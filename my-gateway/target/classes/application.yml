@@ -1,0 +1,32 @@
+server:
+  port: 80
+
+spring:
+  application:
+    name: my-gateway
+  config:
+    import: optional:nacos:application.yml
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848
+        namespace: ""
+      config:
+        server-addr: 127.0.0.1:8848
+        namespace: ""
+        file-extension: yaml
+        shared-configs:
+          - data-id: gateway-routes.json
+            refresh: true
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+      httpclient:
+        pool:
+          type: ELASTIC
+
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
+    com.alibaba.nacos: INFO

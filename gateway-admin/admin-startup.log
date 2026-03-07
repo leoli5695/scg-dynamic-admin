@@ -1,0 +1,3107 @@
+﻿**********************
+Windows PowerShell 脚本开始
+开始时间: 20260307202140
+用户名: 李朝\leoli
+RunAs 用户: 李朝\leoli
+配置名称: 
+计算机: 李朝 (Microsoft Windows NT 10.0.26200.0)
+主机应用程序: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -noexit -command try { . "d:\soft\Qoder\resources\app\out\vs\workbench\contrib\terminal\common\scripts\shellIntegration.ps1" } catch {}
+进程 ID: 28196
+PSVersion: 5.1.26100.7462
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.7462
+BuildVersion: 10.0.26100.7462
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+已启动脚本，输出文件为 d:\source\gateway-admin\admin-startup.log
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] Scanning for projects...:PSObject) [Start-Transcript]，ParameterBi
+ndingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] Scanning for projects...:
+   PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] :PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] :PSObject) [Start-Transcr
+   ipt]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] --------...---------------:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] --------...--------------
+   -:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] Building gateway-admin 1.0.0:PSObject) [Start-Transcript]，Paramet
+erBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] Building gateway-admin 1.
+   0.0:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] --------...---------------:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] --------...--------------
+   -:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] :PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] :PSObject) [Start-Transcr
+   ipt]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] >>> spri...teway-admin >>>:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] >>> spri...teway-admin >>
+   >:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] :PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] :PSObject) [Start-Transcr
+   ipt]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] --- mave...teway-admin ---:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] --- mave...teway-admin --
+   -:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] Copying ... target\classes:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] Copying ... target\classe
+   s:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] Copying ... target\classes:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] Copying ... target\classe
+   s:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] :PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] :PSObject) [Start-Transcr
+   ipt]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] --- mave...teway-admin ---:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] --- mave...teway-admin --
+   -:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] Nothing ... are up to date:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] Nothing ... are up to dat
+   e:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] :PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] :PSObject) [Start-Transcr
+   ipt]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] --- mave...teway-admin ---:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] --- mave...teway-admin --
+   -:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] skip non...\test\resources:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] skip non...\test\resource
+   s:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] :PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] :PSObject) [Start-Transcr
+   ipt]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] --- mave...teway-admin ---:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] --- mave...teway-admin --
+   -:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] No sources to compile:PSObject) [Start-Transcript]，ParameterBindi
+ngException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] No sources to compile:PSO
+   bject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] :PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] :PSObject) [Start-Transcr
+   ipt]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] <<< spri...teway-admin <<<:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] <<< spri...teway-admin <<
+   <:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] :PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] :PSObject) [Start-Transcr
+   ipt]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] :PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] :PSObject) [Start-Transcr
+   ipt]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] --- spri...teway-admin ---:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] --- spri...teway-admin --
+   -:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] Attaching agents: []:PSObject) [Start-Transcript]，ParameterBindin
+gException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ([INFO] Attaching agents: []:PSOb
+   ject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (:PSObject) [Start-Transcript]，Pa
+    rameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  .   ____          _            __ _ _:PSObject) [Start-Transcript]，Par
+ameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  .   ____          _
+    __ _ _:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ( /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \:PSObject) [Start-Transcript]，Pa
+rameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ( /\\ / ___'_ __ _ _(_)_ __  __ _
+    \ \ \ \:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (( ( )\___ | '_ ...\/ _` | \ \ \ \:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (( ( )\___ | '_ ...\/ _` | \ \ \
+   \:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ( \\/  ___)| |_)... (_| |  ) ) ) ):PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ( \\/  ___)| |_)... (_| |  ) ) )
+   ):PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  '  |____| .__..._\__, | / / / /:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  '  |____| .__..._\__, | / / /
+   /:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ( =========|_|==============|___/=/_/_/_/:PSObject) [Start-Transcript]，Pa
+rameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ( =========|_|==============|___/
+   =/_/_/_/:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ( :: Spring Boot...       (v3.2.0):PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: ( :: Spring Boot...       (v3.2.0
+   ):PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (:PSObject) [Start-Transcript]，Pa
+    rameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...\gateway-admin):PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...\gateway-admin
+   ):PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2..., Spring v6.1.1:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2..., Spring v6.1.
+   1:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...s active: "dev":PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...s active: "dev
+   ":PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...21-cc14dbb31ecb:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...21-cc14dbb31ec
+   b:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ort 8081 (http):PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ort 8081 (http
+   ):PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ervice [Tomcat]:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ervice [Tomcat
+   ]:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...Tomcat/10.1.16]:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...Tomcat/10.1.16
+   ]:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...licationContext:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...licationContex
+   t:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...leted in 685 ms:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...leted in 685 m
+   s:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...erver port:8848:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...erver port:884
+   8:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ct timeout:1000:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ct timeout:100
+   0:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...IG_SIZE: 3000.0:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...IG_SIZE: 3000.
+   0:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...redential found:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...redential foun
+   d:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ceImpl success.:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ceImpl success
+   .:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ceImpl success.:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ceImpl success
+   .:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ttribute : null:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ttribute : nul
+   l:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...attribute :null:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...attribute :nul
+   l:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...attribute :null:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...attribute :nul
+   l:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ceImpl success.:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ceImpl success
+   .:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ceImpl success.:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ceImpl success
+   .:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...d0-8e3903a938c5:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...d0-8e3903a938c
+   5:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...d0-8e3903a938c5:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...d0-8e3903a938c
+   5:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...rverListManager:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...rverListManage
+   r:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...GrpcRedoService:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...GrpcRedoServic
+   e:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...hRequestHandler:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...hRequestHandle
+   r:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...in port = 8848}:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...in port = 8848
+   }:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...rustAll":false}:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...rustAll":false
+   }:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...de abilities...:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...de abilities..
+   .:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...s: [SDK_CLIENT]:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...s: [SDK_CLIENT
+   ]:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ities finish...:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ities finish..
+   .:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...yControlManager:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...yControlManage
+   r:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...127.0.0.1_56552:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...127.0.0.1_5655
+   2:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...t to listeners.:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...t to listeners
+   .:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...nection connect:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...nection connec
+   t:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...tRequestHandler:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...tRequestHandle
+   r:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...000013e89557640:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...000013e8955764
+   0:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...: public (id: ):PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...: public (id:
+   ):PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...li\nacos\config:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...li\nacos\confi
+   g:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...d0c85b_config-0:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...d0c85b_config-
+   0:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...000013e8955ac08:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...000013e8955ac0
+   8:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...000013e8955ae28:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...000013e8955ae2
+   8:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ansportClient$1:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ansportClient$
+   1:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ansportClient$2:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ansportClient$
+   2:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...in port = 8848}:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...in port = 8848
+   }:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...rustAll":false}:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...rustAll":false
+   }:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...127.0.0.1_56553:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...127.0.0.1_5655
+   3:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...tRequestHandler:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...tRequestHandle
+   r:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...t to listeners.:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...t to listeners
+   .:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...sten context...:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...sten context..
+   .:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...000013e89557640:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...000013e8955764
+   0:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...: limitTime:5.0:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...: limitTime:5.
+   0:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ntent length: 0:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ntent length:
+   0:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ng empty config:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ng empty confi
+   g:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...iInstance:false:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...iInstance:fals
+   e:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ent length: 289:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ent length: 28
+   9:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...utes from Nacos:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...utes from Naco
+   s:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ent length: 374:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ent length: 37
+   4:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ices from Nacos:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ices from Naco
+   s:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...template: index:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...template: inde
+   x:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2... 'public' to '':PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2... 'public' to '
+   ':PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ceImpl success.:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ceImpl success
+   .:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ceImpl success.:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ceImpl success
+   .:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...context path '':PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...context path '
+   ':PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ttribute : null:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ttribute : nul
+   l:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...attribute :null:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...attribute :nul
+   l:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...attribute :null:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...attribute :nul
+   l:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ceImpl success.:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ceImpl success
+   .:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ceImpl success.:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ceImpl success
+   .:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...0c-f4c1478299e3:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...0c-f4c1478299e
+   3:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...0c-f4c1478299e3:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...0c-f4c1478299e
+   3:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...rverListManager:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...rverListManage
+   r:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...GrpcRedoService:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...GrpcRedoServic
+   e:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...hRequestHandler:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...hRequestHandle
+   r:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...in port = 8848}:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...in port = 8848
+   }:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...rustAll":false}:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...rustAll":false
+   }:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...127.0.0.1_63164:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...127.0.0.1_6316
+   4:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...tRequestHandler:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...tRequestHandle
+   r:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...000013e89557640:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...000013e8955764
+   0:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...t to listeners.:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...t to listeners
+   .:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...nection connect:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...nection connec
+   t:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...=SPRING_CLOUD}}:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...=SPRING_CLOUD}
+   }:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...gister finished:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...gister finishe
+   d:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ning for 3.798):PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ning for 3.798
+   ):PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (========================================:PSObject) [Start-Transcript]，Pa
+rameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (================================
+   ========:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  Gateway Admin Console Started!:PSObject) [Start-Transcript]，ParameterB
+indingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  Gateway Admin Console Started!
+   :PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  API Base URL:...alhost:8081/api:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  API Base URL:...alhost:8081/ap
+   i:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (========================================:PSObject) [Start-Transcript]，Pa
+rameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (================================
+   ========:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...patcherServlet':PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...patcherServlet
+   ':PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...patcherServlet':PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...patcherServlet
+   ':PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ization in 4 ms:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ization in 4 m
+   s:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...e: user-service:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...e: user-servic
+   e:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...nant=, config={:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...nant=, config=
+   {:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "version" : "1.0",:PSObject) [Start-Transcript]，ParameterBindingExcept
+ion
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "version" : "1.0",:PSObject) [
+   Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "services" : [ ]:PSObject) [Start-Transcript]，ParameterBindingExceptio
+n
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "services" : [ ]:PSObject) [St
+   art-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (}:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (}:PSObject) [Start-Transcript]，P
+    arameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...y-services.json:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...y-services.jso
+   n:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ute: user-route:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ute: user-rout
+   e:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...nant=, config={:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...nant=, config=
+   {:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "version" : "1.0",:PSObject) [Start-Transcript]，ParameterBindingExcept
+ion
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "version" : "1.0",:PSObject) [
+   Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "routes" : [ ]:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "routes" : [ ]:PSObject) [Star
+   t-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (}:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (}:PSObject) [Start-Transcript]，P
+    arameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...way-routes.json:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...way-routes.jso
+   n:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...e: user-service:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...e: user-servic
+   e:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...nant=, config={:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...nant=, config=
+   {:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "version" : "1.0",:PSObject) [Start-Transcript]，ParameterBindingExcept
+ion
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "version" : "1.0",:PSObject) [
+   Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "services" : [ {:PSObject) [Start-Transcript]，ParameterBindingExceptio
+n
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "services" : [ {:PSObject) [St
+   art-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (    "name" : "user-service",:PSObject) [Start-Transcript]，ParameterBindi
+ngException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (    "name" : "user-service",:PSO
+   bject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (    "description" : null,...:PSObject) [Start-Transcript]，ParameterBindi
+ngException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (    "description" : null,...:PSO
+   bject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...y-services.json:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...y-services.jso
+   n:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ute: user-route:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...ute: user-rout
+   e:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...nant=, config={:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...nant=, config=
+   {:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "version" : "1.0",:PSObject) [Start-Transcript]，ParameterBindingExcept
+ion
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "version" : "1.0",:PSObject) [
+   Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "routes" : [ {:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "routes" : [ {:PSObject) [Star
+   t-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (    "id" : "user-route",:PSObject) [Start-Transcript]，ParameterBindingEx
+ception
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (    "id" : "user-route",:PSObjec
+   t) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (    "order" : 0,:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (    "order" : 0,:PSObject) [Star
+   t-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (    "uri" : "...:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (    "uri" : "...:PSObject) [Star
+   t-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...way-routes.json:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T20:2...way-routes.jso
+   n:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:3...ute: user-route:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:3...ute: user-rout
+   e:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:3...nant=, config={:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:3...nant=, config=
+   {:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "version" : "1.0",:PSObject) [Start-Transcript]，ParameterBindingExcept
+ion
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "version" : "1.0",:PSObject) [
+   Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "routes" : [ ]:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "routes" : [ ]:PSObject) [Star
+   t-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (}:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (}:PSObject) [Start-Transcript]，P
+    arameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:3...way-routes.json:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:3...way-routes.jso
+   n:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:3...e: user-service:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:3...e: user-servic
+   e:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:3...nant=, config={:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:3...nant=, config=
+   {:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "version" : "1.0",:PSObject) [Start-Transcript]，ParameterBindingExcept
+ion
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "version" : "1.0",:PSObject) [
+   Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "services" : [ ]:PSObject) [Start-Transcript]，ParameterBindingExceptio
+n
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "services" : [ ]:PSObject) [St
+   art-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (}:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (}:PSObject) [Start-Transcript]，P
+    arameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:3...y-services.json:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:3...y-services.jso
+   n:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:4..., requestId = 9:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:4..., requestId =
+   9:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:4... requestId = 10:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:4... requestId = 1
+   0:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:4..., requestId = 9:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:4..., requestId =
+   9:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:4... requestId = 10:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:4... requestId = 1
+   0:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:5...e: user-service:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:5...e: user-servic
+   e:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:5...nant=, config={:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:5...nant=, config=
+   {:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "version" : "1.0",:PSObject) [Start-Transcript]，ParameterBindingExcept
+ion
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "version" : "1.0",:PSObject) [
+   Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "services" : [ {:PSObject) [Start-Transcript]，ParameterBindingExceptio
+n
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "services" : [ {:PSObject) [St
+   art-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (    "name" : "user-service",:PSObject) [Start-Transcript]，ParameterBindi
+ngException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (    "name" : "user-service",:PSO
+   bject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (    "description" : null,...:PSObject) [Start-Transcript]，ParameterBindi
+ngException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (    "description" : null,...:PSO
+   bject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:5...y-services.json:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:5...y-services.jso
+   n:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:5...ute: user-route:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:5...ute: user-rout
+   e:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:5...nant=, config={:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:5...nant=, config=
+   {:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "version" : "1.0",:PSObject) [Start-Transcript]，ParameterBindingExcept
+ion
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "version" : "1.0",:PSObject) [
+   Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "routes" : [ {:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (  "routes" : [ {:PSObject) [Star
+   t-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (    "id" : "user-route",:PSObject) [Start-Transcript]，ParameterBindingEx
+ception
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (    "id" : "user-route",:PSObjec
+   t) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (    "order" : 0,:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (    "order" : 0,:PSObject) [Star
+   t-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (    "uri" : "...:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (    "uri" : "...:PSObject) [Star
+   t-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:5...way-routes.json:PSObject) [Start-Transcript]，Parameter
+BindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.StartTranscriptCommand
+Start-Transcript : 无法将输入对象绑定到命令的任何参数，可能是因为该命令没有采用管
+道输入，或者输入及其属性与采用管道输入的任何参数均不匹配。
+所在位置 行:1 字符: 57
++ ... :run 2>&1 | Start-Transcript -Path "d:\source\gateway-admin\admin-sta ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (2026-03-07T21:5...way-routes.jso
+   n:PSObject) [Start-Transcript]，ParameterBindingException
+    + FullyQualifiedErrorId : InputObjectNotBound,Microsoft.PowerShell.Commands.
+   StartTranscriptCommand
+

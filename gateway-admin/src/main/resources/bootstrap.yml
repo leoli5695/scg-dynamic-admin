@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: gateway-admin
+  config:
+    import: optional:nacos:
+  cloud:
+    nacos:
+      config:
+        server-addr: 127.0.0.1:8848
+        namespace: public
+        group: DEFAULT_GROUP
+        file-extension: yml
+        enabled: true

@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gateway Admin - Console</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container { max-width: 1300px; margin: 0 auto; }
+
+        /* Header */
+        .header {
+            background: white;
+            padding: 28px 36px;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+            margin-bottom: 20px;
+        }
+        .header-top { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+        .header h1 { color: #667eea; font-size: 28px; }
+        .header .subtitle { color: #888; font-size: 14px; margin-top: 4px; }
+
+        /* Guide Steps */
+        .guide {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            background: #f5f3ff;
+            border-radius: 8px;
+            padding: 12px 20px;
+        }
+        .guide-step {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            padding: 6px 14px;
+            border-radius: 6px;
+            transition: background 0.2s;
+            color: #555;
+            font-size: 14px;
+        }
+        .guide-step:hover { background: #e0dbff; }
+        .guide-step.active { background: #667eea; color: white; font-weight: 600; }
+        .guide-step .step-num {
+            width: 22px; height: 22px;
+            background: rgba(102,126,234,0.2);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px; font-weight: bold; color: #667eea;
+            flex-shrink: 0;
+        }
+        .guide-step.active .step-num { background: rgba(255,255,255,0.3); color: white; }
+        .guide-arrow { color: #bbb; font-size: 18px; padding: 0 4px; user-select: none; }
+
+        /* Tabs */
+        .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+        .tab-btn {
+            padding: 10px 24px;
+            background: rgba(255,255,255,0.2);
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .tab-btn:hover { background: rgba(255,255,255,0.35); }
+        .tab-btn.active { background: white; color: #667eea; border-color: white; font-weight: 700; }
+
+        /* Panel */
+        .panel { display: none; }
+        .panel.active { display: grid; grid-template-columns: 420px 1fr; gap: 20px; }
+
+        /* Cards */
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        .card h3 {
+            color: #333;
+            font-size: 18px;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #f0f0f0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .card h3 .icon { font-size: 20px; }
+
+        /* Form */
+        .form-group { margin-bottom: 16px; }
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            color: #444;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .form-group label .required { color: #e74c3c; margin-left: 2px; }
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 9px 12px;
+            border: 1.5px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+            background: white;
+        }
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
+        }
+        .form-group textarea { resize: vertical; min-height: 70px; }
+
+        /* Dynamic rows */
+        .dynamic-list { margin-top: 8px; }
+        .dynamic-row {
+            display: grid;
+            gap: 8px;
+            margin-bottom: 8px;
+            align-items: center;
+        }
+        .dynamic-row.instance-row { grid-template-columns: 1fr 90px 80px 32px; }
+        .dynamic-row.kv-row { grid-template-columns: 1fr 1fr 32px; }
+        .dynamic-row input, .dynamic-row select {
+            padding: 7px 10px;
+            border: 1.5px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 13px;
+        }
+        .btn-remove {
+            width: 32px; height: 32px;
+            background: #fff0f0;
+            border: 1px solid #ffcdd2;
+            border-radius: 5px;
+            color: #e74c3c;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .btn-remove:hover { background: #ffebee; }
+        .btn-add {
+            padding: 6px 14px;
+            background: #f0fff4;
+            border: 1px solid #a8d5b5;
+            border-radius: 5px;
+            color: #27ae60;
+            cursor: pointer;
+            font-size: 13px;
+            margin-top: 4px;
+        }
+        .btn-add:hover { background: #e6f9ec; }
+
+        /* Buttons */
+        .btn-primary {
+            width: 100%;
+            padding: 11px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 7px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 4px;
+        }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102,126,234,0.4); }
+        .btn-primary:active { transform: translateY(0); }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            top: 24px; right: 24px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+            z-index: 9999;
+            display: none;
+            animation: slideIn 0.3s ease;
+            max-width: 340px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        .toast.success { background: #27ae60; }
+        .toast.error { background: #e74c3c; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+        /* List Panel */
+        .list-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .list-header h3 {
+            color: #333;
+            font-size: 18px;
+            display: flex; align-items: center; gap: 8px;
+            border: none; padding: 0; margin: 0;
+        }
+        .badge {
+            background: #667eea;
+            color: white;
+            border-radius: 12px;
+            padding: 2px 10px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .btn-refresh {
+            padding: 6px 14px;
+            background: #f5f3ff;
+            border: 1px solid #d0c8ff;
+            border-radius: 6px;
+            color: #667eea;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .btn-refresh:hover { background: #ede9ff; }
+
+        /* Item Cards */
+        .item-card {
+            border: 1.5px solid #e8e8e8;
+            border-radius: 8px;
+            padding: 14px 16px;
+            margin-bottom: 10px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .item-card:hover { border-color: #c5b8ff; box-shadow: 0 2px 8px rgba(102,126,234,0.1); }
+        .item-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 8px;
+        }
+        .item-name { font-weight: 700; color: #333; font-size: 15px; }
+        .item-tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 6px;
+        }
+        .tag-blue { background: #e3f2fd; color: #1565c0; }
+        .tag-green { background: #e8f5e9; color: #2e7d32; }
+        .tag-orange { background: #fff3e0; color: #e65100; }
+        .tag-purple { background: #f3e5f5; color: #6a1b9a; }
+        .item-meta { font-size: 12px; color: #888; margin-top: 4px; }
+        .item-actions { display: flex; gap: 6px; }
+        .btn-del {
+            padding: 4px 10px;
+            background: #fff0f0;
+            border: 1px solid #ffcdd2;
+            border-radius: 5px;
+            color: #e74c3c;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .btn-del:hover { background: #ffebee; }
+
+        .empty-tip {
+            text-align: center;
+            padding: 40px 20px;
+            color: #bbb;
+            font-size: 14px;
+        }
+        .empty-tip .empty-icon { font-size: 36px; margin-bottom: 8px; }
+
+        /* Form row */
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+        /* Plugin sections */
+        .plugin-section { margin-bottom: 28px; }
+        .plugin-section-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .divider { border: none; border-top: 1.5px dashed #e8e8e8; margin: 24px 0; }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <!-- Header -->
+    <div class="header">
+        <div class="header-top">
+            <div>
+                <h1>🚀 Gateway Admin Console</h1>
+                <div class="subtitle">Dynamic Routing, Service & Plugin Configuration Management Platform</div>
+            </div>
+        </div>
+        <!-- Guide Steps -->
+        <div class="guide">
+            <span style="color:#888;font-size:13px;margin-right:12px;">Quick Guide:</span>
+            <div class="guide-step active" id="guide-1" onclick="switchTab('services')">
+                <span class="step-num">1</span> Create Service
+            </div>
+            <span class="guide-arrow">→</span>
+            <div class="guide-step" id="guide-2" onclick="switchTab('routes')">
+                <span class="step-num">2</span> Create Route
+            </div>
+            <span class="guide-arrow">→</span>
+            <div class="guide-step" id="guide-3" onclick="switchTab('plugins')">
+                <span class="step-num">3</span> Create Plugin
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+        <button class="tab-btn" id="tab-services" onclick="switchTab('services')">Services</button>
+        <button class="tab-btn" id="tab-routes" onclick="switchTab('routes')">Routes</button>
+        <button class="tab-btn" id="tab-plugins" onclick="switchTab('plugins')">Plugins</button>
+    </div>
+
+    <!-- ======== SERVICES PANEL ======== -->
+    <div id="services-panel" class="panel">
+        <!-- Left: Form -->
+        <div class="card">
+            <h3><span class="icon">🔧</span> Create Service</h3>
+            <form id="serviceForm" onsubmit="submitService(event)">
+                <div class="form-group">
+                    <label>Service Name <span class="required">*</span></label>
+                    <input type="text" id="svc-name" placeholder="e.g. user-service" required>
+                </div>
+                <div class="form-group">
+                    <label>Load Balancing Strategy</label>
+                    <select id="svc-lb">
+                        <option value="round-robin">Round Robin</option>
+                        <option value="weighted">Weighted</option>
+                        <option value="least-connections">Least Connections</option>
+                        <option value="random">Random</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Service Instances</label>
+                    <div class="dynamic-list" id="instances-list">
+                        <!-- default row -->
+                    </div>
+                    <button type="button" class="btn-add" onclick="addInstance()">+ Add Instance</button>
+                </div>
+                <button type="submit" class="btn-primary">✓ Save Service</button>
+            </form>
+        </div>
+        <!-- Right: List -->
+        <div class="card">
+            <div class="list-header">
+                <h3><span class="icon">📋</span> Created Services <span class="badge" id="svc-count">0</span></h3>
+                <button class="btn-refresh" onclick="loadServices()">↻ Refresh</button>
+            </div>
+            <div id="services-list"></div>
+        </div>
+    </div>
+
+    <!-- ======== ROUTES PANEL ======== -->
+    <div id="routes-panel" class="panel">
+        <!-- Left: Form -->
+        <div class="card">
+            <h3><span class="icon">🛣️</span> Create Route</h3>
+            <form id="routeForm" onsubmit="submitRoute(event)">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Route ID <span class="required">*</span></label>
+                        <input type="text" id="rt-id" placeholder="e.g. user-route" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Order</label>
+                        <input type="number" id="rt-order" value="0">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Target Type <span class="required">*</span></label>
+                    <div style="display:flex;gap:16px;margin-top:4px;">
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;">
+                            <input type="radio" name="rt-type" value="static" checked onchange="onUriTypeChange()">
+                            Static Node (use service from Services)
+                        </label>
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;">
+                            <input type="radio" name="rt-type" value="discovery" onchange="onUriTypeChange()">
+                            Service Discovery (from Nacos registry)
+                        </label>
+                    </div>
+                </div>
+                <!-- 固定节点：选择服务管理里的服务 -->
+                <div class="form-group" id="rt-static-group">
+                    <label>Target Service (Static) <span class="required">*</span></label>
+                    <select id="rt-service" onchange="onStaticServiceSelect()">
+                        <option value="">-- Select a created service --</option>
+                    </select>
+                </div>
+                <!-- 服务发现：选择 Nacos 注册服务 -->
+                <div class="form-group" id="rt-discovery-group" style="display:none;">
+                    <label>Target Service (Discovery) <span class="required">*</span></label>
+                    <select id="rt-nacos-service" onchange="onDiscoveryServiceSelect()">
+                        <option value="">-- Loading... --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Target URI <span class="required">*</span></label>
+                    <input type="text" id="rt-uri" placeholder="e.g. lb://user-service" required>
+                </div>
+                <div class="form-group">
+                    <label>Predicates <span class="required">*</span></label>
+                    <div class="dynamic-list" id="predicates-list"></div>
+                    <button type="button" class="btn-add" onclick="addPredicate()">+ Add Predicate</button>
+                </div>
+                <div class="form-group">
+                    <label>Filters</label>
+                    <div class="dynamic-list" id="filters-list"></div>
+                    <button type="button" class="btn-add" onclick="addFilter()">+ Add Filter</button>
+                </div>
+                <button type="submit" class="btn-primary">✓ Save Route</button>
+            </form>
+        </div>
+        <!-- Right: List -->
+        <div class="card">
+            <div class="list-header">
+                <h3><span class="icon">📋</span> Created Routes <span class="badge" id="rt-count">0</span></h3>
+                <button class="btn-refresh" onclick="loadRoutes()">↻ Refresh</button>
+            </div>
+            <div id="routes-list"></div>
+        </div>
+    </div>
+
+    <!-- ======== PLUGINS PANEL ======== -->
+    <div id="plugins-panel" class="panel">
+        <!-- Left: Form -->
+        <div class="card">
+            <div class="plugin-section">
+                <div class="plugin-section-title">🚦 Rate Limiter Plugin</div>
+                <form id="rlForm" onsubmit="submitRateLimiter(event)">
+                    <div class="form-group">
+                        <label>Associated Route <span class="required">*</span></label>
+                        <select id="rl-route" required>
+                            <option value="">-- Select a created route --</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Request Rate (req/s) <span class="required">*</span></label>
+                            <input type="number" id="rl-rate" value="100" min="1" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Burst Capacity <span class="required">*</span></label>
+                            <input type="number" id="rl-burst" value="200" min="1" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Rate Limit Dimension</label>
+                            <select id="rl-key" onchange="onKeyResolverChange()">
+                                <option value="ip">By IP Address</option>
+                                <option value="user">By User</option>
+                                <option value="header">By Request Header</option>
+                                <option value="global">Global Rate Limit</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="rl-header-group" style="display:none">
+                            <label>Header Name</label>
+                            <input type="text" id="rl-header" placeholder="e.g. X-User-ID">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-primary">✓ Save Rate Limiter Config</button>
+                </form>
+            </div>
+
+            <hr class="divider">
+
+            <div class="plugin-section">
+                <div class="plugin-section-title">🏷️ Custom Header Plugin</div>
+                <form id="headerForm" onsubmit="submitCustomHeader(event)">
+                    <div class="form-group">
+                        <label>Associated Route <span class="required">*</span></label>
+                        <select id="header-route" required>
+                            <option value="">-- Select a created route --</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label style="display:block;margin-bottom:8px;">Headers (Key-Value Pairs)</label>
+                        <div id="header-kv-list"></div>
+                        <button type="button" class="btn-add" onclick="addHeaderKV()">+ Add Header</button>
+                    </div>
+                    <button type="submit" class="btn-primary">✓ Save Custom Headers</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Right: List -->
+        <div class="card">
+            <div class="list-header">
+                <h3><span class="icon">📋</span> Created Plugins</h3>
+                <button class="btn-refresh" onclick="loadPlugins()">↻ Refresh</button>
+            </div>
+            <div id="plugins-list"></div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+
+<script>
+// ======== State ========
+let services = [];
+let routes = [];
+let instanceSeq = 0;
+let predicateSeq = 0;
+let filterSeq = 0;
+
+// ======== Toast ========
+function toast(msg, type = 'success') {
+    const el = document.getElementById('toast');
+    el.textContent = (type === 'success' ? '✓ ' : '✗ ') + msg;
+    el.className = 'toast ' + type;
+    el.style.display = 'block';
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.style.display = 'none', 3000);
+}
+
+// ======== Tab Switch ========
+function switchTab(tab) {
+    ['services', 'routes', 'plugins'].forEach(t => {
+        document.getElementById(t + '-panel').classList.remove('active');
+        document.getElementById('tab-' + t).classList.remove('active');
+        document.getElementById('guide-' + ({'services':1,'routes':2,'plugins':3}[t])).classList.remove('active');
+    });
+    document.getElementById(tab + '-panel').classList.add('active');
+    document.getElementById('tab-' + tab).classList.add('active');
+    document.getElementById('guide-' + ({'services':1,'routes':2,'plugins':3}[tab])).classList.add('active');
+
+    if (tab === 'services') loadServices();
+    if (tab === 'routes') { loadRoutes(); refreshServiceDropdowns(); }
+    if (tab === 'plugins') { loadPlugins(); refreshRouteDropdowns(); refreshServiceDropdowns(); }
+}
+
+// ======== Dropdown Refresh ========
+function refreshServiceDropdowns() {
+    const selects = ['rt-service', 'lb-service'];
+    selects.forEach(id => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        const cur = sel.value;
+        sel.innerHTML = '<option value="">-- Select a created service --</option>';
+        services.forEach(s => {
+            sel.innerHTML += `<option value="${s.name}">${s.name} (${s.loadBalancer})</option>`;
+        });
+        if (cur) sel.value = cur;
+    });
+}
+
+function refreshRouteDropdowns() {
+    const routeIds = ['rl-route', 'header-route'];
+    routeIds.forEach(id => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        const cur = sel.value;
+        sel.innerHTML = '<option value="">-- Select a created route --</option>';
+        routes.forEach(r => {
+            sel.innerHTML += `<option value="${r.id}">${r.id} → ${r.uri}</option>`;
+        });
+        if (cur) sel.value = cur;
+    });
+}
+
+function onServiceSelect() {
+    const val = document.getElementById('rt-service').value;
+    if (val) document.getElementById('rt-uri').value = 'static://' + val;
+}
+
+function onUriTypeChange() {
+    const type = document.querySelector('input[name="rt-type"]:checked').value;
+    const staticGroup = document.getElementById('rt-static-group');
+    const discoveryGroup = document.getElementById('rt-discovery-group');
+    document.getElementById('rt-uri').value = '';
+    if (type === 'static') {
+        staticGroup.style.display = 'block';
+        discoveryGroup.style.display = 'none';
+        // 触发一次以更新 uri
+        onStaticServiceSelect();
+    } else {
+        staticGroup.style.display = 'none';
+        discoveryGroup.style.display = 'block';
+        loadNacosDiscoveryServices();
+    }
+}
+
+function onStaticServiceSelect() {
+    const val = document.getElementById('rt-service').value;
+    if (val) document.getElementById('rt-uri').value = 'static://' + val;
+    else document.getElementById('rt-uri').value = '';
+}
+
+function onDiscoveryServiceSelect() {
+    const val = document.getElementById('rt-nacos-service').value;
+    if (val) document.getElementById('rt-uri').value = 'lb://' + val;
+    else document.getElementById('rt-uri').value = '';
+}
+
+async function loadNacosDiscoveryServices() {
+    const sel = document.getElementById('rt-nacos-service');
+    sel.innerHTML = '<option value="">-- Loading... --</option>';
+    try {
+        const r = await fetch('/api/services/nacos-discovery');
+        const res = await r.json();
+        const list = res.data || [];
+        sel.innerHTML = '<option value="">-- Select Nacos registered service --</option>';
+        list.forEach(name => {
+            sel.innerHTML += `<option value="${name}">${name}</option>`;
+        });
+    } catch(err) {
+        sel.innerHTML = '<option value="">-- Load failed --</option>';
+        console.error('Failed to load Nacos services', err);
+    }
+}
+
+function onKeyResolverChange() {
+    const v = document.getElementById('rl-key').value;
+    document.getElementById('rl-header-group').style.display = v === 'header' ? 'block' : 'none';
+}
+
+// ======== Instance Rows ========
+function addInstance(ip='', port='8080', weight='1') {
+    instanceSeq++;
+    const id = instanceSeq;
+    const row = document.createElement('div');
+    row.className = 'dynamic-row instance-row';
+    row.id = 'inst-' + id;
+    row.innerHTML = `
+        <input type="text" placeholder="IP Address" value="${ip}" data-field="ip">
+        <input type="number" placeholder="Port" value="${port}" data-field="port">
+        <input type="number" placeholder="Weight" value="${weight}" min="1" data-field="weight">
+        <button type="button" class="btn-remove" onclick="document.getElementById('inst-${id}').remove()">×</button>
+    `;
+    document.getElementById('instances-list').appendChild(row);
+}
+
+function getInstances() {
+    const rows = document.querySelectorAll('#instances-list .instance-row');
+    return Array.from(rows).map(row => ({
+        ip: row.querySelector('[data-field=ip]').value,
+        port: parseInt(row.querySelector('[data-field=port]').value) || 8080,
+        weight: parseInt(row.querySelector('[data-field=weight]').value) || 1
+    })).filter(i => i.ip);
+}
+
+// ======== Predicate Rows ========
+function addPredicate(name='Path', args='/api/**') {
+    predicateSeq++;
+    const id = predicateSeq;
+    const row = document.createElement('div');
+    row.className = 'dynamic-row kv-row';
+    row.id = 'pred-' + id;
+    row.innerHTML = `
+        <select data-field="name">
+            <option value="Path" ${name==='Path'?'selected':''}>Path</option>
+            <option value="Host" ${name==='Host'?'selected':''}>Host</option>
+            <option value="Method" ${name==='Method'?'selected':''}>Method</option>
+            <option value="Header" ${name==='Header'?'selected':''}>Header</option>
+        </select>
+        <input type="text" placeholder="Arguments, e.g. /api/**" value="${args}" data-field="args">
+        <button type="button" class="btn-remove" onclick="document.getElementById('pred-${id}').remove()">×</button>
+    `;
+    document.getElementById('predicates-list').appendChild(row);
+}
+
+function getPredicates() {
+    return Array.from(document.querySelectorAll('#predicates-list .kv-row')).map(row => ({
+        name: row.querySelector('[data-field=name]').value,
+        args: { pattern: row.querySelector('[data-field=args]').value }
+    }));
+}
+
+// ======== Filter Rows ========
+function addFilter(name='StripPrefix', args='1') {
+    filterSeq++;
+    const id = filterSeq;
+    const row = document.createElement('div');
+    row.className = 'dynamic-row kv-row';
+    row.id = 'filt-' + id;
+    row.innerHTML = `
+        <select data-field="name">
+            <option value="StripPrefix" ${name==='StripPrefix'?'selected':''}>StripPrefix</option>
+            <option value="AddRequestHeader" ${name==='AddRequestHeader'?'selected':''}>AddRequestHeader</option>
+            <option value="RateLimiter" ${name==='RateLimiter'?'selected':''}>RateLimiter</option>
+            <option value="CustomLoadBalancer" ${name==='CustomLoadBalancer'?'selected':''}>CustomLoadBalancer</option>
+        </select>
+        <input type="text" placeholder="Arguments" value="${args}" data-field="args">
+        <button type="button" class="btn-remove" onclick="document.getElementById('filt-${id}').remove()">×</button>
+    `;
+    document.getElementById('filters-list').appendChild(row);
+}
+
+function getFilters() {
+    return Array.from(document.querySelectorAll('#filters-list .kv-row')).map(row => {
+        const n = row.querySelector('[data-field=name]').value;
+        const a = row.querySelector('[data-field=args]').value;
+        let args = {};
+        if (n === 'StripPrefix') args = { parts: a };
+        else if (n === 'AddRequestHeader') { const p = a.split(':'); args = { name: p[0]||'', value: p[1]||'' }; }
+        else args = { key: a };
+        return { name: n, args };
+    });
+}
+
+// ======== Services API ========
+async function submitService(e) {
+    e.preventDefault();
+    const data = {
+        name: document.getElementById('svc-name').value.trim(),
+        loadBalancer: document.getElementById('svc-lb').value,
+        instances: getInstances()
+    };
+    if (!data.name) { toast('Please enter service name', 'error'); return; }
+    try {
+        const r = await fetch('/api/services', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+        const res = await r.json();
+        if (r.ok) {
+            toast('Service "' + data.name + '" created successfully!');
+            document.getElementById('serviceForm').reset();
+            document.getElementById('instances-list').innerHTML = '';
+            loadServices();
+        } else {
+            toast(res.message || 'Failed to create', 'error');
+        }
+    } catch(err) { toast('Network error: ' + err.message, 'error'); }
+}
+
+async function loadServices() {
+    try {
+        const r = await fetch('/api/services');
+        const res = await r.json();
+        services = res.data || [];
+        renderServices(services);
+        refreshServiceDropdowns();
+    } catch(err) { console.error(err); }
+}
+
+function renderServices(list) {
+    document.getElementById('svc-count').textContent = list.length;
+    const el = document.getElementById('services-list');
+    if (!list.length) {
+        el.innerHTML = '<div class="empty-tip"><div class="empty-icon">📭</div>No services yet. Please create a service first.</div>';
+        return;
+    }
+    const lbLabel = { 'round-robin':'Round Robin','weighted':'Weighted','least-connections':'Least Connections','random':'Random' };
+    el.innerHTML = list.map(s => `
+        <div class="item-card">
+            <div class="item-card-header">
+                <div>
+                    <span class="item-name">${s.name}</span>
+                    <span class="item-tag tag-blue">${lbLabel[s.loadBalancer] || s.loadBalancer}</span>
+                </div>
+                <div class="item-actions">
+                    <button class="btn-del" onclick="deleteService('${s.name}')">Delete</button>
+                </div>
+            </div>
+            <div class="item-meta">
+                Instances: ${(s.instances||[]).length}
+                ${(s.instances||[]).map(i => `<span style="margin-left:8px;background:#f5f5f5;padding:1px 6px;border-radius:3px;">${i.ip}:${i.port} (×${i.weight})</span>`).join('')}
+            </div>
+        </div>
+    `).join('');
+}
+
+async function deleteService(name) {
+    if (!confirm(`Are you sure you want to delete service "${name}"?`)) return;
+    try {
+        const r = await fetch('/api/services/' + encodeURIComponent(name), { method:'DELETE' });
+        const res = await r.json();
+        if (r.ok) { toast('Service deleted'); loadServices(); }
+        else toast(res.message || 'Failed to delete', 'error');
+    } catch(err) { toast('Network error', 'error'); }
+}
+
+// ======== Routes API ========
+async function submitRoute(e) {
+    e.preventDefault();
+    const predicates = getPredicates();
+    if (!predicates.length) { toast('Please add at least one predicate', 'error'); return; }
+    const data = {
+        id: document.getElementById('rt-id').value.trim(),
+        uri: document.getElementById('rt-uri').value.trim(),
+        order: parseInt(document.getElementById('rt-order').value) || 0,
+        predicates: predicates,
+        filters: getFilters()
+    };
+    if (!data.id || !data.uri) { toast('Please fill in Route ID and Target URI', 'error'); return; }
+    try {
+        const r = await fetch('/api/routes', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+        const res = await r.json();
+        if (r.ok) {
+            toast('Route "' + data.id + '" created successfully!');
+            document.getElementById('routeForm').reset();
+            document.getElementById('predicates-list').innerHTML = '';
+            document.getElementById('filters-list').innerHTML = '';
+            // Reset target type to static
+            document.querySelector('input[name="rt-type"][value="static"]').checked = true;
+            document.getElementById('rt-static-group').style.display = 'block';
+            document.getElementById('rt-discovery-group').style.display = 'none';
+            loadRoutes();
+        } else {
+            toast(res.message || 'Failed to create', 'error');
+        }
+    } catch(err) { toast('Network error: ' + err.message, 'error'); }
+}
+
+async function loadRoutes() {
+    try {
+        const r = await fetch('/api/routes');
+        const res = await r.json();
+        routes = res.data || [];
+        renderRoutes(routes);
+        refreshRouteDropdowns();
+    } catch(err) { console.error(err); }
+}
+
+function renderRoutes(list) {
+    document.getElementById('rt-count').textContent = list.length;
+    const el = document.getElementById('routes-list');
+    if (!list.length) {
+        el.innerHTML = '<div class="empty-tip"><div class="empty-icon">📭</div>No routes yet. Please create a service first, then create a route.</div>';
+        return;
+    }
+    el.innerHTML = list.map(r => `
+        <div class="item-card">
+            <div class="item-card-header">
+                <div>
+                    <span class="item-name">${r.id}</span>
+                    <span class="item-tag tag-green">order: ${r.order}</span>
+                </div>
+                <div class="item-actions">
+                    <button class="btn-del" onclick="deleteRoute('${r.id}')">Delete</button>
+                </div>
+            </div>
+            <div class="item-meta">
+                URI: <strong>${r.uri}</strong>
+            </div>
+            <div class="item-meta" style="margin-top:4px;">
+                Predicates: ${(r.predicates||[]).map(p => `<span style="background:#e3f2fd;color:#1565c0;padding:1px 6px;border-radius:3px;margin-right:4px;">${p.name}=${JSON.stringify(p.args)}</span>`).join('')}
+            </div>
+            ${(r.filters||[]).length ? `<div class="item-meta" style="margin-top:4px;">Filters: ${(r.filters||[]).map(f => `<span style="background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:3px;margin-right:4px;">${f.name}</span>`).join('')}</div>` : ''}
+        </div>
+    `).join('');
+}
+
+async function deleteRoute(id) {
+    if (!confirm(`Are you sure you want to delete route "${id}"?`)) return;
+    try {
+        const r = await fetch('/api/routes/' + encodeURIComponent(id), { method:'DELETE' });
+        const res = await r.json();
+        if (r.ok) { toast('Route deleted'); loadRoutes(); }
+        else toast(res.message || 'Failed to delete', 'error');
+    } catch(err) { toast('Network error', 'error'); }
+}
+
+// ======== Plugins API ========
+async function submitRateLimiter(e) {
+    e.preventDefault();
+    const routeId = document.getElementById('rl-route').value;
+    if (!routeId) { toast('Please select a route', 'error'); return; }
+    const data = {
+        routeId,
+        rate: parseInt(document.getElementById('rl-rate').value),
+        burst: parseInt(document.getElementById('rl-burst').value),
+        keyResolver: document.getElementById('rl-key').value,
+        headerName: document.getElementById('rl-header').value || null
+    };
+    try {
+        const r = await fetch('/api/plugins/rate-limiters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+        const res = await r.json();
+        if (r.ok) { toast('Rate limiter config saved!'); loadPlugins(); }
+        else toast(res.message || 'Failed to save', 'error');
+    } catch(err) { toast('Network error', 'error'); }
+}
+
+// ======== Custom Header Plugin ========
+let headerKVSeq = 0;
+
+function addHeaderKV(key='', value='') {
+    headerKVSeq++;
+    const id = headerKVSeq;
+    const row = document.createElement('div');
+    row.className = 'dynamic-row kv-row';
+    row.id = 'header-kv-' + id;
+    row.innerHTML = `
+        <input type="text" placeholder="Header Name" value="${key}" data-field="key">
+        <input type="text" placeholder="Header Value (supports \${random.uuid}, \${client.ip}, \${request.path})" value="${value}" data-field="value">
+        <button type="button" class="btn-remove" onclick="document.getElementById('header-kv-${id}').remove()">×</button>
+    `;
+    document.getElementById('header-kv-list').appendChild(row);
+}
+
+function getHeaderKVs() {
+    const rows = document.querySelectorAll('#header-kv-list .kv-row');
+    const result = {};
+    Array.from(rows).forEach(row => {
+        const key = row.querySelector('[data-field=key]').value.trim();
+        const value = row.querySelector('[data-field=value]').value.trim();
+        if (key) {
+            result[key] = value;
+        }
+    });
+    return result;
+}
+
+async function submitCustomHeader(e) {
+    e.preventDefault();
+    const routeId = document.getElementById('header-route').value;
+    if (!routeId) { toast('Please select a route', 'error'); return; }
+    
+    const headers = getHeaderKVs();
+    if (Object.keys(headers).length === 0) {
+        toast('Please add at least one Header', 'error');
+        return;
+    }
+    
+    const data = {
+        routeId,
+        headers
+    };
+    
+    try {
+        const r = await fetch('/api/plugins/custom-headers', { 
+            method: 'POST', 
+            headers: {'Content-Type': 'application/json'}, 
+            body: JSON.stringify(data) 
+        });
+        const res = await r.json();
+        if (r.ok) { 
+            toast('Custom header config saved!'); 
+            document.getElementById('headerForm').reset();
+            document.getElementById('header-kv-list').innerHTML = '';
+            loadPlugins(); 
+        } else {
+            toast(res.message || 'Failed to save', 'error');
+        }
+    } catch(err) { 
+        toast('Network error: ' + err.message, 'error'); 
+    }
+}
+
+async function loadPlugins() {
+    try {
+        const [rlRes, chRes] = await Promise.all([
+            fetch('/api/plugins/rate-limiters').then(r => r.json()),
+            fetch('/api/plugins/custom-headers').then(r => r.json())
+        ]);
+        renderPlugins(rlRes.data || [], chRes.data || []);
+    } catch(err) { console.error(err); }
+}
+
+function renderPlugins(rls, chs) {
+    const el = document.getElementById('plugins-list');
+    let html = '';
+    
+    // Rate limiter plugin
+    if (rls.length) {
+        html += '<div style="font-weight:700;color:#667eea;margin-bottom:10px;font-size:14px;">🚦 Rate Limiter Plugin</div>';
+        html += rls.map(p => `
+            <div class="item-card">
+                <div class="item-card-header">
+                    <div>
+                        <span class="item-name">${p.routeId}</span>
+                        <span class="item-tag tag-orange">${p.keyResolver}</span>
+                    </div>
+                </div>
+                <div class="item-meta">Rate: <strong>${p.rate}</strong> req/s &nbsp;|&nbsp; Burst: <strong>${p.burst}</strong>${p.headerName ? ' &nbsp;|&nbsp; Header: ' + p.headerName : ''}</div>
+            </div>
+        `).join('');
+    }
+    
+    // Custom header plugin
+    if (chs && chs.length) {
+        html += '<div style="font-weight:700;color:#667eea;margin:16px 0 10px;font-size:14px;">🏷️ Custom Header Plugin</div>';
+        html += chs.map(p => `
+            <div class="item-card">
+                <div class="item-card-header">
+                    <div>
+                        <span class="item-name">${p.routeId}</span>
+                        <span class="item-tag tag-blue">Header</span>
+                    </div>
+                </div>
+                <div class="item-meta">${Object.entries(p.headers || {}).map(([k, v]) => `<strong>${k}</strong>: ${v}`).join(', ')}</div>
+            </div>
+        `).join('');
+    }
+    
+    if (!html) {
+        html = '<div class="empty-tip"><div class="empty-icon">📭</div>No plugins configured</div>';
+    }
+    el.innerHTML = html;
+}
+
+// ======== Init ========
+window.addEventListener('DOMContentLoaded', () => {
+    switchTab('services');
+    addInstance();
+    addPredicate();
+    addHeaderKV(); // Add default Header KV row
+});
+</script>
+</body>
+</html>
