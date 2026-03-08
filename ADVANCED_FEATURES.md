@@ -294,4 +294,4 @@ return Mono.fromSupplier(() -> chain.filter(exchange))
 📝 **Authentication** - JWT validation and context propagation  
 📝 **Circuit Breaker** - Resilience4j integration  
 
-For complete implementation details, see [INTEGRATION_GUIDE.md](../INTEGRATION_GUIDE.md).
+For complete implementation details, see [INTEGRATION_GUIDE.md](./INTEGRATION_GUIDE.md).
