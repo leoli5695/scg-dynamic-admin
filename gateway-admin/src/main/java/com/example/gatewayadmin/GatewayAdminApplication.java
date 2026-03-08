@@ -10,12 +10,13 @@ import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 
 /**
  * Gateway Admin Console Application
+ * 
+ * MyBatis Plus: Enabled via property `mybatis-plus.enabled=true` (for production with database)
+ * Default (dev profile): Disabled, using Nacos as data store
  */
 @SpringBootApplication(exclude = {
     SecurityAutoConfiguration.class, 
-    UserDetailsServiceAutoConfiguration.class,
-    org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration.class,
-    org.mybatis.spring.boot.autoconfigure.MybatisPlusAutoConfiguration.class
+    UserDetailsServiceAutoConfiguration.class
 })
 @EnableDiscoveryClient
 @EnableConfigurationProperties(GatewayAdminProperties.class)
