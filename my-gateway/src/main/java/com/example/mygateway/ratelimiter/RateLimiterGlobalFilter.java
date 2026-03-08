@@ -1,5 +1,9 @@
 package com.example.mygateway.ratelimiter;
 
+import com.alibaba.csp.sentinel.Entry;
+import com.alibaba.csp.sentinel.SphU;
+import com.alibaba.csp.sentinel.Tracer;
+import com.alibaba.csp.sentinel.slots.block.BlockException;
 import com.example.mygateway.model.RateLimiterConfig;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -9,8 +13,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
-
-import java.util.Map;
 
 /**
  * Rate Limiter Global Filter
@@ -35,7 +37,7 @@ public class RateLimiterGlobalFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
         
-        // Try Redis rate limiting first
+        // Step 1: Try Redis rate limiting first
         if (redisRateLimiter.isRedisAvailable() && config.getRedisQps() > 0) {
             String key = buildRateLimitKey(routeId, exchange, config);
             RedisRateLimiter.RateLimitResult result = redisRateLimiter.tryAcquire(
@@ -45,16 +47,58 @@ public class RateLimiterGlobalFilter implements GlobalFilter, Ordered {
                 addRateLimitHeaders(exchange, config.getRedisQps(), "redis");
                 return chain.filter(exchange);
             } else if (!result.isFallback()) {
-                // Redis rejected - return 429
+                // Redis rejected - return 429 directly
                 exchange.getResponse().setStatusCode(HttpStatus.TOO_MANY_REQUESTS);
                 addRateLimitHeaders(exchange, config.getRedisQps(), "redis");
-                return exchange.getResponse().setComplete();
+                return writeRateLimitResponse(exchange);
             }
+            // If fallback, continue to Sentinel
         }
         
-        // Fallback to Sentinel
+        // Step 2: Fallback to Sentinel
         addRateLimitHeaders(exchange, config.getSentinelQps(), "sentinel");
-        return chain.filter(exchange);
+        return handleSentinelFallback(exchange, chain, routeId, config);
+    }
+
+    /**
+     * Handle Sentinel rate limiting fallback
+     * Uses Sentinel's programmatic API for reactive context
+     */
+    private Mono<Void> handleSentinelFallback(ServerWebExchange exchange, GatewayFilterChain chain, 
+                                              String routeId, RateLimiterConfig config) {
+        Entry entry = null;
+        
+        try {
+            // Sentinel resource name = routeId
+            entry = SphU.entry(routeId);
+            
+            // Request allowed by Sentinel - continue chain
+            return chain.filter(exchange);
+            
+        } catch (BlockException e) {
+            // Request blocked by Sentinel - return 429
+            exchange.getResponse().setStatusCode(HttpStatus.TOO_MANY_REQUESTS);
+            addRateLimitHeaders(exchange, config.getSentinelQps(), "sentinel");
+            return writeRateLimitResponse(exchange);
+            
+        } catch (Exception e) {
+            // Unexpected error - trace and continue
+            Tracer.trace(e);
+            return chain.filter(exchange);
+            
+        } finally {
+            if (entry != null) {
+                entry.exit();
+            }
+        }
+    }
+
+    private Mono<Void> writeRateLimitResponse(ServerWebExchange exchange) {
+        exchange.getResponse().getHeaders().add("Content-Type", "application/json");
+        String body = "{\"error\":\"Too Many Requests\",\"message\":\"Rate limit exceeded\"}";
+        return exchange.getResponse().writeWith(
+            Mono.just(exchange.getResponse().bufferFactory().wrap(body.getBytes()))
+        );
     }
 
     private String buildRateLimitKey(String routeId, ServerWebExchange exchange, RateLimiterConfig config) {
