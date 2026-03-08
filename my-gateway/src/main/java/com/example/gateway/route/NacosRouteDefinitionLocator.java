@@ -7,10 +7,12 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cloud.gateway.event.RefreshRoutesEvent;
 import org.springframework.cloud.gateway.filter.FilterDefinition;
 import org.springframework.cloud.gateway.handler.predicate.PredicateDefinition;
 import org.springframework.cloud.gateway.route.RouteDefinition;
 import org.springframework.cloud.gateway.route.RouteDefinitionLocator;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.env.Environment;
 import reactor.core.publisher.Flux;
 
@@ -30,12 +32,14 @@ public class NacosRouteDefinitionLocator implements RouteDefinitionLocator {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ConfigService configService;
     private final String dataId;
-    
+    private final ApplicationEventPublisher eventPublisher;
+
     private static final long CACHE_TTL_MS = 10000;
     private List<RouteDefinition> cachedRoutes = Collections.emptyList();
     private volatile long lastLoadTime = 0;
 
-    public NacosRouteDefinitionLocator(Environment env) {
+    public NacosRouteDefinitionLocator(Environment env, ApplicationEventPublisher eventPublisher) {
+        this.eventPublisher = eventPublisher;
         this.dataId = env.getProperty("spring.cloud.nacos.config.shared-configs[0].data-id", "gateway-routes.json");
         String serverAddr = env.getProperty("spring.cloud.nacos.config.server-addr", "127.0.0.1:8848");
         String namespace = env.getProperty("spring.cloud.nacos.config.namespace", "");
@@ -58,6 +62,8 @@ public class NacosRouteDefinitionLocator implements RouteDefinitionLocator {
                         cachedRoutes = Collections.emptyList();
                         lastLoadTime = 0;
                     }
+                    // Notify SCG to refresh its internal route cache immediately
+                    NacosRouteDefinitionLocator.this.publishRefreshEvent();
                 }
                 
                 @Override
@@ -78,6 +84,18 @@ public class NacosRouteDefinitionLocator implements RouteDefinitionLocator {
         cachedRoutes = Collections.emptyList();
         lastLoadTime = 0;
         log.info("Cleared route cache");
+    }
+
+    /**
+     * Publish RefreshRoutesEvent to notify SCG to reload its internal route cache.
+     */
+    private void publishRefreshEvent() {
+        try {
+            eventPublisher.publishEvent(new RefreshRoutesEvent(this));
+            log.info("Published RefreshRoutesEvent to SCG");
+        } catch (Exception e) {
+            log.warn("Failed to publish RefreshRoutesEvent", e);
+        }
     }
 
     @Override
