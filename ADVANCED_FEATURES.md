@@ -8,20 +8,18 @@ Implementation details for the gateway's three runtime plugins.
 
 **Files:** `ratelimiter/RedisRateLimiter.java`, `ratelimiter/RateLimiterGlobalFilter.java`
 
-**Strategy:** Redis sliding-window (primary) + Sentinel QPS (fallback)
+**Strategy:** Redis sliding-window
 
 ```
 Request
   │
   ▼
-Redis available? ──Yes──► Redis sliding window ──Allow──► next filter
-       │                          │
-       No                       Reject
-       │                          │
-       ▼                          ▼
-  Sentinel QPS               HTTP 429
-  ──Allow──► next filter
-  ──Reject──► HTTP 429
+Redis sliding window ──Allow──► next filter
+       │
+     Reject
+       │
+       ▼
+   HTTP 429
 ```
 
 **Core Redis logic (sliding window):**
@@ -51,7 +49,7 @@ return false;      // rejected → 429
 | `keyType` | `ip` / `route` / `combined` / `header` |
 | `keyPrefix` | Redis key prefix (default `rate_limit:`) |
 
-Redis health check runs every 10 s; recovers after 5 s cooldown.
+
 
 ---
 
