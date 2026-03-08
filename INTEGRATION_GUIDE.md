@@ -1,841 +1,247 @@
-# Spring Cloud Gateway Integration Guide
+# Integration Guide
 
-## Project Overview
-
-This project demonstrates how to build a **dynamic API gateway management system** by extending Spring Cloud Gateway with a custom admin console. The system consists of two core modules:
-
-1. **gateway-admin** - Web-based management console for visual configuration
-2. **my-gateway** - Modified Spring Cloud Gateway with dynamic routing and plugin support
+Technical reference for the Spring Cloud Gateway Dynamic Management System.
 
 ---
 
-## 1. Gateway Admin Console
+## Architecture Overview
 
-### Purpose
-Provides a web UI and REST API to manage gateway configurations (routes, services, plugins) without editing YAML files manually.
-
-### Key Components
-
-#### A. NacosConfigManager
-**Location:** `gateway-admin/src/main/java/com/example/gatewayadmin/config/NacosConfigManager.java`
-
-**Responsibilities:**
-- Manages Nacos ConfigService connection
-- Pushes configuration updates to Nacos server
-- Listens for configuration changes
-
-**Configuration Data IDs:**
-- `gateway-routes.json` - Route definitions
-- `gateway-services.json` - Service instance configurations
-- `gateway-plugins.json` - Plugin configurations
-
-```java
-// Example: Push route configuration to Nacos
-public void updateRoutes(String routesJson) {
-    configService.publishConfig(
-        "gateway-routes.json", 
-        "DEFAULT_GROUP", 
-        routesJson
-    );
-}
 ```
-
-#### B. REST Controllers
-
-**RouteController** (`/api/routes`)
-- `POST /api/routes` - Create new route
-- `DELETE /api/routes/{routeId}` - Delete route
-- `GET /api/routes` - List all routes
-
-**ServiceController** (`/api/services`)
-- `POST /api/services` - Create service with instances
-- `DELETE /api/services/{name}` - Delete service
-- `GET /api/services/nacos-discovery` - Get services from Nacos
-
-**PluginController** (`/api/plugins`)
-- `POST /api/plugins/rate-limiter` - Configure rate limiter
-- `POST /api/plugins/custom-header` - Configure custom headers
-
-#### C. Data Models
-
-**RouteDefinition** - Mirrors Spring Cloud Gateway's route structure:
-```java
-{
-  "id": "user-route",
-  "uri": "lb://user-service",
-  "predicates": [
-    {"name": "Path", "args": {"pattern": "/api/users/**"}}
-  ],
-  "filters": [
-    {"name": "StripPrefix", "args": {"parts": "1"}}
-  ]
-}
-```
-
-**ServiceDefinition** - Custom service model:
-```java
-{
-  "name": "user-service",
-  "loadBalancer": "round-robin",
-  "instances": [
-    {"ip": "127.0.0.1", "port": 8081, "weight": 1.0}
-  ]
-}
-```
-
-### How It Works
-
-1. User creates route/service/plugin via web UI
-2. Admin console validates and formats configuration
-3. Configuration is pushed to Nacos as JSON
-4. My-Gateway listens for changes and applies them in real-time
-
----
-
-## 2. My-Gateway (Modified Spring Cloud Gateway)
-
-### Core Modifications
-
-To enable dynamic configuration, we modified Spring Cloud Gateway at three key points:
-
-#### A. Dynamic Route Loading
-
-**Component:** `NacosRouteDefinitionLocator`
-
-**Location:** `my-gateway/src/main/java/com/example/mygateway/route/NacosRouteDefinitionLocator.java`
-
-**What it does:**
-- Replaces default route definition locator
-- Listens to `gateway-routes.json` in Nacos
-- Parses JSON and converts to `RouteDefinition` objects
-- Caches routes with TTL (10 seconds)
-- Automatically refreshes when configuration changes
-
-**Implementation:**
-```java
-@Override
-public Flux<RouteDefinition> getRouteDefinitions() {
-    // Check cache first
-    if (!cachedRoutes.isEmpty() && !cacheExpired()) {
-        return Flux.fromIterable(cachedRoutes);
-    }
-    
-    // Load from Nacos
-    String content = configService.getConfig("gateway-routes.json", "DEFAULT_GROUP", 5000);
-    
-    // Parse JSON (supports multiple formats)
-    List<RouteDefinition> routes = parseRoutes(content);
-    
-    // Update cache
-    cachedRoutes = routes;
-    
-    return Flux.fromIterable(routes);
-}
-```
-
-**Supported JSON Formats:**
-1. Wrapped array: `{"version": "1.0", "routes": [...]}`
-2. Direct array: `[...]`
-3. Map format: `{routeId: {...}}`
-
-#### B. Custom Global Filters
-
-##### 1. NacosLoadBalancerFilter
-
-**Order:** 10150 (replaces ReactiveLoadBalancerClientFilter)
-
-**Location:** `my-gateway/src/main/java/com/example/mygateway/filter/NacosLoadBalancerFilter.java`
-
-**Purpose:**
-- Integrates directly with Nacos service discovery
-- Selects service instances based on load balancing strategy
-- Supports weighted round-robin, random, and least connections
-
-**How it works:**
-```java
-@Override
-public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-    URI url = exchange.getAttribute(GATEWAY_REQUEST_URL_ATTR);
-    
-    // Only process lb:// protocol
-    if ("lb".equals(url.getScheme())) {
-        String serviceId = url.getHost();
-        
-        // Get healthy instances from Nacos
-        List<Instance> instances = nacosNamingService.getAllInstances(serviceId);
-        
-        // Filter healthy and enabled instances
-        List<Instance> healthyInstances = instances.stream()
-            .filter(Instance::isHealthy)
-            .filter(Instance::isEnabled)
-            .collect(Collectors.toList());
-        
-        // Select instance using load balancer
-        Instance selected = selectInstance(healthyInstances, strategy);
-        
-        // Reconstruct URI: lb://user-service -> http://127.0.0.1:8081
-        URI finalUri = new URI("http://" + selected.getIp() + ":" + selected.getPort());
-        exchange.getAttributes().put(GATEWAY_REQUEST_URL_ATTR, finalUri);
-    }
-    
-    return chain.filter(exchange);
-}
-```
-
-**Load Balancing Strategies:**
-- **Round Robin** - Distributes requests evenly
-- **Weighted Round Robin** - Considers instance weights from Nacos
-- **Random** - Random selection
-- **Least Connections** - Routes to instance with fewest active connections
-
-##### 2. StaticProtocolGlobalFilter
-
-**Order:** 10001
-
-**Location:** `my-gateway/src/main/java/com/example/mygateway/filter/StaticProtocolGlobalFilter.java`
-
-**Purpose:**
-- Handles `static://` protocol for fixed node routing
-- Reads service instances from `gateway-services.json`
-- Useful for services not registered in Nacos
-
-**How it works:**
-```java
-@Override
-public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-    Object routeObj = exchange.getAttribute(GATEWAY_ROUTE_ATTR);
-    URI routeUri = routeObj.getUri();
-    
-    // Intercept static:// protocol
-    if ("static".equalsIgnoreCase(routeUri.getScheme())) {
-        // Resolve from gateway-services.json
-        URI resolvedUri = resolveFromGatewayServices(routeUri.getHost());
-        
-        if (resolvedUri != null) {
-            // Reconstruct final HTTP URI
-            URI finalUri = new URI(
-                "http",
-                null,
-                resolvedUri.getHost(),
-                resolvedUri.getPort(),
-                exchange.getRequest().getPath().value(),
-                exchange.getRequest().getQuery(),
-                null
-            );
-            
-            exchange.getAttributes().put(GATEWAY_REQUEST_URL_ATTR, finalUri);
-        }
-    }
-    
-    return chain.filter(exchange);
-}
-```
-
-**Configuration Example (gateway-services.json):**
-```json
-{
-  "services": [
-    {
-      "name": "legacy-service",
-      "loadBalancer": "round-robin",
-      "instances": [
-        {"ip": "192.168.1.100", "port": 8080, "weight": 1.0}
-      ]
-    }
-  ]
-}
-```
-
-##### 3. DynamicCustomHeaderGlobalFilter
-
-**Order:** 10250 (after load balancer)
-
-**Location:** `my-gateway/src/main/java/com/example/mygateway/filter/DynamicCustomHeaderGlobalFilter.java`
-
-**Purpose:**
-- Adds custom headers based on plugin configuration
-- Supports variable placeholders
-- Executes after route is determined
-
-**How it works:**
-```java
-@Override
-public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-    String routeId = getRouteId(exchange);
-    
-    // Check if route has custom header config
-    if (!pluginConfigManager.hasCustomHeaders(routeId)) {
-        return chain.filter(exchange);
-    }
-    
-    // Get headers from config
-    Map<String, String> customHeaders = pluginConfigManager.getCustomHeadersForRoute(routeId);
-    
-    // Add headers to request
-    ServerHttpRequest request = exchange.getRequest();
-    ServerHttpRequest.Builder builder = request.mutate();
-    
-    for (Map.Entry<String, String> entry : customHeaders.entrySet()) {
-        String headerName = entry.getKey();
-        String headerValue = resolveHeaderValue(entry.getValue(), exchange);
-        builder.header(headerName, headerValue);
-    }
-    
-    return chain.filter(exchange.mutate().request(builder.build()).build());
-}
-```
-
-**Variable Resolution:**
-```java
-private String resolveHeaderValue(String value, ServerWebExchange exchange) {
-    // Support ${random.uuid}
-    if (value.contains("${random.uuid}")) {
-        value = value.replace("${random.uuid}", UUID.randomUUID().toString());
-    }
-    
-    // Support ${client.ip}
-    if (value.contains("${client.ip}")) {
-        String ip = exchange.getRequest().getRemoteAddress()
-            .getAddress().getHostAddress();
-        value = value.replace("${client.ip}", ip);
-    }
-    
-    // Support ${request.path}
-    if (value.contains("${request.path}")) {
-        value = value.replace("${request.path}", exchange.getRequest().getPath().value());
-    }
-    
-    return value;
-}
-```
-
-#### C. Plugin System
-
-##### PluginConfigManager
-
-**Location:** `my-gateway/src/main/java/com/example/mygateway/plugin/PluginConfigManager.java`
-
-**Responsibilities:**
-- Listens to `gateway-plugins.json` in Nacos
-- Parses plugin configurations
-- Provides API for filters to query plugin settings
-
-**Configuration Structure:**
-```json
-{
-  "plugins": {
-    "customHeaders": [
-      {
-        "routeId": "user-route",
-        "enabled": true,
-        "headers": {
-          "X-Request-Id": "${random.uuid}",
-          "X-Forwarded-For": "${client.ip}"
-        }
-      }
-    ],
-    "rateLimiters": [
-      {
-        "routeId": "api-route",
-        "qps": 100,
-        "burstCapacity": 200
-      }
-    ]
-  }
-}
-```
-
-##### NacosPluginConfigListener
-
-**Location:** `my-gateway/src/main/java/com/example/mygateway/config/NacosPluginConfigListener.java`
-
-**Purpose:**
-- Initializes Nacos ConfigService
-- Adds listener for `gateway-plugins.json`
-- Triggers PluginConfigManager.updateConfig() on changes
-
-```java
-@EventListener(ApplicationReadyEvent.class)
-public void init() {
-    ConfigService configService = NacosFactory.createConfigService(props);
-    
-    configService.addListener("gateway-plugins.json", "DEFAULT_GROUP", new Listener() {
-        @Override
-        public void receiveConfigInfo(String configInfo) {
-            pluginConfigManager.updateConfig(configInfo);
-        }
-    });
-}
+┌──────────────────────────────────────────────┐
+│              Gateway Admin (8080)            │
+│  RouteController / ServiceController /       │
+│  PluginController  →  NacosConfigManager     │
+└──────────────────────┬───────────────────────┘
+                       │ publish JSON config
+                       ▼
+              ┌─────────────────┐
+              │   Nacos (8848)  │
+              │  routes.json    │
+              │  services.json  │
+              │  plugins.json   │
+              └────────┬────────┘
+          listen+notify│
+                       ▼
+┌──────────────────────────────────────────────┐
+│                My-Gateway (80)               │
+│                                              │
+│  NacosRouteDefinitionLocator                 │
+│    └─ Nacos listener → RefreshRoutesEvent    │
+│                                              │
+│  Global Filter Chain (by order):             │
+│    TimeoutGlobalFilter        (-200)         │
+│    IPFilterGlobalFilter       (-100)         │
+│    RateLimiterGlobalFilter     (-50)         │
+│    StaticProtocolGlobalFilter (10001)        │
+│    NacosLoadBalancerFilter    (10150)        │
+└──────────────────────┬───────────────────────┘
+                       │ HTTP
+                       ▼
+              ┌─────────────────┐
+              │  Backend Service │
+              └─────────────────┘
 ```
 
 ---
 
-## 3. Integration Architecture
+## Config Data IDs (Nacos, DEFAULT_GROUP)
 
-### Complete Request Flow
-
-```
-┌─────────────┐
-│   Client    │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────────────────────────────────┐
-│         My-Gateway (Port 80)            │
-│                                         │
-│  ┌──────────────────────────────────┐  │
-│  │  NacosRouteDefinitionLocator     │  │◄─── gateway-routes.json
-│  └──────────────────────────────────┘  │
-│                                         │
-│  ┌──────────────────────────────────┐  │
-│  │  StaticProtocolGlobalFilter      │  │◄─── gateway-services.json
-│  │  (Order: 10001)                  │  │
-│  └──────────────────────────────────┘  │
-│                                         │
-│  ┌──────────────────────────────────┐  │
-│  │  NacosLoadBalancerFilter         │  │◄─── Nacos Discovery
-│  │  (Order: 10150)                  │  │
-│  └──────────────────────────────────┘  │
-│                                         │
-│  ┌──────────────────────────────────┐  │
-│  │  DynamicCustomHeaderGlobalFilter │  │◄─── gateway-plugins.json
-│  │  (Order: 10250)                  │  │
-│  └──────────────────────────────────┘  │
-└──────────────┬──────────────────────────┘
-               │
-               ▼
-        ┌─────────────┐
-        │Backend Svc  │
-        └─────────────┘
-```
-
-### Configuration Flow
-
-```
-┌──────────────────┐
-│  Gateway Admin   │
-│   (Port 8081)    │
-└────────┬─────────┘
-         │ REST API
-         ▼
-┌──────────────────┐
-│  NacosConfigMgr  │
-└────────┬─────────┘
-         │ Publish Config
-         ▼
-┌──────────────────┐
-│  Nacos Server    │
-│  (Port 8848)     │
-│  ──────────────  │
-│  - gateway-      │
-│    routes.json   │
-│  - gateway-      │
-│    services.json │
-│  - gateway-      │
-│    plugins.json  │
-└────────┬─────────┘
-         │ Listen & Notify
-         ▼
-┌──────────────────┐
-│   My-Gateway     │
-│  ──────────────  │
-│  - Route Locator │
-│  - Plugin Mgr    │
-│  - LB Filter     │
-└──────────────────┘
-```
+| Data ID | Description |
+|---------|-------------|
+| `gateway-routes.json` | Route definitions |
+| `gateway-services.json` | Static service instances (for `static://`) |
+| `gateway-plugins.json` | Plugin config: rate limiter, IP filter, timeout |
 
 ---
 
-## 4. Key Implementation Details
+## 1. Dynamic Route Loading
 
-### A. Filter Order Strategy
+**Class:** `NacosRouteDefinitionLocator`
 
-Filters must execute in correct order:
-
-1. **StaticProtocolGlobalFilter (10001)** - Resolves static:// URIs early
-2. **NacosLoadBalancerFilter (10150)** - Replaces default LB filter
-3. **DynamicCustomHeaderGlobalFilter (10250)** - Runs after route is confirmed
-
-**Why this order?**
-- Static protocol resolution happens before load balancing
-- Load balancer selects instance before adding headers
-- Custom headers are added last (may include instance info)
-
-### B. Cache Strategy
-
-Both routes and services use caching to reduce Nacos load:
+- Implements SCG's `RouteDefinitionLocator`
+- Caches routes (TTL 10 s), reloads on cache miss or Nacos change
+- On config change: clears cache → publishes `RefreshRoutesEvent` → SCG rebuilds route table immediately
 
 ```java
-private static final long CACHE_TTL_MS = 10000; // 10 seconds
-
-// Check cache before loading from Nacos
-if (cachedRoutes != null && (now - lastLoadTime) < CACHE_TTL_MS) {
-    return cachedRoutes;
-}
-
-// Load from Nacos and update cache
-cachedRoutes = loadFromNacos();
-lastLoadTime = now;
-```
-
-**Benefits:**
-- Reduces Nacos RPC calls
-- Improves response time
-- Prevents cascading failures during Nacos downtime
-
-### C. Hot Update Mechanism
-
-Configuration changes take effect immediately without restart:
-
-1. User updates config via Admin UI
-2. Admin publishes new config to Nacos
-3. Nacos notifies registered listeners
-4. My-Gateway receives notification
-5. Cache is cleared or updated
-6. Next request uses new configuration
-
-**Example:**
-```java
-configService.addListener("gateway-routes.json", "DEFAULT_GROUP", new Listener() {
-    @Override
+// Nacos listener → immediate SCG refresh
+configService.addListener(dataId, "DEFAULT_GROUP", new Listener() {
     public void receiveConfigInfo(String configInfo) {
-        log.info("Route config updated");
-        // Clear cache to force reload on next request
         cachedRoutes = Collections.emptyList();
         lastLoadTime = 0;
+        eventPublisher.publishEvent(new RefreshRoutesEvent(this));
     }
 });
 ```
 
-### D. Load Balancing Implementation
+**Supported JSON formats for `gateway-routes.json`:**
 
-**Weighted Round-Robin:**
-```java
-private Instance selectByWeightedRoundRobin(List<Instance> instances) {
-    // Calculate total weight
-    double totalWeight = instances.stream()
-        .mapToDouble(Instance::getWeight)
-        .sum();
-    
-    // Random selection based on weight proportion
-    double random = Math.random() * totalWeight;
-    double weightSum = 0;
-    
-    for (Instance instance : instances) {
-        weightSum += instance.getWeight();
-        if (random <= weightSum) {
-            return instance;
-        }
-    }
-    
-    return instances.get(instances.size() - 1);
-}
-```
-
----
-
-## 5. Plugin Development Guide
-
-### Creating a Custom Plugin
-
-**Step 1: Define Plugin Configuration**
-
-Add to `gateway-plugins.json`:
 ```json
 {
-  "plugins": {
-    "yourPlugin": [
-      {
-        "routeId": "your-route",
-        "enabled": true,
-        "config": {
-          "key1": "value1"
-        }
-      }
-    ]
-  }
-}
-```
-
-**Step 2: Create Plugin Manager**
-
-Extend `PluginConfigManager` to parse your config:
-```java
-public Map<String, String> getYourPluginConfig(String routeId) {
-    // Query plugin config for specific route
-    return pluginConfig.getYourPlugin().stream()
-        .filter(p -> p.getRouteId().equals(routeId))
-        .findFirst()
-        .map(YourPlugin::getConfig)
-        .orElse(Collections.emptyMap());
-}
-```
-
-**Step 3: Implement GlobalFilter**
-
-```java
-@Component
-@Slf4j
-public class YourCustomFilter implements GlobalFilter, Ordered {
-    
-    private final PluginConfigManager configManager;
-    
-    @Override
-    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        String routeId = getRouteId(exchange);
-        
-        // Get plugin config
-        Map<String, String> config = configManager.getYourPluginConfig(routeId);
-        
-        if (config.isEmpty()) {
-            return chain.filter(exchange);
-        }
-        
-        // Apply plugin logic
-        // ...
-        
-        return chain.filter(exchange);
-    }
-    
-    @Override
-    public int getOrder() {
-        return 10300; // Choose appropriate order
-    }
-}
-```
-
----
-
-## 6. Rate Limiting (Advanced)
-
-### Overview
-
-The gateway implements a dual-strategy rate limiting system:
-
-1. **Redis Global Rate Limiting** - Distributed rate limiting across multiple gateway instances
-2. **Sentinel Local Rate Limiting** - Fallback to single-instance rate limiting when Redis is unavailable
-
-### Architecture
-
-```
-Request -> Redis Global Rate Limiting (Priority)
-                |
-                v
-        [Available] --> Allow, Continue
-                |
-                v
-        [Rejected] --> Return 429
-                |
-                v
-        [Unavailable] --> Fallback to Sentinel
-                                        |
-                                        v
-                                [Sentinel QPS Limit]
-```
-
-### Configuration
-
-**Rate Limiter Config (Nacos: `gateway-rate-limiter.json`):**
-```json
-{
-  "rateLimiters": [
+  "version": "1.0",
+  "routes": [
     {
-      "routeId": "user-service",
-      "enabled": true,
-      "redisQps": 100,
-      "redisBurstCapacity": 200,
-      "keyPrefix": "rate_limit:",
-      "keyType": "combined",
-      "sentinelQps": 50,
-      "sentinelThresholdType": "QPS",
-      "sentinelControlStrategy": "reject",
-      "fallbackToSentinel": true,
-      "redisFallbackTimeoutMs": 5000
+      "id": "demo-route",
+      "uri": "static://demo-service",
+      "predicates": [{"name": "Path", "args": {"pattern": "/api/**"}}],
+      "filters": [{"name": "StripPrefix", "args": {"parts": "1"}}]
     }
   ]
 }
 ```
 
-### Configuration Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `enabled` | boolean | true | Enable rate limiting |
-| `redisQps` | int | 100 | Redis global QPS limit (0 = disabled) |
-| `redisBurstCapacity` | int | 200 | Max burst requests |
-| `keyPrefix` | String | "rate_limit:" | Redis key prefix |
-| `keyType` | String | "combined" | Key type: route/ip/user/combined |
-| `sentinelQps` | int | 50 | Sentinel fallback QPS limit |
-| `sentinelThresholdType` | String | "QPS" | Threshold type: QPS/threads |
-| `fallbackToSentinel` | boolean | true | Enable Sentinel fallback |
-| `redisFallbackTimeoutMs` | long | 5000 | Fallback timeout after Redis failure |
-
-### Admin API
-
-**Gateway-Admin provides REST API for rate limiter management:**
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | /api/rate-limiter | Get all rate limiter configs |
-| GET | /api/rate-limiter/{routeId} | Get config by route ID |
-| POST | /api/rate-limiter | Create/Update config |
-| DELETE | /api/rate-limiter/{routeId} | Delete config |
-| POST | /api/rate-limiter/refresh | Refresh configs from Nacos |
-
-### Response Headers
-
-When rate limit is triggered, the following headers are returned:
-
-| Header | Description |
-|--------|-------------|
-| X-RateLimit-Limit | Maximum requests allowed |
-| X-RateLimit-Remaining | Remaining requests in window |
-| X-RateLimit-Type | Rate limiter type: redis/sentinel |
-
-### Key Components
-
-**RedisRateLimiter.java** - Core Redis rate limiting with sliding window algorithm:
-- Health check every 10 seconds
-- Auto fallback to Sentinel when Redis fails
-- 5-second cooldown before recovering
-
-**RedisRateLimitSlotChainBuilder.java** - Sentinel SPI extension:
-- Custom Slot chain with Redis rate limiting priority
-- Falls back to Sentinel when Redis unavailable
-
-**SentinelBlockHandler.java** - 429 response handler:
-- Returns standard HTTP 429 status
-- Includes X-RateLimit-* headers
-
-**RateLimiterConfigManager.java** - Nacos configuration loader:
-- Loads config from Nacos on startup
-- Supports hot reload
-
 ---
 
-## 7. Deployment Notes
+## 2. static:// Protocol (`StaticProtocolGlobalFilter`, order 10001)
 
-### Prerequisites
+Resolves `static://<service-name>` URIs to real HTTP addresses using `gateway-services.json`.
 
-- JDK 17+
-- Nacos 2.4.3 (standalone for demo, cluster for production)
-- Redis 6.0+ (for rate limiter plugin)
-- Maven 3.8+
+**Flow:**
+1. Read `routeUri.getScheme()` — if `static`, look up service in config
+2. Filter healthy + enabled instances
+3. Select instance by load balancing strategy
+4. Overwrite `GATEWAY_REQUEST_URL_ATTR` with `http://<ip>:<port>/<path>`
 
-### Configuration Files
+**Load balancing strategies:**
 
-**application.yml (My-Gateway):**
-```yaml
-spring:
-  cloud:
-    nacos:
-      config:
-        server-addr: 127.0.0.1:8848
-        namespace: public
-        file-extension: json
-    gateway:
-      discovery:
-        locator:
-          enabled: false  # Disable default locator
+| Value | Algorithm |
+|-------|-----------|
+| `round-robin` (default) | Timestamp-based modulo |
+| `random` | `Random.nextInt()` |
+| `weighted` / `weight` | Deterministic weighted round-robin via `AtomicLong` counter + expanded slot list |
+
+```java
+// Weighted round-robin core
+List<ServiceInstanceConfig> expanded = new ArrayList<>();
+for (ServiceInstanceConfig inst : instances) {
+    int w = (int) Math.max(1, inst.getWeight());
+    for (int i = 0; i < w; i++) expanded.add(inst);
+}
+long idx = weightedCounter.getAndIncrement() % expanded.size();
+return expanded.get((int) idx);
 ```
 
-**bootstrap.yml (Gateway-Admin):**
-```yaml
-spring:
-  application:
-    name: gateway-admin
-  cloud:
-    nacos:
-      config:
-        server-addr: 127.0.0.1:8848
-        namespace: public
+Cache TTL: 10 s. Nacos listener clears cache immediately on config update/delete.
+
+---
+
+## 3. Nacos Discovery Load Balancing (`NacosLoadBalancerFilter`, order 10150)
+
+Handles `lb://<service-name>` URIs using Nacos naming service.
+
+- Queries healthy + enabled instances from Nacos
+- Delegates to SCG's `ReactorServiceInstanceLoadBalancer` if configured, else falls back to weighted round-robin
+- Reconstructs URI: `lb://svc` → `http://ip:port/path`
+
+---
+
+## 4. Plugin System
+
+### PluginConfigManager
+
+Central in-memory store for all plugin configs. Updated by `NacosPluginConfigListener` when `gateway-plugins.json` changes. Uses `AtomicReference<PluginConfig>` for thread safety.
+
+```java
+// Filters query configs like this:
+RateLimiterConfig cfg = pluginConfigManager.getRateLimiterForRoute(routeId);
+TimeoutConfig tc      = pluginConfigManager.getTimeoutForRoute(routeId);
+Map<?,?> ipCfg       = pluginConfigManager.getIPFilterForRoute(routeId);
 ```
 
-### Startup Sequence
+### gateway-plugins.json structure
 
-1. Start Nacos Server
-2. Start Redis (optional, for rate limiting)
-3. Start Gateway-Admin (Port 8081)
-4. Start My-Gateway (Port 80)
-5. Access Admin Console: http://localhost:8081
-
----
-
-## 7. Troubleshooting
-
-### Issue: Routes Not Loading
-
-**Symptoms:** Requests return 404, routes not appearing in logs
-
-**Solution:**
-1. Check Nacos configuration exists
-2. Verify Nacos server address in application.yml
-3. Check My-Gateway logs for parsing errors
-4. Ensure JSON format is valid
-
-### Issue: Load Balancer Not Working
-
-**Symptoms:** `Unable to find instance for service` error
-
-**Solution:**
-1. Verify service is registered in Nacos
-2. Check service instances are healthy
-3. Confirm Nacos namespace matches
-4. Review NacosLoadBalancerFilter logs
-
-### Issue: Plugins Not Applying
-
-**Symptoms:** Custom headers not added, rate limiting not working
-
-**Solution:**
-1. Check `gateway-plugins.json` exists in Nacos
-2. Verify plugin is enabled for route
-3. Confirm filter order is correct
-4. Check PluginConfigManager logs
+```json
+{
+  "version": "1.0",
+  "plugins": {
+    "rateLimiters": [
+      { "routeId": "demo-route", "qps": 100, "burstCapacity": 200,
+        "timeUnit": "second", "keyType": "ip", "enabled": true }
+    ],
+    "ipFilters": [
+      { "routeId": "demo-route", "mode": "whitelist",
+        "ipList": ["192.168.1.0/24", "127.0.0.1"], "enabled": true }
+    ],
+    "timeouts": [
+      { "routeId": "demo-route", "connectTimeout": 3000,
+        "responseTimeout": 5000, "enabled": true }
+    ]
+  }
+}
+```
 
 ---
 
-## 8. Future Enhancements
+## 5. Per-route Timeout (`TimeoutGlobalFilter`, order -200)
 
-Potential improvements for production use:
+Injects timeout values into SCG route metadata before `NettyRoutingFilter` runs.
 
-1. **Authentication & Authorization**
-   - JWT/OAuth2 integration
-   - RBAC for admin console
-   - API access control
+```java
+Map<String, Object> metadata = new HashMap<>(route.getMetadata());
+metadata.put(RouteMetadataUtils.CONNECT_TIMEOUT_ATTR,  config.getConnectTimeout());  // Integer ms
+metadata.put(RouteMetadataUtils.RESPONSE_TIMEOUT_ATTR, config.getResponseTimeout()); // Integer ms
+// Rebuild Route and write back to exchange
+Route newRoute = Route.async().id(...).metadata(metadata).build();
+exchange.getAttributes().put(GATEWAY_ROUTE_ATTR, newRoute);
+```
 
-2. **Advanced Rate Limiting**
-   - Distributed Redis rate limiting
-   - Sentinel integration
-   - Adaptive rate limiting
-
-3. **Monitoring & Observability**
-   - Prometheus metrics
-   - Distributed tracing (Sleuth/Zipkin)
-   - Grafana dashboards
-
-4. **High Availability**
-   - Gateway cluster deployment
-   - Nacos cluster
-   - Redis cluster
-
-5. **Advanced Routing**
-   - Canary releases
-   - A/B testing
-   - Traffic mirroring
+> `NettyRoutingFilter` reads these keys via `getLong()` and applies them at the Netty `HttpClient` level.  
+> On timeout → HTTP **504 Gateway Timeout**.
 
 ---
 
-## Conclusion
+## 6. IP Access Control (`IPFilterGlobalFilter`, order -100)
 
-This project demonstrates how to extend Spring Cloud Gateway with:
-- ✅ Dynamic route loading from Nacos
-- ✅ Visual management console
-- ✅ Custom load balancing strategies
-- ✅ Plugin architecture
-- ✅ Real-time configuration updates
+Reads `mode` (`whitelist` | `blacklist`) and `ipList` from `PluginConfigManager`.  
+Supports exact IP and CIDR (`192.168.1.0/24`) matching.  
+Rejected requests → HTTP **403 Forbidden**.
 
-The codebase serves as a foundation for building enterprise-grade API gateways while maintaining simplicity for learning and prototyping.
+---
 
-For questions or contributions, visit: https://github.com/leoli5695/scg-dynamic-admin-demo
+## 7. Rate Limiting (`RateLimiterGlobalFilter`, order -50)
+
+Dual-backend strategy:
+
+1. **Redis** (primary) — sliding window, distributed across gateway instances
+2. **Sentinel** (fallback) — activates automatically when Redis is unavailable (5 s cooldown)
+
+Rate limit key types: `ip` | `route` | `combined` | `header`.  
+Rejected requests → HTTP **429 Too Many Requests**.
+
+---
+
+## 8. Real-time Update Summary
+
+| Config changed | Propagation path | Latency |
+|----------------|-----------------|---------|
+| Route add/update/delete | Nacos → `NacosRouteDefinitionLocator` listener → `RefreshRoutesEvent` | < 1 s |
+| Service add/update/delete | Nacos → `StaticProtocolGlobalFilter` listener → cache cleared | < 1 s |
+| Plugin add/update/delete | Nacos → `NacosPluginConfigListener` → `PluginConfigManager.updateConfig()` | < 1 s |
+
+---
+
+## 9. Adding a Custom Plugin
+
+1. Add config section to `gateway-plugins.json`
+2. Parse it in `PluginConfigManager.parseConfig()`
+3. Implement a `GlobalFilter` that reads config via `PluginConfigManager`
+4. Register as `@Component` with appropriate `@Order`
+
+```java
+@Component
+public class MyPlugin implements GlobalFilter, Ordered {
+    @Autowired PluginConfigManager configManager;
+
+    @Override
+    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        String routeId = getRouteId(exchange);
+        // query config, apply logic
+        return chain.filter(exchange);
+    }
+
+    @Override public int getOrder() { return -30; }
+}
+```
+
+---
+
+For questions or contributions: https://github.com/leoli5695/scg-dynamic-admin-demo

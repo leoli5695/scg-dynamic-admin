@@ -1,297 +1,125 @@
-# Advanced Features Implementation
+# Advanced Features
 
-Core advanced features for production-grade API gateway: distributed rate limiting, IP access control, and CORS configuration.
-
----
-
-## A. Distributed Rate Limiting (Redis-based)
-
-**Redis Rate Limiter with Token Bucket Algorithm**
-
-### Core Implementation
-
-**RateLimiterConfig.java:**
-```java
-@Data
-public class RateLimiterConfig {
-    private String routeId;
-    private boolean enabled;
-    private int qps;
-    private int burstCapacity;
-}
-```
-
-**RedisRateLimiter.java:**
-```java
-@Component
-public class RedisRateLimiter {
-    @Autowired
-    private RedisTemplate<String, String> redisTemplate;
-    
-    public boolean tryAcquire(String routeId, int qps, int burstCapacity) {
-        String key = "rate_limiter:" + routeId;
-        
-        return redisTemplate.execute((RedisCallback<Boolean>) connection -> {
-            long now = System.currentTimeMillis();
-            byte[] keyBytes = key.getBytes();
-            
-            // Remove expired entries
-            connection.zSetCommands().zRemRangeByScore(keyBytes, 0, now - 1000);
-            
-            // Count requests in current window
-            Long count = connection.zSetCommands().zCard(keyBytes);
-            
-            if (count != null && count < qps) {
-                connection.zSetCommands().zAdd(keyBytes, now, String.valueOf(now).getBytes());
-                return true;
-            }
-            return false;
-        });
-    }
-}
-// Full implementation: RedisRateLimiter.java
-```
-
-**RateLimiterGlobalFilter.java:**
-```java
-@Component
-public class RateLimiterGlobalFilter implements GlobalFilter, Ordered {
-    @Autowired
-    private PluginConfigManager pluginConfigManager;
-    
-    @Autowired
-    private RedisRateLimiter redisRateLimiter;
-    
-    @Override
-    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        String routeId = getRouteId(exchange);
-        RateLimiterConfig config = pluginConfigManager.getRateLimiterConfig(routeId);
-        
-        if (!config.isEnabled()) return chain.filter(exchange);
-        
-        String clientId = extractClientId(exchange.getRequest());
-        boolean allowed = redisRateLimiter.tryAcquire(
-            routeId + ":" + clientId, 
-            config.getQps(), 
-            config.getBurstCapacity()
-        );
-        
-        if (!allowed) {
-            exchange.getResponse().setStatusCode(HttpStatus.TOO_MANY_REQUESTS);
-            return exchange.getResponse().setComplete();
-        }
-        
-        return chain.filter(exchange);
-    }
-    
-    private String extractClientId(ServerHttpRequest request) {
-        String apiKey = request.getHeaders().getFirst("X-API-Key");
-        if (apiKey != null) return "api_key:" + apiKey;
-        
-        InetSocketAddress remoteAddress = request.getRemoteAddress();
-        return remoteAddress != null ? "ip:" + remoteAddress.getAddress().getHostAddress() : "anonymous";
-    }
-    
-    @Override
-    public int getOrder() {
-        return 5000;
-    }
-}
-// Full implementation: RateLimiterGlobalFilter.java
-```
-
-**REST API Controller:**
-```java
-@RestController
-@RequestMapping("/api/plugins")
-public class PluginController {
-    @Autowired
-    private NacosConfigManager nacosConfigManager;
-    
-    @PostMapping("/rate-limiter")
-    public ResponseEntity<?> configureRateLimiter(@RequestBody RateLimiterConfig config) {
-        PluginConfig pluginConfig = nacosConfigManager.getPluginsConfig("gateway-plugins.json");
-        
-        pluginConfig.getRateLimiters().removeIf(rl -> rl.getRouteId().equals(config.getRouteId()));
-        pluginConfig.getRateLimiters().add(config);
-        
-        String json = objectMapper.writeValueAsString(pluginConfig);
-        nacosConfigManager.publishConfig("gateway-plugins.json", json);
-        
-        return ResponseEntity.ok(Map.of("message", "Rate limiter configured"));
-    }
-}
-// Full implementation: PluginController.java
-```
+Implementation details for the gateway's three runtime plugins.
 
 ---
 
-## B. IP Whitelist & Blacklist
+## A. Distributed Rate Limiting
 
-**IP Access Control with CIDR and Wildcard Support**
+**Files:** `ratelimiter/RedisRateLimiter.java`, `ratelimiter/RateLimiterGlobalFilter.java`
 
-### Core Implementation
+**Strategy:** Redis sliding-window (primary) + Sentinel QPS (fallback)
 
-**IpAccessControlFilter.java:**
+```
+Request
+  │
+  ▼
+Redis available? ──Yes──► Redis sliding window ──Allow──► next filter
+       │                          │
+       No                       Reject
+       │                          │
+       ▼                          ▼
+  Sentinel QPS               HTTP 429
+  ──Allow──► next filter
+  ──Reject──► HTTP 429
+```
+
+**Core Redis logic (sliding window):**
+
 ```java
-@Component
-public class IpAccessControlFilter implements GlobalFilter, Ordered {
-    @Autowired
-    private PluginConfigManager pluginConfigManager;
-    
-    @Override
-    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        String clientIp = extractClientIp(exchange.getRequest());
-        IpAccessConfig ipConfig = pluginConfigManager.getIpAccessConfig(getRouteId(exchange));
-        
-        if (ipConfig == null || !ipConfig.isEnabled()) return chain.filter(exchange);
-        
-        // Check blacklist
-        if (matchesIpPattern(clientIp, ipConfig.getBlacklist())) {
-            exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
-            return exchange.getResponse().setComplete();
-        }
-        
-        // Check whitelist
-        if (matchesIpPattern(clientIp, ipConfig.getWhitelist())) {
-            return chain.filter(exchange);
-        }
-        
-        exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
-        return exchange.getResponse().setComplete();
-    }
-    
-    private String extractClientIp(ServerHttpRequest request) {
-        String forwardedFor = request.getHeaders().getFirst("X-Forwarded-For");
-        if (forwardedFor != null) return forwardedFor.split(",")[0].trim();
-        
-        InetSocketAddress remoteAddress = request.getRemoteAddress();
-        return remoteAddress != null ? remoteAddress.getAddress().getHostAddress() : "unknown";
-    }
-    
-    private boolean matchesIpPattern(String ip, List<String> patterns) {
-        for (String pattern : patterns) {
-            if (pattern.contains("*")) {
-                String regex = pattern.replace(".", "\\.").replace("*", "\\d{1,3}");
-                if (ip.matches(regex)) return true;
-            } else if (pattern.equals(ip)) {
-                return true;
-            } else if (pattern.contains("/")) {
-                return matchesCidr(ip, pattern);
-            }
-        }
-        return false;
-    }
-    
-    @Override
-    public int getOrder() {
-        return 4000;
-    }
+// RedisRateLimiter.tryAcquire()
+long now = System.currentTimeMillis();
+long windowStart = now - windowMs;
+
+connection.zRemRangeByScore(key, 0, windowStart);       // evict old entries
+Long count = connection.zCard(key);                      // count in window
+if (count < limit) {
+    connection.zAdd(key, now, String.valueOf(now));       // record request
+    connection.expire(key, ttlSeconds);
+    return true;   // allowed
 }
-// Full implementation: IpAccessControlFilter.java
+return false;      // rejected → 429
 ```
 
-**Configuration Example:**
-```json
-{
-  "plugins": {
-    "ipAccess": [
-      {
-        "routeId": "admin-route",
-        "enabled": true,
-        "whitelist": ["192.168.1.0/24", "10.0.0.*"]
-      }
-    ]
-  }
-}
-```
+**Config fields (`gateway-plugins.json`):**
+
+| Field | Description |
+|-------|-------------|
+| `qps` | Max requests per `timeUnit` |
+| `timeUnit` | `second` / `minute` / `hour` |
+| `burstCapacity` | Max burst (Redis key TTL extends) |
+| `keyType` | `ip` / `route` / `combined` / `header` |
+| `keyPrefix` | Redis key prefix (default `rate_limit:`) |
+
+Redis health check runs every 10 s; recovers after 5 s cooldown.
 
 ---
 
-## C. Dynamic CORS Configuration
+## B. IP Access Control
 
-**Cross-Origin Resource Sharing for Frontend Integration**
+**File:** `filter/IPFilterGlobalFilter.java` (order -100)
 
-### Core Implementation
+Supports exact IP, wildcard (`192.168.1.*`), and CIDR (`192.168.1.0/24`) matching.
 
-**CorsGlobalFilter.java:**
 ```java
-@Component
-public class CorsGlobalFilter implements GlobalFilter, Ordered {
-    @Override
-    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        ServerHttpResponse response = exchange.getResponse();
-        
-        // Handle preflight OPTIONS request
-        if (HttpMethod.OPTIONS.matches(exchange.getRequest().getMethod().value())) {
-            addCorsHeaders(response);
-            return Mono.empty();
-        }
-        
-        addCorsHeaders(response);
-        return chain.filter(exchange);
+// Core matching
+private boolean matches(String ip, List<String> patterns) {
+    for (String p : patterns) {
+        if (p.contains("/")  && matchesCidr(ip, p)) return true;
+        if (p.contains("*")  && ip.matches(p.replace(".", "\\.").replace("*", "\\d{1,3}"))) return true;
+        if (p.equals(ip)) return true;
     }
-    
-    private void addCorsHeaders(ServerHttpResponse response) {
-        HttpHeaders headers = response.getHeaders();
-        headers.add("Access-Control-Allow-Origin", "*");
-        headers.add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-        headers.add("Access-Control-Allow-Headers", "*");
-        headers.add("Access-Control-Max-Age", "3600");
-    }
-    
-    @Override
-    public int getOrder() {
-        return -100;
-    }
+    return false;
 }
-// Full implementation: CorsGlobalFilter.java
 ```
+
+**Mode behavior:**
+
+| `mode` | Allow if | Reject if |
+|--------|----------|-----------|
+| `whitelist` | IP matches list | IP not in list |
+| `blacklist` | IP not in list | IP matches list |
+
+Client IP is read from `X-Forwarded-For` header first, then `RemoteAddress`.  
+Rejected → HTTP **403 Forbidden**.
 
 ---
 
-## D. Design Patterns for Extension
+## C. Per-route Timeout
 
-### Timeout Configuration
+**File:** `filter/TimeoutGlobalFilter.java` (order -200)
+
+Writes timeout values into SCG route metadata. `NettyRoutingFilter` (order `Integer.MAX_VALUE`) reads them and applies at the Netty `HttpClient` level.
+
 ```java
-return chain.filter(exchange)
-    .timeout(Duration.ofSeconds(30), Mono.defer(() -> {
-        exchange.getResponse().setStatusCode(HttpStatus.GATEWAY_TIMEOUT);
-        return exchange.getResponse().setComplete();
-    }));
+metadata.put(RouteMetadataUtils.CONNECT_TIMEOUT_ATTR,  config.getConnectTimeout());  // Integer ms
+metadata.put(RouteMetadataUtils.RESPONSE_TIMEOUT_ATTR, config.getResponseTimeout()); // Integer ms
+// Rebuild Route with new metadata and write back
+exchange.getAttributes().put(GATEWAY_ROUTE_ATTR, Route.async()...metadata(metadata).build());
 ```
 
-### JWT Authentication
-```java
-Jwt jwt = jwtDecoder.decode(token);
-ServerHttpRequest mutatedRequest = exchange.getRequest().mutate()
-    .header("X-User-Id", jwt.getSubject())
-    .build();
-return chain.filter(exchange.mutate().request(mutatedRequest).build());
-```
+| Field | Scope | On expiry |
+|-------|-------|-----------|
+| `connectTimeout` | TCP handshake | HTTP 504 |
+| `responseTimeout` | Request sent → full response | HTTP 504 |
 
-### Circuit Breaker (Resilience4j)
-```java
-return Mono.fromSupplier(() -> chain.filter(exchange))
-    .transformDeferred(CircuitBreakerOperator.of(circuitBreaker))
-    .onErrorResume(CallNotPermittedException.class, ex -> {
-        exchange.getResponse().setStatusCode(HttpStatus.SERVICE_UNAVAILABLE);
-        return exchange.getResponse().setComplete();
-    });
-```
+> **Why not `Mono.timeout()`?** SCG's own `NettyRoutingFilter` already handles timeouts via route metadata. Using `Mono.timeout()` would bypass Netty and cause 500 errors instead of 504.
 
 ---
 
-## Summary
+## D. Extending with a New Plugin
 
-### Implemented Features
-✅ **Distributed Rate Limiting** - Redis token bucket algorithm  
-✅ **IP Access Control** - CIDR and wildcard pattern matching  
-✅ **CORS Configuration** - Cross-origin request support  
+1. Add a config section to `gateway-plugins.json`
+2. Add a parser block in `PluginConfigManager.parseConfig()`
+3. Implement `GlobalFilter` + `Ordered`, inject `PluginConfigManager`
+4. Annotate with `@Component` — Spring auto-registers it into the filter chain
 
-### Extension Patterns
-📝 **Timeout** - Reactor timeout operator  
-📝 **Authentication** - JWT validation and context propagation  
-📝 **Circuit Breaker** - Resilience4j integration  
+Filter order reference:
 
-For complete implementation details, see [INTEGRATION_GUIDE.md](./INTEGRATION_GUIDE.md).
+| Filter | Order | Runs before |
+|--------|-------|-------------|
+| `TimeoutGlobalFilter` | -200 | All others |
+| `IPFilterGlobalFilter` | -100 | Rate limiter |
+| `RateLimiterGlobalFilter` | -50 | Routing |
+| `StaticProtocolGlobalFilter` | 10001 | LB filter |
+| `NacosLoadBalancerFilter` | 10150 | NettyRoutingFilter |
