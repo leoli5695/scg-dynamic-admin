@@ -1,4 +1,4 @@
-package com.example.mygateway.filter;
+package com.example.gateway.filter;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -7,18 +7,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
-import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory;
 import org.springframework.cloud.gateway.support.NotFoundException;
 import org.springframework.core.env.Environment;
-import org.springframework.core.Ordered;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.net.URI;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -142,18 +139,99 @@ public class CustomLoadBalancerGatewayFilterFactory extends AbstractGatewayFilte
         
         for (ServicesConfig.ServiceDefinition service : cfg.getServices().values()) {
             if (serviceName.equalsIgnoreCase(service.getName()) && service.getInstances() != null) {
-                for (ServicesConfig.StaticServiceInstance inst : service.getInstances()) {
-                    if (inst.isHealthy() && inst.isEnabled()) {
-                        String resolved = "http://" + inst.getHost() + ":" + inst.getPort();
-                        log.info("Resolved static://" + serviceName + " -> " + resolved);
-                        return URI.create(resolved);
-                    }
+                // Filter healthy and enabled instances
+                List<ServicesConfig.StaticServiceInstance> healthyInstances = 
+                    service.getInstances().stream()
+                        .filter(inst -> inst.isHealthy() && inst.isEnabled())
+                        .toList();
+                
+                if (healthyInstances.isEmpty()) {
+                    log.warn("No healthy/enabled instances for static://{}", serviceName);
+                    return null;
                 }
+                
+                // Select instance using weighted strategy
+                ServicesConfig.StaticServiceInstance selected = selectByWeightedStrategy(healthyInstances, "round-robin");
+                
+                String resolved = "http://" + selected.getHost() + ":" + selected.getPort();
+                log.info("Resolved static://{} -> {} (weighted {})", serviceName, resolved, selected.getPort());
+                return URI.create(resolved);
             }
         }
         
-        log.warn("No healthy instance found for static://" + serviceName);
+        log.warn("No matching service found for static://{}", serviceName);
         return null;
+    }
+
+    /**
+     * Select instance using weighted strategy (supports round-robin and random with weights)
+     */
+    private ServicesConfig.StaticServiceInstance selectByWeightedStrategy(
+            List<ServicesConfig.StaticServiceInstance> instances, String strategy) {
+        
+        if (instances.size() == 1) {
+            return instances.get(0);
+        }
+        
+        // Get weights from metadata (default weight = 1)
+        List<Integer> weights = instances.stream()
+                .map(inst -> {
+                    String weightStr = inst.getMetadata().get("weight");
+                    return weightStr != null ? Integer.parseInt(weightStr) : 1;
+                })
+                .toList();
+        
+        // Calculate total weight
+        int totalWeight = weights.stream().mapToInt(w -> w).sum();
+        
+        // Check if all weights are the same
+        boolean sameWeight = weights.stream().allMatch(w -> w == weights.get(0));
+        
+        if (sameWeight) {
+            // Use simple round-robin or random when all weights are equal
+            if ("random".equalsIgnoreCase(strategy)) {
+                int index = (int)(Math.random() * instances.size());
+                return instances.get(index);
+            } else {
+                // Default to round-robin
+                int index = (int)(System.currentTimeMillis() / 1000) % instances.size();
+                return instances.get(index);
+            }
+        }
+        
+        // Weighted selection
+        if ("random".equalsIgnoreCase(strategy)) {
+            // Weighted random: select based on weight proportion
+            double random = Math.random() * totalWeight;
+            double weightSum = 0;
+            
+            for (int i = 0; i < instances.size(); i++) {
+                weightSum += weights.get(i);
+                if (random <= weightSum) {
+                    ServicesConfig.StaticServiceInstance selected = instances.get(i);
+                    log.debug("Selected instance {}:{} with weight {} (total: {})",
+                            selected.getHost(), selected.getPort(), weights.get(i), totalWeight);
+                    return selected;
+                }
+            }
+            return instances.get(instances.size() - 1);
+        } else {
+            // Weighted round-robin: use smooth weighted round-robin algorithm
+            // For simplicity, use weighted random which gives similar distribution
+            double random = Math.random() * totalWeight;
+            double weightSum = 0;
+            
+            for (int i = 0; i < instances.size(); i++) {
+                weightSum += weights.get(i);
+                if (random <= weightSum) {
+                    ServicesConfig.StaticServiceInstance selected = instances.get(i);
+                    log.debug("Selected instance {}:{} with weight {} (total: {})",
+                            selected.getHost(), selected.getPort(), weights.get(i), totalWeight);
+                    return selected;
+                }
+            }
+            return instances.get(instances.size() - 1);
+        }
     }
 
     private ServicesConfig getServicesConfig() {
@@ -213,19 +291,32 @@ public class CustomLoadBalancerGatewayFilterFactory extends AbstractGatewayFilte
         }
         
         public static class StaticServiceInstance implements ServiceInstance {
-            private String ip; private int port; private boolean healthy; private boolean enabled;
+            private String ip; 
+            private int port; 
+            private boolean healthy; 
+            private boolean enabled;
+            private Integer weight; // Weight for load balancing
+            
             @Override public String getServiceId() { return null; }
             @Override public String getHost() { return ip; }
             @Override public int getPort() { return port; }
             @Override public boolean isSecure() { return false; }
             @Override public URI getUri() { return URI.create("http://" + ip + ":" + port); }
-            @Override public Map<String, String> getMetadata() { return Collections.emptyMap(); }
+            @Override public Map<String, String> getMetadata() { 
+                Map<String, String> metadata = new ConcurrentHashMap<>();
+                if (weight != null) {
+                    metadata.put("weight", String.valueOf(weight));
+                }
+                return metadata; 
+            }
             public boolean isHealthy() { return healthy; }
             public boolean isEnabled() { return enabled; }
+            public Integer getWeight() { return weight; }
             public void setIp(String ip) { this.ip = ip; }
             public void setPort(int port) { this.port = port; }
             public void setHealthy(boolean h) { this.healthy = h; }
             public void setEnabled(boolean e) { this.enabled = e; }
+            public void setWeight(Integer weight) { this.weight = weight; }
         }
     }
 }

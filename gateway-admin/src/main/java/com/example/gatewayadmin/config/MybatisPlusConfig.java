@@ -6,30 +6,52 @@ import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerIntercept
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.mybatis.spring.SqlSessionFactoryBean;
 import org.mybatis.spring.annotation.MapperScan;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 
 import javax.sql.DataSource;
 
 /**
- * MyBatis Plus 配置
- * 通过配置 mybatis-plus.enabled=true 启用（生产环境使用数据库时）
- * 默认 dev 环境下不启用
+ * MyBatis Plus Configuration
+ * Only active when profile is NOT 'dev'
+ *
+ * @author leoli
  */
-@Configuration
+@Configuration(proxyBeanMethods = false)
 @MapperScan("com.example.gatewayadmin.mapper")
-@ConditionalOnProperty(name = "mybatis-plus.enabled", havingValue = "true", matchIfMissing = false)
+@ConditionalOnExpression("!environment.getProperty('spring.profiles.active', 'dev').equals('dev')")
 public class MybatisPlusConfig {
 
     /**
-     * 分页插件
+     * DataSource configuration
+     */
+    @Bean
+    @ConfigurationProperties(prefix = "spring.datasource")
+    public DataSourceProperties dataSourceProperties() {
+        return new DataSourceProperties();
+    }
+
+    /**
+     * HikariDataSource (auto-configured from properties)
+     */
+    @Bean
+    @Primary
+    public DataSource dataSource(DataSourceProperties properties) {
+        return properties.initializeDataSourceBuilder().build();
+    }
+
+    /**
+     * Pagination interceptor
      */
     @Bean
     public MybatisPlusInterceptor mybatisPlusInterceptor() {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
-        interceptor.addInnerInterceptor(new PaginationInnerInterceptor(DbType.H2));
+        interceptor.addInnerInterceptor(new PaginationInnerInterceptor(DbType.MYSQL));
         return interceptor;
     }
 
@@ -41,7 +63,7 @@ public class MybatisPlusConfig {
         SqlSessionFactoryBean sessionFactory = new SqlSessionFactoryBean();
         sessionFactory.setDataSource(dataSource);
         sessionFactory.setMapperLocations(
-            new PathMatchingResourcePatternResolver().getResources("classpath*:mapper/**/*.xml")
+                new PathMatchingResourcePatternResolver().getResources("classpath*:mapper/**/*.xml")
         );
         return sessionFactory.getObject();
     }

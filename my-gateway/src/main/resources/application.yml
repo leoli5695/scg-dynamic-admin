@@ -6,6 +6,18 @@ spring:
     name: my-gateway
   config:
     import: optional:nacos:application.yml
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      password:
+      database: 0
+      timeout: 5000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
   cloud:
     nacos:
       discovery:

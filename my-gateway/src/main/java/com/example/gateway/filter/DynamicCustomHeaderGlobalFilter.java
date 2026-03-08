@@ -1,6 +1,6 @@
-package com.example.mygateway.filter;
+package com.example.gateway.filter;
 
-import com.example.mygateway.plugin.PluginConfigManager;
+import com.example.gateway.plugin.PluginConfigManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;

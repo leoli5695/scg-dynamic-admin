@@ -2,7 +2,6 @@ package com.example.gatewayadmin.config;
 
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.stereotype.Component;
 
 /**
  * Gateway Admin 配置属性

@@ -359,11 +359,12 @@
                 <div class="form-group">
                     <label>Load Balancing Strategy</label>
                     <select id="svc-lb">
-                        <option value="round-robin">Round Robin</option>
-                        <option value="weighted">Weighted</option>
+                        <option value="round-robin">Round Robin (supports weight)</option>
+                        <option value="random">Random (supports weight)</option>
+                        <option value="weighted" selected>Weighted (recommended)</option>
                         <option value="least-connections">Least Connections</option>
-                        <option value="random">Random</option>
                     </select>
+                    <small style="color:#999;margin-top:4px;display:block;">All strategies support instance weights. Round-robin distributes by weight ratio, random uses weight as probability.</small>
                 </div>
                 <div class="form-group">
                     <label>Service Instances</label>
@@ -434,6 +435,7 @@
                 </div>
                 <div class="form-group">
                     <label>Predicates <span class="required">*</span></label>
+                    <small style="color:#667eea;display:block;margin-bottom:8px;">⚠️ At least one Path predicate is required. Multiple Path predicates are supported (OR logic).</small>
                     <div class="dynamic-list" id="predicates-list"></div>
                     <button type="button" class="btn-add" onclick="addPredicate()">+ Add Predicate</button>
                 </div>
@@ -473,13 +475,24 @@
                     <div class="plugin-section-subtitle">Redis Global Rate Limiting</div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label>Redis QPS Limit <span class="required">*</span></label>
+                            <label>Rate Limit <span class="required">*</span></label>
                             <input type="number" id="rl-redis-qps" value="100" min="0" required>
-                            <small>Set to 0 to disable Redis rate limiting</small>
+                            <small>Number of requests per time unit</small>
                         </div>
+                        <div class="form-group">
+                            <label>Time Unit</label>
+                            <select id="rl-time-unit">
+                                <option value="second">Per Second (QPS)</option>
+                                <option value="minute">Per Minute</option>
+                                <option value="hour">Per Hour</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
                         <div class="form-group">
                             <label>Burst Capacity</label>
                             <input type="number" id="rl-redis-burst" value="200" min="1">
+                            <small>Burst request capacity</small>
                         </div>
                     </div>
                     <div class="form-row">
@@ -498,39 +511,6 @@
                         </div>
                     </div>
                     
-                    <!-- Sentinel Local Rate Limiting -->
-                    <div class="plugin-section-subtitle">Sentinel Fallback (when Redis unavailable)</div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Sentinel QPS Limit</label>
-                            <input type="number" id="rl-sentinel-qps" value="50" min="0">
-                            <small>Set to 0 to disable Sentinel fallback</small>
-                        </div>
-                        <div class="form-group">
-                            <label>Threshold Type</label>
-                            <select id="rl-sentinel-threshold-type">
-                                <option value="QPS" selected>QPS</option>
-                                <option value="threads">Threads</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <!-- Fallback Settings -->
-                    <div class="plugin-section-subtitle">Fallback Settings</div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="rl-fallback-enabled" checked>
-                                Enable Sentinel Fallback
-                            </label>
-                        </div>
-                        <div class="form-group">
-                            <label>Fallback Timeout (ms)</label>
-                            <input type="number" id="rl-fallback-timeout" value="5000" min="1000" step="1000">
-                            <small>Cooldown period after Redis failure</small>
-                        </div>
-                    </div>
-                    
                     <div class="form-group">
                         <label>
                             <input type="checkbox" id="rl-enabled" checked>
@@ -542,23 +522,75 @@
                 </form>
             </div>
 
-            <hr class="divider">
-
-            <div class="plugin-section">
-                <div class="plugin-section-title">🏷️ Custom Header Plugin</div>
-                <form id="headerForm" onsubmit="submitCustomHeader(event)">
+            <!-- IP Filter Plugin -->
+            <div style="margin-top: 2rem;">
+                <h3 style="color:#667eea;margin-bottom:1rem;">🛡️ IP Filter Plugin</h3>
+                <form id="ipFilterForm" onsubmit="submitIPFilter(event)" style="background:#f8f9fa;padding:1.5rem;border-radius:8px;">
                     <div class="form-group">
-                        <label>Associated Route <span class="required">*</span></label>
-                        <select id="header-route" required>
-                            <option value="">-- Select a created route --</option>
+                        <label>Route</label>
+                        <select id="ip-route" required></select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Mode</label>
+                        <select id="ip-mode" onchange="toggleIPListHelp()" required>
+                            <option value="blacklist">Blacklist (Block specified IPs)</option>
+                            <option value="whitelist">Whitelist (Allow only specified IPs)</option>
                         </select>
                     </div>
+                    
                     <div class="form-group">
-                        <label style="display:block;margin-bottom:8px;">Headers (Key-Value Pairs)</label>
-                        <div id="header-kv-list"></div>
-                        <button type="button" class="btn-add" onclick="addHeaderKV()">+ Add Header</button>
+                        <label>IP Addresses (one per line, supports CIDR)</label>
+                        <textarea id="ip-list" rows="6" placeholder="192.168.1.100&#10;10.0.0.0/8&#10;172.16.0.0/12" required></textarea>
+                        <small id="ip-help" style="color:#666;display:block;margin-top:0.5rem;">Example: 192.168.1.100 or 10.0.0.0/8</small>
                     </div>
-                    <button type="submit" class="btn-primary">✓ Save Custom Headers</button>
+                    
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="ip-enabled" checked>
+                            Enable IP Filter
+                        </label>
+                    </div>
+                    
+                    <button type="submit" class="btn-primary">✓ Save IP Filter Config</button>
+                </form>
+            </div>
+
+            <!-- Note: Custom Header Plugin removed - use SCG native AddRequestHeader filter instead -->
+            
+            <!-- Timeout Plugin -->
+            <div style="margin-top: 2rem;">
+                <h3 style="color:#667eea;margin-bottom:1rem;">⏱️ Timeout Plugin</h3>
+                <form id="timeoutForm" onsubmit="submitTimeout(event)" style="background:#f8f9fa;padding:1.5rem;border-radius:8px;">
+                    <div class="form-group">
+                        <label>Route</label>
+                        <select id="timeout-route" required></select>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Connect Timeout (ms)</label>
+                            <input type="number" id="timeout-connect" value="5000" min="100" step="100" required>
+                            <small>TCP 连接超时</small>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Response Timeout (ms)</label>
+                            <input type="number" id="timeout-response" value="30000" min="100" step="100" required>
+                            <small>从发起请求到收到完整响应的总超时</small>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="timeout-enabled" checked>
+                            Enable Timeout
+                        </label>
+                    </div>
+                    
+                    <button type="submit" class="btn-primary">✓ Save Timeout Config</button>
                 </form>
             </div>
         </div>
@@ -628,7 +660,7 @@ function refreshServiceDropdowns() {
 }
 
 function refreshRouteDropdowns() {
-    const routeIds = ['rl-route', 'header-route'];
+    const routeIds = ['rl-route', 'ip-route', 'timeout-route'];
     routeIds.forEach(id => {
         const sel = document.getElementById(id);
         if (!sel) return;
@@ -697,6 +729,16 @@ function onKeyResolverChange() {
     document.getElementById('rl-header-group').style.display = v === 'header' ? 'block' : 'none';
 }
 
+function toggleIPListHelp() {
+    const mode = document.getElementById('ip-mode').value;
+    const help = document.getElementById('ip-help');
+    if (mode === 'blacklist') {
+        help.textContent = 'Blacklist mode: These IPs will be BLOCKED. Example: 192.168.1.100 or 10.0.0.0/8';
+    } else {
+        help.textContent = 'Whitelist mode: Only these IPs will be ALLOWED. Example: 192.168.1.100 or 10.0.0.0/8';
+    }
+}
+
 // ======== Instance Rows ========
 function addInstance(ip='', port='8080', weight='1') {
     instanceSeq++;
@@ -723,60 +765,372 @@ function getInstances() {
 }
 
 // ======== Predicate Rows ========
-function addPredicate(name='Path', args='/api/**') {
+const predicateConfig = {
+    'Path': { 
+        label: 'Path', 
+        placeholder: 'Pattern, e.g. /api/**', 
+        defaultValue: '/api/**',
+        inputType: 'text' 
+    },
+    'Host': { 
+        label: 'Host', 
+        placeholder: 'Hostname pattern, e.g. www.example.com', 
+        defaultValue: 'www.example.com',
+        inputType: 'text' 
+    },
+    'Method': { 
+        label: 'Method', 
+        placeholder: 'Select HTTP methods', 
+        defaultValue: 'GET',
+        inputType: 'select-multiple',
+        options: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
+    },
+    'Header': { 
+        label: 'Header', 
+        placeholder: 'HeaderName:Regexp', 
+        defaultValue: 'X-Api-Key:.*',
+        inputType: 'kv-pair'
+    }
+};
+function addPredicate(name='Path', args='') {
     predicateSeq++;
     const id = predicateSeq;
     const row = document.createElement('div');
     row.className = 'dynamic-row kv-row';
     row.id = 'pred-' + id;
+    
+    // Build predicate options
+    const predicateOptions = Object.keys(predicateConfig).map(key => 
+        `<option value="${key}" ${name===key?'selected':''}>${predicateConfig[key].label}</option>`
+    ).join('');
+    
+    // Get default args if not provided
+    if (!args) {
+        args = predicateConfig[name]?.defaultValue || '';
+    }
+    
+    // Generate input HTML based on type
+    let inputHtml = '';
+    const config = predicateConfig[name] || predicateConfig['Path'];
+    
+    if (config.inputType === 'select-multiple') {
+        // Method checkbox group
+        const methods = args.split(',').filter(m => m);
+        const checkboxHtml = config.options.map(opt => 
+            `<label style="display:inline-flex;align-items:center;margin-right:12px;font-size:13px;">` +
+            `<input type="checkbox" value="${opt}" ${methods.includes(opt)?'checked':''} data-field="method-chk" style="margin-right:4px;">` +
+            `${opt}` +
+            `</label>`
+        ).join('');
+        inputHtml = `
+            <div style="display:flex;flex-wrap:wrap;gap:8px;padding:8px;background:#f8f9fa;border-radius:6px;">
+                ${checkboxHtml}
+            </div>
+        `;
+    } else if (config.inputType === 'kv-pair') {
+        // Header K/V input
+        let key = '', value = '';
+        if (args && args.includes(':')) {
+            const parts = args.split(':');
+            key = parts[0] || '';
+            value = parts.slice(1).join(':') || '';
+        }
+        inputHtml = `
+            <div style="display:flex;gap:8px;flex:1;">
+                <input type="text" placeholder="Header Name" value="${key}" data-field="header-key" style="flex:1;min-width:120px;">
+                <input type="text" placeholder="Regexp Value" value="${value}" data-field="header-value" style="flex:1;min-width:120px;">
+            </div>
+        `;
+    } else {
+        // Default text input
+        inputHtml = `
+            <input type="text" placeholder="${config.placeholder}" value="${args}" data-field="args" style="flex:1;">
+        `;
+    }
+    
     row.innerHTML = `
-        <select data-field="name">
-            <option value="Path" ${name==='Path'?'selected':''}>Path</option>
-            <option value="Host" ${name==='Host'?'selected':''}>Host</option>
-            <option value="Method" ${name==='Method'?'selected':''}>Method</option>
-            <option value="Header" ${name==='Header'?'selected':''}>Header</option>
+        <select data-field="name" onchange="onPredicateTypeChange(this)">
+            ${predicateOptions}
         </select>
-        <input type="text" placeholder="Arguments, e.g. /api/**" value="${args}" data-field="args">
+        ${inputHtml}
         <button type="button" class="btn-remove" onclick="document.getElementById('pred-${id}').remove()">×</button>
     `;
     document.getElementById('predicates-list').appendChild(row);
 }
 
+// Handle predicate type change to update input UI
+window.onPredicateTypeChange = function(select) {
+    const row = select.closest('.kv-row');
+    const predicateType = select.value;
+    const config = predicateConfig[predicateType];
+    
+    // Get the remove button first (we need to keep it)
+    const removeBtn = row.querySelector('.btn-remove');
+    
+    // Remove everything except the select and remove button
+    const allChildren = Array.from(row.children);
+    allChildren.forEach(child => {
+        if (child !== select && child !== removeBtn) {
+            child.remove();
+        }
+    });
+    
+    // Generate new input based on type
+    let inputHtml = '';
+    if (config.inputType === 'select-multiple') {
+        const checkboxHtml = config.options.map(opt => 
+            `<label style="display:inline-flex;align-items:center;margin-right:12px;font-size:13px;">` +
+            `<input type="checkbox" value="${opt}" data-field="method-chk" style="margin-right:4px;">` +
+            `${opt}` +
+            `</label>`
+        ).join('');
+        inputHtml = `
+            <div style="display:flex;flex-wrap:wrap;gap:8px;padding:8px;background:#f8f9fa;border-radius:6px;">
+                ${checkboxHtml}
+            </div>
+        `;
+    } else if (config.inputType === 'kv-pair') {
+        inputHtml = `
+            <div style="display:flex;gap:8px;flex:1;">
+                <input type="text" placeholder="Header Name" data-field="header-key" style="flex:1;min-width:120px;">
+                <input type="text" placeholder="Regexp Value" data-field="header-value" style="flex:1;min-width:120px;">
+            </div>
+        `;
+    } else {
+        inputHtml = `
+            <input type="text" placeholder="${config.placeholder}" value="${config.defaultValue}" data-field="args" style="flex:1;">
+        `;
+    }
+    
+    // Insert new input before remove button
+    select.insertAdjacentHTML('afterend', inputHtml);
+};
+
 function getPredicates() {
-    return Array.from(document.querySelectorAll('#predicates-list .kv-row')).map(row => ({
-        name: row.querySelector('[data-field=name]').value,
-        args: { pattern: row.querySelector('[data-field=args]').value }
-    }));
+    return Array.from(document.querySelectorAll('#predicates-list .kv-row')).map(row => {
+        const name = row.querySelector('[data-field=name]').value;
+        
+        // Parse args based on predicate type
+        let args = {};
+        if (name === 'Header') {
+            // Header predicate: use separate key/value inputs
+            const keyInput = row.querySelector('[data-field="header-key"]');
+            const valueInput = row.querySelector('[data-field="header-value"]');
+            const key = keyInput ? keyInput.value.trim() : '';
+            const value = valueInput ? valueInput.value.trim() : '';
+            
+            if (key && value) {
+                args = { name: key, regexp: value };
+            } else if (key) {
+                args = { name: key };
+            }
+        } else if (name === 'Method') {
+            // Method predicate: get checked checkboxes
+            const checkboxes = row.querySelectorAll('[data-field="method-chk"]');
+            const methods = Array.from(checkboxes).filter(chk => chk.checked).map(chk => chk.value);
+            args = { methods: methods };
+        } else {
+            // Path, Host and others: use pattern
+            const input = row.querySelector('[data-field="args"]');
+            const pattern = input ? input.value.trim() : '';
+            args = { pattern: pattern };
+        }
+        
+        return {
+            name: name,
+            args: args
+        };
+    });
 }
 
 // ======== Filter Rows ========
-function addFilter(name='StripPrefix', args='1') {
+const filterConfig = {
+    'StripPrefix': { 
+        label: 'Strip Prefix', 
+        placeholder: 'Parts to strip (e.g., 1)', 
+        defaultValue: '1',
+        argsType: 'number' 
+    },
+    'AddRequestHeader': { 
+        label: 'Add Request Header', 
+        placeholder: 'HeaderName:HeaderValue', 
+        defaultValue: 'X-Forwarded-For:127.0.0.1',
+        argsType: 'text' 
+    },
+    'AddRequestParameter': { 
+        label: 'Add Request Parameter', 
+        placeholder: 'ParamName:ParamValue', 
+        defaultValue: 'tenantId:default',
+        argsType: 'text' 
+    },
+    'SetPath': { 
+        label: 'Set Path', 
+        placeholder: 'New path pattern (e.g., /new/path)', 
+        defaultValue: '/${segments}',
+        argsType: 'text' 
+    },
+    'RewritePath': { 
+        label: 'Rewrite Path', 
+        placeholder: 'Regexp,Replacement (e.g., /api/(?<segment>.*),/$\{segment})', 
+        defaultValue: '/api/(?<segment>.*),/$\{segment}',
+        argsType: 'text' 
+    },
+    'PrefixPath': { 
+        label: 'Prefix Path', 
+        placeholder: 'Path prefix (e.g., /api)', 
+        defaultValue: '/api',
+        argsType: 'text' 
+    },
+    'RemoveRequestHeader': { 
+        label: 'Remove Request Header', 
+        placeholder: 'Header name to remove', 
+        defaultValue: 'X-Bad-Header',
+        argsType: 'text' 
+    },
+    'RemoveResponseHeader': { 
+        label: 'Remove Response Header', 
+        placeholder: 'Header name to remove', 
+        defaultValue: 'X-Powered-By',
+        argsType: 'text' 
+    },
+    'SetRequestHeader': { 
+        label: 'Set Request Header', 
+        placeholder: 'HeaderName:HeaderValue', 
+        defaultValue: 'X-Request-Source:gateway',
+        argsType: 'text' 
+    },
+    'SetResponseHeader': { 
+        label: 'Set Response Header', 
+        placeholder: 'HeaderName:HeaderValue', 
+        defaultValue: 'X-Response-Time:${requestTime}',
+        argsType: 'text' 
+    },
+    'RedirectTo': { 
+        label: 'Redirect To', 
+        placeholder: 'Status code,URL (e.g., 302,https://example.com)', 
+        defaultValue: '302,https://example.com',
+        argsType: 'text' 
+    },
+    'Retry': { 
+        label: 'Retry', 
+        placeholder: 'Retries,HTTP statuses,Methods (e.g., 3,503,GET)', 
+        defaultValue: '3,503,GET',
+        argsType: 'text' 
+    },
+    'RequestSize': { 
+        label: 'Request Size', 
+        placeholder: 'Max size in bytes (e.g., 10MB)', 
+        defaultValue: '10MB',
+        argsType: 'text' 
+    },
+    'SecureHeaders': { 
+        label: 'Secure Headers', 
+        placeholder: 'Enable secure headers (true/false)', 
+        defaultValue: 'true',
+        argsType: 'boolean' 
+    }
+};
+
+function addFilter(name='StripPrefix', args='') {
     filterSeq++;
     const id = filterSeq;
     const row = document.createElement('div');
     row.className = 'dynamic-row kv-row';
     row.id = 'filt-' + id;
+    
+    // Build filter options
+    const filterOptions = Object.keys(filterConfig).map(key => 
+        `<option value="${key}" ${name===key?'selected':''}>${filterConfig[key].label}</option>`
+    ).join('');
+    
+    // Get default args if not provided
+    if (!args) {
+        args = filterConfig[name]?.defaultValue || '';
+    }
+    
+    // Get placeholder based on type
+    const placeholder = filterConfig[name]?.placeholder || 'Arguments';
+    
     row.innerHTML = `
-        <select data-field="name">
-            <option value="StripPrefix" ${name==='StripPrefix'?'selected':''}>StripPrefix</option>
-            <option value="AddRequestHeader" ${name==='AddRequestHeader'?'selected':''}>AddRequestHeader</option>
-            <option value="RateLimiter" ${name==='RateLimiter'?'selected':''}>RateLimiter</option>
-            <option value="CustomLoadBalancer" ${name==='CustomLoadBalancer'?'selected':''}>CustomLoadBalancer</option>
+        <select data-field="name" onchange="onFilterTypeChange(this)">
+            ${filterOptions}
         </select>
-        <input type="text" placeholder="Arguments" value="${args}" data-field="args">
+        <input type="text" placeholder="${placeholder}" value="${args}" data-field="args">
         <button type="button" class="btn-remove" onclick="document.getElementById('filt-${id}').remove()">×</button>
     `;
     document.getElementById('filters-list').appendChild(row);
 }
 
+// Handle filter type change to update placeholder and input type
+window.onFilterTypeChange = function(select) {
+    const row = select.closest('.kv-row');
+    const input = row.querySelector('[data-field=args]');
+    const filterType = select.value;
+    
+    const config = filterConfig[filterType];
+    if (config) {
+        input.placeholder = config.placeholder;
+        input.value = config.defaultValue || '';
+    }
+};
+
 function getFilters() {
     return Array.from(document.querySelectorAll('#filters-list .kv-row')).map(row => {
         const n = row.querySelector('[data-field=name]').value;
-        const a = row.querySelector('[data-field=args]').value;
+        const a = row.querySelector('[data-field=args]').value.trim();
         let args = {};
-        if (n === 'StripPrefix') args = { parts: a };
-        else if (n === 'AddRequestHeader') { const p = a.split(':'); args = { name: p[0]||'', value: p[1]||'' }; }
-        else args = { key: a };
+        
+        // Parse args based on filter type (matching SCG's Config class structure)
+        if (n === 'StripPrefix') {
+            // StripPrefixGatewayFilterFactory.Config.parts
+            args = { parts: parseInt(a) || 1 };
+        } else if (n === 'AddRequestHeader' || n === 'SetRequestHeader') {
+            // AddRequestHeaderGatewayFilterFactory.Config.name/value
+            const p = a.split(':');
+            args = { name: p[0]||'', value: p[1]||'' };
+        } else if (n === 'AddRequestParameter') {
+            // AddRequestParameterGatewayFilterFactory.Config.name/value
+            const p = a.split(':');
+            args = { name: p[0]||'', value: p[1]||'' };
+        } else if (n === 'RewritePath') {
+            // RewritePathGatewayFilterFactory.Config.regexp/replacement
+            const p = a.split(',');
+            args = { regexp: p[0]||'', replacement: p[1]||'' };
+        } else if (n === 'PrefixPath') {
+            // PrefixPathGatewayFilterFactory.Config.prefix
+            args = { prefix: a };
+        } else if (n === 'SetPath') {
+            // SetPathGatewayFilterFactory.Config.template
+            args = { template: a };
+        } else if (n === 'RemoveRequestHeader') {
+            // RemoveRequestHeaderGatewayFilterFactory.Config.name
+            args = { name: a };
+        } else if (n === 'RemoveResponseHeader') {
+            // RemoveResponseHeaderGatewayFilterFactory.Config.name
+            args = { name: a };
+        } else if (n === 'SetResponseHeader') {
+            // SetResponseHeaderGatewayFilterFactory.Config.name/value
+            const p = a.split(':');
+            args = { name: p[0]||'', value: p[1]||'' };
+        } else if (n === 'RedirectTo') {
+            // RedirectToGatewayFilterFactory.Config.status/url
+            const p = a.split(',');
+            args = { status: parseInt(p[0])||302, url: p[1]||'' };
+        } else if (n === 'Retry') {
+            // RetryGatewayFilterFactory.Config.retries/statuses/methods
+            const p = a.split(',');
+            args = { retries: parseInt(p[0])||3, statuses: p[1]?p[1].split(','):['503'], methods: p[2]?p[2].split(','):['GET'] };
+        } else if (n === 'RequestSize') {
+            // RequestSizeGatewayFilterFactory.Config.maxSize
+            args = { maxSize: a };
+        } else if (n === 'SecureHeaders') {
+            // SecureHeadersGatewayFilterFactory.Config (boolean flag)
+            args = { enabled: a !== 'false' };
+        } else {
+            // Generic fallback
+            args = { value: a };
+        }
+        
         return { name: n, args };
     });
 }
@@ -821,7 +1175,12 @@ function renderServices(list) {
         el.innerHTML = '<div class="empty-tip"><div class="empty-icon">📭</div>No services yet. Please create a service first.</div>';
         return;
     }
-    const lbLabel = { 'round-robin':'Round Robin','weighted':'Weighted','least-connections':'Least Connections','random':'Random' };
+    const lbLabel = { 
+        'round-robin': 'Round Robin (×weight)',
+        'random': 'Random (×weight)',
+        'weighted': 'Weighted',
+        'least-connections': 'Least Connections' 
+    };
     el.innerHTML = list.map(s => `
         <div class="item-card">
             <div class="item-card-header">
@@ -842,20 +1201,57 @@ function renderServices(list) {
 }
 
 async function deleteService(name) {
-    if (!confirm(`Are you sure you want to delete service "${name}"?`)) return;
     try {
+        // First, check if any routes are using this service
+        const routesRes = await fetch('/api/routes');
+        const routesData = await routesRes.json();
+        const routes = routesData.data || [];
+        
+        // Check if any route is bound to this service
+        const boundRoutes = routes.filter(r => {
+            const uri = r.uri || '';
+            // Check for lb:// or static:// protocols with this service name
+            return uri === `lb://${name}` || uri === `static://${name}`;
+        });
+        
+        if (boundRoutes.length > 0) {
+            const routeNames = boundRoutes.map(r => r.id).join(', ');
+            toast(`Cannot delete service "${name}". It is bound to ${boundRoutes.length} route(s): ${routeNames}`, 'error');
+            return;
+        }
+        
+        // No bound routes, proceed with deletion
+        if (!confirm(`Are you sure you want to delete service "${name}"?`)) return;
+        
         const r = await fetch('/api/services/' + encodeURIComponent(name), { method:'DELETE' });
         const res = await r.json();
-        if (r.ok) { toast('Service deleted'); loadServices(); }
-        else toast(res.message || 'Failed to delete', 'error');
-    } catch(err) { toast('Network error', 'error'); }
+        if (r.ok) { 
+            toast('Service deleted'); 
+            loadServices(); 
+        } else {
+            toast(res.message || 'Failed to delete', 'error');
+        }
+    } catch(err) { 
+        toast('Network error: ' + err.message, 'error'); 
+    }
 }
 
 // ======== Routes API ========
 async function submitRoute(e) {
     e.preventDefault();
     const predicates = getPredicates();
-    if (!predicates.length) { toast('Please add at least one predicate', 'error'); return; }
+    if (!predicates.length) { 
+        toast('Please add at least one predicate', 'error'); 
+        return; 
+    }
+    
+    // Validate: At least one Path predicate is required
+    const hasPathPredicate = predicates.some(p => p.name === 'Path');
+    if (!hasPathPredicate) {
+        toast('At least one Path predicate is required', 'error');
+        return;
+    }
+    
     const data = {
         id: document.getElementById('rt-id').value.trim(),
         uri: document.getElementById('rt-uri').value.trim(),
@@ -863,7 +1259,10 @@ async function submitRoute(e) {
         predicates: predicates,
         filters: getFilters()
     };
-    if (!data.id || !data.uri) { toast('Please fill in Route ID and Target URI', 'error'); return; }
+    if (!data.id || !data.uri) { 
+        toast('Please fill in Route ID and Target URI', 'error'); 
+        return; 
+    }
     try {
         const r = await fetch('/api/routes', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
         const res = await r.json();
@@ -932,27 +1331,29 @@ async function deleteRoute(id) {
     } catch(err) { toast('Network error', 'error'); }
 }
 
-// ======== Plugins API ========
+// ======== PLUGINS API ========
 async function submitRateLimiter(e) {
     e.preventDefault();
     const routeId = document.getElementById('rl-route').value;
     if (!routeId) { toast('Please select a route', 'error'); return; }
     
+    // Get raw values (no conversion)
+    const baseQps = parseInt(document.getElementById('rl-redis-qps').value) || 0;
+    const timeUnit = document.getElementById('rl-time-unit').value;
+    
     const data = {
         routeId: routeId,
         enabled: document.getElementById('rl-enabled').checked,
-        redisQps: parseInt(document.getElementById('rl-redis-qps').value) || 0,
-        redisBurstCapacity: parseInt(document.getElementById('rl-redis-burst').value) || 200,
+        qps: baseQps, // Store original value
+        timeUnit: timeUnit, // Store time unit
+        burstCapacity: parseInt(document.getElementById('rl-redis-burst').value) || 200,
         keyPrefix: document.getElementById('rl-key-prefix').value || 'rate_limit:',
         keyType: document.getElementById('rl-key-type').value,
-        sentinelQps: parseInt(document.getElementById('rl-sentinel-qps').value) || 0,
-        sentinelThresholdType: document.getElementById('rl-sentinel-threshold-type').value,
-        fallbackToSentinel: document.getElementById('rl-fallback-enabled').checked,
-        redisFallbackTimeoutMs: parseInt(document.getElementById('rl-fallback-timeout').value) || 5000
+        updateTime: new Date().toISOString() // Add timestamp
     };
     
     try {
-        const r = await fetch('/api/rate-limiter', { 
+        const r = await fetch('/api/plugins/rate-limiters', {
             method: 'POST', 
             headers: {'Content-Type': 'application/json'}, 
             body: JSON.stringify(data) 
@@ -969,7 +1370,7 @@ async function submitRateLimiter(e) {
 async function deleteRateLimiter(routeId) {
     if (!confirm('Delete rate limiter config for route: ' + routeId + '?')) return;
     try {
-        const r = await fetch('/api/rate-limiter/' + routeId, { method: 'DELETE' });
+        const r = await fetch('/api/plugins/rate-limiters/' + routeId, { method: 'DELETE' });
         const res = await r.json();
         if (r.ok) { 
             toast('Rate limiter config deleted!'); 
@@ -979,90 +1380,142 @@ async function deleteRateLimiter(routeId) {
     } catch(err) { toast('Network error', 'error'); }
 }
 
-// ======== Custom Header Plugin ========
-let headerKVSeq = 0;
-
-function addHeaderKV(key='', value='') {
-    headerKVSeq++;
-    const id = headerKVSeq;
-    const row = document.createElement('div');
-    row.className = 'dynamic-row kv-row';
-    row.id = 'header-kv-' + id;
-    row.innerHTML = `
-        <input type="text" placeholder="Header Name" value="${key}" data-field="key">
-        <input type="text" placeholder="Header Value (supports \${random.uuid}, \${client.ip}, \${request.path})" value="${value}" data-field="value">
-        <button type="button" class="btn-remove" onclick="document.getElementById('header-kv-${id}').remove()">×</button>
-    `;
-    document.getElementById('header-kv-list').appendChild(row);
-}
-
-function getHeaderKVs() {
-    const rows = document.querySelectorAll('#header-kv-list .kv-row');
-    const result = {};
-    Array.from(rows).forEach(row => {
-        const key = row.querySelector('[data-field=key]').value.trim();
-        const value = row.querySelector('[data-field=value]').value.trim();
-        if (key) {
-            result[key] = value;
-        }
-    });
-    return result;
-}
-
-async function submitCustomHeader(e) {
+async function submitIPFilter(e) {
     e.preventDefault();
-    const routeId = document.getElementById('header-route').value;
-    if (!routeId) { toast('Please select a route', 'error'); return; }
+    const routeId = document.getElementById('ip-route').value;
+    const mode = document.getElementById('ip-mode').value;
+    const ipListText = document.getElementById('ip-list').value.trim();
+    const enabled = document.getElementById('ip-enabled').checked;
     
-    const headers = getHeaderKVs();
-    if (Object.keys(headers).length === 0) {
-        toast('Please add at least one Header', 'error');
-        return;
-    }
+    // Parse IP list (one per line)
+    const ipList = ipListText.split('\n').map(ip => ip.trim()).filter(ip => ip);
     
     const data = {
         routeId,
-        headers
+        mode,
+        ipList,
+        enabled,
+        updateTime: new Date().toISOString()
     };
     
     try {
-        const r = await fetch('/api/plugins/custom-headers', { 
-            method: 'POST', 
-            headers: {'Content-Type': 'application/json'}, 
-            body: JSON.stringify(data) 
+        const r = await fetch('/api/plugins/ip-filters', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
         });
         const res = await r.json();
-        if (r.ok) { 
-            toast('Custom header config saved!'); 
-            document.getElementById('headerForm').reset();
-            document.getElementById('header-kv-list').innerHTML = '';
-            loadPlugins(); 
+        if (r.ok && res.code === 200) {
+            toast('✓ IP filter saved!');
+            document.getElementById('ipFilterForm').reset();
+            toggleIPListHelp();
+            loadPlugins();
         } else {
-            toast(res.message || 'Failed to save', 'error');
+            toast('✗ Failed: ' + (res.message || 'Unknown error'), 'error');
         }
-    } catch(err) { 
-        toast('Network error: ' + err.message, 'error'); 
+    } catch(err) {
+        console.error(err);
+        toast('✗ Network error', 'error');
     }
 }
 
+async function deleteIPFilter(routeId) {
+    if (!confirm('Delete IP filter config for route: ' + routeId + '?')) return;
+    try {
+        const r = await fetch('/api/plugins/ip-filters/' + routeId, { method: 'DELETE' });
+        const res = await r.json();
+        if (r.ok) { 
+            toast('✓ IP filter deleted!'); 
+            loadPlugins(); 
+        }
+        else toast(res.message || 'Failed to delete', 'error');
+    } catch(err) { toast('✗ Network error', 'error'); }
+}
+
+// ======== Timeout Plugin ========
+async function submitTimeout(e) {
+    e.preventDefault();
+    const routeId = document.getElementById('timeout-route').value;
+    const connectTimeout = parseInt(document.getElementById('timeout-connect').value);
+    const responseTimeout = parseInt(document.getElementById('timeout-response').value);
+    const enabled = document.getElementById('timeout-enabled').checked;
+    
+    const data = {
+        routeId,
+        connectTimeout,
+        responseTimeout,
+        enabled,
+        updateTime: new Date().toISOString()
+    };
+    
+    try {
+        const r = await fetch('/api/plugins/timeouts', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        const res = await r.json();
+        if (r.ok && res.code === 200) {
+            toast('✓ Timeout config saved!');
+            document.getElementById('timeoutForm').reset();
+            // Reset default values
+            document.getElementById('timeout-connect').value = 5000;
+            document.getElementById('timeout-response').value = 30000;
+            document.getElementById('timeout-enabled').checked = true;
+            loadPlugins();
+        } else {
+            toast('✗ Failed: ' + (res.message || 'Unknown error'), 'error');
+        }
+    } catch(err) {
+        console.error(err);
+        toast('✗ Network error', 'error');
+    }
+}
+
+async function deleteTimeout(routeId) {
+    if (!confirm('Delete timeout config for route: ' + routeId + '?')) return;
+    try {
+        const r = await fetch('/api/plugins/timeouts/' + routeId, { method: 'DELETE' });
+        const res = await r.json();
+        if (r.ok) { 
+            toast('✓ Timeout config deleted!'); 
+            loadPlugins(); 
+        }
+        else toast(res.message || 'Failed to delete', 'error');
+    } catch(err) { toast('✗ Network error', 'error'); }
+}
+
+// ======== Custom Header Plugin (已移除) ========
+// Note: Custom Header plugin removed - use SCG native AddRequestHeader filter instead
+// Example route configuration:
+// filters:
+//   - AddRequestHeader=X-Forwarded-For, ${random.uuid}
+//   - AddRequestHeader=X-Custom-Header, MyValue
+
 async function loadPlugins() {
     try {
-        const [rlRes, chRes] = await Promise.all([
-            fetch('/api/rate-limiter').then(r => r.json()),
-            fetch('/api/plugins/custom-headers').then(r => r.json())
-        ]);
-        renderPlugins(rlRes.data || [], chRes.data || []);
+        const rlRes = await fetch('/api/plugins/rate-limiters').then(r => r.json());
+        const ipRes = await fetch('/api/plugins/ip-filters').then(r => r.json());
+        const timeoutRes = await fetch('/api/plugins/timeouts').then(r => r.json());
+        renderPlugins(rlRes.data || [], ipRes.data || [], timeoutRes.data || []);
     } catch(err) { console.error(err); }
 }
 
-function renderPlugins(rls, chs) {
+function renderPlugins(rls, ipFilters, timeouts) {
     const el = document.getElementById('plugins-list');
     let html = '';
     
     // Rate limiter plugin
     if (rls && rls.length) {
         html += '<div style="font-weight:700;color:#667eea;margin-bottom:10px;font-size:14px;">🚦 Rate Limiter Plugin</div>';
-        html += rls.map(p => `
+        html += rls.map(p => {
+            const qps = p.qps || 0;
+            const timeUnit = p.timeUnit || 'second';
+            let timeLabel = 'QPS';
+            if (timeUnit === 'minute') timeLabel = 'Per Minute';
+            else if (timeUnit === 'hour') timeLabel = 'Per Hour';
+            
+            return `
             <div class="item-card">
                 <div class="item-card-header">
                     <div>
@@ -1073,30 +1526,76 @@ function renderPlugins(rls, chs) {
                     <button class="btn-delete" onclick="deleteRateLimiter('${p.routeId}')">🗑</button>
                 </div>
                 <div class="item-meta">
-                    Redis QPS: <strong>${p.redisQps}</strong> 
-                    | Burst: <strong>${p.redisBurstCapacity}</strong>
+                    Rate: <strong>${qps} ${timeLabel}</strong>
+                    | Burst: <strong>${p.burstCapacity}</strong>
                     ${p.sentinelQps > 0 ? ' | Sentinel QPS: <strong>' + p.sentinelQps + '</strong>' : ''}
                 </div>
+                <div class="item-meta" style="margin-top:6px;color:#999;font-size:12px;">
+                    ⏰ Updated: ${p.updateTime ? new Date(p.updateTime).toLocaleString('zh-CN', {hour12:false}) : 'N/A'}
+                </div>
             </div>
-        `).join('');
+            `;
+        }).join('');
     } else {
         html += '<div style="color:#999;font-size:13px;padding:10px;">No rate limiter config. Create one using the form above.</div>';
     }
     
-    // Custom header plugin
-    if (chs && chs.length) {
-        html += '<div style="font-weight:700;color:#667eea;margin:16px 0 10px;font-size:14px;">🏷️ Custom Header Plugin</div>';
-        html += chs.map(p => `
+    // IP Filter plugin
+    if (ipFilters && ipFilters.length) {
+        html += '<div style="font-weight:700;color:#667eea;margin-bottom:10px;font-size:14px;margin-top:20px;">🛡️ IP Filter Plugin</div>';
+        html += ipFilters.map(p => {
+            const modeLabel = p.mode === 'blacklist' ? '⛔ Blacklist' : '✅ Whitelist';
+            const ipCount = p.ipList ? p.ipList.length : 0;
+            
+            return `
             <div class="item-card">
                 <div class="item-card-header">
                     <div>
                         <span class="item-name">${p.routeId}</span>
-                        <span class="item-tag tag-blue">Header</span>
+                        <span class="item-tag tag-${p.enabled ? 'green' : 'gray'}">${p.enabled ? 'Enabled' : 'Disabled'}</span>
+                        <span class="item-tag tag-${p.mode === 'blacklist' ? 'red' : 'blue'}">${modeLabel}</span>
                     </div>
+                    <button class="btn-delete" onclick="deleteIPFilter('${p.routeId}')">🗑</button>
                 </div>
-                <div class="item-meta">${Object.entries(p.headers || {}).map(([k, v]) => `<strong>${k}</strong>: ${v}`).join(', ')}</div>
+                <div class="item-meta">
+                    IPs: <strong>${ipCount}</strong>
+                    ${ipCount > 0 ? '(First: ' + p.ipList[0] + ')' : ''}
+                </div>
+                <div class="item-meta" style="margin-top:6px;color:#999;font-size:12px;">
+                    ⏰ Updated: ${p.updateTime ? new Date(p.updateTime).toLocaleString('zh-CN', {hour12:false}) : 'N/A'}
+                </div>
             </div>
-        `).join('');
+            `;
+        }).join('');
+    } else {
+        html += '<div style="color:#999;font-size:13px;padding:10px;margin-top:10px;">No IP filter config. Create one using the form above.</div>';
+    }
+    
+    // Timeout plugin
+    if (timeouts && timeouts.length) {
+        html += '<div style="font-weight:700;color:#667eea;margin-bottom:10px;font-size:14px;margin-top:20px;">⏱️ Timeout Plugin</div>';
+        html += timeouts.map(p => {
+            return `
+            <div class="item-card">
+                <div class="item-card-header">
+                    <div>
+                        <span class="item-name">${p.routeId}</span>
+                        <span class="item-tag tag-${p.enabled ? 'green' : 'gray'}">${p.enabled ? 'Enabled' : 'Disabled'}</span>
+                    </div>
+                    <button class="btn-delete" onclick="deleteTimeout('${p.routeId}')">🗑</button>
+                </div>
+                <div class="item-meta">
+                    ⚡ Connect: <strong>${p.connectTimeout}ms</strong>
+                    | ⏱️ Response: <strong>${p.responseTimeout}ms</strong>
+                </div>
+                <div class="item-meta" style="margin-top:6px;color:#999;font-size:12px;">
+                    ⏰ Updated: ${p.updateTime ? new Date(p.updateTime).toLocaleString('zh-CN', {hour12:false}) : 'N/A'}
+                </div>
+            </div>
+            `;
+        }).join('');
+    } else {
+        html += '<div style="color:#999;font-size:13px;padding:10px;margin-top:10px;">No timeout config. Create one using the form above.</div>';
     }
     
     if (!html) {
@@ -1109,8 +1608,7 @@ function renderPlugins(rls, chs) {
 window.addEventListener('DOMContentLoaded', () => {
     switchTab('services');
     addInstance();
-    addPredicate();
-    addHeaderKV(); // Add default Header KV row
+    // Don't add default predicate - let user add their own to avoid duplicates
 });
 </script>
 </body>

@@ -14,15 +14,11 @@ public class RateLimiterConfig {
     private boolean enabled = true;
     
     // Redis global rate limiting
-    private int redisQps = 100;
-    private int redisBurstCapacity = 200;
+    private int qps = 100;
+    private String timeUnit = "second"; // second, minute, hour
+    private int burstCapacity = 200;
     private String keyPrefix = "rate_limit:";
     private String keyType = "combined";
-    
-    // Sentinel local rate limiting
-    private int sentinelQps = 50;
-    private String sentinelThresholdType = "QPS";
-    private String sentinelControlStrategy = "reject";
     
     // Fallback configuration
     private boolean fallbackToSentinel = true;

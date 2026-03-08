@@ -1,6 +1,8 @@
 package com.example.demoservice.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -14,11 +16,19 @@ import java.util.Map;
 @RestController
 public class HelloController {
 
+    private static final Logger log = LoggerFactory.getLogger(HelloController.class);
+
     @Value("${server.port:8080}")
     private String port;
 
     @GetMapping("/hello")
-    public Map<String, String> hello() {
+    public Map<String, String> hello(HttpServletRequest request) {
+        // Log request info for load balancing statistics
+        String clientIp = request.getRemoteAddr();
+        String localIP = getLocalIP();
+        log.info("[Load Balance Test] Request from {} -> Instance IP: {}, Port: {}", 
+                 clientIp, localIP, port);
+        
         Map<String, String> result = new HashMap<>();
         result.put("message", "Hello from Demo Service!");
         result.put("service", "demo-service");
@@ -31,11 +41,24 @@ public class HelloController {
         return result;
     }
 
+    private String getLocalIP() {
+        try {
+            return InetAddress.getLocalHost().getHostAddress();
+        } catch (UnknownHostException e) {
+            return "unknown";
+        }
+    }
+
     /**
      * 返回所有请求头的接口，方便测试自定义 Header 插件
      */
     @GetMapping("/headers")
     public Map<String, Object> headers(HttpServletRequest request) {
+        String clientIp = request.getRemoteAddr();
+        String localIP = getLocalIP();
+        log.info("[Load Balance Test] Headers request from {} -> Instance IP: {}, Port: {}", 
+                 clientIp, localIP, port);
+        
         Map<String, Object> result = new HashMap<>();
         result.put("message", "Request Headers");
         result.put("service", "demo-service");
@@ -59,7 +82,12 @@ public class HelloController {
     }
 
     @GetMapping("/health")
-    public Map<String, String> health() {
+    public Map<String, String> health(HttpServletRequest request) {
+        String clientIp = request.getRemoteAddr();
+        String localIP = getLocalIP();
+        log.info("[Load Balance Test] Health check from {} -> Instance IP: {}, Port: {}", 
+                 clientIp, localIP, port);
+        
         Map<String, String> result = new HashMap<>();
         result.put("status", "UP");
         result.put("service", "demo-service");

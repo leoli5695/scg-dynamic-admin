@@ -1,4 +1,4 @@
-package com.example.mygateway.route;
+package com.example.gateway.route;
 
 import com.alibaba.nacos.api.NacosFactory;
 import com.alibaba.nacos.api.config.ConfigService;

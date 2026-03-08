@@ -117,14 +117,21 @@ public class PluginController {
         }
     }
 
-    // ==================== 自定义 Header 插件 API ====================
+    // ==================== 自定义 Header 插件 API (已移除) ====================
+    // Note: Custom Header APIs removed - use SCG native AddRequestHeader filter instead
+    // 路由配置示例：
+    // filters:
+    //   - AddRequestHeader=X-Forwarded-For, 10.0.0.1
+    //   - AddRequestHeader=X-Custom-Header, ${CUSTOM_VALUE}
+
+    // ==================== IP 过滤器 API ====================
 
     /**
-     * 获取所有自定义 Header 配置
+     * 获取所有 IP 过滤器配置
      */
-    @GetMapping("/custom-headers")
-    public ResponseEntity<Map<String, Object>> getAllCustomHeaders() {
-        List<PluginConfig.CustomHeaderConfig> configs = pluginService.getAllCustomHeaders();
+    @GetMapping("/ip-filters")
+    public ResponseEntity<Map<String, Object>> getAllIPFilters() {
+        List<PluginConfig.IPFilterConfig> configs = pluginService.getAllIPFilters();
         Map<String, Object> result = new HashMap<>();
         result.put("code", 200);
         result.put("message", "success");
@@ -133,11 +140,11 @@ public class PluginController {
     }
 
     /**
-     * 根据路由 ID 获取自定义 Header 配置
+     * 根据路由 ID 获取 IP 过滤器配置
      */
-    @GetMapping("/custom-headers/{routeId}")
-    public ResponseEntity<Map<String, Object>> getCustomHeaderByRoute(@PathVariable String routeId) {
-        PluginConfig.CustomHeaderConfig config = pluginService.getCustomHeaderByRoute(routeId);
+    @GetMapping("/ip-filters/{routeId}")
+    public ResponseEntity<Map<String, Object>> getIPFilterByRoute(@PathVariable String routeId) {
+        PluginConfig.IPFilterConfig config = pluginService.getIPFilterByRoute(routeId);
         Map<String, Object> result = new HashMap<>();
         if (config != null) {
             result.put("code", 200);
@@ -146,68 +153,163 @@ public class PluginController {
             return ResponseEntity.ok(result);
         } else {
             result.put("code", 404);
-            result.put("message", "Custom header config not found for route: " + routeId);
+            result.put("message", "IP filter config not found for route: " + routeId);
             return ResponseEntity.status(404).body(result);
         }
     }
 
     /**
-     * 创建自定义 Header 配置
+     * 创建 IP 过滤器配置
      */
-    @PostMapping("/custom-headers")
-    public ResponseEntity<Map<String, Object>> createCustomHeader(@RequestBody PluginConfig.CustomHeaderConfig config) {
-        log.info("Creating custom header for route: {}", config.getRouteId());
-        boolean success = pluginService.createCustomHeader(config);
+    @PostMapping("/ip-filters")
+    public ResponseEntity<Map<String, Object>> createIPFilter(@RequestBody PluginConfig.IPFilterConfig config) {
+        log.info("Creating IP filter for route: {}", config.getRouteId());
+        boolean success = pluginService.createIPFilter(config);
         Map<String, Object> result = new HashMap<>();
         if (success) {
             result.put("code", 200);
-            result.put("message", "Custom header created successfully");
+            result.put("message", "IP filter created successfully");
             result.put("data", config);
             return ResponseEntity.ok(result);
         } else {
             result.put("code", 500);
-            result.put("message", "Failed to create custom header");
+            result.put("message", "Failed to create IP filter");
             return ResponseEntity.status(500).body(result);
         }
     }
 
     /**
-     * 更新自定义 Header 配置
+     * 更新 IP 过滤器配置
      */
-    @PutMapping("/custom-headers/{routeId}")
-    public ResponseEntity<Map<String, Object>> updateCustomHeader(
+    @PutMapping("/ip-filters/{routeId}")
+    public ResponseEntity<Map<String, Object>> updateIPFilter(
             @PathVariable String routeId,
-            @RequestBody PluginConfig.CustomHeaderConfig config) {
-        log.info("Updating custom header for route: {}", routeId);
-        boolean success = pluginService.updateCustomHeader(routeId, config);
+            @RequestBody PluginConfig.IPFilterConfig config) {
+        log.info("Updating IP filter for route: {}", routeId);
+        boolean success = pluginService.updateIPFilter(routeId, config);
         Map<String, Object> result = new HashMap<>();
         if (success) {
             result.put("code", 200);
-            result.put("message", "Custom header updated successfully");
+            result.put("message", "IP filter updated successfully");
             result.put("data", config);
             return ResponseEntity.ok(result);
         } else {
             result.put("code", 500);
-            result.put("message", "Failed to update custom header");
+            result.put("message", "Failed to update IP filter");
             return ResponseEntity.status(500).body(result);
         }
     }
 
     /**
-     * 删除自定义 Header 配置
+     * 删除 IP 过滤器配置
      */
-    @DeleteMapping("/custom-headers/{routeId}")
-    public ResponseEntity<Map<String, Object>> deleteCustomHeader(@PathVariable String routeId) {
-        log.info("Deleting custom header for route: {}", routeId);
-        boolean success = pluginService.deleteCustomHeader(routeId);
+    @DeleteMapping("/ip-filters/{routeId}")
+    public ResponseEntity<Map<String, Object>> deleteIPFilter(@PathVariable String routeId) {
+        log.info("Deleting IP filter for route: {}", routeId);
+        boolean success = pluginService.deleteIPFilter(routeId);
         Map<String, Object> result = new HashMap<>();
         if (success) {
             result.put("code", 200);
-            result.put("message", "Custom header deleted successfully");
+            result.put("message", "IP filter deleted successfully");
             return ResponseEntity.ok(result);
         } else {
             result.put("code", 500);
-            result.put("message", "Failed to delete custom header");
+            result.put("message", "Failed to delete IP filter");
+            return ResponseEntity.status(500).body(result);
+        }
+    }
+    
+    // ==================== Timeout Plugin API ====================
+    
+    /**
+     * 获取所有超时配置
+     */
+    @GetMapping("/timeouts")
+    public ResponseEntity<Map<String, Object>> getAllTimeouts() {
+        List<PluginConfig.TimeoutConfig> timeouts = pluginService.getAllTimeouts();
+        Map<String, Object> result = new HashMap<>();
+        result.put("code", 200);
+        result.put("message", "success");
+        result.put("data", timeouts);
+        return ResponseEntity.ok(result);
+    }
+    
+    /**
+     * 根据路由 ID 获取超时配置
+     */
+    @GetMapping("/timeouts/{routeId}")
+    public ResponseEntity<Map<String, Object>> getTimeoutByRoute(@PathVariable String routeId) {
+        PluginConfig.TimeoutConfig config = pluginService.getTimeoutByRoute(routeId);
+        Map<String, Object> result = new HashMap<>();
+        if (config != null) {
+            result.put("code", 200);
+            result.put("message", "success");
+            result.put("data", config);
+            return ResponseEntity.ok(result);
+        } else {
+            result.put("code", 404);
+            result.put("message", "Timeout config not found for route: " + routeId);
+            return ResponseEntity.status(404).body(result);
+        }
+    }
+    
+    /**
+     * 创建超时配置
+     */
+    @PostMapping("/timeouts")
+    public ResponseEntity<Map<String, Object>> createTimeout(@RequestBody PluginConfig.TimeoutConfig config) {
+        log.info("Creating timeout config for route: {}", config.getRouteId());
+        boolean success = pluginService.createTimeout(config);
+        Map<String, Object> result = new HashMap<>();
+        if (success) {
+            result.put("code", 200);
+            result.put("message", "Timeout config created successfully");
+            result.put("data", config);
+            return ResponseEntity.ok(result);
+        } else {
+            result.put("code", 500);
+            result.put("message", "Failed to create timeout config");
+            return ResponseEntity.status(500).body(result);
+        }
+    }
+    
+    /**
+     * 更新超时配置
+     */
+    @PutMapping("/timeouts/{routeId}")
+    public ResponseEntity<Map<String, Object>> updateTimeout(
+            @PathVariable String routeId,
+            @RequestBody PluginConfig.TimeoutConfig config) {
+        log.info("Updating timeout config for route: {}", routeId);
+        boolean success = pluginService.updateTimeout(routeId, config);
+        Map<String, Object> result = new HashMap<>();
+        if (success) {
+            result.put("code", 200);
+            result.put("message", "Timeout config updated successfully");
+            result.put("data", config);
+            return ResponseEntity.ok(result);
+        } else {
+            result.put("code", 500);
+            result.put("message", "Failed to update timeout config");
+            return ResponseEntity.status(500).body(result);
+        }
+    }
+    
+    /**
+     * 删除超时配置
+     */
+    @DeleteMapping("/timeouts/{routeId}")
+    public ResponseEntity<Map<String, Object>> deleteTimeout(@PathVariable String routeId) {
+        log.info("Deleting timeout config for route: {}", routeId);
+        boolean success = pluginService.deleteTimeout(routeId);
+        Map<String, Object> result = new HashMap<>();
+        if (success) {
+            result.put("code", 200);
+            result.put("message", "Timeout config deleted successfully");
+            return ResponseEntity.ok(result);
+        } else {
+            result.put("code", 500);
+            result.put("message", "Failed to delete timeout config");
             return ResponseEntity.status(500).body(result);
         }
     }

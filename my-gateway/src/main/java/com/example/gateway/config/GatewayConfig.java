@@ -1,7 +1,7 @@
-package com.example.mygateway.config;
+package com.example.gateway.config;
 
-import com.example.mygateway.filter.CustomLoadBalancerGatewayFilterFactory;
-import com.example.mygateway.route.NacosRouteDefinitionLocator;
+import com.example.gateway.filter.CustomLoadBalancerGatewayFilterFactory;
+import com.example.gateway.route.NacosRouteDefinitionLocator;
 import org.springframework.cloud.gateway.route.RouteDefinitionLocator;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

@@ -12,6 +12,7 @@ spring:
         group: DEFAULT_GROUP
         heart-beat-interval: 5000
         heart-beat-timeout: 15000
+        ip: 127.0.0.1
 
 management:
   endpoints:

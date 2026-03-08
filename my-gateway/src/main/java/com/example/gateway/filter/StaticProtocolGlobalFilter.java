@@ -1,9 +1,7 @@
-package com.example.mygateway.filter;
+package com.example.gateway.filter;
 
 import com.alibaba.nacos.api.NacosFactory;
 import com.alibaba.nacos.api.config.ConfigService;
-import com.alibaba.nacos.api.naming.NamingService;
-import com.alibaba.nacos.api.naming.pojo.Instance;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -12,13 +10,11 @@ import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.cloud.gateway.support.NotFoundException;
 import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
 import org.springframework.core.Ordered;
-import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.net.URI;
-import java.util.List;
 import java.util.Properties;
 
 import static org.springframework.cloud.gateway.support.ServerWebExchangeUtils.*;
@@ -269,7 +265,7 @@ public class StaticProtocolGlobalFilter implements GlobalFilter, Ordered {
             return roundRobinSelect(instances);
         } else if ("random".equalsIgnoreCase(strategy)) {
             return randomSelect(instances);
-        } else if ("weight".equalsIgnoreCase(strategy)) {
+        } else if ("weight".equalsIgnoreCase(strategy) || "weighted".equalsIgnoreCase(strategy)) {
             return weightSelect(instances);
         } else {
             // Default round-robin
@@ -293,26 +289,24 @@ public class StaticProtocolGlobalFilter implements GlobalFilter, Ordered {
         return instances.get(index);
     }
     
+    // 加权轮询计数器（原子操作，线程安全）
+    private final java.util.concurrent.atomic.AtomicLong weightedCounter = new java.util.concurrent.atomic.AtomicLong(0);
+
     /**
-     * Weight strategy (select by weight proportion)
+     * Weight strategy: deterministic weighted round-robin
+     * e.g. weight 1:2 -> sequence: B A B A B A B ...
      */
     private ServiceInstanceConfig weightSelect(java.util.List<ServiceInstanceConfig> instances) {
-        double totalWeight = 0;
+        // Build expanded list: weight=1 -> 1 slot, weight=2 -> 2 slots
+        java.util.List<ServiceInstanceConfig> expanded = new java.util.ArrayList<>();
         for (ServiceInstanceConfig inst : instances) {
-            totalWeight += inst.getWeight();
-        }
-        
-        double random = Math.random() * totalWeight;
-        double weightSum = 0;
-        
-        for (ServiceInstanceConfig inst : instances) {
-            weightSum += inst.getWeight();
-            if (random <= weightSum) {
-                return inst;
+            int w = (int) Math.max(1, inst.getWeight());
+            for (int i = 0; i < w; i++) {
+                expanded.add(inst);
             }
         }
-        
-        return instances.get(instances.size() - 1);
+        long idx = weightedCounter.getAndIncrement() % expanded.size();
+        return expanded.get((int) idx);
     }
     
     // Configuration class

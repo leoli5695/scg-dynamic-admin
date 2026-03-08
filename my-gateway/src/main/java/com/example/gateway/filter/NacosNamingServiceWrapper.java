@@ -1,4 +1,4 @@
-package com.example.mygateway.filter;
+package com.example.gateway.filter;
 
 import com.alibaba.nacos.api.NacosFactory;
 import com.alibaba.nacos.api.naming.NamingService;

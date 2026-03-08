@@ -1,6 +1,7 @@
 package com.example.gatewayadmin.config;
 
 import com.alibaba.nacos.api.config.ConfigService;
+import com.alibaba.nacos.api.config.ConfigType;
 import com.alibaba.nacos.api.config.listener.Listener;
 import com.alibaba.nacos.api.exception.NacosException;
 import com.alibaba.nacos.api.naming.NamingService;
@@ -9,13 +10,12 @@ import com.alibaba.nacos.client.config.NacosConfigService;
 import com.alibaba.nacos.client.naming.NacosNamingService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
@@ -71,13 +71,14 @@ public class NacosConfigManager {
     }
 
     /**
-     * 发布配置到Nacos
+     * 发布配置到 Nacos
      */
     public boolean publishConfig(String dataId, String content) {
         try {
-            boolean result = configService.publishConfig(dataId, group, content);
+            // Publish with JSON type
+            boolean result = configService.publishConfig(dataId, group, content, ConfigType.JSON.getType());
             if (result) {
-                log.info("Published config to Nacos, dataId: {}", dataId);
+                log.info("Published config to Nacos, dataId: {}, type: json", dataId);
             } else {
                 log.warn("Failed to publish config to Nacos, dataId: {}", dataId);
             }
@@ -89,12 +90,19 @@ public class NacosConfigManager {
     }
 
     /**
-     * 发布配置到Nacos (对象自动转JSON)
+     * 发布配置到 Nacos (对象自动转 JSON)
      */
     public boolean publishConfig(String dataId, Object config) {
         try {
             String content = objectMapper.writeValueAsString(config);
-            return publishConfig(dataId, content);
+            // Publish with JSON type
+            boolean result = configService.publishConfig(dataId, group, content, ConfigType.JSON.getType());
+            if (result) {
+                log.info("Published config to Nacos, dataId: {}, type: json", dataId);
+            } else {
+                log.warn("Failed to publish config to Nacos, dataId: {}", dataId);
+            }
+            return result;
         } catch (Exception e) {
             log.error("Error serializing config to JSON, dataId: {}", dataId, e);
             return false;
@@ -107,8 +115,8 @@ public class NacosConfigManager {
     public String getConfig(String dataId) {
         try {
             String content = configService.getConfig(dataId, group, 5000);
-            log.debug("Got config from Nacos, dataId: {}, content length: {}", 
-                dataId, content != null ? content.length() : 0);
+            log.debug("Got config from Nacos, dataId: {}, content length: {}",
+                    dataId, content != null ? content.length() : 0);
             return content;
         } catch (NacosException e) {
             log.error("Error getting config from Nacos, dataId: {}", dataId, e);

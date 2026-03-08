@@ -1,8 +1,8 @@
-package com.example.mygateway.config;
+package com.example.gateway.config;
 
 import com.alibaba.nacos.api.NacosFactory;
 import com.alibaba.nacos.api.config.ConfigService;
-import com.example.mygateway.plugin.PluginConfigManager;
+import com.example.gateway.plugin.PluginConfigManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -36,7 +36,7 @@ public class NacosPluginConfigListener {
         String namespace = env.getProperty("spring.cloud.nacos.config.namespace", "");
         
         try {
-            log.info("Initializing Nacos plugin config listener, serverAddr: {}, namespace: {}", serverAddr, namespace);
+            log.info("🚀 Initializing Nacos plugin config listener, serverAddr: {}, namespace: {}", serverAddr, namespace);
             
             Properties props = new Properties();
             props.setProperty("serverAddr", serverAddr);
@@ -45,6 +45,7 @@ public class NacosPluginConfigListener {
             }
             
             ConfigService configService = NacosFactory.createConfigService(props);
+            log.info("✅ Nacos ConfigService created successfully");
             
             // Add listener to monitor gateway-plugins.json
             String pluginsDataId = "gateway-plugins.json";
@@ -52,11 +53,13 @@ public class NacosPluginConfigListener {
                 @Override
                 public void receiveConfigInfo(String configInfo) {
                     log.info("📦 Received plugin config update from Nacos [dataId={}]", pluginsDataId);
+                    log.info("📄 Config content length: {}", configInfo != null ? configInfo.length() : 0);
                     
                     if (configInfo == null || configInfo.trim().isEmpty()) {
                         log.info("Plugin config deleted or empty, clearing plugin config");
                         pluginConfigManager.updateConfig(null);
                     } else {
+                        log.info("Plugin config received, updating...");
                         log.debug("Plugin config content: {}", configInfo);
                         pluginConfigManager.updateConfig(configInfo);
                     }
@@ -71,12 +74,14 @@ public class NacosPluginConfigListener {
             log.info("✅ Nacos plugin config listener registered for dataId: {}", pluginsDataId);
             
             // Initial load of configuration
+            log.info("⏳ Loading initial plugin config from Nacos...");
             String initialConfig = configService.getConfig(pluginsDataId, "DEFAULT_GROUP", 5000);
             if (initialConfig != null && !initialConfig.trim().isEmpty()) {
-                log.info("Loading initial plugin config from Nacos");
+                log.info("✅ Loaded initial plugin config from Nacos (length: {})", initialConfig.length());
+                log.info("Initial config content: {}", initialConfig);
                 pluginConfigManager.updateConfig(initialConfig);
             } else {
-                log.info("No initial plugin config found in Nacos");
+                log.warn("⚠️ No initial plugin config found in Nacos [dataId={}]", pluginsDataId);
             }
             
         } catch (Exception e) {
