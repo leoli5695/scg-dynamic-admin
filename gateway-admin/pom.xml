@@ -64,6 +64,14 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- MyBatis Plus (optional, for future database integration) -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+            <version>3.5.5</version>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Jakarta Annotation API -->
         <dependency>
             <groupId>jakarta.annotation</groupId>

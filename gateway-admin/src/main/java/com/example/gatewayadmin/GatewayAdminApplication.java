@@ -9,9 +9,14 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 
 /**
- * Gateway Admin 控制台应用
+ * Gateway Admin Console Application
  */
-@SpringBootApplication(exclude = {SecurityAutoConfiguration.class, UserDetailsServiceAutoConfiguration.class})
+@SpringBootApplication(exclude = {
+    SecurityAutoConfiguration.class, 
+    UserDetailsServiceAutoConfiguration.class,
+    org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration.class,
+    org.mybatis.spring.boot.autoconfigure.MybatisPlusAutoConfiguration.class
+})
 @EnableDiscoveryClient
 @EnableConfigurationProperties(GatewayAdminProperties.class)
 public class GatewayAdminApplication {
@@ -20,7 +25,7 @@ public class GatewayAdminApplication {
         SpringApplication.run(GatewayAdminApplication.class, args);
         System.out.println("========================================");
         System.out.println("  Gateway Admin Console Started!");
-        System.out.println("  API Base URL: http://localhost:8081/api");
+        System.out.println("  API Base URL: http://localhost:8080/api");
         System.out.println("========================================");
     }
 }
