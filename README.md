@@ -188,27 +188,39 @@ scg-dynamic-admin-demo/
 │   └── service/             # Business logic
 ├── my-gateway/              # Core gateway (port 80)
 │   ├── filter/              # Global filters
-│   │   ├── TraceIdGlobalFilter.java     # Distributed tracing
-│   │   ├── IPFilterGlobalFilter.java    # IP access control
-│   │   ├── AuthenticationGlobalFilter.java # Auth framework
-│   │   ├── CircuitBreakerGlobalFilter.java # Circuit breaker
-│   │   ├── TimeoutGlobalFilter.java     # Timeout control
-│   │   └── RateLimiterGlobalFilter.java # Rate limiting
-│   ├── plugin/              # Plugin configuration managers
-│   │   ├── PluginConfigManager.java     # Unified plugin config store
-│   │   ├── TimeoutConfigManager.java    # Timeout config loader
-│   │   └── CircuitBreakerConfigManager.java # Circuit breaker config
-│   ├── auth/                # Authentication framework
-│   │   ├── AuthProcessor.java           # Strategy interface
-│   │   ├── JwtAuthProcessor.java        # JWT implementation
-│   │   ├── ApiKeyAuthProcessor.java     # API Key implementation
-│   │   └── OAuth2AuthProcessor.java     # OAuth2 implementation
+│   │   ├── PluginGlobalFilter.java   # Main strategy-based filter
+│   │   ├── TraceIdGlobalFilter.java  # Distributed tracing
+│   │   ├── IPFilterGlobalFilter.java  # IP access control
+│   │   └── ... 
+│   ├── plugin/strategy/     # Strategy implementations
+│   │   ├── Plugin.java             # Strategy interface
+│   │   ├── PluginType.java         # Strategy type enum
+│   │   ├── AbstractPlugin.java     # Base class
+│   │   ├── StrategyManager.java    # Central registry
+│   │   ├── timeout/                 # Timeout strategy
+│   │   ├── ratelimiter/             # Rate limiter strategy
+│   │   ├── circuitbreaker/          # Circuit breaker strategy
+│   │   ├── auth/                    # Auth strategy
+│   │   ├── ipfilter/                # IP filter strategy
+│   │   └── tracing/                 # Tracing strategy
+│   ├── manager/             # Configuration managers
+│   │   ├── PluginConfigManager.java   # Unified config store
+│   │   ├── TimeoutConfigManager.java  # Timeout config
+│   │   ├── CircuitBreakerConfigManager.java # Circuit breaker config
+│   │   └── RateLimiterConfigManager.java  # Rate limiter config
+│   ├── refresher/           # Config refreshers
+│   │   ├── AbstractRefresher.java    # Base refresher
+│   │   ├── PluginRefresher.java      # Plugin config refresher
+│   │   └── NacosConfigListener.java  # Nacos listener
 │   └── route/
 │       └── NacosRouteDefinitionLocator.java # Dynamic route loader
 ├── demo-service/            # Sample backend (port 9000/9001)
 └── docs/                    # Documentation
-    ├── FEATURES.md          # Feature guide
-    └── ARCHITECTURE.md      # Architecture & design principles
+    ├── PLUGIN_ARCHITECTURE.md      # Architecture design
+    ├── PLUGIN_QUICKSTART.md        # Usage guide
+    ├── REFACTORING_SUMMARY.md      # Refactoring summary
+    ├── FEATURES.md                 # Feature overview
+    └── ARCHITECTURE.md             # System architecture
 ```
 
 ---

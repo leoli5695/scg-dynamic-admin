@@ -1,4 +1,4 @@
-package com.example.gateway.ratelimiter;
+package com.example.gateway.manager;
 
 import com.example.gateway.model.RateLimiterConfig;
 import com.example.gateway.plugin.PluginConfigManager;
