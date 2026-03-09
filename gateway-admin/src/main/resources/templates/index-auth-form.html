@@ -1,0 +1,67 @@
+<!-- 在 Plugins Panel 中添加 Auth Config 表单 -->
+<!-- 找到 Timeout Plugin 部分之后，添加以下内容 -->
+
+            <!-- Auth Plugin -->
+            <div style="margin-top: 2rem;">
+                <h3 style="color:#667eea;margin-bottom:1rem;">🔐 Authentication Plugin</h3>
+                <form id="authForm" onsubmit="submitAuth(event)" style="background:#f8f9fa;padding:1.5rem;border-radius:8px;">
+                    <div class="form-group">
+                        <label>Route <span class="required">*</span></label>
+                        <select id="auth-route" required></select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Auth Type <span class="required">*</span></label>
+                        <select id="auth-type" onchange="onAuthTypeChange()" required>
+                            <option value="">-- Select authentication type --</option>
+                            <option value="JWT">JWT Token</option>
+                            <option value="API_KEY">API Key</option>
+                            <option value="OAUTH2">OAuth2 (coming soon)</option>
+                        </select>
+                    </div>
+                    
+                    <!-- JWT Config -->
+                    <div id="jwt-config" style="display:none;">
+                        <div class="form-group">
+                            <label>Secret Key <span class="required">*</span></label>
+                            <input type="text" id="jwt-secret" placeholder="Your JWT secret key (min 32 characters)">
+                            <small style="color:#666;display:block;margin-top:0.5rem;">Minimum 32 characters for HS256 algorithm</small>
+                        </div>
+                    </div>
+                    
+                    <!-- API Key Config -->
+                    <div id="apikey-config" style="display:none;">
+                        <div class="form-group">
+                            <label>API Key <span class="required">*</span></label>
+                            <input type="text" id="api-key" placeholder="e.g., sk-abc123def456">
+                        </div>
+                    </div>
+                    
+                    <!-- OAuth2 Config -->
+                    <div id="oauth2-config" style="display:none;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Client ID</label>
+                                <input type="text" id="oauth2-client-id" placeholder="OAuth2 client ID">
+                            </div>
+                            <div class="form-group">
+                                <label>Client Secret</label>
+                                <input type="text" id="oauth2-client-secret" placeholder="OAuth2 client secret">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Token Endpoint</label>
+                            <input type="text" id="oauth2-token-endpoint" placeholder="https://auth-server.com/oauth/token">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="auth-enabled" checked>
+                            Enable Authentication
+                        </label>
+                    </div>
+                    
+                    <button type="submit" class="btn-primary">✓ Save Auth Config</button>
+                </form>
+            </div>

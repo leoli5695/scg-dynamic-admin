@@ -2,6 +2,7 @@ package com.example.gatewayadmin.service;
 
 import com.example.gatewayadmin.config.GatewayAdminProperties;
 import com.example.gatewayadmin.config.NacosConfigManager;
+import com.example.gatewayadmin.model.AuthConfig;
 import com.example.gatewayadmin.model.GatewayPluginsConfig;
 import com.example.gatewayadmin.model.PluginConfig;
 import jakarta.annotation.PostConstruct;
@@ -86,15 +87,22 @@ public class PluginService {
     }
     
     /**
-     * Get timeout configuration by route ID
+     * Get all authentication configurations
      */
-    public PluginConfig.TimeoutConfig getTimeoutByRoute(String routeId) {
-        return pluginCache.getTimeouts().stream()
-                .filter(t -> routeId.equals(t.getRouteId()) && t.isEnabled())
+    public List<AuthConfig> getAllAuthConfigs() {
+        return pluginCache.getAuthConfigs();
+    }
+    
+    /**
+     * Get authentication configuration by route ID
+     */
+    public AuthConfig getAuthConfigByRoute(String routeId) {
+        return pluginCache.getAuthConfigs().stream()
+                .filter(a -> routeId.equals(a.getRouteId()) && a.isEnabled())
                 .findFirst()
                 .orElse(null);
     }
-
+    
     /**
      * Get IP filter configuration by route ID
      */
@@ -372,6 +380,61 @@ public class PluginService {
     }
 
     /**
+     * Create a new authentication configuration
+     */
+    public boolean createAuthConfig(AuthConfig config) {
+        if (config == null || config.getRouteId() == null) {
+            return false;
+        }
+        
+        // Remove existing config for this route
+        removeAuthConfig(config.getRouteId());
+        
+        // Add new config
+        pluginCache.getAuthConfigs().add(config);
+        log.info("Created auth config for route {}: type={}", config.getRouteId(), config.getAuthType());
+        
+        return publisher.publish(new GatewayPluginsConfig(pluginCache));
+    }
+    
+    /**
+     * Update an existing authentication configuration
+     */
+    public boolean updateAuthConfig(AuthConfig config) {
+        if (config == null || config.getRouteId() == null) {
+            return false;
+        }
+        
+        Optional<AuthConfig> existing = pluginCache.getAuthConfigs().stream()
+                .filter(a -> a.getRouteId().equals(config.getRouteId()))
+                .findFirst();
+        
+        if (existing.isPresent()) {
+            pluginCache.getAuthConfigs().remove(existing.get());
+            pluginCache.getAuthConfigs().add(config);
+            log.info("Updated auth config for route {}: type={}", config.getRouteId(), config.getAuthType());
+            return publisher.publish(new GatewayPluginsConfig(pluginCache));
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Delete an authentication configuration
+     */
+    public boolean removeAuthConfig(String routeId) {
+        List<AuthConfig> list = pluginCache.getAuthConfigs();
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i).getRouteId().equals(routeId)) {
+                list.remove(i);
+                log.info("Removed auth config for route: {}", routeId);
+                return publisher.publish(new GatewayPluginsConfig(pluginCache));
+            }
+        }
+        return false;
+    }
+    
+    /**
      * Get plugin statistics
      */
     public PluginStats getPluginStats() {
@@ -383,6 +446,10 @@ public class PluginService {
         stats.setTimeoutCount(pluginCache.getTimeouts().size());
         stats.setEnabledTimeouts((int) pluginCache.getTimeouts().stream()
                 .filter(PluginConfig.TimeoutConfig::isEnabled)
+                .count());
+        stats.setAuthCount(pluginCache.getAuthConfigs().size());
+        stats.setEnabledAuths((int) pluginCache.getAuthConfigs().stream()
+                .filter(AuthConfig::isEnabled)
                 .count());
         return stats;
     }
@@ -396,5 +463,7 @@ public class PluginService {
         private int enabledRateLimiters;
         private int timeoutCount;
         private int enabledTimeouts;
+        private int authCount;
+        private int enabledAuths;
     }
 }

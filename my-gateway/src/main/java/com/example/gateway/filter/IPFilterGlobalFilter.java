@@ -161,7 +161,9 @@ public class IPFilterGlobalFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        // High priority - execute before rate limiting
-        return -200;
+        // High priority - execute before authentication
+        // IP filtering is coarse-grained protection, should run first to block malicious IPs
+        // This avoids unnecessary authentication computation for blocked IPs
+        return -280;
     }
 }

@@ -1,0 +1,145 @@
+// ======== Auth Plugin JavaScript ========
+
+// Add auth route dropdown refresh function
+function refreshAuthRouteDropdown() {
+    const sel = document.getElementById('auth-route');
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">-- Select a created route --</option>';
+    routes.forEach(r => {
+        sel.innerHTML += `<option value="${r.id}">${r.id} → ${r.uri}</option>`;
+    });
+    if (cur) sel.value = cur;
+}
+
+// Handle auth type change to show/hide config fields
+window.onAuthTypeChange = function() {
+    const authType = document.getElementById('auth-type').value;
+    
+    // Hide all config sections
+    document.getElementById('jwt-config').style.display = 'none';
+    document.getElementById('apikey-config').style.display = 'none';
+    document.getElementById('oauth2-config').style.display = 'none';
+    
+    // Show relevant config section
+    if (authType === 'JWT') {
+        document.getElementById('jwt-config').style.display = 'block';
+        document.getElementById('jwt-secret').required = true;
+    } else if (authType === 'API_KEY') {
+        document.getElementById('apikey-config').style.display = 'block';
+        document.getElementById('api-key').required = true;
+    } else if (authType === 'OAUTH2') {
+        document.getElementById('oauth2-config').style.display = 'block';
+    }
+};
+
+// Submit auth config
+async function submitAuth(e) {
+    e.preventDefault();
+    
+    const routeId = document.getElementById('auth-route').value;
+    const authType = document.getElementById('auth-type').value;
+    const enabled = document.getElementById('auth-enabled').checked;
+    
+    if (!routeId || !authType) {
+        toast('Please select route and auth type', 'error');
+        return;
+    }
+    
+    const data = {
+        routeId: routeId,
+        authType: authType,
+        enabled: enabled
+    };
+    
+    // Add type-specific config
+    if (authType === 'JWT') {
+        data.secretKey = document.getElementById('jwt-secret').value;
+        if (!data.secretKey) {
+            toast('JWT secret key is required', 'error');
+            return;
+        }
+    } else if (authType === 'API_KEY') {
+        data.apiKey = document.getElementById('api-key').value;
+        if (!data.apiKey) {
+            toast('API Key is required', 'error');
+            return;
+        }
+    } else if (authType === 'OAUTH2') {
+        data.clientId = document.getElementById('oauth2-client-id').value;
+        data.clientSecret = document.getElementById('oauth2-client-secret').value;
+        data.tokenEndpoint = document.getElementById('oauth2-token-endpoint').value;
+    }
+    
+    try {
+        const r = await fetch('/api/plugins/auth', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        const res = await r.json();
+        
+        if (r.ok && res.code === 200) {
+            toast('✓ Auth config saved successfully!');
+            document.getElementById('authForm').reset();
+            document.getElementById('jwt-config').style.display = 'none';
+            document.getElementById('apikey-config').style.display = 'none';
+            document.getElementById('oauth2-config').style.display = 'none';
+            loadPlugins();
+        } else {
+            toast('✗ Failed: ' + (res.message || 'Unknown error'), 'error');
+        }
+    } catch(err) {
+        console.error(err);
+        toast('✗ Network error', 'error');
+    }
+}
+
+// Delete auth config
+async function deleteAuthConfig(routeId) {
+    if (!confirm('Delete authentication config for route: ' + routeId + '?')) return;
+    
+    try {
+        const r = await fetch('/api/plugins/auth/' + encodeURIComponent(routeId), {
+            method: 'DELETE'
+        });
+        const res = await r.json();
+        
+        if (r.ok) {
+            toast('✓ Auth config deleted!');
+            loadPlugins();
+        } else {
+            toast('✗ Failed: ' + (res.message || 'Unknown error'), 'error');
+        }
+    } catch(err) {
+        console.error(err);
+        toast('✗ Network error', 'error');
+    }
+}
+
+// Render auth configs in plugins list
+function renderAuthConfigs(authConfigs) {
+    if (!authConfigs || authConfigs.length === 0) return '';
+    
+    return `
+        <div class="plugin-section-subtitle">🔐 Authentication Configurations (${authConfigs.length})</div>
+        ${authConfigs.map(a => `
+            <div class="item-card" style="margin-bottom:8px;">
+                <div class="item-card-header">
+                    <div>
+                        <span class="item-name">${a.routeId}</span>
+                        <span class="item-tag tag-${a.enabled ? 'green' : 'orange'}">${a.authType}${a.enabled ? '' : ' (disabled)'}</span>
+                    </div>
+                    <div class="item-actions">
+                        <button class="btn-del" onclick="deleteAuthConfig('${a.routeId}')">Delete</button>
+                    </div>
+                </div>
+                <div class="item-meta">
+                    ${a.authType === 'JWT' ? 'Secret Key: ***' : ''}
+                    ${a.authType === 'API_KEY' ? 'API Key: ***' : ''}
+                    ${a.authType === 'OAUTH2' ? 'OAuth2 Client: ' + (a.clientId || 'N/A') : ''}
+                </div>
+            </div>
+        `).join('')}
+    `;
+}

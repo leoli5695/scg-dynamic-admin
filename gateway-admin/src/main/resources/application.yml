@@ -9,6 +9,29 @@ spring:
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+  datasource:
+    driver-class-name: org.h2.Driver
+    url: jdbc:h2:file:./data/gateway_db;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;AUTO_SERVER=TRUE
+    username: sa
+    password: 
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+      settings:
+        web-allow-others: true
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      password:
+      database: 0
+      timeout: 5000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
   cloud:
     nacos:
       config:
@@ -35,6 +58,9 @@ spring:
 
 gateway:
   admin:
+    jwt:
+      secret: ${GATEWAY_ADMIN_JWT_SECRET:mySecretKeyForJWTTokenGenerationWhichMustBeLongEnoughAndSecure}
+      expiration: 86400000  # 24 hours in milliseconds
     nacos:
       data-ids:
         routes: gateway-routes.json

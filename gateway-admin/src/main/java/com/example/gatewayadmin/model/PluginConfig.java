@@ -32,6 +32,16 @@ public class PluginConfig {
      */
     private List<TimeoutConfig> timeouts = new ArrayList<>();
     
+    /**
+     * Circuit breaker configurations.
+     */
+    private List<CircuitBreakerConfig> circuitBreakers = new ArrayList<>();
+    
+    /**
+     * Authentication configurations.
+     */
+    private List<AuthConfig> authConfigs = new ArrayList<>();
+    
     // Note: customHeaders removed - use SCG native AddRequestHeader filter instead
     
     /**
@@ -160,6 +170,66 @@ public class PluginConfig {
             this.routeId = routeId;
             this.connectTimeout = connectTimeout;
             this.responseTimeout = responseTimeout;
+        }
+    }
+
+    /**
+     * Circuit breaker configuration.
+     */
+    @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class CircuitBreakerConfig {
+        /**
+         * Route ID.
+         */
+        private String routeId;
+        
+        /**
+         * Failure rate threshold (percentage, e.g., 50 = 50%).
+         */
+        private float failureRateThreshold = 50.0f;
+        
+        /**
+         * Slow call duration threshold in milliseconds.
+         */
+        private long slowCallDurationThreshold = 60000L;
+        
+        /**
+         * Slow call rate threshold (percentage).
+         */
+        private float slowCallRateThreshold = 80.0f;
+        
+        /**
+         * Wait duration in open state (milliseconds).
+         */
+        private long waitDurationInOpenState = 30000L;
+        
+        /**
+         * Sliding window size (number of calls).
+         */
+        private int slidingWindowSize = 10;
+        
+        /**
+         * Minimum number of calls before calculating metrics.
+         */
+        private int minimumNumberOfCalls = 5;
+        
+        /**
+         * Whether automatic transition from half-open to closed is enabled.
+         */
+        private boolean automaticTransitionFromOpenToHalfOpenEnabled = true;
+        
+        /**
+         * Whether this config is enabled.
+         */
+        private boolean enabled = true;
+        
+        public CircuitBreakerConfig() {}
+        
+        public CircuitBreakerConfig(String routeId, float failureRateThreshold, long waitDurationInOpenState) {
+            this.routeId = routeId;
+            this.failureRateThreshold = failureRateThreshold;
+            this.waitDurationInOpenState = waitDurationInOpenState;
         }
     }
 
