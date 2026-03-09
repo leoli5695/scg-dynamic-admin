@@ -3,7 +3,7 @@ package com.example.gateway.config;
 import com.alibaba.nacos.api.annotation.NacosInjected;
 import com.alibaba.nacos.api.config.ConfigService;
 import com.alibaba.nacos.api.config.listener.Listener;
-import com.example.gateway.refresher.PluginRefresher;
+import com.example.gateway.refresher.StrategyRefresher;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -29,10 +29,10 @@ public class NacosConfigListener {
     @Value("${nacos.config.group:DEFAULT_GROUP}")
    private String group;
     
-   private final PluginRefresher pluginRefresher;
+   private final StrategyRefresher StrategyRefresher;
     
-    public NacosConfigListener(PluginRefresher pluginRefresher) {
-        this.pluginRefresher= pluginRefresher;
+    public NacosConfigListener(StrategyRefresher StrategyRefresher) {
+        this.StrategyRefresher= StrategyRefresher;
     }
     
     /**
@@ -45,7 +45,7 @@ public class NacosConfigListener {
            String content = configService.getConfig(dataId, group, 5000);
             if (content != null) {
                 log.info("Loaded initial plugin config from Nacos");
-               pluginRefresher.onConfigChange(dataId, content);
+               StrategyRefresher.onConfigChange(dataId, content);
             }
             
             // Register listener for future changes
@@ -63,7 +63,7 @@ public class NacosConfigListener {
                 @Override
                 public void receiveConfigInfo(String configInfo) {
                     log.info("Received config change from Nacos: {}", dataId);
-                   pluginRefresher.onConfigChange(dataId, configInfo);
+                   StrategyRefresher.onConfigChange(dataId, configInfo);
                 }
             });
             

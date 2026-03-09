@@ -1,7 +1,7 @@
-package com.example.gateway.plugin.circuitbreaker;
+package com.example.gateway.strategy.circuitbreaker;
 
-import com.example.gateway.plugin.AbstractPlugin;
-import com.example.gateway.plugin.PluginType;
+import com.example.gateway.strategy.AbstractStrategy;
+import com.example.gateway.strategy.StrategyType;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
@@ -17,7 +17,7 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-public class CircuitBreakerStrategy extends AbstractPlugin {
+public class CircuitBreakerStrategy extends AbstractStrategy {
     
     private int failureRateThreshold = 50; // 50%
     private int waitDurationInOpenState = 30; // 30 seconds
@@ -27,8 +27,8 @@ public class CircuitBreakerStrategy extends AbstractPlugin {
    private final CircuitBreakerRegistry registry = CircuitBreakerRegistry.ofDefaults();
     
     @Override
-    public PluginType getType() {
-     return PluginType.CIRCUIT_BREAKER;
+    public StrategyType getType() {
+     return StrategyType.CIRCUIT_BREAKER;
     }
     
     @Override

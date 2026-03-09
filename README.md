@@ -1,4 +1,4 @@
-# Production-Grade API Gateway Demo
+﻿# Production-Grade API Gateway Demo
 
 Enterprise-ready API Gateway built with Spring Cloud Gateway, featuring production-proven security, resilience, and observability patterns.
 
@@ -8,46 +8,46 @@ Enterprise-ready API Gateway built with Spring Cloud Gateway, featuring producti
 
 ---
 
-## 🎯 Key Features
+## 馃幆 Key Features
 
-### 🔐 Enterprise Authentication
-- **Strategy Pattern Design** — Extensible auth processor architecture
-- **JWT / API Key / OAuth2** — Multiple auth methods out of the box
-- **Extensible** — Add custom auth types (e.g., DingTalk, WeChat) in minutes
-- **Performance Optimized** — IP filtering before auth (+37% TPS)
+### 馃攼 Enterprise Authentication
+- **Strategy Pattern Design** 鈥?Extensible auth processor architecture
+- **JWT / API Key / OAuth2** 鈥?Multiple auth methods out of the box
+- **Extensible** 鈥?Add custom auth types (e.g., DingTalk, WeChat) in minutes
+- **Performance Optimized** 鈥?IP filtering before auth (+37% TPS)
 
-### ⚡ Resilience & Protection
-- **Circuit Breaker** — Prevent cascading failures (Resilience4j)
-- **Rate Limiting** — QPS-based throttling (Redis sliding window)
-- **Timeout Control** — Per-route connection/response timeouts
-- **Multi-Layered Defense** — IP filter → Auth → Rate limit → Circuit breaker
+### 鈿?Resilience & Protection
+- **Circuit Breaker** 鈥?Prevent cascading failures (Resilience4j)
+- **Rate Limiting** 鈥?QPS-based throttling (Redis sliding window)
+- **Timeout Control** 鈥?Per-route connection/response timeouts
+- **Multi-Layered Defense** 鈥?IP filter 鈫?Auth 鈫?Rate limit 鈫?Circuit breaker
 
-### 🔍 Observability
-- **Distributed Tracing** — Automatic TraceId propagation
-- **Audit Logging** — Complete change history via AOP
-- **Structured Logging** — MDC-based correlation
+### 馃攳 Observability
+- **Distributed Tracing** 鈥?Automatic TraceId propagation
+- **Audit Logging** 鈥?Complete change history via AOP
+- **Structured Logging** 鈥?MDC-based correlation
 
-### 🛠️ Management
-- **REST Admin API** — Full CRUD for all configurations
-- **Web Dashboard** — User-friendly UI (Thymeleaf + Bootstrap)
-- **Dynamic Updates** — Hot-reload without restarts (< 1s)
-- **Nacos Integration** — Centralized config management
+### 馃洜锔?Management
+- **REST Admin API** 鈥?Full CRUD for all configurations
+- **Web Dashboard** 鈥?User-friendly UI (Thymeleaf + Bootstrap)
+- **Dynamic Updates** 鈥?Hot-reload without restarts (< 1s)
+- **Nacos Integration** 鈥?Centralized config management
 
 ---
 
-## 🚀 Quick Start
+## 馃殌 Quick Start
 
 | Module | Port | Description |
 |--------|------|-------------|
-| `my-gateway` | 80 | Core gateway — Spring Cloud Gateway extended |
+| `my-gateway` | 80 | Core gateway 鈥?Spring Cloud Gateway extended |
 | `gateway-admin` | 8080 | Management console (REST API + Web UI) |
-| `demo-service` | **9000 / 9001** | Demo backend — **start 2 instances to demonstrate load balancing** |
+| `demo-service` | **9000 / 9001** | Demo backend 鈥?**start 2 instances to demonstrate load balancing** |
 | Nacos | 8848 | Config center + Service registry |
 | Redis | 6379 | Rate limiting counter storage |
 
 ---
 
-## 🚀 Quick Start
+## 馃殌 Quick Start
 
 ### Prerequisites
 
@@ -143,18 +143,18 @@ curl http://localhost/api/hello
 
 ---
 
-## ⚡ Real-Time Configuration Updates
+## 鈿?Real-Time Configuration Updates
 
 **How It Works:**
 ```
 Admin API (POST/PUT/DELETE)
-  ↓
+  鈫?
 Nacos Config Center (< 100ms push)
-  ↓
+  鈫?
 Gateway Listener (detects change)
-  ↓
+  鈫?
 Clear cache + Rebuild routes/plugins
-  ↓
+  鈫?
 Next request uses new config (no restart!)
 ```
 
@@ -178,54 +178,54 @@ curl http://localhost:80/api/data -H "Authorization: Bearer <token>"
 
 ---
 
-## 📁 Project Structure
+## 馃搧 Project Structure
 
 ```
 scg-dynamic-admin-demo/
-├── gateway-admin/           # Admin console (port 8080)
-│   ├── controller/          # REST API + Web UI
-│   ├── model/               # Data models
-│   └── service/             # Business logic
-├── my-gateway/              # Core gateway (port 80)
-│   ├── filter/              # Global filters
-│   │   ├── PluginGlobalFilter.java   # Main strategy-based filter
-│   │   ├── TraceIdGlobalFilter.java  # Distributed tracing
-│   │   ├── IPFilterGlobalFilter.java  # IP access control
-│   │   └── ... 
-│   ├── plugin/strategy/     # Strategy implementations
-│   │   ├── Plugin.java             # Strategy interface
-│   │   ├── PluginType.java         # Strategy type enum
-│   │   ├── AbstractPlugin.java     # Base class
-│   │   ├── StrategyManager.java    # Central registry
-│   │   ├── timeout/                 # Timeout strategy
-│   │   ├── ratelimiter/             # Rate limiter strategy
-│   │   ├── circuitbreaker/          # Circuit breaker strategy
-│   │   ├── auth/                    # Auth strategy
-│   │   ├── ipfilter/                # IP filter strategy
-│   │   └── tracing/                 # Tracing strategy
-│   ├── manager/             # Configuration managers
-│   │   ├── PluginConfigManager.java   # Unified config store
-│   │   ├── TimeoutConfigManager.java  # Timeout config
-│   │   ├── CircuitBreakerConfigManager.java # Circuit breaker config
-│   │   └── RateLimiterConfigManager.java  # Rate limiter config
-│   ├── refresher/           # Config refreshers
-│   │   ├── AbstractRefresher.java    # Base refresher
-│   │   ├── PluginRefresher.java      # Plugin config refresher
-│   │   └── NacosConfigListener.java  # Nacos listener
-│   └── route/
-│       └── NacosRouteDefinitionLocator.java # Dynamic route loader
-├── demo-service/            # Sample backend (port 9000/9001)
-└── docs/                    # Documentation
-    ├── PLUGIN_ARCHITECTURE.md      # Architecture design
-    ├── PLUGIN_QUICKSTART.md        # Usage guide
-    ├── REFACTORING_SUMMARY.md      # Refactoring summary
-    ├── FEATURES.md                 # Feature overview
-    └── ARCHITECTURE.md             # System architecture
+鈹溾攢鈹€ gateway-admin/           # Admin console (port 8080)
+鈹?  鈹溾攢鈹€ controller/          # REST API + Web UI
+鈹?  鈹溾攢鈹€ model/               # Data models
+鈹?  鈹斺攢鈹€ service/             # Business logic
+鈹溾攢鈹€ my-gateway/              # Core gateway (port 80)
+鈹?  鈹溾攢鈹€ filter/              # Global filters
+鈹?  鈹?  鈹溾攢鈹€ StrategyGlobalFilter.java   # Main strategy-based filter
+鈹?  鈹?  鈹溾攢鈹€ TraceIdGlobalFilter.java  # Distributed tracing
+鈹?  鈹?  鈹溾攢鈹€ IPFilterGlobalFilter.java  # IP access control
+鈹?  鈹?  鈹斺攢鈹€ ... 
+鈹?  鈹溾攢鈹€ strategy/     # Strategy implementations
+鈹?  鈹?  鈹溾攢鈹€ Plugin.java             # Strategy interface
+鈹?  鈹?  鈹溾攢鈹€ PluginType.java         # Strategy type enum
+鈹?  鈹?  鈹溾攢鈹€ AbstractPlugin.java     # Base class
+鈹?  鈹?  鈹溾攢鈹€ StrategyManager.java    # Central registry
+鈹?  鈹?  鈹溾攢鈹€ timeout/                 # Timeout strategy
+鈹?  鈹?  鈹溾攢鈹€ ratelimiter/             # Rate limiter strategy
+鈹?  鈹?  鈹溾攢鈹€ circuitbreaker/          # Circuit breaker strategy
+鈹?  鈹?  鈹溾攢鈹€ auth/                    # Auth strategy
+鈹?  鈹?  鈹溾攢鈹€ ipfilter/                # IP filter strategy
+鈹?  鈹?  鈹斺攢鈹€ tracing/                 # Tracing strategy
+鈹?  鈹溾攢鈹€ manager/             # Configuration managers
+鈹?  鈹?  鈹溾攢鈹€ GatewayConfigManager.java   # Unified config store
+鈹?  鈹?  鈹溾攢鈹€ TimeoutConfigManager.java  # Timeout config
+鈹?  鈹?  鈹溾攢鈹€ CircuitBreakerConfigManager.java # Circuit breaker config
+鈹?  鈹?  鈹斺攢鈹€ RateLimiterConfigManager.java  # Rate limiter config
+鈹?  鈹溾攢鈹€ refresher/           # Config refreshers
+鈹?  鈹?  鈹溾攢鈹€ AbstractRefresher.java    # Base refresher
+鈹?  鈹?  鈹溾攢鈹€ StrategyRefresher.java      # Plugin config refresher
+鈹?  鈹?  鈹斺攢鈹€ NacosConfigListener.java  # Nacos listener
+鈹?  鈹斺攢鈹€ route/
+鈹?      鈹斺攢鈹€ NacosRouteDefinitionLocator.java # Dynamic route loader
+鈹溾攢鈹€ demo-service/            # Sample backend (port 9000/9001)
+鈹斺攢鈹€ docs/                    # Documentation
+    鈹溾攢鈹€ PLUGIN_ARCHITECTURE.md      # Architecture design
+    鈹溾攢鈹€ PLUGIN_QUICKSTART.md        # Usage guide
+    鈹溾攢鈹€ REFACTORING_SUMMARY.md      # Refactoring summary
+    鈹溾攢鈹€ FEATURES.md                 # Feature overview
+    鈹斺攢鈹€ ARCHITECTURE.md             # System architecture
 ```
 
 ---
 
-## 🛠️ Tech Stack
+## 馃洜锔?Tech Stack
 
 | Layer | Technology | Purpose |
 |-------|------------|---------|
@@ -243,7 +243,7 @@ scg-dynamic-admin-demo/
 
 ---
 
-## 📖 Documentation
+## 馃摉 Documentation
 
 | Document | Audience | Content |
 |----------|----------|---------|
@@ -254,33 +254,33 @@ scg-dynamic-admin-demo/
 
 ---
 
-## 💼 Available for Hire
+## 馃捈 Available for Hire
 
 **Need a customized API Gateway or Microservices Architecture?**
 
 I'm available on Upwork for freelance projects:
-- 🔗 **Profile:** [https://www.upwork.com/freelancers/~017be8c63f36907379](https://www.upwork.com/freelancers/~017be8c63f36907379)
-- 📧 **Contact:** lizhao5695@gmail.com
+- 馃敆 **Profile:** [https://www.upwork.com/freelancers/~017be8c63f36907379](https://www.upwork.com/freelancers/~017be8c63f36907379)
+- 馃摟 **Contact:** lizhao5695@gmail.com
 
 **Specialties:**
-- ✅ Spring Cloud Gateway customization
-- ✅ Microservices architecture design
-- ✅ Production-grade security patterns
-- ✅ Performance optimization
-- ✅ Enterprise authentication integration
+- 鉁?Spring Cloud Gateway customization
+- 鉁?Microservices architecture design
+- 鉁?Production-grade security patterns
+- 鉁?Performance optimization
+- 鉁?Enterprise authentication integration
 
 ---
 
-## 📄 License
+## 馃搫 License
 
-MIT License — free for personal and commercial use. See [LICENSE](LICENSE) for details.
+MIT License 鈥?free for personal and commercial use. See [LICENSE](LICENSE) for details.
 
 ---
 
 <div align="center">
 
-**Built with ❤️ by leoli**
+**Built with 鉂わ笍 by leoli**
 
-Found this useful? Give it a ⭐ Star!
+Found this useful? Give it a 猸?Star!
 
 </div>

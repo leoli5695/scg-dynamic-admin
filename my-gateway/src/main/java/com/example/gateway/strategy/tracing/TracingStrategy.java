@@ -1,7 +1,7 @@
-package com.example.gateway.plugin.tracing;
+package com.example.gateway.strategy.tracing;
 
-import com.example.gateway.plugin.AbstractPlugin;
-import com.example.gateway.plugin.PluginType;
+import com.example.gateway.strategy.AbstractStrategy;
+import com.example.gateway.strategy.StrategyType;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
@@ -15,14 +15,14 @@ import java.util.UUID;
  */
 @Slf4j
 @Component
-public class TracingStrategy extends AbstractPlugin {
+public class TracingStrategy extends AbstractStrategy {
     
     private static final String TRACE_ID_KEY = "traceId";
     private static final String TRACE_HEADER = "X-Trace-Id";
     
     @Override
-    public PluginType getType() {
-    return PluginType.TRACING;
+    public StrategyType getType() {
+    return StrategyType.TRACING;
     }
     
     @Override

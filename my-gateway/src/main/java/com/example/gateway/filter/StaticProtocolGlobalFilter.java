@@ -106,7 +106,7 @@ public class StaticProtocolGlobalFilter implements GlobalFilter, Ordered {
         log.debug("StaticProtocolGlobalFilter - Route URI: {}", routeUri);
         
         if (routeUri != null && "static".equalsIgnoreCase(routeUri.getScheme())) {
-            log.info("🔍 Intercepting static:// protocol for route: {}", routeUri);
+            log.info("妫ｅ啯鏁?Intercepting static:// protocol for route: {}", routeUri);
             try {
                 URI resolvedUri = resolveServiceUri(routeUri);
                 if (resolvedUri != null) {
@@ -129,7 +129,7 @@ public class StaticProtocolGlobalFilter implements GlobalFilter, Ordered {
                         requestUri.getFragment() // fragment
                     );
                                 
-                    log.info("✅ Resolved static://{} -> {} (with path: {})", routeUri.getHost(), finalUri, path);
+                    log.info("闁?Resolved static://{} -> {} (with path: {})", routeUri.getHost(), finalUri, path);
                                 
                     // Directly set final HTTP URL to avoid RouteToRequestUrlFilter processing again
                     exchange.getAttributes().put(GATEWAY_REQUEST_URL_ATTR, finalUri);
@@ -138,11 +138,11 @@ public class StaticProtocolGlobalFilter implements GlobalFilter, Ordered {
                                  
                     return chain.filter(exchange);
                 } else {
-                    log.error("❌ Failed to resolve static://{}", routeUri.getHost());
+                    log.error("闁?Failed to resolve static://{}", routeUri.getHost());
                     return Mono.error(new NotFoundException("Unable to find instance for service: " + routeUri.getHost()));
                 }
             } catch (Exception e) {
-                log.error("❌ Error resolving static protocol", e);
+                log.error("闁?Error resolving static protocol", e);
                 return Mono.error(e);
             }
         } else if (routeUri != null && "lb".equalsIgnoreCase(routeUri.getScheme())) {

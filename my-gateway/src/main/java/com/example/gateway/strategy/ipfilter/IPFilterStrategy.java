@@ -1,7 +1,7 @@
-package com.example.gateway.plugin.ipfilter;
+package com.example.gateway.strategy.ipfilter;
 
-import com.example.gateway.plugin.AbstractPlugin;
-import com.example.gateway.plugin.PluginType;
+import com.example.gateway.strategy.AbstractStrategy;
+import com.example.gateway.strategy.StrategyType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -16,15 +16,15 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Slf4j
 @Component
-public class IPFilterStrategy extends AbstractPlugin {
+public class IPFilterStrategy extends AbstractStrategy {
     
     private final Set<String> whitelist = ConcurrentHashMap.newKeySet();
     private final Set<String> blacklist = ConcurrentHashMap.newKeySet();
     private String mode = "blacklist"; // or "whitelist"
     
     @Override
-    public PluginType getType() {
-    return PluginType.IP_FILTER;
+    public StrategyType getType() {
+    return StrategyType.IP_FILTER;
     }
     
     @Override

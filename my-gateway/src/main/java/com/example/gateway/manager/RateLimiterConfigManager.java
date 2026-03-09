@@ -1,14 +1,14 @@
 package com.example.gateway.manager;
 
 import com.example.gateway.model.RateLimiterConfig;
-import com.example.gateway.plugin.PluginConfigManager;
+import com.example.gateway.manager.GatewayConfigManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
  * Rate Limiter Configuration Manager
- * Load rate limiter config from PluginConfigManager
+ * Load rate limiter config from GatewayConfigManager
  *
  * @author leoli
  */
@@ -17,18 +17,18 @@ import org.springframework.stereotype.Component;
 public class RateLimiterConfigManager {
 
     @Autowired
-    private PluginConfigManager pluginConfigManager;
+    private GatewayConfigManager GatewayConfigManager;
 
     public RateLimiterConfigManager() {
-        log.info("RateLimiterConfigManager initialized, using PluginConfigManager");
+        log.info("RateLimiterConfigManager initialized, using GatewayConfigManager");
     }
 
     public RateLimiterConfig getRateLimiterConfig(String routeId) {
         if (routeId == null) return null;
 
-        // Get from PluginConfigManager
-        PluginConfigManager.RateLimiterConfig pluginConfig =
-                pluginConfigManager.getRateLimiterForRoute(routeId);
+        // Get from GatewayConfigManager
+        GatewayConfigManager.RateLimiterConfig pluginConfig =
+                GatewayConfigManager.getRateLimiterForRoute(routeId);
 
         if (pluginConfig != null) {
             log.debug("Found rate limiter config for route {}: QPS={}, timeUnit={}, burst={}",

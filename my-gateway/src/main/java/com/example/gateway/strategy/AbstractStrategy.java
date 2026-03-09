@@ -1,14 +1,14 @@
-package com.example.gateway.plugin;
+package com.example.gateway.strategy;
 
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
 
 /**
- * Abstract plugin with common functionality.
+ * Abstract strategy with common functionality.
  */
 @Slf4j
-public abstract class AbstractPlugin implements Plugin {
+public abstract class AbstractStrategy implements Strategy {
     
    protected volatile boolean enabled = true;
    protected Map<String, Object> config;
@@ -41,3 +41,4 @@ public abstract class AbstractPlugin implements Plugin {
        return value != null ? (T) value : defaultValue;
     }
 }
+

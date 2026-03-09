@@ -1,80 +1,80 @@
-# Gateway Plugin Architecture (Strategy Pattern)
+﻿# Gateway Plugin Architecture (Strategy Pattern)
 
-## 🎯 Overview
+## 馃幆 Overview
 
 This document describes the new plugin-based architecture for the API Gateway, using **Strategy Pattern** for extensibility and **Refresher Pattern** for dynamic configuration.
 
 ---
 
-## 📦 Package Structure
+## 馃摝 Package Structure
 
 ```
 com.example.gateway/
-├── plugin/                          # Strategy layer
-│   ├── Plugin.java                # Strategy interface
-│   ├── PluginType.java            # Strategy type enumeration
-│   ├── AbstractPlugin.java        # Base class with common logic
-│   ├── StrategyManager.java       # Central strategy registry
-│   │
-│   ├── timeout/                    # Timeout strategy
-│   │   └── TimeoutStrategy.java
-│   ├── ratelimiter/                # Rate limiter strategy
-│   │   └── RateLimiterStrategy.java
-│   ├── circuitbreaker/             # Circuit breaker strategy
-│   │   └── CircuitBreakerStrategy.java
-│   ├── auth/                       # Authentication strategy
-│   │   └── AuthStrategy.java
-│   ├── ipfilter/                   # IP filter strategy
-│   │   └── IPFilterStrategy.java
-│   └── tracing/                    # Distributed tracing strategy
-│       └── TracingStrategy.java
-│
-├── refresher/                       # Configuration refresh layer
-│   ├── AbstractRefresher.java     # Base refresher class
-│   ├── ServiceRefresher.java      # Service config refresher
-│   ├── RouteRefresher.java        # Route config refresher
-│   └── PluginRefresher.java       # Plugin config refresher
-│
-└── manager/                         # Data caching layer
-    ├── ServiceManager.java        # Service data cache
-    ├── RouteManager.java          # Route data cache
-    └── PluginConfigManager.java   # Plugin config cache
+鈹溾攢鈹€ plugin/                          # Strategy layer
+鈹?  鈹溾攢鈹€ Plugin.java                # Strategy interface
+鈹?  鈹溾攢鈹€ PluginType.java            # Strategy type enumeration
+鈹?  鈹溾攢鈹€ AbstractPlugin.java        # Base class with common logic
+鈹?  鈹溾攢鈹€ StrategyManager.java       # Central strategy registry
+鈹?  鈹?
+鈹?  鈹溾攢鈹€ timeout/                    # Timeout strategy
+鈹?  鈹?  鈹斺攢鈹€ TimeoutStrategy.java
+鈹?  鈹溾攢鈹€ ratelimiter/                # Rate limiter strategy
+鈹?  鈹?  鈹斺攢鈹€ RateLimiterStrategy.java
+鈹?  鈹溾攢鈹€ circuitbreaker/             # Circuit breaker strategy
+鈹?  鈹?  鈹斺攢鈹€ CircuitBreakerStrategy.java
+鈹?  鈹溾攢鈹€ auth/                       # Authentication strategy
+鈹?  鈹?  鈹斺攢鈹€ AuthStrategy.java
+鈹?  鈹溾攢鈹€ ipfilter/                   # IP filter strategy
+鈹?  鈹?  鈹斺攢鈹€ IPFilterStrategy.java
+鈹?  鈹斺攢鈹€ tracing/                    # Distributed tracing strategy
+鈹?      鈹斺攢鈹€ TracingStrategy.java
+鈹?
+鈹溾攢鈹€ refresher/                       # Configuration refresh layer
+鈹?  鈹溾攢鈹€ AbstractRefresher.java     # Base refresher class
+鈹?  鈹溾攢鈹€ ServiceRefresher.java      # Service config refresher
+鈹?  鈹溾攢鈹€ RouteRefresher.java        # Route config refresher
+鈹?  鈹斺攢鈹€ StrategyRefresher.java       # Plugin config refresher
+鈹?
+鈹斺攢鈹€ manager/                         # Data caching layer
+    鈹溾攢鈹€ ServiceManager.java        # Service data cache
+    鈹溾攢鈹€ RouteManager.java          # Route data cache
+    鈹斺攢鈹€ GatewayConfigManager.java   # Plugin config cache
 ```
 
 ---
 
-## 🏗️ Architecture Design
+## 馃彈锔?Architecture Design
 
 ### Core Concept: Three-Layer Separation
 
 ```
-┌─────────────────────────────────────────┐
-│  Refresher Layer (Ears)                 │
-│  - Listens to Nacos config changes     │
-│  - Parses and validates config         │
-│  - Triggers refresh callbacks          │
-└────────────┬────────────────────────────┘
-             │ onConfigChange()
-             ↓
-┌─────────────────────────────────────────┐
-│  Manager Layer (Brain)                  │
-│  - Stores configuration in memory      │
-│  - Provides query interfaces           │
-│  - Manages lifecycle                   │
-└────────────┬────────────────────────────┘
-             │ refreshStrategy()
-             ↓
-┌─────────────────────────────────────────┐
-│  Strategy Layer (Hands)                 │
-│  - Executes business logic             │
-│  - Applies rules to requests           │
-│  - Self-managed state (enabled/disabled)│
-└─────────────────────────────────────────┘
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+鈹? Refresher Layer (Ears)                 鈹?
+鈹? - Listens to Nacos config changes     鈹?
+鈹? - Parses and validates config         鈹?
+鈹? - Triggers refresh callbacks          鈹?
+鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+             鈹?onConfigChange()
+             鈫?
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+鈹? Manager Layer (Brain)                  鈹?
+鈹? - Stores configuration in memory      鈹?
+鈹? - Provides query interfaces           鈹?
+鈹? - Manages lifecycle                   鈹?
+鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+             鈹?refreshStrategy()
+             鈫?
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+鈹? Strategy Layer (Hands)                 鈹?
+鈹? - Executes business logic             鈹?
+鈹? - Applies rules to requests           鈹?
+鈹? - Self-managed state (enabled/disabled)鈹?
+鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
 ```
 
 ---
 
-## 🔧 Strategy Pattern Implementation
+## 馃敡 Strategy Pattern Implementation
 
 ### Plugin Interface
 
@@ -90,9 +90,9 @@ public interface Plugin {
 ### AbstractPlugin Base Class
 
 Provides common functionality:
-- ✅ Enable/disable state management
-- ✅ Configuration map storage
-- ✅ Helper method `getConfigValue()`
+- 鉁?Enable/disable state management
+- 鉁?Configuration map storage
+- 鉁?Helper method `getConfigValue()`
 
 ### Concrete Strategies
 
@@ -109,7 +109,7 @@ Each strategy focuses on one concern:
 
 ---
 
-## 🔄 StrategyManager: Central Registry
+## 馃攧 StrategyManager: Central Registry
 
 ### Auto-Discovery via Spring DI
 
@@ -148,14 +148,14 @@ public class StrategyManager {
 
 ### Benefits
 
-✅ **Zero Configuration** — Spring auto-discovers all `@Component` strategies  
-✅ **Open-Closed Principle** — Add new strategies without modifying existing code  
-✅ **Testability** — Each strategy can be tested independently  
-✅ **Clear Responsibility** — Each strategy handles one concern  
+鉁?**Zero Configuration** 鈥?Spring auto-discovers all `@Component` strategies  
+鉁?**Open-Closed Principle** 鈥?Add new strategies without modifying existing code  
+鉁?**Testability** 鈥?Each strategy can be tested independently  
+鉁?**Clear Responsibility** 鈥?Each strategy handles one concern  
 
 ---
 
-## 📝 Usage Example
+## 馃摑 Usage Example
 
 ### Adding a New Strategy
 
@@ -205,11 +205,11 @@ public class CustomStrategy extends AbstractPlugin {
 
 ---
 
-## 🎯 Integration with Filters
+## 馃幆 Integration with Filters
 
 ### Old vs New Approach
 
-#### ❌ Old Approach (Monolithic Filter)
+#### 鉂?Old Approach (Monolithic Filter)
 
 ```java
 @Component
@@ -230,20 +230,20 @@ public class MyGlobalFilter implements GlobalFilter {
 ```
 
 **Problems:**
-- ❌ Hard to maintain
-- ❌ Hard to test
-- ❌ Violates Single Responsibility
-- ❌ Cannot disable individual features easily
+- 鉂?Hard to maintain
+- 鉂?Hard to test
+- 鉂?Violates Single Responsibility
+- 鉂?Cannot disable individual features easily
 
-#### ✅ New Approach (Strategy-Based)
+#### 鉁?New Approach (Strategy-Based)
 
 ```java
 @Component
-public class PluginGlobalFilter implements GlobalFilter {
+public class StrategyGlobalFilter implements GlobalFilter {
     
    private final StrategyManager strategyManager;
     
-    public PluginGlobalFilter(StrategyManager strategyManager) {
+    public StrategyGlobalFilter(StrategyManager strategyManager) {
         this.strategyManager= strategyManager;
     }
     
@@ -266,20 +266,20 @@ public class PluginGlobalFilter implements GlobalFilter {
 ```
 
 **Benefits:**
-- ✅ Clean and readable
-- ✅ Each strategy is independently testable
-- ✅ Can enable/disable strategies via config
-- ✅ Easy to add new features
+- 鉁?Clean and readable
+- 鉁?Each strategy is independently testable
+- 鉁?Can enable/disable strategies via config
+- 鉁?Easy to add new features
 
 ---
 
-## 🔄 Refresher Pattern (Coming Soon)
+## 馃攧 Refresher Pattern (Coming Soon)
 
 The Refresher layer listens to Nacos configuration changes and triggers updates:
 
 ```java
 @Component
-public class PluginRefresher extends AbstractRefresher {
+public class StrategyRefresher extends AbstractRefresher {
     
    private final StrategyManager strategyManager;
     
@@ -298,7 +298,7 @@ public class PluginRefresher extends AbstractRefresher {
 
 ---
 
-## 📊 Performance Considerations
+## 馃搳 Performance Considerations
 
 ### Memory Footprint
 
@@ -319,19 +319,19 @@ Strategies are applied in order of their importance:
 
 ---
 
-## 🎓 Design Principles
+## 馃帗 Design Principles
 
 ### 1. Single Responsibility Principle (SRP)
 
 Each strategy handles ONE concern:
-- `TimeoutStrategy` → Only timeout
-- `AuthStrategy` → Only authentication
-- `RateLimiterStrategy` → Only rate limiting
+- `TimeoutStrategy` 鈫?Only timeout
+- `AuthStrategy` 鈫?Only authentication
+- `RateLimiterStrategy` 鈫?Only rate limiting
 
 ### 2. Open-Closed Principle (OCP)
 
-- **Open for extension** — Add new strategies easily
-- **Closed for modification** — No need to change `StrategyManager`
+- **Open for extension** 鈥?Add new strategies easily
+- **Closed for modification** 鈥?No need to change `StrategyManager`
 
 ### 3. Dependency Injection (DI)
 
@@ -341,13 +341,13 @@ Each strategy handles ONE concern:
 
 ### 4. Separation of Concerns
 
-- **Refresher** → Listens to config changes
-- **Manager** → Stores and manages data
-- **Strategy** → Executes business logic
+- **Refresher** 鈫?Listens to config changes
+- **Manager** 鈫?Stores and manages data
+- **Strategy** 鈫?Executes business logic
 
 ---
 
-## 🚀 Migration Guide
+## 馃殌 Migration Guide
 
 ### From Old Filter to New Strategy
 
@@ -382,26 +382,26 @@ public class TimeoutStrategy implements Plugin {
 
 ---
 
-## 📈 Future Enhancements
+## 馃搱 Future Enhancements
 
 ### Planned Features
 
-1. **Dynamic Strategy Loading** — Load strategies from JAR files at runtime
-2. **Strategy Chaining** — Define execution order dynamically
-3. **Hot Reload** — Update strategy configuration without restart
-4. **Metrics Collection** — Track strategy execution time and success rate
-5. **Conditional Execution** — Execute strategies based on request attributes
+1. **Dynamic Strategy Loading** 鈥?Load strategies from JAR files at runtime
+2. **Strategy Chaining** 鈥?Define execution order dynamically
+3. **Hot Reload** 鈥?Update strategy configuration without restart
+4. **Metrics Collection** 鈥?Track strategy execution time and success rate
+5. **Conditional Execution** 鈥?Execute strategies based on request attributes
 
 ---
 
-## 🎯 Summary
+## 馃幆 Summary
 
 The new plugin architecture brings:
 
-✅ **Clean Code** — Each strategy has single responsibility  
-✅ **Easy Testing** — Strategies can be tested in isolation  
-✅ **High Extensibility** — Add features without modifying core code  
-✅ **Dynamic Configuration** — Hot reload via Nacos + Refresher 
-✅ **Production Ready** — Proven patterns (Strategy + Observer)  
+鉁?**Clean Code** 鈥?Each strategy has single responsibility  
+鉁?**Easy Testing** 鈥?Strategies can be tested in isolation  
+鉁?**High Extensibility** 鈥?Add features without modifying core code  
+鉁?**Dynamic Configuration** 鈥?Hot reload via Nacos + Refresher 
+鉁?**Production Ready** 鈥?Proven patterns (Strategy + Observer)  
 
-This design demonstrates **professional-grade architecture thinking** suitable for enterprise systems! 🚀
+This design demonstrates **professional-grade architecture thinking** suitable for enterprise systems! 馃殌

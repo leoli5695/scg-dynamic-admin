@@ -1,9 +1,9 @@
-package com.example.gateway.plugin;
+package com.example.gateway.strategy;
 
 /**
- * Plugin type enumeration.
+ * Strategy type enumeration.
  */
-public enum PluginType {
+public enum StrategyType {
     RATE_LIMITER("rateLimiters", "Rate Limiter"),
     AUTH("authConfigs", "Authentication"),
     CIRCUIT_BREAKER("circuitBreakers", "Circuit Breaker"),
@@ -14,16 +14,16 @@ public enum PluginType {
    private final String configKey;
    private final String displayName;
     
-    PluginType(String configKey, String displayName) {
+    StrategyType(String configKey, String displayName) {
         this.configKey = configKey;
         this.displayName = displayName;
     }
     
     public String getConfigKey() {
-       return configKey;
+    return configKey;
     }
     
     public String getDisplayName() {
-       return displayName;
+    return displayName;
     }
 }

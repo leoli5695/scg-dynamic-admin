@@ -1,7 +1,7 @@
-package com.example.gateway.plugin.auth;
+package com.example.gateway.strategy.auth;
 
-import com.example.gateway.plugin.AbstractPlugin;
-import com.example.gateway.plugin.PluginType;
+import com.example.gateway.strategy.AbstractStrategy;
+import com.example.gateway.strategy.StrategyType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -13,13 +13,13 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-public class AuthStrategy extends AbstractPlugin {
+public class AuthStrategy extends AbstractStrategy {
     
     private String defaultAuthType = "JWT";
     
     @Override
-    public PluginType getType() {
-     return PluginType.AUTH;
+    public StrategyType getType() {
+     return StrategyType.AUTH;
     }
     
     @Override

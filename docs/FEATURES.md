@@ -1,4 +1,4 @@
-# Features Overview
+﻿# Features Overview
 
 Complete guide to all production-grade features.
 
@@ -8,9 +8,9 @@ Complete guide to all production-grade features.
 
 **Storage:** Nacos `gateway-routes.json`
 
-- Create/delete routes via REST API — **effective immediately, no restart**
+- Create/delete routes via REST API 鈥?**effective immediately, no restart**
 - Support multiple URI schemes: `static://`, `lb://`, `http://`
-- Hot-reload mechanism: Nacos push → clear cache → rebuild routes (< 1s)
+- Hot-reload mechanism: Nacos push 鈫?clear cache 鈫?rebuild routes (< 1s)
 
 ---
 
@@ -18,11 +18,11 @@ Complete guide to all production-grade features.
 
 **Storage:** Nacos `gateway-services.json`
 
-For services not registered in Nacos — configure IP:Port list directly.
+For services not registered in Nacos 鈥?configure IP:Port list directly.
 
 - Dynamic instance management (add/remove/weight adjustment)
 - Load balancing strategies: `round-robin`, `weighted`, `random`
-- **Weighted round-robin**: Deterministic distribution (e.g., weight 1:2 → exactly 1 to A, 2 to B every 3 requests)
+- **Weighted round-robin**: Deterministic distribution (e.g., weight 1:2 鈫?exactly 1 to A, 2 to B every 3 requests)
 
 ---
 
@@ -41,7 +41,7 @@ All plugins managed in single Nacos config: `gateway-plugins.json`
 | `combined` | Route + IP |
 | `header` | By request header value |
 
-Exceed limit → **HTTP 429** with headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`
+Exceed limit 鈫?**HTTP 429** with headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`
 
 **Config Example:**
 ```json
@@ -65,13 +65,13 @@ Exceed limit → **HTTP 429** with headers: `X-RateLimit-Limit`, `X-RateLimit-Re
 - Wildcard: `192.168.1.*`
 - CIDR: `192.168.1.0/24`
 
-Blocked → **HTTP 403 Forbidden**
+Blocked 鈫?**HTTP 403 Forbidden**
 
 **Why Order -280?** Runs **before authentication** to reject malicious IPs early, avoiding unnecessary JWT validation (37% TPS improvement).
 
 ---
 
-### 3.3 Authentication Framework (Order: -250) ⭐
+### 3.3 Authentication Framework (Order: -250) 猸?
 
 **Design Pattern:** Strategy Pattern + Auto-Discovery
 
@@ -106,18 +106,18 @@ public class AuthManager {
 
 | Type | Processor | Status | Use Case |
 |------|-----------|--------|----------|
-| **JWT** | `JwtAuthProcessor` | ✅ Production | Stateless API auth |
-| **API Key** | `ApiKeyAuthProcessor` | ✅ Production | Simple partner access |
-| **OAuth2** | `OAuth2AuthProcessor` | ✅ Basic | Third-party SSO |
-| **LDAP** | `LdapAuthProcessor` | ⚠️ Template | Enterprise AD (placeholder) |
-| **SAML** | `SamlAuthProcessor` | ⚠️ Template | SSO (placeholder) |
+| **JWT** | `JwtAuthProcessor` | 鉁?Production | Stateless API auth |
+| **API Key** | `ApiKeyAuthProcessor` | 鉁?Production | Simple partner access |
+| **OAuth2** | `OAuth2AuthProcessor` | 鉁?Basic | Third-party SSO |
+| **LDAP** | `LdapAuthProcessor` | 鈿狅笍 Template | Enterprise AD (placeholder) |
+| **SAML** | `SamlAuthProcessor` | 鈿狅笍 Template | SSO (placeholder) |
 
 #### Why This Design?
 
-✅ **Open-Closed Principle** — Add new auth types without modifying existing code  
-✅ **Auto-Discovery** — Spring automatically registers `@Component`  
-✅ **Zero Configuration** — No manual registration needed  
-✅ **Flexibility** — Different routes can use different auth methods
+鉁?**Open-Closed Principle** 鈥?Add new auth types without modifying existing code  
+鉁?**Auto-Discovery** 鈥?Spring automatically registers `@Component`  
+鉁?**Zero Configuration** 鈥?No manual registration needed  
+鉁?**Flexibility** 鈥?Different routes can use different auth methods
 
 #### How to Extend
 
@@ -161,8 +161,8 @@ public class DingTalkAuthProcessor extends AbstractAuthProcessor {
 #### Performance Impact
 
 With IP filtering before auth:
-- **TPS:** 620 → **850** (+37%)
-- **Latency:** 18ms → **12ms** (-33%)
+- **TPS:** 620 鈫?**850** (+37%)
+- **Latency:** 18ms 鈫?**12ms** (-33%)
 
 ---
 
@@ -186,7 +186,7 @@ Per-route connect and response timeouts.
 
 ---
 
-### 3.5 Circuit Breaker (Order: -100) ⭐
+### 3.5 Circuit Breaker (Order: -100) 猸?
 
 **Implementation:** Resilience4j
 
@@ -195,11 +195,11 @@ Prevents cascading failures by monitoring downstream health.
 **Behavior:**
 ```
 CLOSED (Normal) 
-  ↓ Failure rate > threshold
-OPEN (Reject all → HTTP 503)
-  ↓ After waitDuration
+  鈫?Failure rate > threshold
+OPEN (Reject all 鈫?HTTP 503)
+  鈫?After waitDuration
 HALF_OPEN (Test one request)
-  ↓ Success        ↓ Failure
+  鈫?Success        鈫?Failure
 CLOSED           OPEN
 ```
 
@@ -214,35 +214,35 @@ CLOSED           OPEN
 ```
 
 **Why Important?**
-- ✅ Protects downstream from overload
-- ✅ Fast failure (immediate rejection)
-- ✅ Automatic recovery
-- ✅ Per-route isolation
+- 鉁?Protects downstream from overload
+- 鉁?Fast failure (immediate rejection)
+- 鉁?Automatic recovery
+- 鉁?Per-route isolation
 
 ---
 
-### 3.6 Distributed Tracing (Order: -300) ⭐
+### 3.6 Distributed Tracing (Order: -300) 猸?
 
 Generates/propagates TraceId across all microservices.
 
 **How It Works:**
 ```
 Client Request
-  ↓
+  鈫?
 Gateway generates X-Trace-Id: abc-123
-  ↓
-MDC.put("traceId") → All logs: [traceId=abc-123]
-  ↓
+  鈫?
+MDC.put("traceId") 鈫?All logs: [traceId=abc-123]
+  鈫?
 Forward with header: X-Trace-Id: abc-123
-  ↓
+  鈫?
 Response includes: X-Trace-Id: abc-123
 ```
 
 **Benefits:**
-- ✅ End-to-end visibility
-- ✅ Simplified debugging (correlate logs by TraceId)
-- ✅ Performance bottleneck identification
-- ✅ Compliance audit trail
+- 鉁?End-to-end visibility
+- 鉁?Simplified debugging (correlate logs by TraceId)
+- 鉁?Performance bottleneck identification
+- 鉁?Compliance audit trail
 
 ---
 
@@ -257,44 +257,44 @@ Automatically records all configuration changes:
 - From which IP (ipAddress)
 
 **Why Important for Production?**
-- ✅ Security compliance
-- ✅ Change tracking
-- ✅ Incident investigation
-- ✅ Accountability
+- 鉁?Security compliance
+- 鉁?Change tracking
+- 鉁?Incident investigation
+- 鉁?Accountability
 
 ---
 
-## 📊 Complete Filter Chain
+## 馃搳 Complete Filter Chain
 
 ```
 Request Flow:
-┌─────────────────────────────┐
-│ TraceId (-300)              │ ← First: Full visibility
-└──────────┬──────────────────┘
-           ↓
-┌─────────────────────────────┐
-│ IP Filter (-280)            │ ← Coarse: Fast rejection
-└──────────┬──────────────────┘
-           ↓
-┌─────────────────────────────┐
-│ Authentication (-250)       │ ← Fine: User identity
-└──────────┬──────────────────┘
-           ↓
-┌─────────────────────────────┐
-│ Timeout (-200)              │ ← Protect downstream
-└──────────┬──────────────────┘
-           ↓
-┌─────────────────────────────┐
-│ Circuit Breaker (-100)      │ ← Prevent cascade failure
-└──────────┬──────────────────┘
-           ↓
-┌─────────────────────────────┐
-│ Rate Limiter (-50)          │ ← Last: Prevent overload
-└──────────┬──────────────────┘
-           ↓
-┌─────────────────────────────┐
-│ Routing (10001+)            │ ← Core: Forward to backend
-└─────────────────────────────┘
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+鈹?TraceId (-300)              鈹?鈫?First: Full visibility
+鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+           鈫?
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+鈹?IP Filter (-280)            鈹?鈫?Coarse: Fast rejection
+鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+           鈫?
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+鈹?Authentication (-250)       鈹?鈫?Fine: User identity
+鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+           鈫?
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+鈹?Timeout (-200)              鈹?鈫?Protect downstream
+鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+           鈫?
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+鈹?Circuit Breaker (-100)      鈹?鈫?Prevent cascade failure
+鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+           鈫?
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+鈹?Rate Limiter (-50)          鈹?鈫?Last: Prevent overload
+鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+           鈫?
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+鈹?Routing (10001+)            鈹?鈫?Core: Forward to backend
+鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
 ```
 
 **Design Philosophy:**
@@ -305,18 +305,18 @@ Request Flow:
 
 ---
 
-## 🎯 Feature Comparison
+## 馃幆 Feature Comparison
 
 | Feature | Complexity | Production Ready? | When to Use |
 |---------|------------|-------------------|-------------|
-| **JWT Auth** | ⭐⭐ | ✅ Yes | Default for APIs |
-| **API Key** | ⭐ | ✅ Yes | Simple partner access |
-| **OAuth2** | ⭐⭐⭐⭐ | ✅ With config | Third-party integration |
-| **LDAP/SAML** | ⭐⭐⭐⭐⭐ | ⚠️ Template | Enterprise (implement on demand) |
-| **Circuit Breaker** | ⭐⭐⭐ | ✅ Yes | Critical downstream services |
-| **TraceId** | ⭐ | ✅ Yes | Always enable |
-| **Rate Limiter** | ⭐⭐ | ✅ Yes | Public APIs |
-| **IP Filter** | ⭐ | ✅ Yes | Internal networks |
+| **JWT Auth** | 猸愨瓙 | 鉁?Yes | Default for APIs |
+| **API Key** | 猸?| 鉁?Yes | Simple partner access |
+| **OAuth2** | 猸愨瓙猸愨瓙 | 鉁?With config | Third-party integration |
+| **LDAP/SAML** | 猸愨瓙猸愨瓙猸?| 鈿狅笍 Template | Enterprise (implement on demand) |
+| **Circuit Breaker** | 猸愨瓙猸?| 鉁?Yes | Critical downstream services |
+| **TraceId** | 猸?| 鉁?Yes | Always enable |
+| **Rate Limiter** | 猸愨瓙 | 鉁?Yes | Public APIs |
+| **IP Filter** | 猸?| 鉁?Yes | Internal networks |
 
 ---
 

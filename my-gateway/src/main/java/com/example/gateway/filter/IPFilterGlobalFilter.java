@@ -1,6 +1,6 @@
 package com.example.gateway.filter;
 
-import com.example.gateway.plugin.PluginConfigManager;
+import com.example.gateway.manager.GatewayConfigManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -27,7 +27,7 @@ import java.util.Map;
 public class IPFilterGlobalFilter implements GlobalFilter, Ordered {
 
     @Autowired(required = false)
-    private PluginConfigManager pluginConfigManager;
+    private GatewayConfigManager GatewayConfigManager;
 
     /**
      * Check if IP is in the list (supports CIDR notation)
@@ -124,8 +124,8 @@ public class IPFilterGlobalFilter implements GlobalFilter, Ordered {
         String clientIp = getClientIp(exchange);
         
         // Get IP filter config for this route
-        if (pluginConfigManager != null) {
-            Map<String, Object> ipFilterConfig = pluginConfigManager.getIPFilterForRoute(routeId);
+        if (GatewayConfigManager != null) {
+            Map<String, Object> ipFilterConfig = GatewayConfigManager.getIPFilterForRoute(routeId);
             
             if (ipFilterConfig != null && !ipFilterConfig.isEmpty()) {
                 String mode = (String) ipFilterConfig.get("mode");

@@ -1,4 +1,4 @@
-package com.example.gateway.plugin;
+package com.example.gateway.strategy;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,16 +16,16 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class StrategyManager {
     
-   private final Map<PluginType, Plugin> strategyMap = new ConcurrentHashMap<>();
+   private final Map<StrategyType, Strategy> strategyMap = new ConcurrentHashMap<>();
     
     /**
      * Auto-discover and register all strategies via Spring DI.
      */
     @Autowired
-    public StrategyManager(List<Plugin> plugins) {
-        for (Plugin plugin: plugins) {
-            strategyMap.put(plugin.getType(), plugin);
-            log.info("Registered strategy: {} ({})", plugin.getType().getDisplayName(), plugin.getClass().getSimpleName());
+    public StrategyManager(List<Strategy> plugins) {
+        for (Strategy Strategy: plugins) {
+            strategyMap.put(Strategy.getType(), Strategy);
+            log.info("Registered strategy: {} ({})", Strategy.getType().getDisplayName(), Strategy.getClass().getSimpleName());
         }
         log.info("Total {} strategies registered", strategyMap.size());
     }
@@ -33,15 +33,15 @@ public class StrategyManager {
     /**
      * Get strategy by type.
      */
-    public Plugin getStrategy(PluginType type) {
+    public Strategy getStrategy(StrategyType type) {
        return strategyMap.get(type);
     }
     
     /**
      * Refresh specific strategy configuration.
      */
-    public void refreshStrategy(PluginType type, Object config) {
-        Plugin strategy = strategyMap.get(type);
+    public void refreshStrategy(StrategyType type, Object config) {
+        Strategy strategy = strategyMap.get(type);
         if (strategy != null) {
             strategy.refresh(config);
             log.debug("Strategy {} configuration refreshed", type.getDisplayName());
@@ -54,7 +54,7 @@ public class StrategyManager {
      * Apply all enabled strategies in order.
      */
     public void applyStrategies(Map<String, Object> context) {
-        for (Plugin strategy : strategyMap.values()) {
+        for (Strategy strategy : strategyMap.values()) {
             if (strategy.isEnabled()) {
                 try {
                     strategy.apply(context);
@@ -69,8 +69,8 @@ public class StrategyManager {
     /**
      * Check if specific strategy is enabled.
      */
-    public boolean isStrategyEnabled(PluginType type) {
-        Plugin strategy = strategyMap.get(type);
+    public boolean isStrategyEnabled(StrategyType type) {
+        Strategy strategy = strategyMap.get(type);
        return strategy != null && strategy.isEnabled();
     }
 }

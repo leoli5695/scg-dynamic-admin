@@ -68,14 +68,14 @@ public class CustomLoadBalancerGatewayFilterFactory extends AbstractGatewayFilte
             try {
                 // Process static:// protocol
                 if (originalUri.startsWith("static://")) {
-                    log.info("🔍 Processing static:// protocol: {}", originalUri);
+                    log.info("棣冩敵 Processing static:// protocol: {}", originalUri);
                     URI serviceUri = resolveServiceUri(URI.create(originalUri));
                     
                     if (serviceUri == null) {
                         return Mono.error(new NotFoundException("Unable to find instance for service"));
                     }
                     
-                    log.info("✅ Resolved static:// -> {}", serviceUri);
+                    log.info("閴?Resolved static:// -> {}", serviceUri);
                     
                     // Replace URI and continue
                     ServerHttpRequest request = exchange.getRequest().mutate()
@@ -101,7 +101,7 @@ public class CustomLoadBalancerGatewayFilterFactory extends AbstractGatewayFilte
                 return chain.filter(exchange.mutate().request(request).build());
                 
             } catch (Exception e) {
-                log.error("❌ Error resolving service", e);
+                log.error("閴?Error resolving service", e);
                 return Mono.error(e);
             }
         }

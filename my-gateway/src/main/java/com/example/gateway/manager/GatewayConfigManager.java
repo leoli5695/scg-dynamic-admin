@@ -1,4 +1,4 @@
-package com.example.gateway.plugin;
+package com.example.gateway.manager;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Plugin Configuration Manager
+ * Gateway Configuration Manager
  * 
  * Responsible for listening and parsing gateway-plugins.json configuration in Nacos
  * 
@@ -21,13 +21,13 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 @Slf4j
 @Component
-public class PluginConfigManager {
+public class GatewayConfigManager {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final AtomicReference<PluginConfig> currentConfig = new AtomicReference<>(new PluginConfig());
     
-    public PluginConfigManager() {
-        log.info("PluginConfigManager initialized");
+    public GatewayConfigManager() {
+        log.info("GatewayConfigManager initialized");
     }
     
     /**
@@ -44,7 +44,7 @@ public class PluginConfigManager {
         try {
             PluginConfig config = parseConfig(configJson);
             currentConfig.set(config);
-            log.info("✅ Plugin config updated: {} rate limiter(s), {} custom header config(s), {} IP filter(s), {} timeout config(s)", 
+            log.info("閴?Plugin config updated: {} rate limiter(s), {} custom header config(s), {} IP filter(s), {} timeout config(s)", 
                 config.getRateLimitersConfigs().size(),
                 config.getCustomHeadersConfigs().size(),
                 config.getIpFiltersConfigs().size(),
@@ -52,12 +52,12 @@ public class PluginConfigManager {
             
             // Print detailed configuration information
             config.getRateLimitersConfigs().forEach((routeId, rateConfig) -> {
-                log.info("  🚦 Rate Limiter - Route '{}': QPS={}, timeUnit={}, burst={}", 
+                log.info("  棣冩 Rate Limiter - Route '{}': QPS={}, timeUnit={}, burst={}", 
                     routeId, rateConfig.getQps(), rateConfig.getTimeUnit(), rateConfig.getBurstCapacity());
             });
             
             config.getCustomHeadersConfigs().forEach((routeId, headerConfig) -> {
-                log.info("  🏷️ Custom Header - Route '{}': {} headers -> {}", 
+                log.info("  棣冨娇閿?Custom Header - Route '{}': {} headers -> {}", 
                     routeId, 
                     headerConfig.getHeaders().size(),
                     headerConfig.getHeaders()
@@ -65,7 +65,7 @@ public class PluginConfigManager {
             });
             
             config.getTimeoutsConfigs().forEach((routeId, timeoutConfig) -> {
-                log.info("  ⏱️ Timeout - Route '{}': connect={}ms, read={}ms, response={}ms", 
+                log.info("  閳存唻绗?Timeout - Route '{}': connect={}ms, read={}ms, response={}ms", 
                     routeId, timeoutConfig.getConnectTimeout(), 
                     timeoutConfig.getReadTimeout(), timeoutConfig.getResponseTimeout());
             });
@@ -132,7 +132,7 @@ public class PluginConfigManager {
                         config.rateLimitersConfigs.put(routeId, 
                             new RateLimiterConfig(qps, timeUnit, burstCapacity, 
                                                 keyResolver, headerName, keyType, keyPrefix, enabled));
-                        log.info("✅ Loaded rate limiter config for route {}: QPS={}, timeUnit={}, burst={}", 
+                        log.info("閴?Loaded rate limiter config for route {}: QPS={}, timeUnit={}, burst={}", 
                             routeId, qps, timeUnit, burstCapacity);
                     }
                 }
@@ -158,7 +158,7 @@ public class PluginConfigManager {
                     if (routeId != null && enabled && !ipList.isEmpty()) {
                         config.ipFiltersConfigs.put(routeId, 
                             new IPFilterConfig(mode, ipList, enabled));
-                        log.info("✅ Loaded IP filter config for route {}: mode={}, IPs={}", 
+                        log.info("閴?Loaded IP filter config for route {}: mode={}, IPs={}", 
                             routeId, mode, ipList.size());
                     }
                 }
@@ -178,7 +178,7 @@ public class PluginConfigManager {
                     if (routeId != null && enabled) {
                         config.timeoutsConfigs.put(routeId, 
                             new TimeoutConfig(connectTimeout, readTimeout, responseTimeout, enabled));
-                        log.info("✅ Loaded timeout config for route {}: connect={}ms, read={}ms, response={}ms", 
+                        log.info("閴?Loaded timeout config for route {}: connect={}ms, read={}ms, response={}ms", 
                             routeId, connectTimeout, readTimeout, responseTimeout);
                     }
                 }

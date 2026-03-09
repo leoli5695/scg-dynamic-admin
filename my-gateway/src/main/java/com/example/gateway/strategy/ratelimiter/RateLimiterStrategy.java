@@ -1,7 +1,7 @@
-package com.example.gateway.plugin.ratelimiter;
+package com.example.gateway.strategy.ratelimiter;
 
-import com.example.gateway.plugin.AbstractPlugin;
-import com.example.gateway.plugin.PluginType;
+import com.example.gateway.strategy.AbstractStrategy;
+import com.example.gateway.strategy.StrategyType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -13,11 +13,11 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-public class RateLimiterStrategy extends AbstractPlugin {
+public class RateLimiterStrategy extends AbstractStrategy {
     
     @Override
-    public PluginType getType() {
-    return PluginType.RATE_LIMITER;
+    public StrategyType getType() {
+    return StrategyType.RATE_LIMITER;
     }
     
     @Override

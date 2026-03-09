@@ -1,6 +1,6 @@
 package com.example.gateway.filter;
 
-import com.example.gateway.plugin.StrategyManager;
+import com.example.gateway.strategy.StrategyManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
@@ -14,17 +14,17 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Plugin-based global filter.
+ * strategy-based global filter.
  * Delegates to StrategyManager to apply all enabled strategies.
  */
 @Slf4j
 @Component
-public class PluginGlobalFilter implements GlobalFilter, Ordered {
+public class StrategyGlobalFilter implements GlobalFilter, Ordered {
     
-   private final StrategyManager strategyManager;
+   private final StrategyManager StrategyManager;
     
-    public PluginGlobalFilter(StrategyManager strategyManager) {
-        this.strategyManager= strategyManager;
+    public StrategyGlobalFilter(StrategyManager StrategyManager) {
+        this.StrategyManager= StrategyManager;
     }
     
     @Override
@@ -33,7 +33,7 @@ public class PluginGlobalFilter implements GlobalFilter, Ordered {
        Map<String, Object> context = buildContext(exchange);
         
         // Apply all enabled strategies
-       strategyManager.applyStrategies(context);
+       StrategyManager.applyStrategies(context);
         
         // Check if any strategy rejected the request
        Boolean rejected = (Boolean) context.get("rejected");

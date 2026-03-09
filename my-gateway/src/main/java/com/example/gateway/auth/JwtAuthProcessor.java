@@ -47,11 +47,11 @@ public class JwtAuthProcessor extends AbstractAuthProcessor {
         try {
             SecretKey key = getSigningKey(config.getSecretKey());
             
-            Claims claims = Jwts.parserBuilder()
-                    .setSigningKey(key)
+            Claims claims = Jwts.parser()
+                    .verifyWith(key)
                     .build()
-                    .parseClaimsJws(token)
-                    .getBody();
+                    .parseSignedClaims(token)
+                    .getPayload();
             
             // Optional: Add claims to exchange attributes for downstream use
             exchange.getAttributes().put("jwt_claims", claims);

@@ -1,5 +1,6 @@
 package com.example.gateway.filter;
 
+import com.example.gateway.manager.TimeoutConfigManager;
 import com.example.gateway.model.TimeoutConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

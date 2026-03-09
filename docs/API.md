@@ -1,4 +1,4 @@
-# Admin Console API Reference
+﻿# Admin Console API Reference
 
 Gateway Admin (port **8080**) provides both a Web UI and a REST API. All operations sync to the gateway in real time via Nacos.
 
@@ -8,7 +8,7 @@ Gateway Admin (port **8080**) provides both a Web UI and a REST API. All operati
 
 - Base URL: `http://localhost:8080`
 - Content-Type: `application/json`
-- Authentication: **None** (demo only — not for production)
+- Authentication: **None** (demo only 鈥?not for production)
 
 ---
 
@@ -20,7 +20,7 @@ Gateway Admin (port **8080**) provides both a Web UI and a REST API. All operati
 | `POST` | `/api/routes` | Create a new route |
 | `DELETE` | `/api/routes/{id}` | Delete route (gateway returns **404 immediately**) |
 
-**Create route — request body:**
+**Create route 鈥?request body:**
 ```json
 {
   "id": "demo-route",
@@ -44,7 +44,7 @@ Gateway Admin (port **8080**) provides both a Web UI and a REST API. All operati
 | `POST` | `/api/services` | Create a new service |
 | `DELETE` | `/api/services/{name}` | Delete service (effective immediately) |
 
-**Create service — request body:**
+**Create service 鈥?request body:**
 ```json
 {
   "name": "demo-service",
@@ -131,7 +131,7 @@ X-RateLimit-Type: redis
 }
 ```
 
-On timeout → **HTTP 504 Gateway Timeout**
+On timeout 鈫?**HTTP 504 Gateway Timeout**
 
 ---
 

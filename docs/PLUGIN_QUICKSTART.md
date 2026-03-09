@@ -1,66 +1,66 @@
-# Plugin Architecture Quick Start
+﻿# Plugin Architecture Quick Start
 
-## 🚀 Overview
+## 馃殌 Overview
 
 This guide shows you how to use the new plugin-based architecture in your gateway.
 
 ---
 
-## 📦 Architecture Components
+## 馃摝 Architecture Components
 
 ```
-┌─────────────────────────────────────────┐
-│  Nacos Config (gateway-plugins.json)    │
-│  - Stores all plugin configurations    │
-│  - Hot reload supported (< 1s)         │
-└────────────┬────────────────────────────┘
-             │ Push notification
-             ↓
-┌─────────────────────────────────────────┐
-│  NacosConfigListener                   │
-│  - Listens to config changes           │
-│  - Triggers refresh on update          │
-└────────────┬────────────────────────────┘
-             │ onConfigChange()
-             ↓
-┌─────────────────────────────────────────┐
-│  PluginRefresher                       │
-│  - Parses JSON config                  │
-│  - Merges configs per strategy type    │
-│  - Calls StrategyManager.refresh()     │
-└────────────┬────────────────────────────┘
-             │ refreshStrategy()
-             ↓
-┌─────────────────────────────────────────┐
-│  StrategyManager                       │
-│  - Central registry for all strategies │
-│  - Auto-discovers via Spring DI        │
-│  - Routes config to correct strategy   │
-└────────────┬────────────────────────────┘
-             │ applyStrategies()
-             ↓
-┌─────────────────────────────────────────┐
-│  PluginGlobalFilter (-200)              │
-│  - Builds request context              │
-│  - Applies all enabled strategies      │
-│  - Checks results & rejects if needed  │
-└────────────┬────────────────────────────┘
-             │
-             ↓
-┌─────────────────────────────────────────┐
-│  Six Core Strategies                    │
-│  ✓ IP Filter (whitelist/blacklist)     │
-│  ✓ Auth (JWT/API Key/OAuth2)           │
-│  ✓ Rate Limiter (Redis sliding window) │
-│  ✓ Circuit Breaker (Resilience4j)      │
-│  ✓ Timeout (per-route timeout)         │
-│  ✓ Tracing (TraceId generation)        │
-└─────────────────────────────────────────┘
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+鈹? Nacos Config (gateway-plugins.json)    鈹?
+鈹? - Stores all plugin configurations    鈹?
+鈹? - Hot reload supported (< 1s)         鈹?
+鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+             鈹?Push notification
+             鈫?
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+鈹? NacosConfigListener                   鈹?
+鈹? - Listens to config changes           鈹?
+鈹? - Triggers refresh on update          鈹?
+鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+             鈹?onConfigChange()
+             鈫?
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+鈹? StrategyRefresher                       鈹?
+鈹? - Parses JSON config                  鈹?
+鈹? - Merges configs per strategy type    鈹?
+鈹? - Calls StrategyManager.refresh()     鈹?
+鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+             鈹?refreshStrategy()
+             鈫?
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+鈹? StrategyManager                       鈹?
+鈹? - Central registry for all strategies 鈹?
+鈹? - Auto-discovers via Spring DI        鈹?
+鈹? - Routes config to correct strategy   鈹?
+鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+             鈹?applyStrategies()
+             鈫?
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+鈹? StrategyGlobalFilter (-200)              鈹?
+鈹? - Builds request context              鈹?
+鈹? - Applies all enabled strategies      鈹?
+鈹? - Checks results & rejects if needed  鈹?
+鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+             鈹?
+             鈫?
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+鈹? Six Core Strategies                    鈹?
+鈹? 鉁?IP Filter (whitelist/blacklist)     鈹?
+鈹? 鉁?Auth (JWT/API Key/OAuth2)           鈹?
+鈹? 鉁?Rate Limiter (Redis sliding window) 鈹?
+鈹? 鉁?Circuit Breaker (Resilience4j)      鈹?
+鈹? 鉁?Timeout (per-route timeout)         鈹?
+鈹? 鉁?Tracing (TraceId generation)        鈹?
+鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
 ```
 
 ---
 
-## 🔧 Configuration Example
+## 馃敡 Configuration Example
 
 ### gateway-plugins.json
 
@@ -127,7 +127,7 @@ Create this file in Nacos with data-id: `gateway-plugins.json`
 
 ---
 
-## 📝 Step-by-Step Usage
+## 馃摑 Step-by-Step Usage
 
 ### Step 1: Deploy Gateway
 
@@ -147,7 +147,7 @@ java -jar target/my-gateway-0.0.1-SNAPSHOT.jar \
 ### Step 2: Configure Nacos
 
 1. Open Nacos Console (http://localhost:8848/nacos)
-2. Navigate to **Configuration Management** → **Configuration List**
+2. Navigate to **Configuration Management** 鈫?**Configuration List**
 3. Click **+** to add new configuration
 4. Fill in:
    - **Data ID**: `gateway-plugins.json`
@@ -237,7 +237,7 @@ curl -v http://localhost/api/users
 
 ---
 
-## 🎯 Customizing Strategies
+## 馃幆 Customizing Strategies
 
 ### Enable/Disable Specific Strategy
 
@@ -248,7 +248,7 @@ Edit `gateway-plugins.json` in Nacos:
   "ipFilters": [
     {
       "routeId": "api",
-      "enabled": false  // ← Disable IP filter
+      "enabled": false  // 鈫?Disable IP filter
     }
   ]
 }
@@ -266,7 +266,7 @@ Edit `gateway-plugins.json` in Nacos:
     {
       "routeId": "api",
       "enabled": true,
-      "defaultQps": 200  // ← Increase from 100 to 200
+      "defaultQps": 200  // 鈫?Increase from 100 to 200
     }
   ]
 }
@@ -301,7 +301,7 @@ Edit `gateway-plugins.json` in Nacos:
 
 ---
 
-## 🔨 Extending with Custom Strategy
+## 馃敤 Extending with Custom Strategy
 
 ### Create Your Own Strategy
 
@@ -313,7 +313,7 @@ public enum PluginType {
     AUTH("authConfigs", "Authentication"),
     // ... existing types ...
     
-    CUSTOM("customConfigs", "Custom Strategy"); // ← Add this
+    CUSTOM("customConfigs", "Custom Strategy"); // 鈫?Add this
 }
 ```
 
@@ -383,11 +383,11 @@ public class CustomStrategy extends AbstractPlugin {
 }
 ```
 
-**Done!** Your custom strategy is automatically loaded and executed! ✨
+**Done!** Your custom strategy is automatically loaded and executed! 鉁?
 
 ---
 
-## 📊 Monitoring & Debugging
+## 馃搳 Monitoring & Debugging
 
 ### Check Active Strategies
 
@@ -443,11 +443,11 @@ DEBUG: All strategies applied successfully, continuing filter chain
 
 ---
 
-## 🎯 Best Practices
+## 馃幆 Best Practices
 
 ### 1. Configuration Organization
 
-✅ **DO:** Group configs by route for clarity
+鉁?**DO:** Group configs by route for clarity
 ```json
 {
   "ipFilters": [
@@ -457,7 +457,7 @@ DEBUG: All strategies applied successfully, continuing filter chain
 }
 ```
 
-❌ **DON'T:** Mix routes randomly
+鉂?**DON'T:** Mix routes randomly
 
 ---
 
@@ -468,7 +468,7 @@ Use `enabled: false` instead of removing configs:
 {
   "authConfigs": [{
     "routeId": "api",
-    "enabled": false  // ← Temporarily disable for testing
+    "enabled": false  // 鈫?Temporarily disable for testing
   }]
 }
 ```
@@ -482,7 +482,7 @@ Start with conservative limits, then increase:
 {
   "rateLimiters": [{
     "routeId": "api",
-    "defaultQps": 50    // ← Start low
+    "defaultQps": 50    // 鈫?Start low
   }]
 }
 
@@ -490,7 +490,7 @@ Start with conservative limits, then increase:
 {
   "rateLimiters": [{
     "routeId": "api",
-    "defaultQps": 200   // ← Increase based on metrics
+    "defaultQps": 200   // 鈫?Increase based on metrics
   }]
 }
 ```
@@ -503,35 +503,35 @@ Adjust based on your service characteristics:
 ```json
 {
   "circuitBreakers": [{
-    "failureRateThreshold": 50,      // ← 50% failures trigger open
-    "minimumNumberOfCalls": 10,      // ← Wait for 10 calls before calculating
-    "slidingWindowSize": 10,         // ← Consider last 10 calls
-    "waitDurationInOpenState": 30    // ← Wait 30s before trying again
+    "failureRateThreshold": 50,      // 鈫?50% failures trigger open
+    "minimumNumberOfCalls": 10,      // 鈫?Wait for 10 calls before calculating
+    "slidingWindowSize": 10,         // 鈫?Consider last 10 calls
+    "waitDurationInOpenState": 30    // 鈫?Wait 30s before trying again
   }]
 }
 ```
 
 ---
 
-## 🚨 Troubleshooting
+## 馃毃 Troubleshooting
 
 ### Issue: Strategies Not Loading
 
 **Check:**
-1. ✅ Nacos server is running (`http://localhost:8848`)
-2. ✅ `gateway-plugins.json` exists in Nacos
-3. ✅ JSON format is valid (use JSONLint to validate)
-4. ✅ Application logs show "Loaded initial plugin config from Nacos"
+1. 鉁?Nacos server is running (`http://localhost:8848`)
+2. 鉁?`gateway-plugins.json` exists in Nacos
+3. 鉁?JSON format is valid (use JSONLint to validate)
+4. 鉁?Application logs show "Loaded initial plugin config from Nacos"
 
 ---
 
 ### Issue: Config Changes Not Applied
 
 **Check:**
-1. ✅ Published the config in Nacos (not just saved)
-2. ✅ Logs show "Received config change from Nacos"
-3. ✅ Logs show "Refreshed strategy XXX with Y configs"
-4. ✅ No JSON parsing errors in logs
+1. 鉁?Published the config in Nacos (not just saved)
+2. 鉁?Logs show "Received config change from Nacos"
+3. 鉁?Logs show "Refreshed strategy XXX with Y configs"
+4. 鉁?No JSON parsing errors in logs
 
 ---
 
@@ -546,13 +546,13 @@ Adjust based on your service characteristics:
 
 ---
 
-## 📈 Performance Tips
+## 馃搱 Performance Tips
 
 ### Optimize Strategy Execution Order
 
 Current order: `-200` (between TraceId and RateLimiter)
 
-If you need custom ordering, adjust in `PluginGlobalFilter.java`:
+If you need custom ordering, adjust in `StrategyGlobalFilter.java`:
 ```java
 @Override
 public int getOrder() {
@@ -564,21 +564,21 @@ public int getOrder() {
 - TraceId: `-300` (first)
 - IP Filter: `-280` (fast rejection)
 - Auth: `-250` (identity verification)
-- **PluginGlobalFilter: `-200`** (applies all strategies)
+- **StrategyGlobalFilter: `-200`** (applies all strategies)
 - Timeout: `-200` (protect downstream)
 - Circuit Breaker: `-100` (prevent cascade)
 - Rate Limiter: `-50` (last defense)
 
 ---
 
-## 🎓 Summary
+## 馃帗 Summary
 
 The plugin architecture provides:
 
-✅ **Zero Downtime Configuration** — Hot reload via Nacos  
-✅ **Easy Extension** — Add strategies in 3 steps  
-✅ **Clean Separation** — Each strategy handles one concern  
-✅ **Production Ready** — Built-in error handling and logging  
-✅ **Flexible Control** — Enable/disable per route  
+鉁?**Zero Downtime Configuration** 鈥?Hot reload via Nacos  
+鉁?**Easy Extension** 鈥?Add strategies in 3 steps  
+鉁?**Clean Separation** 鈥?Each strategy handles one concern  
+鉁?**Production Ready** 鈥?Built-in error handling and logging  
+鉁?**Flexible Control** 鈥?Enable/disable per route  
 
-**Start building your custom gateway now!** 🚀
+**Start building your custom gateway now!** 馃殌

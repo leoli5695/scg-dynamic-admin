@@ -1,32 +1,32 @@
-package com.example.gateway.plugin;
+package com.example.gateway.manager;
 
 import com.example.gateway.model.TimeoutConfig;
-import com.example.gateway.plugin.PluginConfigManager;
+import com.example.gateway.manager.GatewayConfigManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
  * Timeout Configuration Manager
- * Load timeout config from PluginConfigManager
+ * Load timeout config from GatewayConfigManager
  */
 @Slf4j
 @Component
 public class TimeoutConfigManager {
 
     @Autowired
-    private PluginConfigManager pluginConfigManager;
+    private GatewayConfigManager GatewayConfigManager;
 
     public TimeoutConfigManager() {
-        log.info("TimeoutConfigManager initialized, using PluginConfigManager");
+        log.info("TimeoutConfigManager initialized, using GatewayConfigManager");
     }
 
     public TimeoutConfig getTimeoutConfig(String routeId) {
         if (routeId == null) return null;
 
-        // Get from PluginConfigManager
-        PluginConfigManager.TimeoutConfig pluginConfig =
-                pluginConfigManager.getTimeoutForRoute(routeId);
+        // Get from GatewayConfigManager
+        GatewayConfigManager.TimeoutConfig pluginConfig =
+                GatewayConfigManager.getTimeoutForRoute(routeId);
 
         if (pluginConfig != null) {
             log.debug("Found timeout config for route {}: connect={}ms, read={}ms, response={}ms",

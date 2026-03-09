@@ -1,5 +1,7 @@
 package com.example.gateway.filter;
 
+import com.example.gateway.manager.CircuitBreakerConfigManager;
+
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;

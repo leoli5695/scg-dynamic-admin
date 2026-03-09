@@ -1,12 +1,12 @@
-# Architecture & Design Principles
+﻿# Architecture & Design Principles
 
-## 🎬 Demo Video
+## 馃幀 Demo Video
 
-▶️ **[Watch on YouTube](https://youtu.be/JASijtZ5cNk)** — see the system in action.
+鈻讹笍 **[Watch on YouTube](https://youtu.be/JASijtZ5cNk)** 鈥?see the system in action.
 
 ---
 
-## 📊 Overall Architecture
+## 馃搳 Overall Architecture
 
 ```mermaid
 flowchart TD
@@ -36,33 +36,33 @@ flowchart TD
 ```
 
 **Key Design Decisions:**
-1. ✅ **Observability first** - TraceId sees everything
-2. ✅ **Coarse before fine** - IP filter (fast) before auth (slow)
-3. ✅ **Protection before function** - Timeout/Circuit breaker before routing
-4. ✅ **Fast failure** - Reject early to save resources
+1. 鉁?**Observability first** - TraceId sees everything
+2. 鉁?**Coarse before fine** - IP filter (fast) before auth (slow)
+3. 鉁?**Protection before function** - Timeout/Circuit breaker before routing
+4. 鉁?**Fast failure** - Reject early to save resources
 
 ---
 
-## ⏳ Filter Execution Order & Rationale
+## 鈴?Filter Execution Order & Rationale
 
 ### Why This Order?
 
 ```
 Request enters gateway
-  │
-  ▼  order -300  TraceId          → Generate/propagate X-Trace-Id, MDC logging
-  │                                WHY FIRST? → See everything for debugging
-  ▼  order -280  IP Filter        → Whitelist/blacklist check → 403 if blocked
-  │                                WHY BEFORE AUTH? → Fast rejection saves CPU (37% TPS gain)
-  ▼  order -250  Authentication   → JWT/API Key/OAuth2 validation → 401 if failed
-  │                                WHY AFTER IP FILTER? → Don't waste JWT validation on bad IPs
-  ▼  order -200  Timeout          → Inject timeout params into route metadata
-  │                                WHY HERE? → Protect downstream before routing
-  ▼  order -100  Circuit Breaker  → Check circuit status → 503 if open
-  │                                WHY BEFORE RATE LIMIT? → Downstream protection > self protection
-  ▼  order  -50  Rate Limiter     → Redis sliding-window → 429 if exceeded
-  │                                WHY LAST? → Final defense before routing
-  ▼  order 10001+ Routing         → Forward to backend
+  鈹?
+  鈻? order -300  TraceId          鈫?Generate/propagate X-Trace-Id, MDC logging
+  鈹?                               WHY FIRST? 鈫?See everything for debugging
+  鈻? order -280  IP Filter        鈫?Whitelist/blacklist check 鈫?403 if blocked
+  鈹?                               WHY BEFORE AUTH? 鈫?Fast rejection saves CPU (37% TPS gain)
+  鈻? order -250  Authentication   鈫?JWT/API Key/OAuth2 validation 鈫?401 if failed
+  鈹?                               WHY AFTER IP FILTER? 鈫?Don't waste JWT validation on bad IPs
+  鈻? order -200  Timeout          鈫?Inject timeout params into route metadata
+  鈹?                               WHY HERE? 鈫?Protect downstream before routing
+  鈻? order -100  Circuit Breaker  鈫?Check circuit status 鈫?503 if open
+  鈹?                               WHY BEFORE RATE LIMIT? 鈫?Downstream protection > self protection
+  鈻? order  -50  Rate Limiter     鈫?Redis sliding-window 鈫?429 if exceeded
+  鈹?                               WHY LAST? 鈫?Final defense before routing
+  鈻? order 10001+ Routing         鈫?Forward to backend
 ```
 
 ### Performance Impact: IP Filter Before Authentication
@@ -73,7 +73,7 @@ This is a **deliberate performance optimization**:
 |--------|-----------|----------------|
 | **Computation** | String matching (< 1ms) | JWT signature verification (~5ms) |
 | **Granularity** | Coarse (IP-based) | Fine (user/token-based) |
-| **Should Run First?** | ✅ YES - reject obvious malicious requests | ❌ NO - don't waste CPU |
+| **Should Run First?** | 鉁?YES - reject obvious malicious requests | 鉂?NO - don't waste CPU |
 
 **Real-World Impact** (1000 req/s, 20% from blacklisted IPs):
 - **Old order (Auth first):** 1000 auth computations = 18ms avg, 620 TPS
@@ -83,15 +83,15 @@ This is a **deliberate performance optimization**:
 
 ---
 
-## 🎨 Design Principles Summary
+## 馃帹 Design Principles Summary
 
 ### 1. Layered Defense (Defense in Depth)
 
 ```
-Layer 1: IP Filter     → Fast, coarse-grained (block obvious threats)
-Layer 2: Auth          → Slow, fine-grained (verify user identity)
-Layer 3: Rate Limiter  → Prevent abuse (QPS control)
-Layer 4: Circuit Breaker → Protect downstream (cascade failure prevention)
+Layer 1: IP Filter     鈫?Fast, coarse-grained (block obvious threats)
+Layer 2: Auth          鈫?Slow, fine-grained (verify user identity)
+Layer 3: Rate Limiter  鈫?Prevent abuse (QPS control)
+Layer 4: Circuit Breaker 鈫?Protect downstream (cascade failure prevention)
 ```
 
 **Why This Order?**
@@ -125,9 +125,9 @@ interface AuthProcessor { process(); getAuthType(); }
 ```
 
 **Benefits:**
-- ✅ Add new auth type = 1 class (~50 lines)
-- ✅ Zero configuration (Spring auto-registers)
-- ✅ No modification to existing code (Open-Closed Principle)
+- 鉁?Add new auth type = 1 class (~50 lines)
+- 鉁?Zero configuration (Spring auto-registers)
+- 鉁?No modification to existing code (Open-Closed Principle)
 
 ---
 
@@ -139,9 +139,9 @@ interface AuthProcessor { process(); getAuthType(); }
 - Backpressure support
 
 **Why Reactive?**
-- ✅ Higher throughput with fewer threads
-- ✅ Better resource utilization
-- ✅ Natural fit for async operations (Redis, HTTP calls)
+- 鉁?Higher throughput with fewer threads
+- 鉁?Better resource utilization
+- 鉁?Natural fit for async operations (Redis, HTTP calls)
 
 **Example:**
 ```java
@@ -157,15 +157,15 @@ public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
 ### 4. Configuration Externalization
 
 **All configs in Nacos:**
-- `gateway-routes.json` — Route definitions
-- `gateway-services.json` — Static service instances
-- `gateway-plugins.json` — Plugin configurations
+- `gateway-routes.json` 鈥?Route definitions
+- `gateway-services.json` 鈥?Static service instances
+- `gateway-plugins.json` 鈥?Plugin configurations
 
 **Benefits:**
-- ✅ Centralized management
-- ✅ Hot-reload (< 1s propagation)
-- ✅ Version control friendly
-- ✅ Environment separation (dev/test/prod)
+- 鉁?Centralized management
+- 鉁?Hot-reload (< 1s propagation)
+- 鉁?Version control friendly
+- 鉁?Environment separation (dev/test/prod)
 
 **Trade-off:** No database persistence (by design for demo simplicity)
 
@@ -176,25 +176,25 @@ public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
 **TraceId Propagation:**
 ```
 Client Request
-  ↓
+  鈫?
 Gateway generates X-Trace-Id: abc-123
-  ↓
-MDC.put("traceId") → All logs include [traceId=abc-123]
-  ↓
+  鈫?
+MDC.put("traceId") 鈫?All logs include [traceId=abc-123]
+  鈫?
 Forward with header: X-Trace-Id: abc-123
-  ↓
+  鈫?
 Backend services see same traceId
 ```
 
 **Why Important?**
-- ✅ Debug distributed systems easily
-- ✅ Correlate logs across services
-- ✅ Identify performance bottlenecks
-- ✅ Compliance audit trail
+- 鉁?Debug distributed systems easily
+- 鉁?Correlate logs across services
+- 鉁?Identify performance bottlenecks
+- 鉁?Compliance audit trail
 
 ---
 
-## 📊 Architecture Trade-offs
+## 馃搳 Architecture Trade-offs
 
 | Decision | Benefit | Trade-off | When to Change |
 |----------|---------|-----------|----------------|
@@ -206,15 +206,15 @@ Backend services see same traceId
 
 ---
 
-## 🎯 For Upwork Clients
+## 馃幆 For Upwork Clients
 
 ### What This Demonstrates
 
-✅ **Architecture Thinking** — Not just CRUD, but thoughtful design  
-✅ **Production Awareness** — Performance optimization, layered defense  
-✅ **Extensibility** — Strategy pattern, zero-config extension  
-✅ **Best Practices** — Open-Closed Principle, dependency injection  
-✅ **Documentation** — Clear, professional English  
+鉁?**Architecture Thinking** 鈥?Not just CRUD, but thoughtful design  
+鉁?**Production Awareness** 鈥?Performance optimization, layered defense  
+鉁?**Extensibility** 鈥?Strategy pattern, zero-config extension  
+鉁?**Best Practices** 鈥?Open-Closed Principle, dependency injection  
+鉁?**Documentation** 鈥?Clear, professional English  
 
 ### How to Extend for Real Projects
 
@@ -251,52 +251,52 @@ curl -X POST http://localhost:8080/api/plugins/auth \
 **Last Updated:** 2024-03-09  
 **Version:** v1.0.0
 
-**Ready for production customization.** Contact me on Upwork for your project! 🚀
+**Ready for production customization.** Contact me on Upwork for your project! 馃殌
 
 ```
 Gateway Admin
-    │
-    │  REST API (create / update / delete)
-    ▼
+    鈹?
+    鈹? REST API (create / update / delete)
+    鈻?
 Nacos Config Center
-    │  gateway-routes.json
-    │  gateway-services.json
-    │  gateway-plugins.json
-    │
-    │  Nacos listener push (< 1s)
-    ▼
+    鈹? gateway-routes.json
+    鈹? gateway-services.json
+    鈹? gateway-plugins.json
+    鈹?
+    鈹? Nacos listener push (< 1s)
+    鈻?
 my-gateway (Config Listeners)
-    ├── NacosRouteDefinitionLocator  →  RefreshRoutesEvent  →  SCG CachingRouteLocator rebuild
-    ├── StaticProtocolGlobalFilter   →  service cache cleared
-    └── NacosPluginConfigListener    →  PluginConfigManager in-memory update
+    鈹溾攢鈹€ NacosRouteDefinitionLocator  鈫? RefreshRoutesEvent  鈫? SCG CachingRouteLocator rebuild
+    鈹溾攢鈹€ StaticProtocolGlobalFilter   鈫? service cache cleared
+    鈹斺攢鈹€ NacosPluginConfigListener    鈫? GatewayConfigManager in-memory update
 ```
 
 ---
 
-## ⚡ Real-Time Update Latency
+## 鈿?Real-Time Update Latency
 
 | Operation | Propagation Path | Effective Latency |
 |-----------|-----------------|-------------------|
-| Add / update / delete **route** | Nacos → `NacosRouteDefinitionLocator` → `RefreshRoutesEvent` → SCG rebuild | < 1 s |
-| Add / update / delete **service** | Nacos → `StaticProtocolGlobalFilter` listener → cache cleared | < 1 s |
-| Add / update / delete **plugin** | Nacos → `NacosPluginConfigListener` → `PluginConfigManager` in-memory update | < 1 s |
-| Delete **entire plugin config file** | Nacos pushes empty content → `PluginConfigManager` clears all plugin cache | < 1 s |
+| Add / update / delete **route** | Nacos 鈫?`NacosRouteDefinitionLocator` 鈫?`RefreshRoutesEvent` 鈫?SCG rebuild | < 1 s |
+| Add / update / delete **service** | Nacos 鈫?`StaticProtocolGlobalFilter` listener 鈫?cache cleared | < 1 s |
+| Add / update / delete **plugin** | Nacos 鈫?`NacosPluginConfigListener` 鈫?`GatewayConfigManager` in-memory update | < 1 s |
+| Delete **entire plugin config file** | Nacos pushes empty content 鈫?`GatewayConfigManager` clears all plugin cache | < 1 s |
 
-> Deleting a route in the Admin Console causes the gateway to return **HTTP 404 immediately** — no restart required.
+> Deleting a route in the Admin Console causes the gateway to return **HTTP 404 immediately** 鈥?no restart required.
 
 ---
 
-## 🗺️ Nacos Config Data IDs
+## 馃椇锔?Nacos Config Data IDs
 
 | Data ID | Content | Consumer |
 |---------|---------|----------|
 | `gateway-routes.json` | Route definitions | `NacosRouteDefinitionLocator` |
 | `gateway-services.json` | Static service instances | `StaticProtocolGlobalFilter` |
-| `gateway-plugins.json` | Rate limiter / IP filter / Timeout / Circuit Breaker / **Authentication** | `PluginConfigManager` |
+| `gateway-plugins.json` | Rate limiter / IP filter / Timeout / Circuit Breaker / **Authentication** | `GatewayConfigManager` |
 
 ---
 
-## 🔐 Authentication Architecture: Strategy Pattern
+## 馃攼 Authentication Architecture: Strategy Pattern
 
 ### Design Decision: Why Strategy Pattern?
 
@@ -346,11 +346,11 @@ public class AuthManager {
 
 ### Benefits of This Design
 
-✅ **Open-Closed Principle** — Add new auth types without modifying existing code  
-✅ **Single Responsibility** — Each processor focuses on one auth type  
-✅ **Dependency Injection** — Spring manages lifecycle and registration  
-✅ **Zero Configuration** — No manual registration needed  
-✅ **Testability** — Each processor can be tested independently  
+鉁?**Open-Closed Principle** 鈥?Add new auth types without modifying existing code  
+鉁?**Single Responsibility** 鈥?Each processor focuses on one auth type  
+鉁?**Dependency Injection** 鈥?Spring manages lifecycle and registration  
+鉁?**Zero Configuration** 鈥?No manual registration needed  
+鉁?**Testability** 鈥?Each processor can be tested independently  
 
 ### How to Extend
 
@@ -386,12 +386,12 @@ curl -X POST http://localhost:8080/api/plugins/auth \
 
 | Requirement | Implementation Effort | Code Changes Needed |
 |-------------|----------------------|---------------------|
-| Add JWT support | ✅ Done | N/A |
-| Add API Key support | ✅ Done | N/A |
-| Add OAuth2 support | ✅ Done | N/A |
-| Add DingTalk auth | ⏳ 1 class (~50 lines) | **Only new class** |
-| Add WeChat auth | ⏳ 1 class (~50 lines) | **Only new class** |
-| Add custom SSO | ⏳ 1 class (~80 lines) | **Only new class** |
+| Add JWT support | 鉁?Done | N/A |
+| Add API Key support | 鉁?Done | N/A |
+| Add OAuth2 support | 鉁?Done | N/A |
+| Add DingTalk auth | 鈴?1 class (~50 lines) | **Only new class** |
+| Add WeChat auth | 鈴?1 class (~50 lines) | **Only new class** |
+| Add custom SSO | 鈴?1 class (~80 lines) | **Only new class** |
 
 **Key Insight:** The framework is designed for **zero-configuration extension**. New auth types are automatically discovered and registered by Spring.
 

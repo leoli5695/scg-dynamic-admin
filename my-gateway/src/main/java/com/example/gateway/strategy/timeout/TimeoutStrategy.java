@@ -1,7 +1,7 @@
-package com.example.gateway.plugin.timeout;
+package com.example.gateway.strategy.timeout;
 
-import com.example.gateway.plugin.AbstractPlugin;
-import com.example.gateway.plugin.PluginType;
+import com.example.gateway.strategy.AbstractStrategy;
+import com.example.gateway.strategy.StrategyType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -13,13 +13,13 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-public class TimeoutStrategy extends AbstractPlugin {
+public class TimeoutStrategy extends AbstractStrategy {
     
     private long defaultTimeout = 3000; // 3 seconds
     
     @Override
-    public PluginType getType() {
-       return PluginType.TIMEOUT;
+    public StrategyType getType() {
+       return StrategyType.TIMEOUT;
     }
     
     @Override

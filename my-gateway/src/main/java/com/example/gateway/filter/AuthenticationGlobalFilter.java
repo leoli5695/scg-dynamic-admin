@@ -29,7 +29,7 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
     @Autowired
     private AuthManager authManager;
 
-    // TODO: Integrate with PluginConfigManager to load actual auth config
+    // TODO: Integrate with GatewayConfigManager to load actual auth config
     // For demonstration, we'll use a simple in-memory map
     // In production, this should be loaded from Nacos/Database configuration
 
@@ -55,7 +55,7 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
 
     /**
      * Load authentication configuration for a route.
-     * TODO: Replace with actual implementation using PluginConfigManager.
+     * TODO: Replace with actual implementation using GatewayConfigManager.
      * 
      * This is a placeholder implementation. In production, you should:
      * 1. Add AuthConfig to gateway-admin's PluginConfig

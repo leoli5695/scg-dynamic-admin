@@ -78,12 +78,12 @@ public class CustomHeaderGatewayFilterFactory extends AbstractGatewayFilterFacto
                 
                 ServerHttpRequest modifiedRequest = builder.build();
                 
-                log.info("✅ Added {} custom header(s) to request", config.getHeaders().size());
+                log.info("閴?Added {} custom header(s) to request", config.getHeaders().size());
                 
                 return chain.filter(exchange.mutate().request(modifiedRequest).build());
                 
             } catch (Exception e) {
-                log.error("❌ Error adding custom headers", e);
+                log.error("閴?Error adding custom headers", e);
                 return chain.filter(exchange);
             }
         }

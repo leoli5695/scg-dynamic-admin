@@ -1,7 +1,7 @@
 package com.example.gateway.refresher;
 
-import com.example.gateway.plugin.PluginType;
-import com.example.gateway.plugin.StrategyManager;
+import com.example.gateway.strategy.StrategyType;
+import com.example.gateway.strategy.StrategyManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -19,13 +19,13 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-public class PluginRefresher extends AbstractRefresher {
+public class StrategyRefresher extends AbstractRefresher {
     
    private final StrategyManager strategyManager;
    private final ObjectMapper objectMapper = new ObjectMapper();
     
     @Autowired
-    public PluginRefresher(StrategyManager strategyManager) {
+    public StrategyRefresher(StrategyManager strategyManager) {
         this.strategyManager = strategyManager;
     }
     
@@ -55,7 +55,7 @@ public class PluginRefresher extends AbstractRefresher {
         JsonNode root = (JsonNode) config;
         
         // Iterate through all plugin types
-       for (PluginType type : PluginType.values()) {
+       for (StrategyType type : StrategyType.values()) {
             String configKey = type.getConfigKey();
             JsonNode pluginConfigs = root.get(configKey);
             
