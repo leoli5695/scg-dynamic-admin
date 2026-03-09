@@ -172,8 +172,8 @@ public class PluginService {
                 .filter(r -> !routeId.equals(r.getRouteId()))
                 .collect(Collectors.toList()));
 
-        // If cache is empty, remove config from Nacos directly
-        if (pluginCache.getRateLimiters().isEmpty()) {
+        // If all plugin lists are empty, remove config from Nacos
+        if (pluginCache.getRateLimiters().isEmpty() && pluginCache.getIpFilters().isEmpty() && pluginCache.getTimeouts().isEmpty()) {
             log.info("No plugins left, removing config from Nacos: {}", pluginsDataId);
             return publisher.remove();
         }
