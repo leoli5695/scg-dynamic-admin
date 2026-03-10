@@ -5,6 +5,7 @@ import com.alibaba.nacos.api.config.ConfigService;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.cloud.gateway.support.NotFoundException;
@@ -29,24 +30,26 @@ import static org.springframework.cloud.gateway.support.ServerWebExchangeUtils.*
 @Component
 public class StaticProtocolGlobalFilter implements GlobalFilter, Ordered {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper= new ObjectMapper();
     private final ConfigService configService;
+    
+    @Value("${spring.cloud.nacos.config.server-addr:127.0.0.1:8848}")
+    private String serverAddr;
+    
+    @Value("${spring.cloud.nacos.config.namespace:}")
+    private String namespace;
     
     // Service configuration cache
     private ServicesConfig cachedServicesConfig;
     private volatile long servicesLastLoadTime = 0;
     private static final long SERVICES_CACHE_TTL_MS = 10000;
     
-    static {
+   static {
         new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
 
     public StaticProtocolGlobalFilter() {
         try {
-            // Get Nacos configuration from environment variables or default values
-            String serverAddr = System.getProperty("spring.cloud.nacos.config.server-addr", "127.0.0.1:8848");
-            String namespace = System.getProperty("spring.cloud.nacos.config.namespace", "");
-            
             Properties props = new Properties();
             props.setProperty("serverAddr", serverAddr);
             if (!namespace.isEmpty()) {

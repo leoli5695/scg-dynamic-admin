@@ -4,6 +4,7 @@ import com.alibaba.nacos.api.naming.pojo.Instance;
 import com.example.gateway.nacos.NacosNamingServiceWrapper;
 import com.example.gateway.nacos.NacosServiceInstance;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.loadbalancer.*;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -34,15 +35,18 @@ public class NacosLoadBalancerFilter implements GlobalFilter, Ordered {
 
     private final LoadBalancerClientFactory clientFactory;
     private final NacosNamingServiceWrapper nacosNamingService;
+    
+    @Value("${spring.cloud.nacos.discovery.server-addr:127.0.0.1:8848}")
+    private String serverAddr;
+    
+    @Value("${spring.cloud.nacos.discovery.namespace:}")
+    private String namespace;
 
     public NacosLoadBalancerFilter(LoadBalancerClientFactory clientFactory) {
         this.clientFactory = clientFactory;
         
         // Initialize Nacos NamingService
         try {
-            String serverAddr = System.getProperty("spring.cloud.nacos.discovery.server-addr", "127.0.0.1:8848");
-            String namespace = System.getProperty("spring.cloud.nacos.discovery.namespace", "");
-            
             Properties props = new Properties();
             props.setProperty("serverAddr", serverAddr);
             if (!namespace.isEmpty()) {
