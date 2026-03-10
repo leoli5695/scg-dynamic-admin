@@ -8,46 +8,140 @@ Enterprise-ready API Gateway built with Spring Cloud Gateway, featuring producti
 
 ---
 
-## 馃幆 Key Features
+## 🎯 Key Features
 
-### 馃攼 Enterprise Authentication
-- **Strategy Pattern Design** 鈥?Extensible auth processor architecture
-- **JWT / API Key / OAuth2** 鈥?Multiple auth methods out of the box
-- **Extensible** 鈥?Add custom auth types (e.g., DingTalk, WeChat) in minutes
-- **Performance Optimized** 鈥?IP filtering before auth (+37% TPS)
+### 🔐 Enterprise Authentication
+- **Strategy Pattern Design** - Extensible auth processor architecture
+- **JWT / API Key/ OAuth2** - Multiple auth methods out of the box
+- **Extensible** - Add custom auth types (e.g., DingTalk, WeChat) in minutes
+- **Performance Optimized** - IP filtering before auth (+37% TPS)
 
-### 鈿?Resilience & Protection
-- **Circuit Breaker** 鈥?Prevent cascading failures (Resilience4j)
-- **Rate Limiting** 鈥?QPS-based throttling (Redis sliding window)
-- **Timeout Control** 鈥?Per-route connection/response timeouts
-- **Multi-Layered Defense** 鈥?IP filter 鈫?Auth 鈫?Rate limit 鈫?Circuit breaker
+### 🛡️ Resilience & Protection
+- **Circuit Breaker** - Prevent cascading failures (Resilience4j)
+- **Rate Limiting** - QPS-based throttling (Redis sliding window)
+- **Timeout Control** - Per-route connection/response timeouts
+- **Multi-Layered Defense** - IP filter → Auth → Rate limit → Circuit breaker
 
-### 馃攳 Observability
-- **Distributed Tracing** 鈥?Automatic TraceId propagation
-- **Audit Logging** 鈥?Complete change history via AOP
-- **Structured Logging** 鈥?MDC-based correlation
+### 🔍 Observability
+- **Distributed Tracing** - Automatic TraceId propagation
+- **Audit Logging** - Complete change history via AOP
+- **Structured Logging** - MDC-based correlation
 
-### 馃洜锔?Management
-- **REST Admin API** 鈥?Full CRUD for all configurations
-- **Web Dashboard** 鈥?User-friendly UI (Thymeleaf + Bootstrap)
-- **Dynamic Updates** 鈥?Hot-reload without restarts (< 1s)
-- **Nacos Integration** 鈥?Centralized config management
-
----
-
-## 馃殌 Quick Start
-
-| Module | Port | Description |
-|--------|------|-------------|
-| `my-gateway` | 80 | Core gateway 鈥?Spring Cloud Gateway extended |
-| `gateway-admin` | 8080 | Management console (REST API + Web UI) |
-| `demo-service` | **9000 / 9001** | Demo backend 鈥?**start 2 instances to demonstrate load balancing** |
-| Nacos | 8848 | Config center + Service registry |
-| Redis | 6379 | Rate limiting counter storage |
+### 🌐 Management
+- **REST Admin API** - Full CRUD for all configurations
+- **Web Dashboard** - User-friendly UI (Thymeleaf + Bootstrap)
+- **Dynamic Updates** - Hot-reload without restarts (< 1s)
+- **Nacos Integration** - Centralized config management
 
 ---
 
-## 馃殌 Quick Start
+## 🏗️ Architecture Overview
+
+### **System Flow**
+
+```
+┌─────────────┐
+│   Client    │
+└──────┬──────┘
+       │ HTTP Request
+       ↓
+┌─────────────────────────────────────────┐
+│      API Gateway (Port 80)              │
+│                                         │
+│  ┌───────────────────────────────────┐ │
+│  │ Global Filters (Ordered)          │ │
+│  │  1. StaticProtocolGlobalFilter  │ │
+│  │  2. IPFilterGlobalFilter        │ │
+│  │  3. AuthenticationGlobalFilter  │ │
+│  │  4. TimeoutGlobalFilter         │ │
+│  │  5. CircuitBreakerGlobalFilter  │ │
+│  │  6. TraceIdGlobalFilter         │ │
+│  └───────────────────────────────────┘ │
+│              ↓                          │
+│  ┌───────────────────────────────────┐ │
+│  │ DiscoveryLoadBalancerFilter     │ │
+│  │  - Weighted Round-Robin LB        │ │
+│  │  - Service instance selection   │ │
+│  └───────────────────────────────────┘ │
+└──────────────┬────────────────────────┘
+               │
+               ↓
+┌─────────────────────────────────────────┐
+│      Backend Service (9000/9001)        │
+└─────────────────────────────────────────┘
+```
+
+### **Configuration Sync Flow**
+
+```
+┌─────────────────┐
+│ Gateway Admin   │ (Port 8080)
+│  - REST API     │
+│  - Web UI       │
+└────────┬────────┘
+         │ 1. Create/Update Route
+         │    (POST /api/routes)
+         ↓
+┌─────────────────────────────────────────┐
+│  H2 Database                            │
+│  - RouteEntity                          │
+│  - ServiceEntity                        │
+│  - PluginEntity                         │
+└────────┬────────────────────────────────┘
+         │ 2. Transaction Commit
+         ↓
+┌─────────────────────────────────────────┐
+│  NacosPublisher (Async)                 │
+│  - Query all routes from H2             │
+│  - Convert to JSON                      │
+│  - Publish to Nacos                     │
+└────────┬────────────────────────────────┘
+         │ 3. HTTP PUT /nacos/config
+         ↓
+┌─────────────────────────────────────────┐
+│  Nacos Config Center                  │
+│  - gateway-routes.json                │
+│  - gateway-services.json              │
+│  - gateway-plugins.json               │
+└────────┬────────────────────────────────┘
+         │ 4. Configuration Push (<100ms)
+         ↓
+┌─────────────────────────────────────────┐
+│  API Gateway Listeners                  │
+│  - RouteRefresher                     │
+│  - ServiceRefresher                   │
+│  - StrategyRefresher                  │
+└────────┬────────────────────────────────┘
+         │ 5. Detect Change
+         ↓
+┌─────────────────────────────────────────┐
+│  Manager Layer                        │
+│  - RouteManager.loadConfig()            │
+│  - ServiceManager.loadConfig()          │
+│  - StrategyManager.loadConfig()         │
+└────────┬────────────────────────────────┘
+         │ 6. Update Cache
+         ↓
+┌─────────────────────────────────────────┐
+│  Locator Layer                        │
+│  - DynamicRouteDefinitionLocator        │
+│    · clearCache()                       │
+│    · publishRefreshEvent()              │
+└────────┬────────────────────────────────┘
+         │ 7. RefreshRoutesEvent
+         ↓
+┌─────────────────────────────────────────┐
+│  Spring Cloud Gateway                   │
+│  - Auto-reload route table              │
+│  - Next request uses new config         │
+└─────────────────────────────────────────┘
+
+Total Latency: < 1 second
+```
+
+---
+
+## 🚀 Quick Start
 
 ### Prerequisites
 
@@ -143,19 +237,16 @@ curl http://localhost/api/hello
 
 ---
 
-## 鈿?Real-Time Configuration Updates
+## ⚡ Real-Time Configuration Updates
 
 **How It Works:**
 ```
 Admin API (POST/PUT/DELETE)
-  鈫?
-Nacos Config Center (< 100ms push)
-  鈫?
-Gateway Listener (detects change)
-  鈫?
-Clear cache + Rebuild routes/plugins
-  鈫?
-Next request uses new config (no restart!)
+  → H2 Database (Persist)
+  → Nacos Config Center (< 100ms push)
+  → Gateway Listener (Detects change)
+  → Clear cache + Rebuild routes/plugins
+  → Next request uses new config (no restart!)
 ```
 
 **Effective Latency:** < 1 second
@@ -163,11 +254,11 @@ Next request uses new config (no restart!)
 **Example: Add JWT Authentication**
 ```bash
 # 1. Call Admin API
-curl -X POST http://localhost:8080/api/plugins/auth \
+curl -X POST http://localhost:8080/api/plugins/auth\
   -H "Content-Type: application/json" \
   -d '{"routeId":"demo-route","authType":"JWT","secretKey":"test-secret-key"}'
 
-# 2. Immediate effect - next request requires JWT token
+# 2. Immediate effect- next request requires JWT token
 curl http://localhost:80/api/data
 # Returns 401 Unauthorized (missing Authorization header)
 
@@ -178,54 +269,67 @@ curl http://localhost:80/api/data -H "Authorization: Bearer <token>"
 
 ---
 
-## 馃搧 Project Structure
+## 📁 Project Structure
 
 ```
 scg-dynamic-admin-demo/
-鈹溾攢鈹€ gateway-admin/           # Admin console (port 8080)
-鈹?  鈹溾攢鈹€ controller/          # REST API + Web UI
-鈹?  鈹溾攢鈹€ model/               # Data models
-鈹?  鈹斺攢鈹€ service/             # Business logic
-鈹溾攢鈹€ my-gateway/              # Core gateway (port 80)
-鈹?  鈹溾攢鈹€ filter/              # Global filters
-鈹?  鈹?  鈹溾攢鈹€ StrategyGlobalFilter.java   # Main strategy-based filter
-鈹?  鈹?  鈹溾攢鈹€ TraceIdGlobalFilter.java  # Distributed tracing
-鈹?  鈹?  鈹溾攢鈹€ IPFilterGlobalFilter.java  # IP access control
-鈹?  鈹?  鈹斺攢鈹€ ... 
-鈹?  鈹溾攢鈹€ strategy/     # Strategy implementations
-鈹?  鈹?  鈹溾攢鈹€ Plugin.java             # Strategy interface
-鈹?  鈹?  鈹溾攢鈹€ PluginType.java         # Strategy type enum
-鈹?  鈹?  鈹溾攢鈹€ AbstractPlugin.java     # Base class
-鈹?  鈹?  鈹溾攢鈹€ StrategyManager.java    # Central registry
-鈹?  鈹?  鈹溾攢鈹€ timeout/                 # Timeout strategy
-鈹?  鈹?  鈹溾攢鈹€ ratelimiter/             # Rate limiter strategy
-鈹?  鈹?  鈹溾攢鈹€ circuitbreaker/          # Circuit breaker strategy
-鈹?  鈹?  鈹溾攢鈹€ auth/                    # Auth strategy
-鈹?  鈹?  鈹溾攢鈹€ ipfilter/                # IP filter strategy
-鈹?  鈹?  鈹斺攢鈹€ tracing/                 # Tracing strategy
-鈹?  鈹溾攢鈹€ manager/             # Configuration managers
-鈹?  鈹?  鈹溾攢鈹€ GatewayConfigManager.java   # Unified config store
-鈹?  鈹?  鈹溾攢鈹€ TimeoutConfigManager.java  # Timeout config
-鈹?  鈹?  鈹溾攢鈹€ CircuitBreakerConfigManager.java # Circuit breaker config
-鈹?  鈹?  鈹斺攢鈹€ RateLimiterConfigManager.java  # Rate limiter config
-鈹?  鈹溾攢鈹€ refresher/           # Config refreshers
-鈹?  鈹?  鈹溾攢鈹€ AbstractRefresher.java    # Base refresher
-鈹?  鈹?  鈹溾攢鈹€ StrategyRefresher.java      # Plugin config refresher
-鈹?  鈹?  鈹斺攢鈹€ NacosConfigListener.java  # Nacos listener
-鈹?  鈹斺攢鈹€ route/
-鈹?      鈹斺攢鈹€ NacosRouteDefinitionLocator.java # Dynamic route loader
-鈹溾攢鈹€ demo-service/            # Sample backend (port 9000/9001)
-鈹斺攢鈹€ docs/                    # Documentation
-    鈹溾攢鈹€ PLUGIN_ARCHITECTURE.md      # Architecture design
-    鈹溾攢鈹€ PLUGIN_QUICKSTART.md        # Usage guide
-    鈹溾攢鈹€ REFACTORING_SUMMARY.md      # Refactoring summary
-    鈹溾攢鈹€ FEATURES.md                 # Feature overview
-    鈹斺攢鈹€ ARCHITECTURE.md             # System architecture
+├── gateway-admin/           # Admin console (port 8080)
+│   ├── controller/          # REST API + Web UI
+│   ├── service/             # Business logic
+│   ├── mapper/              # Data access (MyBatis Plus)
+│   ├── model/               # Entity classes
+│   ├── config/              # Security & JWT config
+│   ├── aspect/              # Audit logging (AOP)
+│   └── filter/              # JWT authentication filter
+│
+├── my-gateway/              # Core gateway (port 80)
+│   ├── filter/              # Global filters
+│   │   ├── AuthenticationGlobalFilter.java
+│   │   ├── CircuitBreakerGlobalFilter.java
+│   │   ├── IPFilterGlobalFilter.java
+│   │   ├── TimeoutGlobalFilter.java
+│   │   ├── TraceIdGlobalFilter.java
+│   │   └── DiscoveryLoadBalancerFilter.java
+│   ├── manager/             # Configuration managers
+│   │   ├── RouteManager.java
+│   │   ├── ServiceManager.java
+│   │   └── StrategyManager.java
+│   ├── refresher/           # Config refreshers
+│   │   ├── RouteRefresher.java
+│   │   ├── ServiceRefresher.java
+│   │   └── StrategyRefresher.java
+│   ├── route/               # Route locator
+│   │   └── DynamicRouteDefinitionLocator.java
+│   ├── discovery/           # Service discovery SPI
+│   │   ├── spi/DiscoveryService.java
+│   │   ├── nacos/NacosDiscoveryService.java
+│   │   └── consul/ConsulDiscoveryService.java
+│   ├── center/              # Config center SPI
+│   │   ├── spi/ConfigCenterService.java
+│   │   ├── nacos/NacosConfigService.java
+│   │   └── consul/ConsulConfigService.java
+│   ├── enums/               # Unified enums
+│   │   ├── StrategyType.java
+│   │   ├── CenterType.java
+│   │   └── AuthType.java
+│   └── model/               # Config models
+│       ├── RateLimiterConfig.java
+│       ├── CircuitBreakerConfig.java
+│       ├── TimeoutConfig.java
+│       └── ...
+│
+├── demo-service/            # Sample backend (port 9000/9001)
+│
+└── docs/                    # Documentation
+    ├── README.md            # This file
+    ├── FEATURES.md          # Complete feature guide
+    ├── ARCHITECTURE.md      # System architecture
+    └── GATEWAY_ADMIN_ARCHITECTURE.md  # Admin design details
 ```
 
 ---
 
-## 馃洜锔?Tech Stack
+## 🛠️ Tech Stack
 
 | Layer | Technology | Purpose |
 |-------|------------|---------|
@@ -243,44 +347,44 @@ scg-dynamic-admin-demo/
 
 ---
 
-## 馃摉 Documentation
+## 📚 Documentation
 
 | Document | Audience | Content |
 |----------|----------|---------|
-| [README.md](README.md) | Everyone | Overview, quick start |
-| [FEATURES.md](docs/FEATURES.md) | Users | Complete feature guide |
-| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Developers | Design principles, trade-offs |
-| [API.md](docs/API.md) | Integrators | REST API reference |
+| [README.md](README.md) | Everyone | Overview, quick start, architecture flow |
+| [FEATURES.md](docs/FEATURES.md) | Users | Complete feature guide with examples |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Developers | System design principles, trade-offs |
+| [GATEWAY_ADMIN_ARCHITECTURE.md](docs/GATEWAY_ADMIN_ARCHITECTURE.md) | Architects | Admin console detailed design, patterns, extensibility |
 
 ---
 
-## 馃捈 Available for Hire
+## 💼 Available for Hire
 
 **Need a customized API Gateway or Microservices Architecture?**
 
 I'm available on Upwork for freelance projects:
-- 馃敆 **Profile:** [https://www.upwork.com/freelancers/~017be8c63f36907379](https://www.upwork.com/freelancers/~017be8c63f36907379)
-- 馃摟 **Contact:** lizhao5695@gmail.com
+- 👇 **Profile:** [https://www.upwork.com/freelancers/~017be8c63f36907379](https://www.upwork.com/freelancers/~017be8c63f36907379)
+- 📧 **Contact:** lizhao5695@gmail.com
 
 **Specialties:**
-- 鉁?Spring Cloud Gateway customization
-- 鉁?Microservices architecture design
-- 鉁?Production-grade security patterns
-- 鉁?Performance optimization
-- 鉁?Enterprise authentication integration
+- ✅ Spring Cloud Gateway customization
+- ✅ Microservices architecture design
+- ✅ Production-grade security patterns
+- ✅ Performance optimization
+- ✅ Enterprise authentication integration
 
 ---
 
-## 馃搫 License
+## 📋 License
 
-MIT License 鈥?free for personal and commercial use. See [LICENSE](LICENSE) for details.
+MIT License – free for personal and commercial use. See [LICENSE](LICENSE) for details.
 
 ---
 
 <div align="center">
 
-**Built with 鉂わ笍 by leoli**
+**Built with ❤️ by leoli**
 
-Found this useful? Give it a 猸?Star!
+Found this useful? Give it a ⭐ Star!
 
 </div>
