@@ -42,7 +42,7 @@ public class RouteController {
      */
     @GetMapping("/{id}")
     public ResponseEntity<Map<String, Object>> getRouteById(@PathVariable String id) {
-        RouteDefinition route = routeService.getRouteById(id);
+        RouteDefinition route = routeService.getRoute(id);
         Map<String, Object> result = new HashMap<>();
         if (route != null) {
             result.put("code", 200);

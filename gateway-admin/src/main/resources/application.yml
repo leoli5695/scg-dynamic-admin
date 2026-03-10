@@ -13,7 +13,7 @@ spring:
     driver-class-name: org.h2.Driver
     url: jdbc:h2:file:./data/gateway_db;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;AUTO_SERVER=TRUE
     username: sa
-    password: 
+    password:
   h2:
     console:
       enabled: true
@@ -33,6 +33,9 @@ spring:
           max-idle: 8
           min-idle: 0
   cloud:
+    # Config Center type: nacos (default) or consul
+    # gateway.center.type=nacos -> uses NacosConfigCenterService
+    # gateway.center.type=consul -> uses ConsulConfigCenterService
     nacos:
       config:
         server-addr: 127.0.0.1:8848
@@ -55,17 +58,36 @@ spring:
         server-addr: 127.0.0.1:8848
         namespace: public
         group: DEFAULT_GROUP
+    consul:
+      host: 127.0.0.1
+      port: 8500
+      discovery:
+        enabled: false  # Disable service discovery for admin console
+      config:
+        enabled: true
+        prefix: config
+        profile-separator: ','
+        format: JSON
+        watch:
+          enabled: true
+          wait: 10s
 
 gateway:
+  center:
+    type: nacos  # default config center type, can be 'nacos' or 'consul'
   admin:
     jwt:
       secret: ${GATEWAY_ADMIN_JWT_SECRET:mySecretKeyForJWTTokenGenerationWhichMustBeLongEnoughAndSecure}
       expiration: 86400000  # 24 hours in milliseconds
-    nacos:
-      data-ids:
-        routes: gateway-routes.json
-        services: gateway-services.json
-        plugins: gateway-plugins.json
+  consul:
+    host: 127.0.0.1
+    port: 8500
+    prefix: config
+  nacos:
+    data-ids:
+      routes: gateway-routes.json
+      services: gateway-services.json
+      plugins: gateway-plugins.json
       group: DEFAULT_GROUP
 
 management:

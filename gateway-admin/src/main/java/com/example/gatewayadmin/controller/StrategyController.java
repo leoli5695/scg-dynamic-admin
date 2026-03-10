@@ -1,7 +1,7 @@
 package com.example.gatewayadmin.controller;
 
 import com.example.gatewayadmin.model.PluginConfig;
-import com.example.gatewayadmin.service.PluginService;
+import com.example.gatewayadmin.service.StrategyService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -12,26 +12,28 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Plugin management controller.
+ * Strategy management controller.
+ * Provides REST APIs for managing gateway strategies (rate limiter, IP filter,
+ * timeout, circuit breaker, auth).
  *
  * @author leoli
  */
 @Slf4j
 @RestController
 @RequestMapping("/api/plugins")
-public class PluginController {
+public class StrategyController {
 
     @Autowired
-    private PluginService pluginService;
+    private StrategyService strategyService;
 
-    // ==================== Rate Limiter Plugin API ====================
+    // ==================== Rate Limiter Strategy API ====================
 
     /**
      * Get all rate limiter configurations.
      */
     @GetMapping("/rate-limiters")
     public ResponseEntity<Map<String, Object>> getAllRateLimiters() {
-        List<PluginConfig.RateLimiterConfig> configs = pluginService.getAllRateLimiters();
+        List<PluginConfig.RateLimiterConfig> configs = strategyService.getAllRateLimiters();
         Map<String, Object> result = new HashMap<>();
         result.put("code", 200);
         result.put("message", "success");
@@ -44,7 +46,7 @@ public class PluginController {
      */
     @GetMapping("/rate-limiters/{routeId}")
     public ResponseEntity<Map<String, Object>> getRateLimiterByRouteId(@PathVariable String routeId) {
-        PluginConfig.RateLimiterConfig config = pluginService.getRateLimiterByRouteId(routeId);
+        PluginConfig.RateLimiterConfig config = strategyService.getRateLimiterByRouteId(routeId);
         Map<String, Object> result = new HashMap<>();
         if (config != null) {
             result.put("code", 200);
@@ -63,17 +65,17 @@ public class PluginController {
      */
     @PostMapping("/rate-limiters")
     public ResponseEntity<Map<String, Object>> createRateLimiter(@RequestBody PluginConfig.RateLimiterConfig config) {
-        log.info("Creating rate limiter for route: {}", config.getRouteId());
-        boolean success = pluginService.createRateLimiter(config);
+        log.info("Creating rate limiter strategy for route: {}", config.getRouteId());
+        boolean success = strategyService.createRateLimiter(config);
         Map<String, Object> result = new HashMap<>();
         if (success) {
             result.put("code", 200);
-            result.put("message", "Rate limiter created successfully");
+            result.put("message", "Rate limiter strategy created successfully");
             result.put("data", config);
             return ResponseEntity.ok(result);
         } else {
             result.put("code", 500);
-            result.put("message", "Failed to create rate limiter");
+            result.put("message", "Failed to create rate limiter strategy");
             return ResponseEntity.status(500).body(result);
         }
     }
@@ -85,17 +87,17 @@ public class PluginController {
     public ResponseEntity<Map<String, Object>> updateRateLimiter(
             @PathVariable String routeId,
             @RequestBody PluginConfig.RateLimiterConfig config) {
-        log.info("Updating rate limiter for route: {}", routeId);
-        boolean success = pluginService.updateRateLimiter(routeId, config);
+        log.info("Updating rate limiter strategy for route: {}", routeId);
+        boolean success = strategyService.updateRateLimiter(routeId, config);
         Map<String, Object> result = new HashMap<>();
         if (success) {
             result.put("code", 200);
-            result.put("message", "Rate limiter updated successfully");
+            result.put("message", "Rate limiter strategy updated successfully");
             result.put("data", config);
             return ResponseEntity.ok(result);
         } else {
             result.put("code", 500);
-            result.put("message", "Failed to update rate limiter");
+            result.put("message", "Failed to update rate limiter strategy");
             return ResponseEntity.status(500).body(result);
         }
     }
@@ -105,35 +107,31 @@ public class PluginController {
      */
     @DeleteMapping("/rate-limiters/{routeId}")
     public ResponseEntity<Map<String, Object>> deleteRateLimiter(@PathVariable String routeId) {
-        log.info("Deleting rate limiter for route: {}", routeId);
-        boolean success = pluginService.deleteRateLimiter(routeId);
+        log.info("Deleting rate limiter strategy for route: {}", routeId);
+        boolean success = strategyService.deleteRateLimiter(routeId);
         Map<String, Object> result = new HashMap<>();
         if (success) {
             result.put("code", 200);
-            result.put("message", "Rate limiter deleted successfully");
+            result.put("message", "Rate limiter strategy deleted successfully");
             return ResponseEntity.ok(result);
         } else {
             result.put("code", 500);
-            result.put("message", "Failed to delete rate limiter");
+            result.put("message", "Failed to delete rate limiter strategy");
             return ResponseEntity.status(500).body(result);
         }
     }
 
-    // ==================== Custom Header Plugin API (removed) ====================
+    // ==================== Custom Header Strategy API (removed) ====================
     // Note: Custom Header APIs removed - use SCG native AddRequestHeader filter instead
-    // Route config example:
-    // filters:
-    //   - AddRequestHeader=X-Forwarded-For, 10.0.0.1
-    //   - AddRequestHeader=X-Custom-Header, ${CUSTOM_VALUE}
 
-    // ==================== IP Filter Plugin API ====================
+    // ==================== IP Filter Strategy API ====================
 
     /**
      * Get all IP filter configurations.
      */
     @GetMapping("/ip-filters")
     public ResponseEntity<Map<String, Object>> getAllIPFilters() {
-        List<PluginConfig.IPFilterConfig> configs = pluginService.getAllIPFilters();
+        List<PluginConfig.IPFilterConfig> configs = strategyService.getAllIPFilters();
         Map<String, Object> result = new HashMap<>();
         result.put("code", 200);
         result.put("message", "success");
@@ -146,7 +144,7 @@ public class PluginController {
      */
     @GetMapping("/ip-filters/{routeId}")
     public ResponseEntity<Map<String, Object>> getIPFilterByRoute(@PathVariable String routeId) {
-        PluginConfig.IPFilterConfig config = pluginService.getIPFilterByRoute(routeId);
+        PluginConfig.IPFilterConfig config = strategyService.getIPFilterByRoute(routeId);
         Map<String, Object> result = new HashMap<>();
         if (config != null) {
             result.put("code", 200);
@@ -165,17 +163,17 @@ public class PluginController {
      */
     @PostMapping("/ip-filters")
     public ResponseEntity<Map<String, Object>> createIPFilter(@RequestBody PluginConfig.IPFilterConfig config) {
-        log.info("Creating IP filter for route: {}", config.getRouteId());
-        boolean success = pluginService.createIPFilter(config);
+        log.info("Creating IP filter strategy for route: {}", config.getRouteId());
+        boolean success = strategyService.createIPFilter(config);
         Map<String, Object> result = new HashMap<>();
         if (success) {
             result.put("code", 200);
-            result.put("message", "IP filter created successfully");
+            result.put("message", "IP filter strategy created successfully");
             result.put("data", config);
             return ResponseEntity.ok(result);
         } else {
             result.put("code", 500);
-            result.put("message", "Failed to create IP filter");
+            result.put("message", "Failed to create IP filter strategy");
             return ResponseEntity.status(500).body(result);
         }
     }
@@ -187,17 +185,17 @@ public class PluginController {
     public ResponseEntity<Map<String, Object>> updateIPFilter(
             @PathVariable String routeId,
             @RequestBody PluginConfig.IPFilterConfig config) {
-        log.info("Updating IP filter for route: {}", routeId);
-        boolean success = pluginService.updateIPFilter(routeId, config);
+        log.info("Updating IP filter strategy for route: {}", routeId);
+        boolean success = strategyService.updateIPFilter(routeId, config);
         Map<String, Object> result = new HashMap<>();
         if (success) {
             result.put("code", 200);
-            result.put("message", "IP filter updated successfully");
+            result.put("message", "IP filter strategy updated successfully");
             result.put("data", config);
             return ResponseEntity.ok(result);
         } else {
             result.put("code", 500);
-            result.put("message", "Failed to update IP filter");
+            result.put("message", "Failed to update IP filter strategy");
             return ResponseEntity.status(500).body(result);
         }
     }
@@ -207,41 +205,41 @@ public class PluginController {
      */
     @DeleteMapping("/ip-filters/{routeId}")
     public ResponseEntity<Map<String, Object>> deleteIPFilter(@PathVariable String routeId) {
-        log.info("Deleting IP filter for route: {}", routeId);
-        boolean success = pluginService.deleteIPFilter(routeId);
+        log.info("Deleting IP filter strategy for route: {}", routeId);
+        boolean success = strategyService.deleteIPFilter(routeId);
         Map<String, Object> result = new HashMap<>();
         if (success) {
             result.put("code", 200);
-            result.put("message", "IP filter deleted successfully");
+            result.put("message", "IP filter strategy deleted successfully");
             return ResponseEntity.ok(result);
         } else {
             result.put("code", 500);
-            result.put("message", "Failed to delete IP filter");
+            result.put("message", "Failed to delete IP filter strategy");
             return ResponseEntity.status(500).body(result);
         }
     }
-    
-    // ==================== Timeout Plugin API ====================
-    
+
+    // ==================== Timeout Strategy API ====================
+
     /**
      * Get all timeout configurations.
      */
     @GetMapping("/timeouts")
     public ResponseEntity<Map<String, Object>> getAllTimeouts() {
-        List<PluginConfig.TimeoutConfig> timeouts = pluginService.getAllTimeouts();
+        List<PluginConfig.TimeoutConfig> timeouts = strategyService.getAllTimeouts();
         Map<String, Object> result = new HashMap<>();
         result.put("code", 200);
         result.put("message", "success");
         result.put("data", timeouts);
         return ResponseEntity.ok(result);
     }
-    
+
     /**
      * Get timeout configuration by route ID.
      */
     @GetMapping("/timeouts/{routeId}")
     public ResponseEntity<Map<String, Object>> getTimeoutByRoute(@PathVariable String routeId) {
-        PluginConfig.TimeoutConfig config = pluginService.getTimeoutByRoute(routeId);
+        PluginConfig.TimeoutConfig config = strategyService.getTimeoutByRoute(routeId);
         Map<String, Object> result = new HashMap<>();
         if (config != null) {
             result.put("code", 200);
@@ -254,27 +252,27 @@ public class PluginController {
             return ResponseEntity.status(404).body(result);
         }
     }
-    
+
     /**
      * Create timeout configuration.
      */
     @PostMapping("/timeouts")
     public ResponseEntity<Map<String, Object>> createTimeout(@RequestBody PluginConfig.TimeoutConfig config) {
-        log.info("Creating timeout config for route: {}", config.getRouteId());
-        boolean success = pluginService.createTimeout(config);
+        log.info("Creating timeout strategy for route: {}", config.getRouteId());
+        boolean success = strategyService.createTimeout(config);
         Map<String, Object> result = new HashMap<>();
         if (success) {
             result.put("code", 200);
-            result.put("message", "Timeout config created successfully");
+            result.put("message", "Timeout strategy created successfully");
             result.put("data", config);
             return ResponseEntity.ok(result);
         } else {
             result.put("code", 500);
-            result.put("message", "Failed to create timeout config");
+            result.put("message", "Failed to create timeout strategy");
             return ResponseEntity.status(500).body(result);
         }
     }
-    
+
     /**
      * Update timeout configuration.
      */
@@ -282,48 +280,143 @@ public class PluginController {
     public ResponseEntity<Map<String, Object>> updateTimeout(
             @PathVariable String routeId,
             @RequestBody PluginConfig.TimeoutConfig config) {
-        log.info("Updating timeout config for route: {}", routeId);
-        boolean success = pluginService.updateTimeout(routeId, config);
+        log.info("Updating timeout strategy for route: {}", routeId);
+        boolean success = strategyService.updateTimeout(routeId, config);
         Map<String, Object> result = new HashMap<>();
         if (success) {
             result.put("code", 200);
-            result.put("message", "Timeout config updated successfully");
+            result.put("message", "Timeout strategy updated successfully");
             result.put("data", config);
             return ResponseEntity.ok(result);
         } else {
             result.put("code", 500);
-            result.put("message", "Failed to update timeout config");
+            result.put("message", "Failed to update timeout strategy");
             return ResponseEntity.status(500).body(result);
         }
     }
-    
+
     /**
      * Delete timeout configuration.
      */
     @DeleteMapping("/timeouts/{routeId}")
     public ResponseEntity<Map<String, Object>> deleteTimeout(@PathVariable String routeId) {
-        log.info("Deleting timeout config for route: {}", routeId);
-        boolean success = pluginService.deleteTimeout(routeId);
+        log.info("Deleting timeout strategy for route: {}", routeId);
+        boolean success = strategyService.deleteTimeout(routeId);
         Map<String, Object> result = new HashMap<>();
         if (success) {
             result.put("code", 200);
-            result.put("message", "Timeout config deleted successfully");
+            result.put("message", "Timeout strategy deleted successfully");
             return ResponseEntity.ok(result);
         } else {
             result.put("code", 500);
-            result.put("message", "Failed to delete timeout config");
+            result.put("message", "Failed to delete timeout strategy");
             return ResponseEntity.status(500).body(result);
         }
     }
 
-    // ==================== Common API ====================
+    // ==================== Circuit Breaker Strategy API ====================
 
     /**
-     * Get all plugin configurations.
+     * Get all circuit breaker configurations.
+     */
+    @GetMapping("/circuit-breakers")
+    public ResponseEntity<Map<String, Object>> getAllCircuitBreakers() {
+        List<PluginConfig.CircuitBreakerConfig> configs = strategyService.getAllCircuitBreakers();
+        Map<String, Object> result = new HashMap<>();
+        result.put("code", 200);
+        result.put("message", "success");
+        result.put("data", configs);
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Get circuit breaker configuration by route ID.
+     */
+    @GetMapping("/circuit-breakers/{routeId}")
+    public ResponseEntity<Map<String, Object>> getCircuitBreakerByRoute(@PathVariable String routeId) {
+        PluginConfig.CircuitBreakerConfig config = strategyService.getCircuitBreakerByRoute(routeId);
+        Map<String, Object> result = new HashMap<>();
+        if (config != null) {
+            result.put("code", 200);
+            result.put("message", "success");
+            result.put("data", config);
+            return ResponseEntity.ok(result);
+        } else {
+            result.put("code", 404);
+            result.put("message", "Circuit breaker config not found for route: " + routeId);
+            return ResponseEntity.status(404).body(result);
+        }
+    }
+
+    /**
+     * Create circuit breaker configuration.
+     */
+    @PostMapping("/circuit-breakers")
+    public ResponseEntity<Map<String, Object>> createCircuitBreaker(@RequestBody PluginConfig.CircuitBreakerConfig config) {
+        log.info("Creating circuit breaker strategy for route: {}", config.getRouteId());
+        boolean success = strategyService.createCircuitBreaker(config);
+        Map<String, Object> result = new HashMap<>();
+        if (success) {
+            result.put("code", 200);
+            result.put("message", "Circuit breaker strategy created successfully");
+            result.put("data", config);
+            return ResponseEntity.ok(result);
+        } else {
+            result.put("code", 500);
+            result.put("message", "Failed to create circuit breaker strategy");
+            return ResponseEntity.status(500).body(result);
+        }
+    }
+
+    /**
+     * Update circuit breaker configuration.
+     */
+    @PutMapping("/circuit-breakers/{routeId}")
+    public ResponseEntity<Map<String, Object>> updateCircuitBreaker(
+            @PathVariable String routeId,
+            @RequestBody PluginConfig.CircuitBreakerConfig config) {
+        log.info("Updating circuit breaker strategy for route: {}", routeId);
+        boolean success = strategyService.updateCircuitBreaker(routeId, config);
+        Map<String, Object> result = new HashMap<>();
+        if (success) {
+            result.put("code", 200);
+            result.put("message", "Circuit breaker strategy updated successfully");
+            result.put("data", config);
+            return ResponseEntity.ok(result);
+        } else {
+            result.put("code", 500);
+            result.put("message", "Failed to update circuit breaker strategy");
+            return ResponseEntity.status(500).body(result);
+        }
+    }
+
+    /**
+     * Delete circuit breaker configuration.
+     */
+    @DeleteMapping("/circuit-breakers/{routeId}")
+    public ResponseEntity<Map<String, Object>> deleteCircuitBreaker(@PathVariable String routeId) {
+        log.info("Deleting circuit breaker strategy for route: {}", routeId);
+        boolean success = strategyService.deleteCircuitBreaker(routeId);
+        Map<String, Object> result = new HashMap<>();
+        if (success) {
+            result.put("code", 200);
+            result.put("message", "Circuit breaker strategy deleted successfully");
+            return ResponseEntity.ok(result);
+        } else {
+            result.put("code", 500);
+            result.put("message", "Failed to delete circuit breaker strategy");
+            return ResponseEntity.status(500).body(result);
+        }
+    }
+
+    // ==================== Common Strategy API ====================
+
+    /**
+     * Get all strategy configurations.
      */
     @GetMapping
-    public ResponseEntity<Map<String, Object>> getAllPlugins() {
-        PluginConfig plugins = pluginService.getAllPlugins();
+    public ResponseEntity<Map<String, Object>> getAllStrategies() {
+        PluginConfig plugins = strategyService.getAllPlugins();
         Map<String, Object> result = new HashMap<>();
         result.put("code", 200);
         result.put("message", "success");
@@ -332,30 +425,30 @@ public class PluginController {
     }
 
     /**
-     * Batch update plugin configurations.
+     * Batch update strategy configurations.
      */
     @PostMapping("/batch")
-    public ResponseEntity<Map<String, Object>> batchUpdatePlugins(@RequestBody PluginConfig plugins) {
-        log.info("Batch updating plugins config");
-        boolean success = pluginService.batchUpdatePlugins(plugins);
+    public ResponseEntity<Map<String, Object>> batchUpdateStrategies(@RequestBody PluginConfig plugins) {
+        log.info("Batch updating strategy config");
+        boolean success = strategyService.batchUpdatePlugins(plugins);
         Map<String, Object> result = new HashMap<>();
         if (success) {
             result.put("code", 200);
-            result.put("message", "Plugins updated successfully");
+            result.put("message", "Strategies updated successfully");
             return ResponseEntity.ok(result);
         } else {
             result.put("code", 500);
-            result.put("message", "Failed to update plugins");
+            result.put("message", "Failed to update strategies");
             return ResponseEntity.status(500).body(result);
         }
     }
 
     /**
-     * Get plugin statistics.
+     * Get strategy statistics.
      */
     @GetMapping("/stats")
-    public ResponseEntity<Map<String, Object>> getPluginStats() {
-        PluginService.PluginStats stats = pluginService.getPluginStats();
+    public ResponseEntity<Map<String, Object>> getStrategyStats() {
+        StrategyService.StrategyStats stats = strategyService.getStrategyStats();
         Map<String, Object> result = new HashMap<>();
         result.put("code", 200);
         result.put("message", "success");

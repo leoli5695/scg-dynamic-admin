@@ -18,13 +18,12 @@ import javax.sql.DataSource;
 
 /**
  * MyBatis Plus Configuration
- * Only active when profile is NOT 'dev'
+ * Uses H2 database (no MySQL required)
  *
  * @author leoli
  */
 @Configuration(proxyBeanMethods = false)
 @MapperScan("com.example.gatewayadmin.mapper")
-@ConditionalOnExpression("!environment.getProperty('spring.profiles.active', 'dev').equals('dev')")
 public class MybatisPlusConfig {
 
     /**
@@ -51,7 +50,7 @@ public class MybatisPlusConfig {
     @Bean
     public MybatisPlusInterceptor mybatisPlusInterceptor() {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
-        interceptor.addInnerInterceptor(new PaginationInnerInterceptor(DbType.MYSQL));
+        interceptor.addInnerInterceptor(new PaginationInnerInterceptor(DbType.H2));
         return interceptor;
     }
 

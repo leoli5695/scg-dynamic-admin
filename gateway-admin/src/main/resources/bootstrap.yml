@@ -1,7 +1,14 @@
 spring:
   application:
-    name: gateway-admin
+  name: gateway-admin
+  profiles:
+    active: dev
+  config:
+    import: "optional:nacos:"
   cloud:
+    # Config Center type: nacos (default) or consul
+    # gateway.center.type=nacos -> uses NacosConfigCenterService
+    # gateway.center.type=consul -> uses ConsulConfigCenterService
     nacos:
       config:
         server-addr: 127.0.0.1:8848
@@ -9,3 +16,16 @@ spring:
         group: DEFAULT_GROUP
         file-extension: yml
         enabled: true
+    consul:
+      host: 127.0.0.1
+      port: 8500
+      discovery:
+        enabled: false  # Disable service discovery for admin console
+      config:
+        enabled: true
+        prefix: config
+        profile-separator: ','
+        format: YAML
+        watch:
+          enabled: true
+          wait: 10s

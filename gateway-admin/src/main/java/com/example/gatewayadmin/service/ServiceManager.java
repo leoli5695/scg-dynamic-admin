@@ -1,7 +1,7 @@
 package com.example.gatewayadmin.service;
 
-import com.example.gatewayadmin.config.GatewayAdminProperties;
-import com.example.gatewayadmin.config.NacosConfigManager;
+import com.example.gatewayadmin.center.ConfigCenterService;
+import com.example.gatewayadmin.properties.GatewayAdminProperties;
 import com.example.gatewayadmin.model.GatewayServicesConfig;
 import com.example.gatewayadmin.model.ServiceDefinition;
 import jakarta.annotation.PostConstruct;
@@ -25,23 +25,23 @@ import java.util.stream.Collectors;
 public class ServiceManager {
 
     @Autowired
-    private NacosConfigManager nacosConfigManager;
+  private ConfigCenterService configCenterService;
 
     @Autowired
-    private GatewayAdminProperties properties;
+  private GatewayAdminProperties properties;
 
-    private String servicesDataId;
-    private NacosPublisher publisher;
+  private String servicesDataId;
+  private ConfigCenterPublisher publisher;
 
     // Local cache: serviceName -> ServiceDefinition
-    private final ConcurrentHashMap<String, ServiceDefinition> serviceCache = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, ServiceDefinition> serviceCache = new ConcurrentHashMap<>();
 
     @PostConstruct
     public void init() {
         servicesDataId = properties.getNacos().getDataIds().getServices();
-        publisher = new NacosPublisher(nacosConfigManager, servicesDataId);
-        // Load initial config from Nacos
-        loadServicesFromNacos();
+        publisher=new ConfigCenterPublisher(configCenterService, servicesDataId);
+        // Load initial config from config center
+        loadServicesFromConfigCenter();
     }
 
     /**
@@ -68,7 +68,7 @@ public class ServiceManager {
         
         // Cache miss, reload from Nacos
         log.info("Service not found in cache, reloading from Nacos: {}", name);
-        loadServicesFromNacos();
+        loadServicesFromConfigCenter();
 
         return serviceCache.get(name);
     }
@@ -78,7 +78,7 @@ public class ServiceManager {
      */
     public List<ServiceDefinition> refreshFromNacos() {
         log.info("Force refreshing services from Nacos");
-        loadServicesFromNacos();
+        loadServicesFromConfigCenter();
         return getAllServices();
     }
 
@@ -203,11 +203,11 @@ public class ServiceManager {
     }
 
     /**
-     * Load service configuration from Nacos
+     * Load services configuration from config center
      */
-    private void loadServicesFromNacos() {
+  private void loadServicesFromConfigCenter() {
         try {
-            GatewayServicesConfig config = nacosConfigManager.getConfig(servicesDataId, GatewayServicesConfig.class);
+            GatewayServicesConfig config = configCenterService.getConfig(servicesDataId, GatewayServicesConfig.class);
             if (config != null && config.getServices() != null) {
                 serviceCache.clear();
                 for (ServiceDefinition service : config.getServices()) {

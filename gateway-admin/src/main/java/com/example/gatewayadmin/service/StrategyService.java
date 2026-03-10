@@ -1,7 +1,7 @@
 package com.example.gatewayadmin.service;
 
-import com.example.gatewayadmin.config.GatewayAdminProperties;
-import com.example.gatewayadmin.config.NacosConfigManager;
+import com.example.gatewayadmin.center.ConfigCenterService;
+import com.example.gatewayadmin.properties.GatewayAdminProperties;
 import com.example.gatewayadmin.model.AuthConfig;
 import com.example.gatewayadmin.model.GatewayPluginsConfig;
 import com.example.gatewayadmin.model.PluginConfig;
@@ -16,53 +16,55 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
- * Plugin configuration service
+ * Strategy configuration service.
+ * Manages all gateway strategy (plugin) configurations: rate limiter, IP filter,
+ * timeout, circuit breaker, and auth strategies.
  *
  * @author leoli
  */
 @Slf4j
 @Service
-public class PluginService {
+public class StrategyService {
 
     @Autowired
-    private NacosConfigManager nacosConfigManager;
+   private ConfigCenterService configCenterService;
 
     @Autowired
-    private GatewayAdminProperties properties;
+   private GatewayAdminProperties properties;
 
-    private String pluginsDataId;
-    private NacosPublisher publisher;
+   private String pluginsDataId;
+   private ConfigCenterPublisher publisher;
 
     // Local cache
-    private PluginConfig pluginCache = new PluginConfig();
+   private PluginConfig pluginCache = new PluginConfig();
 
     @PostConstruct
     public void init() {
         pluginsDataId = properties.getNacos().getDataIds().getPlugins();
-        publisher = new NacosPublisher(nacosConfigManager, pluginsDataId);
-        // Load initial config from Nacos
-        loadPluginsFromNacos();
+        publisher= new ConfigCenterPublisher(configCenterService, pluginsDataId);
+        // Load initial config from config center
+        loadPluginsFromConfigCenter();
     }
 
     /**
      * Get all plugin configurations.
-     * Reloads from Nacos on cache miss.
+     * Reloads from config center on cache miss.
      */
     public PluginConfig getAllPlugins() {
-        if (pluginCache == null || pluginCache.getRateLimiters() == null) {
-            log.info("Plugin cache is empty, reloading from Nacos");
-            loadPluginsFromNacos();
+      if (pluginCache == null || pluginCache.getRateLimiters() == null) {
+            log.info("Strategy cache is empty, reloading from config center");
+            loadPluginsFromConfigCenter();
         }
-        return pluginCache;
+      return pluginCache;
     }
 
     /**
-     * Force refresh cache from Nacos
+     * Force refresh cache from config center
      */
     public PluginConfig refreshFromNacos() {
-        log.info("Force refreshing plugins from Nacos");
-        loadPluginsFromNacos();
-        return pluginCache;
+        log.info("Force refreshing strategies from config center");
+        loadPluginsFromConfigCenter();
+      return pluginCache;
     }
 
     /**
@@ -78,21 +80,38 @@ public class PluginService {
     public List<PluginConfig.IPFilterConfig> getAllIPFilters() {
         return pluginCache.getIpFilters();
     }
-    
+
     /**
      * Get all timeout configurations
      */
     public List<PluginConfig.TimeoutConfig> getAllTimeouts() {
         return pluginCache.getTimeouts();
     }
-    
+
+    /**
+     * Get all circuit breaker configurations
+     */
+    public List<PluginConfig.CircuitBreakerConfig> getAllCircuitBreakers() {
+        return pluginCache.getCircuitBreakers();
+    }
+
+    /**
+     * Get circuit breaker configuration by route ID
+     */
+    public PluginConfig.CircuitBreakerConfig getCircuitBreakerByRoute(String routeId) {
+        return pluginCache.getCircuitBreakers().stream()
+                .filter(c -> routeId.equals(c.getRouteId()) && c.isEnabled())
+                .findFirst()
+                .orElse(null);
+    }
+
     /**
      * Get all authentication configurations
      */
     public List<AuthConfig> getAllAuthConfigs() {
         return pluginCache.getAuthConfigs();
     }
-    
+
     /**
      * Get authentication configuration by route ID
      */
@@ -102,7 +121,7 @@ public class PluginService {
                 .findFirst()
                 .orElse(null);
     }
-    
+
     /**
      * Get IP filter configuration by route ID
      */
@@ -124,6 +143,16 @@ public class PluginService {
     }
 
     /**
+     * Get timeout configuration by route ID
+     */
+    public PluginConfig.TimeoutConfig getTimeoutByRoute(String routeId) {
+        return pluginCache.getTimeouts().stream()
+                .filter(t -> routeId.equals(t.getRouteId()) && t.isEnabled())
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
      * Create rate limiter configuration
      */
     public boolean createRateLimiter(PluginConfig.RateLimiterConfig config) {
@@ -138,7 +167,6 @@ public class PluginService {
                 .findFirst();
 
         if (existing.isPresent()) {
-            // Update
             pluginCache.getRateLimiters().remove(existing.get());
         }
 
@@ -157,12 +185,10 @@ public class PluginService {
 
         config.setRouteId(routeId);
 
-        // Remove old entry
         pluginCache.setRateLimiters(pluginCache.getRateLimiters().stream()
                 .filter(r -> !routeId.equals(r.getRouteId()))
                 .collect(Collectors.toList()));
 
-        // Add new entry
         pluginCache.getRateLimiters().add(config);
         return publisher.publish(new GatewayPluginsConfig(pluginCache));
     }
@@ -180,13 +206,11 @@ public class PluginService {
                 .filter(r -> !routeId.equals(r.getRouteId()))
                 .collect(Collectors.toList()));
 
-        // If all plugin lists are empty, remove config from Nacos
-        if (pluginCache.getRateLimiters().isEmpty() && pluginCache.getIpFilters().isEmpty() && pluginCache.getTimeouts().isEmpty()) {
-            log.info("No plugins left, removing config from Nacos: {}", pluginsDataId);
+        if (isAllPluginsEmpty()) {
+            log.info("No strategies left, removing config from Nacos: {}", pluginsDataId);
             return publisher.remove();
         }
 
-        // Otherwise publish updated config
         boolean result = publisher.publish(new GatewayPluginsConfig(pluginCache));
         if (result) {
             log.info("Successfully deleted rate limiter '{}' and published to Nacos", routeId);
@@ -207,13 +231,11 @@ public class PluginService {
             return false;
         }
 
-        // Check if already exists
         Optional<PluginConfig.IPFilterConfig> existing = pluginCache.getIpFilters().stream()
                 .filter(f -> config.getRouteId().equals(f.getRouteId()))
                 .findFirst();
 
         if (existing.isPresent()) {
-            // Update
             pluginCache.getIpFilters().remove(existing.get());
         }
 
@@ -232,12 +254,10 @@ public class PluginService {
 
         config.setRouteId(routeId);
 
-        // Remove old entry
         pluginCache.setIpFilters(pluginCache.getIpFilters().stream()
                 .filter(f -> !routeId.equals(f.getRouteId()))
                 .collect(Collectors.toList()));
 
-        // Add new entry
         pluginCache.getIpFilters().add(config);
         return publisher.publish(new GatewayPluginsConfig(pluginCache));
     }
@@ -255,13 +275,11 @@ public class PluginService {
                 .filter(f -> !routeId.equals(f.getRouteId()))
                 .collect(Collectors.toList()));
 
-        // If cache is empty, remove config from Nacos directly
-        if (pluginCache.getRateLimiters().isEmpty() && pluginCache.getIpFilters().isEmpty() && pluginCache.getTimeouts().isEmpty()) {
-            log.info("No plugins left, removing config from Nacos: {}", pluginsDataId);
+        if (isAllPluginsEmpty()) {
+            log.info("No strategies left, removing config from Nacos: {}", pluginsDataId);
             return publisher.remove();
         }
 
-        // Otherwise publish updated config
         boolean result = publisher.publish(new GatewayPluginsConfig(pluginCache));
         if (result) {
             log.info("Successfully deleted IP filter '{}' and published to Nacos", routeId);
@@ -270,7 +288,7 @@ public class PluginService {
         }
         return result;
     }
-    
+
     /**
      * Create timeout configuration
      */
@@ -280,20 +298,18 @@ public class PluginService {
             return false;
         }
 
-        // Check if already exists
         Optional<PluginConfig.TimeoutConfig> existing = pluginCache.getTimeouts().stream()
                 .filter(t -> config.getRouteId().equals(t.getRouteId()))
                 .findFirst();
 
         if (existing.isPresent()) {
-            // Update
             pluginCache.getTimeouts().remove(existing.get());
         }
 
         pluginCache.getTimeouts().add(config);
         return publisher.publish(new GatewayPluginsConfig(pluginCache));
     }
-    
+
     /**
      * Update timeout configuration
      */
@@ -305,16 +321,14 @@ public class PluginService {
 
         config.setRouteId(routeId);
 
-        // Remove old entry
         pluginCache.setTimeouts(pluginCache.getTimeouts().stream()
                 .filter(t -> !routeId.equals(t.getRouteId()))
                 .collect(Collectors.toList()));
 
-        // Add new entry
         pluginCache.getTimeouts().add(config);
         return publisher.publish(new GatewayPluginsConfig(pluginCache));
     }
-    
+
     /**
      * Delete timeout configuration
      */
@@ -328,13 +342,11 @@ public class PluginService {
                 .filter(t -> !routeId.equals(t.getRouteId()))
                 .collect(Collectors.toList()));
 
-        // If cache is empty, remove config from Nacos directly
-        if (pluginCache.getRateLimiters().isEmpty() && pluginCache.getIpFilters().isEmpty() && pluginCache.getTimeouts().isEmpty()) {
-            log.info("No plugins left, removing config from Nacos: {}", pluginsDataId);
+        if (isAllPluginsEmpty()) {
+            log.info("No strategies left, removing config from Nacos: {}", pluginsDataId);
             return publisher.remove();
         }
 
-        // Otherwise publish updated config
         boolean result = publisher.publish(new GatewayPluginsConfig(pluginCache));
         if (result) {
             log.info("Successfully deleted timeout config '{}' and published to Nacos", routeId);
@@ -344,37 +356,106 @@ public class PluginService {
         return result;
     }
 
-    /**
-     * 更新限流配置
-     */
+    // ==================== Circuit Breaker CRUD ====================
 
     /**
-     * Batch update plugin configurations
+     * Create circuit breaker configuration
+     */
+    public boolean createCircuitBreaker(PluginConfig.CircuitBreakerConfig config) {
+        if (config == null || config.getRouteId() == null || config.getRouteId().isEmpty()) {
+            log.warn("Invalid circuit breaker config");
+            return false;
+        }
+
+        pluginCache.getCircuitBreakers().removeIf(c -> config.getRouteId().equals(c.getRouteId()));
+        pluginCache.getCircuitBreakers().add(config);
+        return publisher.publish(new GatewayPluginsConfig(pluginCache));
+    }
+
+    /**
+     * Update circuit breaker configuration
+     */
+    public boolean updateCircuitBreaker(String routeId, PluginConfig.CircuitBreakerConfig config) {
+        if (config == null || routeId == null || routeId.isEmpty()) {
+            log.warn("Invalid circuit breaker config");
+            return false;
+        }
+
+        config.setRouteId(routeId);
+
+        pluginCache.setCircuitBreakers(pluginCache.getCircuitBreakers().stream()
+                .filter(c -> !routeId.equals(c.getRouteId()))
+                .collect(Collectors.toList()));
+
+        pluginCache.getCircuitBreakers().add(config);
+        return publisher.publish(new GatewayPluginsConfig(pluginCache));
+    }
+
+    /**
+     * Delete circuit breaker configuration
+     */
+    public boolean deleteCircuitBreaker(String routeId) {
+        if (routeId == null || routeId.isEmpty()) {
+            return false;
+        }
+
+        log.info("Deleting circuit breaker config for route: {}", routeId);
+        pluginCache.setCircuitBreakers(pluginCache.getCircuitBreakers().stream()
+                .filter(c -> !routeId.equals(c.getRouteId()))
+                .collect(Collectors.toList()));
+
+        if (isAllPluginsEmpty()) {
+            log.info("No strategies left, removing config from Nacos: {}", pluginsDataId);
+            return publisher.remove();
+        }
+
+        boolean result = publisher.publish(new GatewayPluginsConfig(pluginCache));
+        if (result) {
+            log.info("Successfully deleted circuit breaker '{}' and published to Nacos", routeId);
+        } else {
+            log.error("Failed to publish circuit breaker deletion to Nacos for route: {}", routeId);
+        }
+        return result;
+    }
+
+    /**
+     * Batch update all strategy configurations
      */
     public boolean batchUpdatePlugins(PluginConfig plugins) {
         if (plugins == null) {
             return false;
         }
-
         this.pluginCache = plugins;
         return publisher.publish(new GatewayPluginsConfig(pluginCache));
     }
 
     /**
-     * Load plugin configuration from Nacos
+     * Check whether all strategy lists are empty.
+     * Used to decide whether to remove the Nacos config entirely.
      */
-    private void loadPluginsFromNacos() {
+    private boolean isAllPluginsEmpty() {
+        return pluginCache.getRateLimiters().isEmpty()
+                && pluginCache.getIpFilters().isEmpty()
+                && pluginCache.getTimeouts().isEmpty()
+                && pluginCache.getCircuitBreakers().isEmpty()
+                && pluginCache.getAuthConfigs().isEmpty();
+    }
+
+    /**
+     * Load strategy configuration from config center
+     */
+   private void loadPluginsFromConfigCenter() {
         try {
-            GatewayPluginsConfig config = nacosConfigManager.getConfig(pluginsDataId, GatewayPluginsConfig.class);
+            GatewayPluginsConfig config = configCenterService.getConfig(pluginsDataId, GatewayPluginsConfig.class);
             if (config != null && config.getPlugins() != null) {
                 this.pluginCache = config.getPlugins();
-                log.info("Loaded plugins config from Nacos: {} rate limiters", pluginCache.getRateLimiters().size());
+                log.info("Loaded strategy config from Nacos: {} rate limiters", pluginCache.getRateLimiters().size());
             } else {
-                log.info("No plugins config found in Nacos, using empty config");
+                log.info("No strategy config found in Nacos, using empty config");
                 this.pluginCache = new PluginConfig();
             }
         } catch (Exception e) {
-            log.error("Error loading plugins from Nacos", e);
+            log.error("Error loading strategies from Nacos", e);
             this.pluginCache = new PluginConfig();
         }
     }
@@ -386,17 +467,12 @@ public class PluginService {
         if (config == null || config.getRouteId() == null) {
             return false;
         }
-        
-        // Remove existing config for this route
         removeAuthConfig(config.getRouteId());
-        
-        // Add new config
         pluginCache.getAuthConfigs().add(config);
         log.info("Created auth config for route {}: type={}", config.getRouteId(), config.getAuthType());
-        
         return publisher.publish(new GatewayPluginsConfig(pluginCache));
     }
-    
+
     /**
      * Update an existing authentication configuration
      */
@@ -404,21 +480,21 @@ public class PluginService {
         if (config == null || config.getRouteId() == null) {
             return false;
         }
-        
+
         Optional<AuthConfig> existing = pluginCache.getAuthConfigs().stream()
                 .filter(a -> a.getRouteId().equals(config.getRouteId()))
                 .findFirst();
-        
+
         if (existing.isPresent()) {
             pluginCache.getAuthConfigs().remove(existing.get());
             pluginCache.getAuthConfigs().add(config);
             log.info("Updated auth config for route {}: type={}", config.getRouteId(), config.getAuthType());
             return publisher.publish(new GatewayPluginsConfig(pluginCache));
         }
-        
+
         return false;
     }
-    
+
     /**
      * Delete an authentication configuration
      */
@@ -433,37 +509,44 @@ public class PluginService {
         }
         return false;
     }
-    
+
     /**
-     * Get plugin statistics
+     * Get strategy statistics
      */
-    public PluginStats getPluginStats() {
-        PluginStats stats = new PluginStats();
+    public StrategyStats getStrategyStats() {
+        StrategyStats stats = new StrategyStats();
         stats.setRateLimiterCount(pluginCache.getRateLimiters().size());
         stats.setEnabledRateLimiters((int) pluginCache.getRateLimiters().stream()
-                .filter(PluginConfig.RateLimiterConfig::isEnabled)
-                .count());
+                .filter(PluginConfig.RateLimiterConfig::isEnabled).count());
         stats.setTimeoutCount(pluginCache.getTimeouts().size());
         stats.setEnabledTimeouts((int) pluginCache.getTimeouts().stream()
-                .filter(PluginConfig.TimeoutConfig::isEnabled)
-                .count());
+                .filter(PluginConfig.TimeoutConfig::isEnabled).count());
         stats.setAuthCount(pluginCache.getAuthConfigs().size());
         stats.setEnabledAuths((int) pluginCache.getAuthConfigs().stream()
-                .filter(AuthConfig::isEnabled)
-                .count());
+                .filter(AuthConfig::isEnabled).count());
+        stats.setCircuitBreakerCount(pluginCache.getCircuitBreakers().size());
+        stats.setEnabledCircuitBreakers((int) pluginCache.getCircuitBreakers().stream()
+                .filter(PluginConfig.CircuitBreakerConfig::isEnabled).count());
+        stats.setIpFilterCount(pluginCache.getIpFilters().size());
+        stats.setEnabledIpFilters((int) pluginCache.getIpFilters().stream()
+                .filter(PluginConfig.IPFilterConfig::isEnabled).count());
         return stats;
     }
 
     /**
-     * Plugin statistics
+     * Strategy statistics
      */
     @Data
-    public static class PluginStats {
+    public static class StrategyStats {
         private int rateLimiterCount;
         private int enabledRateLimiters;
         private int timeoutCount;
         private int enabledTimeouts;
         private int authCount;
         private int enabledAuths;
+        private int circuitBreakerCount;
+        private int enabledCircuitBreakers;
+        private int ipFilterCount;
+        private int enabledIpFilters;
     }
 }

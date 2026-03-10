@@ -1,11 +1,15 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gateway Admin - Console</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -14,19 +18,37 @@
             padding: 20px;
         }
 
-        .container { max-width: 1300px; margin: 0 auto; }
+        .container {
+            max-width: 1300px;
+            margin: 0 auto;
+        }
 
         /* Header */
         .header {
             background: white;
             padding: 28px 36px;
             border-radius: 12px;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
             margin-bottom: 20px;
         }
-        .header-top { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
-        .header h1 { color: #667eea; font-size: 28px; }
-        .header .subtitle { color: #888; font-size: 14px; margin-top: 4px; }
+
+        .header-top {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .header h1 {
+            color: #667eea;
+            font-size: 28px;
+        }
+
+        .header .subtitle {
+            color: #888;
+            font-size: 14px;
+            margin-top: 4px;
+        }
 
         /* Guide Steps */
         .guide {
@@ -37,6 +59,7 @@
             border-radius: 8px;
             padding: 12px 20px;
         }
+
         .guide-step {
             display: flex;
             align-items: center;
@@ -48,25 +71,54 @@
             color: #555;
             font-size: 14px;
         }
-        .guide-step:hover { background: #e0dbff; }
-        .guide-step.active { background: #667eea; color: white; font-weight: 600; }
+
+        .guide-step:hover {
+            background: #e0dbff;
+        }
+
+        .guide-step.active {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+        }
+
         .guide-step .step-num {
-            width: 22px; height: 22px;
-            background: rgba(102,126,234,0.2);
+            width: 22px;
+            height: 22px;
+            background: rgba(102, 126, 234, 0.2);
             border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 12px; font-weight: bold; color: #667eea;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            color: #667eea;
             flex-shrink: 0;
         }
-        .guide-step.active .step-num { background: rgba(255,255,255,0.3); color: white; }
-        .guide-arrow { color: #bbb; font-size: 18px; padding: 0 4px; user-select: none; }
+
+        .guide-step.active .step-num {
+            background: rgba(255, 255, 255, 0.3);
+            color: white;
+        }
+
+        .guide-arrow {
+            color: #bbb;
+            font-size: 18px;
+            padding: 0 4px;
+            user-select: none;
+        }
 
         /* Tabs */
-        .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
         .tab-btn {
             padding: 10px 24px;
-            background: rgba(255,255,255,0.2);
-            border: 2px solid rgba(255,255,255,0.3);
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.3);
             border-radius: 8px;
             color: white;
             cursor: pointer;
@@ -74,20 +126,37 @@
             font-weight: 500;
             transition: all 0.2s;
         }
-        .tab-btn:hover { background: rgba(255,255,255,0.35); }
-        .tab-btn.active { background: white; color: #667eea; border-color: white; font-weight: 700; }
+
+        .tab-btn:hover {
+            background: rgba(255, 255, 255, 0.35);
+        }
+
+        .tab-btn.active {
+            background: white;
+            color: #667eea;
+            border-color: white;
+            font-weight: 700;
+        }
 
         /* Panel */
-        .panel { display: none; }
-        .panel.active { display: grid; grid-template-columns: 420px 1fr; gap: 20px; }
+        .panel {
+            display: none;
+        }
+
+        .panel.active {
+            display: grid;
+            grid-template-columns: 420px 1fr;
+            gap: 20px;
+        }
 
         /* Cards */
         .card {
             background: white;
             border-radius: 12px;
             padding: 28px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
         }
+
         .card h3 {
             color: #333;
             font-size: 18px;
@@ -98,10 +167,16 @@
             align-items: center;
             gap: 8px;
         }
-        .card h3 .icon { font-size: 20px; }
+
+        .card h3 .icon {
+            font-size: 20px;
+        }
 
         /* Form */
-        .form-group { margin-bottom: 16px; }
+        .form-group {
+            margin-bottom: 16px;
+        }
+
         .form-group label {
             display: block;
             margin-bottom: 6px;
@@ -109,7 +184,12 @@
             font-size: 13px;
             font-weight: 600;
         }
-        .form-group label .required { color: #e74c3c; margin-left: 2px; }
+
+        .form-group label .required {
+            color: #e74c3c;
+            margin-left: 2px;
+        }
+
         .form-group input,
         .form-group select,
         .form-group textarea {
@@ -121,42 +201,65 @@
             transition: border-color 0.2s;
             background: white;
         }
+
         .form-group input:focus,
         .form-group select:focus,
         .form-group textarea:focus {
             outline: none;
             border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
-        .form-group textarea { resize: vertical; min-height: 70px; }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 70px;
+        }
 
         /* Dynamic rows */
-        .dynamic-list { margin-top: 8px; }
+        .dynamic-list {
+            margin-top: 8px;
+        }
+
         .dynamic-row {
             display: grid;
             gap: 8px;
             margin-bottom: 8px;
             align-items: center;
         }
-        .dynamic-row.instance-row { grid-template-columns: 1fr 90px 80px 32px; }
-        .dynamic-row.kv-row { grid-template-columns: 1fr 1fr 32px; }
+
+        .dynamic-row.instance-row {
+            grid-template-columns: 1fr 90px 80px 32px;
+        }
+
+        .dynamic-row.kv-row {
+            grid-template-columns: 1fr 1fr 32px;
+        }
+
         .dynamic-row input, .dynamic-row select {
             padding: 7px 10px;
             border: 1.5px solid #e0e0e0;
             border-radius: 5px;
             font-size: 13px;
         }
+
         .btn-remove {
-            width: 32px; height: 32px;
+            width: 32px;
+            height: 32px;
             background: #fff0f0;
             border: 1px solid #ffcdd2;
             border-radius: 5px;
             color: #e74c3c;
             cursor: pointer;
             font-size: 16px;
-            display: flex; align-items: center; justify-content: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        .btn-remove:hover { background: #ffebee; }
+
+        .btn-remove:hover {
+            background: #ffebee;
+        }
+
         .btn-add {
             padding: 6px 14px;
             background: #f0fff4;
@@ -167,7 +270,10 @@
             font-size: 13px;
             margin-top: 4px;
         }
-        .btn-add:hover { background: #e6f9ec; }
+
+        .btn-add:hover {
+            background: #e6f9ec;
+        }
 
         /* Buttons */
         .btn-primary {
@@ -183,13 +289,21 @@
             transition: all 0.2s;
             margin-top: 4px;
         }
-        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102,126,234,0.4); }
-        .btn-primary:active { transform: translateY(0); }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
 
         /* Toast */
         .toast {
             position: fixed;
-            top: 24px; right: 24px;
+            top: 24px;
+            right: 24px;
             padding: 12px 20px;
             border-radius: 8px;
             color: white;
@@ -199,11 +313,27 @@
             display: none;
             animation: slideIn 0.3s ease;
             max-width: 340px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
-        .toast.success { background: #27ae60; }
-        .toast.error { background: #e74c3c; }
-        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+        .toast.success {
+            background: #27ae60;
+        }
+
+        .toast.error {
+            background: #e74c3c;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
 
         /* List Panel */
         .list-header {
@@ -212,12 +342,18 @@
             align-items: center;
             margin-bottom: 16px;
         }
+
         .list-header h3 {
             color: #333;
             font-size: 18px;
-            display: flex; align-items: center; gap: 8px;
-            border: none; padding: 0; margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: none;
+            padding: 0;
+            margin: 0;
         }
+
         .badge {
             background: #667eea;
             color: white;
@@ -226,6 +362,7 @@
             font-size: 12px;
             font-weight: 600;
         }
+
         .btn-refresh {
             padding: 6px 14px;
             background: #f5f3ff;
@@ -235,7 +372,10 @@
             cursor: pointer;
             font-size: 13px;
         }
-        .btn-refresh:hover { background: #ede9ff; }
+
+        .btn-refresh:hover {
+            background: #ede9ff;
+        }
 
         /* Item Cards */
         .item-card {
@@ -245,14 +385,25 @@
             margin-bottom: 10px;
             transition: border-color 0.2s, box-shadow 0.2s;
         }
-        .item-card:hover { border-color: #c5b8ff; box-shadow: 0 2px 8px rgba(102,126,234,0.1); }
+
+        .item-card:hover {
+            border-color: #c5b8ff;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+        }
+
         .item-card-header {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
             margin-bottom: 8px;
         }
-        .item-name { font-weight: 700; color: #333; font-size: 15px; }
+
+        .item-name {
+            font-weight: 700;
+            color: #333;
+            font-size: 15px;
+        }
+
         .item-tag {
             display: inline-block;
             padding: 2px 8px;
@@ -261,12 +412,38 @@
             font-weight: 600;
             margin-left: 6px;
         }
-        .tag-blue { background: #e3f2fd; color: #1565c0; }
-        .tag-green { background: #e8f5e9; color: #2e7d32; }
-        .tag-orange { background: #fff3e0; color: #e65100; }
-        .tag-purple { background: #f3e5f5; color: #6a1b9a; }
-        .item-meta { font-size: 12px; color: #888; margin-top: 4px; }
-        .item-actions { display: flex; gap: 6px; }
+
+        .tag-blue {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+
+        .tag-green {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .tag-orange {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        .tag-purple {
+            background: #f3e5f5;
+            color: #6a1b9a;
+        }
+
+        .item-meta {
+            font-size: 12px;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        .item-actions {
+            display: flex;
+            gap: 6px;
+        }
+
         .btn-del {
             padding: 4px 10px;
             background: #fff0f0;
@@ -276,7 +453,10 @@
             cursor: pointer;
             font-size: 12px;
         }
-        .btn-del:hover { background: #ffebee; }
+
+        .btn-del:hover {
+            background: #ffebee;
+        }
 
         .empty-tip {
             text-align: center;
@@ -284,13 +464,24 @@
             color: #bbb;
             font-size: 14px;
         }
-        .empty-tip .empty-icon { font-size: 36px; margin-bottom: 8px; }
+
+        .empty-tip .empty-icon {
+            font-size: 36px;
+            margin-bottom: 8px;
+        }
 
         /* Form row */
-        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
 
         /* Plugin sections */
-        .plugin-section { margin-bottom: 28px; }
+        .plugin-section {
+            margin-bottom: 28px;
+        }
+
         .plugin-section-title {
             font-size: 15px;
             font-weight: 700;
@@ -300,6 +491,7 @@
             align-items: center;
             gap: 6px;
         }
+
         .plugin-section-subtitle {
             font-size: 13px;
             font-weight: 600;
@@ -308,7 +500,12 @@
             padding-bottom: 4px;
             border-bottom: 1px solid #eee;
         }
-        .divider { border: none; border-top: 1.5px dashed #e8e8e8; margin: 24px 0; }
+
+        .divider {
+            border: none;
+            border-top: 1.5px dashed #e8e8e8;
+            margin: 24px 0;
+        }
     </style>
 </head>
 <body>
@@ -334,7 +531,7 @@
             </div>
             <span class="guide-arrow">→</span>
             <div class="guide-step" id="guide-3" onclick="switchTab('plugins')">
-                <span class="step-num">3</span> Create Plugin
+                <span class="step-num">3</span> Config Strategies
             </div>
         </div>
     </div>
@@ -343,7 +540,7 @@
     <div class="tabs">
         <button class="tab-btn" id="tab-services" onclick="switchTab('services')">Services</button>
         <button class="tab-btn" id="tab-routes" onclick="switchTab('routes')">Routes</button>
-        <button class="tab-btn" id="tab-plugins" onclick="switchTab('plugins')">Plugins</button>
+        <button class="tab-btn" id="tab-plugins" onclick="switchTab('plugins')">Strategies</button>
     </div>
 
     <!-- ======== SERVICES PANEL ======== -->
@@ -364,7 +561,8 @@
                         <option value="weighted" selected>Weighted (recommended)</option>
                         <option value="least-connections">Least Connections</option>
                     </select>
-                    <small style="color:#999;margin-top:4px;display:block;">All strategies support instance weights. Round-robin distributes by weight ratio, random uses weight as probability.</small>
+                    <small style="color:#999;margin-top:4px;display:block;">All strategies support instance weights.
+                        Round-robin distributes by weight ratio, random uses weight as probability.</small>
                 </div>
                 <div class="form-group">
                     <label>Service Instances</label>
@@ -435,7 +633,8 @@
                 </div>
                 <div class="form-group">
                     <label>Predicates <span class="required">*</span></label>
-                    <small style="color:#667eea;display:block;margin-bottom:8px;">⚠️ At least one Path predicate is required. Multiple Path predicates are supported (OR logic).</small>
+                    <small style="color:#667eea;display:block;margin-bottom:8px;">⚠️ At least one Path predicate is
+                        required. Multiple Path predicates are supported (OR logic).</small>
                     <div class="dynamic-list" id="predicates-list"></div>
                     <button type="button" class="btn-add" onclick="addPredicate()">+ Add Predicate</button>
                 </div>
@@ -462,7 +661,7 @@
         <!-- Left: Form -->
         <div class="card">
             <div class="plugin-section">
-                <div class="plugin-section-title">🚦 Rate Limiter Plugin</div>
+                <div class="plugin-section-title">🚦 Rate Limiter Strategy</div>
                 <form id="rlForm" onsubmit="submitRateLimiter(event)">
                     <div class="form-group">
                         <label>Associated Route <span class="required">*</span></label>
@@ -470,7 +669,7 @@
                             <option value="">-- Select a created route --</option>
                         </select>
                     </div>
-                    
+
                     <!-- Redis Global Rate Limiting -->
                     <div class="plugin-section-subtitle">Redis Global Rate Limiting</div>
                     <div class="form-row">
@@ -510,27 +709,28 @@
                             <input type="text" id="rl-key-prefix" value="rate_limit:" placeholder="rate_limit:">
                         </div>
                     </div>
-                    
+
                     <div class="form-group">
                         <label>
                             <input type="checkbox" id="rl-enabled" checked>
                             Enable Rate Limiting
                         </label>
                     </div>
-                    
+
                     <button type="submit" class="btn-primary">✓ Save Rate Limiter Config</button>
                 </form>
             </div>
 
-            <!-- IP Filter Plugin -->
+            <!-- IP Filter Strategy -->
             <div style="margin-top: 2rem;">
-                <h3 style="color:#667eea;margin-bottom:1rem;">🛡️ IP Filter Plugin</h3>
-                <form id="ipFilterForm" onsubmit="submitIPFilter(event)" style="background:#f8f9fa;padding:1.5rem;border-radius:8px;">
+                <h3 style="color:#667eea;margin-bottom:1rem;">🛡️ IP Filter Strategy</h3>
+                <form id="ipFilterForm" onsubmit="submitIPFilter(event)"
+                      style="background:#f8f9fa;padding:1.5rem;border-radius:8px;">
                     <div class="form-group">
                         <label>Route</label>
                         <select id="ip-route" required></select>
                     </div>
-                    
+
                     <div class="form-group">
                         <label>Mode</label>
                         <select id="ip-mode" onchange="toggleIPListHelp()" required>
@@ -538,35 +738,38 @@
                             <option value="whitelist">Whitelist (Allow only specified IPs)</option>
                         </select>
                     </div>
-                    
+
                     <div class="form-group">
                         <label>IP Addresses (one per line, supports CIDR)</label>
-                        <textarea id="ip-list" rows="6" placeholder="192.168.1.100&#10;10.0.0.0/8&#10;172.16.0.0/12" required></textarea>
-                        <small id="ip-help" style="color:#666;display:block;margin-top:0.5rem;">Example: 192.168.1.100 or 10.0.0.0/8</small>
+                        <textarea id="ip-list" rows="6" placeholder="192.168.1.100&#10;10.0.0.0/8&#10;172.16.0.0/12"
+                                  required></textarea>
+                        <small id="ip-help" style="color:#666;display:block;margin-top:0.5rem;">Example: 192.168.1.100
+                            or 10.0.0.0/8</small>
                     </div>
-                    
+
                     <div class="form-group">
                         <label>
                             <input type="checkbox" id="ip-enabled" checked>
                             Enable IP Filter
                         </label>
                     </div>
-                    
+
                     <button type="submit" class="btn-primary">✓ Save IP Filter Config</button>
                 </form>
             </div>
 
             <!-- Note: Custom Header Plugin removed - use SCG native AddRequestHeader filter instead -->
-            
-            <!-- Timeout Plugin -->
+
+            <!-- Timeout Strategy -->
             <div style="margin-top: 2rem;">
-                <h3 style="color:#667eea;margin-bottom:1rem;">⏱️ Timeout Plugin</h3>
-                <form id="timeoutForm" onsubmit="submitTimeout(event)" style="background:#f8f9fa;padding:1.5rem;border-radius:8px;">
+                <h3 style="color:#667eea;margin-bottom:1rem;">⏱️ Timeout Strategy</h3>
+                <form id="timeoutForm" onsubmit="submitTimeout(event)"
+                      style="background:#f8f9fa;padding:1.5rem;border-radius:8px;">
                     <div class="form-group">
                         <label>Route</label>
                         <select id="timeout-route" required></select>
                     </div>
-                    
+
                     <div class="form-row">
                         <div class="form-group">
                             <label>Connect Timeout (ms)</label>
@@ -574,7 +777,7 @@
                             <small>TCP 连接超时</small>
                         </div>
                     </div>
-                    
+
                     <div class="form-row">
                         <div class="form-group">
                             <label>Response Timeout (ms)</label>
@@ -582,15 +785,75 @@
                             <small>从发起请求到收到完整响应的总超时</small>
                         </div>
                     </div>
-                    
+
                     <div class="form-group">
                         <label>
                             <input type="checkbox" id="timeout-enabled" checked>
                             Enable Timeout
                         </label>
                     </div>
-                    
+
                     <button type="submit" class="btn-primary">✓ Save Timeout Config</button>
+                </form>
+            </div>
+
+            <!-- Circuit Breaker Strategy -->
+            <div style="margin-top: 2rem;">
+                <h3 style="color:#667eea;margin-bottom:1rem;">⚡ Circuit Breaker Strategy</h3>
+                <form id="cbForm" onsubmit="submitCircuitBreaker(event)"
+                      style="background:#f8f9fa;padding:1.5rem;border-radius:8px;">
+                    <div class="form-group">
+                        <label>Route <span class="required">*</span></label>
+                        <select id="cb-route" required></select>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Failure Rate Threshold (%)</label>
+                            <input type="number" id="cb-failure-rate" value="50" min="1" max="100" step="1" required>
+                            <small>Circuit opens when failure rate exceeds this %</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Wait Duration in Open State (ms)</label>
+                            <input type="number" id="cb-wait-duration" value="30000" min="1000" step="1000" required>
+                            <small>How long to stay open before trying half-open</small>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Sliding Window Size</label>
+                            <input type="number" id="cb-window-size" value="10" min="1" step="1">
+                            <small>Number of calls in sliding window</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Minimum Number of Calls</label>
+                            <input type="number" id="cb-min-calls" value="5" min="1" step="1">
+                            <small>Calls needed before calculating metrics</small>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Slow Call Duration Threshold (ms)</label>
+                            <input type="number" id="cb-slow-call-duration" value="60000" min="100" step="100">
+                            <small>Calls slower than this are counted as slow</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Slow Call Rate Threshold (%)</label>
+                            <input type="number" id="cb-slow-call-rate" value="80" min="1" max="100" step="1">
+                            <small>Circuit opens when slow call rate exceeds this %</small>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="cb-enabled" checked>
+                            Enable Circuit Breaker
+                        </label>
+                    </div>
+
+                    <button type="submit" class="btn-primary">✓ Save Circuit Breaker Config</button>
                 </form>
             </div>
         </div>
@@ -598,8 +861,8 @@
         <!-- Right: List -->
         <div class="card">
             <div class="list-header">
-                <h3><span class="icon">📋</span> Created Plugins</h3>
-                <button class="btn-refresh" onclick="loadPlugins()">↻ Refresh</button>
+                <h3><span class="icon">📋</span> Configured Strategies</h3>
+                <button class="btn-refresh" onclick="loadStrategies()">↻ Refresh</button>
             </div>
             <div id="plugins-list"></div>
         </div>
@@ -611,577 +874,604 @@
 <div id="toast" class="toast"></div>
 
 <script>
-// ======== State ========
-let services = [];
-let routes = [];
-let instanceSeq = 0;
-let predicateSeq = 0;
-let filterSeq = 0;
+    // ======== State ========
+    let services = [];
+    let routes = [];
+    let instanceSeq = 0;
+    let predicateSeq = 0;
+    let filterSeq = 0;
 
-// ======== Toast ========
-function toast(msg, type = 'success') {
-    const el = document.getElementById('toast');
-    el.textContent = (type === 'success' ? '✓ ' : '✗ ') + msg;
-    el.className = 'toast ' + type;
-    el.style.display = 'block';
-    clearTimeout(el._t);
-    el._t = setTimeout(() => el.style.display = 'none', 3000);
-}
-
-// ======== Tab Switch ========
-function switchTab(tab) {
-    ['services', 'routes', 'plugins'].forEach(t => {
-        document.getElementById(t + '-panel').classList.remove('active');
-        document.getElementById('tab-' + t).classList.remove('active');
-        document.getElementById('guide-' + ({'services':1,'routes':2,'plugins':3}[t])).classList.remove('active');
-    });
-    document.getElementById(tab + '-panel').classList.add('active');
-    document.getElementById('tab-' + tab).classList.add('active');
-    document.getElementById('guide-' + ({'services':1,'routes':2,'plugins':3}[tab])).classList.add('active');
-
-    if (tab === 'services') loadServices();
-    if (tab === 'routes') { loadRoutes(); refreshServiceDropdowns(); }
-    if (tab === 'plugins') { loadPlugins(); refreshRouteDropdowns(); refreshServiceDropdowns(); }
-}
-
-// ======== Dropdown Refresh ========
-function refreshServiceDropdowns() {
-    const selects = ['rt-service', 'lb-service'];
-    selects.forEach(id => {
-        const sel = document.getElementById(id);
-        if (!sel) return;
-        const cur = sel.value;
-        sel.innerHTML = '<option value="">-- Select a created service --</option>';
-        services.forEach(s => {
-            sel.innerHTML += `<option value="${s.name}">${s.name} (${s.loadBalancer})</option>`;
-        });
-        if (cur) sel.value = cur;
-    });
-}
-
-function refreshRouteDropdowns() {
-    const routeIds = ['rl-route', 'ip-route', 'timeout-route'];
-    routeIds.forEach(id => {
-        const sel = document.getElementById(id);
-        if (!sel) return;
-        const cur = sel.value;
-        sel.innerHTML = '<option value="">-- Select a created route --</option>';
-        routes.forEach(r => {
-            sel.innerHTML += `<option value="${r.id}">${r.id} → ${r.uri}</option>`;
-        });
-        if (cur) sel.value = cur;
-    });
-}
-
-function onServiceSelect() {
-    const val = document.getElementById('rt-service').value;
-    if (val) document.getElementById('rt-uri').value = 'static://' + val;
-}
-
-function onUriTypeChange() {
-    const type = document.querySelector('input[name="rt-type"]:checked').value;
-    const staticGroup = document.getElementById('rt-static-group');
-    const discoveryGroup = document.getElementById('rt-discovery-group');
-    document.getElementById('rt-uri').value = '';
-    if (type === 'static') {
-        staticGroup.style.display = 'block';
-        discoveryGroup.style.display = 'none';
-        // 触发一次以更新 uri
-        onStaticServiceSelect();
-    } else {
-        staticGroup.style.display = 'none';
-        discoveryGroup.style.display = 'block';
-        loadNacosDiscoveryServices();
+    // ======== Toast ========
+    function toast(msg, type = 'success') {
+        const el = document.getElementById('toast');
+        el.textContent = (type === 'success' ? '✓ ' : '✗ ') + msg;
+        el.className = 'toast ' + type;
+        el.style.display = 'block';
+        clearTimeout(el._t);
+        el._t = setTimeout(() => el.style.display = 'none', 3000);
     }
-}
 
-function onStaticServiceSelect() {
-    const val = document.getElementById('rt-service').value;
-    if (val) document.getElementById('rt-uri').value = 'static://' + val;
-    else document.getElementById('rt-uri').value = '';
-}
-
-function onDiscoveryServiceSelect() {
-    const val = document.getElementById('rt-nacos-service').value;
-    if (val) document.getElementById('rt-uri').value = 'lb://' + val;
-    else document.getElementById('rt-uri').value = '';
-}
-
-async function loadNacosDiscoveryServices() {
-    const sel = document.getElementById('rt-nacos-service');
-    sel.innerHTML = '<option value="">-- Loading... --</option>';
-    try {
-        const r = await fetch('/api/services/nacos-discovery');
-        const res = await r.json();
-        const list = res.data || [];
-        sel.innerHTML = '<option value="">-- Select Nacos registered service --</option>';
-        list.forEach(name => {
-            sel.innerHTML += `<option value="${name}">${name}</option>`;
+    // ======== Tab Switch ========
+    function switchTab(tab) {
+        ['services', 'routes', 'plugins'].forEach(t => {
+            document.getElementById(t + '-panel').classList.remove('active');
+            document.getElementById('tab-' + t).classList.remove('active');
+            document.getElementById('guide-' + ({
+                'services': 1,
+                'routes': 2,
+                'plugins': 3
+            }[t])).classList.remove('active');
         });
-    } catch(err) {
-        sel.innerHTML = '<option value="">-- Load failed --</option>';
-        console.error('Failed to load Nacos services', err);
+        document.getElementById(tab + '-panel').classList.add('active');
+        document.getElementById('tab-' + tab).classList.add('active');
+        document.getElementById('guide-' + ({'services': 1, 'routes': 2, 'plugins': 3}[tab])).classList.add('active');
+
+        if (tab === 'services') loadServices();
+        if (tab === 'routes') {
+            loadRoutes();
+            refreshServiceDropdowns();
+        }
+        if (tab === 'plugins') {
+            loadStrategies();
+            refreshRouteDropdowns();
+            refreshServiceDropdowns();
+        }
     }
-}
 
-function onKeyResolverChange() {
-    const v = document.getElementById('rl-key').value;
-    document.getElementById('rl-header-group').style.display = v === 'header' ? 'block' : 'none';
-}
-
-function toggleIPListHelp() {
-    const mode = document.getElementById('ip-mode').value;
-    const help = document.getElementById('ip-help');
-    if (mode === 'blacklist') {
-        help.textContent = 'Blacklist mode: These IPs will be BLOCKED. Example: 192.168.1.100 or 10.0.0.0/8';
-    } else {
-        help.textContent = 'Whitelist mode: Only these IPs will be ALLOWED. Example: 192.168.1.100 or 10.0.0.0/8';
+    // ======== Dropdown Refresh ========
+    function refreshServiceDropdowns() {
+        const selects = ['rt-service', 'lb-service'];
+        selects.forEach(id => {
+            const sel = document.getElementById(id);
+            if (!sel) return;
+            const cur = sel.value;
+            sel.innerHTML = '<option value="">-- Select a created service --</option>';
+            services.forEach(s => {
+                sel.innerHTML += `<option value="${s.name}">${s.name} (${s.loadBalancer})</option>`;
+            });
+            if (cur) sel.value = cur;
+        });
     }
-}
 
-// ======== Instance Rows ========
-function addInstance(ip='', port='8080', weight='1') {
-    instanceSeq++;
-    const id = instanceSeq;
-    const row = document.createElement('div');
-    row.className = 'dynamic-row instance-row';
-    row.id = 'inst-' + id;
-    row.innerHTML = `
+    function refreshRouteDropdowns() {
+        const routeIds = ['rl-route', 'ip-route', 'timeout-route', 'cb-route'];
+        routeIds.forEach(id => {
+            const sel = document.getElementById(id);
+            if (!sel) return;
+            const cur = sel.value;
+            sel.innerHTML = '<option value="">-- Select a created route --</option>';
+            routes.forEach(r => {
+                sel.innerHTML += `<option value="${r.id}">${r.id} → ${r.uri}</option>`;
+            });
+            if (cur) sel.value = cur;
+        });
+    }
+
+    function onServiceSelect() {
+        const val = document.getElementById('rt-service').value;
+        if (val) document.getElementById('rt-uri').value = 'static://' + val;
+    }
+
+    function onUriTypeChange() {
+        const type = document.querySelector('input[name="rt-type"]:checked').value;
+        const staticGroup = document.getElementById('rt-static-group');
+        const discoveryGroup = document.getElementById('rt-discovery-group');
+        document.getElementById('rt-uri').value = '';
+        if (type === 'static') {
+            staticGroup.style.display = 'block';
+            discoveryGroup.style.display = 'none';
+            // 触发一次以更新 uri
+            onStaticServiceSelect();
+        } else {
+            staticGroup.style.display = 'none';
+            discoveryGroup.style.display = 'block';
+            loadNacosDiscoveryServices();
+        }
+    }
+
+    function onStaticServiceSelect() {
+        const val = document.getElementById('rt-service').value;
+        if (val) document.getElementById('rt-uri').value = 'static://' + val;
+        else document.getElementById('rt-uri').value = '';
+    }
+
+    function onDiscoveryServiceSelect() {
+        const val = document.getElementById('rt-nacos-service').value;
+        if (val) document.getElementById('rt-uri').value = 'lb://' + val;
+        else document.getElementById('rt-uri').value = '';
+    }
+
+    async function loadNacosDiscoveryServices() {
+        const sel = document.getElementById('rt-nacos-service');
+        sel.innerHTML = '<option value="">-- Loading... --</option>';
+        try {
+            const r = await fetch('/api/services/nacos-discovery');
+            const res = await r.json();
+            const list = res.data || [];
+            sel.innerHTML = '<option value="">-- Select Nacos registered service --</option>';
+            list.forEach(name => {
+                sel.innerHTML += `<option value="${name}">${name}</option>`;
+            });
+        } catch (err) {
+            sel.innerHTML = '<option value="">-- Load failed --</option>';
+            console.error('Failed to load Nacos services', err);
+        }
+    }
+
+    function onKeyResolverChange() {
+        const v = document.getElementById('rl-key').value;
+        document.getElementById('rl-header-group').style.display = v === 'header' ? 'block' : 'none';
+    }
+
+    function toggleIPListHelp() {
+        const mode = document.getElementById('ip-mode').value;
+        const help = document.getElementById('ip-help');
+        if (mode === 'blacklist') {
+            help.textContent = 'Blacklist mode: These IPs will be BLOCKED. Example: 192.168.1.100 or 10.0.0.0/8';
+        } else {
+            help.textContent = 'Whitelist mode: Only these IPs will be ALLOWED. Example: 192.168.1.100 or 10.0.0.0/8';
+        }
+    }
+
+    // ======== Instance Rows ========
+    function addInstance(ip = '', port = '8080', weight = '1') {
+        instanceSeq++;
+        const id = instanceSeq;
+        const row = document.createElement('div');
+        row.className = 'dynamic-row instance-row';
+        row.id = 'inst-' + id;
+        row.innerHTML = `
         <input type="text" placeholder="IP Address" value="${ip}" data-field="ip">
         <input type="number" placeholder="Port" value="${port}" data-field="port">
         <input type="number" placeholder="Weight" value="${weight}" min="1" data-field="weight">
         <button type="button" class="btn-remove" onclick="document.getElementById('inst-${id}').remove()">×</button>
     `;
-    document.getElementById('instances-list').appendChild(row);
-}
-
-function getInstances() {
-    const rows = document.querySelectorAll('#instances-list .instance-row');
-    return Array.from(rows).map(row => ({
-        ip: row.querySelector('[data-field=ip]').value,
-        port: parseInt(row.querySelector('[data-field=port]').value) || 8080,
-        weight: parseInt(row.querySelector('[data-field=weight]').value) || 1
-    })).filter(i => i.ip);
-}
-
-// ======== Predicate Rows ========
-const predicateConfig = {
-    'Path': { 
-        label: 'Path', 
-        placeholder: 'Pattern, e.g. /api/**', 
-        defaultValue: '/api/**',
-        inputType: 'text' 
-    },
-    'Host': { 
-        label: 'Host', 
-        placeholder: 'Hostname pattern, e.g. www.example.com', 
-        defaultValue: 'www.example.com',
-        inputType: 'text' 
-    },
-    'Method': { 
-        label: 'Method', 
-        placeholder: 'Select HTTP methods', 
-        defaultValue: 'GET',
-        inputType: 'select-multiple',
-        options: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
-    },
-    'Header': { 
-        label: 'Header', 
-        placeholder: 'HeaderName:Regexp', 
-        defaultValue: 'X-Api-Key:.*',
-        inputType: 'kv-pair'
+        document.getElementById('instances-list').appendChild(row);
     }
-};
-function addPredicate(name='Path', args='') {
-    predicateSeq++;
-    const id = predicateSeq;
-    const row = document.createElement('div');
-    row.className = 'dynamic-row kv-row';
-    row.id = 'pred-' + id;
-    
-    // Build predicate options
-    const predicateOptions = Object.keys(predicateConfig).map(key => 
-        `<option value="${key}" ${name===key?'selected':''}>${predicateConfig[key].label}</option>`
-    ).join('');
-    
-    // Get default args if not provided
-    if (!args) {
-        args = predicateConfig[name]?.defaultValue || '';
+
+    function getInstances() {
+        const rows = document.querySelectorAll('#instances-list .instance-row');
+        return Array.from(rows).map(row => ({
+            ip: row.querySelector('[data-field=ip]').value,
+            port: parseInt(row.querySelector('[data-field=port]').value) || 8080,
+            weight: parseInt(row.querySelector('[data-field=weight]').value) || 1
+        })).filter(i => i.ip);
     }
-    
-    // Generate input HTML based on type
-    let inputHtml = '';
-    const config = predicateConfig[name] || predicateConfig['Path'];
-    
-    if (config.inputType === 'select-multiple') {
-        // Method checkbox group
-        const methods = args.split(',').filter(m => m);
-        const checkboxHtml = config.options.map(opt => 
-            `<label style="display:inline-flex;align-items:center;margin-right:12px;font-size:13px;">` +
-            `<input type="checkbox" value="${opt}" ${methods.includes(opt)?'checked':''} data-field="method-chk" style="margin-right:4px;">` +
-            `${opt}` +
-            `</label>`
+
+    // ======== Predicate Rows ========
+    const predicateConfig = {
+        'Path': {
+            label: 'Path',
+            placeholder: 'Pattern, e.g. /api/**',
+            defaultValue: '/api/**',
+            inputType: 'text'
+        },
+        'Host': {
+            label: 'Host',
+            placeholder: 'Hostname pattern, e.g. www.example.com',
+            defaultValue: 'www.example.com',
+            inputType: 'text'
+        },
+        'Method': {
+            label: 'Method',
+            placeholder: 'Select HTTP methods',
+            defaultValue: 'GET',
+            inputType: 'select-multiple',
+            options: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
+        },
+        'Header': {
+            label: 'Header',
+            placeholder: 'HeaderName:Regexp',
+            defaultValue: 'X-Api-Key:.*',
+            inputType: 'kv-pair'
+        }
+    };
+
+    function addPredicate(name = 'Path', args = '') {
+        predicateSeq++;
+        const id = predicateSeq;
+        const row = document.createElement('div');
+        row.className = 'dynamic-row kv-row';
+        row.id = 'pred-' + id;
+
+        // Build predicate options
+        const predicateOptions = Object.keys(predicateConfig).map(key =>
+            `<option value="${key}" ${name === key ? 'selected' : ''}>${predicateConfig[key].label}</option>`
         ).join('');
-        inputHtml = `
+
+        // Get default args if not provided
+        if (!args) {
+            args = predicateConfig[name]?.defaultValue || '';
+        }
+
+        // Generate input HTML based on type
+        let inputHtml = '';
+        const config = predicateConfig[name] || predicateConfig['Path'];
+
+        if (config.inputType === 'select-multiple') {
+            // Method checkbox group
+            const methods = args.split(',').filter(m => m);
+            const checkboxHtml = config.options.map(opt =>
+                `<label style="display:inline-flex;align-items:center;margin-right:12px;font-size:13px;">` +
+                `<input type="checkbox" value="${opt}" ${methods.includes(opt) ? 'checked' : ''} data-field="method-chk" style="margin-right:4px;">` +
+                `${opt}` +
+                `</label>`
+            ).join('');
+            inputHtml = `
             <div style="display:flex;flex-wrap:wrap;gap:8px;padding:8px;background:#f8f9fa;border-radius:6px;">
                 ${checkboxHtml}
             </div>
         `;
-    } else if (config.inputType === 'kv-pair') {
-        // Header K/V input
-        let key = '', value = '';
-        if (args && args.includes(':')) {
-            const parts = args.split(':');
-            key = parts[0] || '';
-            value = parts.slice(1).join(':') || '';
-        }
-        inputHtml = `
+        } else if (config.inputType === 'kv-pair') {
+            // Header K/V input
+            let key = '', value = '';
+            if (args && args.includes(':')) {
+                const parts = args.split(':');
+                key = parts[0] || '';
+                value = parts.slice(1).join(':') || '';
+            }
+            inputHtml = `
             <div style="display:flex;gap:8px;flex:1;">
                 <input type="text" placeholder="Header Name" value="${key}" data-field="header-key" style="flex:1;min-width:120px;">
                 <input type="text" placeholder="Regexp Value" value="${value}" data-field="header-value" style="flex:1;min-width:120px;">
             </div>
         `;
-    } else {
-        // Default text input
-        inputHtml = `
+        } else {
+            // Default text input
+            inputHtml = `
             <input type="text" placeholder="${config.placeholder}" value="${args}" data-field="args" style="flex:1;">
         `;
-    }
-    
-    row.innerHTML = `
+        }
+
+        row.innerHTML = `
         <select data-field="name" onchange="onPredicateTypeChange(this)">
             ${predicateOptions}
         </select>
         ${inputHtml}
         <button type="button" class="btn-remove" onclick="document.getElementById('pred-${id}').remove()">×</button>
     `;
-    document.getElementById('predicates-list').appendChild(row);
-}
+        document.getElementById('predicates-list').appendChild(row);
+    }
 
-// Handle predicate type change to update input UI
-window.onPredicateTypeChange = function(select) {
-    const row = select.closest('.kv-row');
-    const predicateType = select.value;
-    const config = predicateConfig[predicateType];
-    
-    // Get the remove button first (we need to keep it)
-    const removeBtn = row.querySelector('.btn-remove');
-    
-    // Remove everything except the select and remove button
-    const allChildren = Array.from(row.children);
-    allChildren.forEach(child => {
-        if (child !== select && child !== removeBtn) {
-            child.remove();
-        }
-    });
-    
-    // Generate new input based on type
-    let inputHtml = '';
-    if (config.inputType === 'select-multiple') {
-        const checkboxHtml = config.options.map(opt => 
-            `<label style="display:inline-flex;align-items:center;margin-right:12px;font-size:13px;">` +
-            `<input type="checkbox" value="${opt}" data-field="method-chk" style="margin-right:4px;">` +
-            `${opt}` +
-            `</label>`
-        ).join('');
-        inputHtml = `
+    // Handle predicate type change to update input UI
+    window.onPredicateTypeChange = function (select) {
+        const row = select.closest('.kv-row');
+        const predicateType = select.value;
+        const config = predicateConfig[predicateType];
+
+        // Get the remove button first (we need to keep it)
+        const removeBtn = row.querySelector('.btn-remove');
+
+        // Remove everything except the select and remove button
+        const allChildren = Array.from(row.children);
+        allChildren.forEach(child => {
+            if (child !== select && child !== removeBtn) {
+                child.remove();
+            }
+        });
+
+        // Generate new input based on type
+        let inputHtml = '';
+        if (config.inputType === 'select-multiple') {
+            const checkboxHtml = config.options.map(opt =>
+                `<label style="display:inline-flex;align-items:center;margin-right:12px;font-size:13px;">` +
+                `<input type="checkbox" value="${opt}" data-field="method-chk" style="margin-right:4px;">` +
+                `${opt}` +
+                `</label>`
+            ).join('');
+            inputHtml = `
             <div style="display:flex;flex-wrap:wrap;gap:8px;padding:8px;background:#f8f9fa;border-radius:6px;">
                 ${checkboxHtml}
             </div>
         `;
-    } else if (config.inputType === 'kv-pair') {
-        inputHtml = `
+        } else if (config.inputType === 'kv-pair') {
+            inputHtml = `
             <div style="display:flex;gap:8px;flex:1;">
                 <input type="text" placeholder="Header Name" data-field="header-key" style="flex:1;min-width:120px;">
                 <input type="text" placeholder="Regexp Value" data-field="header-value" style="flex:1;min-width:120px;">
             </div>
         `;
-    } else {
-        inputHtml = `
+        } else {
+            inputHtml = `
             <input type="text" placeholder="${config.placeholder}" value="${config.defaultValue}" data-field="args" style="flex:1;">
         `;
-    }
-    
-    // Insert new input before remove button
-    select.insertAdjacentHTML('afterend', inputHtml);
-};
-
-function getPredicates() {
-    return Array.from(document.querySelectorAll('#predicates-list .kv-row')).map(row => {
-        const name = row.querySelector('[data-field=name]').value;
-        
-        // Parse args based on predicate type
-        let args = {};
-        if (name === 'Header') {
-            // Header predicate: use separate key/value inputs
-            const keyInput = row.querySelector('[data-field="header-key"]');
-            const valueInput = row.querySelector('[data-field="header-value"]');
-            const key = keyInput ? keyInput.value.trim() : '';
-            const value = valueInput ? valueInput.value.trim() : '';
-            
-            if (key && value) {
-                args = { name: key, regexp: value };
-            } else if (key) {
-                args = { name: key };
-            }
-        } else if (name === 'Method') {
-            // Method predicate: get checked checkboxes
-            const checkboxes = row.querySelectorAll('[data-field="method-chk"]');
-            const methods = Array.from(checkboxes).filter(chk => chk.checked).map(chk => chk.value);
-            args = { methods: methods };
-        } else {
-            // Path, Host and others: use pattern
-            const input = row.querySelector('[data-field="args"]');
-            const pattern = input ? input.value.trim() : '';
-            args = { pattern: pattern };
         }
-        
-        return {
-            name: name,
-            args: args
-        };
-    });
-}
 
-// ======== Filter Rows ========
-const filterConfig = {
-    'StripPrefix': { 
-        label: 'Strip Prefix', 
-        placeholder: 'Parts to strip (e.g., 1)', 
-        defaultValue: '1',
-        argsType: 'number' 
-    },
-    'AddRequestHeader': { 
-        label: 'Add Request Header', 
-        placeholder: 'HeaderName:HeaderValue', 
-        defaultValue: 'X-Forwarded-For:127.0.0.1',
-        argsType: 'text' 
-    },
-    'AddRequestParameter': { 
-        label: 'Add Request Parameter', 
-        placeholder: 'ParamName:ParamValue', 
-        defaultValue: 'tenantId:default',
-        argsType: 'text' 
-    },
-    'SetPath': { 
-        label: 'Set Path', 
-        placeholder: 'New path pattern (e.g., /new/path)', 
-        defaultValue: '/${segments}',
-        argsType: 'text' 
-    },
-    'RewritePath': { 
-        label: 'Rewrite Path', 
-        placeholder: 'Regexp,Replacement (e.g., /api/(?<segment>.*),/$\{segment})', 
-        defaultValue: '/api/(?<segment>.*),/$\{segment}',
-        argsType: 'text' 
-    },
-    'PrefixPath': { 
-        label: 'Prefix Path', 
-        placeholder: 'Path prefix (e.g., /api)', 
-        defaultValue: '/api',
-        argsType: 'text' 
-    },
-    'RemoveRequestHeader': { 
-        label: 'Remove Request Header', 
-        placeholder: 'Header name to remove', 
-        defaultValue: 'X-Bad-Header',
-        argsType: 'text' 
-    },
-    'RemoveResponseHeader': { 
-        label: 'Remove Response Header', 
-        placeholder: 'Header name to remove', 
-        defaultValue: 'X-Powered-By',
-        argsType: 'text' 
-    },
-    'SetRequestHeader': { 
-        label: 'Set Request Header', 
-        placeholder: 'HeaderName:HeaderValue', 
-        defaultValue: 'X-Request-Source:gateway',
-        argsType: 'text' 
-    },
-    'SetResponseHeader': { 
-        label: 'Set Response Header', 
-        placeholder: 'HeaderName:HeaderValue', 
-        defaultValue: 'X-Response-Time:${requestTime}',
-        argsType: 'text' 
-    },
-    'RedirectTo': { 
-        label: 'Redirect To', 
-        placeholder: 'Status code,URL (e.g., 302,https://example.com)', 
-        defaultValue: '302,https://example.com',
-        argsType: 'text' 
-    },
-    'Retry': { 
-        label: 'Retry', 
-        placeholder: 'Retries,HTTP statuses,Methods (e.g., 3,503,GET)', 
-        defaultValue: '3,503,GET',
-        argsType: 'text' 
-    },
-    'RequestSize': { 
-        label: 'Request Size', 
-        placeholder: 'Max size in bytes (e.g., 10MB)', 
-        defaultValue: '10MB',
-        argsType: 'text' 
-    },
-    'SecureHeaders': { 
-        label: 'Secure Headers', 
-        placeholder: 'Enable secure headers (true/false)', 
-        defaultValue: 'true',
-        argsType: 'boolean' 
-    }
-};
+        // Insert new input before remove button
+        select.insertAdjacentHTML('afterend', inputHtml);
+    };
 
-function addFilter(name='StripPrefix', args='') {
-    filterSeq++;
-    const id = filterSeq;
-    const row = document.createElement('div');
-    row.className = 'dynamic-row kv-row';
-    row.id = 'filt-' + id;
-    
-    // Build filter options
-    const filterOptions = Object.keys(filterConfig).map(key => 
-        `<option value="${key}" ${name===key?'selected':''}>${filterConfig[key].label}</option>`
-    ).join('');
-    
-    // Get default args if not provided
-    if (!args) {
-        args = filterConfig[name]?.defaultValue || '';
+    function getPredicates() {
+        return Array.from(document.querySelectorAll('#predicates-list .kv-row')).map(row => {
+            const name = row.querySelector('[data-field=name]').value;
+
+            // Parse args based on predicate type
+            let args = {};
+            if (name === 'Header') {
+                // Header predicate: use separate key/value inputs
+                const keyInput = row.querySelector('[data-field="header-key"]');
+                const valueInput = row.querySelector('[data-field="header-value"]');
+                const key = keyInput ? keyInput.value.trim() : '';
+                const value = valueInput ? valueInput.value.trim() : '';
+
+                if (key && value) {
+                    args = {name: key, regexp: value};
+                } else if (key) {
+                    args = {name: key};
+                }
+            } else if (name === 'Method') {
+                // Method predicate: get checked checkboxes
+                const checkboxes = row.querySelectorAll('[data-field="method-chk"]');
+                const methods = Array.from(checkboxes).filter(chk => chk.checked).map(chk => chk.value);
+                args = {methods: methods};
+            } else {
+                // Path, Host and others: use pattern
+                const input = row.querySelector('[data-field="args"]');
+                const pattern = input ? input.value.trim() : '';
+                args = {pattern: pattern};
+            }
+
+            return {
+                name: name,
+                args: args
+            };
+        });
     }
-    
-    // Get placeholder based on type
-    const placeholder = filterConfig[name]?.placeholder || 'Arguments';
-    
-    row.innerHTML = `
+
+    // ======== Filter Rows ========
+    const filterConfig = {
+        'StripPrefix': {
+            label: 'Strip Prefix',
+            placeholder: 'Parts to strip (e.g., 1)',
+            defaultValue: '1',
+            argsType: 'number'
+        },
+        'AddRequestHeader': {
+            label: 'Add Request Header',
+            placeholder: 'HeaderName:HeaderValue',
+            defaultValue: 'X-Forwarded-For:127.0.0.1',
+            argsType: 'text'
+        },
+        'AddRequestParameter': {
+            label: 'Add Request Parameter',
+            placeholder: 'ParamName:ParamValue',
+            defaultValue: 'tenantId:default',
+            argsType: 'text'
+        },
+        'SetPath': {
+            label: 'Set Path',
+            placeholder: 'New path pattern (e.g., /new/path)',
+            defaultValue: '/${segments}',
+            argsType: 'text'
+        },
+        'RewritePath': {
+            label: 'Rewrite Path',
+            placeholder: 'Regexp,Replacement (e.g., /api/(?<segment>.*),/$\{segment})',
+            defaultValue: '/api/(?<segment>.*),/$\{segment}',
+            argsType: 'text'
+        },
+        'PrefixPath': {
+            label: 'Prefix Path',
+            placeholder: 'Path prefix (e.g., /api)',
+            defaultValue: '/api',
+            argsType: 'text'
+        },
+        'RemoveRequestHeader': {
+            label: 'Remove Request Header',
+            placeholder: 'Header name to remove',
+            defaultValue: 'X-Bad-Header',
+            argsType: 'text'
+        },
+        'RemoveResponseHeader': {
+            label: 'Remove Response Header',
+            placeholder: 'Header name to remove',
+            defaultValue: 'X-Powered-By',
+            argsType: 'text'
+        },
+        'SetRequestHeader': {
+            label: 'Set Request Header',
+            placeholder: 'HeaderName:HeaderValue',
+            defaultValue: 'X-Request-Source:gateway',
+            argsType: 'text'
+        },
+        'SetResponseHeader': {
+            label: 'Set Response Header',
+            placeholder: 'HeaderName:HeaderValue',
+            defaultValue: 'X-Response-Time:${requestTime}',
+            argsType: 'text'
+        },
+        'RedirectTo': {
+            label: 'Redirect To',
+            placeholder: 'Status code,URL (e.g., 302,https://example.com)',
+            defaultValue: '302,https://example.com',
+            argsType: 'text'
+        },
+        'Retry': {
+            label: 'Retry',
+            placeholder: 'Retries,HTTP statuses,Methods (e.g., 3,503,GET)',
+            defaultValue: '3,503,GET',
+            argsType: 'text'
+        },
+        'RequestSize': {
+            label: 'Request Size',
+            placeholder: 'Max size in bytes (e.g., 10MB)',
+            defaultValue: '10MB',
+            argsType: 'text'
+        },
+        'SecureHeaders': {
+            label: 'Secure Headers',
+            placeholder: 'Enable secure headers (true/false)',
+            defaultValue: 'true',
+            argsType: 'boolean'
+        }
+    };
+
+    function addFilter(name = 'StripPrefix', args = '') {
+        filterSeq++;
+        const id = filterSeq;
+        const row = document.createElement('div');
+        row.className = 'dynamic-row kv-row';
+        row.id = 'filt-' + id;
+
+        // Build filter options
+        const filterOptions = Object.keys(filterConfig).map(key =>
+            `<option value="${key}" ${name === key ? 'selected' : ''}>${filterConfig[key].label}</option>`
+        ).join('');
+
+        // Get default args if not provided
+        if (!args) {
+            args = filterConfig[name]?.defaultValue || '';
+        }
+
+        // Get placeholder based on type
+        const placeholder = filterConfig[name]?.placeholder || 'Arguments';
+
+        row.innerHTML = `
         <select data-field="name" onchange="onFilterTypeChange(this)">
             ${filterOptions}
         </select>
         <input type="text" placeholder="${placeholder}" value="${args}" data-field="args">
         <button type="button" class="btn-remove" onclick="document.getElementById('filt-${id}').remove()">×</button>
     `;
-    document.getElementById('filters-list').appendChild(row);
-}
-
-// Handle filter type change to update placeholder and input type
-window.onFilterTypeChange = function(select) {
-    const row = select.closest('.kv-row');
-    const input = row.querySelector('[data-field=args]');
-    const filterType = select.value;
-    
-    const config = filterConfig[filterType];
-    if (config) {
-        input.placeholder = config.placeholder;
-        input.value = config.defaultValue || '';
+        document.getElementById('filters-list').appendChild(row);
     }
-};
 
-function getFilters() {
-    return Array.from(document.querySelectorAll('#filters-list .kv-row')).map(row => {
-        const n = row.querySelector('[data-field=name]').value;
-        const a = row.querySelector('[data-field=args]').value.trim();
-        let args = {};
-        
-        // Parse args based on filter type (matching SCG's Config class structure)
-        if (n === 'StripPrefix') {
-            // StripPrefixGatewayFilterFactory.Config.parts
-            args = { parts: parseInt(a) || 1 };
-        } else if (n === 'AddRequestHeader' || n === 'SetRequestHeader') {
-            // AddRequestHeaderGatewayFilterFactory.Config.name/value
-            const p = a.split(':');
-            args = { name: p[0]||'', value: p[1]||'' };
-        } else if (n === 'AddRequestParameter') {
-            // AddRequestParameterGatewayFilterFactory.Config.name/value
-            const p = a.split(':');
-            args = { name: p[0]||'', value: p[1]||'' };
-        } else if (n === 'RewritePath') {
-            // RewritePathGatewayFilterFactory.Config.regexp/replacement
-            const p = a.split(',');
-            args = { regexp: p[0]||'', replacement: p[1]||'' };
-        } else if (n === 'PrefixPath') {
-            // PrefixPathGatewayFilterFactory.Config.prefix
-            args = { prefix: a };
-        } else if (n === 'SetPath') {
-            // SetPathGatewayFilterFactory.Config.template
-            args = { template: a };
-        } else if (n === 'RemoveRequestHeader') {
-            // RemoveRequestHeaderGatewayFilterFactory.Config.name
-            args = { name: a };
-        } else if (n === 'RemoveResponseHeader') {
-            // RemoveResponseHeaderGatewayFilterFactory.Config.name
-            args = { name: a };
-        } else if (n === 'SetResponseHeader') {
-            // SetResponseHeaderGatewayFilterFactory.Config.name/value
-            const p = a.split(':');
-            args = { name: p[0]||'', value: p[1]||'' };
-        } else if (n === 'RedirectTo') {
-            // RedirectToGatewayFilterFactory.Config.status/url
-            const p = a.split(',');
-            args = { status: parseInt(p[0])||302, url: p[1]||'' };
-        } else if (n === 'Retry') {
-            // RetryGatewayFilterFactory.Config.retries/statuses/methods
-            const p = a.split(',');
-            args = { retries: parseInt(p[0])||3, statuses: p[1]?p[1].split(','):['503'], methods: p[2]?p[2].split(','):['GET'] };
-        } else if (n === 'RequestSize') {
-            // RequestSizeGatewayFilterFactory.Config.maxSize
-            args = { maxSize: a };
-        } else if (n === 'SecureHeaders') {
-            // SecureHeadersGatewayFilterFactory.Config (boolean flag)
-            args = { enabled: a !== 'false' };
-        } else {
-            // Generic fallback
-            args = { value: a };
+    // Handle filter type change to update placeholder and input type
+    window.onFilterTypeChange = function (select) {
+        const row = select.closest('.kv-row');
+        const input = row.querySelector('[data-field=args]');
+        const filterType = select.value;
+
+        const config = filterConfig[filterType];
+        if (config) {
+            input.placeholder = config.placeholder;
+            input.value = config.defaultValue || '';
         }
-        
-        return { name: n, args };
-    });
-}
-
-// ======== Services API ========
-async function submitService(e) {
-    e.preventDefault();
-    const data = {
-        name: document.getElementById('svc-name').value.trim(),
-        loadBalancer: document.getElementById('svc-lb').value,
-        instances: getInstances()
     };
-    if (!data.name) { toast('Please enter service name', 'error'); return; }
-    try {
-        const r = await fetch('/api/services', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
-        const res = await r.json();
-        if (r.ok) {
-            toast('Service "' + data.name + '" created successfully!');
-            document.getElementById('serviceForm').reset();
-            document.getElementById('instances-list').innerHTML = '';
-            loadServices();
-        } else {
-            toast(res.message || 'Failed to create', 'error');
-        }
-    } catch(err) { toast('Network error: ' + err.message, 'error'); }
-}
 
-async function loadServices() {
-    try {
-        const r = await fetch('/api/services');
-        const res = await r.json();
-        services = res.data || [];
-        renderServices(services);
-        refreshServiceDropdowns();
-    } catch(err) { console.error(err); }
-}
+    function getFilters() {
+        return Array.from(document.querySelectorAll('#filters-list .kv-row')).map(row => {
+            const n = row.querySelector('[data-field=name]').value;
+            const a = row.querySelector('[data-field=args]').value.trim();
+            let args = {};
 
-function renderServices(list) {
-    document.getElementById('svc-count').textContent = list.length;
-    const el = document.getElementById('services-list');
-    if (!list.length) {
-        el.innerHTML = '<div class="empty-tip"><div class="empty-icon">📭</div>No services yet. Please create a service first.</div>';
-        return;
+            // Parse args based on filter type (matching SCG's Config class structure)
+            if (n === 'StripPrefix') {
+                // StripPrefixGatewayFilterFactory.Config.parts
+                args = {parts: parseInt(a) || 1};
+            } else if (n === 'AddRequestHeader' || n === 'SetRequestHeader') {
+                // AddRequestHeaderGatewayFilterFactory.Config.name/value
+                const p = a.split(':');
+                args = {name: p[0] || '', value: p[1] || ''};
+            } else if (n === 'AddRequestParameter') {
+                // AddRequestParameterGatewayFilterFactory.Config.name/value
+                const p = a.split(':');
+                args = {name: p[0] || '', value: p[1] || ''};
+            } else if (n === 'RewritePath') {
+                // RewritePathGatewayFilterFactory.Config.regexp/replacement
+                const p = a.split(',');
+                args = {regexp: p[0] || '', replacement: p[1] || ''};
+            } else if (n === 'PrefixPath') {
+                // PrefixPathGatewayFilterFactory.Config.prefix
+                args = {prefix: a};
+            } else if (n === 'SetPath') {
+                // SetPathGatewayFilterFactory.Config.template
+                args = {template: a};
+            } else if (n === 'RemoveRequestHeader') {
+                // RemoveRequestHeaderGatewayFilterFactory.Config.name
+                args = {name: a};
+            } else if (n === 'RemoveResponseHeader') {
+                // RemoveResponseHeaderGatewayFilterFactory.Config.name
+                args = {name: a};
+            } else if (n === 'SetResponseHeader') {
+                // SetResponseHeaderGatewayFilterFactory.Config.name/value
+                const p = a.split(':');
+                args = {name: p[0] || '', value: p[1] || ''};
+            } else if (n === 'RedirectTo') {
+                // RedirectToGatewayFilterFactory.Config.status/url
+                const p = a.split(',');
+                args = {status: parseInt(p[0]) || 302, url: p[1] || ''};
+            } else if (n === 'Retry') {
+                // RetryGatewayFilterFactory.Config.retries/statuses/methods
+                const p = a.split(',');
+                args = {
+                    retries: parseInt(p[0]) || 3,
+                    statuses: p[1] ? p[1].split(',') : ['503'],
+                    methods: p[2] ? p[2].split(',') : ['GET']
+                };
+            } else if (n === 'RequestSize') {
+                // RequestSizeGatewayFilterFactory.Config.maxSize
+                args = {maxSize: a};
+            } else if (n === 'SecureHeaders') {
+                // SecureHeadersGatewayFilterFactory.Config (boolean flag)
+                args = {enabled: a !== 'false'};
+            } else {
+                // Generic fallback
+                args = {value: a};
+            }
+
+            return {name: n, args};
+        });
     }
-    const lbLabel = { 
-        'round-robin': 'Round Robin (×weight)',
-        'random': 'Random (×weight)',
-        'weighted': 'Weighted',
-        'least-connections': 'Least Connections' 
-    };
-    el.innerHTML = list.map(s => `
+
+    // ======== Services API ========
+    async function submitService(e) {
+        e.preventDefault();
+        const data = {
+            name: document.getElementById('svc-name').value.trim(),
+            loadBalancer: document.getElementById('svc-lb').value,
+            instances: getInstances()
+        };
+        if (!data.name) {
+            toast('Please enter service name', 'error');
+            return;
+        }
+        try {
+            const r = await fetch('/api/services', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            const res = await r.json();
+            if (r.ok) {
+                toast('Service "' + data.name + '" created successfully!');
+                document.getElementById('serviceForm').reset();
+                document.getElementById('instances-list').innerHTML = '';
+                loadServices();
+            } else {
+                toast(res.message || 'Failed to create', 'error');
+            }
+        } catch (err) {
+            toast('Network error: ' + err.message, 'error');
+        }
+    }
+
+    async function loadServices() {
+        try {
+            const r = await fetch('/api/services');
+            const res = await r.json();
+            services = res.data || [];
+            renderServices(services);
+            refreshServiceDropdowns();
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    function renderServices(list) {
+        document.getElementById('svc-count').textContent = list.length;
+        const el = document.getElementById('services-list');
+        if (!list.length) {
+            el.innerHTML = '<div class="empty-tip"><div class="empty-icon">📭</div>No services yet. Please create a service first.</div>';
+            return;
+        }
+        const lbLabel = {
+            'round-robin': 'Round Robin (×weight)',
+            'random': 'Random (×weight)',
+            'weighted': 'Weighted',
+            'least-connections': 'Least Connections'
+        };
+        el.innerHTML = list.map(s => `
         <div class="item-card">
             <div class="item-card-header">
                 <div>
@@ -1193,113 +1483,121 @@ function renderServices(list) {
                 </div>
             </div>
             <div class="item-meta">
-                Instances: ${(s.instances||[]).length}
-                ${(s.instances||[]).map(i => `<span style="margin-left:8px;background:#f5f5f5;padding:1px 6px;border-radius:3px;">${i.ip}:${i.port} (×${i.weight})</span>`).join('')}
+                Instances: ${(s.instances || []).length}
+                ${(s.instances || []).map(i => `<span style="margin-left:8px;background:#f5f5f5;padding:1px 6px;border-radius:3px;">${i.ip}:${i.port} (×${i.weight})</span>`).join('')}
             </div>
         </div>
     `).join('');
-}
+    }
 
-async function deleteService(name) {
-    try {
-        // First, check if any routes are using this service
-        const routesRes = await fetch('/api/routes');
-        const routesData = await routesRes.json();
-        const routes = routesData.data || [];
-        
-        // Check if any route is bound to this service
-        const boundRoutes = routes.filter(r => {
-            const uri = r.uri || '';
-            // Check for lb:// or static:// protocols with this service name
-            return uri === `lb://${name}` || uri === `static://${name}`;
-        });
-        
-        if (boundRoutes.length > 0) {
-            const routeNames = boundRoutes.map(r => r.id).join(', ');
-            toast(`Cannot delete service "${name}". It is bound to ${boundRoutes.length} route(s): ${routeNames}`, 'error');
+    async function deleteService(name) {
+        try {
+            // First, check if any routes are using this service
+            const routesRes = await fetch('/api/routes');
+            const routesData = await routesRes.json();
+            const routes = routesData.data || [];
+
+            // Check if any route is bound to this service
+            const boundRoutes = routes.filter(r => {
+                const uri = r.uri || '';
+                // Check for lb:// or static:// protocols with this service name
+                return uri === `lb://${name}` || uri === `static://${name}`;
+            });
+
+            if (boundRoutes.length > 0) {
+                const routeNames = boundRoutes.map(r => r.id).join(', ');
+                toast(`Cannot delete service "${name}". It is bound to ${boundRoutes.length} route(s): ${routeNames}`, 'error');
+                return;
+            }
+
+            // No bound routes, proceed with deletion
+            if (!confirm(`Are you sure you want to delete service "${name}"?`)) return;
+
+            const r = await fetch('/api/services/' + encodeURIComponent(name), {method: 'DELETE'});
+            const res = await r.json();
+            if (r.ok) {
+                toast('Service deleted');
+                loadServices();
+            } else {
+                toast(res.message || 'Failed to delete', 'error');
+            }
+        } catch (err) {
+            toast('Network error: ' + err.message, 'error');
+        }
+    }
+
+    // ======== Routes API ========
+    async function submitRoute(e) {
+        e.preventDefault();
+        const predicates = getPredicates();
+        if (!predicates.length) {
+            toast('Please add at least one predicate', 'error');
             return;
         }
-        
-        // No bound routes, proceed with deletion
-        if (!confirm(`Are you sure you want to delete service "${name}"?`)) return;
-        
-        const r = await fetch('/api/services/' + encodeURIComponent(name), { method:'DELETE' });
-        const res = await r.json();
-        if (r.ok) { 
-            toast('Service deleted'); 
-            loadServices(); 
-        } else {
-            toast(res.message || 'Failed to delete', 'error');
+
+        // Validate: At least one Path predicate is required
+        const hasPathPredicate = predicates.some(p => p.name === 'Path');
+        if (!hasPathPredicate) {
+            toast('At least one Path predicate is required', 'error');
+            return;
         }
-    } catch(err) { 
-        toast('Network error: ' + err.message, 'error'); 
-    }
-}
 
-// ======== Routes API ========
-async function submitRoute(e) {
-    e.preventDefault();
-    const predicates = getPredicates();
-    if (!predicates.length) { 
-        toast('Please add at least one predicate', 'error'); 
-        return; 
-    }
-    
-    // Validate: At least one Path predicate is required
-    const hasPathPredicate = predicates.some(p => p.name === 'Path');
-    if (!hasPathPredicate) {
-        toast('At least one Path predicate is required', 'error');
-        return;
-    }
-    
-    const data = {
-        id: document.getElementById('rt-id').value.trim(),
-        uri: document.getElementById('rt-uri').value.trim(),
-        order: parseInt(document.getElementById('rt-order').value) || 0,
-        predicates: predicates,
-        filters: getFilters()
-    };
-    if (!data.id || !data.uri) { 
-        toast('Please fill in Route ID and Target URI', 'error'); 
-        return; 
-    }
-    try {
-        const r = await fetch('/api/routes', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
-        const res = await r.json();
-        if (r.ok) {
-            toast('Route "' + data.id + '" created successfully!');
-            document.getElementById('routeForm').reset();
-            document.getElementById('predicates-list').innerHTML = '';
-            document.getElementById('filters-list').innerHTML = '';
-            // Reset target type to static
-            document.querySelector('input[name="rt-type"][value="static"]').checked = true;
-            document.getElementById('rt-static-group').style.display = 'block';
-            document.getElementById('rt-discovery-group').style.display = 'none';
-            loadRoutes();
-        } else {
-            toast(res.message || 'Failed to create', 'error');
+        const data = {
+            id: document.getElementById('rt-id').value.trim(),
+            uri: document.getElementById('rt-uri').value.trim(),
+            order: parseInt(document.getElementById('rt-order').value) || 0,
+            predicates: predicates,
+            filters: getFilters()
+        };
+        if (!data.id || !data.uri) {
+            toast('Please fill in Route ID and Target URI', 'error');
+            return;
         }
-    } catch(err) { toast('Network error: ' + err.message, 'error'); }
-}
-
-async function loadRoutes() {
-    try {
-        const r = await fetch('/api/routes');
-        const res = await r.json();
-        routes = res.data || [];
-        renderRoutes(routes);
-        refreshRouteDropdowns();
-    } catch(err) { console.error(err); }
-}
-
-function renderRoutes(list) {
-    document.getElementById('rt-count').textContent = list.length;
-    const el = document.getElementById('routes-list');
-    if (!list.length) {
-        el.innerHTML = '<div class="empty-tip"><div class="empty-icon">📭</div>No routes yet. Please create a service first, then create a route.</div>';
-        return;
+        try {
+            const r = await fetch('/api/routes', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            const res = await r.json();
+            if (r.ok) {
+                toast('Route "' + data.id + '" created successfully!');
+                document.getElementById('routeForm').reset();
+                document.getElementById('predicates-list').innerHTML = '';
+                document.getElementById('filters-list').innerHTML = '';
+                // Reset target type to static
+                document.querySelector('input[name="rt-type"][value="static"]').checked = true;
+                document.getElementById('rt-static-group').style.display = 'block';
+                document.getElementById('rt-discovery-group').style.display = 'none';
+                loadRoutes();
+            } else {
+                toast(res.message || 'Failed to create', 'error');
+            }
+        } catch (err) {
+            toast('Network error: ' + err.message, 'error');
+        }
     }
-    el.innerHTML = list.map(r => `
+
+    async function loadRoutes() {
+        try {
+            const r = await fetch('/api/routes');
+            const res = await r.json();
+            routes = res.data || [];
+            renderRoutes(routes);
+            refreshRouteDropdowns();
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    function renderRoutes(list) {
+        document.getElementById('rt-count').textContent = list.length;
+        const el = document.getElementById('routes-list');
+        if (!list.length) {
+            el.innerHTML = '<div class="empty-tip"><div class="empty-icon">📭</div>No routes yet. Please create a service first, then create a route.</div>';
+            return;
+        }
+        el.innerHTML = list.map(r => `
         <div class="item-card">
             <div class="item-card-header">
                 <div>
@@ -1314,302 +1612,396 @@ function renderRoutes(list) {
                 URI: <strong>${r.uri}</strong>
             </div>
             <div class="item-meta" style="margin-top:4px;">
-                Predicates: ${(r.predicates||[]).map(p => `<span style="background:#e3f2fd;color:#1565c0;padding:1px 6px;border-radius:3px;margin-right:4px;">${p.name}=${JSON.stringify(p.args)}</span>`).join('')}
+                Predicates: ${(r.predicates || []).map(p => `<span style="background:#e3f2fd;color:#1565c0;padding:1px 6px;border-radius:3px;margin-right:4px;">${p.name}=${JSON.stringify(p.args)}</span>`).join('')}
             </div>
-            ${(r.filters||[]).length ? `<div class="item-meta" style="margin-top:4px;">Filters: ${(r.filters||[]).map(f => `<span style="background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:3px;margin-right:4px;">${f.name}</span>`).join('')}</div>` : ''}
+            ${(r.filters || []).length ? `<div class="item-meta" style="margin-top:4px;">Filters: ${(r.filters || []).map(f => `<span style="background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:3px;margin-right:4px;">${f.name}</span>`).join('')}</div>` : ''}
         </div>
     `).join('');
-}
-
-async function deleteRoute(id) {
-    if (!confirm(`Are you sure you want to delete route "${id}"?`)) return;
-    try {
-        const r = await fetch('/api/routes/' + encodeURIComponent(id), { method:'DELETE' });
-        const res = await r.json();
-        if (r.ok) { toast('Route deleted'); loadRoutes(); }
-        else toast(res.message || 'Failed to delete', 'error');
-    } catch(err) { toast('Network error', 'error'); }
-}
-
-// ======== PLUGINS API ========
-async function submitRateLimiter(e) {
-    e.preventDefault();
-    const routeId = document.getElementById('rl-route').value;
-    if (!routeId) { toast('Please select a route', 'error'); return; }
-    
-    // Get raw values (no conversion)
-    const baseQps = parseInt(document.getElementById('rl-redis-qps').value) || 0;
-    const timeUnit = document.getElementById('rl-time-unit').value;
-    
-    const data = {
-        routeId: routeId,
-        enabled: document.getElementById('rl-enabled').checked,
-        qps: baseQps, // Store original value
-        timeUnit: timeUnit, // Store time unit
-        burstCapacity: parseInt(document.getElementById('rl-redis-burst').value) || 200,
-        keyPrefix: document.getElementById('rl-key-prefix').value || 'rate_limit:',
-        keyType: document.getElementById('rl-key-type').value,
-        updateTime: new Date().toISOString() // Add timestamp
-    };
-    
-    try {
-        const r = await fetch('/api/plugins/rate-limiters', {
-            method: 'POST', 
-            headers: {'Content-Type': 'application/json'}, 
-            body: JSON.stringify(data) 
-        });
-        const res = await r.json();
-        if (r.ok) { 
-            toast('Rate limiter config saved!'); 
-            loadPlugins(); 
-        }
-        else toast(res.message || 'Failed to save', 'error');
-    } catch(err) { toast('Network error', 'error'); }
-}
-
-async function deleteRateLimiter(routeId) {
-    if (!confirm('Delete rate limiter config for route: ' + routeId + '?')) return;
-    try {
-        const r = await fetch('/api/plugins/rate-limiters/' + routeId, { method: 'DELETE' });
-        const res = await r.json();
-        if (r.ok) { 
-            toast('Rate limiter config deleted!'); 
-            loadPlugins(); 
-        }
-        else toast(res.message || 'Failed to delete', 'error');
-    } catch(err) { toast('Network error', 'error'); }
-}
-
-async function submitIPFilter(e) {
-    e.preventDefault();
-    const routeId = document.getElementById('ip-route').value;
-    const mode = document.getElementById('ip-mode').value;
-    const ipListText = document.getElementById('ip-list').value.trim();
-    const enabled = document.getElementById('ip-enabled').checked;
-    
-    // Parse IP list (one per line)
-    const ipList = ipListText.split('\n').map(ip => ip.trim()).filter(ip => ip);
-    
-    const data = {
-        routeId,
-        mode,
-        ipList,
-        enabled,
-        updateTime: new Date().toISOString()
-    };
-    
-    try {
-        const r = await fetch('/api/plugins/ip-filters', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(data)
-        });
-        const res = await r.json();
-        if (r.ok && res.code === 200) {
-            toast('✓ IP filter saved!');
-            document.getElementById('ipFilterForm').reset();
-            toggleIPListHelp();
-            loadPlugins();
-        } else {
-            toast('✗ Failed: ' + (res.message || 'Unknown error'), 'error');
-        }
-    } catch(err) {
-        console.error(err);
-        toast('✗ Network error', 'error');
     }
-}
 
-async function deleteIPFilter(routeId) {
-    if (!confirm('Delete IP filter config for route: ' + routeId + '?')) return;
-    try {
-        const r = await fetch('/api/plugins/ip-filters/' + routeId, { method: 'DELETE' });
-        const res = await r.json();
-        if (r.ok) { 
-            toast('✓ IP filter deleted!'); 
-            loadPlugins(); 
+    async function deleteRoute(id) {
+        if (!confirm(`Are you sure you want to delete route "${id}"?`)) return;
+        try {
+            const r = await fetch('/api/routes/' + encodeURIComponent(id), {method: 'DELETE'});
+            const res = await r.json();
+            if (r.ok) {
+                toast('Route deleted');
+                loadRoutes();
+            } else toast(res.message || 'Failed to delete', 'error');
+        } catch (err) {
+            toast('Network error', 'error');
         }
-        else toast(res.message || 'Failed to delete', 'error');
-    } catch(err) { toast('✗ Network error', 'error'); }
-}
-
-// ======== Timeout Plugin ========
-async function submitTimeout(e) {
-    e.preventDefault();
-    const routeId = document.getElementById('timeout-route').value;
-    const connectTimeout = parseInt(document.getElementById('timeout-connect').value);
-    const responseTimeout = parseInt(document.getElementById('timeout-response').value);
-    const enabled = document.getElementById('timeout-enabled').checked;
-    
-    const data = {
-        routeId,
-        connectTimeout,
-        responseTimeout,
-        enabled,
-        updateTime: new Date().toISOString()
-    };
-    
-    try {
-        const r = await fetch('/api/plugins/timeouts', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(data)
-        });
-        const res = await r.json();
-        if (r.ok && res.code === 200) {
-            toast('✓ Timeout config saved!');
-            document.getElementById('timeoutForm').reset();
-            // Reset default values
-            document.getElementById('timeout-connect').value = 5000;
-            document.getElementById('timeout-response').value = 30000;
-            document.getElementById('timeout-enabled').checked = true;
-            loadPlugins();
-        } else {
-            toast('✗ Failed: ' + (res.message || 'Unknown error'), 'error');
-        }
-    } catch(err) {
-        console.error(err);
-        toast('✗ Network error', 'error');
     }
-}
 
-async function deleteTimeout(routeId) {
-    if (!confirm('Delete timeout config for route: ' + routeId + '?')) return;
-    try {
-        const r = await fetch('/api/plugins/timeouts/' + routeId, { method: 'DELETE' });
-        const res = await r.json();
-        if (r.ok) { 
-            toast('✓ Timeout config deleted!'); 
-            loadPlugins(); 
+    // ======== PLUGINS API ========
+    async function submitRateLimiter(e) {
+        e.preventDefault();
+        const routeId = document.getElementById('rl-route').value;
+        if (!routeId) {
+            toast('Please select a route', 'error');
+            return;
         }
-        else toast(res.message || 'Failed to delete', 'error');
-    } catch(err) { toast('✗ Network error', 'error'); }
-}
 
-// ======== Custom Header Plugin (已移除) ========
-// Note: Custom Header plugin removed - use SCG native AddRequestHeader filter instead
-// Example route configuration:
-// filters:
-//   - AddRequestHeader=X-Forwarded-For, ${random.uuid}
-//   - AddRequestHeader=X-Custom-Header, MyValue
+        // Get raw values (no conversion)
+        const baseQps = parseInt(document.getElementById('rl-redis-qps').value) || 0;
+        const timeUnit = document.getElementById('rl-time-unit').value;
 
-async function loadPlugins() {
-    try {
-        const rlRes = await fetch('/api/plugins/rate-limiters').then(r => r.json());
-        const ipRes = await fetch('/api/plugins/ip-filters').then(r => r.json());
-        const timeoutRes = await fetch('/api/plugins/timeouts').then(r => r.json());
-        renderPlugins(rlRes.data || [], ipRes.data || [], timeoutRes.data || []);
-    } catch(err) { console.error(err); }
-}
+        const data = {
+            routeId: routeId,
+            enabled: document.getElementById('rl-enabled').checked,
+            qps: baseQps, // Store original value
+            timeUnit: timeUnit, // Store time unit
+            burstCapacity: parseInt(document.getElementById('rl-redis-burst').value) || 200,
+            keyPrefix: document.getElementById('rl-key-prefix').value || 'rate_limit:',
+            keyType: document.getElementById('rl-key-type').value,
+            updateTime: new Date().toISOString() // Add timestamp
+        };
 
-function renderPlugins(rls, ipFilters, timeouts) {
-    const el = document.getElementById('plugins-list');
-    let html = '';
-    
-    // Rate limiter plugin
-    if (rls && rls.length) {
-        html += '<div style="font-weight:700;color:#667eea;margin-bottom:10px;font-size:14px;">🚦 Rate Limiter Plugin</div>';
-        html += rls.map(p => {
-            const qps = p.qps || 0;
-            const timeUnit = p.timeUnit || 'second';
-            let timeLabel = 'QPS';
-            if (timeUnit === 'minute') timeLabel = 'Per Minute';
-            else if (timeUnit === 'hour') timeLabel = 'Per Hour';
-            
-            return `
+        try {
+            const r = await fetch('/api/plugins/rate-limiters', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            const res = await r.json();
+            if (r.ok) {
+                toast('Rate limiter config saved!');
+                loadStrategies();
+            } else toast(res.message || 'Failed to save', 'error');
+        } catch (err) {
+            toast('Network error', 'error');
+        }
+    }
+
+    async function deleteRateLimiter(routeId) {
+        if (!confirm('Delete rate limiter config for route: ' + routeId + '?')) return;
+        try {
+            const r = await fetch('/api/plugins/rate-limiters/' + routeId, {method: 'DELETE'});
+            const res = await r.json();
+            if (r.ok) {
+                toast('Rate limiter config deleted!');
+                loadStrategies();
+            } else toast(res.message || 'Failed to delete', 'error');
+        } catch (err) {
+            toast('Network error', 'error');
+        }
+    }
+
+    async function submitIPFilter(e) {
+        e.preventDefault();
+        const routeId = document.getElementById('ip-route').value;
+        const mode = document.getElementById('ip-mode').value;
+        const ipListText = document.getElementById('ip-list').value.trim();
+        const enabled = document.getElementById('ip-enabled').checked;
+
+        // Parse IP list (one per line)
+        const ipList = ipListText.split('\n').map(ip => ip.trim()).filter(ip => ip);
+
+        const data = {
+            routeId,
+            mode,
+            ipList,
+            enabled,
+            updateTime: new Date().toISOString()
+        };
+
+        try {
+            const r = await fetch('/api/plugins/ip-filters', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            const res = await r.json();
+            if (r.ok && res.code === 200) {
+                toast('✓ IP filter saved!');
+                document.getElementById('ipFilterForm').reset();
+                toggleIPListHelp();
+                loadStrategies();
+            } else {
+                toast('✗ Failed: ' + (res.message || 'Unknown error'), 'error');
+            }
+        } catch (err) {
+            console.error(err);
+            toast('✗ Network error', 'error');
+        }
+    }
+
+    async function deleteIPFilter(routeId) {
+        if (!confirm('Delete IP filter config for route: ' + routeId + '?')) return;
+        try {
+            const r = await fetch('/api/plugins/ip-filters/' + routeId, {method: 'DELETE'});
+            const res = await r.json();
+            if (r.ok) {
+                toast('✓ IP filter deleted!');
+                loadStrategies();
+            } else toast(res.message || 'Failed to delete', 'error');
+        } catch (err) {
+            toast('✗ Network error', 'error');
+        }
+    }
+
+    // ======== Timeout Plugin ========
+    async function submitTimeout(e) {
+        e.preventDefault();
+        const routeId = document.getElementById('timeout-route').value;
+        const connectTimeout = parseInt(document.getElementById('timeout-connect').value);
+        const responseTimeout = parseInt(document.getElementById('timeout-response').value);
+        const enabled = document.getElementById('timeout-enabled').checked;
+
+        const data = {
+            routeId,
+            connectTimeout,
+            responseTimeout,
+            enabled,
+            updateTime: new Date().toISOString()
+        };
+
+        try {
+            const r = await fetch('/api/plugins/timeouts', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            const res = await r.json();
+            if (r.ok && res.code === 200) {
+                toast('✓ Timeout config saved!');
+                document.getElementById('timeoutForm').reset();
+                // Reset default values
+                document.getElementById('timeout-connect').value = 5000;
+                document.getElementById('timeout-response').value = 30000;
+                document.getElementById('timeout-enabled').checked = true;
+                loadStrategies();
+            } else {
+                toast('✗ Failed: ' + (res.message || 'Unknown error'), 'error');
+            }
+        } catch (err) {
+            console.error(err);
+            toast('✗ Network error', 'error');
+        }
+    }
+
+    async function deleteTimeout(routeId) {
+        if (!confirm('Delete timeout config for route: ' + routeId + '?')) return;
+        try {
+            const r = await fetch('/api/plugins/timeouts/' + routeId, {method: 'DELETE'});
+            const res = await r.json();
+            if (r.ok) {
+                toast('✓ Timeout config deleted!');
+                loadStrategies();
+            } else toast(res.message || 'Failed to delete', 'error');
+        } catch (err) {
+            toast('✗ Network error', 'error');
+        }
+    }
+
+    // ======== Circuit Breaker Strategy ========
+    async function submitCircuitBreaker(e) {
+        e.preventDefault();
+        const routeId = document.getElementById('cb-route').value;
+        if (!routeId) {
+            toast('Please select a route', 'error');
+            return;
+        }
+
+        const data = {
+            routeId,
+            failureRateThreshold: parseFloat(document.getElementById('cb-failure-rate').value) || 50,
+            waitDurationInOpenState: parseInt(document.getElementById('cb-wait-duration').value) || 30000,
+            slidingWindowSize: parseInt(document.getElementById('cb-window-size').value) || 10,
+            minimumNumberOfCalls: parseInt(document.getElementById('cb-min-calls').value) || 5,
+            slowCallDurationThreshold: parseInt(document.getElementById('cb-slow-call-duration').value) || 60000,
+            slowCallRateThreshold: parseFloat(document.getElementById('cb-slow-call-rate').value) || 80,
+            automaticTransitionFromOpenToHalfOpenEnabled: true,
+            enabled: document.getElementById('cb-enabled').checked
+        };
+
+        try {
+            const r = await fetch('/api/plugins/circuit-breakers', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            const res = await r.json();
+            if (r.ok && res.code === 200) {
+                toast('✓ Circuit breaker config saved!');
+                document.getElementById('cbForm').reset();
+                document.getElementById('cb-failure-rate').value = 50;
+                document.getElementById('cb-wait-duration').value = 30000;
+                document.getElementById('cb-window-size').value = 10;
+                document.getElementById('cb-min-calls').value = 5;
+                document.getElementById('cb-slow-call-duration').value = 60000;
+                document.getElementById('cb-slow-call-rate').value = 80;
+                document.getElementById('cb-enabled').checked = true;
+                loadStrategies();
+            } else {
+                toast('✗ Failed: ' + (res.message || 'Unknown error'), 'error');
+            }
+        } catch (err) {
+            console.error(err);
+            toast('✗ Network error', 'error');
+        }
+    }
+
+    async function deleteCircuitBreaker(routeId) {
+        if (!confirm('Delete circuit breaker config for route: ' + routeId + '?')) return;
+        try {
+            const r = await fetch('/api/plugins/circuit-breakers/' + routeId, {method: 'DELETE'});
+            const res = await r.json();
+            if (r.ok) {
+                toast('✓ Circuit breaker config deleted!');
+                loadStrategies();
+            } else {
+                toast(res.message || 'Failed to delete', 'error');
+            }
+        } catch (err) {
+            toast('✗ Network error', 'error');
+        }
+    }
+
+    // ======== Custom Header Strategy (removed) ========
+    // Note: Custom Header strategy removed - use SCG native AddRequestHeader filter instead
+
+    async function loadStrategies() {
+        try {
+            const [rlRes, ipRes, timeoutRes, cbRes] = await Promise.all([
+                fetch('/api/plugins/rate-limiters').then(r => r.json()),
+                fetch('/api/plugins/ip-filters').then(r => r.json()),
+                fetch('/api/plugins/timeouts').then(r => r.json()),
+                fetch('/api/plugins/circuit-breakers').then(r => r.json())
+            ]);
+            renderStrategies(rlRes.data || [], ipRes.data || [], timeoutRes.data || [], cbRes.data || []);
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    function renderStrategies(rls, ipFilters, timeouts, circuitBreakers) {
+        const el = document.getElementById('plugins-list');
+        let html = '';
+
+        // Rate Limiter strategy
+        if (rls && rls.length) {
+            html += '<div style="font-weight:700;color:#667eea;margin-bottom:10px;font-size:14px;">🚦 Rate Limiter Strategy</div>';
+            html += rls.map(p => {
+                const qps = p.qps || 0;
+                const timeUnit = p.timeUnit || 'second';
+                let timeLabel = 'QPS';
+                if (timeUnit === 'minute') timeLabel = 'Per Minute';
+                else if (timeUnit === 'hour') timeLabel = 'Per Hour';
+                return `
             <div class="item-card">
                 <div class="item-card-header">
                     <div>
                         <span class="item-name">${p.routeId}</span>
-                        <span class="item-tag tag-${p.enabled ? 'green' : 'gray'}">${p.enabled ? 'Enabled' : 'Disabled'}</span>
-                        <span class="item-tag tag-orange">${p.keyType}</span>
+                        <span class="item-tag tag-${p.enabled ? 'green' : 'orange'}">${p.enabled ? 'Enabled' : 'Disabled'}</span>
+                        <span class="item-tag tag-blue">${p.keyType || ''}</span>
                     </div>
-                    <button class="btn-delete" onclick="deleteRateLimiter('${p.routeId}')">🗑</button>
+                    <button class="btn-del" onclick="deleteRateLimiter('${p.routeId}')">Delete</button>
                 </div>
                 <div class="item-meta">
                     Rate: <strong>${qps} ${timeLabel}</strong>
                     | Burst: <strong>${p.burstCapacity}</strong>
-                    ${p.sentinelQps > 0 ? ' | Sentinel QPS: <strong>' + p.sentinelQps + '</strong>' : ''}
                 </div>
                 <div class="item-meta" style="margin-top:6px;color:#999;font-size:12px;">
-                    ⏰ Updated: ${p.updateTime ? new Date(p.updateTime).toLocaleString('zh-CN', {hour12:false}) : 'N/A'}
+                    Updated: ${p.updateTime ? new Date(p.updateTime).toLocaleString('zh-CN', {hour12: false}) : 'N/A'}
                 </div>
-            </div>
-            `;
-        }).join('');
-    } else {
-        html += '<div style="color:#999;font-size:13px;padding:10px;">No rate limiter config. Create one using the form above.</div>';
-    }
-    
-    // IP Filter plugin
-    if (ipFilters && ipFilters.length) {
-        html += '<div style="font-weight:700;color:#667eea;margin-bottom:10px;font-size:14px;margin-top:20px;">🛡️ IP Filter Plugin</div>';
-        html += ipFilters.map(p => {
-            const modeLabel = p.mode === 'blacklist' ? '⛔ Blacklist' : '✅ Whitelist';
-            const ipCount = p.ipList ? p.ipList.length : 0;
-            
-            return `
+            </div>`;
+            }).join('');
+        } else {
+            html += '<div style="color:#999;font-size:13px;padding:10px;">No rate limiter strategy configured.</div>';
+        }
+
+        // IP Filter strategy
+        html += '<hr style="margin:16px 0;border:none;border-top:1px dashed #e8e8e8;">';
+        if (ipFilters && ipFilters.length) {
+            html += '<div style="font-weight:700;color:#667eea;margin-bottom:10px;font-size:14px;">🛡️ IP Filter Strategy</div>';
+            html += ipFilters.map(p => {
+                const modeLabel = p.mode === 'blacklist' ? 'Blacklist' : 'Whitelist';
+                const ipCount = p.ipList ? p.ipList.length : 0;
+                return `
             <div class="item-card">
                 <div class="item-card-header">
                     <div>
                         <span class="item-name">${p.routeId}</span>
-                        <span class="item-tag tag-${p.enabled ? 'green' : 'gray'}">${p.enabled ? 'Enabled' : 'Disabled'}</span>
-                        <span class="item-tag tag-${p.mode === 'blacklist' ? 'red' : 'blue'}">${modeLabel}</span>
+                        <span class="item-tag tag-${p.enabled ? 'green' : 'orange'}">${p.enabled ? 'Enabled' : 'Disabled'}</span>
+                        <span class="item-tag tag-${p.mode === 'blacklist' ? 'orange' : 'blue'}">${modeLabel}</span>
                     </div>
-                    <button class="btn-delete" onclick="deleteIPFilter('${p.routeId}')">🗑</button>
+                    <button class="btn-del" onclick="deleteIPFilter('${p.routeId}')">Delete</button>
                 </div>
                 <div class="item-meta">
                     IPs: <strong>${ipCount}</strong>
-                    ${ipCount > 0 ? '(First: ' + p.ipList[0] + ')' : ''}
+                    ${ipCount > 0 ? ' — ' + p.ipList[0] + (ipCount > 1 ? ' ...' : '') : ''}
                 </div>
                 <div class="item-meta" style="margin-top:6px;color:#999;font-size:12px;">
-                    ⏰ Updated: ${p.updateTime ? new Date(p.updateTime).toLocaleString('zh-CN', {hour12:false}) : 'N/A'}
+                    Updated: ${p.updateTime ? new Date(p.updateTime).toLocaleString('zh-CN', {hour12: false}) : 'N/A'}
                 </div>
-            </div>
-            `;
-        }).join('');
-    } else {
-        html += '<div style="color:#999;font-size:13px;padding:10px;margin-top:10px;">No IP filter config. Create one using the form above.</div>';
-    }
-    
-    // Timeout plugin
-    if (timeouts && timeouts.length) {
-        html += '<div style="font-weight:700;color:#667eea;margin-bottom:10px;font-size:14px;margin-top:20px;">⏱️ Timeout Plugin</div>';
-        html += timeouts.map(p => {
-            return `
+            </div>`;
+            }).join('');
+        } else {
+            html += '<div style="color:#999;font-size:13px;padding:10px;">No IP filter strategy configured.</div>';
+        }
+
+        // Timeout strategy
+        html += '<hr style="margin:16px 0;border:none;border-top:1px dashed #e8e8e8;">';
+        if (timeouts && timeouts.length) {
+            html += '<div style="font-weight:700;color:#667eea;margin-bottom:10px;font-size:14px;">⏱️ Timeout Strategy</div>';
+            html += timeouts.map(p => `
             <div class="item-card">
                 <div class="item-card-header">
                     <div>
                         <span class="item-name">${p.routeId}</span>
-                        <span class="item-tag tag-${p.enabled ? 'green' : 'gray'}">${p.enabled ? 'Enabled' : 'Disabled'}</span>
+                        <span class="item-tag tag-${p.enabled ? 'green' : 'orange'}">${p.enabled ? 'Enabled' : 'Disabled'}</span>
                     </div>
-                    <button class="btn-delete" onclick="deleteTimeout('${p.routeId}')">🗑</button>
+                    <button class="btn-del" onclick="deleteTimeout('${p.routeId}')">Delete</button>
                 </div>
                 <div class="item-meta">
-                    ⚡ Connect: <strong>${p.connectTimeout}ms</strong>
-                    | ⏱️ Response: <strong>${p.responseTimeout}ms</strong>
+                    Connect: <strong>${p.connectTimeout}ms</strong>
+                    | Response: <strong>${p.responseTimeout}ms</strong>
                 </div>
                 <div class="item-meta" style="margin-top:6px;color:#999;font-size:12px;">
-                    ⏰ Updated: ${p.updateTime ? new Date(p.updateTime).toLocaleString('zh-CN', {hour12:false}) : 'N/A'}
+                    Updated: ${p.updateTime ? new Date(p.updateTime).toLocaleString('zh-CN', {hour12: false}) : 'N/A'}
                 </div>
-            </div>
-            `;
-        }).join('');
-    } else {
-        html += '<div style="color:#999;font-size:13px;padding:10px;margin-top:10px;">No timeout config. Create one using the form above.</div>';
-    }
-    
-    if (!html) {
-        html = '<div class="empty-tip"><div class="empty-icon">📭</div>No plugins configured</div>';
-    }
-    el.innerHTML = html;
-}
+            </div>`).join('');
+        } else {
+            html += '<div style="color:#999;font-size:13px;padding:10px;">No timeout strategy configured.</div>';
+        }
 
-// ======== Init ========
-window.addEventListener('DOMContentLoaded', () => {
-    switchTab('services');
-    addInstance();
-    // Don't add default predicate - let user add their own to avoid duplicates
-});
+        // Circuit Breaker strategy
+        html += '<hr style="margin:16px 0;border:none;border-top:1px dashed #e8e8e8;">';
+        if (circuitBreakers && circuitBreakers.length) {
+            html += '<div style="font-weight:700;color:#667eea;margin-bottom:10px;font-size:14px;">⚡ Circuit Breaker Strategy</div>';
+            html += circuitBreakers.map(p => `
+            <div class="item-card">
+                <div class="item-card-header">
+                    <div>
+                        <span class="item-name">${p.routeId}</span>
+                        <span class="item-tag tag-${p.enabled ? 'green' : 'orange'}">${p.enabled ? 'Enabled' : 'Disabled'}</span>
+                        <span class="item-tag tag-purple">Failure: ${p.failureRateThreshold}%</span>
+                    </div>
+                    <button class="btn-del" onclick="deleteCircuitBreaker('${p.routeId}')">Delete</button>
+                </div>
+                <div class="item-meta">
+                    Wait: <strong>${p.waitDurationInOpenState}ms</strong>
+                    | Window: <strong>${p.slidingWindowSize}</strong>
+                    | Min Calls: <strong>${p.minimumNumberOfCalls}</strong>
+                </div>
+                <div class="item-meta" style="margin-top:4px;">
+                    Slow Call: <strong>${p.slowCallRateThreshold}%</strong> (&gt; ${p.slowCallDurationThreshold}ms)
+                </div>
+            </div>`).join('');
+        } else {
+            html += '<div style="color:#999;font-size:13px;padding:10px;">No circuit breaker strategy configured.</div>';
+        }
+
+        el.innerHTML = html;
+    }
+
+    // ======== Init ========
+    window.addEventListener('DOMContentLoaded', () => {
+        switchTab('services');
+        addInstance();
+        // Don't add default predicate - let user add their own to avoid duplicates
+    });
 </script>
 </body>
 </html>

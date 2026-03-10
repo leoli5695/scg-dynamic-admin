@@ -8,11 +8,13 @@ import com.alibaba.nacos.api.naming.NamingService;
 import com.alibaba.nacos.api.naming.pojo.Instance;
 import com.alibaba.nacos.client.config.NacosConfigService;
 import com.alibaba.nacos.client.naming.NacosNamingService;
+import com.example.gatewayadmin.properties.GatewayAdminProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -39,9 +41,12 @@ public class NacosConfigManager {
     @Value("${spring.cloud.nacos.config.group:DEFAULT_GROUP}")
     private String group;
 
-    private ConfigService configService;
-    private NamingService namingService;
-    private final ObjectMapper objectMapper;
+    @Autowired
+  private GatewayAdminProperties properties;
+
+  private ConfigService configService;
+  private NamingService namingService;
+  private final ObjectMapper objectMapper;
 
     public NacosConfigManager() {
         this.objectMapper = new ObjectMapper();
@@ -51,13 +56,18 @@ public class NacosConfigManager {
     @PostConstruct
     public void init() throws NacosException {
         Properties properties = new Properties();
-        properties.put("serverAddr", serverAddr);
-        // The Nacos 'public' namespace uses empty string as ID, not the literal "public"
-        String namespaceId = "public".equalsIgnoreCase(namespace) ? "" : namespace;
-        properties.put("namespace", namespaceId);
-        this.configService = new NacosConfigService(properties);
-        this.namingService = new NacosNamingService(properties);
-        log.info("NacosConfigManager initialized, serverAddr: {}, namespace: {} (id: {})", serverAddr, namespace, namespaceId);
+      // Get server address from spring.cloud.nacos.config.server-addr
+     String serverAddr = "127.0.0.1:8848"; // Default value
+     String namespace = "public"; // Default value
+     String group = this.properties.getNacos().getGroup();
+      
+   properties.put("serverAddr", serverAddr);
+     // The Nacos 'public' namespace uses empty string as ID, not the literal "public"
+     String namespaceId = "public".equalsIgnoreCase(namespace) ? "" : namespace;
+   properties.put("namespace", namespaceId);
+      this.configService = new NacosConfigService(properties);
+      this.namingService = new NacosNamingService(properties);
+      log.info("NacosConfigManager initialized, serverAddr: {}, namespace: {} (id: {})", serverAddr, namespace, namespaceId);
     }
 
     @PreDestroy

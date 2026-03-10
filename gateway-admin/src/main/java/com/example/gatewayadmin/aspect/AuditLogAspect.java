@@ -47,10 +47,10 @@ public class AuditLogAspect {
      * Record successful operations.
      */
     @AfterReturning(pointcut = "execution(* com.example.gatewayadmin.controller..*.*(..)) && " +
-                               "(within(com.example.gatewayadmin.controller.RouteController) || " +
-                               " within(com.example.gatewayadmin.controller.ServiceController) || " +
-                               " within(com.example.gatewayadmin.controller.PluginController))",
-                    returning = "result")
+            "(within(com.example.gatewayadmin.controller.RouteController) || " +
+            " within(com.example.gatewayadmin.controller.ServiceController) || " +
+            " within(com.example.gatewayadmin.controller.StrategyController))",
+            returning = "result")
     public void afterReturning(JoinPoint joinPoint, Object result) {
         recordAuditLog(joinPoint, "SUCCESS");
     }
@@ -59,10 +59,10 @@ public class AuditLogAspect {
      * Record failed operations.
      */
     @AfterThrowing(pointcut = "execution(* com.example.gatewayadmin.controller..*.*(..)) && " +
-                              "(within(com.example.gatewayadmin.controller.RouteController) || " +
-                              " within(com.example.gatewayadmin.controller.ServiceController) || " +
-                              " within(com.example.gatewayadmin.controller.PluginController))",
-                   throwing = "ex")
+            "(within(com.example.gatewayadmin.controller.RouteController) || " +
+            " within(com.example.gatewayadmin.controller.ServiceController) || " +
+            " within(com.example.gatewayadmin.controller.StrategyController))",
+            throwing = "ex")
     public void afterThrowing(JoinPoint joinPoint, Exception ex) {
         log.error("Operation failed", ex);
         recordAuditLog(joinPoint, "FAILED");
@@ -75,29 +75,29 @@ public class AuditLogAspect {
         try {
             MethodSignature signature = (MethodSignature) joinPoint.getSignature();
             Method method = signature.getMethod();
-            
+
             // Get current user from security context
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-            String operator = authentication != null && authentication.isAuthenticated() ? 
-                            authentication.getName() : "anonymous";
-            
+            String operator = authentication != null && authentication.isAuthenticated() ?
+                    authentication.getName() : "anonymous";
+
             // Get request info
-            ServletRequestAttributes attributes = 
-                (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            ServletRequestAttributes attributes =
+                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
             HttpServletRequest request = attributes != null ? attributes.getRequest() : null;
             String ipAddress = request != null ? request.getRemoteAddr() : "unknown";
-            
+
             // Determine operation type and target
             String methodName = method.getName();
             String operationType = getOperationType(methodName, status);
             String targetType = getTargetType(joinPoint);
             String targetId = getTargetId(joinPoint, methodName);
-            
+
             // Record asynchronously
             auditLogService.recordAuditLog(operator, operationType, targetType, targetId, ipAddress);
-            
-            log.info("Audit: {} {} {} by {} in {}ms", 
-                    operationType, targetType, targetId, operator, 
+
+            log.info("Audit: {} {} {} by {} in {}ms",
+                    operationType, targetType, targetId, operator,
                     System.currentTimeMillis() - startTime.get());
         } catch (Exception ex) {
             log.error("Failed to record audit log", ex);
@@ -113,15 +113,15 @@ public class AuditLogAspect {
         if ("FAILED".equals(status)) {
             return "FAILED";
         }
-        
+
         if (methodName.startsWith("create") || methodName.startsWith("add")) {
             return "CREATE";
         } else if (methodName.startsWith("update") || methodName.startsWith("modify")) {
             return "UPDATE";
         } else if (methodName.startsWith("delete") || methodName.startsWith("remove")) {
             return "DELETE";
-        } else if (methodName.startsWith("get") || methodName.startsWith("list") || 
-                   methodName.startsWith("query")) {
+        } else if (methodName.startsWith("get") || methodName.startsWith("list") ||
+                methodName.startsWith("query")) {
             return "READ";
         }
         return "OTHER";
@@ -147,14 +147,14 @@ public class AuditLogAspect {
      */
     private String getTargetId(JoinPoint joinPoint, String methodName) {
         Object[] args = joinPoint.getArgs();
-        
+
         // Try to find path variable (usually second parameter for update/delete)
         for (Object arg : args) {
             if (arg instanceof String && !arg.toString().isEmpty()) {
                 return arg.toString();
             }
         }
-        
+
         return "unknown";
     }
 }

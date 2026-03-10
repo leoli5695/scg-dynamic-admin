@@ -1,28 +1,29 @@
 package com.example.gatewayadmin;
 
-import com.example.gatewayadmin.config.GatewayAdminProperties;
-import org.springframework.boot.SpringApplication;
+import com.example.gatewayadmin.properties.GatewayAdminProperties;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
-import org.springframework.context.event.EventListener;
+import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 /**
  * Gateway Admin Console Application
- * 
+ * <p>
  * MyBatis Plus: Enabled via property `mybatis-plus.enabled=true` (for production with database)
  * Default (dev profile): Disabled, using Nacos as data store
  */
-@SpringBootApplication
-@EnableDiscoveryClient
-@EnableConfigurationProperties(GatewayAdminProperties.class)
 @EnableAsync
+@SpringBootApplication
+@EnableConfigurationProperties(GatewayAdminProperties.class)
+@EnableTransactionManagement  // Enable transaction management for database operations
 public class GatewayAdminApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(GatewayAdminApplication.class, args);
+        ConfigurableApplicationContext applicationContext = new SpringApplicationBuilder(GatewayAdminApplication.class).run(args);
     }
 
     @EventListener(ApplicationReadyEvent.class)

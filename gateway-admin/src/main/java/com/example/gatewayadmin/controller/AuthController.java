@@ -1,7 +1,7 @@
 package com.example.gatewayadmin.controller;
 
 import com.example.gatewayadmin.model.AuthConfig;
-import com.example.gatewayadmin.service.PluginService;
+import com.example.gatewayadmin.service.StrategyService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -22,14 +22,14 @@ import java.util.Map;
 public class AuthController {
 
     @Autowired
-    private PluginService pluginService;
+    private StrategyService strategyService;
 
     /**
      * Get all authentication configurations
      */
     @GetMapping
     public ResponseEntity<Map<String, Object>> getAllAuthConfigs() {
-        List<AuthConfig> configs = pluginService.getAllAuthConfigs();
+        List<AuthConfig> configs = strategyService.getAllAuthConfigs();
         Map<String, Object> result = new HashMap<>();
         result.put("code", 200);
         result.put("message", "success");
@@ -42,7 +42,7 @@ public class AuthController {
      */
     @GetMapping("/{routeId}")
     public ResponseEntity<Map<String, Object>> getAuthConfig(@PathVariable String routeId) {
-        AuthConfig config = pluginService.getAuthConfigByRoute(routeId);
+        AuthConfig config = strategyService.getAuthConfigByRoute(routeId);
         Map<String, Object> result = new HashMap<>();
         
         if (config != null) {
@@ -66,7 +66,7 @@ public class AuthController {
         
         Map<String, Object> result = new HashMap<>();
         
-        if (pluginService.createAuthConfig(config)) {
+        if (strategyService.createAuthConfig(config)) {
             result.put("code", 200);
             result.put("message", "Auth config created successfully");
             result.put("data", config);
@@ -89,7 +89,7 @@ public class AuthController {
         
         Map<String, Object> result = new HashMap<>();
         
-        if (pluginService.updateAuthConfig(config)) {
+        if (strategyService.updateAuthConfig(config)) {
             result.put("code", 200);
             result.put("message", "Auth config updated successfully");
             result.put("data", config);
@@ -110,7 +110,7 @@ public class AuthController {
         
         Map<String, Object> result = new HashMap<>();
         
-        if (pluginService.removeAuthConfig(routeId)) {
+        if (strategyService.removeAuthConfig(routeId)) {
             result.put("code", 200);
             result.put("message", "Auth config deleted successfully");
             return ResponseEntity.ok(result);
