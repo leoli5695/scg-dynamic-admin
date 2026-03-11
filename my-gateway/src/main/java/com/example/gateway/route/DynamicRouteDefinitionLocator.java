@@ -1,5 +1,7 @@
 package com.example.gateway.route;
 
+import com.example.gateway.cache.GenericCacheManager;
+import com.example.gateway.center.spi.ConfigCenterService;
 import com.example.gateway.manager.RouteManager;
 import com.example.gateway.refresher.RouteRefresher;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -32,15 +34,25 @@ public class DynamicRouteDefinitionLocator implements RouteDefinitionLocator {
     private final RouteManager routeManager;
     private final RouteRefresher routeRefresher;
     private final ApplicationEventPublisher eventPublisher;
+    private final GenericCacheManager<JsonNode> cacheManager;
+    private final ConfigCenterService configService;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    private static final String CACHE_KEY = "routes";
+    private static final String DATA_ID = "gateway-routes.json";
+    private static final String GROUP = "DEFAULT_GROUP";
 
     public DynamicRouteDefinitionLocator(RouteManager routeManager,
                                          RouteRefresher routeRefresher,
-                                         ApplicationEventPublisher eventPublisher) {
+                                         ApplicationEventPublisher eventPublisher,
+                                         GenericCacheManager<JsonNode> cacheManager,
+                                         ConfigCenterService configService) {
         this.routeManager= routeManager;
         this.routeRefresher = routeRefresher;
         this.eventPublisher = eventPublisher;
-        log.info("DynamicRouteDefinitionLocator initialized with RouteRefresher");
+        this.cacheManager = cacheManager;
+        this.configService = configService;
+        log.info("DynamicRouteDefinitionLocator initialized with GenericCacheManager");
     }
 
     /**
@@ -69,52 +81,15 @@ public class DynamicRouteDefinitionLocator implements RouteDefinitionLocator {
     @Override
     public Flux<RouteDefinition> getRouteDefinitions() {
         try {
-            // Get cached config from RouteManager
-            JsonNode cachedConfig = routeManager.getCachedConfig();
+            // ✅ Use GenericCacheManager's intelligent reload logic
+            JsonNode cachedConfig = cacheManager.getConfigWithFallback(
+                CACHE_KEY,
+                key -> configService.getConfig(DATA_ID, GROUP)
+            );
             
-            if (cachedConfig == null || !routeManager.isCacheValid()) {
-                log.warn("Route cache is empty or expired, will reload from Nacos");
-                
-                // Try to reload from Nacos with retry mechanism
-                boolean reloaded = false;
-                int maxRetries = 3;
-                int retryCount = 0;
-                
-                while (!reloaded && retryCount < maxRetries) {
-                    try {
-                        retryCount++;
-                        log.info("Attempting to reload from Nacos (attempt {}/{})", retryCount, maxRetries);
-                        routeRefresher.reloadConfigFromNacos();
-                        cachedConfig = routeManager.getCachedConfig();
-                        
-                        if (cachedConfig != null) {
-                            reloaded = true;
-                            log.info("Successfully reloaded routes from Nacos");
-                        } else {
-                            log.warn("Reloaded config is null, will retry...");
-                            Thread.sleep(1000 * retryCount); // Exponential backoff
-                        }
-                    } catch (Exception e) {
-                        log.error("Failed to reload from Nacos (attempt {}/{}): {}", 
-                                retryCount, maxRetries, e.getMessage());
-                        if (retryCount < maxRetries) {
-                            Thread.sleep(1000 * retryCount);
-                        }
-                    }
-                }
-                
-                // Fallback: use last valid config if Nacos is completely unavailable
-                if (!reloaded) {
-                    log.error("All Nacos reload attempts failed, using fallback cache");
-                    cachedConfig = routeManager.getFallbackConfig();
-                    
-                    if (cachedConfig != null) {
-                        log.warn("Using fallback configuration (last valid config from Nacos)");
-                    } else {
-                        log.error("No fallback configuration available, returning empty routes");
-                        return Flux.empty();
-                    }
-                }
+            if (cachedConfig == null) {
+                log.warn("No route configuration available (deleted or never loaded)");
+                return Flux.empty();
             }
 
             // Parse routes from cached config

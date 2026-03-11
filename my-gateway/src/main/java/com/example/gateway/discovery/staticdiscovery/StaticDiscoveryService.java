@@ -1,6 +1,9 @@
 package com.example.gateway.discovery.staticdiscovery;
 
+import com.example.gateway.cache.GenericCacheManager;
+import com.example.gateway.center.spi.ConfigCenterService;
 import com.example.gateway.manager.ServiceManager;
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.discovery.DiscoveryClient;
@@ -23,25 +26,42 @@ public class StaticDiscoveryService {
 
     private final ServiceManager serviceManager;
     private final DiscoveryClient discoveryClient;
+    private final GenericCacheManager<JsonNode> cacheManager;
+    private final ConfigCenterService configService;
 
-    public StaticDiscoveryService(ServiceManager serviceManager, DiscoveryClient discoveryClient) {
+    private static final String CACHE_KEY = "services";
+    private static final String DATA_ID = "gateway-services.json";
+    private static final String GROUP = "DEFAULT_GROUP";
+
+    public StaticDiscoveryService(ServiceManager serviceManager, 
+                                  DiscoveryClient discoveryClient,
+                                  GenericCacheManager<JsonNode> cacheManager,
+                                  ConfigCenterService configService) {
         this.serviceManager = serviceManager;
         this.discoveryClient = discoveryClient;
-        log.info("StaticDiscoveryService initialized with ServiceManager and Nacos DiscoveryClient");
+        this.cacheManager = cacheManager;
+        this.configService = configService;
+        log.info("StaticDiscoveryService initialized with GenericCacheManager for intelligent fallback");
     }
 
     /**
      * Get all healthy instances for a service.
      * Priority:
-     * 1. Static configuration from gateway-services.json (via ServiceManager)
+     * 1. Static configuration from gateway-services.json (via ServiceManager + GenericCacheManager)
      * 2. Dynamic discovery from Nacos (via DiscoveryClient)
      *
      * @param serviceId service name
      * @return list of service instances
      */
     public List<ServiceInstance> getInstances(String serviceId) {
-        // First, try to get from static configuration (gateway-services.json)
-        if (serviceManager.isCacheValid()) {
+        // ✅ First, ensure cache is loaded using intelligent reload logic
+        JsonNode cachedConfig = cacheManager.getConfigWithFallback(
+            CACHE_KEY,
+            key -> configService.getConfig(DATA_ID, GROUP)
+        );
+        
+        if (cachedConfig != null && serviceManager.isCacheValid()) {
+            // Try to get from static configuration (gateway-services.json)
             List<ServiceManager.ServiceInstance> staticInstances =
                     serviceManager.getServiceInstances(serviceId);
 
@@ -54,11 +74,13 @@ public class StaticDiscoveryService {
         }
 
         // Fallback: Get from Nacos DiscoveryClient
-        log.debug("No static config found, getting instances for service: {} from Nacos", serviceId);
+        log.debug("No static config found for {}, getting instances from Nacos", serviceId);
         List<ServiceInstance> nacosInstances = discoveryClient.getInstances(serviceId);
 
         if (nacosInstances != null && !nacosInstances.isEmpty()) {
-            log.debug("Found {} instance(s) for service: {} from Nacos", nacosInstances.size(), serviceId);
+            log.debug("Found {} instance(s) for {} from Nacos", nacosInstances.size(), serviceId);
+        } else {
+            log.warn("No instances found for service: {} (neither static nor Nacos)", serviceId);
         }
 
         return nacosInstances != null ? nacosInstances : Collections.emptyList();
