@@ -1,54 +1,72 @@
 package com.example.gateway.schedule;
 
+import com.example.gateway.cache.GenericCacheManager;
+import com.example.gateway.center.spi.ConfigCenterService;
 import com.example.gateway.monitor.AlertService;
-import com.example.gateway.refresher.RouteRefresher;
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
  * Scheduled task to periodically sync route configuration from Nacos.
- * Ensures routes are refreshed even if no requests trigger the reload.
+ * Uses GenericCacheManager with intelligent retry and fallback logic.
  */
 @Slf4j
 @Component
 public class RouteSyncScheduler {
 
     @Autowired
-    private RouteRefresher routeRefresher;
+    private GenericCacheManager<JsonNode> cacheManager;
+    
+    @Autowired
+    private ConfigCenterService configService;
     
     @Autowired(required = false)
     private AlertService alertService;
-    
-    @Value("${gateway.cache.sync-interval-ms:1800000}")
-    private long syncIntervalMs = 1800000; // 30 minutes default
+
+    private static final String CACHE_KEY = "routes";
+    private static final String DATA_ID = "gateway-routes.json";
+    private static final String GROUP = "DEFAULT_GROUP";
 
     /**
-     * Sync routes from Nacos every 30 minutes (configurable).
-     * - If successful: updates cache
-     * - If config is empty: clears cache (intentional deletion)
-     * - If network error: ignores and keeps current cache
+     * Sync routes from Nacos every 30 minutes using intelligent fallback logic.
+     * - Automatically retries on network failures (3 times with exponential backoff)
+     * - Falls back to last valid config if Nacos is unavailable
+     * - Clears cache only when Nacos explicitly returns empty (intentional deletion)
      */
-    @Scheduled(fixedRate = 1800000) // 30 minutes, configurable via application.yml
+    @Scheduled(fixedRate = 1800000) // 30 minutes
     public void syncRoutesFromNacos() {
-        log.info("Starting scheduled route synchronization from Nacos");
+        log.info("Starting scheduled route synchronization from Nacos (with fallback)");
         
         try {
-            routeRefresher.reloadConfigFromNacos();
-            log.info("✅ Scheduled route synchronization completed successfully");
+            // Use GenericCacheManager's intelligent reload logic
+            JsonNode config = cacheManager.getConfigWithFallback(
+                CACHE_KEY, 
+                key -> configService.getConfig(DATA_ID, GROUP)
+            );
             
-            if (alertService != null) {
-                alertService.send("INFO", "Route sync successful at " + new java.util.Date());
+            if (config != null) {
+                int routeCount = config.has("routes") ? config.get("routes").size() : 0;
+                log.info("✅ Scheduled route synchronization completed: {} routes", routeCount);
+                
+                if (alertService != null) {
+                    alertService.send("INFO", "Route sync successful: " + routeCount + " routes at " + new java.util.Date());
+                }
+            } else {
+                log.warn("⚠️ No route configuration available (deleted or never loaded)");
+                
+                if (alertService != null) {
+                    alertService.sendWarn("No route configuration available after sync attempt");
+                }
             }
         } catch (Exception e) {
-            log.warn("⚠️  Scheduled route synchronization failed (will continue with current cache): {}", 
-                    e.getMessage());
-            // Don't propagate exception - keep using current cache
+            // This should not happen as GenericCacheManager handles all exceptions internally
+            log.error("❌ Scheduled route synchronization failed unexpectedly", e);
             
             if (alertService != null) {
-                alertService.sendWarn("Route sync failed: " + e.getMessage());
+                alertService.sendError("Route sync failed: " + e.getMessage());
             }
         }
     }
