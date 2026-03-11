@@ -33,7 +33,7 @@ public class StaticDiscoveryService {
     private static final String DATA_ID = "gateway-services.json";
     private static final String GROUP = "DEFAULT_GROUP";
 
-    public StaticDiscoveryService(ServiceManager serviceManager, 
+    public StaticDiscoveryService(ServiceManager serviceManager,
                                   DiscoveryClient discoveryClient,
                                   GenericCacheManager<JsonNode> cacheManager,
                                   ConfigCenterService configService) {
@@ -56,10 +56,10 @@ public class StaticDiscoveryService {
     public List<ServiceInstance> getInstances(String serviceId) {
         // ✅ First, ensure cache is loaded using intelligent reload logic
         JsonNode cachedConfig = cacheManager.getConfigWithFallback(
-            CACHE_KEY,
-            key -> configService.getConfig(DATA_ID, GROUP)
+                CACHE_KEY,
+                key -> configService.getConfig(DATA_ID, GROUP)
         );
-        
+
         if (cachedConfig != null && serviceManager.isCacheValid()) {
             // Try to get from static configuration (gateway-services.json)
             List<ServiceManager.ServiceInstance> staticInstances =

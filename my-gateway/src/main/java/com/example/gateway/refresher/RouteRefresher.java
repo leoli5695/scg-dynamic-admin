@@ -3,97 +3,70 @@ package com.example.gateway.refresher;
 import com.example.gateway.center.spi.ConfigCenterService;
 import com.example.gateway.manager.RouteManager;
 import com.example.gateway.route.DynamicRouteDefinitionLocator;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cloud.gateway.route.RouteDefinition;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+
 /**
- * Route configuration refresher.
- * Listens to gateway-routes.json changes and refreshes routes.
+ * Route configuration refresher with per-route incremental refresh.
+ * Listens to routes index and individual route changes in Nacos.
  *
  * @author leoli
- * @version 1.0
  */
 @Slf4j
 @Component
-public class RouteRefresher extends AbstractRefresher {
+public class RouteRefresher {
+
+    private static final String ROUTE_PREFIX = "config/gateway/routes/route-";
+    private static final String ROUTES_INDEX = "config/gateway/metadata/routes-index";
+    private static final String GROUP = "DEFAULT_GROUP";
 
     private final RouteManager routeManager;
     private final ConfigCenterService configService;
     private final DynamicRouteDefinitionLocator routeLocator;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    private static final String GROUP = "DEFAULT_GROUP";
-    private static final String DATA_ID = "gateway-routes.json";
+    // Currently listening route IDs
+    private final Set<String> listeningRouteIds = ConcurrentHashMap.newKeySet();
+    
+    // Route listeners cache: <routeId, listener>
+    private final ConcurrentHashMap<String, ConfigCenterService.ConfigListener> routeListeners = new ConcurrentHashMap<>();
 
     @Autowired
     public RouteRefresher(RouteManager routeManager,
-                          ConfigCenterService confgService,
-                          DynamicRouteDefinitionLocator routeLocator) {
+                         ConfigCenterService configService,
+                         DynamicRouteDefinitionLocator routeLocator) {
         this.routeManager = routeManager;
+        this.configService = configService;
         this.routeLocator = routeLocator;
-        this.configService = confgService;
-        log.info("RouteRefresher initialized for config center: {}", configService.getCenterType());
+        log.info("RouteRefresher initialized with per-route incremental refresh");
     }
 
     /**
-     * Initialize listener after bean construction
+     * Initialize after bean construction
      */
     @PostConstruct
     public void init() {
-        // Register listener to Nacos config center
-        ConfigCenterService.ConfigListener listener = (dataId, group, newContent) -> {
-            log.info("Route config change detected: {}, content={}", dataId, 
-                    newContent == null ? "null" : (newContent.isBlank() ? "empty" : "has content"));
-            if (newContent == null || newContent.isBlank()) {
-                log.warn("Route config deleted or empty, clearing cache");
-                clearCache();
-            } else {
-                onConfigChange(dataId, newContent);
-            }
-        };
-        configService.addListener(DATA_ID, GROUP, listener);
-        log.info("RouteRefresher registered listener for {}", DATA_ID);
+        // 1. Listen to routes index changes
+        ConfigCenterService.ConfigListener indexListener = this::onRoutesIndexChanged;
+        configService.addListener(ROUTES_INDEX, GROUP, indexListener);
+        log.info("✅ Registered listener for routes index: {}", ROUTES_INDEX);
 
-        // Load initial configuration
-        loadInitialConfig();
+        // 2. Load all routes initially
+        loadAllRoutes();
         
-        // Warmup: proactively sync from Nacos on startup
-        warmupCache();
-    }
-    
-    /**
-     * Warmup cache on startup to ensure routes are available immediately.
-     */
-    private void warmupCache() {
-        log.info("🔥 Warming up route cache on startup...");
-        try {
-            reloadConfigFromNacos();
-            log.info("✅ Route cache warmed up successfully");
-        } catch (Exception e) {
-            log.warn("⚠️  Route cache warmup failed, will load on first request: {}", e.getMessage());
-        }
-    }
-
-    /**
-     * Clear route cache when configuration is deleted
-     */
-    private void clearCache() {
-        try {
-            // Clear RouteManager cache
-            routeManager.loadConfig("[]"); // Empty array
-            
-            // Trigger SCG to refresh and remove all routes
-            routeLocator.refresh();
-            
-            log.info("Route cache cleared successfully");
-        } catch (Exception e) {
-            log.error("Failed to clear route cache: {}", e.getMessage(), e);
-        }
+        log.info("✅ RouteRefresher initialization completed");
     }
 
     /**
@@ -101,149 +74,188 @@ public class RouteRefresher extends AbstractRefresher {
      */
     @PreDestroy
     public void destroy() {
-        ConfigCenterService.ConfigListener listener = (dataId, group, newContent) -> {
-            log.info("Route config change detected: {}", dataId);
-            onConfigChange(dataId, newContent);
+        // Remove all route listeners
+        for (String routeId : listeningRouteIds) {
+            String routeDataId = ROUTE_PREFIX + routeId;
+            ConfigCenterService.ConfigListener listener = routeListeners.get(routeId);
+            if (listener != null) {
+                configService.removeListener(routeDataId, GROUP, listener);
+            }
+        }
+        
+        // Remove index listener
+        configService.removeListener(ROUTES_INDEX, GROUP, this::onRoutesIndexChanged);
+        
+        log.info("RouteRefresher destroyed, all listeners removed");
+    }
+
+    /**
+     * Handle routes index change event.
+     */
+    private void onRoutesIndexChanged(String dataId, String group, String newIndexContent) {
+        log.info("📋 Routes index changed detected");
+        
+        try {
+            List<String> newRouteIds = parseRouteIds(newIndexContent);
+            Set<String> oldRouteIds = new HashSet<>(listeningRouteIds);
+            
+            // Convert List to Set for difference calculation
+            Set<String> newRouteIdSet = new HashSet<>(newRouteIds);
+            
+            // Calculate differences
+            Set<String> addedRoutes = getDifference(newRouteIdSet, oldRouteIds);
+            Set<String> removedRoutes = getDifference(oldRouteIds, newRouteIdSet);
+            
+            log.info("📊 Route changes: +{} added, -{} removed", addedRoutes.size(), removedRoutes.size());
+            
+            // Add listeners for new routes
+            for (String routeId : addedRoutes) {
+                addRouteListener(routeId);
+            }
+            
+            // Remove listeners for deleted routes
+            for (String routeId : removedRoutes) {
+                removeRouteListener(routeId);
+            }
+            
+            // Refresh SCG routes if there are changes
+            if (!addedRoutes.isEmpty() || !removedRoutes.isEmpty()) {
+                refreshSCGRoutes();
+                log.info("✅ Routes index refresh completed");
+            }
+            
+        } catch (Exception e) {
+            log.error("Failed to process routes index change", e);
+        }
+    }
+
+    /**
+     * Handle single route change event (create/update/delete).
+     */
+    private void onSingleRouteChange(String routeId, String content) {
+        try {
+            if (content == null || content.isBlank()) {
+                // Route deleted
+                routeManager.removeRoute(routeId);
+                log.info("🗑️  Route deleted: {}", routeId);
+            } else {
+                // Route created or updated
+                RouteDefinition route = parseRoute(content);
+                routeManager.putRoute(routeId, route);
+                log.info("✏️  Route updated: {} -> {}", routeId, route.getUri());
+            }
+            
+            // Incremental refresh (only this route)
+            refreshSCGRoutes();
+            
+        } catch (Exception e) {
+            log.error("Failed to process route change: {}", routeId, e);
+        }
+    }
+
+    /**
+     * Load all routes on startup.
+     */
+    private void loadAllRoutes() {
+        log.info("🔥 Loading all routes on startup...");
+        
+        try {
+            String indexContent = configService.getConfig(ROUTES_INDEX, GROUP);
+            List<String> routeIds = parseRouteIds(indexContent);
+            
+            for (String routeId : routeIds) {
+                String routeDataId = ROUTE_PREFIX + routeId;
+                String routeConfig = configService.getConfig(routeDataId, GROUP);
+                
+                if (routeConfig != null && !routeConfig.isBlank()) {
+                    RouteDefinition route = parseRoute(routeConfig);
+                    routeManager.putRoute(routeId, route);
+                    
+                    // Add listener for this route
+                    addRouteListener(routeId);
+                    
+                    log.debug("Loaded route: {}", routeId);
+                }
+            }
+            
+            log.info("✅ Loaded {} routes on startup", routeIds.size());
+            
+        } catch (Exception e) {
+            log.error("Failed to load initial routes", e);
+        }
+    }
+
+    /**
+     * Add listener for a single route.
+     */
+    private void addRouteListener(String routeId) {
+        String routeDataId = ROUTE_PREFIX + routeId;
+        
+        ConfigCenterService.ConfigListener listener = (dataId, group, content) -> {
+            onSingleRouteChange(routeId, content);
         };
-        configService.removeListener(DATA_ID, GROUP, listener);
-        log.info("RouteRefresher removed listener for {}", DATA_ID);
+        
+        configService.addListener(routeDataId, GROUP, listener);
+        routeListeners.put(routeId, listener);
+        listeningRouteIds.add(routeId);
+        
+        log.info("✅ Added listener for route: {}", routeId);
     }
 
     /**
-     * Load initial configuration on startup
+     * Remove listener for a deleted route.
      */
-    private void loadInitialConfig() {
+    private void removeRouteListener(String routeId) {
+        String routeDataId = ROUTE_PREFIX + routeId;
+        ConfigCenterService.ConfigListener listener = routeListeners.remove(routeId);
+        
+        if (listener != null) {
+            configService.removeListener(routeDataId, GROUP, listener);
+            listeningRouteIds.remove(routeId);
+            log.info("🗑️  Removed listener for route: {}", routeId);
+        }
+    }
+
+    /**
+     * Refresh SCG routes.
+     */
+    private void refreshSCGRoutes() {
         try {
-            String initialConfig = configService.getConfig(DATA_ID, GROUP);
-            if (initialConfig != null && !initialConfig.isBlank()) {
-                log.info("Loading initial route configuration");
-                onConfigChange(DATA_ID, initialConfig);
-            } else {
-                log.warn("No initial route configuration found");
-            }
+            routeLocator.refresh();
+            log.debug("SCG routes refreshed");
         } catch (Exception e) {
-            log.error("Failed to load initial route configuration: {}", e.getMessage(), e);
+            log.error("Failed to refresh SCG routes", e);
         }
     }
 
     /**
-     * Reload configuration from Nacos manually (fallback when cache is invalid)
+     * Parse route IDs from index JSON.
      */
-    public void reloadConfigFromNacos() {
-        log.info("Manually reloading route configuration from Nacos");
+    private List<String> parseRouteIds(String json) {
         try {
-            String config = configService.getConfig(DATA_ID, GROUP);
-            if (config != null && !config.isBlank()) {
-                log.info("Successfully reloaded route configuration from Nacos");
-                onConfigChange(DATA_ID, config);
-            } else {
-                log.warn("No route configuration found in Nacos during manual reload");
-                clearCache();
+            if (json == null || json.isBlank()) {
+                return new ArrayList<>();
             }
+            return objectMapper.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
         } catch (Exception e) {
-            log.error("Failed to reload route configuration from Nacos: {}", e.getMessage(), e);
+            log.error("Failed to parse route IDs from index", e);
+            return new ArrayList<>();
         }
-    }
-
-    @Override
-    protected Object parseConfig(String json) {
-        try {
-            // Parse JSON to JsonNode for validation
-            JsonNode root = objectMapper.readTree(json);
-
-            // Validate configuration structure
-            validateConfig(root);
-
-            // Load config into RouteManager
-            routeManager.loadConfig(json);
-
-            log.debug("Route config parsed successfully");
-            return root;
-        } catch (Exception e) {
-            log.error("Failed to parse route config: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to parse route config", e);
-        }
-    }
-
-    @Override
-    protected void updateCache(Object config) {
-        // Cache is managed by RouteManager
-        log.debug("Route config cache updated by RouteManager");
-    }
-
-    @Override
-    protected void doRefresh(Object config) {
-        if (config == null || !(config instanceof JsonNode)) {
-            log.warn("Invalid route config, skipping refresh");
-            return;
-        }
-
-        JsonNode root = (JsonNode) config;
-        int routeCount = routeManager.countRoutes(root);
-
-        log.info("Route config refreshed: {} routes", routeCount);
-
-        // Trigger SCG to reload routes immediately
-        routeLocator.refresh();
-
-        // Log detailed route information
-        logRouteDetails(root);
     }
 
     /**
-     * Validate configuration structure
+     * Parse RouteDefinition from JSON.
      */
-    private void validateConfig(JsonNode root) {
-        if (!root.has("routes")) {
-            log.warn("Configuration missing 'routes' node");
-        }
-
-        if (root.has("routes") && !root.get("routes").isArray()) {
-            throw new IllegalArgumentException("'routes' must be an array");
-        }
-
-        // Validate each route has required fields
-        if (root.has("routes")) {
-            root.get("routes").forEach(route -> {
-                if (!route.has("id")) {
-                    throw new IllegalArgumentException("Route missing required 'id' field");
-                }
-                if (!route.has("uri")) {
-                    throw new IllegalArgumentException("Route '" + route.get("id").asText() +
-                            "' missing required 'uri' field");
-                }
-            });
-        }
-
-        log.debug("Route config validation passed");
+    private RouteDefinition parseRoute(String json) throws Exception {
+        return objectMapper.readValue(json, RouteDefinition.class);
     }
 
     /**
-     * Log detailed route information
+     * Get difference between two sets (elements in set1 but not in set2).
      */
-    private void logRouteDetails(JsonNode root) {
-        if (!root.has("routes")) {
-            return;
-        }
-
-        root.get("routes").forEach(route -> {
-            String routeId = route.has("id") ? route.get("id").asText() : "unknown";
-            String uri = route.has("uri") ? route.get("uri").asText() : "unknown";
-            boolean enabled = !route.has("enabled") || route.get("enabled").asBoolean(true);
-
-            log.info("  Route '{}': {} -> {} (enabled={})",
-                    routeId, route.has("predicates") ? route.get("predicates").toString() : "*", uri, enabled);
-
-            if (route.has("filters") && route.get("filters").isArray()) {
-                log.debug("    Filters: {}", route.get("filters").size());
-                route.get("filters").forEach(filter -> {
-                    log.debug("      - {}", filter);
-                });
-            }
-
-            if (route.has("metadata") && route.get("metadata").isObject()) {
-                log.debug("    Metadata: {} entries", route.get("metadata").size());
-            }
-        });
+    private Set<String> getDifference(Set<String> set1, Set<String> set2) {
+        Set<String> result = new HashSet<>(set1);
+        result.removeAll(set2);
+        return result;
     }
 }

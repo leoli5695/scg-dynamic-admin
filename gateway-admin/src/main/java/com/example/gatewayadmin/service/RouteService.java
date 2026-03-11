@@ -2,11 +2,11 @@ package com.example.gatewayadmin.service;
 
 import com.example.gatewayadmin.center.ConfigCenterService;
 import com.example.gatewayadmin.converter.RouteConverter;
-import com.example.gatewayadmin.model.GatewayRoutesConfig;
 import com.example.gatewayadmin.model.RouteDefinition;
 import com.example.gatewayadmin.model.RouteEntity;
 import com.example.gatewayadmin.properties.GatewayAdminProperties;
 import com.example.gatewayadmin.repository.RouteRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,311 +19,234 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
- * Route configuration service
- *
+ * Route configuration service with per-route incremental refresh.
+ * Each route is stored in Nacos as an independent key: config/gateway/routes/route-{routeId}
+ * 
  * @author leoli
  */
 @Slf4j
 @Service
 public class RouteService {
 
-  private String routesDataId;
-  private ConfigCenterPublisher publisher;
+  private static final String ROUTE_PREFIX = "config/gateway/routes/route-";
+  private static final String ROUTES_INDEX = "config/gateway/metadata/routes-index";
+  private static final String GROUP = "DEFAULT_GROUP";
   
-    @Autowired
+  private final ObjectMapper objectMapper = new ObjectMapper();
+  
+  @Autowired
   private GatewayAdminProperties properties;
   
-    @Autowired
+  @Autowired
   private ConfigCenterService configCenterService;
   
-    @Autowired
+  @Autowired
   private RouteRepository routeRepository;
   
   @Autowired
   private RouteConverter routeConverter;
   
-    // Local cache
+  // Local cache
   private final ConcurrentHashMap<String, RouteDefinition> routeCache = new ConcurrentHashMap<>();
 
-    @PostConstruct
-    public void init() {
-        routesDataId = properties.getNacos().getDataIds().getRoutes();
-        publisher=new ConfigCenterPublisher(configCenterService, routesDataId);
-        // Load initial route config from config center AND database (dual-read for redundancy)
-        loadRoutesFromDatabase();
-        loadRoutesFromConfigCenter();
-    }
+  @PostConstruct
+  public void init() {
+    // Load initial routes from database
+    loadRoutesFromDatabase();
+    log.info("RouteService initialized with per-route Nacos storage");
+  }
 
-    /**
-     * Load routes from H2 database.
-     */
-    private void loadRoutesFromDatabase() {
-        try {
-            List<RouteEntity> entities = routeRepository.findAllByOrderByOrderNumAsc();
-            if (entities != null && !entities.isEmpty()) {
-                List<RouteDefinition> definitions = routeConverter.toDefinitions(entities);
-                for (RouteDefinition def : definitions) {
-                    routeCache.put(def.getId(), def);
-                }
-                log.info("Loaded {} routes from database", entities.size());
-            } else {
-                log.info("No routes found in database (table is empty)");
-            }
-        } catch (Exception e) {
-            log.warn("Failed to load routes from database: {}", e.getMessage());
+  /**
+   * Load routes from H2 database and sync to Nacos.
+   */
+  private void loadRoutesFromDatabase() {
+    try {
+      List<RouteEntity> entities = routeRepository.findAllByOrderByOrderNumAsc();
+      if (entities != null && !entities.isEmpty()) {
+        List<RouteDefinition> definitions = routeConverter.toDefinitions(entities);
+        for (RouteDefinition def : definitions) {
+          routeCache.put(def.getId(), def);
         }
-    }
-
-    /**
-     * Get all routes
-     */
-    public List<RouteDefinition> getAllRoutes() {
-        return new ArrayList<>(routeCache.values());
-    }
-
-    /**
-     * Get route configuration by ID
-     */
-    public RouteDefinition getRoute(String id) {
-        RouteDefinition route = routeCache.get(id);
-     if (route == null) {
-            // Cache miss, reload from config center
-           log.info("Route not found in cache, reloading from config center: {}", id);
-          loadRoutesFromConfigCenter();
-          return routeCache.get(id);
-        }
-      return route;
-    }
-
-    /**
-     * Create route with dual-write to database and config center.
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public boolean createRoute(RouteDefinition route) {
-        if (route == null || route.getId() == null || route.getId().isEmpty()) {
-            log.warn("Invalid route definition");
-            return false;
-        }
-
-        if (routeCache.containsKey(route.getId())) {
-            log.warn("Route already exists: {}", route.getId());
-            return false;
-        }
-
-        // 1. Convert to entity and save to H2 database
-        log.info("Writing route to database: {}", route.getId());
-        RouteEntity entity = routeConverter.toEntity(route);
-        try {
-            entity = routeRepository.save(entity);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to insert route into database: " + route.getId(), e);
-        }
-
-        // 2. Update memory cache
-        routeCache.put(route.getId(), route);
-        log.info("Route cached in memory: {}", route.getId());
-
-        // 3. Publish to config center (if fails, transaction will rollback)
-        log.info("Publishing route to config center: {}", route.getId());
-        boolean success = publisher.publish(new GatewayRoutesConfig(new ArrayList<>(routeCache.values())));
+        log.info("Loaded {} routes from database", entities.size());
         
-        if (!success) {
-            throw new RuntimeException("Failed to publish route to config center: " + route.getId());
-        }
-        
-        log.info("Route created successfully: {} (Database + Cache + Config Center)", route.getId());
-        return true;
+        // Sync all routes to Nacos on startup (for migration from old format)
+        syncAllRoutesToNacos();
+      } else {
+        log.info("No routes found in database (table is empty)");
+      }
+    } catch (Exception e) {
+      log.warn("Failed to load routes from database: {}", e.getMessage());
+    }
+  }
+  
+  /**
+   * Sync all routes from database to Nacos (per-route format).
+   * Used for initial migration or recovery.
+   */
+  private void syncAllRoutesToNacos() {
+    log.info("Syncing all routes to Nacos...");
+    List<String> routeIds = new ArrayList<>();
+    
+    for (RouteDefinition route : routeCache.values()) {
+      String routeDataId = ROUTE_PREFIX + route.getId();
+      String routeJson = toJson(route);
+      
+      try {
+        configCenterService.publishConfig(routeDataId, routeJson);
+        routeIds.add(route.getId());
+        log.debug("Pushed route to Nacos: {}", routeDataId);
+      } catch (Exception e) {
+        log.error("Failed to push route to Nacos: {}", routeDataId, e);
+      }
+    }
+    
+    // Update routes index
+    updateRoutesIndex(routeIds);
+    log.info("Synced {} routes to Nacos", routeIds.size());
+  }
+
+  /**
+   * Get all routes
+   */
+  public List<RouteDefinition> getAllRoutes() {
+    return new ArrayList<>(routeCache.values());
+  }
+
+  /**
+   * Get route configuration by ID
+   */
+  public RouteDefinition getRoute(String id) {
+    return routeCache.get(id);
+  }
+
+  /**
+   * Create route with dual-write to database and Nacos (per-route format).
+   */
+  @Transactional(rollbackFor = Exception.class)
+  public RouteEntity createRoute(RouteDefinition route) {
+    if (route == null || route.getId() == null || route.getId().isEmpty()) {
+      throw new IllegalArgumentException("Invalid route definition");
     }
 
-    /**
-     * Update route with dual-write to database and config center.
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public boolean updateRoute(String id, RouteDefinition route) {
-        if (route == null || id == null || id.isEmpty()) {
-            log.warn("Invalid route definition");
-            return false;
-        }
-
-        if (!routeCache.containsKey(id)) {
-            log.warn("Route not found: {}", id);
-            return false;
-        }
-
-        // 1. Update H2 database
-        log.info("Updating route in database: {}", id);
-        RouteEntity entity = routeConverter.toEntity(route);
-        try {
-            routeRepository.save(entity);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to update route in database: " + id, e);
-        }
-
-        // 2. Update memory cache
-        route.setId(id);
-        routeCache.put(id, route);
-        log.info("Route cached in memory: {}", id);
-
-        // 3. Publish to config center
-        log.info("Publishing updated route to config center: {}", id);
-        boolean success = publisher.publish(new GatewayRoutesConfig(new ArrayList<>(routeCache.values())));
-        
-        if (!success) {
-            throw new RuntimeException("Failed to publish route to config center: " + id);
-        }
-        
-        log.info("Route updated successfully: {} (Database + Cache + Config Center)", id);
-        return true;
+    if (routeCache.containsKey(route.getId())) {
+      throw new IllegalArgumentException("Route already exists: " + route.getId());
     }
 
-    @Transactional(rollbackFor = Exception.class)
-    public boolean deleteRoute(String id) {
-        if (id == null || id.isEmpty()) {
-            return false;
-        }
+    // 1. Convert to entity and save to H2 database
+    log.info("Saving route to database: {}", route.getId());
+    RouteEntity entity = routeConverter.toEntity(route);
+    entity = routeRepository.save(entity);
 
-        log.info("Deleting route from database and cache: {}", id);
+    // 2. Update memory cache
+    routeCache.put(route.getId(), route);
+    log.info("Route cached in memory: {}", route.getId());
 
-        // 1. Delete from H2 database
-        try {
-            routeRepository.deleteById(id);
-            log.info("Route deleted from database: {}", id);
-        } catch (Exception e) {
-            log.warn("Failed to delete route from database: {}", e.getMessage());
-        }
+    // 3. Push to Nacos (per-route format)
+    String routeDataId = ROUTE_PREFIX + route.getId();
+    String routeJson = toJson(route);
+    configCenterService.publishConfig(routeDataId, routeJson);
+    log.info("Route pushed to Nacos: {}", routeDataId);
 
-        // 2. Remove from memory cache
-        routeCache.remove(id);
-        log.info("Route removed from cache: {}", id);
+    // 4. Update routes index
+    updateRoutesIndex(getAllRouteIds());
+    
+    log.info("Route created successfully: {} (Database + Cache + Nacos)", route.getId());
+    return entity;
+  }
 
-        // 3. If cache empty, remove config from config center; otherwise publish updated config
-        if (routeCache.isEmpty()) {
-            log.info("Route cache is empty, removing config from config center: {}", routesDataId);
-            boolean result = publisher.remove();
-            if (!result) {
-                throw new RuntimeException("Failed to remove config from config center");
-            }
-        } else {
-            log.info("Publishing updated routes to config center after deletion");
-            boolean result = publisher.publish(new GatewayRoutesConfig(new ArrayList<>(routeCache.values())));
-            if (!result) {
-                throw new RuntimeException("Failed to publish updated routes to config center");
-            }
-        }
-        
-        log.info("Route deleted successfully: {} (Database + Cache + Config Center)", id);
-        return true;
+  /**
+   * Update route with dual-write to database and Nacos (per-route format).
+   */
+  @Transactional(rollbackFor = Exception.class)
+  public RouteEntity updateRoute(Long id, RouteDefinition route) {
+    if (route == null || id == null) {
+      throw new IllegalArgumentException("Invalid route definition or ID");
     }
 
-    /**
-     * Batch create/update routes
-     */
-    public boolean batchUpdateRoutes(List<RouteDefinition> routes) {
-        if (routes == null) {
-            return false;
-        }
+    RouteEntity entity = routeRepository.findById(String.valueOf(id))
+        .orElseThrow(() -> new IllegalArgumentException("Route not found with ID: " + id));
 
-        for (RouteDefinition route : routes) {
-            if (route.getId() != null && !route.getId().isEmpty()) {
-                routeCache.put(route.getId(), route);
-            }
-        }
+    // 1. Update database fields
+    log.info("Updating route in database: {}", route.getId());
+    entity.setUri(route.getUri().toString());
+    entity.setOrderNum(route.getOrder());
+    // Note: predicates, filters, metadata are not persisted to DB in current design
+    entity = routeRepository.save(entity);
 
-        return publisher.publish(new GatewayRoutesConfig(routes));
+    // 2. Update memory cache
+    routeCache.put(route.getId(), route);
+    log.info("Route updated in cache: {}", route.getId());
+
+    // 3. Push to Nacos (overwrite per-route key)
+    String routeDataId = ROUTE_PREFIX + route.getId();
+    String routeJson = toJson(route);
+    configCenterService.publishConfig(routeDataId, routeJson);
+    log.info("Route updated in Nacos: {}", routeDataId);
+
+    // Note: No need to update index since routeId didn't change
+    
+    log.info("Route updated successfully: {} (Database + Cache + Nacos)", route.getId());
+    return entity;
+  }
+
+  /**
+   * Delete route from database and Nacos (per-route format).
+   */
+  @Transactional(rollbackFor = Exception.class)
+  public void deleteRoute(Long id) {
+    RouteEntity entity = routeRepository.findById(String.valueOf(id))
+        .orElseThrow(() -> new IllegalArgumentException("Route not found with ID: " + id));
+    
+    String routeId = entity.getId();
+    log.info("Deleting route: {} (ID: {})", routeId, id);
+
+    // 1. Remove from cache first (to prevent concurrent access)
+    routeCache.remove(routeId);
+    log.info("Route removed from cache: {}", routeId);
+
+    // 2. Delete from Nacos (push empty content)
+    String routeDataId = ROUTE_PREFIX + routeId;
+    configCenterService.publishConfig(routeDataId, "");
+    log.info("Route deleted from Nacos: {}", routeDataId);
+
+    // 3. Delete from database
+    routeRepository.delete(entity);
+    log.info("Route deleted from database: {}", id);
+
+    // 4. Update routes index
+    updateRoutesIndex(getAllRouteIds());
+    
+    log.info("Route deleted successfully: {} (Database + Cache + Nacos)", routeId);
+  }
+
+  /**
+   * Get all route IDs from cache.
+   */
+  private List<String> getAllRouteIds() {
+    return new ArrayList<>(routeCache.keySet());
+  }
+
+  /**
+   * Update routes index in Nacos.
+   */
+  private void updateRoutesIndex(List<String> routeIds) {
+    try {
+      String indexJson = objectMapper.writeValueAsString(routeIds);
+      configCenterService.publishConfig(ROUTES_INDEX, indexJson);
+      log.debug("Routes index updated: {} routes", routeIds.size());
+    } catch (Exception e) {
+      log.error("Failed to update routes index", e);
     }
+  }
 
-    /**
-     * Reload route configuration
-     */
-    public void reloadRoutes() {
-        loadRoutesFromConfigCenter();
+  /**
+   * Convert RouteDefinition to JSON string.
+   */
+  private String toJson(RouteDefinition route) {
+    try {
+      return objectMapper.writeValueAsString(route);
+    } catch (Exception e) {
+      throw new RuntimeException("Failed to convert route to JSON", e);
     }
-
-    /**
-     * Load route configuration from config center
-     */
-  private void loadRoutesFromConfigCenter() {
-        try {
-            GatewayRoutesConfig config = configCenterService.getConfig(routesDataId, GatewayRoutesConfig.class);
-            if (config != null && config.getRoutes() != null) {
-                routeCache.clear();
-                for (RouteDefinition route : config.getRoutes()) {
-                    if (route.getId() != null) {
-                        routeCache.put(route.getId(), route);
-                    }
-                }
-                log.info("Loaded {} routes from config center", routeCache.size());
-            } else {
-                log.info("No routes config found in config center, using empty config");
-            }
-        } catch (Exception e) {
-            log.error("Error loading routes from config center", e);
-        }
-    }
-
-    /**
-     * Find routes by service name
-     */
-    public List<RouteDefinition> getRoutesByService(String serviceName) {
-        return routeCache.values().stream()
-                .filter(route -> route.getUri() != null && route.getUri().contains(serviceName))
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * Get route statistics
-     */
-    public RouteStats getRouteStats() {
-        RouteStats stats = new RouteStats();
-        stats.setTotalCount(routeCache.size());
-        stats.setLbRoutes((int) routeCache.values().stream()
-                .filter(r -> r.getUri() != null && r.getUri().startsWith("lb://"))
-                .count());
-        stats.setHttpRoutes((int) routeCache.values().stream()
-                .filter(r -> r.getUri() != null && r.getUri().startsWith("http"))
-                .count());
-        return stats;
-    }
-
-    /**
-     * Force refresh cache from config center
-     */
-    public List<RouteDefinition> refreshFromNacos() {
-       log.info("Force refreshing routes from config center");
-      loadRoutesFromConfigCenter();
-     return getAllRoutes();
-    }
-
-    /**
-     * Route statistics
-     */
-    public static class RouteStats {
-        private int totalCount;
-        private int lbRoutes;
-        private int httpRoutes;
-
-        public int getTotalCount() {
-            return totalCount;
-        }
-
-        public void setTotalCount(int totalCount) {
-            this.totalCount = totalCount;
-        }
-
-        public int getLbRoutes() {
-            return lbRoutes;
-        }
-
-        public void setLbRoutes(int lbRoutes) {
-            this.lbRoutes = lbRoutes;
-        }
-
-        public int getHttpRoutes() {
-            return httpRoutes;
-        }
-
-        public void setHttpRoutes(int httpRoutes) {
-            this.httpRoutes = httpRoutes;
-        }
-    }
+  }
 }
