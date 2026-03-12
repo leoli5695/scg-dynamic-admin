@@ -79,6 +79,9 @@ public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
         configCenterService.publishConfig(serviceDataId, service);
         
         log.info("✅ Repaired service: {}", entity.getId());
+        
+        // Rebuild services index to ensure consistency
+        rebuildServicesIndex();
     }
     
     @Override
@@ -90,5 +93,21 @@ public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
         configCenterService.publishConfig(serviceDataId, "");
         
         log.info("✅ Removed orphan service: {}", entityId);
+        
+        // Rebuild services index after removal
+        rebuildServicesIndex();
+    }
+    
+    /**
+     * Rebuild services index from database.
+     */
+    private void rebuildServicesIndex() throws Exception {
+        List<String> serviceIds = serviceRepository.findAll().stream()
+            .map(ServiceEntity::getId)
+            .collect(Collectors.toList());
+        
+        String indexJson = objectMapper.writeValueAsString(serviceIds);
+        configCenterService.publishConfig(SERVICES_INDEX, indexJson);
+        log.debug("Services index rebuilt with {} services", serviceIds.size());
     }
 }

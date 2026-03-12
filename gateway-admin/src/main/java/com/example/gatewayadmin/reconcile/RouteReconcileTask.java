@@ -82,6 +82,9 @@ public class RouteReconcileTask implements ReconcileTask<RouteEntity> {
         configCenterService.publishConfig(routeDataId, route);
         
         log.info("✅ Repaired route: {}", entity.getId());
+        
+        // Rebuild routes index to ensure consistency
+        rebuildRoutesIndex();
     }
     
     @Override
@@ -93,5 +96,21 @@ public class RouteReconcileTask implements ReconcileTask<RouteEntity> {
         configCenterService.publishConfig(routeDataId, "");
         
         log.info("✅ Removed orphan route: {}", entityId);
+        
+        // Rebuild routes index after removal
+        rebuildRoutesIndex();
+    }
+    
+    /**
+     * Rebuild routes index from database.
+     */
+    private void rebuildRoutesIndex() throws Exception {
+        List<String> routeIds = routeRepository.findAll().stream()
+            .map(RouteEntity::getId)
+            .collect(Collectors.toList());
+        
+        String indexJson = objectMapper.writeValueAsString(routeIds);
+        configCenterService.publishConfig(ROUTES_INDEX, indexJson);
+        log.debug("Routes index rebuilt with {} routes", routeIds.size());
     }
 }
