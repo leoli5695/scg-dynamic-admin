@@ -63,25 +63,25 @@ public class RouteReconcileTask implements ReconcileTask<RouteEntity> {
     
     @Override
     public String extractId(RouteEntity entity) {
-        return entity.getId();
+        return entity.getRouteName();  // Use routeName as business identifier
     }
     
     @Override
     public void repairMissingInNacos(RouteEntity entity) throws Exception {
-        log.info("🔧 Repairing missing route in Nacos: {}", entity.getId());
+        log.info("🔧 Repairing missing route in Nacos: {}", entity.getRouteName());
         
         // Convert entity to RouteDefinition
         RouteDefinition route = new RouteDefinition();
-        route.setId(entity.getId());
+        route.setId(entity.getRouteName());
         route.setUri(entity.getUri());
         route.setOrder(entity.getOrderNum());
         
         // Push to Nacos
-        String routeDataId = ROUTE_PREFIX + entity.getId();
+        String routeDataId = ROUTE_PREFIX + entity.getRouteName();
         String routeJson = objectMapper.writeValueAsString(route);
         configCenterService.publishConfig(routeDataId, route);
         
-        log.info("✅ Repaired route: {}", entity.getId());
+        log.info("✅ Repaired route: {}", entity.getRouteName());
         
         // Rebuild routes index to ensure consistency
         rebuildRoutesIndex();
@@ -106,7 +106,7 @@ public class RouteReconcileTask implements ReconcileTask<RouteEntity> {
      */
     private void rebuildRoutesIndex() throws Exception {
         List<String> routeIds = routeRepository.findAll().stream()
-            .map(RouteEntity::getId)
+            .map(RouteEntity::getRouteName)
             .collect(Collectors.toList());
         
         String indexJson = objectMapper.writeValueAsString(routeIds);

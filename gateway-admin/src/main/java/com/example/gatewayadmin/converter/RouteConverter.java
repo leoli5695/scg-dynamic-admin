@@ -27,7 +27,8 @@ public class RouteConverter {
         }
 
         RouteEntity entity = new RouteEntity();
-        entity.setId(route.getId());
+        // Don't set ID - let database auto-generate it
+        entity.setRouteName(route.getId());  // Use route ID as business route name
         entity.setUri(route.getUri() != null ? route.getUri().toString() : null);
         
         // Convert predicates to JSON string
@@ -63,7 +64,7 @@ public class RouteConverter {
         }
 
         RouteDefinition route = new RouteDefinition();
-        route.setId(entity.getId());
+        route.setId(entity.getRouteName());  // Use routeName as the business ID
         
         if (entity.getUri() != null && !entity.getUri().isEmpty()) {
             route.setUri(entity.getUri());

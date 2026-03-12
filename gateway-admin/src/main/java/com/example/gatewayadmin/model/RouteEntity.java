@@ -18,8 +18,20 @@ import java.time.LocalDateTime;
 public class RouteEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private String id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    
+    /**
+     * Business route name (e.g., "user-route"), used in Nacos config key.
+     */
+    @Column(name = "route_name", nullable = false, unique = true, length = 255)
+    private String routeName;
+    
+    /**
+     * Route ID (UUID), kept for backward compatibility.
+     */
+    @Column(name = "route_id", length = 255)
+    private String routeId;
     
     @Column(nullable = false, length = 1024)
     private String uri;

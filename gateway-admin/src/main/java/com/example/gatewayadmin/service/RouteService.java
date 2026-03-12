@@ -128,21 +128,27 @@ public class RouteService {
       throw new IllegalArgumentException("Invalid route definition");
     }
 
-    if (routeCache.containsKey(route.getId())) {
-      throw new IllegalArgumentException("Route already exists: " + route.getId());
+    // Use route ID as business route name
+    String routeName = route.getId();
+    
+    if (routeCache.containsKey(routeName)) {
+      throw new IllegalArgumentException("Route already exists: " + routeName);
     }
 
     // 1. Convert to entity and save to H2 database
-    log.info("Saving route to database: {}", route.getId());
+    log.info("Saving route to database: {}", routeName);
     RouteEntity entity = routeConverter.toEntity(route);
+    entity.setRouteName(routeName);
     entity = routeRepository.save(entity);
+    
+    log.info("Route saved with DB id={}, route_name={}", entity.getId(), entity.getRouteName());
 
     // 2. Update memory cache
-    routeCache.put(route.getId(), route);
-    log.info("Route cached in memory: {}", route.getId());
+    routeCache.put(routeName, route);
+    log.info("Route cached in memory: {}", routeName);
 
     // 3. Push to Nacos (per-route format)
-    String routeDataId = ROUTE_PREFIX + route.getId();
+    String routeDataId = ROUTE_PREFIX + routeName;
     String routeJson = toJson(route);
     configCenterService.publishConfig(routeDataId, routeJson);
     log.info("Route pushed to Nacos: {}", routeDataId);
@@ -150,7 +156,7 @@ public class RouteService {
     // 4. Update routes index
     updateRoutesIndex(getAllRouteIds());
     
-    log.info("Route created successfully: {} (Database + Cache + Nacos)", route.getId());
+    log.info("Route created successfully: {} (Database + Cache + Nacos)", routeName);
     return entity;
   }
 
@@ -163,29 +169,30 @@ public class RouteService {
       throw new IllegalArgumentException("Invalid route definition or ID");
     }
 
-    RouteEntity entity = routeRepository.findById(String.valueOf(id))
-        .orElseThrow(() -> new IllegalArgumentException("Route not found with ID: " + id));
+    RouteEntity entity = routeRepository.findById(id)
+        .orElseThrow(() -> new IllegalArgumentException("Route not found with DB id: " + id));
 
     // 1. Update database fields
-    log.info("Updating route in database: {}", route.getId());
+    log.info("Updating route in database: {}", entity.getRouteName());
     entity.setUri(route.getUri().toString());
     entity.setOrderNum(route.getOrder());
     // Note: predicates, filters, metadata are not persisted to DB in current design
     entity = routeRepository.save(entity);
 
-    // 2. Update memory cache
-    routeCache.put(route.getId(), route);
-    log.info("Route updated in cache: {}", route.getId());
+    // 2. Update memory cache (use routeName as key)
+    String routeName = entity.getRouteName();
+    routeCache.put(routeName, route);
+    log.info("Route updated in cache: {}", routeName);
 
     // 3. Push to Nacos (overwrite per-route key)
-    String routeDataId = ROUTE_PREFIX + route.getId();
+    String routeDataId = ROUTE_PREFIX + routeName;
     String routeJson = toJson(route);
     configCenterService.publishConfig(routeDataId, routeJson);
     log.info("Route updated in Nacos: {}", routeDataId);
 
-    // Note: No need to update index since routeId didn't change
+    // Note: No need to update index since routeName didn't change
     
-    log.info("Route updated successfully: {} (Database + Cache + Nacos)", route.getId());
+    log.info("Route updated successfully: {} (Database + Cache + Nacos)", routeName);
     return entity;
   }
 
@@ -194,18 +201,18 @@ public class RouteService {
    */
   @Transactional(rollbackFor = Exception.class)
   public void deleteRoute(Long id) {
-    RouteEntity entity = routeRepository.findById(String.valueOf(id))
-        .orElseThrow(() -> new IllegalArgumentException("Route not found with ID: " + id));
+    RouteEntity entity = routeRepository.findById(id)
+        .orElseThrow(() -> new IllegalArgumentException("Route not found with DB id: " + id));
     
-    String routeId = entity.getId();
-    log.info("Deleting route: {} (ID: {})", routeId, id);
+    String routeName = entity.getRouteName();
+    log.info("Deleting route: {} (DB id: {})", routeName, id);
 
     // 1. Remove from cache first (to prevent concurrent access)
-    routeCache.remove(routeId);
-    log.info("Route removed from cache: {}", routeId);
+    routeCache.remove(routeName);
+    log.info("Route removed from cache: {}", routeName);
 
     // 2. Delete from Nacos (push empty content)
-    String routeDataId = ROUTE_PREFIX + routeId;
+    String routeDataId = ROUTE_PREFIX + routeName;
     configCenterService.publishConfig(routeDataId, "");
     log.info("Route deleted from Nacos: {}", routeDataId);
 
@@ -216,7 +223,7 @@ public class RouteService {
     // 4. Update routes index
     updateRoutesIndex(getAllRouteIds());
     
-    log.info("Route deleted successfully: {} (Database + Cache + Nacos)", routeId);
+    log.info("Route deleted successfully: {} (Database + Cache + Nacos)", routeName);
   }
 
   /**

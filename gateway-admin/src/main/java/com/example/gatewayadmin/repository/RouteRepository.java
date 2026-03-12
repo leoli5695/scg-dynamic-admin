@@ -12,7 +12,12 @@ import java.util.List;
  * @author leoli
  */
 @Repository
-public interface RouteRepository extends JpaRepository<RouteEntity, String> {
+public interface RouteRepository extends JpaRepository<RouteEntity, Long> {
+    
+    /**
+     * Find route by business route name.
+     */
+    RouteEntity findByRouteName(String routeName);
     
     /**
      * Find all enabled routes.
