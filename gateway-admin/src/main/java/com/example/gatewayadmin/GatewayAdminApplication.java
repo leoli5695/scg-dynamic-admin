@@ -8,6 +8,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 /**
@@ -17,6 +18,7 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
  * Default (dev profile): Disabled, using Nacos as data store
  */
 @EnableAsync
+@EnableScheduling
 @SpringBootApplication
 @EnableTransactionManagement
 @EnableConfigurationProperties(GatewayAdminProperties.class)
