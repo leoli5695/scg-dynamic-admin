@@ -66,10 +66,12 @@ gateway:
     prefix: config
   nacos:
     data-ids:
-      routes: gateway-routes.json
-      services: gateway-services.json
-      plugins: gateway-plugins.json
-      group: DEFAULT_GROUP
+      # Deprecated: Services use incremental format now
+      services: gateway-services.json  # Legacy full-config (will be removed)
+      plugins: gateway-plugins.json    # Full plugin strategies config
+      # Routes use incremental format (not configured here):
+      # - config.gateway.routes.route-{id}
+    group: DEFAULT_GROUP
 
 management:
   endpoints:

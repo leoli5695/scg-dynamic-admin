@@ -56,17 +56,17 @@ public class GatewayAdminProperties {
     @Data
     public static class DataIdProperties {
         /**
-         * Data ID for route configuration.
+         * Data ID for service configuration (legacy full-config format).
+         * Deprecated: Services now use incremental format: config.gateway.services.service-{id}
          */
-        private String routes = "gateway-routes.json";
-
-        /**
-         * Data ID for service configuration.
-         */
+        @Deprecated
         private String services = "gateway-services.json";
 
         /**
-         * Data ID for plugin configuration.
+         * Data ID for plugin configuration (full config file).
+         * Routes and services use incremental format: 
+         * - config.gateway.routes.route-{id}
+         * - config.gateway.services.service-{id}
          */
         private String plugins = "gateway-plugins.json";
     }
