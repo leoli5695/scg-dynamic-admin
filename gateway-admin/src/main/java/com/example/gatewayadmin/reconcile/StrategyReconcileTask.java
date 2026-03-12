@@ -21,7 +21,7 @@ import java.util.Set;
 @Component
 public class StrategyReconcileTask implements ReconcileTask<StrategyEntity> {
     
-    private static final String PLUGINS_DATA_ID = "config/gateway/plugins.json";
+    private static final String PLUGINS_DATA_ID = "config.gateway.plugins.json";
     
     @Autowired
     private StrategyRepository strategyRepository;
