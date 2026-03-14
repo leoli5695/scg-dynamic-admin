@@ -92,17 +92,6 @@ const App: React.FC = () => {
     }
   };
 
-  // If not logged in and not on login page, redirect to login
-  if (!isLoggedIn && location.pathname !== '/login') {
-    return <LoginPage />;
-  }
-
-  // If logged in and on login page, redirect to main
-  if (isLoggedIn && location.pathname === '/login') {
-    navigate('/');
-    return null;
-  }
-
   // User dropdown menu items
   const userMenuItems: MenuItem[] = [
     {
@@ -112,6 +101,11 @@ const App: React.FC = () => {
       onClick: handleLogout
     }
   ];
+
+  // If not logged in, show login page only
+  if (!isLoggedIn) {
+    return <LoginPage />;
+  }
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -160,13 +154,7 @@ const App: React.FC = () => {
           background: colorBgContainer,
           overflow: 'auto'
         }}>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/services" element={<ServicesPage />} />
-            <Route path="/routes" element={<RoutesPage />} />
-            <Route path="/strategies" element={<StrategiesPage />} />
-            <Route path="/" element={<ServicesPage />} />
-          </Routes>
+          {renderContent()}
         </Content>
       </Layout>
     </Layout>

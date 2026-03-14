@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Form, Input, Button, message, Typography } from 'antd';
-import { UserOutlined, LockOutlined, GatewayOutlined } from '@ant-design/icons';
+import { Form, Input, Button, message, Typography, Divider } from 'antd';
+import { UserOutlined, LockOutlined, GatewayOutlined, GlobalOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { useTranslation } from 'react-i18next';
 import './LoginPage.css';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 
 interface LoginFormData {
   username: string;
@@ -35,9 +35,9 @@ const LoginPage: React.FC = () => {
         
         message.success(t('login.success', { nickname: nickname || username }));
         
-        // Redirect to main page
+        // Force reload to update App component state
         setTimeout(() => {
-          navigate('/');
+          window.location.href = '/';
         }, 500);
       } else {
         message.error(response.data.message || t('login.failed'));
@@ -52,75 +52,89 @@ const LoginPage: React.FC = () => {
 
   return (
     <div className="login-container">
-      {/* Background decoration */}
+      {/* Animated background */}
       <div className="login-background">
-        <div className="bg-circle circle-1"></div>
-        <div className="bg-circle circle-2"></div>
-        <div className="bg-circle circle-3"></div>
+        <div className="bg-gradient"></div>
         <div className="bg-grid"></div>
+        <div className="bg-glow glow-1"></div>
+        <div className="bg-glow glow-2"></div>
       </div>
 
-      {/* Login box */}
-      <div className="login-box">
-        <div className="login-header">
-          <GatewayOutlined className="logo-icon" />
-          <Title level={2} className="login-title">
-            {t('login.title')}
+      {/* Login card */}
+      <div className="login-card">
+        {/* Brand section */}
+        <div className="login-brand">
+          <div className="brand-icon-wrapper">
+            <GatewayOutlined className="brand-icon" />
+          </div>
+          <Title level={2} className="brand-title">
+            API Gateway Console
           </Title>
-          <p className="login-subtitle">{t('login.subtitle')}</p>
+          <Text className="brand-subtitle">
+            Unified Management Platform
+          </Text>
         </div>
 
-        <Form
-          name="login"
-          layout="vertical"
-          onFinish={onFinish}
-          autoComplete="off"
-          className="login-form"
-        >
-          <Form.Item
-            name="username"
-            rules={[
-              { required: true, message: t('login.username_required') },
-              { min: 3, message: t('login.username_min_length') }
-            ]}
+        {/* Form section */}
+        <div className="login-form-section">
+          <Form
+            name="login"
+            layout="vertical"
+            onFinish={onFinish}
+            autoComplete="off"
+            className="login-form"
           >
-            <Input
-              prefix={<UserOutlined />}
-              placeholder={t('login.username_placeholder')}
-              size="large"
-            />
-          </Form.Item>
-
-          <Form.Item
-            name="password"
-            rules={[
-              { required: true, message: t('login.password_required') },
-              { min: 6, message: t('login.password_min_length') }
-            ]}
-          >
-            <Input.Password
-              prefix={<LockOutlined />}
-              placeholder={t('login.password_placeholder')}
-              size="large"
-            />
-          </Form.Item>
-
-          <Form.Item>
-            <Button 
-              type="primary" 
-              htmlType="submit" 
-              loading={loading}
-              size="large"
-              block
-              className="login-button"
+            <Form.Item
+              name="username"
+              rules={[
+                { required: true, message: t('login.username_required') },
+                { min: 3, message: t('login.username_min_length') }
+              ]}
             >
-              {t('login.button')}
-            </Button>
-          </Form.Item>
-        </Form>
+              <Input
+                prefix={<UserOutlined className="input-icon" />}
+                placeholder={t('login.username_placeholder')}
+                size="large"
+                className="modern-input"
+              />
+            </Form.Item>
 
+            <Form.Item
+              name="password"
+              rules={[
+                { required: true, message: t('login.password_required') },
+                { min: 6, message: t('login.password_min_length') }
+              ]}
+            >
+              <Input.Password
+                prefix={<LockOutlined className="input-icon" />}
+                placeholder={t('login.password_placeholder')}
+                size="large"
+                className="modern-input"
+              />
+            </Form.Item>
+
+            <Form.Item className="form-button">
+              <Button 
+                type="primary" 
+                htmlType="submit" 
+                loading={loading}
+                size="large"
+                block
+                className="login-button"
+              >
+                {t('login.button')}
+              </Button>
+            </Form.Item>
+          </Form>
+        </div>
+
+        {/* Footer section */}
+        <Divider className="footer-divider" />
         <div className="login-footer">
-          <p className="footer-text">{t('login.default_credentials')}</p>
+          <Text className="footer-text">
+            {t('login.default_credentials')}
+          </Text>
         </div>
       </div>
     </div>

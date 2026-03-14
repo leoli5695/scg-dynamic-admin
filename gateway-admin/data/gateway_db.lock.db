@@ -1,6 +1,6 @@
 #FileLock
-#Fri Mar 13 17:52:03 CST 2026
-server=10.85.43.129\:62413
-hostName=10.85.43.129
+#Sat Mar 14 13:14:42 CST 2026
+server=192.168.1.12\:65414
+hostName=192.168.1.12
 method=file
-id=19ce69c2f68db9a537902ede8d969199e4b485bd54d
+id=19ceac4a6870eeb065bdc174c467b6e2d2080f523d7
