@@ -1,123 +1,115 @@
 package com.example.gatewayadmin.controller;
 
-import com.example.gatewayadmin.model.AuthConfig;
-import com.example.gatewayadmin.service.StrategyService;
-import lombok.extern.slf4j.Slf4j;
+import com.example.gatewayadmin.service.AuthService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
- * Authentication configuration controller.
+ * Authentication controller for user login and logout.
  *
  * @author leoli
  */
-@Slf4j
 @RestController
-@RequestMapping("/api/plugins/auth")
+@RequestMapping("/api/auth")
+@CrossOrigin(origins = "*")
 public class AuthController {
 
+    private static final Logger log = LoggerFactory.getLogger(AuthController.class);
+
+    private final AuthService authService;
+
     @Autowired
-    private StrategyService strategyService;
-
-    /**
-     * Get all authentication configurations
-     */
-    @GetMapping
-    public ResponseEntity<Map<String, Object>> getAllAuthConfigs() {
-        List<AuthConfig> configs = strategyService.getAllAuthConfigs();
-        Map<String, Object> result = new HashMap<>();
-        result.put("code", 200);
-        result.put("message", "success");
-        result.put("data", configs);
-        return ResponseEntity.ok(result);
+    public AuthController(AuthService authService) {
+        this.authService = authService;
     }
 
     /**
-     * Get authentication configuration by route ID
+     * User login endpoint.
+     * 
+     * @param loginRequest contains username and password
+     * @return JWT token and user info
      */
-    @GetMapping("/{routeId}")
-    public ResponseEntity<Map<String, Object>> getAuthConfig(@PathVariable String routeId) {
-        AuthConfig config = strategyService.getAuthConfigByRoute(routeId);
-        Map<String, Object> result = new HashMap<>();
+    @PostMapping("/login")
+    public ResponseEntity<Map<String, Object>> login(@RequestBody Map<String, String> loginRequest) {
+        log.info("Login attempt for user: {}", loginRequest.get("username"));
         
-        if (config != null) {
-            result.put("code", 200);
-            result.put("message", "success");
-            result.put("data", config);
-            return ResponseEntity.ok(result);
-        } else {
-            result.put("code", 404);
-            result.put("message", "Auth config not found for route: " + routeId);
-            return ResponseEntity.status(404).body(result);
+        try {
+            String username = loginRequest.get("username");
+            String password = loginRequest.get("password");
+            
+            if (username == null || username.trim().isEmpty()) {
+                return buildErrorResponse("Username is required");
+            }
+            
+            if (password == null || password.isEmpty()) {
+                return buildErrorResponse("Password is required");
+            }
+            
+            // Authenticate and get token
+            String token = authService.authenticate(username, password);
+            
+            // Get user info
+            var userOpt = authService.getUserByUsername(username);
+            if (userOpt.isEmpty()) {
+                return buildErrorResponse("User not found");
+            }
+            
+            var user = userOpt.get();
+            
+            // Build success response
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", 200);
+            response.put("message", "Login successful");
+            
+            Map<String, Object> data = new HashMap<>();
+            data.put("token", token);
+            data.put("username", user.getUsername());
+            data.put("nickname", user.getNickname());
+            data.put("role", user.getRole());
+            
+            response.put("data", data);
+            
+            log.info("Login successful for user: {}", username);
+            return ResponseEntity.ok(response);
+            
+        } catch (IllegalArgumentException e) {
+            log.warn("Login failed: {}", e.getMessage());
+            return buildErrorResponse(e.getMessage());
+        } catch (Exception e) {
+            log.error("Login error", e);
+            return buildErrorResponse("Login failed: " + e.getMessage());
         }
     }
 
     /**
-     * Create a new authentication configuration
+     * Logout endpoint (currently just returns success).
+     * 
+     * @return success message
      */
-    @PostMapping
-    public ResponseEntity<Map<String, Object>> createAuthConfig(@RequestBody AuthConfig config) {
-        log.info("Creating auth config for route: {}", config.getRouteId());
+    @PostMapping("/logout")
+    public ResponseEntity<Map<String, Object>> logout() {
+        log.info("Logout request received");
         
-        Map<String, Object> result = new HashMap<>();
+        Map<String, Object> response = new HashMap<>();
+        response.put("code", 200);
+        response.put("message", "Logout successful");
         
-        if (strategyService.createAuthConfig(config)) {
-            result.put("code", 200);
-            result.put("message", "Auth config created successfully");
-            result.put("data", config);
-            return ResponseEntity.ok(result);
-        } else {
-            result.put("code", 400);
-            result.put("message", "Failed to create auth config");
-            return ResponseEntity.badRequest().body(result);
-        }
+        return ResponseEntity.ok(response);
     }
 
     /**
-     * Update an existing authentication configuration
+     * Helper method to build error response.
      */
-    @PutMapping("/{routeId}")
-    public ResponseEntity<Map<String, Object>> updateAuthConfig(
-            @PathVariable String routeId, 
-            @RequestBody AuthConfig config) {
-        log.info("Updating auth config for route: {}", routeId);
-        
-        Map<String, Object> result = new HashMap<>();
-        
-        if (strategyService.updateAuthConfig(config)) {
-            result.put("code", 200);
-            result.put("message", "Auth config updated successfully");
-            result.put("data", config);
-            return ResponseEntity.ok(result);
-        } else {
-            result.put("code", 404);
-            result.put("message", "Auth config not found for route: " + routeId);
-            return ResponseEntity.status(404).body(result);
-        }
-    }
-
-    /**
-     * Delete an authentication configuration
-     */
-    @DeleteMapping("/{routeId}")
-    public ResponseEntity<Map<String, Object>> deleteAuthConfig(@PathVariable String routeId) {
-        log.info("Deleting auth config for route: {}", routeId);
-        
-        Map<String, Object> result = new HashMap<>();
-        
-        if (strategyService.removeAuthConfig(routeId)) {
-            result.put("code", 200);
-            result.put("message", "Auth config deleted successfully");
-            return ResponseEntity.ok(result);
-        } else {
-            result.put("code", 404);
-            result.put("message", "Auth config not found for route: " + routeId);
-            return ResponseEntity.status(404).body(result);
-        }
+    private ResponseEntity<Map<String, Object>> buildErrorResponse(String message) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("code", 401);
+        response.put("message", message);
+        return ResponseEntity.status(401).body(response);
     }
 }

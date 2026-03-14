@@ -47,9 +47,6 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Public endpoints
                         .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/api/public/**").permitAll()
-                        // API endpoints - temporarily disable authentication for development
-                        .requestMatchers("/api/**").permitAll()
                         // Actuator endpoints
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         // H2 console
