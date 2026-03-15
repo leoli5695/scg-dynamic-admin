@@ -324,6 +324,12 @@ public class RouteRefresher extends AbstractRefresher {
 }
 ```
 
+**设计亮点：**
+- ✅ **索引驱动模式** - services-index 管理所有 serviceId，避免全量扫描
+- ✅ **增量加载** - ServiceRefresher 按需加载单个 service 配置
+- ✅ **快速失败** - static://服务实例全部禁用时立即返回 503，不使用过期缓存
+- ✅ **健康感知** - 加权轮询前过滤不健康实例（单实例除外）
+
 **`lb://` 协议** —— 动态发现（Nacos 注册）
 
 ```java
@@ -375,6 +381,14 @@ private ServiceInstance chooseWeightedRoundRobin(
 ### 3.3 混合限流架构（Redis + Local）
 
 #### 3.3.1 双层架构设计
+
+**核心机制：**
+
+1. **定时健康检查** —— `RedisHealthChecker` 每 10 秒执行一次 `PING` 命令
+2. **状态动态切换** —— 根据 PING 结果自动切换 Redis 可用状态
+3. **限流策略自动选择** —— 基于实时状态决定使用 Redis 还是本地
+4. **可恢复降级** —— 不是永久降级，Redis 恢复后自动切回
+5. **零侵入** —— 业务代码无感知，过滤器自动处理
 
 ```mermaid
 graph TB
@@ -704,6 +718,12 @@ public class AuthProcessManager {
 }
 ```
 
+**设计亮点：**
+- ✅ **零配置扩展** - 新增认证方式只需添加`@Component`，无需修改现有代码
+- ✅ **策略模式 + 工厂模式** - 完美符合 OCP 开闭原则
+- ✅ **类型安全** - 编译期检查，避免拼写错误
+- ✅ **懒加载** - 首次请求时才创建处理器实例
+
 **扩展新认证方式只需 3 步：**
 
 1. 创建 `XxxAuthProcessor extends AbstractAuthProcessor`
@@ -978,15 +998,21 @@ public class ReconcileScheduler {
 }
 ```
 
-**定时任务清单：**
+#### 定时任务清单：
 
-| 任务名 | 频率 | 职责 |
-|--------|------|------|
-| RouteSyncScheduler | 30 分钟 | 同步路由配置 |
-| ServiceSyncScheduler | 30 分钟 | 同步服务配置 |
-| HealthCheckScheduler | 5 秒 | 健康检查 |
-| HealthStatusSyncTask | 5 秒 | 同步健康状态 |
-| ReconcileScheduler | 5 分钟 | 数据对账 |
+| 任务名 | 频率 | 职责 | 所属模块 |
+|--------|------|------|----------|
+| RedisHealthChecker | 10 秒 | Redis 限流健康检查 | limiter |
+| HealthStatusSyncTask | 5 秒 | 同步健康状态到 Nacos | health |
+| HealthCheckScheduler | 30 秒 | 主动 HTTP 健康检查 | health |
+| ReconcileScheduler | 5 分钟 | 数据对账（DB vs Nacos） | schedule |
+| RouteSyncScheduler | 30 分钟 | 路由配置兜底同步 | schedule |
+| ServiceSyncScheduler | 30 分钟 | 服务配置兜底同步 | schedule |
+
+**设计亮点：**
+- ✅ **分层健康检查** - Nacos 负责动态实例，Gateway 负责静态实例
+- ✅ **被动熔断机制** - DiscoveryLoadBalancerFilter 记录请求成功/失败
+- ✅ **快速失败策略** - 单实例故障时立即标记，下次轮询跳过
 
 ### 4.3 告警通知系统
 
@@ -1445,11 +1471,18 @@ telnet backend 9000
 3. ✅ **三层缓存** —— 主缓存 + 降级缓存 + 定时同步，零 404 保障
 4. ✅ **混合限流** —— Redis 分布式 + Caffeine 本地，自动降级
 5. ✅ **策略认证** —— 自动发现、零配置扩展，完美符合开闭原则
-6. ✅ **加权负载均衡** —— 确定性分配，精确符合权重比例
+6. ✅ **加权负载均衡** —— 平滑加权轮询算法，精确符合权重比例
 7. ✅ **健康检查分工** —— Nacos 负责动态实例，Gateway 负责静态实例
 8. ✅ **对账机制** —— 每 5 分钟自动对账，保障数据最终一致性
 9. ✅ **多通道告警** —— 钉钉、邮件、企业微信，分级告警
 10. ✅ **完整文档** —— 23 篇技术文档，覆盖架构、功能、故障排查
+
+**新增设计亮点：**
+11. ✅ **索引驱动模式** - services-index 避免全量扫描，按需加载
+12. ✅ **被动熔断机制** - 过滤器记录请求成功/失败，实时感知健康状态
+13. ✅ **快速失败策略** - static://服务全部禁用时立即返回 503
+14. ✅ **增量配置加载** - RouteManager/ServiceManager 按 routeId/serviceId 独立缓存
+15. ✅ **零配置扩展** - 认证方式、限流策略等均可通过 SPI 扩展
 
 ### 技术价值
 
