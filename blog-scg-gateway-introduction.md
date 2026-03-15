@@ -62,52 +62,39 @@
 
 ### 2.1 双模块职责分离架构
 
-```mermaid
-graph TB
-    %% 定义样式类，使用更小字体避免截断
-    classDef smallFont font-size:10px;
-    
-    subgraph "管理平面 Admin Plane"
-        A1["gateway-admin<br/>Port: 8080"]:::smallFont
-        A2["REST API Controller"]:::smallFont
-        A3["Service Layer"]:::smallFont
-        A4["JPA Repository"]:::smallFont
-        A5["H2 Database"]:::smallFont
-        A6["ConfigCenterService"]:::smallFont
-        
-        A2 --> A3
-        A3 --> A4
-        A4 --> A5
-        A3 --> A6
-    end
-    
-    subgraph "配置中心 Config Center"
-        B1["Nacos Server<br/>gateway-routes.json<br/>gateway-services.json<br/>gateway-strategies.json"]:::smallFont
-        B2["Consul KV<br/>config/gateway-*"]:::smallFont
-    end
-    
-    subgraph "数据平面 Data Plane"
-        C1["my-gateway<br/>Port: 80"]:::smallFont
-        C2["RouteRefresher<br/>ServiceRefresher"]:::smallFont
-        C3["GenericCacheManager<br/>Primary + Fallback"]:::smallFont
-        C4["DynamicRouteDefinitionLocator"]:::smallFont
-        C5["GlobalFilter Chain"]:::smallFont
-        C6["StaticDiscoveryService"]:::smallFont
-        
-        C2 --> C3
-        C3 --> C4
-        C4 --> C5
-        C5 --> C6
-    end
-    
-    A6 -->|Push Config| B1
-    A6 -->|Push Config| B2
-    C2 -->|Listen & Pull| B1
-    C2 -->|Watch| B2
-    
-    style A1 fill:#e1f5ff
-    style C1 fill:#fff4e1
-    style B1 fill:#f0f0f0
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    管理平面 (gateway-admin:8080)             │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐                  │
+│  │ REST API │→ │ Service  │→ │   JPA    │→│ H2 Database  │
+│  └──────────┘  └──────────┘  └──────────┘                  │
+│                        ↓                                    │
+│              ConfigCenterService                            │
+│                ↓         ↓                                  │
+└────────────────────────┼─────────┼──────────────────────────┘
+                         │         │                          
+                    Push to Nacos  Push to Consul             
+                         │         │                          
+┌────────────────────────┼─────────┼──────────────────────────┐
+│                    数据平面 (my-gateway:80)                 │
+│                Listen & Pull    Watch                       │
+│                   ↓                                          │
+│         ┌──────────────────────┐                            │
+│         │ GenericCacheManager  │ (Primary + Fallback)       │
+│         └──────────────────────┘                            │
+│                   ↓                                          │
+│    ┌──────────────────────────────┐                         │
+│    │ DynamicRouteDefinitionLocator│                         │
+│    └──────────────────────────────┘                         │
+│                   ↓                                          │
+│         ┌──────────────────────┐                            │
+│         │ GlobalFilter Chain   │                            │
+│         └──────────────────────┘                            │
+│                   ↓                                          │
+│    ┌──────────────────────────────┐                         │
+│    │ StaticDiscoveryService       │                         │
+│    └──────────────────────────────┘                         │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 **架构设计哲学：**
@@ -118,102 +105,73 @@ graph TB
 
 ### 2.2 分层架构设计
 
-```mermaid
-graph LR
-    subgraph "Web 层 Controller"
-        A1[RouteController]
-        A2[ServiceController]
-        A3[StrategyController]
-        A4[AuthController]
-    end
-    
-    subgraph "Security 层"
-        B1[JwtAuthenticationFilter]
-        B2[SecurityConfig RBAC]
-        B3[AuditLogAspect AOP]
-    end
-    
-    subgraph "Business 层 Service"
-        C1[RouteService]
-        C2[ServiceManager]
-        C3[StrategyService]
-        C4[ConfigCenterService]
-    end
-    
-    subgraph "Data Access 层 Repository"
-        D1[RouteRepository JPA]
-        D2[ServiceRepository]
-        D3[StrategyRepository]
-    end
-    
-    subgraph "Persistence 层"
-        E1[H2 Database]
-        E2[MySQL Production]
-    end
-    
-    A1 --> B1
-    B1 --> B2
-    B2 --> B3
-    B3 --> C1
-    C1 --> D1
-    D1 --> E1
-    
-    style A1 fill:#ffe6e6
-    style B1 fill:#e6f3ff
-    style C1 fill:#e6ffe6
-    style D1 fill:#fff4e6
-    style E1 fill:#f0f0f0
+```
+┌─────────────────────────────────────────────────────────┐
+│              Web 层 (Controller)                        │
+│  ┌────────────┐ ┌────────────┐ ┌────────────┐          │
+│  │RouteCtrl   │ │ServiceCtrl │ │StrategyCtrl │          │
+│  └────────────┘ └────────────┘ └────────────┘          │
+└─────────────────────────────────────────────────────────┘
+                         ↓ JWT Filter + RBAC
+┌─────────────────────────────────────────────────────────┐
+│           Security 层 (Filter + AOP)                    │
+│  JwtAuthenticationFilter → SecurityConfig → AuditAspect │
+└─────────────────────────────────────────────────────────┘
+                         ↓
+┌─────────────────────────────────────────────────────────┐
+│         Business 层 (Service/Manager)                   │
+│  RouteService → ServiceManager → StrategyService        │
+└─────────────────────────────────────────────────────────┘
+                         ↓
+┌─────────────────────────────────────────────────────────┐
+│        Data Access 层 (Repository/JPA)                  │
+│  RouteRepository → ServiceRepository → StrategyRepo     │
+└─────────────────────────────────────────────────────────┘
+                         ↓
+┌─────────────────────────────────────────────────────────┐
+│            Persistence 层 (Database)                    │
+│         H2 (Demo) / MySQL (Production)                  │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ### 2.3 过滤器链架构（Filter Chain）
 
-```mermaid
-graph TB
-    Request[Client Request] --> T1
-    
-    subgraph "Observability 可观测性"
-        T1[TraceIdGlobalFilter<br/>Order: -300<br/>生成/传递 TraceId]
-    end
-    
-    T1 --> T2
-    subgraph "Coarse Filter 粗粒度"
-        T2[IPFilterGlobalFilter<br/>Order: -280<br/>IP 黑白名单]
-    end
-    
-    T2 --> T3
-    subgraph "Authentication 认证"
-        T3[AuthenticationGlobalFilter<br/>Order: -250<br/>JWT/API Key/OAuth2]
-    end
-    
-    T3 --> T4
-    subgraph "Protection 保护"
-        T4[TimeoutGlobalFilter<br/>Order: -200<br/>超时控制]
-        T5[CircuitBreakerGlobalFilter<br/>Order: -100<br/>熔断器]
-    end
-    
-    T4 --> T5
-    T5 --> T6
-    subgraph "Rate Limiting 限流"
-        T6[HybridRateLimiterFilter<br/>Order: -50<br/>Redis + Local]
-    end
-    
-    T6 --> T7
-    subgraph "Routing 路由"
-        T7[StaticProtocolGlobalFilter<br/>Order: 10000+<br/>处理 static://]
-        T8[DiscoveryLoadBalancerFilter<br/>Order: 10001+<br/>负载均衡]
-    end
-    
-    T7 --> T8
-    T8 --> Backend[Backend Services]
-    
-    style T1 fill:#e6f3ff
-    style T2 fill:#ffe6e6
-    style T3 fill:#fff4e6
-    style T4 fill:#ffe6f3
-    style T5 fill:#ffe6f3
-    style T6 fill:#f0e6ff
-    style T7 fill:#e6ffe6
-    style T8 fill:#e6ffe6
+```
+Client Request
+      ↓
+┌───────────────────────────────────────────────────────────┐
+│  可观测性层 (Order: -300)                                 │
+│  TraceIdGlobalFilter - 生成/传递 TraceId                  │
+└───────────────────────────────────────────────────────────┘
+      ↓
+┌───────────────────────────────────────────────────────────┐
+│  粗粒度过滤层 (Order: -280)                               │
+│  IPFilterGlobalFilter - IP 黑白名单                        │
+└───────────────────────────────────────────────────────────┘
+      ↓
+┌───────────────────────────────────────────────────────────┐
+│  认证层 (Order: -250)                                     │
+│  AuthenticationGlobalFilter - JWT/API Key/OAuth2          │
+└───────────────────────────────────────────────────────────┘
+      ↓
+┌───────────────────────────────────────────────────────────┐
+│  保护层 (Order: -200 ~ -100)                              │
+│  TimeoutGlobalFilter - 超时控制                           │
+│  CircuitBreakerGlobalFilter - 熔断器                      │
+└───────────────────────────────────────────────────────────┘
+      ↓
+┌───────────────────────────────────────────────────────────┐
+│  限流层 (Order: -50)                                      │
+│  HybridRateLimiterFilter - Redis + Local 双层限流         │
+└───────────────────────────────────────────────────────────┘
+      ↓
+┌───────────────────────────────────────────────────────────┐
+│  路由层 (Order: 10000+)                                   │
+│  StaticProtocolGlobalFilter - 处理 static://              │
+│  DiscoveryLoadBalancerFilter - 加权负载均衡               │
+└───────────────────────────────────────────────────────────┘
+      ↓
+Backend Services
 ```
 
 **设计原则：**
@@ -626,49 +584,38 @@ gateway:
 
 #### 3.4.1 类图设计
 
-```mermaid
-classDiagram
-    class AuthProcessor {
-        <<interface>>
-        +Mono~Void~ process()
-        +String getAuthType()
-    }
-    
-    class AbstractAuthProcessor {
-        #validateConfig()
-        #buildErrorResponse()
-    }
-    
-    class JwtAuthProcessor {
-        -JwtTokenProvider tokenProvider
-        +process()
-        +getAuthType()
-    }
-    
-    class ApiKeyAuthProcessor {
-        +process()
-        +getAuthType()
-    }
-    
-    class OAuth2AuthProcessor {
-        -RestTemplate restTemplate
-        +process()
-        +getAuthType()
-    }
-    
-    class AuthProcessManager {
-        -Map~String, AuthProcessor~ processorMap
-        +authenticate()
-    }
-    
-    AuthProcessor <|-- AbstractAuthProcessor
-    AbstractAuthProcessor <|-- JwtAuthProcessor
-    AbstractAuthProcessor <|-- ApiKeyAuthProcessor
-    AbstractAuthProcessor <|-- OAuth2AuthProcessor
-    AuthProcessManager --> AuthProcessor : uses
-    
-    style AuthProcessor fill:#e6f3ff
-    style AbstractAuthProcessor fill:#f0f0f0
+```
+┌──────────────────────────────────────────────────────────┐
+│              <<interface>>                               │
+│              AuthProcessor                               │
+│  ─────────────────────────────────────────────────────   │
+│  + Mono<Void> process()                                  │
+│  + String getAuthType()                                  │
+└──────────────────────────────────────────────────────────┘
+           ▲                      ▲              ▲
+           │                      │              │
+    ┌──────┴──────┐      ┌───────┴──────┐ ┌────┴─────┐
+    │             │      │              │ │          │
+┌───▼──────┐ ┌───▼──────┐ ┌─▼────────┐ ┌─▼────────┐
+│JwtAuth   │ │ApiKeyAuth│ │OAuth2Auth│ │XxxAuth   │
+│Processor │ │Processor │ │Processor │ │Processor │
+└──────────┘ └──────────┘ └──────────┘ └──────────┘
+     ▲                                              
+     │ extends                                      
+┌────┴─────────────┐                                
+│AbstractAuth      │                                
+│Processor         │                                
+│#validateConfig() │                                
+│#buildErrorResponse()                              
+└──────────────────┘                                
+
+┌──────────────────────────────────────────────────────┐
+│          AuthProcessManager                          │
+│  - Map<String, AuthProcessor> processorMap           │
+│  + authenticate()                                    │
+│                                                      │
+│  Spring 自动注入所有 AuthProcessor 实现               │
+└──────────────────────────────────────────────────────┘
 ```
 
 #### 3.4.2 自动发现机制
