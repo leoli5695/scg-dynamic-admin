@@ -77,7 +77,7 @@ graph TB
     end
     
     subgraph "配置中心 Config Center"
-        B1["Nacos Config Center\ndataId: gateway-*\ngroup: DEFAULT_GROUP"]
+        B1["Nacos Config Center\ndataId: config.gateway.route-*\ndataId: config.gateway.service-*\ngroup: DEFAULT_GROUP"]
         B2["Consul KV\nprefix: config/gateway"]
     end
     
@@ -110,6 +110,25 @@ graph TB
 1. **管理平面（gateway-admin）**：负责 CRUD 操作、数据持久化、配置推送
 2. **数据平面（my-gateway）**：专注路由转发、策略执行、流量控制
 3. **配置中心解耦**：通过 Nacos/Consul 实现异步通信，延迟 < 100ms
+
+**Nacos DataId 命名规范：**
+
+```yaml
+# 路由配置（按 routeId 增量）
+config.gateway.route-{routeId-uuid}  # 例：config.gateway.route-550e8400-e29b-41d4-a716-446655440000
+
+# 服务配置（按 serviceId 增量）
+config.gateway.service-{serviceId-uuid}  # 例：config.gateway.service-6ba7b810-9dad-11d1-80b4-00c04fd430c8
+
+# 索引列表（用于全量扫描和兜底）
+config.gateway.metadata.routes-index     # JSON Array: ["routeId1", "routeId2"]
+config.gateway.metadata.services-index   # JSON Array: ["serviceId1", "serviceId2"]
+
+# 策略插件（全量配置）
+gateway-plugins.json                     # 包含所有插件配置
+
+# Group 统一为：DEFAULT_GROUP
+```
 
 ### 2.2 分层架构设计
 
@@ -1424,13 +1443,16 @@ groups:
 **问题 1：路由不生效**
 
 ```bash
-# 1. 检查 Nacos 配置
-curl http://nacos:8848/nacos/v1/cs/configs?dataId=gateway-routes.json
+# 1. 检查 Nacos 配置（使用实际的 routeId）
+curl http://nacos:8848/nacos/v1/cs/configs?dataId=config.gateway.route-xxx&group=DEFAULT_GROUP
 
-# 2. 检查 Gateway 日志
+# 2. 检查 routes-index
+curl http://nacos:8848/nacos/v1/cs/configs?dataId=config.gateway.metadata.routes-index&group=DEFAULT_GROUP
+
+# 3. 检查 Gateway 日志
 tail -f gateway.log | grep "RouteRefresher"
 
-# 3. 手动触发刷新
+# 4. 手动触发刷新
 curl -X POST http://gateway:80/actuator/refresh
 ```
 
