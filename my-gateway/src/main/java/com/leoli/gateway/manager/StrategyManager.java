@@ -1,10 +1,11 @@
-package com.example.gateway.manager;
+package com.leoli.gateway.manager;
 
-import com.example.gateway.cache.GenericCacheManager;
-import com.example.gateway.model.CircuitBreakerConfig;
-import com.example.gateway.model.RateLimiterConfig;
-import com.example.gateway.model.TimeoutConfig;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.leoli.gateway.cache.GenericCacheManager;
+import com.leoli.gateway.enums.StrategyType;
+import com.leoli.gateway.model.CircuitBreakerConfig;
+import com.leoli.gateway.model.RateLimiterConfig;
+import com.leoli.gateway.model.TimeoutConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -128,9 +129,9 @@ public class StrategyManager {
                     }
                     if (node.has("readTimeout") || node.has("responseTimeout")) {
                         // Support both "readTimeout" and "responseTimeout" field names
-                        int timeout = node.has("readTimeout") 
-                            ? node.get("readTimeout").asInt()
-                            : node.get("responseTimeout").asInt();
+                        int timeout = node.has("readTimeout")
+                                ? node.get("readTimeout").asInt()
+                                : node.get("responseTimeout").asInt();
                         config.setResponseTimeout(timeout);
                     }
                     return config;
@@ -201,7 +202,7 @@ public class StrategyManager {
     /**
      * Check if strategy is enabled for a route.
      */
-    public boolean isStrategyEnabled(com.example.gateway.enums.StrategyType type, String routeId) {
+    public boolean isStrategyEnabled(StrategyType type, String routeId) {
         switch (type) {
             case RATE_LIMITER:
                 RateLimiterConfig rlConfig = getRateLimiterConfig(routeId);
@@ -221,7 +222,7 @@ public class StrategyManager {
      * Get strategy config by type and route ID.
      */
     @SuppressWarnings("unchecked")
-    public <T> T getConfig(com.example.gateway.enums.StrategyType type, String routeId) {
+    public <T> T getConfig(StrategyType type, String routeId) {
         switch (type) {
             case RATE_LIMITER:
                 return (T) getRateLimiterConfig(routeId);

@@ -1,4 +1,4 @@
-package com.example.gateway.refresher;
+package com.leoli.gateway.refresher;
 
 import lombok.extern.slf4j.Slf4j;
 

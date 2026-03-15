@@ -1,9 +1,9 @@
-package com.example.gateway.schedule;
+package com.leoli.gateway.schedule;
 
-import com.example.gateway.cache.GenericCacheManager;
-import com.example.gateway.center.spi.ConfigCenterService;
-import com.example.gateway.monitor.AlertService;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.leoli.gateway.cache.GenericCacheManager;
+import com.leoli.gateway.center.spi.ConfigCenterService;
+import com.leoli.gateway.monitor.AlertService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -19,10 +19,10 @@ public class RouteSyncScheduler {
 
     @Autowired
     private GenericCacheManager<JsonNode> cacheManager;
-    
+
     @Autowired
     private ConfigCenterService configService;
-    
+
     @Autowired(required = false)
     private AlertService alertService;
 
@@ -39,24 +39,24 @@ public class RouteSyncScheduler {
     @Scheduled(fixedRate = 1800000) // 30 minutes
     public void syncRoutesFromNacos() {
         log.info("Starting scheduled route synchronization from Nacos (with fallback)");
-        
+
         try {
             // Use GenericCacheManager's intelligent reload logic
             JsonNode config = cacheManager.getConfigWithFallback(
-                CACHE_KEY, 
-                key -> configService.getConfig(DATA_ID, GROUP)
+                    CACHE_KEY,
+                    key -> configService.getConfig(DATA_ID, GROUP)
             );
-            
+
             if (config != null) {
                 int routeCount = config.has("routes") ? config.get("routes").size() : 0;
                 log.info("✅ Scheduled route synchronization completed: {} routes", routeCount);
-                
+
                 if (alertService != null) {
                     alertService.send("INFO", "Route sync successful: " + routeCount + " routes at " + new java.util.Date());
                 }
             } else {
                 log.warn("⚠️ No route configuration available (deleted or never loaded)");
-                
+
                 if (alertService != null) {
                     alertService.sendWarn("No route configuration available after sync attempt");
                 }
@@ -64,7 +64,7 @@ public class RouteSyncScheduler {
         } catch (Exception e) {
             // This should not happen as GenericCacheManager handles all exceptions internally
             log.error("❌ Scheduled route synchronization failed unexpectedly", e);
-            
+
             if (alertService != null) {
                 alertService.sendError("Route sync failed: " + e.getMessage());
             }

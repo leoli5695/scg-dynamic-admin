@@ -1,4 +1,4 @@
-package com.example.gateway.util;
+package com.leoli.gateway.util;
 
 import org.springframework.cloud.gateway.route.Route;
 import org.springframework.web.server.ServerWebExchange;
@@ -13,10 +13,10 @@ import static org.springframework.cloud.gateway.support.ServerWebExchangeUtils.G
  * @author leoli
  */
 public class RouteUtils {
-    
+
     /**
      * Extract route ID from exchange.
-     * 
+     *
      * @param exchange the server web exchange
      * @return route ID if available, otherwise "unknown"
      */
@@ -24,11 +24,11 @@ public class RouteUtils {
         Route route = exchange.getAttribute(GATEWAY_ROUTE_ATTR);
         return Objects.nonNull(route) ? route.getId() : "unknown";
     }
-    
+
     /**
      * Extract route ID from exchange with fallback.
-     * 
-     * @param exchange the server web exchange
+     *
+     * @param exchange     the server web exchange
      * @param defaultValue default value if route ID is not available
      * @return route ID if available, otherwise default value
      */
@@ -36,20 +36,20 @@ public class RouteUtils {
         Route route = exchange.getAttribute(GATEWAY_ROUTE_ATTR);
         return Objects.nonNull(route) ? route.getId() : defaultValue;
     }
-    
+
     /**
      * Check if route exists in exchange.
-     * 
+     *
      * @param exchange the server web exchange
      * @return true if route is available, false otherwise
      */
     public static boolean hasRoute(ServerWebExchange exchange) {
         return exchange.getAttribute(GATEWAY_ROUTE_ATTR) != null;
     }
-    
+
     /**
      * Get route from exchange.
-     * 
+     *
      * @param exchange the server web exchange
      * @return route if available, null otherwise
      */

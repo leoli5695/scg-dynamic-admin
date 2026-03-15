@@ -1,7 +1,7 @@
-package com.example.gateway.route;
+package com.leoli.gateway.route;
 
-import com.example.gateway.manager.RouteManager;
-import com.example.gateway.refresher.RouteRefresher;
+import com.leoli.gateway.manager.RouteManager;
+import com.leoli.gateway.refresher.RouteRefresher;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.event.RefreshRoutesEvent;
 import org.springframework.cloud.gateway.route.RouteDefinition;
@@ -28,7 +28,7 @@ public class DynamicRouteDefinitionLocator implements RouteDefinitionLocator {
     public DynamicRouteDefinitionLocator(RouteManager routeManager,
                                          RouteRefresher routeRefresher,
                                          ApplicationEventPublisher eventPublisher) {
-        this.routeManager= routeManager;
+        this.routeManager = routeManager;
         this.routeRefresher = routeRefresher;
         this.eventPublisher = eventPublisher;
         log.info("DynamicRouteDefinitionLocator initialized with per-route refresh");
@@ -62,13 +62,13 @@ public class DynamicRouteDefinitionLocator implements RouteDefinitionLocator {
         try {
             // Get all routes from RouteManager (per-route cache)
             Collection<RouteDefinition> allRoutes = routeManager.getAllRoutes();
-            
+
             log.info("Loaded {} route(s) to SCG", allRoutes.size());
-            
+
             if (log.isDebugEnabled()) {
                 allRoutes.forEach(r ->
-                    log.debug("  >> Route id={}, uri={}, predicates={}",
-                            r.getId(), r.getUri(), r.getPredicates())
+                        log.debug("  >> Route id={}, uri={}, predicates={}",
+                                r.getId(), r.getUri(), r.getPredicates())
                 );
             }
 

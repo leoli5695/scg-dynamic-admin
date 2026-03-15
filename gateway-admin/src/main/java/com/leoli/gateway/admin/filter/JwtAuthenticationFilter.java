@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.User;
@@ -24,7 +25,6 @@ import java.util.Collections;
  *
  * @author leoli
  */
-@ConditionalOnProperty(name = "gateway.security.jwt.enabled", havingValue = "true", matchIfMissing = false)
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
@@ -37,11 +37,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
+        // Skip JWT validation for public endpoints
+        String requestURI = request.getRequestURI();
+        logger.debug("Checking request URI: {}", requestURI);
+        
+        if (isPublicEndpoint(requestURI)) {
+            logger.info("Public endpoint detected, skipping JWT validation: {}", requestURI);
+            filterChain.doFilter(request, response);
+            return;
+        }
+        
         try {
             String jwt = getJwtFromRequest(request);
+            logger.debug("Extracted JWT from request: {}", jwt != null ? "present" : "not present");
 
             if (StringUtils.hasText(jwt) && jwtTokenProvider.validateToken(jwt)) {
                 String username = jwtTokenProvider.getUsernameFromToken(jwt);
@@ -54,12 +64,27 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
                 logger.debug("Set security context for user: {}", username);
+            } else if (StringUtils.hasText(jwt)) {
+                logger.warn("Invalid JWT token provided");
+            } else {
+                logger.warn("No JWT token provided for secured endpoint: {}", requestURI);
             }
         } catch (Exception ex) {
             logger.error("Could not set user authentication in security context", ex);
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    /**
+     * Check if the endpoint is public (no authentication required).
+     */
+    private boolean isPublicEndpoint(String requestURI) {
+        return requestURI.startsWith("/api/auth/") ||      // Login/register
+               requestURI.startsWith("/actuator/") ||       // Health checks
+               requestURI.startsWith("/h2-console/") ||     // Database console
+               requestURI.equals("/api/gateway/health/sync") || // Gateway health sync
+               requestURI.startsWith("/api/gateway/health"); // Gateway health query
     }
 
     /**

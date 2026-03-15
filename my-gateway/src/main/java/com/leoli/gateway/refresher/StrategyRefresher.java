@@ -1,9 +1,9 @@
-package com.example.gateway.refresher;
+package com.leoli.gateway.refresher;
 
-import com.example.gateway.center.spi.ConfigCenterService;
-import com.example.gateway.manager.StrategyManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leoli.gateway.center.spi.ConfigCenterService;
+import com.leoli.gateway.manager.StrategyManager;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
@@ -57,7 +57,7 @@ public class StrategyRefresher extends AbstractRefresher {
      */
     @PreDestroy
     public void destroy() {
-        ConfigCenterService.ConfigListener listener= (dataId, group, newContent) -> {
+        ConfigCenterService.ConfigListener listener = (dataId, group, newContent) -> {
             log.info("Strategy config change detected: {}", dataId);
             onConfigChange(dataId, newContent);
         };

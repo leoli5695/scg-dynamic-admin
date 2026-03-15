@@ -1,9 +1,9 @@
-package com.example.gateway.config;
+package com.leoli.gateway.config;
 
-import com.example.gateway.filter.CustomLoadBalancerGatewayFilterFactory;
-import com.example.gateway.manager.RouteManager;
-import com.example.gateway.refresher.RouteRefresher;
-import com.example.gateway.route.DynamicRouteDefinitionLocator;
+import com.leoli.gateway.filter.CustomLoadBalancerGatewayFilterFactory;
+import com.leoli.gateway.manager.RouteManager;
+import com.leoli.gateway.refresher.RouteRefresher;
+import com.leoli.gateway.route.DynamicRouteDefinitionLocator;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

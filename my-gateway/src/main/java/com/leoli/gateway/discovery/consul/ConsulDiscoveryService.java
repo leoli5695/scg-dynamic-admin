@@ -1,7 +1,7 @@
-package com.example.gateway.discovery.consul;
+package com.leoli.gateway.discovery.consul;
 
-import com.example.gateway.enums.CenterType;
-import com.example.gateway.discovery.spi.AbstractDiscoveryService;
+import com.leoli.gateway.discovery.spi.AbstractDiscoveryService;
+import com.leoli.gateway.enums.CenterType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.client.discovery.DiscoveryClient;
 

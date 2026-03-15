@@ -1,4 +1,4 @@
-package com.example.gateway.health;
+package com.leoli.gateway.health;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,7 +23,13 @@ public class InstanceDiscoveryService {
     private HybridHealthChecker hybridHealthChecker;
     
     @Autowired
-    private DiscoveryClient discoveryClient;  // ← 新增：从 Nacos 获取所有实例
+    private DiscoveryClient discoveryClient;  // ← Nacos 动态发现
+    
+    @Autowired
+    private com.leoli.gateway.discovery.staticdiscovery.StaticDiscoveryService staticDiscoveryService;  // ← 静态服务发现
+    
+    @Autowired
+    private com.leoli.gateway.manager.ServiceManager serviceManager;  // ← 用于获取所有配置的服务
     
     @Value("${gateway.health.idle-threshold:300000}")
     private long idleThresholdMs;
@@ -37,17 +43,19 @@ public class InstanceDiscoveryService {
     public List<InstanceKey> findInstancesNeedingActiveCheck() {
         List<InstanceKey> needingCheck = new ArrayList<>();
         
-        // ✅ 方式 1: 从 Nacos 动态发现所有服务实例（新增）
+        // ✅ 方式 1: 从 StaticDiscoveryService 获取静态配置的实例（新增）
+        // 注意：Nacos 注册的实例由 Nacos 自己负责健康检查，无需重复检查
         try {
-            List<String> serviceIds = discoveryClient.getServices();
-            for (String serviceId : serviceIds) {
-                List<ServiceInstance> instances = discoveryClient.getInstances(serviceId);
-                for (ServiceInstance instance : instances) {
+            // Get all configured services from ServiceManager's instanceCache
+            java.util.Set<String> configuredServices = serviceManager.getAllConfiguredServiceIds();
+            for (String serviceId : configuredServices) {
+                List<ServiceInstance> staticInstances = staticDiscoveryService.getInstances(serviceId);
+                for (ServiceInstance instance : staticInstances) {
                     String key = buildInstanceKey(serviceId, instance.getHost(), instance.getPort());
                     
                     // 如果是新实例，加入缓存（初始为 healthy）
                     if (knownInstances.add(key)) {
-                        log.info("Discovered new instance from Nacos: {}", key);
+                        log.info("Discovered new static instance: {}", key);
                         hybridHealthChecker.initializeInstance(
                             serviceId,
                             instance.getHost(),
@@ -59,9 +67,9 @@ public class InstanceDiscoveryService {
                     needingCheck.add(new InstanceKey(serviceId, instance.getHost(), instance.getPort()));
                 }
             }
-            log.info("Discovered {} total instances from Nacos", needingCheck.size());
+            log.info("Total static instances to check: {}", needingCheck.size());
         } catch (Exception e) {
-            log.error("Failed to discover instances from Nacos", e);
+            log.error("Failed to discover static instances", e);
         }
         
         // ✅ 方式 2: 从健康缓存中获取（已有业务请求的实例）

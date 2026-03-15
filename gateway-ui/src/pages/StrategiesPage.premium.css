@@ -1,0 +1,142 @@
+/* Strategies Page - Premium Enterprise Style */
+
+/* Page Container */
+.page-container {
+  min-height: calc(100vh - 70px - 60px); /* header + footer */
+}
+
+/* Page Header */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 28px;
+  padding: 0 4px;
+}
+
+.page-title-group h2 {
+  margin: 0 0 6px 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1E293B;
+  letter-spacing: -0.5px;
+}
+
+.page-title-group p {
+  margin: 0;
+  font-size: 14px;
+  color: #64748B;
+  font-weight: 400;
+}
+
+/* Premium Tabs */
+.premium-tabs {
+  .ant-tabs-nav {
+    margin: 0 0 24px 0 !important;
+    
+    &::before {
+      border-bottom: 1px solid #E2E8F0 !important;
+    }
+    
+    .ant-tabs-tab {
+      padding: 12px 0 !important;
+      margin: 0 32px 0 0 !important;
+      font-size: 14px;
+      font-weight: 500;
+      color: #64748B !important;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+      
+      &:hover {
+        color: #165DFF !important;
+        transform: translateY(-1px);
+      }
+      
+      &.ant-tabs-tab-active {
+        .ant-tabs-tab-btn {
+          color: #165DFF !important;
+          font-weight: 600 !important;
+          
+          &::after {
+            content: '';
+            position: absolute;
+            bottom: -13px;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #165DFF 0%, #722ED1 100%);
+            border-radius: 2px;
+          }
+        }
+      }
+    }
+    
+    .ant-tabs-ink-bar {
+      background: linear-gradient(90deg, #165DFF 0%, #722ED1 100%) !important;
+      height: 3px !important;
+      border-radius: 2px;
+    }
+  }
+}
+
+/* Gradient Button */
+.gradient-button {
+  background: linear-gradient(135deg, #165DFF 0%, #722ED1 100%) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 2px 8px rgba(22, 93, 255, 0.3) !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  
+  &:hover {
+    background: linear-gradient(135deg, #4080FF 0%, #9254DE 100%) !important;
+    box-shadow: 0 4px 12px rgba(22, 93, 255, 0.4) !important;
+    transform: translateY(-1px);
+  }
+  
+  &:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(22, 93, 255, 0.2) !important;
+  }
+}
+
+/* Card Enhancements */
+.ant-card {
+  border-radius: 10px !important;
+  overflow: hidden;
+  border: 1px solid #E2E8F0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+  
+  &:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04) !important;
+  }
+}
+
+/* Table Row Hover */
+.ant-table-tbody > tr:hover {
+  background: linear-gradient(90deg, rgba(241, 245, 249, 0.8) 0%, rgba(248, 250, 252, 0.6) 100%) !important;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    
+    .page-actions {
+      width: 100%;
+    }
+  }
+  
+  .page-title-group h2 {
+    font-size: 20px;
+  }
+  
+  .premium-tabs {
+    .ant-tabs-nav {
+      .ant-tabs-tab {
+        margin: 0 20px 0 0 !important;
+      }
+    }
+  }
+}

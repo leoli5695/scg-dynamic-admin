@@ -1,8 +1,8 @@
-package com.example.gateway.filter;
+package com.leoli.gateway.filter;
 
-import com.example.gateway.discovery.staticdiscovery.StaticDiscoveryService;
-import com.example.gateway.health.HybridHealthChecker;
-import com.example.gateway.health.InstanceHealth;
+import com.leoli.gateway.discovery.staticdiscovery.StaticDiscoveryService;
+import com.leoli.gateway.health.HybridHealthChecker;
+import com.leoli.gateway.health.InstanceHealth;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.loadbalancer.LoadBalancerProperties;

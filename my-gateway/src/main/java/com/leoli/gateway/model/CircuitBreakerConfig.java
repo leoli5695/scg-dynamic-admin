@@ -1,4 +1,4 @@
-package com.example.gateway.model;
+package com.leoli.gateway.model;
 
 import lombok.Data;
 

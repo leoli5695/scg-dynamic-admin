@@ -1,6 +1,6 @@
-package com.example.gateway.auth;
+package com.leoli.gateway.auth;
 
-import com.example.gateway.model.AuthConfig;
+import com.leoli.gateway.model.AuthConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;

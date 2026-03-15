@@ -1,4 +1,4 @@
-package com.example.gateway.discovery.spi;
+package com.leoli.gateway.discovery.spi;
 
 import lombok.extern.slf4j.Slf4j;
 

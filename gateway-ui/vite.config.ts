@@ -13,4 +13,15 @@ export default defineConfig({
       },
     },
   },
+  preview: {
+    port: 4173,
+  },
+  // Fix for React Router refresh 403 - Serve index.html for all routes
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: undefined,
+      },
+    },
+  },
 })

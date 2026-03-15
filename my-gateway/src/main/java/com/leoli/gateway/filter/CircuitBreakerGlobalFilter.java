@@ -1,8 +1,9 @@
-package com.example.gateway.filter;
+package com.leoli.gateway.filter;
 
-import com.example.gateway.enums.StrategyType;
-import com.example.gateway.manager.StrategyManager;
-import com.example.gateway.util.RouteUtils;
+import com.leoli.gateway.enums.StrategyType;
+import com.leoli.gateway.manager.StrategyManager;
+import com.leoli.gateway.model.CircuitBreakerConfig;
+import com.leoli.gateway.util.RouteUtils;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
@@ -11,7 +12,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
-import org.springframework.cloud.gateway.route.Route;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -19,9 +19,6 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
-import java.util.Objects;
-
-import static org.springframework.cloud.gateway.support.ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR;
 
 /**
  * Circuit breaker global filter using Resilience4j.
@@ -48,7 +45,7 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
         }
 
         // Get circuit breaker configuration
-        com.example.gateway.model.CircuitBreakerConfig config = strategyManager.getConfig(StrategyType.CIRCUIT_BREAKER, routeId);
+        CircuitBreakerConfig config = strategyManager.getConfig(StrategyType.CIRCUIT_BREAKER, routeId);
         if (config == null) {
             return chain.filter(exchange);
         }
@@ -86,8 +83,7 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
     /**
      * Get or create a circuit breaker with the given configuration.
      */
-    private CircuitBreaker getOrCreateCircuitBreaker(String routeId,
-                                                     com.example.gateway.model.CircuitBreakerConfig config) {
+    private CircuitBreaker getOrCreateCircuitBreaker(String routeId, CircuitBreakerConfig config) {
         io.github.resilience4j.circuitbreaker.CircuitBreakerConfig circuitBreakerConfig =
                 io.github.resilience4j.circuitbreaker.CircuitBreakerConfig.custom()
                         .failureRateThreshold(config.getFailureRateThreshold())

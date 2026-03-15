@@ -1,8 +1,8 @@
-package com.example.gateway.health;
+package com.leoli.gateway.health;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
 
 /**
  * 实例健康状态
@@ -11,7 +11,7 @@ import lombok.AllArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class InstanceHealth {
-    
+
     private String serviceId;
     private String ip;
     private int port;
@@ -21,14 +21,14 @@ public class InstanceHealth {
     private Long lastActiveCheckTime;
     private String checkType; // "PASSIVE" or "ACTIVE"
     private String unhealthyReason;
-    
+
     /**
      * 构建唯一键
      */
     public static String buildKey(String serviceId, String ip, int port) {
         return serviceId + ":" + ip + ":" + port;
     }
-    
+
     /**
      * 从键解析
      */
@@ -38,15 +38,15 @@ public class InstanceHealth {
             throw new IllegalArgumentException("Invalid key format: " + key);
         }
         return new InstanceHealth(
-            parts[0],
-            parts[1],
-            Integer.parseInt(parts[2]),
-            true,
-            0,
-            System.currentTimeMillis(),
-            null,
-            "PASSIVE",
-            null
+                parts[0],
+                parts[1],
+                Integer.parseInt(parts[2]),
+                true,
+                0,
+                System.currentTimeMillis(),
+                null,
+                "PASSIVE",
+                null
         );
     }
 }

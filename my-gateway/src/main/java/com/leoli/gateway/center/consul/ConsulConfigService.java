@@ -1,10 +1,10 @@
-package com.example.gateway.center.consul;
+package com.leoli.gateway.center.consul;
 
 import com.ecwid.consul.v1.ConsulClient;
 import com.ecwid.consul.v1.Response;
 import com.ecwid.consul.v1.kv.model.GetValue;
-import com.example.gateway.center.spi.AbstractConfigService;
-import com.example.gateway.enums.CenterType;
+import com.leoli.gateway.center.spi.AbstractConfigService;
+import com.leoli.gateway.enums.CenterType;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Base64;

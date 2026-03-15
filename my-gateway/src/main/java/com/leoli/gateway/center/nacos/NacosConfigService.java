@@ -1,9 +1,9 @@
-package com.example.gateway.center.nacos;
+package com.leoli.gateway.center.nacos;
 
 import com.alibaba.nacos.api.config.ConfigService;
 import com.alibaba.nacos.api.config.listener.Listener;
-import com.example.gateway.center.spi.AbstractConfigService;
-import com.example.gateway.enums.CenterType;
+import com.leoli.gateway.center.spi.AbstractConfigService;
+import com.leoli.gateway.enums.CenterType;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;

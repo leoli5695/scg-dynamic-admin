@@ -1,17 +1,13 @@
-package com.example.gateway.manager;
+package com.leoli.gateway.manager;
 
-import com.example.gateway.cache.GenericCacheManager;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.leoli.gateway.cache.GenericCacheManager;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -24,10 +20,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class ServiceManager {
 
     private static final String SERVICES_CACHE_PREFIX = "services.";
-    
+
     @Autowired
     private GenericCacheManager<JsonNode> cacheManager;
-    
+
     // Service endpoint cache for fast lookup
     private final Map<String, ServiceEndpoint> endpointCache = new ConcurrentHashMap<>();
     // Cache for multiple instances with load balancing support
@@ -35,17 +31,17 @@ public class ServiceManager {
     // Round-robin counter for load balancing
     private final Map<String, AtomicInteger> roundRobinCounters = new ConcurrentHashMap<>();
     private final Random random = new Random();
-    
+
     /**
      * Load and cache service configuration for a specific service.
      *
      * @param serviceId Service ID (UUID)
-     * @param config Service configuration JSON string
+     * @param config    Service configuration JSON string
      */
     public void loadServiceConfig(String serviceId, String config) {
         String cacheKey = SERVICES_CACHE_PREFIX + serviceId;
         cacheManager.loadConfig(cacheKey, config);
-        
+
         // Parse and cache this service's endpoints
         try {
             JsonNode serviceNode = cacheManager.getCachedConfig(cacheKey);
@@ -140,31 +136,31 @@ public class ServiceManager {
         if (serviceNode == null || !serviceNode.isObject()) {
             return;
         }
-        
+
         // Clear old cache for this service
         endpointCache.remove(serviceId);
         instanceCache.remove(serviceId);
         roundRobinCounters.remove(serviceId);
-        
+
         if (serviceNode.has("name") && serviceNode.has("endpoint")) {
             String name = serviceNode.get("name").asText();
             String endpoint = serviceNode.get("endpoint").asText();
-            
+
             // Single instance
             ServiceEndpoint serviceEndpoint = new ServiceEndpoint(name, endpoint);
             endpointCache.put(name, serviceEndpoint);
-            
+
             // Also store in instanceCache for compatibility
             List<ServiceInstance> instances = new ArrayList<>();
             instances.add(new ServiceInstance(name, endpoint, 1));
             instanceCache.put(name, instances);
-            
+
             log.debug("Loaded service: {} -> {}", name, endpoint);
         } else if (serviceNode.has("name") && serviceNode.has("instances") && serviceNode.get("instances").isArray()) {
             // Multiple instances with weights
             String name = serviceNode.get("name").asText();
             List<ServiceInstance> instances = new ArrayList<>();
-            
+
             JsonNode instancesNode = serviceNode.get("instances");
             for (JsonNode instanceNode : instancesNode) {
                 // Support both "ip" and "address" field names
@@ -174,64 +170,65 @@ public class ServiceManager {
                 } else if (instanceNode.has("address")) {
                     address = instanceNode.get("address").asText();
                 }
-                
+
                 if (address != null && instanceNode.has("port")) {
                     int port = instanceNode.get("port").asInt();
                     int weight = instanceNode.has("weight") ? instanceNode.get("weight").asInt() : 1;
                     boolean enabled = !instanceNode.has("enabled") || instanceNode.get("enabled").asBoolean(true);
                     boolean healthy = !instanceNode.has("healthy") || instanceNode.get("healthy").asBoolean(true);
-                    
+
                     if (enabled && healthy) {
                         String instanceEndpoint = "http://" + address + ":" + port;
                         instances.add(new ServiceInstance(name, instanceEndpoint, weight));
-                        
-                        log.debug("Loaded service instance: {} -> {}:{} (weight: {}, enabled: {}, healthy: {})", 
+
+                        log.debug("Loaded service instance: {} -> {}:{} (weight: {}, enabled: {}, healthy: {})",
                                 name, address, port, weight, enabled, healthy);
                     } else {
-                        log.debug("Skipping disabled/unhealthy instance: {}:{} (enabled: {}, healthy: {})", 
+                        log.debug("Skipping disabled/unhealthy instance: {}:{} (enabled: {}, healthy: {})",
                                 address, port, enabled, healthy);
                     }
                 }
             }
-            
+
             if (!instances.isEmpty()) {
                 // Use first instance as primary endpoint
                 endpointCache.put(name, new ServiceEndpoint(name, instances.get(0).getAddress()));
                 instanceCache.put(name, instances);
                 roundRobinCounters.put(name, new AtomicInteger(0));
-                
+
                 log.info("Loaded service '{}' with {} valid instances", name, instances.size());
             } else {
                 log.warn("Service '{}' has no valid instances (all disabled or unhealthy)", name);
             }
         }
     }
+
     private void parseServiceEndpoints(JsonNode root) {
         endpointCache.clear();
         instanceCache.clear();
-        
+
         if (root.has("services") && root.get("services").isArray()) {
             JsonNode servicesNode = root.get("services");
             for (JsonNode serviceNode : servicesNode) {
                 if (serviceNode.has("name") && serviceNode.has("endpoint")) {
                     String name = serviceNode.get("name").asText();
                     String endpoint = serviceNode.get("endpoint").asText();
-                    
+
                     // Single instance
                     ServiceEndpoint serviceEndpoint = new ServiceEndpoint(name, endpoint);
                     endpointCache.put(name, serviceEndpoint);
-                    
+
                     // Also store in instanceCache for compatibility
                     List<ServiceInstance> instances = new ArrayList<>();
                     instances.add(new ServiceInstance(name, endpoint, 1));
                     instanceCache.put(name, instances);
-                    
+
                     log.debug("Loaded service: {} -> {}", name, endpoint);
                 } else if (serviceNode.has("name") && serviceNode.has("instances") && serviceNode.get("instances").isArray()) {
                     // Multiple instances with weights
                     String name = serviceNode.get("name").asText();
                     List<ServiceInstance> instances = new ArrayList<>();
-                    
+
                     JsonNode instancesNode = serviceNode.get("instances");
                     for (JsonNode instanceNode : instancesNode) {
                         // Support both "ip" and "address" field names
@@ -241,33 +238,42 @@ public class ServiceManager {
                         } else if (instanceNode.has("address")) {
                             address = instanceNode.get("address").asText();
                         }
-                        
+
                         if (address != null && instanceNode.has("port")) {
                             int port = instanceNode.get("port").asInt();
                             int weight = instanceNode.has("weight") ? instanceNode.get("weight").asInt() : 1;
-                            
+
                             String instanceEndpoint = "http://" + address + ":" + port;
                             instances.add(new ServiceInstance(name, instanceEndpoint, weight));
-                            
-                            log.debug("Loaded service instance: {} -> {}:{} (weight: {})", 
+
+                            log.debug("Loaded service instance: {} -> {}:{} (weight: {})",
                                     name, address, port, weight);
                         }
                     }
-                    
+
                     if (!instances.isEmpty()) {
                         // Use first instance as primary endpoint
                         endpointCache.put(name, new ServiceEndpoint(name, instances.get(0).getAddress()));
                         instanceCache.put(name, instances);
                         roundRobinCounters.put(name, new AtomicInteger(0));
-                        
+
                         log.info("Loaded service '{}' with {} instances", name, instances.size());
                     }
                 }
             }
         }
-        
-        log.info("Parsed {} services, {} endpoints cached", 
+
+        log.info("Parsed {} services, {} endpoints cached",
                 instanceCache.size(), endpointCache.size());
+    }
+
+    /**
+     * Get all configured service IDs.
+     *
+     * @return Set of all service IDs that have configuration
+     */
+    public java.util.Set<String> getAllConfiguredServiceIds() {
+        return instanceCache.keySet();
     }
 
     /**
@@ -353,12 +359,12 @@ public class ServiceManager {
     public static class ServiceEndpoint {
         private String name;
         private String address;
-        
+
         public ServiceEndpoint(String name, String address) {
             this.name = name;
             this.address = address;
         }
-        
+
         // Compatibility methods for StaticProtocolGlobalFilter
         public String getIp() {
             // Extract IP from address (e.g., "http://192.168.1.1:8080" -> "192.168.1.1")
@@ -371,7 +377,7 @@ public class ServiceManager {
             }
             return address;
         }
-        
+
         public int getPort() {
             // Extract port from address (e.g., "http://192.168.1.1:8080" -> 8080)
             if (address != null && address.contains("://")) {
@@ -398,41 +404,41 @@ public class ServiceManager {
         private String address;
         private int weight;
         private boolean enabled = true;  // ✅ Add enabled field
-        
+
         public ServiceInstance(String serviceId, String address, int weight) {
             this.serviceId = serviceId;
             this.address = address;
             this.weight = weight;
         }
-        
+
         public ServiceInstance(String serviceId, String address, int weight, boolean enabled) {
             this.serviceId = serviceId;
             this.address = address;
             this.weight = weight;
             this.enabled = enabled;  // ✅ Set enabled from parameter
         }
-        
+
         // Compatibility methods for StaticDiscoveryService
         public String getIp() {
             return getIpFromAddress(address);
         }
-        
+
         public int getPort() {
             return getPortFromAddress(address);
         }
-        
+
         public boolean isHealthy() {
             return true; // Assume all static instances are healthy
         }
-        
+
         public boolean isEnabled() {
             return enabled;  // ✅ Return actual enabled value
         }
-        
+
         public String getServiceName() {
             return serviceId; // Alias for serviceId
         }
-        
+
         private String getIpFromAddress(String addr) {
             if (addr != null && addr.contains("://")) {
                 String withoutProtocol = addr.substring(addr.indexOf("://") + 3);
@@ -443,7 +449,7 @@ public class ServiceManager {
             }
             return addr;
         }
-        
+
         private int getPortFromAddress(String addr) {
             if (addr != null && addr.contains("://")) {
                 String withoutProtocol = addr.substring(addr.indexOf("://") + 3);

@@ -1,14 +1,13 @@
-package com.example.gateway.filter;
+package com.leoli.gateway.filter;
 
-import com.example.gateway.center.spi.ConfigCenterService;
-import com.example.gateway.manager.ServiceManager;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leoli.gateway.center.spi.ConfigCenterService;
+import com.leoli.gateway.manager.ServiceManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
-import org.springframework.cloud.gateway.support.NotFoundException;
 import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
 import org.springframework.cloud.loadbalancer.support.LoadBalancerClientFactory;
 import org.springframework.core.Ordered;
@@ -88,23 +87,23 @@ public class StaticProtocolGlobalFilter implements GlobalFilter, Ordered {
             try {
                 // Convert static:// to lb:// and let SCG's native load balancer handle it
                 String serviceName = routeUri.getHost();
-                
+
                 // Create lb:// URI to delegate to SCG's load balancer (which uses Nacos discovery)
                 URI lbUri = new URI("lb", null, serviceName, -1, "/", null, null);
-                
+
                 // Mark this as originally a static:// request for DiscoveryLoadBalancerFilter
                 exchange.getAttributes().put("original_static_uri", routeUri.toString());
-                
+
                 // Replace static:// with lb:// in the route
                 exchange.getAttributes().put(GATEWAY_REQUEST_URL_ATTR, lbUri);
-                
+
                 log.info("Converted static://{} -> lb://{} for SCG+Nacos load balancing", serviceName, serviceName);
-                            
+
                 // Log Nacos discovery info for debugging
                 log.info("Will use Nacos Discovery to find instances for: {}", serviceName);
-                            
+
                 return chain.filter(exchange);
-                
+
             } catch (Exception e) {
                 log.error("Error converting static protocol to lb protocol", e);
                 return Mono.error(e);

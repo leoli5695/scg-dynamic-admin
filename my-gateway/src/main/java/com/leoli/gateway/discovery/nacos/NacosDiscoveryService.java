@@ -1,10 +1,9 @@
-package com.example.gateway.discovery.nacos;
+package com.leoli.gateway.discovery.nacos;
 
 import com.alibaba.nacos.api.naming.NamingService;
 import com.alibaba.nacos.api.naming.pojo.Instance;
-import com.example.gateway.enums.CenterType;
-import com.example.gateway.discovery.spi.AbstractDiscoveryService;
-import com.example.gateway.discovery.spi.DiscoveryService;
+import com.leoli.gateway.discovery.spi.AbstractDiscoveryService;
+import com.leoli.gateway.enums.CenterType;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
@@ -64,7 +63,7 @@ public class NacosDiscoveryService extends AbstractDiscoveryService {
                     );
                     serviceInstance.setHealthy(instance.isHealthy());
                     serviceInstance.setWeight(instance.getWeight());
-                    
+
                     // Set metadata if available
                     if (instance.getMetadata() != null && !instance.getMetadata().isEmpty()) {
                         String weightStr = instance.getMetadata().get("weight");
@@ -76,7 +75,7 @@ public class NacosDiscoveryService extends AbstractDiscoveryService {
                             }
                         }
                     }
-                    
+
                     return serviceInstance;
                 })
                 .collect(Collectors.toList());

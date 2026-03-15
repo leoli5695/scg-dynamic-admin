@@ -1,15 +1,11 @@
-package com.example.gateway.manager;
+package com.leoli.gateway.manager;
 
-import com.example.gateway.cache.GenericCacheManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.route.RouteDefinition;
 import org.springframework.stereotype.Component;
 
 import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -25,10 +21,10 @@ public class RouteManager {
 
     // Route cache: <routeId, RouteDefinition>
     private final ConcurrentHashMap<String, RouteDefinition> routeCache = new ConcurrentHashMap<>();
-    
+
     // Route index (maintains order)
     private final CopyOnWriteArrayList<String> routeIndex = new CopyOnWriteArrayList<>();
-    
+
     /**
      * Add or update a single route.
      */

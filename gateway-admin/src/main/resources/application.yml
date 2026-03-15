@@ -57,7 +57,7 @@ gateway:
     type: nacos  # default config center type, can be 'nacos' or 'consul'
   admin:
     jwt:
-      secret: ${GATEWAY_ADMIN_JWT_SECRET:LeoliGatewayAdminSecretKey2026WhichMustBeLongEnoughAndSecureForProductionUse}
+      secret: ${GATEWAY_ADMIN_JWT_SECRET:mySecretKeyForJWTTokenGenerationWhichMustBeLongEnoughAndSecure}
       expiration: 86400000  # 24 hours in milliseconds
       enabled: true  # ✅ Enable JWT for production
   consul:
@@ -87,8 +87,13 @@ management:
   endpoint:
     health:
       show-details: always
+  health:
+    consul:
+      enabled: false  # Disable Consul health check (not running locally)
 
 logging:
   level:
     com.alibaba.nacos: INFO
-    com.example.gatewayadmin: DEBUG
+    com.leoli.gateway.admin: INFO
+    org.springframework.security: DEBUG
+    org.springframework.web: DEBUG

@@ -1,6 +1,7 @@
-package com.example.gateway.center.spi;
+package com.leoli.gateway.center.spi;
 
-import com.example.gateway.enums.CenterType;
+import com.leoli.gateway.enums.CenterType;
+
 import java.util.Map;
 
 /**

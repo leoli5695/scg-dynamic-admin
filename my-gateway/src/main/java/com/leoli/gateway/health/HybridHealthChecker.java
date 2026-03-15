@@ -1,4 +1,4 @@
-package com.example.gateway.health;
+package com.leoli.gateway.health;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;

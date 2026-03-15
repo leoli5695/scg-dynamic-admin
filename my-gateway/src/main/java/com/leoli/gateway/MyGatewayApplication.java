@@ -1,10 +1,10 @@
-package com.example.gateway;
+package com.leoli.gateway;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
-@SpringBootApplication(scanBasePackages = {"com.example.gateway"})
+@SpringBootApplication()
 @EnableScheduling
 public class MyGatewayApplication {
 

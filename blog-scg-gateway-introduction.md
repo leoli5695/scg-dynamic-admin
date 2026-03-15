@@ -1,7 +1,7 @@
 # 企业级微服务网关架构设计与实现——基于 Spring Cloud Gateway 的二次开发
 
 > **作者**：leoli  
-> **项目地址**：https://github.com/leoli5695/scg-dynamic-admin-demo  
+> **项目地址**：https://github.com/leoli5695/scg-dynamic-admin  
 > **技术栈**：Spring Cloud Gateway 4.1 + Nacos 2.x + Consul + Spring Boot 3.2
 
 ---
@@ -1735,7 +1735,7 @@ public class TraceIdGlobalFilter implements GlobalFilter {
 
 ## 📚 参考资料
 
-- **项目源码**：https://github.com/leoli5695/scg-dynamic-admin-demo
+- **项目源码**：https://github.com/leoli5695/scg-dynamic-admin
 - **Spring Cloud Gateway 官方文档**：https://spring.io/projects/spring-cloud-gateway
 - **Nacos 官方文档**：https://nacos.io/zh-cn/docs/quick-start.html
 - **架构设计文档**：项目 docs 目录下 23 篇完整技术文档
@@ -1754,7 +1754,7 @@ public class TraceIdGlobalFilter implements GlobalFilter {
 
 你的每一个 Star 都是对我们最大的鼓励，也是我们持续优化项目的动力！
 
-🔗 **项目地址**：https://github.com/leoli5695/scg-dynamic-admin-demo
+🔗 **项目地址**：https://github.com/leoli5695/scg-dynamic-admin
 
 我们也非常欢迎你：
 - 🐛 **提交 Issue** - 发现 Bug 或提出改进建议

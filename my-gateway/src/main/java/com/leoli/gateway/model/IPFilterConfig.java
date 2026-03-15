@@ -1,11 +1,11 @@
-package com.example.gateway.model;
+package com.leoli.gateway.model;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
 
-import java.util.List;
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * IP filter configuration for a route.

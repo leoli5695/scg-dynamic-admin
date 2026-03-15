@@ -1,4 +1,4 @@
-package com.example.gateway.limiter;
+package com.leoli.gateway.limiter;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

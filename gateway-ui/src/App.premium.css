@@ -1,0 +1,314 @@
+/* Premium Enterprise UI Styles - Western Aesthetic */
+
+/* ==================== Sidebar ==================== */
+.sidebar-premium {
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%) !important;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15) !important;
+  
+  .sidebar-logo {
+    height: 72px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    background: linear-gradient(135deg, rgba(22, 93, 255, 0.15) 0%, rgba(114, 46, 209, 0.1) 100%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 0 20px;
+    
+    .logo-icon {
+      font-size: 32px;
+      color: #165DFF;
+      filter: drop-shadow(0 0 8px rgba(22, 93, 255, 0.5));
+    }
+    
+    .logo-text {
+      color: white;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      background: linear-gradient(135deg, #165DFF 0%, #722ED1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+  }
+  
+  .ant-menu {
+    padding: 12px 8px !important;
+    background: transparent !important;
+    border-right: none !important;
+    
+    .ant-menu-item {
+      margin: 6px 8px !important;
+      height: 50px;
+      line-height: 50px;
+      border-radius: 8px;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      
+      &:hover {
+        background: linear-gradient(90deg, rgba(22, 93, 255, 0.12) 0%, rgba(114, 46, 209, 0.08) 100%) !important;
+      }
+      
+      &.ant-menu-item-selected {
+        background: linear-gradient(135deg, #165DFF 0%, #722ED1 100%) !important;
+        box-shadow: 0 4px 12px rgba(22, 93, 255, 0.35);
+        
+        &::before {
+          content: '';
+          position: absolute;
+          left: 0;
+          top: 50%;
+          transform: translateY(-50%);
+          width: 4px;
+          height: 60%;
+          background: white;
+          border-radius: 0 2px 2px 0;
+        }
+        
+        span {
+          color: white !important;
+          font-weight: 600;
+        }
+        
+        .anticon {
+          color: white !important;
+        }
+      }
+      
+      .anticon {
+        margin-right: 14px;
+        font-size: 18px;
+        vertical-align: middle;
+        transition: all 0.3s;
+      }
+    }
+  }
+}
+
+/* ==================== Header ==================== */
+.main-header {
+  background: linear-gradient(180deg, #F8FAFC 0%, #FFFFFF 100%) !important;
+  border-bottom: 1px solid #E2E8F0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+  padding: 0 28px !important;
+  height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  
+  .header-left {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    
+    .header-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #1E293B;
+      margin: 0;
+      letter-spacing: -0.3px;
+    }
+    
+    .header-subtitle {
+      font-size: 13px;
+      color: #64748B;
+      font-weight: 400;
+      letter-spacing: 0.2px;
+    }
+  }
+  
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    
+    .user-info {
+      cursor: pointer;
+      padding: 6px 12px !important;
+      border-radius: 20px;
+      transition: all 0.2s;
+      
+      &:hover {
+        background: #F1F5F9;
+      }
+      
+      .username {
+        font-size: 14px;
+        font-weight: 500;
+        color: #1E293B;
+      }
+    }
+  }
+}
+
+/* ==================== Content Area ==================== */
+.main-content {
+  background: linear-gradient(180deg, #F1F5F9 0%, #F8FAFC 100%) !important;
+  padding: 28px !important;
+  min-height: calc(100vh - 70px - 60px); /* header + footer */
+}
+
+/* ==================== Footer ==================== */
+.page-footer {
+  background: #FFFFFF;
+  border-top: 1px solid #E2E8F0;
+  padding: 16px 28px;
+  text-align: center;
+  
+  .footer-text {
+    margin: 0;
+    color: #94A3B8;
+    font-size: 13px;
+    letter-spacing: 0.3px;
+  }
+}
+
+/* ==================== Page Headers ==================== */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 28px;
+  padding: 0 4px;
+  
+  .page-title-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    
+    h2 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 700;
+      color: #1E293B;
+      letter-spacing: -0.5px;
+    }
+    
+    p {
+      margin: 0;
+      font-size: 14px;
+      color: #64748B;
+      font-weight: 400;
+    }
+  }
+}
+
+/* ==================== Cards ==================== */
+.ant-card {
+  border-radius: 10px !important;
+  overflow: hidden;
+  border: 1px solid #E2E8F0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  
+  &:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04) !important;
+  }
+}
+
+/* ==================== Buttons ==================== */
+.ant-btn-primary {
+  background: linear-gradient(135deg, #165DFF 0%, #722ED1 100%) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+  box-shadow: 0 2px 8px rgba(22, 93, 255, 0.3) !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  
+  &:hover {
+    background: linear-gradient(135deg, #4080FF 0%, #9254DE 100%) !important;
+    box-shadow: 0 4px 12px rgba(22, 93, 255, 0.4) !important;
+    transform: translateY(-1px);
+  }
+  
+  &:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(22, 93, 255, 0.2) !important;
+  }
+}
+
+.ant-btn {
+  border-radius: 8px !important;
+  font-weight: 500 !important;
+  transition: all 0.2s !important;
+}
+
+/* ==================== Tables ==================== */
+.ant-table {
+  background: white !important;
+  border-radius: 10px !important;
+  overflow: hidden !important;
+  
+  thead > tr > th {
+    background: #F8FAFC !important;
+    color: #475569 !important;
+    font-weight: 600 !important;
+    font-size: 13px !important;
+    letter-spacing: 0.3px;
+    border-bottom: 1px solid #E2E8F0 !important;
+    padding: 14px 20px !important;
+    text-transform: uppercase;
+    font-size: 12px;
+  }
+  
+  tbody > tr {
+    transition: all 0.2s !important;
+    
+    &:hover {
+      background: linear-gradient(90deg, rgba(241, 245, 249, 0.8) 0%, rgba(248, 250, 252, 0.6) 100%) !important;
+    }
+    
+    td {
+      padding: 14px 20px !important;
+      border-bottom: 1px solid #F1F5F9 !important;
+      color: #1E293B !important;
+      font-size: 14px !important;
+    }
+  }
+}
+
+/* ==================== Tags ==================== */
+.ant-tag {
+  border-radius: 6px !important;
+  font-size: 12px !important;
+  padding: 4px 10px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.2px;
+}
+
+/* ==================== Responsive ==================== */
+@media (max-width: 768px) {
+  .sidebar-premium {
+    .sidebar-logo {
+      height: 64px;
+      
+      .logo-icon {
+        font-size: 28px;
+      }
+      
+      .logo-text {
+        font-size: 16px;
+      }
+    }
+  }
+  
+  .main-header {
+    padding: 0 20px !important;
+    height: 64px;
+    
+    .header-left {
+      flex-direction: column;
+      gap: 4px;
+      
+      .header-title {
+        font-size: 18px;
+      }
+    }
+  }
+  
+  .main-content {
+    padding: 20px !important;
+  }
+}

@@ -1,9 +1,9 @@
-package com.example.gateway.refresher;
+package com.leoli.gateway.refresher;
 
-import com.example.gateway.center.spi.ConfigCenterService;
-import com.example.gateway.cache.GenericCacheManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leoli.gateway.cache.GenericCacheManager;
+import com.leoli.gateway.center.spi.ConfigCenterService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
@@ -18,7 +18,7 @@ import java.util.concurrent.ConcurrentMap;
  * Service configuration refresher with incremental mode.
  * Listens to services-index changes and loads individual service configs on demand.
  * Uses GenericCacheManager for dual-cache protection (primary + fallback).
- *
+ * <p>
  * For static:// protocol services: if all instances are disabled/removed, cache is immediately cleared
  * to ensure 503 is returned (no fallback to stale config).
  *
@@ -37,7 +37,7 @@ public class ServiceRefresher {
     private final ConfigCenterService configService;
     private final GenericCacheManager<JsonNode> cacheManager;
     private final ObjectMapper objectMapper = new ObjectMapper();
-    
+
     // Track which services use static:// protocol (need immediate cache invalidation)
     private final ConcurrentMap<String, Boolean> staticProtocolServices = new ConcurrentHashMap<>();
 
@@ -60,7 +60,7 @@ public class ServiceRefresher {
             List<String> serviceIds = loadServicesIndex();
             if (serviceIds != null && !serviceIds.isEmpty()) {
                 log.info("Loaded {} services from index", serviceIds.size());
-                
+
                 // Warmup: preload all service configs into cache
                 warmupServices(serviceIds);
                 log.info("✅ Service cache warmed up successfully");
@@ -90,7 +90,8 @@ public class ServiceRefresher {
                 return null;
             }
             // Parse JSON array string to List
-            return objectMapper.readValue(indexJson, new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
+            return objectMapper.readValue(indexJson, new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {
+            });
         } catch (Exception e) {
             log.error("Failed to load services index from Nacos", e);
             return null;
@@ -106,19 +107,19 @@ public class ServiceRefresher {
             try {
                 String serviceDataId = SERVICE_PREFIX + serviceId;
                 String serviceConfig = configService.getConfig(serviceDataId, GROUP);
-                
+
                 if (serviceConfig != null && !serviceConfig.isBlank()) {
                     // Parse and validate service config
                     JsonNode serviceNode = objectMapper.readTree(serviceConfig);
                     validateServiceConfig(serviceNode, serviceId);
-                    
+
                     // Check if this is a static:// protocol service
                     boolean isStaticProtocol = checkIfStaticProtocol(serviceNode);
                     if (isStaticProtocol) {
                         staticProtocolServices.put(serviceId, true);
                         log.debug("Detected static:// protocol service: {}", serviceId);
                     }
-                    
+
                     // Load into cache manager
                     cacheManager.loadConfig(CACHE_KEY + "." + serviceId, serviceConfig);
                     loadedCount++;
@@ -136,8 +137,8 @@ public class ServiceRefresher {
     /**
      * Get service configuration by serviceId.
      * Uses cache with automatic fallback to Nacos.
-     * 
-     * For static:// protocol services: if all instances are disabled/removed, 
+     * <p>
+     * For static:// protocol services: if all instances are disabled/removed,
      * cache is immediately cleared to ensure 503 is returned (no fallback).
      *
      * @param serviceId Service ID (UUID)
@@ -145,7 +146,7 @@ public class ServiceRefresher {
      */
     public JsonNode getServiceConfig(String serviceId) {
         String cacheKey = CACHE_KEY + "." + serviceId;
-        
+
         // For static:// protocol services, check if we need immediate invalidation
         if (staticProtocolServices.containsKey(serviceId)) {
             JsonNode cachedConfig = cacheManager.getCachedConfig(cacheKey);
@@ -160,7 +161,7 @@ public class ServiceRefresher {
                 return null;
             }
         }
-        
+
         // For lb:// protocol services, use normal cache with fallback
         return cacheManager.getConfigWithFallback(cacheKey, key -> {
             // Loader function: fetch from Nacos
@@ -178,11 +179,11 @@ public class ServiceRefresher {
         // In a more sophisticated implementation, we could check route URIs
         // But since static:// services are defined by how they're used in routes,
         // we'll track them based on the service structure
-        
+
         // Static services typically have explicit IP:port configurations
         // and may have loadBalancer settings
-        return serviceNode.has("loadBalancer") || 
-               (serviceNode.has("instances") && serviceNode.get("instances").isArray());
+        return serviceNode.has("loadBalancer") ||
+                (serviceNode.has("instances") && serviceNode.get("instances").isArray());
     }
 
     /**
@@ -193,22 +194,22 @@ public class ServiceRefresher {
         if (!serviceNode.has("instances") || !serviceNode.get("instances").isArray()) {
             return false;
         }
-        
+
         JsonNode instances = serviceNode.get("instances");
         if (instances.size() == 0) {
             return false; // No instances at all
         }
-        
+
         // Check if at least one instance is enabled and healthy
         for (JsonNode instance : instances) {
             boolean enabled = !instance.has("enabled") || instance.get("enabled").asBoolean(true);
             boolean healthy = !instance.has("healthy") || instance.get("healthy").asBoolean(true);
-            
+
             if (enabled && healthy) {
                 return true; // At least one valid instance
             }
         }
-        
+
         return false; // All instances are disabled or unhealthy
     }
 
@@ -224,7 +225,7 @@ public class ServiceRefresher {
         if (!serviceNode.has("name")) {
             throw new IllegalArgumentException("Service '" + serviceId + "' missing required 'name' field");
         }
-        
+
         if (!serviceNode.has("instances") || !serviceNode.get("instances").isArray()) {
             throw new IllegalArgumentException("Service '" + serviceId + "' missing or invalid 'instances' field");
         }
@@ -252,10 +253,10 @@ public class ServiceRefresher {
         try {
             String serviceDataId = SERVICE_PREFIX + serviceId;
             String serviceConfig = configService.getConfig(serviceDataId, GROUP);
-            
+
             if (serviceConfig != null && !serviceConfig.isBlank()) {
                 JsonNode serviceNode = objectMapper.readTree(serviceConfig);
-                
+
                 // Check if all instances are disabled/removed
                 if (!hasValidInstances(serviceNode)) {
                     log.warn("Service {} has no valid instances, clearing cache (will return 503)", serviceId);

@@ -1,8 +1,8 @@
-package com.example.gateway.autoconfig;
+package com.leoli.gateway.autoconfig;
 
 import com.ecwid.consul.v1.ConsulClient;
-import com.example.gateway.center.consul.ConsulConfigService;
-import com.example.gateway.discovery.consul.ConsulDiscoveryService;
+import com.leoli.gateway.center.consul.ConsulConfigService;
+import com.leoli.gateway.discovery.consul.ConsulDiscoveryService;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;

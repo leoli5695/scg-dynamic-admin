@@ -1,9 +1,9 @@
-package com.example.gateway.discovery.staticdiscovery;
+package com.leoli.gateway.discovery.staticdiscovery;
 
-import com.example.gateway.cache.GenericCacheManager;
-import com.example.gateway.center.spi.ConfigCenterService;
-import com.example.gateway.manager.ServiceManager;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.leoli.gateway.cache.GenericCacheManager;
+import com.leoli.gateway.center.spi.ConfigCenterService;
+import com.leoli.gateway.manager.ServiceManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.discovery.DiscoveryClient;

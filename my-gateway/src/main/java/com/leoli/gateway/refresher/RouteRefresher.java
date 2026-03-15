@@ -1,9 +1,9 @@
-package com.example.gateway.refresher;
+package com.leoli.gateway.refresher;
 
-import com.example.gateway.center.spi.ConfigCenterService;
-import com.example.gateway.manager.RouteManager;
-import com.example.gateway.route.DynamicRouteDefinitionLocator;
+import com.leoli.gateway.manager.RouteManager;
+import com.leoli.gateway.route.DynamicRouteDefinitionLocator;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leoli.gateway.center.spi.ConfigCenterService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
@@ -16,7 +16,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Route configuration refresher with per-route incremental refresh.
@@ -39,14 +38,14 @@ public class RouteRefresher {
 
     // Currently listening route IDs
     private final Set<String> listeningRouteIds = ConcurrentHashMap.newKeySet();
-    
+
     // Route listeners cache: <routeId, listener>
     private final ConcurrentHashMap<String, ConfigCenterService.ConfigListener> routeListeners = new ConcurrentHashMap<>();
 
     @Autowired
     public RouteRefresher(RouteManager routeManager,
-                         ConfigCenterService configService,
-                         DynamicRouteDefinitionLocator routeLocator) {
+                          ConfigCenterService configService,
+                          DynamicRouteDefinitionLocator routeLocator) {
         this.routeManager = routeManager;
         this.configService = configService;
         this.routeLocator = routeLocator;
@@ -65,7 +64,7 @@ public class RouteRefresher {
 
         // 2. Load all routes initially
         loadAllRoutes();
-        
+
         log.info("✅ RouteRefresher initialization completed");
     }
 
@@ -82,10 +81,10 @@ public class RouteRefresher {
                 configService.removeListener(routeDataId, GROUP, listener);
             }
         }
-        
+
         // Remove index listener
         configService.removeListener(ROUTES_INDEX, GROUP, this::onRoutesIndexChanged);
-        
+
         log.info("RouteRefresher destroyed, all listeners removed");
     }
 
@@ -94,36 +93,36 @@ public class RouteRefresher {
      */
     private void onRoutesIndexChanged(String dataId, String group, String newIndexContent) {
         log.info("📋 Routes index changed detected");
-        
+
         try {
             List<String> newRouteIds = parseRouteIds(newIndexContent);
             Set<String> oldRouteIds = new HashSet<>(listeningRouteIds);
-            
+
             // Convert List to Set for difference calculation
             Set<String> newRouteIdSet = new HashSet<>(newRouteIds);
-            
+
             // Calculate differences
             Set<String> addedRoutes = getDifference(newRouteIdSet, oldRouteIds);
             Set<String> removedRoutes = getDifference(oldRouteIds, newRouteIdSet);
-            
+
             log.info("📊 Route changes: +{} added, -{} removed", addedRoutes.size(), removedRoutes.size());
-            
+
             // Add listeners for new routes
             for (String routeId : addedRoutes) {
                 addRouteListener(routeId);
             }
-            
+
             // Remove listeners for deleted routes
             for (String routeId : removedRoutes) {
                 removeRouteListener(routeId);
             }
-            
+
             // Refresh SCG routes if there are changes
             if (!addedRoutes.isEmpty() || !removedRoutes.isEmpty()) {
                 refreshSCGRoutes();
                 log.info("✅ Routes index refresh completed");
             }
-            
+
         } catch (Exception e) {
             log.error("Failed to process routes index change", e);
         }
@@ -144,10 +143,10 @@ public class RouteRefresher {
                 routeManager.putRoute(routeId, route);
                 log.info("✏️  Route updated: {} -> {}", routeId, route.getUri());
             }
-            
+
             // Incremental refresh (only this route)
             refreshSCGRoutes();
-            
+
         } catch (Exception e) {
             log.error("Failed to process route change: {}", routeId, e);
         }
@@ -158,28 +157,28 @@ public class RouteRefresher {
      */
     private void loadAllRoutes() {
         log.info("🔥 Loading all routes on startup...");
-        
+
         try {
             String indexContent = configService.getConfig(ROUTES_INDEX, GROUP);
             List<String> routeIds = parseRouteIds(indexContent);
-            
+
             for (String routeId : routeIds) {
                 String routeDataId = ROUTE_PREFIX + routeId;
                 String routeConfig = configService.getConfig(routeDataId, GROUP);
-                
+
                 if (routeConfig != null && !routeConfig.isBlank()) {
                     RouteDefinition route = parseRoute(routeConfig);
                     routeManager.putRoute(routeId, route);
-                    
+
                     // Add listener for this route
                     addRouteListener(routeId);
-                    
+
                     log.debug("Loaded route: {}", routeId);
                 }
             }
-            
+
             log.info("✅ Loaded {} routes on startup", routeIds.size());
-            
+
         } catch (Exception e) {
             log.error("Failed to load initial routes", e);
         }
@@ -190,15 +189,15 @@ public class RouteRefresher {
      */
     private void addRouteListener(String routeId) {
         String routeDataId = ROUTE_PREFIX + routeId;
-        
+
         ConfigCenterService.ConfigListener listener = (dataId, group, content) -> {
             onSingleRouteChange(routeId, content);
         };
-        
+
         configService.addListener(routeDataId, GROUP, listener);
         routeListeners.put(routeId, listener);
         listeningRouteIds.add(routeId);
-        
+
         log.info("✅ Added listener for route: {}", routeId);
     }
 
@@ -208,7 +207,7 @@ public class RouteRefresher {
     private void removeRouteListener(String routeId) {
         String routeDataId = ROUTE_PREFIX + routeId;
         ConfigCenterService.ConfigListener listener = routeListeners.remove(routeId);
-        
+
         if (listener != null) {
             configService.removeListener(routeDataId, GROUP, listener);
             listeningRouteIds.remove(routeId);
@@ -236,7 +235,8 @@ public class RouteRefresher {
             if (json == null || json.isBlank()) {
                 return new ArrayList<>();
             }
-            return objectMapper.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
+            return objectMapper.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {
+            });
         } catch (Exception e) {
             log.error("Failed to parse route IDs from index", e);
             return new ArrayList<>();

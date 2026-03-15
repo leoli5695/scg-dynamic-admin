@@ -1,8 +1,8 @@
-package com.example.gateway.cache;
+package com.leoli.gateway.cache;
 
-import com.example.gateway.monitor.AlertService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leoli.gateway.monitor.AlertService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,14 +23,14 @@ import java.util.function.Function;
 public class GenericCacheManager<T> {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-        
+
     @Autowired(required = false)
     private AlertService alertService;
-        
+
     // Cache TTL: configurable, default 5 minutes
     @Value("${gateway.cache.ttl-ms:300000}")
     private long cacheTtlMs = 300000; // 5 minutes default
-        
+
     // Per-type caches
     private final ConcurrentHashMap<String, Long> lastLoadTimes = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, AtomicReference<JsonNode>> primaryCaches = new ConcurrentHashMap<>();
@@ -131,9 +131,9 @@ public class GenericCacheManager<T> {
     /**
      * Execute a loader function with retry logic and fallback.
      * This is the core method that implements the retry + fallback pattern.
-     *
+     * <p>
      * CRITICAL: Fallback is ONLY used when Nacos has network failures (exceptions).
-     * If Nacos returns empty/null config normally, we MUST NOT use fallback - 
+     * If Nacos returns empty/null config normally, we MUST NOT use fallback -
      * this indicates intentional deletion by user and should return 503.
      *
      * @param cacheKey Configuration type key
@@ -160,11 +160,11 @@ public class GenericCacheManager<T> {
         while (!reloaded && retryCount < maxRetries) {
             try {
                 retryCount++;
-                log.info("Attempting to reload {} from Nacos (attempt {}/{})", 
+                log.info("Attempting to reload {} from Nacos (attempt {}/{})",
                         cacheKey, retryCount, maxRetries);
-                        
+
                 String config = loader.apply(cacheKey);
-                        
+
                 if (config != null && !config.isBlank()) {
                     // Nacos 正常返回配置 → 加载并更新缓存
                     loadConfig(cacheKey, config);
@@ -177,7 +177,7 @@ public class GenericCacheManager<T> {
                     clearCache(cacheKey);
                     reloaded = true; // Mark as reloaded (but cache is cleared)
                     cachedConfig = null;
-                    
+
                     // Send alert when config is deleted
                     if (alertService != null) {
                         alertService.sendWarn("Configuration deleted in Nacos for " + cacheKey + ", cache cleared - service will return 503");
@@ -186,9 +186,9 @@ public class GenericCacheManager<T> {
             } catch (Exception e) {
                 // Nacos 网络故障/异常 → 标记为网络失败，继续重试
                 isNetworkFailure = true;
-                log.error("Failed to reload {} from Nacos (attempt {}/{}): Network error - {}", 
+                log.error("Failed to reload {} from Nacos (attempt {}/{}): Network error - {}",
                         cacheKey, retryCount, maxRetries, e.getMessage());
-                
+
                 // Send alert on first failure
                 if (retryCount == 1 && alertService != null) {
                     alertService.sendError("Nacos network unavailable for " + cacheKey + ", will retry...");
@@ -208,23 +208,23 @@ public class GenericCacheManager<T> {
         if (isNetworkFailure && !reloaded) {
             log.error("All Nacos reload attempts failed for {} due to network issues, using fallback cache (disaster recovery)", cacheKey);
             cachedConfig = getFallbackConfig(cacheKey);
-                    
+
             if (cachedConfig != null) {
                 log.warn("Using fallback configuration for {} (last valid config from before network failure)", cacheKey);
-                        
+
                 // Send alert when using fallback cache
                 if (alertService != null) {
                     alertService.sendError("Using fallback cache for " + cacheKey + " - Nacos network is completely unavailable!");
                 }
-                        
+
                 return cachedConfig;
             } else {
                 log.error("No fallback configuration available for {} (network failure)", cacheKey);
-                        
+
                 if (alertService != null) {
                     alertService.sendError("No fallback cache for " + cacheKey + " - Nacos network failure and no previous config!");
                 }
-                        
+
                 return null;
             }
         }

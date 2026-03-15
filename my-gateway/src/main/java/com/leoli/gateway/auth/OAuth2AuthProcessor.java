@@ -1,6 +1,6 @@
-package com.example.gateway.auth;
-import com.example.gateway.model.AuthConfig;
+package com.leoli.gateway.auth;
 
+import com.leoli.gateway.model.AuthConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -8,8 +8,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
+
 import java.util.Collections;
 import java.util.Map;
+
 /**
  * OAuth2 Authentication Processor.
  * Validates access tokens with OAuth2 authorization server.
@@ -20,13 +22,16 @@ import java.util.Map;
 @Component
 public class OAuth2AuthProcessor extends AbstractAuthProcessor {
     private final WebClient webClient;
+
     public OAuth2AuthProcessor() {
         this.webClient = WebClient.builder().build();
     }
+
     @Override
     public String getAuthType() {
         return "OAUTH2";
     }
+
     @Override
     public Mono<Void> process(ServerWebExchange exchange, AuthConfig config) {
         if (!isValidConfig(config)) {
@@ -34,10 +39,10 @@ public class OAuth2AuthProcessor extends AbstractAuthProcessor {
             return Mono.empty();
         }
         String routeId = config.getRouteId();
-        
+
         // Extract access token from Authorization header
         String accessToken = extractBearerToken(exchange);
-        
+
         if (accessToken == null || accessToken.isEmpty()) {
             logFailure(routeId, "Missing or empty access token");
             return writeUnauthorizedResponse(exchange, "Missing or invalid Authorization header");
@@ -50,7 +55,7 @@ public class OAuth2AuthProcessor extends AbstractAuthProcessor {
                         exchange.getAttributes().put("oauth2_token_active", true);
                         exchange.getAttributes().put("oauth2_username", validationResult.get("username"));
                         exchange.getAttributes().put("oauth2_scope", validationResult.get("scope"));
-                        
+
                         logSuccess(routeId);
                         return Mono.empty();
                     } else {
@@ -63,13 +68,14 @@ public class OAuth2AuthProcessor extends AbstractAuthProcessor {
                     return writeUnauthorizedResponse(exchange, "Token validation failed: " + ex.getMessage());
                 });
     }
+
     /**
      * Validate token with OAuth2 authorization server using introspection endpoint.
      */
     @SuppressWarnings("unchecked")
     private Mono<Map<String, Object>> validateTokenWithServer(String token, AuthConfig config) {
         String tokenEndpoint = config.getTokenEndpoint();
-        
+
         if (tokenEndpoint == null || tokenEndpoint.isEmpty()) {
             // Fallback: simple JWT validation without server
             log.warn("No token endpoint configured, using simple validation");
@@ -87,6 +93,7 @@ public class OAuth2AuthProcessor extends AbstractAuthProcessor {
                 .map(map -> (Map<String, Object>) map)
                 .doOnNext(result -> log.debug("OAuth2 introspection result: {}", result));
     }
+
     /**
      * Encode client credentials as Base64.
      */

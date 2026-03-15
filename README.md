@@ -275,7 +275,7 @@ curl http://localhost:80/api/data -H "Authorization: Bearer <token>"
 ## Project Structure
 
 ```
-scg-dynamic-admin-demo/
+scg-dynamic-admin/
 +-- gateway-admin/           # Admin console (port 8080)
 |   +-- controller/          # REST API + Web UI
 |   +-- service/             # Business logic

@@ -1,4 +1,4 @@
-package com.example.gateway.filter;
+package com.leoli.gateway.filter;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.filter.GatewayFilter;

@@ -1,6 +1,6 @@
-package com.example.gateway.auth;
+package com.leoli.gateway.auth;
 
-import com.example.gateway.model.AuthConfig;
+import com.leoli.gateway.model.AuthConfig;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -35,10 +35,10 @@ public class JwtAuthProcessor extends AbstractAuthProcessor {
         }
 
         String routeId = config.getRouteId();
-        
+
         // Extract JWT token from Authorization header
         String token = extractBearerToken(exchange);
-        
+
         if (token == null || token.isEmpty()) {
             logFailure(routeId, "Missing or empty JWT token");
             return writeUnauthorizedResponse(exchange, "Missing or invalid Authorization header");
@@ -47,20 +47,20 @@ public class JwtAuthProcessor extends AbstractAuthProcessor {
         // Validate JWT token
         try {
             SecretKey key = getSigningKey(config.getSecretKey());
-            
+
             Claims claims = Jwts.parser()
                     .verifyWith(key)
                     .build()
                     .parseSignedClaims(token)
                     .getPayload();
-            
+
             // Optional: Add claims to exchange attributes for downstream use
             exchange.getAttributes().put("jwt_claims", claims);
             exchange.getAttributes().put("jwt_subject", claims.getSubject());
-            
+
             logSuccess(routeId);
             return Mono.empty(); // Continue the filter chain
-            
+
         } catch (Exception ex) {
             logFailure(routeId, ex.getMessage());
             return writeUnauthorizedResponse(exchange, "Invalid JWT token: " + ex.getMessage());
@@ -75,11 +75,11 @@ public class JwtAuthProcessor extends AbstractAuthProcessor {
         if (secret == null || secret.isEmpty()) {
             throw new IllegalArgumentException("JWT secret key cannot be empty");
         }
-        
+
         // Ensure the secret is at least 32 bytes
-        String paddedSecret = secret.length() < 32 ? 
-            secret + "0".repeat(32 - secret.length()) : secret;
-        
+        String paddedSecret = secret.length() < 32 ?
+                secret + "0".repeat(32 - secret.length()) : secret;
+
         return Keys.hmacShaKeyFor(paddedSecret.getBytes(StandardCharsets.UTF_8));
     }
 }

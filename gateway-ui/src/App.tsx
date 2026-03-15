@@ -81,7 +81,8 @@ const App: React.FC = () => {
     setIsLoggedIn(false);
     setUser(null);
     message.success('Logout successful');
-    navigate('/login');
+    // Force full page reload to reset router state
+    window.location.href = '/login';
   };
 
   const renderContent = () => {

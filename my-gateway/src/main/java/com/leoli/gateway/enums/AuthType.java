@@ -1,4 +1,4 @@
-package com.example.gateway.enums;
+package com.leoli.gateway.enums;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;

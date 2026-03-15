@@ -1,10 +1,10 @@
-package com.example.gateway.filter;
+package com.leoli.gateway.filter;
 
-import com.example.gateway.limiter.RedisHealthChecker;
-import com.example.gateway.limiter.RedisRateLimiter;
-import com.example.gateway.util.RouteUtils;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.leoli.gateway.limiter.RedisHealthChecker;
+import com.leoli.gateway.limiter.RedisRateLimiter;
+import com.leoli.gateway.util.RouteUtils;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Hybrid Rate Limiter Filter - Redis + Local Dual-Layer Architecture
- * 
+ * <p>
  * Execution Logic:
  * 1. Check switch: gateway.rate-limiter.redis.enabled (default true)
  * 2. If enabled → Check Redis availability (scheduled task detection)
@@ -36,50 +36,50 @@ import java.util.concurrent.atomic.AtomicLong;
 @Component
 @Slf4j
 public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
-    
+
     @Autowired
     private RedisHealthChecker redisHealthChecker;
-    
+
     @Autowired(required = false)
     private RedisRateLimiter redisRateLimiter;
-    
+
     /**
      * Whether to enable Redis rate limiting (can be disabled via configuration)
      */
     @Value("${gateway.rate-limiter.redis.enabled:true}")
     private boolean redisLimitEnabled;
-    
+
     /**
      * Rate limiter cache: key = rateLimitKey, value = RateLimiterWindow
      */
     private final Cache<String, RateLimiterWindow> rateLimiterCache = Caffeine.newBuilder()
-        .maximumSize(10000)
-        .expireAfterWrite(1, TimeUnit.HOURS)
-        .build();
-    
+            .maximumSize(10000)
+            .expireAfterWrite(1, TimeUnit.HOURS)
+            .build();
+
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         RateLimitConfig config = getDefaultConfig();
-        
+
         if (!config.enabled) {
             return chain.filter(exchange);
         }
-        
+
         String routeId = RouteUtils.getRouteId(exchange);
         String clientId = extractClientId(exchange);
         String rateLimitKey = buildRateLimitKey(routeId, clientId, config);
-        
+
         // 1. Check if Redis rate limiting is enabled (default enabled)
         if (redisLimitEnabled) {
             redisHealthChecker.setRedisLimitEnabled(true);
-            
+
             // 2. Check Redis availability (scheduled task detection)
             if (redisHealthChecker.isRedisAvailableForRateLimiting()) {
                 log.debug("Using Redis distributed rate limiting for key: {}", rateLimitKey);
-                
+
                 // 3. Redis available → Use Redis rate limiting
                 boolean allowed = redisRateLimiter.tryAcquire(rateLimitKey, config.qps, config.windowSizeMs);
-                
+
                 if (allowed) {
                     return chain.filter(exchange);
                 } else {
@@ -90,11 +90,11 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
         } else {
             redisHealthChecker.setRedisLimitEnabled(false);
         }
-        
+
         // 4. Redis unavailable or switch disabled → Fallback to local rate limiting
         log.debug("Falling back to local rate limiting for key: {}", rateLimitKey);
         RateLimiterWindow window = getOrCreateWindow(rateLimitKey, config);
-        
+
         if (window.tryAcquire()) {
             log.debug("Local rate limit allowed for key: {}, remaining: {}", rateLimitKey, window.getRemaining());
             return chain.filter(exchange);
@@ -103,21 +103,21 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
             return rejectRequest(exchange);
         }
     }
-    
+
     /**
      * Get or create rate limiter window
      */
     private RateLimiterWindow getOrCreateWindow(String key, RateLimitConfig config) {
-        return rateLimiterCache.get(key, k -> 
-            new RateLimiterWindow(config.qps, config.windowSizeMs));
+        return rateLimiterCache.get(key, k ->
+                new RateLimiterWindow(config.qps, config.windowSizeMs));
     }
-    
+
     /**
      * Build rate limit key
      */
     private String buildRateLimitKey(String routeId, String clientId, RateLimitConfig config) {
         StringBuilder key = new StringBuilder("rate_limit:");
-        
+
         switch (config.keyType) {
             case "route":
                 key.append(routeId);
@@ -130,10 +130,10 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
                 key.append(routeId).append(":").append(clientId);
                 break;
         }
-        
+
         return key.toString();
     }
-    
+
     /**
      * Extract client identifier (IP address)
      */
@@ -144,7 +144,7 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
         }
         return "unknown";
     }
-    
+
     /**
      * Reject request, return 429 Too Many Requests
      */
@@ -153,7 +153,7 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
         exchange.getResponse().getHeaders().add("X-RateLimit-Limit", "true");
         return exchange.getResponse().setComplete();
     }
-    
+
     /**
      * Default rate limit configuration
      */
@@ -165,13 +165,13 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
         config.keyType = "combined";
         return config;
     }
-    
+
     @Override
     public int getOrder() {
         // 在 TracingFilter 和 AuthFilter 之后执行
         return Ordered.HIGHEST_PRECEDENCE + 20;
     }
-    
+
     /**
      * Rate limit configuration class
      */
@@ -182,7 +182,7 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
         private long windowSizeMs = 1000;
         private String keyType = "combined"; // route, ip, combined
     }
-    
+
     /**
      * Sliding time window rate limiter
      */
@@ -192,20 +192,21 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
         private final long windowSizeMs;
         private final AtomicInteger currentCount = new AtomicInteger(0);
         private final AtomicLong windowStartTime = new AtomicLong(System.currentTimeMillis());
-        
+
         public RateLimiterWindow(int maxRequests, long windowSizeMs) {
             this.maxRequests = maxRequests;
             this.windowSizeMs = windowSizeMs;
         }
-        
+
         /**
          * Try to acquire a permit
+         *
          * @return true if request is allowed, false if limit exceeded
          */
         public synchronized boolean tryAcquire() {
             long now = System.currentTimeMillis();
             long windowStart = windowStartTime.get();
-            
+
             // Check if window needs to be reset
             if (now - windowStart >= windowSizeMs) {
                 // Time window has passed, reset counter
@@ -213,7 +214,7 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
                 windowStartTime.set(now);
                 windowStart = now;
             }
-            
+
             // Check if limit exceeded
             int count = currentCount.get();
             if (count < maxRequests) {
@@ -221,10 +222,10 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
                 currentCount.incrementAndGet();
                 return true;
             }
-            
+
             return false;
         }
-        
+
         /**
          * Get remaining available requests
          */

@@ -1,8 +1,8 @@
-package com.example.gateway.filter;
+package com.leoli.gateway.filter;
 
-import com.example.gateway.enums.StrategyType;
-import com.example.gateway.manager.StrategyManager;
-import com.example.gateway.util.RouteUtils;
+import com.leoli.gateway.enums.StrategyType;
+import com.leoli.gateway.manager.StrategyManager;
+import com.leoli.gateway.util.RouteUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;

@@ -1,19 +1,19 @@
-package com.example.gateway.monitor;
+package com.leoli.gateway.monitor;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
  * Alert service for gateway monitoring.
- * 
+ * <p>
  * Current implementation: Logs alerts to application log
  * Production integration points (extend as needed):
- *   - Email notifications (JavaMail)
- *   - SMS notifications (Aliyun SMS, Tencent SMS)
- *   - Instant messaging (DingTalk, WeChat Work, Slack webhooks)
- *   - Monitoring systems (Prometheus, Grafana, Datadog)
- *   - APM tools (SkyWalking, Pinpoint, New Relic)
- * 
+ * - Email notifications (JavaMail)
+ * - SMS notifications (Aliyun SMS, Tencent SMS)
+ * - Instant messaging (DingTalk, WeChat Work, Slack webhooks)
+ * - Monitoring systems (Prometheus, Grafana, Datadog)
+ * - APM tools (SkyWalking, Pinpoint, New Relic)
+ *
  * @author leoli
  */
 @Slf4j
@@ -24,8 +24,8 @@ public class AlertService {
      * Send alert message.
      * Currently logs to application log only.
      * Extend this method in production to integrate with actual notification channels.
-     * 
-     * @param level Alert level (INFO, WARN, ERROR)
+     *
+     * @param level   Alert level (INFO, WARN, ERROR)
      * @param message Alert message
      */
     public void send(String level, String message) {
@@ -40,7 +40,7 @@ public class AlertService {
             default:
                 log.info("ℹ️  ALERT [INFO]: {}", message);
         }
-        
+
         // TODO: Production integrations - uncomment and implement as needed
         // Example 1: Email notification
         // if (level.equals("ERROR")) {
@@ -58,14 +58,14 @@ public class AlertService {
         // span.tag("level", level);
         // span.tag("message", message);
     }
-    
+
     /**
      * Send error level alert.
      */
     public void sendError(String message) {
         send("ERROR", message);
     }
-    
+
     /**
      * Send warning level alert.
      */

@@ -69,7 +69,7 @@ git rebase develop
 git push -u origin feature/new-authentication
 
 # 5. 在 GitHub 创建 Pull Request
-#    https://github.com/leoli5695/scg-dynamic-admin-demo/pulls
+#    https://github.com/leoli5695/scg-dynamic-admin/pulls
 #    选择：feature/new-authentication → develop
 
 # 6. Code Review 通过后合并到 develop
