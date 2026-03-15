@@ -383,6 +383,20 @@ MIT License - free for personal and commercial use. See [LICENSE](LICENSE) for d
 
 ---
 
+## 💝 Support & Sponsor
+
+This project is free to use under the MIT License. 
+
+If it helps your business or learning, consider:
+- ⭐ Starring this repository
+- 📢 Sharing with others
+- 💬 Contributing improvements
+- ☕ Buying me a coffee (optional)
+
+Your support keeps this project growing! 🚀
+
+---
+
 <div align="center">
 
 **Built by leoli**
