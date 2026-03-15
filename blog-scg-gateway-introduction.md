@@ -1343,7 +1343,402 @@ if (!jwtValidator.validate(token)) {
 
 ---
 
-## 七、生产实践与建议
+## 八、未来规划与扩展功能
+
+### 8.1 多服务路由与灰度发布（计划中）
+
+#### 8.1.1 功能概述
+
+**核心特性：**
+- ✅ **一个路由对应多个服务** - 支持流量按比例分发到不同服务
+- ✅ **服务级权重配置** - 每个服务设置不同的流量权重
+- ✅ **两级负载均衡** - 服务选择 + 实例选择
+- ✅ **灰度发布支持** - 按权重实现金丝雀发布、蓝绿部署
+
+**应用场景：**
+- 🎯 **灰度发布** - 新版本服务 10% 流量，旧版本 90% 流量
+- 🎯 **A/B 测试** - 50% 流量到 A 服务，50% 到 B 服务
+- 🎯 **多活容灾** - 主服务 80%，备用服务 20%
+- 🎯 **逐步放量** - 从 1% → 5% → 20% → 50% → 100%
+
+---
+
+#### 8.1.2 架构设计
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Client Request                           │
+│                  Path: /api/users                          │
+└───────────────────────┬─────────────────────────────────────┘
+                        ↓
+┌─────────────────────────────────────────────────────────────┐
+│         Route Matching (路由匹配)                            │
+│  Route: /api/** -> Multi-Service Route                      │
+│  Services: [Service-A (weight=80), Service-B (weight=20)]   │
+└───────────────────────┬─────────────────────────────────────┘
+                        ↓
+        ╔═══════════════════════════════════╗
+        ║  Level 1: 服务级负载均衡          ║
+        ║  (Service-Level Load Balancing)   ║
+        ║                                   ║
+        ║  基于权重的随机/轮询算法           ║
+        ║  - Service-A: 80% 概率             ║
+        ║  - Service-B: 20% 概率             ║
+        ╚═══════════════════════════════════╝
+                        ↓
+            选中：Service-A (80%)
+                        ↓
+┌─────────────────────────────────────────────────────────────┐
+│      Service-A Instances (Nacos 注册列表)                   │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
+│  │ Instance-A1  │  │ Instance-A2  │  │ Instance-A3  │     │
+│  │ weight: 1    │  │ weight: 2    │  │ weight: 3    │     │
+│  │ healthy      │  │ healthy      │  │ unhealthy    │     │
+│  └──────────────┘  └──────────────┘  └──────────────┘     │
+└───────────────────────┬─────────────────────────────────────┘
+                        ↓
+        ╔═══════════════════════════════════╗
+        ║  Level 2: 实例级负载均衡          ║
+        ║  (Instance-Level Load Balancing)  ║
+        ║                                   ║
+        ║  平滑加权轮询算法                  ║
+        ║  - 跳过不健康实例                  ║
+        ║  - 按权重比例分配                  ║
+        ╚═══════════════════════════════════╝
+                        ↓
+            选中：Instance-A2 (weight=2)
+                        ↓
+┌─────────────────────────────────────────────────────────────┐
+│              Forward to Backend                             │
+│         http://192.168.1.102:9001/api/users                │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+#### 8.1.3 数据流转全流程
+
+```
+Client Request (/api/order)
+        ↓
+┌──────────────────────────────────────────────────────────┐
+│  Step 1: Route Matching                                 │
+│  - Match route: "/api/**"                               │
+│  - Get configured services:                             │
+│    [{serviceId: "order-service-v1", weight: 90},        │
+│     {serviceId: "order-service-v2", weight: 10}]        │
+└────────────────────┬─────────────────────────────────────┘
+                     ↓
+┌──────────────────────────────────────────────────────────┐
+│  Step 2: Service Selection (Level 1 LB)                 │
+│  Algorithm: Weighted Random / Smooth Round-Robin        │
+│  Result: Select "order-service-v1" (90% probability)    │
+└────────────────────┬─────────────────────────────────────┘
+                     ↓
+┌──────────────────────────────────────────────────────────┐
+│  Step 3: Get Instances from Nacos                       │
+│  DiscoveryClient.getInstances("order-service-v1")       │
+│  Result:                                                │
+│    [Instance-1 (w=1), Instance-2 (w=2), Instance-3(w=3)]│
+└────────────────────┬─────────────────────────────────────┘
+                     ↓
+┌──────────────────────────────────────────────────────────┐
+│  Step 4: Instance Selection (Level 2 LB)                │
+│  Algorithm: Smooth Weighted Round-Robin                 │
+│  Health Check: Skip unhealthy instances                 │
+│  Result: Select Instance-2 (weight=2)                   │
+└────────────────────┬─────────────────────────────────────┘
+                     ↓
+┌──────────────────────────────────────────────────────────┐
+│  Step 5: Forward Request                                │
+│  URI: http://192.168.1.102:9001/api/order               │
+│  Headers: X-Service-Version: v1                         │
+└──────────────────────────────────────────────────────────┘
+```
+
+---
+
+#### 8.1.4 配置示例
+
+**路由配置（Nacos config.gateway.route-{routeId}）：**
+
+```json
+{
+  "id": "multi-service-route",
+  "uri": "multi://loadbalance",  // 特殊协议标识多服务模式
+  "predicates": [{
+    "name": "Path",
+    "args": {"pattern": "/api/order"}
+  }],
+  "metadata": {
+    "services": [
+      {
+        "serviceId": "order-service-v1",
+        "weight": 90,
+        "version": "v1.0.0",
+        "gray": false
+      },
+      {
+        "serviceId": "order-service-v2",
+        "weight": 10,
+        "version": "v2.0.0-beta",
+        "gray": true
+      }
+    ],
+    "loadBalancer": {
+      "algorithm": "weighted-random",  // weighted-random / smooth-round-robin
+      "stickySession": true,           // 是否开启会话粘滞
+      "healthAware": true              // 是否感知服务健康状态
+    }
+  }
+}
+```
+
+**服务实例配置（Nacos config.gateway.service-{serviceId}）：**
+
+```json
+{
+  "serviceId": "order-service-v1",
+  "loadBalancer": "weighted",
+  "instances": [
+    {
+      "ip": "192.168.1.100",
+      "port": 9001,
+      "weight": 1,
+      "healthy": true,
+      "metadata": {"zone": "beijing", "rack": "A1"}
+    },
+    {
+      "ip": "192.168.1.101",
+      "port": 9001,
+      "weight": 2,
+      "healthy": true,
+      "metadata": {"zone": "beijing", "rack": "A2"}
+    },
+    {
+      "ip": "192.168.1.102",
+      "port": 9001,
+      "weight": 3,
+      "healthy": false,  // 不健康实例会被跳过
+      "metadata": {"zone": "shanghai", "rack": "B1"}
+    }
+  ]
+}
+```
+
+---
+
+#### 8.1.5 核心代码实现
+
+**两级负载均衡过滤器：**
+
+```java
+@Component
+public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
+    
+    @Autowired
+    private DiscoveryClient discoveryClient;
+    
+    @Autowired
+    private HybridHealthChecker healthChecker;
+    
+    @Override
+    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        // 1. 获取路由配置中的多服务列表
+        Route route = (Route) exchange.getAttribute("GATEWAY_ROUTE_ATTR");
+        List<ServiceWeightConfig> serviceConfigs = extractServiceConfigs(route);
+        
+        if (serviceConfigs == null || serviceConfigs.isEmpty()) {
+            return chain.filter(exchange); // 单服务模式，直接放行
+        }
+        
+        // 2. Level 1: 服务级负载均衡（基于权重选择服务）
+        ServiceWeightConfig selectedService = selectServiceByWeight(serviceConfigs);
+        log.debug("Selected service: {} (weight={})", 
+                  selectedService.getServiceId(), selectedService.getWeight());
+        
+        // 3. 从 Nacos 获取该服务的所有实例
+        List<ServiceInstance> instances = discoveryClient
+            .getInstances(selectedService.getServiceId());
+        
+        if (CollectionUtils.isEmpty(instances)) {
+            log.error("No instances found for service: {}", selectedService.getServiceId());
+            return Mono.error(new NotFoundException("No available instances"));
+        }
+        
+        // 4. Level 2: 实例级负载均衡（平滑加权轮询）
+        ServiceInstance selectedInstance = selectInstanceByWeight(instances);
+        log.debug("Selected instance: {}:{} (weight={})", 
+                  selectedInstance.getHost(), 
+                  selectedInstance.getPort(),
+                  getInstanceWeight(selectedInstance));
+        
+        // 5. 重构请求 URI
+        URI newUri = reconstructURI(selectedInstance, exchange.getRequest().getURI());
+        ServerWebExchange filteredExchange = exchange.mutate()
+            .request(newRequest -> newRequest.uri(newUri))
+            .build();
+        
+        // 6. 添加服务版本标记头
+        filteredExchange.getRequest().mutate()
+            .header("X-Service-Version", selectedService.getVersion())
+            .header("X-Service-Gray", String.valueOf(selectedService.isGray()));
+        
+        return chain.filter(filteredExchange);
+    }
+    
+    /**
+     * Level 1: 基于权重的服务选择（支持加权随机/平滑轮询）
+     */
+    private ServiceWeightConfig selectServiceByWeight(List<ServiceWeightConfig> services) {
+        // 实现加权随机或平滑加权轮询算法
+        return weightedRandomSelect(services);
+    }
+    
+    /**
+     * Level 2: 实例级平滑加权轮询（Nginx 风格）
+     */
+    private ServiceInstance selectInstanceByWeight(List<ServiceInstance> instances) {
+        // 过滤不健康实例（单实例服务保留）
+        List<ServiceInstance> healthyInstances = filterByHealth(instances);
+        
+        if (healthyInstances.isEmpty()) {
+            return instances.get(0); // 全部不健康时返回第一个
+        }
+        
+        // 平滑加权轮询算法
+        return smoothWeightedRoundRobin(healthyInstances);
+    }
+}
+```
+
+---
+
+#### 8.1.6 灰度发布实战
+
+**场景：从 v1 版本灰度迁移到 v2 版本**
+
+**阶段 1：准备期（v2 部署完成）**
+```yaml
+services:
+  - serviceId: order-service-v1
+    weight: 100
+    version: v1.0.0
+  - serviceId: order-service-v2
+    weight: 0       # 暂不引流，仅验证功能
+    version: v2.0.0
+```
+
+**阶段 2：小流量验证（1%）**
+```yaml
+services:
+  - serviceId: order-service-v1
+    weight: 99
+  - serviceId: order-service-v2
+    weight: 1       # 引入 1% 流量验证
+```
+
+**阶段 3：逐步放量（5% → 20% → 50%）**
+```yaml
+# Day 3: 5%
+services:
+  - serviceId: order-service-v1
+    weight: 95
+  - serviceId: order-service-v2
+    weight: 5
+
+# Day 5: 20%
+services:
+  - serviceId: order-service-v1
+    weight: 80
+  - serviceId: order-service-v2
+    weight: 20
+
+# Day 7: 50%
+services:
+  - serviceId: order-service-v1
+    weight: 50
+  - serviceId: order-service-v2
+    weight: 50
+```
+
+**阶段 4：全量切换（100%）**
+```yaml
+services:
+  - serviceId: order-service-v1
+    weight: 0       # 停止引流
+  - serviceId: order-service-v2
+    weight: 100     # 全量切换到 v2
+```
+
+**阶段 5：观察与回滚**
+```yaml
+# 如果 v2 出现问题，快速回滚
+services:
+  - serviceId: order-service-v1
+    weight: 100     # 切回 v1
+  - serviceId: order-service-v2
+    weight: 0       # 下线 v2
+```
+
+---
+
+#### 8.1.7 监控指标
+
+**关键指标：**
+- ✅ **服务级别流量分布** - 各服务的实际流量占比
+- ✅ **实例级别 QPS** - 每个实例的处理能力
+- ✅ **延迟对比** - v1 vs v2 的 P99 延迟
+- ✅ **错误率对比** - 各版本的错误率趋势
+- ✅ **会话粘滞命中率** - Sticky Session 效果
+
+**Grafana Dashboard 示例：**
+
+```
+╔═══════════════════════════════════════════════════════════╗
+║           Multi-Service Route Traffic Distribution        ║
+╠═══════════════════════════════════════════════════════════╣
+║                                                           ║
+║  Service-A (v1.0.0): ████████████████████  80% (4000 QPS)║
+║  Service-B (v2.0.0): ████████              20% (1000 QPS)║
+║                                                           ║
+╠═══════════════════════════════════════════════════════════╣
+║              Instance Health Status                       ║
+╠═══════════════════════════════════════════════════════════╣
+║  Service-A:                                               ║
+║    ✓ Instance-A1: 9001  [████████]  w=1  300 QPS         ║
+║    ✓ Instance-A2: 9002  [████████████] w=2  600 QPS      ║
+║    ✓ Instance-A3: 9003  [████████████████] w=3  900 QPS  ║
+║                                                           ║
+║  Service-B:                                               ║
+║    ✓ Instance-B1: 9001  [████████]  w=1  100 QPS         ║
+║    ⚠ Instance-B2: 9002  [----]      w=2  0 QPS (unhealthy)║
+║                                                           ║
+╠═══════════════════════════════════════════════════════════╣
+║              Latency Comparison (P99)                     ║
+╠═══════════════════════════════════════════════════════════╣
+║  Service-A (v1):  ━━━━━━━━━━━━━ 45ms                     ║
+║  Service-B (v2):  ━━━━━━━━━━━━━━━━ 52ms (+15%)           ║
+╚═══════════════════════════════════════════════════════════╝
+```
+
+---
+
+#### 8.1.8 优势与价值
+
+**技术优势：**
+- ✅ **零代码侵入** - 业务服务无需任何改造
+- ✅ **动态调整** - 权重实时生效，无需重启
+- ✅ **健康感知** - 自动跳过故障服务/实例
+- ✅ **平滑过渡** - 支持渐进式灰度，风险可控
+
+**业务价值：**
+- ✅ **降低发布风险** - 从 1% 开始逐步验证
+- ✅ **快速回滚能力** - 秒级切回旧版本
+- ✅ **A/B 测试支持** - 灵活分配流量
+- ✅ **多活容灾** - 跨机房/跨区域流量调度
+
+---
 
 ### 7.1 部署架构
 
