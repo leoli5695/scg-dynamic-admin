@@ -42,6 +42,9 @@ public class ServiceRefresher {
 
     // Track which services use static:// protocol (need immediate cache invalidation)
     private final ConcurrentMap<String, Boolean> staticProtocolServices = new ConcurrentHashMap<>();
+    
+    // Track registered listeners for each service config
+    private final ConcurrentMap<String, ConfigCenterService.ConfigListener> serviceListeners = new ConcurrentHashMap<>();
 
     @Autowired
     public ServiceRefresher(ConfigCenterService configService, 
@@ -94,6 +97,14 @@ public class ServiceRefresher {
     @PreDestroy
     public void destroy() {
         log.info("ServiceRefresher shutting down...");
+        // Remove all listeners
+        for (String serviceId : serviceListeners.keySet()) {
+            ConfigCenterService.ConfigListener listener = serviceListeners.remove(serviceId);
+            if (listener != null) {
+                String serviceDataId = SERVICE_PREFIX + serviceId;
+                configService.removeListener(serviceDataId, GROUP, listener);
+            }
+        }
     }
 
     /**
@@ -111,6 +122,80 @@ public class ServiceRefresher {
         } catch (Exception e) {
             log.error("Failed to load services index from Nacos", e);
             return null;
+        }
+    }
+    
+    /**
+     * Register a listener for a specific service config.
+     */
+    private void registerServiceListener(String serviceId) {
+        if (serviceListeners.containsKey(serviceId)) {
+            log.debug("Listener already registered for service: {}", serviceId);
+            return;
+        }
+        
+        String serviceDataId = SERVICE_PREFIX + serviceId;
+        ConfigCenterService.ConfigListener listener = new ConfigCenterService.ConfigListener() {
+            @Override
+            public void onConfigChange(String dataId, String group, String newContent) {
+                log.info("📡 [Service Config Change] Detected change in {}: {}", dataId, serviceId);
+                handleSingleServiceChange(serviceId, newContent);
+            }
+        };
+        
+        try {
+            configService.addListener(serviceDataId, GROUP, listener);
+            serviceListeners.put(serviceId, listener);
+            log.info("✅ Registered listener for service: {}", serviceId);
+        } catch (Exception e) {
+            log.error("❌ Failed to register listener for service: {}", serviceId, e);
+        }
+    }
+    
+    /**
+     * Remove listener for a specific service config.
+     */
+    private void removeServiceListener(String serviceId) {
+        ConfigCenterService.ConfigListener listener = serviceListeners.remove(serviceId);
+        if (listener != null) {
+            String serviceDataId = SERVICE_PREFIX + serviceId;
+            configService.removeListener(serviceDataId, GROUP, listener);
+            log.info("✅ Removed listener for service: {}", serviceId);
+        }
+    }
+    
+    /**
+     * Handle single service config change.
+     */
+    private void handleSingleServiceChange(String serviceId, String newContent) {
+        log.info("🔄 Handling service config change for: {}", serviceId);
+        
+        try {
+            if (newContent == null || newContent.isBlank()) {
+                log.warn("⚠️ Service {} config is empty, clearing cache", serviceId);
+                clearServiceCache(serviceId);
+                return;
+            }
+            
+            JsonNode serviceNode = objectMapper.readTree(newContent);
+            
+            // Validate service config
+            validateServiceConfig(serviceNode, serviceId);
+            
+            // Check if all instances are disabled/removed
+            if (!hasValidInstances(serviceNode)) {
+                log.warn("⚠️ Service {} has no valid instances, clearing cache", serviceId);
+                clearServiceCache(serviceId);
+            } else {
+                // Update L1 and L3 caches
+                String cacheKey = CACHE_KEY + "." + serviceId;
+                cacheManager.loadConfig(cacheKey, newContent);
+                serviceManager.parseAndCacheService(serviceId, serviceNode);
+                log.info("✅ Service {} config refreshed ({} instances)", 
+                        serviceId, serviceNode.get("instances").size());
+            }
+        } catch (Exception e) {
+            log.error("💥 Failed to handle service config change for: {}", serviceId, e);
         }
     }
 
@@ -141,6 +226,9 @@ public class ServiceRefresher {
                     
                     // Parse and cache service instances to ServiceManager.instanceCache
                     serviceManager.parseAndCacheService(serviceId, serviceNode);
+                    
+                    // ✅ Register listener for this service
+                    registerServiceListener(serviceId);
                     
                     loadedCount++;
                     log.debug("Warmed up service: {}", serviceId);
@@ -341,6 +429,10 @@ public class ServiceRefresher {
                         
                         cacheManager.loadConfig(CACHE_KEY + "." + newServiceId, serviceConfig);
                         serviceManager.parseAndCacheService(newServiceId, serviceNode);
+                        
+                        // ✅ Register listener for new service
+                        registerServiceListener(newServiceId);
+                        
                         log.info("✅ New service loaded: {}", newServiceId);
                     } else {
                         log.warn("New service config not found or empty: {}", newServiceId);
@@ -351,9 +443,12 @@ public class ServiceRefresher {
             // Find removed services (in current but not in new)
             for (String currentServiceId : currentServiceIds) {
                 if (!newServiceIds.contains(currentServiceId)) {
-                    log.info("🗑️  Service removed: {}, clearing cache...", currentServiceId);
+                    log.info("🗑️  Service removed: {}, clearing cache and listener...", currentServiceId);
                     clearServiceCache(currentServiceId);
                     staticProtocolServices.remove(currentServiceId);
+                    
+                    // ✅ Remove listener for removed service
+                    removeServiceListener(currentServiceId);
                 }
             }
             
