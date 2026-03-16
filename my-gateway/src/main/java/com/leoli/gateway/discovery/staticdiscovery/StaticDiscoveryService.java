@@ -16,6 +16,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Static Discovery Service implementation.
@@ -57,113 +58,112 @@ public class StaticDiscoveryService {
      * @return list of service instances
      */
     public List<ServiceInstance> getInstances(String serviceId) {
-        log.info("🔍 [DIAGNOSE] getInstances called for service: {}", serviceId);
+        log.info("🔍 getInstances called for service: {}", serviceId);
         
-        // ✅ Priority: Get from ServiceManager (static configuration)
-        boolean cacheValid = serviceManager.isServiceCacheValid(serviceId);
-        log.info("🔍 [DIAGNOSE] Cache valid check result: {} for service: {}", cacheValid, serviceId);
-        
-        if (cacheValid) {
-            List<ServiceManager.ServiceInstance> staticInstances =
-                    serviceManager.getServiceInstances(serviceId);
-
-            if (staticInstances != null && !staticInstances.isEmpty()) {
-                log.info("✅ [DIAGNOSE] Found {} static instance(s) for service: {} from VALID cache", 
-                        staticInstances.size(), serviceId);
-                return staticInstances.stream()
-                        .map(StaticServiceInstance::new)
-                        .collect(java.util.stream.Collectors.toList());
-            } else {
-                log.warn("⚠️ [DIAGNOSE] Cache valid but instances empty for service: {}", serviceId);
-            }
-        } else {
-            log.warn("❌ [DIAGNOSE] Cache INVALID for service: {}", serviceId);
-        }
-
-        // ⚠️ Cache expired or invalid, try to reload from Nacos
-        log.warn("🔄 [DIAGNOSE] Cache invalid for service: {}, attempting to reload from Nacos", serviceId);
-        try {
-            // Get services-index to find the service config key
-            String servicesIndex = configService.getConfig(SERVICES_INDEX_DATA_ID, GROUP);
-            log.info("📋 [DIAGNOSE] Services index content: {}", servicesIndex);
+        // 1️⃣ Priority: Check primary cache (L1)
+        JsonNode primaryConfig = serviceManager.getServiceConfig(serviceId);
+        if (primaryConfig != null && !primaryConfig.isNull()) {
+            log.info("✅ [L1 Cache Hit] Found in primaryCache");
             
-            if (servicesIndex != null && !servicesIndex.isBlank()) {
-                JsonNode indexNode = new ObjectMapper().readTree(servicesIndex);
-                if (indexNode.isArray()) {
-                    log.info("🔢 [DIAGNOSE] Found {} services in index", indexNode.size());
-                    
-                    for (JsonNode routeIdNode : indexNode) {
-                        String routeConfigKey = "config.gateway.service-" + routeIdNode.asText();
-                        log.info("🔍 [DIAGNOSE] Trying to load service config: {}", routeConfigKey);
-                        
-                        String serviceConfig = configService.getConfig(routeConfigKey, GROUP);
-                        log.info("📦 [DIAGNOSE] Config for {} length={}, isBlank={}", 
-                                routeConfigKey, 
-                                serviceConfig != null ? serviceConfig.length() : 0,
-                                serviceConfig != null ? serviceConfig.isBlank() : "N/A");
-                        
-                        if (serviceConfig != null && !serviceConfig.isBlank()) {
-                            // Load into cache
-                            log.info("💾 [DIAGNOSE] Loading config into cache for service: {}", serviceId);
-                            serviceManager.loadServiceConfig(serviceId, serviceConfig);
-                            
-                            // Try again after loading
-                            boolean reloadedCacheValid = serviceManager.isServiceCacheValid(serviceId);
-                            log.info("🔍 [DIAGNOSE] After reload - cache valid: {} for service: {}", 
-                                    reloadedCacheValid, serviceId);
-                            
-                            if (reloadedCacheValid) {
-                                List<ServiceManager.ServiceInstance> staticInstances =
-                                        serviceManager.getServiceInstances(serviceId);
-                                
-                                if (staticInstances != null && !staticInstances.isEmpty()) {
-                                    log.info("✅ [DIAGNOSE] Successfully reloaded {} static instance(s) for service: {}", 
-                                            staticInstances.size(), serviceId);
-                                    return staticInstances.stream()
-                                            .map(StaticServiceInstance::new)
-                                            .collect(java.util.stream.Collectors.toList());
-                                } else {
-                                    log.warn("⚠️ [DIAGNOSE] Reloaded cache but instances still empty for service: {}", serviceId);
-                                }
-                            }
-                        }
-                    }
-                }
-            } else {
-                log.error("❌ [DIAGNOSE] Services index is null or blank!");
-            }
-        } catch (Exception e) {
-            log.error("💥 [DIAGNOSE] Failed to reload service config from Nacos for {}: {}", 
-                    serviceId, e.getMessage(), e);
-        }
-
-        // ⚠️ Nacos unavailable, try to use fallback cache
-        log.warn("⚠️ [DIAGNOSE] Nacos reload failed, checking fallback cache for service: {}", serviceId);
-        JsonNode fallbackConfig = serviceManager.getServiceFallbackConfig(serviceId);
-        if (fallbackConfig != null && !fallbackConfig.isNull()) {
-            log.info("✅ [DIAGNOSE] Found fallback config for service: {}, reloading into instanceCache", serviceId);
-            try {
-                // Reload fallback config into instanceCache (tertiary cache)
-                serviceManager.parseAndCacheService(serviceId, fallbackConfig);
-                
-                // Try to get instances again
-                List<ServiceManager.ServiceInstance> staticInstances =
-                        serviceManager.getServiceInstances(serviceId);
-                
-                if (staticInstances != null && !staticInstances.isEmpty()) {
-                    log.info("✅ [DIAGNOSE] Successfully loaded {} instance(s) from fallback cache for service: {}", 
-                            staticInstances.size(), serviceId);
-                    return staticInstances.stream()
-                            .map(StaticServiceInstance::new)
-                            .collect(java.util.stream.Collectors.toList());
-                }
-            } catch (Exception ex) {
-                log.error("💥 [DIAGNOSE] Failed to load fallback config for {}: {}", serviceId, ex.getMessage());
+            // Parse and cache it, then get from instanceCache
+            serviceManager.parseAndCacheService(serviceId, primaryConfig);
+            
+            List<ServiceManager.ServiceInstance> instances = 
+                serviceManager.getServiceInstances(serviceId);
+            
+            if (instances != null && !instances.isEmpty()) {
+                return instances.stream()
+                        .map(StaticServiceInstance::new)
+                        .collect(Collectors.toList());
             }
         }
         
-        log.warn("🚫 [DIAGNOSE] No configuration available (primary/fallback/Nacos all failed) for service: {}, returning empty list", serviceId);
-        return Collections.emptyList();
+        // 2️⃣ Primary cache empty/expired, reload from Nacos (L2)
+        log.warn("⚠️ [L1 Cache Miss] primaryCache empty/expired, reloading from Nacos");
+        
+        try {
+            // Get services-index to check which services exist
+            String servicesIndex = configService.getConfig(SERVICES_INDEX_DATA_ID, GROUP);
+            if (servicesIndex == null || servicesIndex.isBlank()) {
+                log.error("❌ services-index is empty!");
+                return Collections.emptyList();
+            }
+            
+            JsonNode indexNode = new ObjectMapper().readTree(servicesIndex);
+            if (!indexNode.isArray()) {
+                log.error("❌ services-index is not an array!");
+                return Collections.emptyList();
+            }
+            
+            // Check if current service exists in the index
+            boolean serviceExists = false;
+            for (JsonNode nodeId : indexNode) {
+                if (serviceId.equals(nodeId.asText())) {
+                    serviceExists = true;
+                    break;
+                }
+            }
+            
+            // ⚠️ Service not in index, it was deleted
+            if (!serviceExists) {
+                log.warn("⚠️ Service {} not found in services-index (deleted?), clearing its caches", 
+                        serviceId);
+                serviceManager.clearServiceCache(serviceId); // Clear only this service's cache
+                return Collections.emptyList();
+            }
+            
+            // ✅ Service exists, load its config
+            String routeConfigKey = "config.gateway.service-" + serviceId;
+            String serviceConfig = configService.getConfig(routeConfigKey, GROUP);
+            
+            if (serviceConfig != null && !serviceConfig.isBlank()) {
+                log.info("✅ [Nacos Success] Got config for {} from Nacos", serviceId);
+                
+                // Update L1 and L3 caches
+                serviceManager.loadServiceConfig(serviceId, serviceConfig);
+                
+                List<ServiceManager.ServiceInstance> instances = 
+                    serviceManager.getServiceInstances(serviceId);
+                
+                if (instances != null && !instances.isEmpty()) {
+                    return instances.stream()
+                            .map(StaticServiceInstance::new)
+                            .collect(Collectors.toList());
+                }
+                
+                // Config is empty, service was deleted
+                log.warn("⚠️ Service {} has empty config (deleted?), clearing its caches", 
+                        serviceId);
+                serviceManager.clearServiceCache(serviceId);
+                return Collections.emptyList();
+                
+            } else {
+                // Empty config string
+                log.warn("⚠️ Service {} returned empty config string (deleted?), clearing its caches", 
+                        serviceId);
+                serviceManager.clearServiceCache(serviceId);
+                return Collections.emptyList();
+            }
+            
+        } catch (Exception e) {
+            // 3️⃣ Nacos unavailable, use instanceCache as final fallback (L3)
+            log.error("💥 [Nacos Failed] {} - falling back to instanceCache", e.getMessage());
+            
+            // Check instanceCache (even if stale)
+            List<ServiceManager.ServiceInstance> cachedInstances = 
+                serviceManager.getServiceInstances(serviceId);
+            
+            if (cachedInstances != null && !cachedInstances.isEmpty()) {
+                log.info("✅ [L3 Fallback] Using instanceCache to avoid 503 (DEGRADED MODE)");
+                return cachedInstances.stream()
+                        .map(StaticServiceInstance::new)
+                        .collect(Collectors.toList());
+            }
+            
+            // No data in instanceCache either
+            log.error("❌ [All Caches Failed] instanceCache also empty, returning 503");
+            return Collections.emptyList();
+        }
     }
 
     /**

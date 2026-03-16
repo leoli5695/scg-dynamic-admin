@@ -91,51 +91,25 @@ public class GenericCacheManager<T> {
     }
 
     /**
-     * Check if cache is valid (not null and not expired).
+     * Check if cache is valid (not null).
      * 
-     * Logic:
-     * 1. If primary cache is loaded and not expired → return true
-     * 2. If primary cache is expired but fallback cache exists → return true (fallback still works)
-     * 3. If both caches are empty → return false
+     * Logic: Simply check if primary cache has data, ignore TTL.
+     * TTL is only used to trigger Nacos reload, not to invalidate cache.
      *
      * @param cacheKey Configuration type key
-     * @return true if cache is loaded and (not expired OR has fallback)
+     * @return true if primary cache has data (regardless of expiration)
      */
     public boolean isCacheValid(String cacheKey) {
         JsonNode primaryConfig = getCachedConfig(cacheKey);
         
-        // Check if primary cache is valid and not expired
+        // Has data → return true (use it regardless of TTL)
         if (primaryConfig != null) {
-            Long lastLoadTime = lastLoadTimes.get(cacheKey);
-            if (lastLoadTime == null) {
-                log.debug("Cache {} invalid: no lastLoadTime", cacheKey);
-                return false;
-            }
-
-            long now = System.currentTimeMillis();
-            long age = now - lastLoadTime;
-            boolean valid = (age < cacheTtlMs);
-            
-            log.debug("Cache {} validity check: age={}ms, TTL={}ms, valid={}", 
-                     cacheKey, age, cacheTtlMs, valid);
-            
-            if (valid) {
-                return true; // Primary cache is fresh
-            }
-            
-            // Primary cache expired, but we can still use it if no better option
-            log.warn("Cache {} expired (age={}ms), but will continue using until reload", cacheKey, age);
-            return true; // Use expired primary cache as fallback
+            log.debug("Cache {} has data, using it", cacheKey);
+            return true;
         }
         
-        // Primary cache is null, try fallback
-        JsonNode fallbackConfig = getFallbackConfig(cacheKey);
-        if (fallbackConfig != null) {
-            log.warn("Cache {} is null, using fallback config", cacheKey);
-            return true; // Fallback cache is available
-        }
-        
-        log.debug("Cache {} invalid: both primary and fallback are null", cacheKey);
+        // No data → return false (need to reload from Nacos)
+        log.debug("Cache {} is empty, need reload from Nacos", cacheKey);
         return false;
     }
 
