@@ -54,9 +54,12 @@ public class GenericCacheManager<T> {
             fallbackCaches.computeIfAbsent(cacheKey, k -> new AtomicReference<>()).set(root);
 
             // Update load time
-            lastLoadTimes.put(cacheKey, System.currentTimeMillis());
+            long currentTime = System.currentTimeMillis();
+            lastLoadTimes.put(cacheKey, currentTime);
 
             log.info("Configuration loaded for {}: {}", cacheKey, summarizeConfig(root));
+            log.info("Cache {} lastLoadTime set to {} (TTL={}ms, expires at {})", 
+                    cacheKey, currentTime, cacheTtlMs, new java.util.Date(currentTime + cacheTtlMs));
         } catch (Exception e) {
             log.error("Failed to load configuration for {}", cacheKey, e);
             throw new RuntimeException("Failed to parse config for " + cacheKey, e);
@@ -101,11 +104,18 @@ public class GenericCacheManager<T> {
 
         Long lastLoadTime = lastLoadTimes.get(cacheKey);
         if (lastLoadTime == null) {
+            log.debug("Cache {} invalid: no lastLoadTime", cacheKey);
             return false;
         }
 
         long now = System.currentTimeMillis();
-        return (now - lastLoadTime) < cacheTtlMs;
+        long age = now - lastLoadTime;
+        boolean valid = (age < cacheTtlMs);
+        
+        log.debug("Cache {} validity check: age={}ms, TTL={}ms, valid={}", 
+                 cacheKey, age, cacheTtlMs, valid);
+        
+        return valid;
     }
 
     /**
