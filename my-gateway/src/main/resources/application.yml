@@ -93,11 +93,6 @@ gateway:
     endpoint: /actuator/health
     timeout: 3000
   
-  # Active Health Check Configuration
-  health-check:
-    endpoint: /actuator/health
-    timeout: 3000
-  
   # Rate Limiter Configuration
   rate-limiter:
     # Redis 限流开关（默认 true，可手动关闭强制使用本地限流）

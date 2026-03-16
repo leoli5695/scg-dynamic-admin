@@ -38,16 +38,16 @@ api.interceptors.response.use(
       // Handle unauthorized/forbidden access - redirect to login
       console.error('Unauthorized/Forbidden access:', error.response?.data);
       
-      // Check if token exists in localStorage
+      // Clear invalid token and redirect to login
       const token = localStorage.getItem('token');
-      if (!token) {
-        console.warn('[API Interceptor] No token found, redirecting to login...');
-        // Only redirect if token doesn't exist (user is not logged in)
-        window.location.href = '/login';
-      } else {
-        console.warn('[API Interceptor] Token exists but request failed with 403/401. This may indicate an invalid token.');
-        // Don't redirect, let the component handle the error
+      if (token) {
+        console.warn('[API Interceptor] Token is invalid/expired, clearing and redirecting to login...');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
       }
+      
+      // Redirect to login page
+      window.location.href = '/login';
     } else if (error.response?.status >= 500) {
       console.error('Server error:', error.response?.data || error.message);
     } else if (error.response?.status >= 400) {
