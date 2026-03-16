@@ -98,14 +98,11 @@ public class ServiceService {
     }
 
     String serviceName = service.getName();
-    
+        
     if (serviceCache.containsKey(serviceName)) {
       throw new IllegalArgumentException("Service already exists: " + serviceName);
     }
-
-    // Extract description for database-only storage
-    String description = service.getDescription();
-    
+        
     // Generate UUID first (needed for both DB and Nacos)
     String generatedServiceId = java.util.UUID.randomUUID().toString();
     
@@ -113,23 +110,12 @@ public class ServiceService {
     // This ensures metadata JSON contains the correct serviceId
     service.setServiceId(generatedServiceId);
     
-    // Temporarily set description to null for JSON serialization
-    // (description is stored in DB column only, not in metadata JSON)
-    service.setDescription(null);
-    
     // 1. Convert to entity and save to H2 database
     log.info("Saving service to database: {}", serviceName);
     ServiceEntity entity = toEntity(service);
     entity.setServiceName(serviceName);
     entity.setServiceId(generatedServiceId);
-    entity.setDescription(description); // Save description to DB only (not in JSON)
     entity = serviceRepository.save(entity);
-    
-    // Restore description in service object for cache and Nacos
-    service.setDescription(description);
-    
-    log.info("Service saved with DB id={}, service_name={}, description={}", 
-             entity.getId(), entity.getServiceName(), entity.getDescription());
 
     // 2. Update memory cache
     serviceCache.put(serviceName, service);
@@ -168,24 +154,13 @@ public class ServiceService {
       throw new IllegalArgumentException("Service not found: " + serviceName);
     }
     
-    // Extract description for database-only storage
-    String description = service.getDescription();
-    
     // Ensure serviceId is set (use existing one from entity)
     service.setServiceId(entity.getServiceId());
-    
-    // Temporarily set description to null for JSON serialization
-    // (description is stored in DB column only, not in metadata JSON)
-    service.setDescription(null);
     
     // 1. Update database fields
     log.info("Updating service in database: {}", serviceName);
     // Don't update name field, use service_name instead
-    entity.setDescription(description); // Update description in DB only (not in JSON)
     entity = serviceRepository.save(entity);
-    
-    // Restore description in service object for cache and Nacos
-    service.setDescription(description);
 
     // 2. Update memory cache
     serviceCache.put(serviceName, service);

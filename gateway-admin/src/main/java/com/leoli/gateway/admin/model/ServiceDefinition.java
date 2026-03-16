@@ -20,11 +20,6 @@ public class ServiceDefinition {
     private String name;
     
     /**
-     * Service description
-     */
-    private String description;
-    
-    /**
      * Service instance list
      */
     private List<ServiceInstance> instances = new ArrayList<>();
@@ -33,11 +28,6 @@ public class ServiceDefinition {
      * Load balancer strategy
      */
     private String loadBalancer = "round-robin";
-    
-    /**
-     * Metadata
-     */
-    private Map<String, String> metadata = new HashMap<>();
     
     /**
      * Service ID (UUID) for display purposes.
