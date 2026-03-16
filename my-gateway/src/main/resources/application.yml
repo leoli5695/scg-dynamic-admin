@@ -76,10 +76,15 @@ gateway:
     gateway-id: ${GATEWAY_ID:gateway-1}
     
     # Active health check interval (milliseconds)
+    # Note: Gateway's main responsibility is routing, not health monitoring.
+    # Active check is only for fixed nodes (static:// protocol).
+    # Passive check handles real-time failures during user calls.
     active-check-interval-ms: 30000
     
     # Health status sync interval (milliseconds)
-    sync-interval-ms: 10000
+    # Sync to Admin DB periodically for UI display.
+    # Users need time to open console, so 30s is acceptable.
+    sync-interval-ms: 30000
     
     # Batch size for health status push
     batch-size: 50
