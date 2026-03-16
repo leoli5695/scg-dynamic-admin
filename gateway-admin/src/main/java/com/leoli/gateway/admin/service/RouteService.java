@@ -167,30 +167,21 @@ public class RouteService {
       throw new IllegalArgumentException("Route already exists: " + routeName);
     }
 
-    // Extract description for database-only storage
-    String description = route.getDescription();
-    
-    // Temporarily set description to null for JSON serialization
-    // (description is stored in DB column only, not in metadata JSON)
-    route.setDescription(null);
+    // ✅ Note: RouteDefinition no longer has description field
+    // Description is only stored in RouteEntity for UI display
     
     // 1. Convert to entity and save to H2 database
     log.info("Saving route to database: {}", routeName);
     RouteEntity entity = routeConverter.toEntity(route);
     entity.setRouteName(routeName);
     entity.setRouteId(java.util.UUID.randomUUID().toString());
-    entity.setDescription(description); // Save description to DB only (not in JSON)
+    entity.setDescription(null); // No description in RouteDefinition, so null
     entity = routeRepository.save(entity);
     
-    // ✅ CRITICAL: Do NOT restore description! 
-    // Keep route.description = null for Nacos push
-    // Gateway's RouteDefinition class doesn't have description field
-    
-    log.info("Route saved with DB id={}, route_name={}, description={}", 
-             entity.getId(), entity.getRouteName(), entity.getDescription());
+    log.info("Route saved with DB id={}, route_name={}", 
+             entity.getId(), entity.getRouteName());
 
     // 2. Push to Nacos (per-route format using route_id UUID)
-    // Important: route.description is null, so Nacos config won't include it
     String routeDataId = ROUTE_PREFIX + entity.getRouteId();
     configCenterService.publishConfig(routeDataId, route);
     log.info("Route pushed to Nacos: {}", routeDataId);
@@ -204,7 +195,6 @@ public class RouteService {
 
   /**
    * Update route with dual-write to database and Nacos (per-route format).
-   * Description is updated in database only, not pushed to Nacos metadata.
    */
   @Transactional(rollbackFor = Exception.class)
   public RouteEntity updateRoute(Long id, RouteDefinition route) {
@@ -215,34 +205,22 @@ public class RouteService {
     RouteEntity entity = routeRepository.findById(id)
         .orElseThrow(() -> new IllegalArgumentException("Route not found with DB id: " + id));
 
-    // Extract description for database-only storage
-    String description = route.getDescription();
+    // ✅ Note: RouteDefinition no longer has description field
+    // Keep existing description in database unchanged
     
-    // Temporarily set description to null for JSON serialization
-    // (description is stored in DB column only, not in metadata JSON)
-    route.setDescription(null);
-    
-    // Update entity fields from route definition
-    entity.setDescription(description); // Update description in DB only (not in JSON)
-    
-    // Store complete configuration as JSON in metadata field for backup
+    // Store configuration as JSON in metadata field for backup
     try {
       String configJson = objectMapper.writeValueAsString(route);
       entity.setMetadata(configJson);
     } catch (Exception e) {
       log.warn("Failed to serialize route config to JSON", e);
     }
-    
-    // ✅ CRITICAL: Do NOT restore description!
-    // Keep route.description = null for Nacos push
-    // Gateway's RouteDefinition class doesn't have description field
 
     // 1. Update database
     log.info("Updating route in database: {}", entity.getRouteName());
     entity = routeRepository.save(entity);
 
     // 2. Push to Nacos (overwrite per-route key using route_id UUID)
-    // Important: route.description is null, so Nacos config won't include it
     String routeDataId = ROUTE_PREFIX + entity.getRouteId();
     configCenterService.publishConfig(routeDataId, route);
     log.info("Route updated in Nacos: {}", routeDataId);
@@ -264,34 +242,22 @@ public class RouteService {
       throw new IllegalArgumentException("Route not found with route_id: " + routeId);
     }
 
-    // Extract description for database-only storage
-    String description = route.getDescription();
+    // ✅ Note: RouteDefinition no longer has description field
+    // Keep existing description in database unchanged
     
-    // Temporarily set description to null for JSON serialization
-    // (description is stored in DB column only, not in metadata JSON)
-    route.setDescription(null);
-    
-    // Update entity fields from route definition
-    entity.setDescription(description); // Update description in DB only (not in JSON)
-    
-    // Store complete configuration as JSON in metadata field for backup
+    // Store configuration as JSON in metadata field for backup
     try {
       String configJson = objectMapper.writeValueAsString(route);
       entity.setMetadata(configJson);
     } catch (Exception e) {
       log.warn("Failed to serialize route config to JSON", e);
     }
-    
-    // ✅ CRITICAL: Do NOT restore description!
-    // Keep route.description = null for Nacos push
-    // Gateway's RouteDefinition class doesn't have description field
 
     // 1. Update database
     log.info("Updating route in database: {}", entity.getRouteName());
     entity = routeRepository.save(entity);
 
     // 2. Push to Nacos (overwrite per-route key using route_id UUID)
-    // Important: route.description is null, so Nacos config won't include it
     String routeDataId = ROUTE_PREFIX + entity.getRouteId();
     configCenterService.publishConfig(routeDataId, route);
     log.info("Route updated in Nacos: {}", routeDataId);
@@ -485,7 +451,8 @@ public class RouteService {
   private RouteEntity toEntity(RouteDefinition route) {
     RouteEntity entity = new RouteEntity();
     entity.setRouteName(route.getId());
-    entity.setDescription(route.getDescription());
+    // ✅ Note: RouteDefinition no longer has description field
+    entity.setDescription(null);
     
     // Store complete configuration as JSON in metadata field for backup
     try {

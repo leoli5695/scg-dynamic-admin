@@ -30,11 +30,6 @@ public class RouteDefinition {
     private String uri;
     
     /**
-     * Route description
-     */
-    private String description;
-    
-    /**
      * Route predicate list
      */
     private List<PredicateDefinition> predicates = new ArrayList<>();
