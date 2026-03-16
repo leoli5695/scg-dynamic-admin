@@ -137,8 +137,32 @@ public class StaticDiscoveryService {
                     serviceId, e.getMessage(), e);
         }
 
-        // ❌ Do NOT fallback to Nacos for static:// protocol
-        log.warn("🚫 [DIAGNOSE] No static configuration found for service: {}, returning empty list", serviceId);
+        // ⚠️ Nacos unavailable, try to use fallback cache
+        log.warn("⚠️ [DIAGNOSE] Nacos reload failed, checking fallback cache for service: {}", serviceId);
+        JsonNode fallbackConfig = serviceManager.getServiceFallbackConfig(serviceId);
+        if (fallbackConfig != null && !fallbackConfig.isNull()) {
+            log.info("✅ [DIAGNOSE] Found fallback config for service: {}, reloading into instanceCache", serviceId);
+            try {
+                // Reload fallback config into instanceCache (tertiary cache)
+                serviceManager.parseAndCacheService(serviceId, fallbackConfig);
+                
+                // Try to get instances again
+                List<ServiceManager.ServiceInstance> staticInstances =
+                        serviceManager.getServiceInstances(serviceId);
+                
+                if (staticInstances != null && !staticInstances.isEmpty()) {
+                    log.info("✅ [DIAGNOSE] Successfully loaded {} instance(s) from fallback cache for service: {}", 
+                            staticInstances.size(), serviceId);
+                    return staticInstances.stream()
+                            .map(StaticServiceInstance::new)
+                            .collect(java.util.stream.Collectors.toList());
+                }
+            } catch (Exception ex) {
+                log.error("💥 [DIAGNOSE] Failed to load fallback config for {}: {}", serviceId, ex.getMessage());
+            }
+        }
+        
+        log.warn("🚫 [DIAGNOSE] No configuration available (primary/fallback/Nacos all failed) for service: {}, returning empty list", serviceId);
         return Collections.emptyList();
     }
 

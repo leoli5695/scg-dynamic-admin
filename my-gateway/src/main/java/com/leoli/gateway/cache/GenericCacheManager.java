@@ -92,30 +92,51 @@ public class GenericCacheManager<T> {
 
     /**
      * Check if cache is valid (not null and not expired).
+     * 
+     * Logic:
+     * 1. If primary cache is loaded and not expired → return true
+     * 2. If primary cache is expired but fallback cache exists → return true (fallback still works)
+     * 3. If both caches are empty → return false
      *
      * @param cacheKey Configuration type key
-     * @return true if cache is loaded and not expired
+     * @return true if cache is loaded and (not expired OR has fallback)
      */
     public boolean isCacheValid(String cacheKey) {
-        JsonNode config = getCachedConfig(cacheKey);
-        if (config == null) {
-            return false;
-        }
-
-        Long lastLoadTime = lastLoadTimes.get(cacheKey);
-        if (lastLoadTime == null) {
-            log.debug("Cache {} invalid: no lastLoadTime", cacheKey);
-            return false;
-        }
-
-        long now = System.currentTimeMillis();
-        long age = now - lastLoadTime;
-        boolean valid = (age < cacheTtlMs);
+        JsonNode primaryConfig = getCachedConfig(cacheKey);
         
-        log.debug("Cache {} validity check: age={}ms, TTL={}ms, valid={}", 
-                 cacheKey, age, cacheTtlMs, valid);
+        // Check if primary cache is valid and not expired
+        if (primaryConfig != null) {
+            Long lastLoadTime = lastLoadTimes.get(cacheKey);
+            if (lastLoadTime == null) {
+                log.debug("Cache {} invalid: no lastLoadTime", cacheKey);
+                return false;
+            }
+
+            long now = System.currentTimeMillis();
+            long age = now - lastLoadTime;
+            boolean valid = (age < cacheTtlMs);
+            
+            log.debug("Cache {} validity check: age={}ms, TTL={}ms, valid={}", 
+                     cacheKey, age, cacheTtlMs, valid);
+            
+            if (valid) {
+                return true; // Primary cache is fresh
+            }
+            
+            // Primary cache expired, but we can still use it if no better option
+            log.warn("Cache {} expired (age={}ms), but will continue using until reload", cacheKey, age);
+            return true; // Use expired primary cache as fallback
+        }
         
-        return valid;
+        // Primary cache is null, try fallback
+        JsonNode fallbackConfig = getFallbackConfig(cacheKey);
+        if (fallbackConfig != null) {
+            log.warn("Cache {} is null, using fallback config", cacheKey);
+            return true; // Fallback cache is available
+        }
+        
+        log.debug("Cache {} invalid: both primary and fallback are null", cacheKey);
+        return false;
     }
 
     /**

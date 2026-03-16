@@ -18,6 +18,12 @@ gateway:
     # This ensures config freshness even if no requests trigger reload
     sync-interval-ms: 1800000
     
+    # Health check interval for static instances
+    # Controls how often to probe instance health and refresh cache
+    # Shorter interval = faster detection but more load
+    # Longer interval = slower detection but less load
+    health-check-interval-seconds: 30
+    
     # Alert configuration (optional)
     # Enable/disable alert notifications
     alert:
