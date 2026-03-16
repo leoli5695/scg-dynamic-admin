@@ -10,7 +10,7 @@ gateway:
     #   - Development: 60000 (1 minute) - frequent changes
     #   - Testing: 300000 (5 minutes) - balanced
     #   - Production: 600000 (10 minutes) - stability focused
-    ttl-ms: 300000
+    ttl-ms: 60000  # ✅ Changed to 1 minute for testing
     
     # Scheduled synchronization interval in milliseconds
     # Background task that proactively syncs config from Nacos
