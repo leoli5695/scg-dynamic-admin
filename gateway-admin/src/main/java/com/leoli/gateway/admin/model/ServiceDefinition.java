@@ -66,6 +66,11 @@ public class ServiceDefinition {
         private boolean enabled = true;
         
         /**
+         * Whether healthy (runtime status from health checks)
+         */
+        private boolean healthy = true;
+        
+        /**
          * Metadata
          */
         private Map<String, String> metadata = new HashMap<>();

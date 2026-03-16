@@ -68,9 +68,12 @@ public class ServiceController {
                         String key = instance.getIp() + ":" + instance.getPort();
                         ServiceInstanceHealth health = healthMap.get(key);
                         if (health != null) {
-                            log.debug("Instance {}:{} enabled={} (Nacos), healthStatus={}", 
+                            // ✅ Set healthy field for frontend display
+                            instance.setHealthy("HEALTHY".equals(health.getHealthStatus()));
+                            
+                            log.debug("Instance {}:{} enabled={} (Nacos), healthy={}", 
                                      instance.getIp(), instance.getPort(), 
-                                     instance.isEnabled(), health.getHealthStatus());
+                                     instance.isEnabled(), instance.isHealthy());
                         }
                     }
                 }
