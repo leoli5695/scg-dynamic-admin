@@ -1,6 +1,7 @@
 package com.leoli.gateway.discovery.staticdiscovery;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.cache.GenericCacheManager;
 import com.leoli.gateway.center.spi.ConfigCenterService;
 import com.leoli.gateway.manager.ServiceManager;
@@ -67,6 +68,42 @@ public class StaticDiscoveryService {
                         .map(StaticServiceInstance::new)
                         .collect(java.util.stream.Collectors.toList());
             }
+        }
+
+        // ⚠️ Cache expired or invalid, try to reload from Nacos
+        log.warn("Cache invalid for service: {}, attempting to reload from Nacos", serviceId);
+        try {
+            // Get services-index to find the service config key
+            String servicesIndex = configService.getConfig(SERVICES_INDEX_DATA_ID, GROUP);
+            if (servicesIndex != null && !servicesIndex.isBlank()) {
+                JsonNode indexNode = new ObjectMapper().readTree(servicesIndex);
+                if (indexNode.isArray()) {
+                    for (JsonNode routeIdNode : indexNode) {
+                        String routeConfigKey = "config.gateway.service-" + routeIdNode.asText();
+                        String serviceConfig = configService.getConfig(routeConfigKey, GROUP);
+                        if (serviceConfig != null && !serviceConfig.isBlank()) {
+                            // Load into cache
+                            serviceManager.loadServiceConfig(serviceId, serviceConfig);
+                            
+                            // Try again after loading
+                            if (serviceManager.isServiceCacheValid(serviceId)) {
+                                List<ServiceManager.ServiceInstance> staticInstances =
+                                        serviceManager.getServiceInstances(serviceId);
+                                
+                                if (staticInstances != null && !staticInstances.isEmpty()) {
+                                    log.info("Successfully reloaded {} static instance(s) for service: {}", 
+                                            staticInstances.size(), serviceId);
+                                    return staticInstances.stream()
+                                            .map(StaticServiceInstance::new)
+                                            .collect(java.util.stream.Collectors.toList());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to reload service config from Nacos for {}: {}", serviceId, e.getMessage());
         }
 
         // ❌ Do NOT fallback to Nacos for static:// protocol
