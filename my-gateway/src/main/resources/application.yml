@@ -4,6 +4,9 @@ server:
 spring:
   application:
     name: my-gateway
+  config:
+    import:
+      - optional:classpath:config/cache-settings.yml
   autoconfigure:
     exclude:
       - org.springframework.cloud.consul.serviceregistry.ConsulAutoServiceRegistrationAutoConfiguration
