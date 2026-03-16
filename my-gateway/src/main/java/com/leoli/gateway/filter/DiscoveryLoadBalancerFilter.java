@@ -156,7 +156,10 @@ public class DiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
 
             if (CollectionUtils.isEmpty(instances)) {
                 log.warn("No instances found for service: {} in StaticDiscoveryService", serviceId);
-                return Mono.empty();
+                // ✅ Throw NotFoundException instead of returning Mono.empty()
+                // This ensures proper 503 response instead of silent 200
+                return Mono.error(() -> NotFoundException.create(true,
+                        "No available instances for service: " + serviceId));
             }
 
             log.info("Found {} instance(s) for service: {} in StaticDiscoveryService",
