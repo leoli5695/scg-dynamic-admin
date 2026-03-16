@@ -57,59 +57,88 @@ public class StaticDiscoveryService {
      * @return list of service instances
      */
     public List<ServiceInstance> getInstances(String serviceId) {
+        log.info("🔍 [DIAGNOSE] getInstances called for service: {}", serviceId);
+        
         // ✅ Priority: Get from ServiceManager (static configuration)
-        if (serviceManager.isServiceCacheValid(serviceId)) {
+        boolean cacheValid = serviceManager.isServiceCacheValid(serviceId);
+        log.info("🔍 [DIAGNOSE] Cache valid check result: {} for service: {}", cacheValid, serviceId);
+        
+        if (cacheValid) {
             List<ServiceManager.ServiceInstance> staticInstances =
                     serviceManager.getServiceInstances(serviceId);
 
             if (staticInstances != null && !staticInstances.isEmpty()) {
-                log.debug("Found {} static instance(s) for service: {}", staticInstances.size(), serviceId);
+                log.info("✅ [DIAGNOSE] Found {} static instance(s) for service: {} from VALID cache", 
+                        staticInstances.size(), serviceId);
                 return staticInstances.stream()
                         .map(StaticServiceInstance::new)
                         .collect(java.util.stream.Collectors.toList());
+            } else {
+                log.warn("⚠️ [DIAGNOSE] Cache valid but instances empty for service: {}", serviceId);
             }
+        } else {
+            log.warn("❌ [DIAGNOSE] Cache INVALID for service: {}", serviceId);
         }
 
         // ⚠️ Cache expired or invalid, try to reload from Nacos
-        log.warn("Cache invalid for service: {}, attempting to reload from Nacos", serviceId);
+        log.warn("🔄 [DIAGNOSE] Cache invalid for service: {}, attempting to reload from Nacos", serviceId);
         try {
             // Get services-index to find the service config key
             String servicesIndex = configService.getConfig(SERVICES_INDEX_DATA_ID, GROUP);
+            log.info("📋 [DIAGNOSE] Services index content: {}", servicesIndex);
+            
             if (servicesIndex != null && !servicesIndex.isBlank()) {
                 JsonNode indexNode = new ObjectMapper().readTree(servicesIndex);
                 if (indexNode.isArray()) {
+                    log.info("🔢 [DIAGNOSE] Found {} services in index", indexNode.size());
+                    
                     for (JsonNode routeIdNode : indexNode) {
                         String routeConfigKey = "config.gateway.service-" + routeIdNode.asText();
+                        log.info("🔍 [DIAGNOSE] Trying to load service config: {}", routeConfigKey);
+                        
                         String serviceConfig = configService.getConfig(routeConfigKey, GROUP);
+                        log.info("📦 [DIAGNOSE] Config for {} length={}, isBlank={}", 
+                                routeConfigKey, 
+                                serviceConfig != null ? serviceConfig.length() : 0,
+                                serviceConfig != null ? serviceConfig.isBlank() : "N/A");
+                        
                         if (serviceConfig != null && !serviceConfig.isBlank()) {
                             // Load into cache
+                            log.info("💾 [DIAGNOSE] Loading config into cache for service: {}", serviceId);
                             serviceManager.loadServiceConfig(serviceId, serviceConfig);
                             
                             // Try again after loading
-                            if (serviceManager.isServiceCacheValid(serviceId)) {
+                            boolean reloadedCacheValid = serviceManager.isServiceCacheValid(serviceId);
+                            log.info("🔍 [DIAGNOSE] After reload - cache valid: {} for service: {}", 
+                                    reloadedCacheValid, serviceId);
+                            
+                            if (reloadedCacheValid) {
                                 List<ServiceManager.ServiceInstance> staticInstances =
                                         serviceManager.getServiceInstances(serviceId);
                                 
                                 if (staticInstances != null && !staticInstances.isEmpty()) {
-                                    log.info("Successfully reloaded {} static instance(s) for service: {}", 
+                                    log.info("✅ [DIAGNOSE] Successfully reloaded {} static instance(s) for service: {}", 
                                             staticInstances.size(), serviceId);
                                     return staticInstances.stream()
                                             .map(StaticServiceInstance::new)
                                             .collect(java.util.stream.Collectors.toList());
+                                } else {
+                                    log.warn("⚠️ [DIAGNOSE] Reloaded cache but instances still empty for service: {}", serviceId);
                                 }
                             }
                         }
                     }
                 }
+            } else {
+                log.error("❌ [DIAGNOSE] Services index is null or blank!");
             }
         } catch (Exception e) {
-            log.error("Failed to reload service config from Nacos for {}: {}", serviceId, e.getMessage());
+            log.error("💥 [DIAGNOSE] Failed to reload service config from Nacos for {}: {}", 
+                    serviceId, e.getMessage(), e);
         }
 
         // ❌ Do NOT fallback to Nacos for static:// protocol
-        // Fixed nodes should be checked based on static configuration only
-        // Nacos registration status should not affect health check
-        log.warn("No static configuration found for service: {}, returning empty list (no Nacos fallback for fixed nodes)", serviceId);
+        log.warn("🚫 [DIAGNOSE] No static configuration found for service: {}, returning empty list", serviceId);
         return Collections.emptyList();
     }
 
