@@ -18,7 +18,7 @@ import java.util.List;
 
 /**
  * Static Discovery Service implementation.
- * Supports both static configuration (gateway-services.json) and dynamic discovery (Nacos).
+ * Supports both static configuration (Nacos) and dynamic discovery (Nacos).
  */
 @Slf4j
 @Component
@@ -30,7 +30,7 @@ public class StaticDiscoveryService {
     private final ConfigCenterService configService;
 
     private static final String CACHE_KEY = "services";
-    private static final String DATA_ID = "gateway-services.json";
+    private static final String SERVICES_INDEX_DATA_ID = "config.gateway.metadata.services-index";
     private static final String GROUP = "DEFAULT_GROUP";
 
     public StaticDiscoveryService(ServiceManager serviceManager,
@@ -47,12 +47,16 @@ public class StaticDiscoveryService {
     /**
      * Get all healthy instances for a service.
      * Now uses ServiceRefresher's per-service incremental configuration.
+     * 
+     * IMPORTANT: For static:// protocol, we ONLY use static configuration.
+     * Do NOT fallback to Nacos discovery, as fixed nodes should be checked
+     * regardless of their Nacos registration status.
      *
      * @param serviceId service name
      * @return list of service instances
      */
     public List<ServiceInstance> getInstances(String serviceId) {
-        // Try to get from ServiceManager (which uses per-service cache)
+        // ✅ Priority: Get from ServiceManager (static configuration)
         if (serviceManager.isServiceCacheValid(serviceId)) {
             List<ServiceManager.ServiceInstance> staticInstances =
                     serviceManager.getServiceInstances(serviceId);
@@ -65,17 +69,11 @@ public class StaticDiscoveryService {
             }
         }
 
-        // Fallback: Get from Nacos DiscoveryClient
-        log.debug("No static config found for {}, getting instances from Nacos", serviceId);
-        List<ServiceInstance> nacosInstances = discoveryClient.getInstances(serviceId);
-
-        if (nacosInstances != null && !nacosInstances.isEmpty()) {
-            log.debug("Found {} instance(s) for {} from Nacos", nacosInstances.size(), serviceId);
-        } else {
-            log.warn("No instances found for service: {} (neither static nor Nacos)", serviceId);
-        }
-
-        return nacosInstances != null ? nacosInstances : Collections.emptyList();
+        // ❌ Do NOT fallback to Nacos for static:// protocol
+        // Fixed nodes should be checked based on static configuration only
+        // Nacos registration status should not affect health check
+        log.warn("No static configuration found for service: {}, returning empty list (no Nacos fallback for fixed nodes)", serviceId);
+        return Collections.emptyList();
     }
 
     /**

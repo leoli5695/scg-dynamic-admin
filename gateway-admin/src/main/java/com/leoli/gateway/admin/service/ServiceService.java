@@ -106,13 +106,27 @@ public class ServiceService {
     // Extract description for database-only storage
     String description = service.getDescription();
     
+    // Generate UUID first (needed for both DB and Nacos)
+    String generatedServiceId = java.util.UUID.randomUUID().toString();
+    
+    // Set serviceId in ServiceDefinition BEFORE converting to entity
+    // This ensures metadata JSON contains the correct serviceId
+    service.setServiceId(generatedServiceId);
+    
+    // Temporarily set description to null for JSON serialization
+    // (description is stored in DB column only, not in metadata JSON)
+    service.setDescription(null);
+    
     // 1. Convert to entity and save to H2 database
     log.info("Saving service to database: {}", serviceName);
     ServiceEntity entity = toEntity(service);
     entity.setServiceName(serviceName);
-    entity.setServiceId(java.util.UUID.randomUUID().toString());
-    entity.setDescription(description); // Save description to DB only
+    entity.setServiceId(generatedServiceId);
+    entity.setDescription(description); // Save description to DB only (not in JSON)
     entity = serviceRepository.save(entity);
+    
+    // Restore description in service object for cache and Nacos
+    service.setDescription(description);
     
     log.info("Service saved with DB id={}, service_name={}, description={}", 
              entity.getId(), entity.getServiceName(), entity.getDescription());
@@ -125,6 +139,9 @@ public class ServiceService {
     // Note: Nacos config contains the original service object (with description field)
     // But we only use it for gateway runtime, not for persistence
     String serviceDataId = SERVICE_PREFIX + entity.getServiceId();
+    
+    // Set serviceId in ServiceDefinition for Nacos config (used by gateway's ServiceManager)
+    service.setServiceId(entity.getServiceId());
     configCenterService.publishConfig(serviceDataId, service);
     log.info("Service pushed to Nacos: {}", serviceDataId);
 
@@ -154,11 +171,21 @@ public class ServiceService {
     // Extract description for database-only storage
     String description = service.getDescription();
     
+    // Ensure serviceId is set (use existing one from entity)
+    service.setServiceId(entity.getServiceId());
+    
+    // Temporarily set description to null for JSON serialization
+    // (description is stored in DB column only, not in metadata JSON)
+    service.setDescription(null);
+    
     // 1. Update database fields
     log.info("Updating service in database: {}", serviceName);
     // Don't update name field, use service_name instead
-    entity.setDescription(description); // Update description in DB only
+    entity.setDescription(description); // Update description in DB only (not in JSON)
     entity = serviceRepository.save(entity);
+    
+    // Restore description in service object for cache and Nacos
+    service.setDescription(description);
 
     // 2. Update memory cache
     serviceCache.put(serviceName, service);
@@ -171,6 +198,8 @@ public class ServiceService {
     configCenterService.removeConfig(serviceDataId);
     log.info("Removed old config from Nacos: {}", serviceDataId);
     
+    // Set serviceId in ServiceDefinition for Nacos config (used by gateway's ServiceManager)
+    service.setServiceId(entity.getServiceId());
     configCenterService.publishConfig(serviceDataId, service);  // ✅ Pass object directly
     log.info("Service updated in Nacos: {}", serviceDataId);
 
@@ -300,21 +329,15 @@ public class ServiceService {
         // Case 1: Nacos index doesn't exist - always create it
         needsRebuild = true;
         reason = "Nacos index does not exist";
-      } else if (serviceIds.isEmpty() && currentNacosIndex.isEmpty()) {
-        // Case 2: Both are empty - no need to rebuild
+      } else if (serviceIds.equals(currentNacosIndex)) {
+        // Case 2: Both are identical - no need to rebuild
         needsRebuild = false;
-        log.debug("Both DB and Nacos index are empty, skipping rebuild");
-      } else if (serviceIds.isEmpty() && !currentNacosIndex.isEmpty()) {
-        // Case 3: DB is empty but Nacos has data - SKIP to prevent data loss
-        // This happens when DB was not initialized properly
-        log.warn("⚠️  Database is empty but Nacos has {} services. Skipping rebuild to prevent data loss.", 
-                currentNacosIndex.size());
-        log.warn("   If this is unexpected, check database initialization or run ServiceDataRepairTool");
-        return; // Skip rebuild
-      } else if (!serviceIds.equals(currentNacosIndex)) {
-        // Case 4: Both have data but different - trust DB as source of truth
+        log.debug("DB and Nacos index are identical, skipping rebuild");
+      } else {
+        // Case 3: Different - trust DB as source of truth
+        // This includes the case where DB is empty (all services deleted)
         needsRebuild = true;
-        reason = "DB and Nacos index differ";
+        reason = "DB and Nacos index differ (DB has " + serviceIds.size() + " services, Nacos has " + currentNacosIndex.size() + ")";
       }
       
       // Perform rebuild if needed
@@ -337,6 +360,14 @@ public class ServiceService {
     ServiceEntity entity = new ServiceEntity();
     // Don't set name field, use service_name instead
     // entity.setName(...) - removed
+    
+    // Set serviceId in ServiceDefinition BEFORE serialization
+    // This ensures metadata JSON contains the correct serviceId
+    if (service.getServiceId() == null && service.getName() != null) {
+      // Will be set by caller after this method returns
+      // Just a placeholder - actual UUID will be set later
+      log.debug("Preparing entity for service: {} (serviceId will be set after UUID generation)", service.getName());
+    }
     
     // Store complete configuration as JSON in metadata field for backup
     try {

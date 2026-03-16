@@ -13,7 +13,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 实例发现服务 - 找出需要主动检查的实例
+ * Instance discovery service - finds instances needing active health check
+ * @author leoli
  */
 @Component
 @Slf4j
@@ -34,22 +35,49 @@ public class InstanceDiscoveryService {
     @Value("${gateway.health.idle-threshold:300000}")
     private long idleThresholdMs;
     
-    // 记录已知的实例（避免重复添加）
+    // Record known instances (avoid duplicates)
     private final Set<String> knownInstances = ConcurrentHashMap.newKeySet();
     
     /**
-     * 获取所有需要主动检查的实例
+     * Get all instances needing active health check
      */
     public List<InstanceKey> findInstancesNeedingActiveCheck() {
         List<InstanceKey> needingCheck = new ArrayList<>();
         
-        // ✅ 方式 1: 从 StaticDiscoveryService 获取静态配置的实例（新增）
-        // 注意：Nacos 注册的实例由 Nacos 自己负责健康检查，无需重复检查
+        // ✅ Method 1: Get static instances from StaticDiscoveryService (NEW)
+        // Note: Nacos registered instances are checked by Nacos itself, no need for duplicate checks
         try {
             // Get all configured services from ServiceManager's instanceCache
             java.util.Set<String> configuredServices = serviceManager.getAllConfiguredServiceIds();
+            
+            if (!configuredServices.isEmpty()) {
+                log.info("Total static instances to check: {}", configuredServices.size());
+            }
+            
             for (String serviceId : configuredServices) {
                 List<ServiceInstance> staticInstances = staticDiscoveryService.getInstances(serviceId);
+                
+                if (staticInstances == null || staticInstances.isEmpty()) {
+                    log.debug("No static instances found for service: {}", serviceId);
+                    
+                    // ✅ Check if there are unhealthy instances in health cache that need recheck
+                    List<InstanceHealth> unhealthyInstances = hybridHealthChecker.getUnhealthyInstances(serviceId);
+                    if (!unhealthyInstances.isEmpty()) {
+                        log.info("Found {} unhealthy instance(s) in cache for service: {}, will recheck", 
+                                unhealthyInstances.size(), serviceId);
+                        for (InstanceHealth health : unhealthyInstances) {
+                            needingCheck.add(new InstanceKey(
+                                health.getServiceId(),
+                                health.getIp(),
+                                health.getPort()
+                            ));
+                        }
+                    }
+                    continue;
+                }
+                
+                log.debug("Found {} instances for service: {}", staticInstances.size(), serviceId);
+                
                 for (ServiceInstance instance : staticInstances) {
                     String key = buildInstanceKey(serviceId, instance.getHost(), instance.getPort());
                     
@@ -67,7 +95,10 @@ public class InstanceDiscoveryService {
                     needingCheck.add(new InstanceKey(serviceId, instance.getHost(), instance.getPort()));
                 }
             }
-            log.info("Total static instances to check: {}", needingCheck.size());
+            
+            if (!needingCheck.isEmpty()) {
+                log.info("Found {} instances needing active check", needingCheck.size());
+            }
         } catch (Exception e) {
             log.error("Failed to discover static instances", e);
         }

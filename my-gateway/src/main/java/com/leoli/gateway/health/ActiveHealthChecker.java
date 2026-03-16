@@ -4,20 +4,21 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
+import org.springframework.web.client.RestTemplate;
 
-import java.time.Duration;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 
 /**
- * 主动健康检查器（HTTP 探测）
+ * Active health checker (TCP ping)
+ * @author leoli
  */
 @Component
 @Slf4j
 public class ActiveHealthChecker {
     
     @Autowired
-    private WebClient.Builder webClientBuilder;
+    private RestTemplate restTemplate;
     
     @Autowired
     private HybridHealthChecker hybridHealthChecker;
@@ -29,56 +30,67 @@ public class ActiveHealthChecker {
     private int timeoutMs;
     
     /**
-     * 探测实例健康状态
+     * Probe instance health status using TCP ping
      */
     public void probe(String serviceId, String ip, int port) {
-        String healthUrl = buildHealthUrl(ip, port);
+        log.info("Probing instance health: {}:{}:{} via TCP ping", serviceId, ip, port);
         
-        log.debug("Probing instance health: {}:{}:{} -> {}", serviceId, ip, port, healthUrl);
-        
-        webClientBuilder.build()
-            .get()
-            .uri(healthUrl)
-            .retrieve()
-            .bodyToMono(String.class)
-            .timeout(Duration.ofMillis(timeoutMs))
-            .doOnSuccess(response -> {
-                // ✅ 探测成功
-                if (isHealthyResponse(response)) {
-                    hybridHealthChecker.markHealthy(serviceId, ip, port, "ACTIVE");
-                    log.info("Instance {}:{}:{} is healthy", serviceId, ip, port);
-                } else {
-                    hybridHealthChecker.markUnhealthy(
-                        serviceId, ip, port, 
-                        "UNHEALTHY_RESPONSE: " + response, 
-                        "ACTIVE"
-                    );
-                    log.warn("Instance {}:{}:{} returned unhealthy response", serviceId, ip, port);
-                }
-            })
-            .doOnError(error -> {
-                // ❌ 探测失败
+        try {
+            // Use TCP socket to check if port is open (faster and simpler)
+            boolean isReachable = checkPortOpen(ip, port, timeoutMs);
+            
+            log.info("TCP check result for {}:{}:{} - reachable={}, port={}", 
+                    serviceId, ip, port, isReachable, port);
+            
+            if (isReachable) {
+                // Port is open, mark as healthy
+                log.info("Marking instance {}:{}:{} as HEALTHY", serviceId, ip, port);
+                hybridHealthChecker.markHealthy(serviceId, ip, port, "ACTIVE");
+            } else {
+                // Port is closed, mark as unhealthy
+                log.warn("Marking instance {}:{}:{} as UNHEALTHY (port closed)", serviceId, ip, port);
                 hybridHealthChecker.markUnhealthy(
-                    serviceId, ip, port, 
-                    error.getClass().getSimpleName() + ": " + error.getMessage(), 
+                    serviceId, ip, port,
+                    "TCP_UNREACHABLE: Port " + port + " is not responding",
                     "ACTIVE"
                 );
-                log.warn("Instance {}:{}:{} health check failed: {}", 
-                         serviceId, ip, port, error.getMessage());
-            })
-            .subscribe();
+            }
+        } catch (Exception e) {
+            // Connection failed, mark as unhealthy
+            log.error("Marking instance {}:{}:{} as UNHEALTHY (exception)", serviceId, ip, port, e);
+            hybridHealthChecker.markUnhealthy(
+                serviceId, ip, port,
+                "TCP_ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage(),
+                "ACTIVE"
+            );
+        }
     }
     
     /**
-     * 构建健康检查 URL
+     * Check if a TCP port is open using Socket
      */
+    private boolean checkPortOpen(String ip, int port, int timeoutMs) {
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress(ip, port), timeoutMs);
+            return true;
+        } catch (Exception e) {
+            log.trace("Port {}:{} is not reachable: {}", ip, port, e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Build health check URL (not used in TCP mode)
+     */
+    @Deprecated
     private String buildHealthUrl(String ip, int port) {
         return String.format("http://%s:%d%s", ip, port, healthEndpoint);
     }
     
     /**
-     * 判断响应是否健康
+     * Check if response is healthy (not used in TCP mode)
      */
+    @Deprecated
     private boolean isHealthyResponse(String response) {
         try {
             com.fasterxml.jackson.databind.JsonNode jsonNode = 
@@ -86,7 +98,7 @@ public class ActiveHealthChecker {
             String status = jsonNode.get("status").asText();
             return "UP".equals(status);
         } catch (Exception e) {
-            // 如果不是 JSON，检查是否包含 "UP" 或 "OK"
+            // If not JSON, check if contains "UP" or "OK"
             return response != null && (response.contains("UP") || response.contains("OK"));
         }
     }

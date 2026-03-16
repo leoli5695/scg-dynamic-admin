@@ -12,7 +12,7 @@ public abstract class AbstractRefresher {
     /**
      * Handle config change event.
      *
-     * @param dataId  Nacos data ID (e.g., gateway-services.json)
+     * @param dataId  Nacos data ID (e.g., config.gateway.metadata.services-index)
      * @param newData New configuration content
      */
     public void onConfigChange(String dataId, String newData) {

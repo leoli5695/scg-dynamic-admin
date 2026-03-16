@@ -122,11 +122,21 @@ public class DiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
                                             retrievedInstance.getHost(),
                                             retrievedInstance.getPort()
                                     );
-                                    log.warn("Recorded failure for instance {}:{} - {}",
-                                            retrievedInstance.getHost(),
-                                            retrievedInstance.getPort(),
-                                            error.getMessage());
-                                    return Mono.error(error);
+                                    
+                                    // Check if this is a single-instance service and instance is unhealthy
+                                    boolean isSingleInstance = staticDiscoveryService.getInstances(serviceId).size() == 1;
+                                    InstanceHealth health = healthChecker.getHealth(serviceId, 
+                                            retrievedInstance.getHost(), retrievedInstance.getPort());
+                                    
+                                    String detailedMessage = buildDetailedErrorMessage(
+                                            serviceId, retrievedInstance, health, isSingleInstance, error);
+                                    
+                                    log.warn("{} - Health: {}, Error: {}", 
+                                            detailedMessage, health.isHealthy() ? "HEALTHY" : "UNHEALTHY", error.getMessage());
+                                    
+                                    // Create NotFoundException with detailed message for better error response
+                                    NotFoundException notFoundException = new NotFoundException(detailedMessage);
+                                    return Mono.error(notFoundException);
                                 });
                     });
         } else {
@@ -399,5 +409,46 @@ public class DiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
         }
 
         return healthyOnly;
+    }
+    
+    /**
+     * Build detailed error message for failed requests
+     */
+    private String buildDetailedErrorMessage(String serviceId, ServiceInstance instance, 
+                                             InstanceHealth health, boolean isSingleInstance, Throwable error) {
+        StringBuilder message = new StringBuilder();
+        
+        message.append("Failed to connect to service instance");
+        message.append(" [serviceId=").append(serviceId);
+        message.append(", host=").append(instance.getHost());
+        message.append(", port=").append(instance.getPort()).append("]");
+        
+        // Add health status context
+        if (!health.isHealthy()) {
+            message.append(" - Instance is UNHEALTHY");
+            
+            if (health.getUnhealthyReason() != null && !health.getUnhealthyReason().isEmpty()) {
+                message.append(" (").append(health.getUnhealthyReason()).append(")");
+            }
+            
+            if (health.getConsecutiveFailures() > 0) {
+                message.append(", consecutive failures: ").append(health.getConsecutiveFailures());
+            }
+            
+            if (isSingleInstance) {
+                message.append(". This is a single-instance service, keeping it for potential auto-recovery");
+            } else {
+                message.append(". Multi-instance service should have filtered this instance.");
+            }
+        } else {
+            message.append(" - Instance appears HEALTHY, but request failed");
+        }
+        
+        // Add original error
+        if (error.getMessage() != null && !error.getMessage().isEmpty()) {
+            message.append(". Original error: ").append(error.getMessage());
+        }
+        
+        return message.toString();
     }
 }

@@ -9,6 +9,7 @@ import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.route.RouteDefinition;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -189,15 +190,22 @@ public class RouteRefresher {
      */
     private void addRouteListener(String routeId) {
         String routeDataId = ROUTE_PREFIX + routeId;
-
+        
+        // ✅ Check if route config exists in Nacos before adding listener
+        String routeConfig = configService.getConfig(routeDataId, GROUP);
+        if (routeConfig == null || routeConfig.isBlank()) {
+            log.warn("⚠️  Route config not found in Nacos: {}, skipping listener", routeDataId);
+            return;
+        }
+        
         ConfigCenterService.ConfigListener listener = (dataId, group, content) -> {
             onSingleRouteChange(routeId, content);
         };
-
+        
         configService.addListener(routeDataId, GROUP, listener);
         routeListeners.put(routeId, listener);
         listeningRouteIds.add(routeId);
-
+        
         log.info("✅ Added listener for route: {}", routeId);
     }
 
@@ -257,5 +265,58 @@ public class RouteRefresher {
         Set<String> result = new HashSet<>(set1);
         result.removeAll(set2);
         return result;
+    }
+    
+    /**
+     * Periodic 兜底 sync: check for missing routes every 1 minute.
+     * This is a safety net in case index listener missed updates.
+     */
+    @Scheduled(fixedRate = 60000) // 1 minute
+    public void periodicSyncMissingRoutes() {
+        try {
+            // Load current routes index from Nacos
+            String indexContent = configService.getConfig(ROUTES_INDEX, GROUP);
+            if (indexContent == null || indexContent.isBlank()) {
+                return; // Nothing to sync
+            }
+            
+            List<String> nacosRouteIds = parseRouteIds(indexContent);
+            if (nacosRouteIds.isEmpty()) {
+                return;
+            }
+            
+            // Get currently listening route IDs
+            Set<String> localRouteIds = new HashSet<>(listeningRouteIds);
+            
+            // Find missing routes (in Nacos but not in local cache)
+            int syncedCount = 0;
+            for (String routeId : nacosRouteIds) {
+                if (!localRouteIds.contains(routeId)) {
+                    log.warn("🔍 Found missing route during periodic sync: {}", routeId);
+                    
+                    // Try to load the missing route
+                    String routeDataId = ROUTE_PREFIX + routeId;
+                    String routeConfig = configService.getConfig(routeDataId, GROUP);
+                    
+                    if (routeConfig != null && !routeConfig.isBlank()) {
+                        RouteDefinition route = parseRoute(routeConfig);
+                        // Load route into RouteManager
+                        routeManager.putRoute(routeId, route);
+                        syncedCount++;
+                        log.info("✅ Periodic sync recovered missing route: {}", routeId);
+                    } else {
+                        log.warn("⚠️  Route config not found in Nacos: {}", routeId);
+                    }
+                }
+            }
+            
+            if (syncedCount > 0) {
+                log.info("📊 Periodic sync completed: recovered {} missing routes", syncedCount);
+                refreshSCGRoutes();
+            }
+            
+        } catch (Exception e) {
+            log.debug("Periodic sync check completed (no action needed)");
+        }
     }
 }

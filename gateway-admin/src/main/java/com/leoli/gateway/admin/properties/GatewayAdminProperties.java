@@ -58,8 +58,8 @@ public class GatewayAdminProperties {
         /**
          * Data ID for plugin configuration (full config file).
          * Routes and services use incremental format: 
-         * - config.gateway.routes.route-{id}
-         * - config.gateway.services.service-{id}
+         * - config.gateway.route-{routeId}
+         * - config.gateway.service-{serviceId}
          */
         private String plugins = "gateway-plugins.json";
     }

@@ -132,7 +132,13 @@ public class ServiceManager {
     /**
      * Parse and cache a single service's endpoints from configuration.
      */
-    private void parseAndCacheService(String serviceId, JsonNode serviceNode) {
+    /**
+     * Parse and cache service configuration.
+     *
+     * @param serviceId   Service ID (UUID)
+     * @param serviceNode Service configuration JSON node
+     */
+    public void parseAndCacheService(String serviceId, JsonNode serviceNode) {
         if (serviceNode == null || !serviceNode.isObject()) {
             return;
         }
@@ -142,23 +148,27 @@ public class ServiceManager {
         instanceCache.remove(serviceId);
         roundRobinCounters.remove(serviceId);
 
-        if (serviceNode.has("name") && serviceNode.has("endpoint")) {
-            String name = serviceNode.get("name").asText();
+        // Always use the serviceId parameter from Nacos DataID as the canonical identifier
+        // This ensures consistency with services-index and avoids field name issues
+        String serviceName = serviceId;
+
+        log.debug("Parsing service config for: {}", serviceId);
+
+        if (serviceNode.has("endpoint")) {
             String endpoint = serviceNode.get("endpoint").asText();
 
             // Single instance
-            ServiceEndpoint serviceEndpoint = new ServiceEndpoint(name, endpoint);
-            endpointCache.put(name, serviceEndpoint);
+            ServiceEndpoint serviceEndpoint = new ServiceEndpoint(serviceName, endpoint);
+            endpointCache.put(serviceName, serviceEndpoint);
 
             // Also store in instanceCache for compatibility
             List<ServiceInstance> instances = new ArrayList<>();
-            instances.add(new ServiceInstance(name, endpoint, 1));
-            instanceCache.put(name, instances);
+            instances.add(new ServiceInstance(serviceName, endpoint, 1));
+            instanceCache.put(serviceName, instances);
 
-            log.debug("Loaded service: {} -> {}", name, endpoint);
-        } else if (serviceNode.has("name") && serviceNode.has("instances") && serviceNode.get("instances").isArray()) {
+            log.debug("Loaded service: {} -> {}", serviceName, endpoint);
+        } else if (serviceNode.has("instances") && serviceNode.get("instances").isArray()) {
             // Multiple instances with weights
-            String name = serviceNode.get("name").asText();
             List<ServiceInstance> instances = new ArrayList<>();
 
             JsonNode instancesNode = serviceNode.get("instances");
@@ -179,10 +189,10 @@ public class ServiceManager {
 
                     if (enabled && healthy) {
                         String instanceEndpoint = "http://" + address + ":" + port;
-                        instances.add(new ServiceInstance(name, instanceEndpoint, weight));
+                        instances.add(new ServiceInstance(serviceName, instanceEndpoint, weight));
 
                         log.debug("Loaded service instance: {} -> {}:{} (weight: {}, enabled: {}, healthy: {})",
-                                name, address, port, weight, enabled, healthy);
+                                serviceName, address, port, weight, enabled, healthy);
                     } else {
                         log.debug("Skipping disabled/unhealthy instance: {}:{} (enabled: {}, healthy: {})",
                                 address, port, enabled, healthy);
@@ -192,14 +202,16 @@ public class ServiceManager {
 
             if (!instances.isEmpty()) {
                 // Use first instance as primary endpoint
-                endpointCache.put(name, new ServiceEndpoint(name, instances.get(0).getAddress()));
-                instanceCache.put(name, instances);
-                roundRobinCounters.put(name, new AtomicInteger(0));
+                endpointCache.put(serviceName, new ServiceEndpoint(serviceName, instances.get(0).getAddress()));
+                instanceCache.put(serviceName, instances);
+                roundRobinCounters.put(serviceName, new AtomicInteger(0));
 
-                log.info("Loaded service '{}' with {} valid instances", name, instances.size());
+                log.info("Loaded service '{}' with {} valid instances", serviceName, instances.size());
             } else {
-                log.warn("Service '{}' has no valid instances (all disabled or unhealthy)", name);
+                log.warn("Service '{}' has no valid instances (all disabled or unhealthy)", serviceName);
             }
+        } else {
+            log.warn("Service config for {} has neither 'endpoint' nor 'instances' field", serviceId);
         }
     }
 

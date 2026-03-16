@@ -22,7 +22,7 @@ import static org.springframework.cloud.gateway.support.ServerWebExchangeUtils.G
 
 /**
  * Global filter for static:// protocol
- * Resolves static service names to real HTTP addresses via gateway-services.json in Nacos.
+ * Resolves static service names to real HTTP addresses via Nacos configuration.
  *
  * @author leoli
  */
@@ -47,9 +47,9 @@ public class StaticProtocolGlobalFilter implements GlobalFilter, Ordered {
         this.loadBalancerClientFactory = loadBalancerClientFactory;
         log.info("StaticProtocolGlobalFilter-ConfigService initialized: {}", configService.getCenterType());
 
-        // Add listener to clear cache when configuration is deleted
-        configService.addListener("gateway-services.json", "DEFAULT_GROUP", (dataId, group, newContent) -> {
-            log.info("Received gateway-services.json update");
+        // Add listener to services-index to clear cache when configuration is deleted
+        configService.addListener("config.gateway.metadata.services-index", "DEFAULT_GROUP", (dataId, group, newContent) -> {
+            log.info("Received services-index update");
             if (newContent == null || newContent.trim().isEmpty()) {
                 log.info("Configuration deleted or empty, clearing cache");
                 clearCache();
@@ -130,7 +130,7 @@ public class StaticProtocolGlobalFilter implements GlobalFilter, Ordered {
         String scheme = uri.getScheme();
         log.debug("Resolving service: {} (scheme: {})", serviceName, scheme);
 
-        // If static:// protocol, get from gateway-services.json configuration
+        // If static:// protocol, get from Nacos configuration
         if ("static".equalsIgnoreCase(scheme)) {
             return resolveFromGatewayServices(serviceName);
         }

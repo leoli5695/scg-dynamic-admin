@@ -43,44 +43,44 @@ public class InstanceHealthService {
     private boolean nacosSyncEnabled;
     
     /**
-     * 处理不健康实例
+     * Sync instance health status from Gateway (BATCH PROCESSING)
      */
     @Transactional
-    public void handleUnhealthyInstance(InstanceHealthDTO health, String gatewayId) {
-        String serviceId = health.getServiceId();
-        String ip = health.getIp();
-        int port = health.getPort();
+    public void syncHealthStatus(List<InstanceHealthDTO> healthList, String gatewayId) {
+        log.info("Syncing {} health statuses from gateway {}", healthList.size(), gatewayId);
         
-        log.warn("Handling unhealthy instance: {}:{}:{} from gateway {}", 
-                 serviceId, ip, port, gatewayId);
+        int healthyCount = 0;
+        int unhealthyCount = 0;
         
-        // 1. 更新本地缓存
-        String key = buildKey(serviceId, ip, port);
-        healthStore.put(key, health);
-        
-        // 2. 同步到数据库（如果启用）
-        if (dbSyncEnabled && healthRepository != null) {
-            syncToDatabase(health);
+        for (InstanceHealthDTO health : healthList) {
+            String serviceId = health.getServiceId();
+            String ip = health.getIp();
+            int port = health.getPort();
+            
+            log.debug("Processing: {}:{}:{} [{}]", serviceId, ip, port, 
+                     health.isHealthy() ? "HEALTHY" : "UNHEALTHY");
+            
+            // 1. Update local cache
+            String key = buildKey(serviceId, ip, port);
+            healthStore.put(key, health);
+            
+            // 2. Sync to database (batch update)
+            if (dbSyncEnabled && healthRepository != null) {
+                syncToDatabase(health);
+            }
+            
+            // 3. Count statistics
+            if (health.isHealthy()) {
+                healthyCount++;
+            } else {
+                unhealthyCount++;
+                // 4. Send alert only if unhealthy
+                alertService.sendInstanceUnhealthyAlert(health);
+            }
         }
         
-        // 3. 同步到 Nacos（如果启用）
-        if (nacosSyncEnabled && nacosSyncer != null) {
-            nacosSyncer.syncToNacos(
-                health.getServiceId(), 
-                health.getIp(), 
-                health.getPort(), 
-                health.isHealthy(), 
-                health.getUnhealthyReason(), 
-                gatewayId
-            );
-        }
-        
-        // 4. 发送告警（如果是首次发现不健康）
-        if (!health.isHealthy()) {
-            alertService.sendInstanceUnhealthyAlert(health);
-        }
-        
-        log.info("Processed unhealthy instance: {}:{}:{}", serviceId, ip, port);
+        log.info("Synced {} health statuses from gateway {}: {} healthy, {} unhealthy", 
+                healthList.size(), gatewayId, healthyCount, unhealthyCount);
     }
     
     /**
@@ -113,30 +113,45 @@ public class InstanceHealthService {
      */
     private void syncToDatabase(InstanceHealthDTO dto) {
         try {
-            ServiceInstanceHealth entity = healthRepository.findByServiceIdAndIpAndPort(
-                dto.getServiceId(), dto.getIp(), dto.getPort()
+            // ✅ 使用 IP + PORT 作为唯一键查询（而不是 serviceId）
+            // 这样可以避免同一实例在不同服务间重复
+            ServiceInstanceHealth entity = healthRepository.findByIpAndPort(
+                dto.getIp(), dto.getPort()
             );
             
             if (entity == null) {
                 // 创建新实体
+                log.info("Creating new instance record: {}:{}", dto.getIp(), dto.getPort());
                 entity = new ServiceInstanceHealth();
                 entity.setServiceId(dto.getServiceId());
                 entity.setIp(dto.getIp());
                 entity.setPort(dto.getPort());
-                entity.setEnabled(false); // 不健康实例禁用
+                // ✅ enabled 字段由 Nacos 配置控制，这里不设置，让 Gateway 端忽略这个字段
+                entity.setHealthStatus(dto.isHealthy() ? "HEALTHY" : "UNHEALTHY");
                 entity.setCreateTime(System.currentTimeMillis());
+            } else {
+                // 更新现有记录的服务 ID（可能服务被重新绑定了）
+                if (!entity.getServiceId().equals(dto.getServiceId())) {
+                    log.info("Instance {}:{} reassigned from {} to {}",
+                             dto.getIp(), dto.getPort(),
+                             entity.getServiceId(), dto.getServiceId());
+                    entity.setServiceId(dto.getServiceId());
+                }
+                // ✅ 只更新健康状态，不更新 enabled（保留用户配置）
             }
             
             // 更新健康状态
             entity.setHealthStatus(dto.isHealthy() ? "HEALTHY" : "UNHEALTHY");
-            entity.setLastHealthCheckTime(dto.getLastRequestTime());
+            entity.setLastHealthCheckTime(dto.getLastActiveCheckTime() != null 
+                ? dto.getLastActiveCheckTime() : System.currentTimeMillis());
             entity.setUnhealthyReason(dto.getUnhealthyReason());
             entity.setConsecutiveFailures(dto.getConsecutiveFailures());
             entity.setUpdateTime(System.currentTimeMillis());
             
             healthRepository.save(entity);
-            log.debug("Synced instance health to database: {}:{}:{}", 
-                     dto.getServiceId(), dto.getIp(), dto.getPort());
+            log.debug("Synced instance health to database: {}:{}:{} [{}]", 
+                     dto.getServiceId(), dto.getIp(), dto.getPort(),
+                     dto.isHealthy() ? "HEALTHY" : "UNHEALTHY");
         } catch (Exception e) {
             log.error("Failed to sync health status to database", e);
             // 不抛出异常，保证主流程正常

@@ -74,6 +74,24 @@ gateway:
     idle-threshold: 300000
     admin-url: ${GATEWAY_ADMIN_URL:http://localhost:8080}
     gateway-id: ${GATEWAY_ID:gateway-1}
+    
+    # Active health check interval (milliseconds)
+    active-check-interval-ms: 30000
+    
+    # Health status sync interval (milliseconds)
+    sync-interval-ms: 10000
+    
+    # Batch size for health status push
+    batch-size: 50
+    
+    # Network flap detection threshold
+    # If more than this number of instances change state at once, it's considered network flap
+    network-flap-threshold: 10
+  
+  # Active Health Check Configuration
+  health-check:
+    endpoint: /actuator/health
+    timeout: 3000
   
   # Active Health Check Configuration
   health-check:
@@ -96,6 +114,9 @@ logging:
     # 健康检查相关日志（开发时可调为 DEBUG）
     com.example.gateway.health: INFO
     com.example.gateway.filter: INFO
+    
+    # 【已禁用】告警服务日志 - 避免噪音
+    com.leoli.gateway.monitor: WARN
     
     # 抑制自动配置日志噪音
     org.springframework.boot.autoconfigure: WARN

@@ -5,7 +5,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * 实例健康状态
+ * Instance health status
+ * @author leoli
  */
 @Data
 @NoArgsConstructor
@@ -23,14 +24,14 @@ public class InstanceHealth {
     private String unhealthyReason;
 
     /**
-     * 构建唯一键
+     * Build unique key
      */
     public static String buildKey(String serviceId, String ip, int port) {
         return serviceId + ":" + ip + ":" + port;
     }
 
     /**
-     * 从键解析
+     * Parse from key
      */
     public static InstanceHealth fromKey(String key) {
         String[] parts = key.split(":");

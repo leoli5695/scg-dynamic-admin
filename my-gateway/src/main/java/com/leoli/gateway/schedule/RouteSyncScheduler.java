@@ -27,7 +27,7 @@ public class RouteSyncScheduler {
     private AlertService alertService;
 
     private static final String CACHE_KEY = "routes";
-    private static final String DATA_ID = "gateway-routes.json";
+    private static final String ROUTES_INDEX_DATA_ID = "config.gateway.metadata.routes-index";
     private static final String GROUP = "DEFAULT_GROUP";
 
     /**
@@ -44,7 +44,7 @@ public class RouteSyncScheduler {
             // Use GenericCacheManager's intelligent reload logic
             JsonNode config = cacheManager.getConfigWithFallback(
                     CACHE_KEY,
-                    key -> configService.getConfig(DATA_ID, GROUP)
+                    key -> configService.getConfig(ROUTES_INDEX_DATA_ID, GROUP)
             );
 
             if (config != null) {

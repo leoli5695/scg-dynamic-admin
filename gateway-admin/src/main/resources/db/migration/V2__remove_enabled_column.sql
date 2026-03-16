@@ -1,0 +1,5 @@
+-- 删除 SERVICE_INSTANCES 表的 ENABLED 列
+-- 原因：enabled 字段现在由 Nacos 配置控制，数据库只负责存储运行时健康状态
+-- 日期：2026-03-16
+
+ALTER TABLE PUBLIC.SERVICE_INSTANCES DROP COLUMN IF EXISTS ENABLED;

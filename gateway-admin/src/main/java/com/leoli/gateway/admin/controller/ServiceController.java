@@ -2,11 +2,15 @@ package com.leoli.gateway.admin.controller;
 
 import com.leoli.gateway.admin.center.NacosConfigCenterService;
 import com.leoli.gateway.admin.model.ServiceDefinition;
+import com.leoli.gateway.admin.model.ServiceInstanceHealth;
+import com.leoli.gateway.admin.repository.ServiceInstanceHealthRepository;
 import com.leoli.gateway.admin.service.ServiceService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.HashMap;
 import java.util.List;
@@ -27,13 +31,52 @@ public class ServiceController {
 
     @Autowired
     private NacosConfigCenterService nacosConfigCenterService;
+    
+    @Autowired
+    private ServiceInstanceHealthRepository instanceHealthRepository;
+    
+    @Autowired
+    private RestTemplate restTemplate;
+    
+    @Value("${gateway.admin.url:http://localhost:8080}")
+    private String gatewayAdminUrl;
 
     /**
-     * Get all services.
+     * Get all services with instance health status.
      */
     @GetMapping
     public ResponseEntity<Map<String, Object>> getAllServices() {
         List<ServiceDefinition> services = serviceManager.getAllServices();
+        
+        // ✅ Attach health status to each service's instances
+        for (ServiceDefinition service : services) {
+            String serviceId = service.getServiceId();
+            if (serviceId != null && !serviceId.isEmpty()) {
+                // Get instance health from SERVICE_INSTANCES table
+                List<ServiceInstanceHealth> instanceHealthList = instanceHealthRepository.findByServiceId(serviceId);
+                
+                // Map health status to instances
+                if (!instanceHealthList.isEmpty() && service.getInstances() != null) {
+                    Map<String, ServiceInstanceHealth> healthMap = new HashMap<>();
+                    for (ServiceInstanceHealth health : instanceHealthList) {
+                        String key = health.getIp() + ":" + health.getPort();
+                        healthMap.put(key, health);
+                    }
+                    
+                    // Update instance health status (keep enabled from Nacos config)
+                    for (ServiceDefinition.ServiceInstance instance : service.getInstances()) {
+                        String key = instance.getIp() + ":" + instance.getPort();
+                        ServiceInstanceHealth health = healthMap.get(key);
+                        if (health != null) {
+                            log.debug("Instance {}:{} enabled={} (Nacos), healthStatus={}", 
+                                     instance.getIp(), instance.getPort(), 
+                                     instance.isEnabled(), health.getHealthStatus());
+                        }
+                    }
+                }
+            }
+        }
+        
         Map<String, Object> result = new HashMap<>();
         result.put("code", 200);
         result.put("message", "success");

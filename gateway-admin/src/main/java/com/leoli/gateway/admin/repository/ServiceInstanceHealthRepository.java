@@ -25,6 +25,15 @@ public interface ServiceInstanceHealthRepository extends JpaRepository<ServiceIn
     );
     
     /**
+     * ✅ 根据 IP 和端口查询（唯一键）
+     */
+    @Query("SELECT h FROM ServiceInstanceHealth h WHERE h.ip = :ip AND h.port = :port")
+    ServiceInstanceHealth findByIpAndPort(
+        @Param("ip") String ip,
+        @Param("port") Integer port
+    );
+    
+    /**
      * 根据服务 ID 查询所有实例
      */
     List<ServiceInstanceHealth> findByServiceId(String serviceId);

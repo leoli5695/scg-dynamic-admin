@@ -3,8 +3,13 @@ package com.leoli.gateway.health;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -12,11 +17,27 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 混合健康检查器（被动 + 主动）
+ * Hybrid health checker (combines passive and active checks)
+ * @author leoli
  */
 @Component
 @Slf4j
 public class HybridHealthChecker {
+    
+    @Autowired
+    private RestTemplate restTemplate;
+    
+    @Value("${gateway.admin.url:http://localhost:8080}")
+    private String adminUrl;
+    
+    @Value("${gateway.id:gateway-1}")
+    private String gatewayId;
+    
+    @Value("${gateway.health.batch-size:50}")
+    private int batchSize;
+    
+    @Value("${gateway.health.network-flap-threshold:10}")
+    private int networkFlapThreshold; // 网络抖动阈值（默认 10 个节点同时变化）
     
     // 本地缓存（高性能）
     private final Cache<String, InstanceHealth> healthCache = Caffeine.newBuilder()
@@ -78,6 +99,8 @@ public class HybridHealthChecker {
             health = createHealthy(serviceId, ip, port);
         }
         
+        boolean wasHealthy = health.isHealthy();
+        
         // 累加失败计数
         int newFailures = health.getConsecutiveFailures() + 1;
         health.setConsecutiveFailures(newFailures);
@@ -89,29 +112,145 @@ public class HybridHealthChecker {
             health.setHealthy(false);
             health.setUnhealthyReason("Gateway request failed " + newFailures + " times consecutively");
             log.warn("Instance {}:{} marked as unhealthy (failures={})", ip, port, newFailures);
+            
+            // ✅ Only queue when state changes (healthy -> unhealthy)
+            if (wasHealthy) {
+                // Check for network flap (sudden mass failure)
+                if (isPotentialNetworkFlap(false)) {
+                    log.warn("⚠️ POTENTIAL NETWORK FLAP DETECTED: {} instances suddenly failed. Skipping push.", 
+                            batchPushQueue.size() + 1);
+                } else {
+                    queueForBatchPush(serviceId, ip, port, false);
+                }
+            }
         }
         
         healthCache.put(key, health);
     }
     
     /**
-     * 标记为健康（主动检查调用）
+     * Mark as healthy (active check call)
      */
     public void markHealthy(String serviceId, String ip, int port, String checkType) {
         String key = InstanceHealth.buildKey(serviceId, ip, port);
         
-        InstanceHealth health = InstanceHealth.fromKey(key);
+        // ✅ Get from cache (contains the latest health status from previous checks)
+        InstanceHealth health = healthCache.getIfPresent(key);
+        if (health == null) {
+            // First time seeing this instance, create as healthy
+            health = createHealthy(serviceId, ip, port);
+        }
+        
+        boolean wasHealthy = health.isHealthy();
+        
+        log.info("markHealthy called for {}:{}:{} - wasHealthy={}, setting healthy=true", 
+                serviceId, ip, port, wasHealthy);
+        
         health.setHealthy(true);
         health.setConsecutiveFailures(0);
         health.setLastActiveCheckTime(System.currentTimeMillis());
         health.setCheckType(checkType);
         
         healthCache.put(key, health);
-        log.info("Instance {}:{} marked as healthy via {}", ip, port, checkType);
+        
+        // ✅ Queue for batch push ONLY when state changes (false -> true)
+        if (!wasHealthy) {
+            log.info("Instance {}:{}:{} recovered to HEALTHY (state changed: false->true)", serviceId, ip, port);
+            
+            // Check for network flap (sudden mass recovery)
+            if (isPotentialNetworkFlap(true)) {
+                log.warn("⚠️ POTENTIAL NETWORK FLAP DETECTED: {} instances suddenly recovered. Skipping push.", 
+                        batchPushQueue.size() + 1);
+                return; // Don't add to queue
+            }
+            
+            log.info("Adding {}:{}:{} to push queue with healthy=true", serviceId, ip, port);
+            queueForBatchPush(serviceId, ip, port, true);
+        } else {
+            log.info("Instance {}:{}:{} remains HEALTHY (no state change)", serviceId, ip, port);
+        }
     }
     
     /**
-     * 标记为不健康（主动检查调用）
+     * Queue health status for batch push to admin
+     */
+    private final List<InstanceHealth> batchPushQueue = new ArrayList<>();
+    private final Object batchLock = new Object();
+    
+    private void queueForBatchPush(String serviceId, String ip, int port, boolean healthy) {
+        InstanceHealth health = new InstanceHealth();
+        health.setServiceId(serviceId);
+        health.setIp(ip);
+        health.setPort(port);
+        health.setHealthy(healthy);
+        health.setLastActiveCheckTime(System.currentTimeMillis());
+        
+        synchronized (batchLock) {
+            batchPushQueue.add(health);
+        }
+    }
+    
+    /**
+     * Push batched health status to admin (BATCH PROCESSING)
+     */
+    public void pushBatchHealthStatusToAdmin() {
+        List<InstanceHealth> toPush;
+        
+        synchronized (batchLock) {
+            if (batchPushQueue.isEmpty()) {
+                return;
+            }
+            toPush = new ArrayList<>(batchPushQueue);
+            batchPushQueue.clear();
+        }
+        
+        // Split into batches and push separately
+        int totalSize = toPush.size();
+        int batchCount = (totalSize + batchSize - 1) / batchSize;
+        
+        log.info("Preparing to push {} health statuses in {} batches", totalSize, batchCount);
+        
+        for (int i = 0; i < batchCount; i++) {
+            int fromIndex = i * batchSize;
+            int toIndex = Math.min(fromIndex + batchSize, totalSize);
+            List<InstanceHealth> batch = toPush.subList(fromIndex, toIndex);
+            
+            try {
+                pushSingleBatch(batch);
+                log.info("Pushed batch {}/{} ({} items) to admin [{}]", 
+                        i + 1, batchCount, batch.size(), gatewayId);
+            } catch (Exception e) {
+                log.warn("Failed to push batch {}/{} to admin, will retry next cycle", 
+                        i + 1, batchCount, e);
+                // Re-add failed items to queue for retry
+                synchronized (batchLock) {
+                    batchPushQueue.addAll(0, batch); // Add to front for priority retry
+                }
+                // Stop pushing remaining batches on error
+                break;
+            }
+        }
+    }
+    
+    /**
+     * Push a single batch to admin
+     */
+    private void pushSingleBatch(List<InstanceHealth> batch) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("X-Gateway-Id", gatewayId);
+        
+        HttpEntity<List<InstanceHealth>> request = new HttpEntity<>(batch, headers);
+        
+        restTemplate.postForEntity(
+            adminUrl + "/api/gateway/health/sync",
+            request,
+            Void.class
+        );
+    }
+    
+    /**
+     * Mark as unhealthy (active check call)
      */
     public void markUnhealthy(String serviceId, String ip, int port, String reason, String checkType) {
         String key = InstanceHealth.buildKey(serviceId, ip, port);
@@ -121,17 +260,89 @@ public class HybridHealthChecker {
             health = createHealthy(serviceId, ip, port);
         }
         
+        boolean wasHealthy = health.isHealthy();
+        
+        log.info("markUnhealthy called for {}:{}:{} - wasHealthy={}, reason={}", 
+                serviceId, ip, port, wasHealthy, reason);
+        
         health.setHealthy(false);
         health.setUnhealthyReason(reason);
         health.setLastActiveCheckTime(System.currentTimeMillis());
         health.setCheckType(checkType);
         
         healthCache.put(key, health);
-        log.warn("Instance {}:{} marked as unhealthy via {}: {}", ip, port, checkType, reason);
+        
+        // ✅ Queue for batch push ONLY when state changes (true -> false)
+        if (wasHealthy) {
+            log.error("Instance {}:{}:{} became UNHEALTHY: {} (state changed: true->false)", serviceId, ip, port, reason);
+            
+            // Check for network flap (sudden mass failure)
+            if (isPotentialNetworkFlap(false)) {
+                log.warn("⚠️ POTENTIAL NETWORK FLAP DETECTED: {} instances suddenly failed. Skipping push.", 
+                        batchPushQueue.size() + 1);
+                return; // Don't add to queue
+            }
+            
+            log.info("Adding {}:{}:{} to push queue with healthy=false", serviceId, ip, port);
+            queueForBatchPush(serviceId, ip, port, false);
+        } else {
+            log.info("Instance {}:{}:{} remains UNHEALTHY: {} (no state change)", serviceId, ip, port, reason);
+        }
     }
     
     /**
-     * 获取实例健康状态
+     * Check if this might be a network flap (sudden mass state changes)
+     */
+    private boolean isPotentialNetworkFlap(boolean becomingHealthy) {
+        synchronized (batchLock) {
+            int queueSize = batchPushQueue.size();
+            
+            // Count how many are changing to the same state
+            long sameStateCount = batchPushQueue.stream()
+                .filter(h -> h.isHealthy() == becomingHealthy)
+                .count();
+            
+            // If more than threshold instances are changing to the same state,
+            // it might be a network flap
+            if (sameStateCount + 1 >= networkFlapThreshold) {
+                log.warn("🚨 NETWORK FLAP ALERT: {} instances {} at once (threshold={})",
+                        sameStateCount + 1,
+                        becomingHealthy ? "recovering" : "failing",
+                        networkFlapThreshold);
+                return true;
+            }
+            
+            return false;
+        }
+    }
+    
+    /**
+     * Get current batch queue size (for debugging)
+     */
+    public int getBatchQueueSize() {
+        synchronized (batchLock) {
+            return batchPushQueue.size();
+        }
+    }
+    
+    /**
+     * Get unhealthy instances for a service (for active recheck)
+     */
+    public List<InstanceHealth> getUnhealthyInstances(String serviceId) {
+        List<InstanceHealth> unhealthy = new ArrayList<>();
+        
+        for (InstanceHealth health : healthCache.asMap().values()) {
+            if (health.getServiceId().equals(serviceId) && !health.isHealthy()) {
+                unhealthy.add(health);
+            }
+        }
+        
+        log.debug("Found {} unhealthy instance(s) for service: {}", unhealthy.size(), serviceId);
+        return unhealthy;
+    }
+    
+    /**
+     * Get instance health status
      */
     public InstanceHealth getHealth(String serviceId, String ip, int port) {
         String key = InstanceHealth.buildKey(serviceId, ip, port);
@@ -175,7 +386,7 @@ public class HybridHealthChecker {
     }
     
     /**
-     * 判断是否应该自动恢复
+     * Check if should attempt recovery
      */
     private boolean shouldRecover(InstanceHealth health) {
         Long lastRequestTime = health.getLastRequestTime();
@@ -187,7 +398,7 @@ public class HybridHealthChecker {
     }
     
     /**
-     * 创建健康实例对象
+     * Create healthy instance
      */
     private InstanceHealth createHealthy(String serviceId, String ip, int port) {
         InstanceHealth health = new InstanceHealth();
@@ -202,14 +413,14 @@ public class HybridHealthChecker {
     }
     
     /**
-     * 清理过期缓存（可选定时任务）
+     * Cleanup expired cache (optional scheduled task)
      */
     public void cleanupExpired() {
         long now = System.currentTimeMillis();
         healthCache.asMap().entrySet().removeIf(entry -> {
             InstanceHealth health = entry.getValue();
             Long lastTime = health.getLastRequestTime();
-            return lastTime != null && (now - lastTime) > 300000; // 5 分钟
+            return lastTime != null && (now - lastTime) > 300000; // 5 minutes
         });
         log.info("Cleaned up expired health records");
     }

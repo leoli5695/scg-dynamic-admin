@@ -8,6 +8,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -37,14 +38,18 @@ public class ServiceRefresher {
     private final ConfigCenterService configService;
     private final GenericCacheManager<JsonNode> cacheManager;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final com.leoli.gateway.manager.ServiceManager serviceManager;
 
     // Track which services use static:// protocol (need immediate cache invalidation)
     private final ConcurrentMap<String, Boolean> staticProtocolServices = new ConcurrentHashMap<>();
 
     @Autowired
-    public ServiceRefresher(ConfigCenterService configService, GenericCacheManager<JsonNode> cacheManager) {
+    public ServiceRefresher(ConfigCenterService configService, 
+                           GenericCacheManager<JsonNode> cacheManager,
+                           com.leoli.gateway.manager.ServiceManager serviceManager) {
         this.configService = configService;
         this.cacheManager = cacheManager;
+        this.serviceManager = serviceManager;
         log.info("ServiceRefresher initialized with incremental mode and dual-cache protection");
         log.info("Static protocol services will have immediate cache invalidation (no fallback)");
     }
@@ -67,6 +72,17 @@ public class ServiceRefresher {
             } else {
                 log.info("No services found in Nacos (index is empty)");
             }
+            
+            // ✅ Add listener to services-index for dynamic updates
+            configService.addListener(SERVICES_INDEX, GROUP, new ConfigCenterService.ConfigListener() {
+                @Override
+                public void onConfigChange(String dataId, String group, String newContent) {
+                    log.info("📡 Detected changes in services-index, reloading...");
+                    handleServicesIndexChanged(newContent);
+                }
+            });
+            log.info("✅ Registered listener for services-index changes");
+            
         } catch (Exception e) {
             log.warn("⚠️  Service cache warmup failed, will load on first request: {}", e.getMessage());
         }
@@ -122,6 +138,10 @@ public class ServiceRefresher {
 
                     // Load into cache manager
                     cacheManager.loadConfig(CACHE_KEY + "." + serviceId, serviceConfig);
+                    
+                    // Parse and cache service instances to ServiceManager.instanceCache
+                    serviceManager.parseAndCacheService(serviceId, serviceNode);
+                    
                     loadedCount++;
                     log.debug("Warmed up service: {}", serviceId);
                 } else {
@@ -274,6 +294,75 @@ public class ServiceRefresher {
             log.error("Failed to refresh service config: {}", serviceId, e);
         }
     }
+    
+    /**
+     * Handle services-index change event.
+     * Parses the new index and loads/refreshes service configurations.
+     *
+     * @param newIndexJson New services-index JSON content
+     */
+    private void handleServicesIndexChanged(String newIndexJson) {
+        try {
+            // Parse new index
+            List<String> newServiceIds = objectMapper.readValue(
+                newIndexJson, 
+                new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {}
+            );
+            
+            if (newServiceIds == null || newServiceIds.isEmpty()) {
+                log.warn("services-index is empty, clearing all service caches");
+                // Clear all service caches
+                java.util.Set<String> currentServiceIds = serviceManager.getAllConfiguredServiceIds();
+                for (String serviceId : currentServiceIds) {
+                    clearServiceCache(serviceId);
+                }
+                staticProtocolServices.clear();
+                return;
+            }
+            
+            // Get current cached service IDs
+            java.util.Set<String> currentServiceIds = serviceManager.getAllConfiguredServiceIds();
+            
+            // Find added services (in new but not in current)
+            for (String newServiceId : newServiceIds) {
+                if (!currentServiceIds.contains(newServiceId)) {
+                    log.info("🆕 New service detected: {}, loading configuration...", newServiceId);
+                    String serviceDataId = SERVICE_PREFIX + newServiceId;
+                    String serviceConfig = configService.getConfig(serviceDataId, GROUP);
+                    
+                    if (serviceConfig != null && !serviceConfig.isBlank()) {
+                        JsonNode serviceNode = objectMapper.readTree(serviceConfig);
+                        validateServiceConfig(serviceNode, newServiceId);
+                        
+                        boolean isStaticProtocol = checkIfStaticProtocol(serviceNode);
+                        if (isStaticProtocol) {
+                            staticProtocolServices.put(newServiceId, true);
+                        }
+                        
+                        cacheManager.loadConfig(CACHE_KEY + "." + newServiceId, serviceConfig);
+                        serviceManager.parseAndCacheService(newServiceId, serviceNode);
+                        log.info("✅ New service loaded: {}", newServiceId);
+                    } else {
+                        log.warn("New service config not found or empty: {}", newServiceId);
+                    }
+                }
+            }
+            
+            // Find removed services (in current but not in new)
+            for (String currentServiceId : currentServiceIds) {
+                if (!newServiceIds.contains(currentServiceId)) {
+                    log.info("🗑️  Service removed: {}, clearing cache...", currentServiceId);
+                    clearServiceCache(currentServiceId);
+                    staticProtocolServices.remove(currentServiceId);
+                }
+            }
+            
+            log.info("✅ Services-index updated: {} services total", newServiceIds.size());
+            
+        } catch (Exception e) {
+            log.error("Failed to handle services-index change", e);
+        }
+    }
 
     /**
      * Clear all service caches.
@@ -281,5 +370,59 @@ public class ServiceRefresher {
     public void clearAllCaches() {
         staticProtocolServices.clear();
         log.info("Clear all caches requested - consider restarting for full cleanup");
+    }
+    
+    /**
+     * Periodic 兜底 sync: check for missing services every 1 minute.
+     * This is a safety net in case index listener missed updates.
+     */
+    @Scheduled(fixedRate = 60000) // 1 minute
+    public void periodicSyncMissingServices() {
+        try {
+            // Load current services index from Nacos
+            List<String> nacosServiceIds = loadServicesIndex();
+            if (nacosServiceIds == null || nacosServiceIds.isEmpty()) {
+                return; // Nothing to sync
+            }
+            
+            // Get currently cached service IDs
+            java.util.Set<String> localServiceIds = serviceManager.getAllConfiguredServiceIds();
+            
+            // Find missing services (in Nacos but not in local cache)
+            int syncedCount = 0;
+            for (String serviceId : nacosServiceIds) {
+                if (!localServiceIds.contains(serviceId)) {
+                    log.warn("🔍 Found missing service during periodic sync: {}", serviceId);
+                    
+                    // Try to load the missing service
+                    String serviceDataId = SERVICE_PREFIX + serviceId;
+                    String serviceConfig = configService.getConfig(serviceDataId, GROUP);
+                    
+                    if (serviceConfig != null && !serviceConfig.isBlank()) {
+                        JsonNode serviceNode = objectMapper.readTree(serviceConfig);
+                        validateServiceConfig(serviceNode, serviceId);
+                        
+                        boolean isStaticProtocol = checkIfStaticProtocol(serviceNode);
+                        if (isStaticProtocol) {
+                            staticProtocolServices.put(serviceId, true);
+                        }
+                        
+                        cacheManager.loadConfig(CACHE_KEY + "." + serviceId, serviceConfig);
+                        serviceManager.parseAndCacheService(serviceId, serviceNode);
+                        syncedCount++;
+                        log.info("✅ Periodic sync recovered missing service: {}", serviceId);
+                    } else {
+                        log.warn("⚠️  Service config not found in Nacos: {}", serviceId);
+                    }
+                }
+            }
+            
+            if (syncedCount > 0) {
+                log.info("📊 Periodic sync completed: recovered {} missing services", syncedCount);
+            }
+            
+        } catch (Exception e) {
+            log.debug("Periodic sync check completed (no action needed)");
+        }
     }
 }

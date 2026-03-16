@@ -27,7 +27,7 @@ public class ServiceSyncScheduler {
     private AlertService alertService;
 
     private static final String CACHE_KEY = "services";
-    private static final String DATA_ID = "gateway-services.json";
+    private static final String SERVICES_INDEX_DATA_ID = "config.gateway.metadata.services-index";
     private static final String GROUP = "DEFAULT_GROUP";
 
     /**
@@ -44,7 +44,7 @@ public class ServiceSyncScheduler {
             // Use GenericCacheManager's intelligent reload logic
             JsonNode config = cacheManager.getConfigWithFallback(
                     CACHE_KEY,
-                    key -> configService.getConfig(DATA_ID, GROUP)
+                    key -> configService.getConfig(SERVICES_INDEX_DATA_ID, GROUP)
             );
 
             if (config != null && config.has("services")) {

@@ -42,12 +42,6 @@ public class ServiceInstanceHealth {
     private Integer port;
     
     /**
-     * 是否启用
-     */
-    @Column(name = "enabled")
-    private Boolean enabled = true;
-    
-    /**
      * 健康状态：HEALTHY, UNHEALTHY
      */
     @Column(name = "health_status", length = 20)

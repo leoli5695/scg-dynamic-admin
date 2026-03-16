@@ -1,5 +1,6 @@
 package com.leoli.gateway.filter;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -30,7 +31,7 @@ public class CustomLoadBalancerGatewayFilterFactory extends AbstractGatewayFilte
     private final Environment environment;
     private final ObjectMapper objectMapper;
 
-    private static final String GATEWAY_SERVICES_DATA_ID = "gateway-services.json";
+    private static final String SERVICES_INDEX_DATA_ID = "config.gateway.metadata.services-index";
     private static final long SERVICES_CACHE_TTL_MS = 10000;
 
     private ServicesConfig cachedServicesConfig;
@@ -248,18 +249,18 @@ public class CustomLoadBalancerGatewayFilterFactory extends AbstractGatewayFilte
             com.alibaba.nacos.client.config.NacosConfigService configService =
                     new com.alibaba.nacos.client.config.NacosConfigService(createNacosProperties(serverAddr, namespace));
 
-            String content = configService.getConfig(GATEWAY_SERVICES_DATA_ID, "DEFAULT_GROUP", 5000);
+            String content = configService.getConfig(SERVICES_INDEX_DATA_ID, "DEFAULT_GROUP", 5000);
             configService.shutDown();
 
             if (content != null && !content.trim().isEmpty()) {
                 cachedServicesConfig = objectMapper.readValue(content, ServicesConfig.class);
                 servicesLastLoadTime = now;
-                log.debug("Loaded gateway-services.json from Nacos");
+                log.debug("Loaded services config from Nacos");
             }
         } catch (JsonProcessingException e) {
-            log.error("Failed to parse gateway-services.json", e);
+            log.error("Failed to parse services configuration", e);
         } catch (Exception e) {
-            log.error("Failed to load gateway-services.json from Nacos", e);
+            log.error("Failed to load services configuration from Nacos", e);
         }
 
         return cachedServicesConfig;
@@ -291,6 +292,11 @@ public class CustomLoadBalancerGatewayFilterFactory extends AbstractGatewayFilte
         public static class ServiceDefinition {
             private String name;
             private List<StaticServiceInstance> instances;
+
+            @JsonProperty("serviceId")
+            public void setServiceId(String serviceId) {
+                this.name = serviceId;
+            }
 
             public String getName() {
                 return name;

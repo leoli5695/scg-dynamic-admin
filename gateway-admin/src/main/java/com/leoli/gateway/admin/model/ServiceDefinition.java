@@ -71,11 +71,6 @@ public class ServiceDefinition {
         private int weight = 1;
         
         /**
-         * Whether healthy
-         */
-        private boolean healthy = true;
-        
-        /**
          * Whether enabled
          */
         private boolean enabled = true;

@@ -10,7 +10,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 健康检查调度器
+ * Health check scheduler
+ * @author leoli
  */
 @Component
 @Slf4j
@@ -26,14 +27,14 @@ public class HealthCheckScheduler {
     private HybridHealthChecker hybridHealthChecker;
     
     /**
-     * 主动健康检查任务（每 30 秒）
+     * Active health check task (every 30 seconds)
      */
-    @Scheduled(fixedRate = 30000)
+    @Scheduled(fixedRate = 30000) // 30 seconds
     public void performActiveHealthCheck() {
         log.debug("Starting active health check...");
         
         try {
-            // 找出需要检查的实例
+            // Find instances needing check
             List<InstanceDiscoveryService.InstanceKey> instances = 
                 instanceDiscovery.findInstancesNeedingActiveCheck();
             
@@ -42,7 +43,7 @@ public class HealthCheckScheduler {
                 return;
             }
             
-            // 并发检查（提高速度）
+            // Concurrent check (improve speed)
             List<CompletableFuture<Void>> futures = instances.stream()
                 .map(instance -> CompletableFuture.runAsync(() -> {
                     try {
@@ -58,7 +59,7 @@ public class HealthCheckScheduler {
                 }))
                 .collect(java.util.stream.Collectors.toList());
             
-            // 等待所有检查完成（最多 10 秒）
+            // Wait for all checks to complete (max 10 seconds)
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
                 .get(10, TimeUnit.SECONDS);
             
@@ -70,7 +71,7 @@ public class HealthCheckScheduler {
     }
     
     /**
-     * 清理过期缓存（每 5 分钟）
+     * Cleanup expired cache (every 5 minutes)
      */
     @Scheduled(fixedRate = 300000)
     public void cleanupExpiredHealthRecords() {

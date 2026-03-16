@@ -10,10 +10,12 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 健康状态同步任务（网关 → Admin）
+ * Health status sync task (Gateway → Admin)
+ * @author leoli
  */
 @Component
 @Slf4j
@@ -32,32 +34,17 @@ public class HealthStatusSyncTask {
     private String gatewayId;
     
     /**
-     * 定时同步不健康实例到 Admin（每 5 秒）
+     * Periodically sync health status to Admin (every 10 seconds) - BATCH MODE
+     * Only pushes when health status actually changes (state transition)
      */
-    @Scheduled(fixedRate = 5000)
+    @Scheduled(fixedRate = 10000)
     public void syncToAdmin() {
-        try {
-            // 只同步不健康的实例（减少网络开销）
-            List<InstanceHealth> unhealthyOnly = hybridHealthChecker.getUnhealthyInstances();
-            
-            if (!unhealthyOnly.isEmpty()) {
-                HttpHeaders headers = new HttpHeaders();
-                headers.setContentType(MediaType.APPLICATION_JSON);
-                headers.set("X-Gateway-Id", gatewayId);
-                
-                HttpEntity<List<InstanceHealth>> request = new HttpEntity<>(unhealthyOnly, headers);
-                
-                restTemplate.postForEntity(
-                    adminUrl + "/api/gateway/health/sync",
-                    request,
-                    Void.class
-                );
-                
-                log.info("Synced {} unhealthy instances to admin [{}]", 
-                         unhealthyOnly.size(), gatewayId);
-            }
-        } catch (Exception e) {
-            log.warn("Failed to sync health status to admin", e);
-        }
+        log.debug("=== Starting health status sync task ===");
+        log.debug("Current push queue size: {}", hybridHealthChecker.getBatchQueueSize());
+        
+        // Push batched health status changes
+        hybridHealthChecker.pushBatchHealthStatusToAdmin();
+        
+        log.debug("=== Completed health status sync task ===");
     }
 }

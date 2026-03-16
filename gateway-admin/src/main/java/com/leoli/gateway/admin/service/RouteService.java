@@ -170,13 +170,20 @@ public class RouteService {
     // Extract description for database-only storage
     String description = route.getDescription();
     
+    // Temporarily set description to null for JSON serialization
+    // (description is stored in DB column only, not in metadata JSON)
+    route.setDescription(null);
+    
     // 1. Convert to entity and save to H2 database
     log.info("Saving route to database: {}", routeName);
     RouteEntity entity = routeConverter.toEntity(route);
     entity.setRouteName(routeName);
     entity.setRouteId(java.util.UUID.randomUUID().toString());
-    entity.setDescription(description); // Save description to DB only
+    entity.setDescription(description); // Save description to DB only (not in JSON)
     entity = routeRepository.save(entity);
+    
+    // Restore description in route object for Nacos
+    route.setDescription(description);
     
     log.info("Route saved with DB id={}, route_name={}, description={}", 
              entity.getId(), entity.getRouteName(), entity.getDescription());
@@ -211,8 +218,12 @@ public class RouteService {
     // Extract description for database-only storage
     String description = route.getDescription();
     
+    // Temporarily set description to null for JSON serialization
+    // (description is stored in DB column only, not in metadata JSON)
+    route.setDescription(null);
+    
     // Update entity fields from route definition
-    entity.setDescription(description); // Update description in DB only
+    entity.setDescription(description); // Update description in DB only (not in JSON)
     
     // Store complete configuration as JSON in metadata field for backup
     try {
@@ -221,6 +232,9 @@ public class RouteService {
     } catch (Exception e) {
       log.warn("Failed to serialize route config to JSON", e);
     }
+    
+    // Restore description in route object for Nacos
+    route.setDescription(description);
 
     // 1. Update database
     log.info("Updating route in database: {}", entity.getRouteName());
@@ -255,8 +269,12 @@ public class RouteService {
     // Extract description for database-only storage
     String description = route.getDescription();
     
+    // Temporarily set description to null for JSON serialization
+    // (description is stored in DB column only, not in metadata JSON)
+    route.setDescription(null);
+    
     // Update entity fields from route definition
-    entity.setDescription(description); // Update description in DB only
+    entity.setDescription(description); // Update description in DB only (not in JSON)
     
     // Store complete configuration as JSON in metadata field for backup
     try {
@@ -265,6 +283,9 @@ public class RouteService {
     } catch (Exception e) {
       log.warn("Failed to serialize route config to JSON", e);
     }
+    
+    // Restore description in route object for Nacos
+    route.setDescription(description);
 
     // 1. Update database
     log.info("Updating route in database: {}", entity.getRouteName());
