@@ -182,15 +182,15 @@ public class RouteService {
     entity.setDescription(description); // Save description to DB only (not in JSON)
     entity = routeRepository.save(entity);
     
-    // Restore description in route object for Nacos
-    route.setDescription(description);
+    // ✅ CRITICAL: Do NOT restore description! 
+    // Keep route.description = null for Nacos push
+    // Gateway's RouteDefinition class doesn't have description field
     
     log.info("Route saved with DB id={}, route_name={}, description={}", 
              entity.getId(), entity.getRouteName(), entity.getDescription());
 
     // 2. Push to Nacos (per-route format using route_id UUID)
-    // Note: Nacos config contains the original route object (with description field)
-    // But we only use it for gateway runtime, not for persistence
+    // Important: route.description is null, so Nacos config won't include it
     String routeDataId = ROUTE_PREFIX + entity.getRouteId();
     configCenterService.publishConfig(routeDataId, route);
     log.info("Route pushed to Nacos: {}", routeDataId);
@@ -233,14 +233,16 @@ public class RouteService {
       log.warn("Failed to serialize route config to JSON", e);
     }
     
-    // Restore description in route object for Nacos
-    route.setDescription(description);
+    // ✅ CRITICAL: Do NOT restore description!
+    // Keep route.description = null for Nacos push
+    // Gateway's RouteDefinition class doesn't have description field
 
     // 1. Update database
     log.info("Updating route in database: {}", entity.getRouteName());
     entity = routeRepository.save(entity);
 
     // 2. Push to Nacos (overwrite per-route key using route_id UUID)
+    // Important: route.description is null, so Nacos config won't include it
     String routeDataId = ROUTE_PREFIX + entity.getRouteId();
     configCenterService.publishConfig(routeDataId, route);
     log.info("Route updated in Nacos: {}", routeDataId);
@@ -251,10 +253,6 @@ public class RouteService {
     return entity;
   }
 
-  /**
-   * Update route by route_id (UUID) with dual-write to database and Nacos.
-   * Description is updated in database only, not pushed to Nacos metadata.
-   */
   @Transactional(rollbackFor = Exception.class)
   public RouteEntity updateRouteByRouteId(String routeId, RouteDefinition route) {
     if (route == null || routeId == null) {
@@ -284,14 +282,16 @@ public class RouteService {
       log.warn("Failed to serialize route config to JSON", e);
     }
     
-    // Restore description in route object for Nacos
-    route.setDescription(description);
+    // ✅ CRITICAL: Do NOT restore description!
+    // Keep route.description = null for Nacos push
+    // Gateway's RouteDefinition class doesn't have description field
 
     // 1. Update database
     log.info("Updating route in database: {}", entity.getRouteName());
     entity = routeRepository.save(entity);
 
     // 2. Push to Nacos (overwrite per-route key using route_id UUID)
+    // Important: route.description is null, so Nacos config won't include it
     String routeDataId = ROUTE_PREFIX + entity.getRouteId();
     configCenterService.publishConfig(routeDataId, route);
     log.info("Route updated in Nacos: {}", routeDataId);

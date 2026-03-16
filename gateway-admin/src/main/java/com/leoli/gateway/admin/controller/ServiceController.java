@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,13 +32,13 @@ public class ServiceController {
 
     @Autowired
     private NacosConfigCenterService nacosConfigCenterService;
-    
+
     @Autowired
     private ServiceInstanceHealthRepository instanceHealthRepository;
-    
+
     @Autowired
     private RestTemplate restTemplate;
-    
+
     @Value("${gateway.admin.url:http://localhost:8080}")
     private String gatewayAdminUrl;
 
@@ -47,43 +48,64 @@ public class ServiceController {
     @GetMapping
     public ResponseEntity<Map<String, Object>> getAllServices() {
         List<ServiceDefinition> services = serviceManager.getAllServices();
-        
-        // ✅ Attach health status to each service's instances
+
+        // ✅ Build response with health status dynamically injected
+        List<Object> servicesWithHealth = new ArrayList<>();
+
         for (ServiceDefinition service : services) {
-            String serviceId = service.getServiceId();
-            if (serviceId != null && !serviceId.isEmpty()) {
+            // Create response map (don't modify cached config)
+            Map<String, Object> serviceMap = new HashMap<>();
+            serviceMap.put("name", service.getName());
+            serviceMap.put("loadBalancer", service.getLoadBalancer());
+            serviceMap.put("serviceId", service.getServiceId());
+
+            // Build instances list with healthy field
+            List<Map<String, Object>> instancesList = new ArrayList<>();
+            if (service.getInstances() != null) {
+                String serviceId = service.getServiceId();
+
                 // Get instance health from SERVICE_INSTANCES table
-                List<ServiceInstanceHealth> instanceHealthList = instanceHealthRepository.findByServiceId(serviceId);
-                
-                // Map health status to instances
-                if (!instanceHealthList.isEmpty() && service.getInstances() != null) {
-                    Map<String, ServiceInstanceHealth> healthMap = new HashMap<>();
-                    for (ServiceInstanceHealth health : instanceHealthList) {
-                        String key = health.getIp() + ":" + health.getPort();
-                        healthMap.put(key, health);
+                List<ServiceInstanceHealth> instanceHealthList =
+                        serviceId != null ? instanceHealthRepository.findByServiceId(serviceId) : new ArrayList<>();
+
+                // Map for quick lookup
+                Map<String, ServiceInstanceHealth> healthMap = new HashMap<>();
+                for (ServiceInstanceHealth health : instanceHealthList) {
+                    String key = health.getIp() + ":" + health.getPort();
+                    healthMap.put(key, health);
+                }
+
+                // Convert each instance and add healthy field
+                for (ServiceDefinition.ServiceInstance instance : service.getInstances()) {
+                    Map<String, Object> instanceMap = new HashMap<>();
+                    instanceMap.put("instanceId", instance.getInstanceId());
+                    instanceMap.put("ip", instance.getIp());
+                    instanceMap.put("port", instance.getPort());
+                    instanceMap.put("weight", instance.getWeight());
+                    instanceMap.put("enabled", instance.isEnabled());
+
+                    // ✅ Inject healthy field from database
+                    String key = instance.getIp() + ":" + instance.getPort();
+                    ServiceInstanceHealth health = healthMap.get(key);
+                    if (health != null) {
+                        instanceMap.put("healthy", "HEALTHY".equals(health.getHealthStatus()));
+                    } else {
+                        instanceMap.put("healthy", true); // Default to healthy if no record
                     }
-                    
-                    // Update instance health status (keep enabled from Nacos config)
-                    for (ServiceDefinition.ServiceInstance instance : service.getInstances()) {
-                        String key = instance.getIp() + ":" + instance.getPort();
-                        ServiceInstanceHealth health = healthMap.get(key);
-                        if (health != null) {
-                            // ✅ Set healthy field for frontend display
-                            instance.setHealthy("HEALTHY".equals(health.getHealthStatus()));
-                            
-                            log.debug("Instance {}:{} enabled={} (Nacos), healthy={}", 
-                                     instance.getIp(), instance.getPort(), 
-                                     instance.isEnabled(), instance.isHealthy());
-                        }
-                    }
+
+                    instanceMap.put("metadata", instance.getMetadata());
+                    instancesList.add(instanceMap);
                 }
             }
+
+            serviceMap.put("instances", instancesList);
+            servicesWithHealth.add(serviceMap);
         }
-        
+
         Map<String, Object> result = new HashMap<>();
         result.put("code", 200);
         result.put("message", "success");
-        result.put("data", services);
+        result.put("data", servicesWithHealth);
         return ResponseEntity.ok(result);
     }
 
