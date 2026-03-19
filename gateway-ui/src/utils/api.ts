@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Create axios instance with baseURL for gateway-admin backend
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:9090',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
