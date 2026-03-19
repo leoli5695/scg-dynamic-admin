@@ -22,22 +22,45 @@ public class StrategyEntity {
     private Long id;
     
     /**
-     * Business strategy name (e.g., "user-route-rate-limiter"), used to identify this strategy.
+     * Strategy ID (UUID).
      */
-    @Column(name = "strategy_name", nullable = false, unique = true, length = 255)
-    private String strategyName;
-    
-    /**
-     * Strategy ID (UUID), kept for backward compatibility.
-     */
-    @Column(name = "strategy_id", length = 255)
+    @Column(name = "strategy_id", length = 255, unique = true)
     private String strategyId;
     
     /**
-     * Complete configuration as JSON backup.
-     * Contains: type, routeId, config, priority, etc.
+     * Strategy name (business identifier).
      */
-    @Column(nullable = false, columnDefinition = "TEXT")
+    @Column(name = "strategy_name", nullable = false, length = 255)
+    private String strategyName;
+    
+    /**
+     * Strategy type: RATE_LIMITER, IP_FILTER, TIMEOUT, CIRCUIT_BREAKER, AUTH.
+     */
+    @Column(name = "strategy_type", length = 50)
+    private String strategyType;
+    
+    /**
+     * Scope: GLOBAL or ROUTE.
+     */
+    @Column(name = "scope", length = 20)
+    private String scope = "GLOBAL";
+    
+    /**
+     * Route ID when scope is ROUTE.
+     */
+    @Column(name = "route_id", length = 255)
+    private String routeId;
+    
+    /**
+     * Priority for ordering.
+     */
+    @Column(name = "priority")
+    private Integer priority = 100;
+    
+    /**
+     * Complete configuration as JSON.
+     */
+    @Column(columnDefinition = "TEXT")
     private String metadata;
     
     @Column(columnDefinition = "BOOLEAN DEFAULT TRUE")

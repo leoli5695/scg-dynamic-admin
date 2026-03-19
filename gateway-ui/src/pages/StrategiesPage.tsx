@@ -1,80 +1,43 @@
 import { useState, useEffect } from 'react';
-import { Table, Button, Space, Modal, message, Typography, Spin, Tag, Drawer, Form, Input, Card, Tabs, Dropdown, Switch, Empty } from 'antd';
-import { PlusOutlined, DeleteOutlined, CopyOutlined, SafetyOutlined } from '@ant-design/icons';
-import type { ColumnsType } from 'antd/es/table';
+import {
+  Card, Button, Space, Modal, message, Spin, Tag, Drawer, Form, Input, Select,
+  Empty, Dropdown, Tooltip, Badge, Divider, Typography, Switch, Radio
+} from 'antd';
+import {
+  PlusOutlined, DeleteOutlined, EditOutlined, MoreOutlined,
+  ThunderboltOutlined, StopOutlined, PlayCircleOutlined, GlobalOutlined,
+  ApiOutlined, SafetyOutlined, ClockCircleOutlined, KeyOutlined
+} from '@ant-design/icons';
+import type { MenuProps } from 'antd';
 import api from '../utils/api';
 import { useTranslation } from 'react-i18next';
-import copy from 'copy-to-clipboard';
 import './StrategiesPage.premium.css';
 
-const { Title, Text } = Typography;
+const { Text, Title } = Typography;
 
-interface RateLimiterConfig {
-  routeId: string;
-  limit: number;
-  windowSize: number;
+interface StrategyDefinition {
+  strategyId: string;
+  strategyName: string;
+  strategyType: string;
+  scope: 'GLOBAL' | 'ROUTE';
+  routeId?: string;
+  priority: number;
   enabled: boolean;
-}
-
-interface IPFilterConfig {
-  routeId: string;
-  whitelist?: string[];
-  blacklist?: string[];
-  enabled: boolean;
-}
-
-interface TimeoutConfig {
-  routeId: string;
-  connectTimeout: number;
-  responseTimeout: number;
-  enabled: boolean;
-}
-
-interface CircuitBreakerConfig {
-  routeId: string;
-  failureRateThreshold: number;
-  minimumNumberOfCalls: number;
-  waitDurationInOpenState: number;
-  enabled: boolean;
-}
-
-interface TracingConfig {
-  routeId: string;
-  enabled: boolean;
-  headerName: string;
-  generateIfMissing: boolean;
-}
-
-interface AuthConfig {
-  routeId: string;
-  enabled: boolean;
-  authType: 'JWT' | 'API_KEY' | 'OAUTH2' | 'BASIC';
-  secretKey?: string;
-  apiKey?: string;
-  excludePaths?: string[];
-}
-
-interface Strategy {
-  rateLimiters?: RateLimiterConfig[];
-  ipFilters?: IPFilterConfig[];
-  timeouts?: TimeoutConfig[];
-  circuitBreakers?: CircuitBreakerConfig[];
-  tracings?: TracingConfig[];
-  auths?: AuthConfig[];
+  config: Record<string, any>;
+  description?: string;
 }
 
 const StrategiesPage: React.FC = () => {
-  const [strategies, setStrategies] = useState<Strategy>({});
+  const [strategies, setStrategies] = useState<StrategyDefinition[]>([]);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('rateLimiter');
   const [createDrawerVisible, setCreateDrawerVisible] = useState(false);
+  const [editDrawerVisible, setEditDrawerVisible] = useState(false);
+  const [selectedStrategy, setSelectedStrategy] = useState<StrategyDefinition | null>(null);
+  const [filterType, setFilterType] = useState<string>('all');
+  const [filterScope, setFilterScope] = useState<string>('all');
   const [createForm] = Form.useForm();
+  const [editForm] = Form.useForm();
   const { t } = useTranslation();
-
-  const copyToClipboard = (text: string, label: string) => {
-    copy(text);
-    message.success(t('message.copied_to_clipboard', { label }));
-  };
 
   useEffect(() => {
     loadStrategies();
@@ -83,9 +46,9 @@ const StrategiesPage: React.FC = () => {
   const loadStrategies = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/api/plugins');
+      const response = await api.get('/api/strategies');
       if (response.data.code === 200) {
-        setStrategies(response.data.data || {});
+        setStrategies(response.data.data || []);
       }
     } catch (error: any) {
       message.error(t('message.load_strategies_failed', { error: error.message }));
@@ -94,354 +57,336 @@ const StrategiesPage: React.FC = () => {
     }
   };
 
-  const handleCreate = (values: any) => {
-    let endpoint = '';
-    let data = { ...values, enabled: true }; // 默认启用
+  const filteredStrategies = strategies.filter(s => {
+    const matchesType = filterType === 'all' || s.strategyType === filterType;
+    const matchesScope = filterScope === 'all' || s.scope === filterScope;
+    return matchesType && matchesScope;
+  });
 
-    switch (activeTab) {
-      case 'rateLimiter':
-        endpoint = '/api/plugins/rate-limiters';
-        data = { ...data, limit: parseInt(values.limit), windowSize: parseInt(values.windowSize) };
-        break;
-      case 'ipFilter':
-        endpoint = '/api/plugins/ip-filters';
-        data = { ...data, whitelist: values.whitelist?.split(',') || [], blacklist: values.blacklist?.split(',') || [] };
-        break;
-      case 'timeout':
-        endpoint = '/api/plugins/timeouts';
-        data = { ...data, connectTimeout: parseInt(values.connectTimeout), responseTimeout: parseInt(values.responseTimeout) };
-        break;
-      case 'circuitBreaker':
-        endpoint = '/api/plugins/circuit-breakers';
-        data = {
-          ...data,
-          failureRateThreshold: parseFloat(values.failureRateThreshold),
-          minimumNumberOfCalls: parseInt(values.minimumNumberOfCalls),
-          waitDurationInOpenState: parseInt(values.waitDurationInOpenState)
-        };
-        break;
-      default:
-        break;
-    }
+  const totalStrategies = strategies.length;
+  const enabledStrategies = strategies.filter(s => s.enabled).length;
+  const globalStrategies = strategies.filter(s => s.scope === 'GLOBAL').length;
 
-    api.post(endpoint, data)
-      .then(response => {
-        if (response.data.code === 200) {
-          message.success(t('message.create_success'));
-          createForm.resetFields();
-          setCreateDrawerVisible(false);
-          loadStrategies();
-        } else {
-          message.error(t('message.create_failed', { msg: response.data.message }));
-        }
-      })
-      .catch(error => {
-        message.error(t('message.create_failed', { msg: error.response?.data?.message || error.message }));
-      });
+  const getStrategyTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      'RATE_LIMITER': t('strategy.type.rate_limiter'),
+      'IP_FILTER': t('strategy.type.ip_filter'),
+      'TIMEOUT': t('strategy.type.timeout'),
+      'CIRCUIT_BREAKER': t('strategy.type.circuit_breaker'),
+      'AUTH': t('strategy.type.auth'),
+    };
+    return labels[type] || type;
   };
 
-  const handleDelete = (strategyType: string, routeId: string) => {
-    let endpoint = '';
+  const getStrategyTypeIcon = (type: string) => {
+    const icons: Record<string, React.ReactNode> = {
+      'RATE_LIMITER': <ThunderboltOutlined />,
+      'IP_FILTER': <SafetyOutlined />,
+      'TIMEOUT': <ClockCircleOutlined />,
+      'CIRCUIT_BREAKER': <StopOutlined />,
+      'AUTH': <KeyOutlined />,
+    };
+    return icons[type] || <ThunderboltOutlined />;
+  };
 
-    switch (strategyType) {
-      case 'rateLimiter':
-        endpoint = `/api/plugins/rate-limiters/${routeId}`;
-        break;
-      case 'ipFilter':
-        endpoint = `/api/plugins/ip-filters/${routeId}`;
-        break;
-      case 'timeout':
-        endpoint = `/api/plugins/timeouts/${routeId}`;
-        break;
-      case 'circuitBreaker':
-        endpoint = `/api/plugins/circuit-breakers/${routeId}`;
-        break;
-      default:
-        break;
+  const getStrategyTypeColor = (type: string) => {
+    const colors: Record<string, string> = {
+      'RATE_LIMITER': '#722ed1',
+      'IP_FILTER': '#13c2c2',
+      'TIMEOUT': '#fa8c16',
+      'CIRCUIT_BREAKER': '#f5222d',
+      'AUTH': '#2f54eb',
+    };
+    return colors[type] || '#1890ff';
+  };
+
+  const handleCreate = async (values: any) => {
+    try {
+      const strategy: StrategyDefinition = {
+        strategyId: '',
+        strategyName: values.strategyName,
+        strategyType: values.strategyType,
+        scope: values.scope,
+        routeId: values.scope === 'ROUTE' ? values.routeId : undefined,
+        priority: values.priority || 100,
+        enabled: values.enabled !== false,
+        config: values.config || {},
+        description: values.description,
+      };
+
+      // Map form values to config based on strategy type
+      switch (values.strategyType) {
+        case 'RATE_LIMITER':
+          strategy.config = {
+            qps: parseInt(values.qps) || 100,
+            burstCapacity: parseInt(values.burstCapacity) || 200,
+            timeUnit: values.timeUnit || 'second',
+            keyResolver: values.keyResolver || 'ip',
+          };
+          break;
+        case 'IP_FILTER':
+          strategy.config = {
+            mode: values.mode || 'blacklist',
+            ipList: values.ipList ? values.ipList.split(',').map((ip: string) => ip.trim()) : [],
+          };
+          break;
+        case 'TIMEOUT':
+          strategy.config = {
+            connectTimeout: parseInt(values.connectTimeout) || 5000,
+            responseTimeout: parseInt(values.responseTimeout) || 30000,
+          };
+          break;
+        case 'CIRCUIT_BREAKER':
+          strategy.config = {
+            failureRateThreshold: parseFloat(values.failureRateThreshold) || 50,
+            slowCallDurationThreshold: parseInt(values.slowCallDurationThreshold) || 60000,
+            waitDurationInOpenState: parseInt(values.waitDurationInOpenState) || 30000,
+            slidingWindowSize: parseInt(values.slidingWindowSize) || 10,
+            minimumNumberOfCalls: parseInt(values.minimumNumberOfCalls) || 5,
+          };
+          break;
+        case 'AUTH':
+          strategy.config = {
+            authType: values.authType || 'JWT',
+            secretKey: values.secretKey,
+            apiKey: values.apiKey,
+            clientId: values.clientId,
+            clientSecret: values.clientSecret,
+          };
+          break;
+      }
+
+      const response = await api.post('/api/strategies', strategy);
+      if (response.data.code === 200) {
+        message.success(t('message.create_success'));
+        createForm.resetFields();
+        setCreateDrawerVisible(false);
+        loadStrategies();
+      } else {
+        message.error(response.data.message);
+      }
+    } catch (error: any) {
+      message.error(error.response?.data?.message || error.message);
     }
+  };
 
+  const handleUpdate = async (values: any) => {
+    if (!selectedStrategy) return;
+
+    try {
+      const strategy: StrategyDefinition = {
+        ...selectedStrategy,
+        strategyName: values.strategyName,
+        scope: values.scope,
+        routeId: values.scope === 'ROUTE' ? values.routeId : undefined,
+        priority: values.priority || 100,
+        enabled: values.enabled !== false,
+        description: values.description,
+        config: {},
+      };
+
+      // Map form values to config based on strategy type
+      switch (selectedStrategy.strategyType) {
+        case 'RATE_LIMITER':
+          strategy.config = {
+            qps: parseInt(values.qps) || 100,
+            burstCapacity: parseInt(values.burstCapacity) || 200,
+            timeUnit: values.timeUnit || 'second',
+            keyResolver: values.keyResolver || 'ip',
+          };
+          break;
+        case 'IP_FILTER':
+          strategy.config = {
+            mode: values.mode || 'blacklist',
+            ipList: values.ipList ? values.ipList.split(',').map((ip: string) => ip.trim()) : [],
+          };
+          break;
+        case 'TIMEOUT':
+          strategy.config = {
+            connectTimeout: parseInt(values.connectTimeout) || 5000,
+            responseTimeout: parseInt(values.responseTimeout) || 30000,
+          };
+          break;
+        case 'CIRCUIT_BREAKER':
+          strategy.config = {
+            failureRateThreshold: parseFloat(values.failureRateThreshold) || 50,
+            slowCallDurationThreshold: parseInt(values.slowCallDurationThreshold) || 60000,
+            waitDurationInOpenState: parseInt(values.waitDurationInOpenState) || 30000,
+            slidingWindowSize: parseInt(values.slidingWindowSize) || 10,
+            minimumNumberOfCalls: parseInt(values.minimumNumberOfCalls) || 5,
+          };
+          break;
+        case 'AUTH':
+          strategy.config = {
+            authType: values.authType || 'JWT',
+            secretKey: values.secretKey,
+            apiKey: values.apiKey,
+            clientId: values.clientId,
+            clientSecret: values.clientSecret,
+          };
+          break;
+      }
+
+      const response = await api.put(`/api/strategies/${selectedStrategy.strategyId}`, strategy);
+      if (response.data.code === 200) {
+        message.success(t('message.update_success'));
+        editForm.resetFields();
+        setEditDrawerVisible(false);
+        loadStrategies();
+      } else {
+        message.error(response.data.message);
+      }
+    } catch (error: any) {
+      message.error(error.response?.data?.message || error.message);
+    }
+  };
+
+  const handleDelete = (strategy: StrategyDefinition) => {
     Modal.confirm({
       title: t('common.confirm'),
-      content: t('message.confirm_delete_strategy', { type: strategyType, routeId }),
+      content: t('message.confirm_delete_strategy', { name: strategy.strategyName }),
       okText: t('common.delete'),
       okType: 'danger',
       cancelText: t('common.cancel'),
       onOk: async () => {
         try {
-          const response = await api.delete(endpoint);
-          
+          const response = await api.delete(`/api/strategies/${strategy.strategyId}`);
           if (response.data.code === 200) {
             message.success(t('message.delete_success'));
             loadStrategies();
           } else {
-            message.error(t('message.delete_failed', { msg: response.data.message }));
+            message.error(response.data.message);
           }
         } catch (error: any) {
-          const errorMsg = error.response?.data?.message || error.message;
-          message.error(t('message.delete_failed', { msg: errorMsg }));
+          message.error(error.response?.data?.message || error.message);
         }
       },
     });
   };
 
-  const getColumns = (strategyType: string) => {
-    const baseColumns: ColumnsType<any> = [
-      {
-        title: t('strategies.routeId'),
-        dataIndex: 'routeId',
-        key: 'routeId',
-        width: 200,
-        render: (text) => (
-          <Space>
-            <span style={{ fontWeight: 500 }}>{text}</span>
-            <Button 
-              type="text" 
-              size="small" 
-              icon={<CopyOutlined />} 
-              onClick={(e) => {
-                e.stopPropagation();
-                copyToClipboard(text, t('strategies.routeId'));
-              }}
-            />
-          </Space>
-        ),
-      },
-      {
-        title: t('strategies.col_status'),
-        dataIndex: 'enabled',
-        key: 'enabled',
-        width: 120,
-        render: (enabled: boolean) => (
-          <Tag color={enabled ? 'green' : 'gray'}>
-            {enabled ? t('strategies.status_active') : t('strategies.status_inactive')}
-          </Tag>
-        ),
-      },
-      {
-        title: t('strategies.col_actions'),
-        key: 'actions',
-        width: 180,
-        fixed: 'right',
-        render: (_, record) => (
-          <Space size="middle">
-            <Button type="link" size="small" onClick={() => message.info(t('common.feature_not_implemented'))}>
-              {t('strategies.btn_view')}
-            </Button>
-            <Button type="link" size="small" onClick={() => message.info(t('common.feature_not_implemented'))}>
-              {t('strategies.btn_edit')}
-            </Button>
-            <Button 
-              danger 
-              type="link" 
-              size="small"
-              icon={<DeleteOutlined />}
-              onClick={() => handleDelete(strategyType, record.routeId)}
-            >
-              {t('strategies.btn_delete')}
-            </Button>
-          </Space>
-        ),
-      },
-    ];
-
-    switch (strategyType) {
-      case 'rateLimiter':
-        return [
-          ...baseColumns.slice(0, 2),
-          {
-            title: t('strategies.rateLimit'),
-            key: 'rateLimit',
-            render: (_: any, record: RateLimiterConfig) => (
-              <span>{record.limit} {t('strategies.requests_per')} {record.windowSize} {t('strategies.seconds')}</span>
-            ),
-          },
-          ...baseColumns.slice(2)
-        ];
-      case 'ipFilter':
-        return [
-          ...baseColumns.slice(0, 2),
-          {
-            title: t('strategies.ipRules'),
-            key: 'ipRules',
-            render: (_: any, record: IPFilterConfig) => (
-              <div>
-                {record.whitelist && record.whitelist.length > 0 && (
-                  <div><strong>{t('strategies.whitelist')}:</strong> {record.whitelist.join(', ')}</div>
-                )}
-                {record.blacklist && record.blacklist.length > 0 && (
-                  <div><strong>{t('strategies.blacklist')}:</strong> {record.blacklist.join(', ')}</div>
-                )}
-              </div>
-            ),
-          },
-          {
-            title: t('strategies.type'),
-            key: 'type',
-            render: () => (
-              <Tag color="blue">{t('strategies.whitelist')}</Tag>
-            ),
-          },
-          ...baseColumns.slice(2)
-        ];
-      case 'timeout':
-        return [
-          ...baseColumns.slice(0, 2),
-          {
-            title: t('strategies.timeouts'),
-            key: 'timeouts',
-            render: (_: any, record: TimeoutConfig) => (
-              <div>
-                <div><strong>{t('strategies.connectTimeout')}:</strong> {record.connectTimeout} ms</div>
-                <div><strong>{t('strategies.responseTimeout')}:</strong> {record.responseTimeout} ms</div>
-              </div>
-            ),
-          },
-          ...baseColumns.slice(2)
-        ];
-      case 'circuitBreaker':
-        return [
-          ...baseColumns.slice(0, 2),
-          {
-            title: t('strategies.circuitBreakerParams'),
-            key: 'circuitBreakerParams',
-            render: (_: any, record: CircuitBreakerConfig) => (
-              <div>
-                <div><strong>{t('strategies.failureRateThreshold')}:</strong> {record.failureRateThreshold}%</div>
-                <div><strong>{t('strategies.minimumNumberOfCalls')}:</strong> {record.minimumNumberOfCalls}</div>
-                <div><strong>{t('strategies.waitDurationInOpenState')}:</strong> {record.waitDurationInOpenState} ms</div>
-              </div>
-            ),
-          },
-          ...baseColumns.slice(2)
-        ];
-      default:
-        return baseColumns;
+  const handleEnable = async (strategy: StrategyDefinition) => {
+    try {
+      const response = await api.post(`/api/strategies/${strategy.strategyId}/enable`);
+      if (response.data.code === 200) {
+        message.success(t('message.enable_success'));
+        loadStrategies();
+      } else {
+        message.error(response.data.message);
+      }
+    } catch (error: any) {
+      message.error(error.response?.data?.message || error.message);
     }
   };
 
-  const getDataSource = (strategyType: string) => {
-    switch (strategyType) {
-      case 'rateLimiter':
-        return strategies.rateLimiters || [];
-      case 'ipFilter':
-        return strategies.ipFilters || [];
-      case 'timeout':
-        return strategies.timeouts || [];
-      case 'circuitBreaker':
-        return strategies.circuitBreakers || [];
-      default:
-        return [];
+  const handleDisable = async (strategy: StrategyDefinition) => {
+    try {
+      const response = await api.post(`/api/strategies/${strategy.strategyId}/disable`);
+      if (response.data.code === 200) {
+        message.success(t('message.disable_success'));
+        loadStrategies();
+      } else {
+        message.error(response.data.message);
+      }
+    } catch (error: any) {
+      message.error(error.response?.data?.message || error.message);
     }
   };
 
-  const getCreateFormItems = () => {
-    switch (activeTab) {
-      case 'rateLimiter':
+  const openEditDrawer = (strategy: StrategyDefinition) => {
+    setSelectedStrategy(strategy);
+    editForm.setFieldsValue({
+      strategyName: strategy.strategyName,
+      scope: strategy.scope,
+      routeId: strategy.routeId,
+      priority: strategy.priority,
+      enabled: strategy.enabled,
+      description: strategy.description,
+      ...strategy.config,
+    });
+    setEditDrawerVisible(true);
+  };
+
+  const getActionMenu = (strategy: StrategyDefinition): MenuProps['items'] => [
+    { key: 'edit', icon: <EditOutlined />, label: t('common.edit'), onClick: () => openEditDrawer(strategy) },
+    { type: 'divider' },
+    strategy.enabled
+      ? { key: 'disable', icon: <StopOutlined />, label: t('common.disable'), onClick: () => handleDisable(strategy) }
+      : { key: 'enable', icon: <PlayCircleOutlined />, label: t('common.enable'), onClick: () => handleEnable(strategy) },
+    { type: 'divider' },
+    { key: 'delete', icon: <DeleteOutlined />, label: t('common.delete'), danger: true, onClick: () => handleDelete(strategy) },
+  ];
+
+  const renderConfigFields = (strategyType: string, form: any) => {
+    switch (strategyType) {
+      case 'RATE_LIMITER':
         return (
           <>
-            <Form.Item
-              name="routeId"
-              label={t('strategies.routeId')}
-              rules={[{ required: true, message: t('strategies.routeId_required') }]}
-            >
-              <Input placeholder={t('strategies.routeId_placeholder')} />
+            <Form.Item name="qps" label={t('strategy.config.qps')} initialValue={100}>
+              <Input type="number" />
             </Form.Item>
-            <Form.Item
-              name="limit"
-              label={t('strategies.limit')}
-              rules={[{ required: true, message: t('strategies.limit_required') }]}
-            >
-              <Input placeholder={t('strategies.limit_placeholder')} />
+            <Form.Item name="burstCapacity" label={t('strategy.config.burst_capacity')} initialValue={200}>
+              <Input type="number" />
             </Form.Item>
-            <Form.Item
-              name="windowSize"
-              label={t('strategies.windowSize')}
-              rules={[{ required: true, message: t('strategies.windowSize_required') }]}
-            >
-              <Input placeholder={t('strategies.windowSize_placeholder')} />
+            <Form.Item name="timeUnit" label={t('strategy.config.time_unit')} initialValue="second">
+              <Select>
+                <Select.Option value="second">{t('strategy.config.second')}</Select.Option>
+                <Select.Option value="minute">{t('strategy.config.minute')}</Select.Option>
+                <Select.Option value="hour">{t('strategy.config.hour')}</Select.Option>
+              </Select>
             </Form.Item>
           </>
         );
-      case 'ipFilter':
+      case 'IP_FILTER':
         return (
           <>
-            <Form.Item
-              name="routeId"
-              label={t('strategies.routeId')}
-              rules={[{ required: true, message: t('strategies.routeId_required') }]}
-            >
-              <Input placeholder={t('strategies.routeId_placeholder')} />
+            <Form.Item name="mode" label={t('strategy.config.filter_mode')} initialValue="blacklist">
+              <Select>
+                <Select.Option value="blacklist">{t('strategy.config.blacklist')}</Select.Option>
+                <Select.Option value="whitelist">{t('strategy.config.whitelist')}</Select.Option>
+              </Select>
             </Form.Item>
-            <Form.Item
-              name="whitelist"
-              label={t('strategies.whitelist')}
-            >
-              <Input.TextArea placeholder={t('strategies.whitelist_placeholder')} />
-            </Form.Item>
-            <Form.Item
-              name="blacklist"
-              label={t('strategies.blacklist')}
-            >
-              <Input.TextArea placeholder={t('strategies.blacklist_placeholder')} />
+            <Form.Item name="ipList" label={t('strategy.config.ip_list')}>
+              <Input.TextArea rows={3} placeholder="192.168.1.1, 10.0.0.0/24" />
             </Form.Item>
           </>
         );
-      case 'timeout':
+      case 'TIMEOUT':
         return (
           <>
-            <Form.Item
-              name="routeId"
-              label={t('strategies.routeId')}
-              rules={[{ required: true, message: t('strategies.routeId_required') }]}
-            >
-              <Input placeholder={t('strategies.routeId_placeholder')} />
+            <Form.Item name="connectTimeout" label={t('strategy.config.connect_timeout')} initialValue={5000}>
+              <Input type="number" addonAfter="ms" />
             </Form.Item>
-            <Form.Item
-              name="connectTimeout"
-              label={t('strategies.connectTimeout')}
-              rules={[{ required: true, message: t('strategies.connectTimeout_required') }]}
-            >
-              <Input placeholder={t('strategies.connectTimeout_placeholder')} />
-            </Form.Item>
-            <Form.Item
-              name="responseTimeout"
-              label={t('strategies.responseTimeout')}
-              rules={[{ required: true, message: t('strategies.responseTimeout_required') }]}
-            >
-              <Input placeholder={t('strategies.responseTimeout_placeholder')} />
+            <Form.Item name="responseTimeout" label={t('strategy.config.response_timeout')} initialValue={30000}>
+              <Input type="number" addonAfter="ms" />
             </Form.Item>
           </>
         );
-      case 'circuitBreaker':
+      case 'CIRCUIT_BREAKER':
         return (
           <>
-            <Form.Item
-              name="routeId"
-              label={t('strategies.routeId')}
-              rules={[{ required: true, message: t('strategies.routeId_required') }]}
-            >
-              <Input placeholder={t('strategies.routeId_placeholder')} />
+            <Form.Item name="failureRateThreshold" label={t('strategy.config.failure_rate')} initialValue={50}>
+              <Input type="number" addonAfter="%" />
             </Form.Item>
-            <Form.Item
-              name="failureRateThreshold"
-              label={t('strategies.failureRateThreshold')}
-              rules={[{ required: true, message: t('strategies.failureRateThreshold_required') }]}
-            >
-              <Input placeholder={t('strategies.failureRateThreshold_placeholder')} />
+            <Form.Item name="waitDurationInOpenState" label={t('strategy.config.wait_duration')} initialValue={30000}>
+              <Input type="number" addonAfter="ms" />
             </Form.Item>
-            <Form.Item
-              name="minimumNumberOfCalls"
-              label={t('strategies.minimumNumberOfCalls')}
-              rules={[{ required: true, message: t('strategies.minimumNumberOfCalls_required') }]}
-            >
-              <Input placeholder={t('strategies.minimumNumberOfCalls_placeholder')} />
+            <Form.Item name="slidingWindowSize" label={t('strategy.config.sliding_window')} initialValue={10}>
+              <Input type="number" />
             </Form.Item>
-            <Form.Item
-              name="waitDurationInOpenState"
-              label={t('strategies.waitDurationInOpenState')}
-              rules={[{ required: true, message: t('strategies.waitDurationInOpenState_required') }]}
-            >
-              <Input placeholder={t('strategies.waitDurationInOpenState_placeholder')} />
+          </>
+        );
+      case 'AUTH':
+        return (
+          <>
+            <Form.Item name="authType" label={t('strategy.config.auth_type')} initialValue="JWT">
+              <Select>
+                <Select.Option value="JWT">JWT</Select.Option>
+                <Select.Option value="API_KEY">API Key</Select.Option>
+                <Select.Option value="OAUTH2">OAuth2</Select.Option>
+              </Select>
+            </Form.Item>
+            <Form.Item name="secretKey" label={t('strategy.config.secret_key')}>
+              <Input.Password />
             </Form.Item>
           </>
         );
@@ -450,351 +395,222 @@ const StrategiesPage: React.FC = () => {
     }
   };
 
-  const items = [
-    {
-      key: 'rateLimiter',
-      label: t('strategies.rateLimiter'),
-      children: (
-        <Card bordered={false}>
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: '40px' }}>
-              <Spin tip={t('common.loading')} size="large" />
-            </div>
-          ) : (
-            <Table
-              columns={getColumns('rateLimiter')}
-              dataSource={getDataSource('rateLimiter')}
-              rowKey={(record) => record.routeId}
-              pagination={{ pageSize: 10, showSizeChanger: true }}
-              scroll={{ x: 800 }}
-              locale={{
-                emptyText: (
-                  <Empty 
-                    description={<span style={{ fontSize: '14px', color: '#64748B' }}>{t('strategies.empty_description')}</span>}
-                    image={<SafetyOutlined style={{ fontSize: 64, color: '#CBD5E1' }} />}
-                  >
-                    <Button 
-                      type="primary" 
-                      icon={<PlusOutlined />}
-                      size="large"
-                      onClick={() => setCreateDrawerVisible(true)}
-                      className="gradient-button"
-                    >
-                      {t('strategies.create_first_button')}
-                    </Button>
-                  </Empty>
-                )
-              }}
-            />
-          )}
-        </Card>
-      ),
-    },
-    {
-      key: 'ipFilter',
-      label: t('strategies.tab_ip_filter'),
-      children: (
-        <Card bordered={false}>
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: '40px' }}>
-              <Spin tip={t('common.loading')} size="large" />
-            </div>
-          ) : (
-            <Table
-              columns={getColumns('ipFilter')}
-              dataSource={getDataSource('ipFilter')}
-              rowKey={(record) => record.routeId}
-              pagination={{ pageSize: 10, showSizeChanger: true }}
-              scroll={{ x: 800 }}
-              locale={{
-                emptyText: (
-                  <Empty 
-                    description={<span style={{ fontSize: '14px', color: '#64748B' }}>{t('strategies.empty_description')}</span>}
-                    image={<SafetyOutlined style={{ fontSize: 64, color: '#CBD5E1' }} />}
-                  >
-                    <Button 
-                      type="primary" 
-                      icon={<PlusOutlined />}
-                      size="large"
-                      onClick={() => setCreateDrawerVisible(true)}
-                      className="gradient-button"
-                    >
-                      {t('strategies.create_first_button')}
-                    </Button>
-                  </Empty>
-                )
-              }}
-            />
-          )}
-        </Card>
-      ),
-    },
-    {
-      key: 'timeout',
-      label: t('strategies.tab_timeout'),
-      children: (
-        <Card bordered={false}>
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: '40px' }}>
-              <Spin tip={t('common.loading')} size="large" />
-            </div>
-          ) : (
-            <Table
-              columns={getColumns('timeout')}
-              dataSource={getDataSource('timeout')}
-              rowKey={(record) => record.routeId}
-              pagination={{ pageSize: 10, showSizeChanger: true }}
-              scroll={{ x: 800 }}
-              locale={{
-                emptyText: (
-                  <Empty 
-                    description={<span style={{ fontSize: '14px', color: '#64748B' }}>{t('strategies.empty_description')}</span>}
-                    image={<SafetyOutlined style={{ fontSize: 64, color: '#CBD5E1' }} />}
-                  >
-                    <Button 
-                      type="primary" 
-                      icon={<PlusOutlined />}
-                      size="large"
-                      onClick={() => setCreateDrawerVisible(true)}
-                      className="gradient-button"
-                    >
-                      {t('strategies.create_first_button')}
-                    </Button>
-                  </Empty>
-                )
-              }}
-            />
-          )}
-        </Card>
-      ),
-    },
-    {
-      key: 'circuitBreaker',
-      label: t('strategies.tab_circuit_breaker'),
-      children: (
-        <Card bordered={false}>
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: '40px' }}>
-              <Spin tip={t('common.loading')} size="large" />
-            </div>
-          ) : (
-            <Table
-              columns={getColumns('circuitBreaker')}
-              dataSource={getDataSource('circuitBreaker')}
-              rowKey={(record) => record.routeId}
-              pagination={{ pageSize: 10, showSizeChanger: true }}
-              scroll={{ x: 800 }}
-              locale={{
-                emptyText: (
-                  <Empty 
-                    description={<span style={{ fontSize: '14px', color: '#64748B' }}>{t('strategies.empty_description')}</span>}
-                    image={<SafetyOutlined style={{ fontSize: 64, color: '#CBD5E1' }} />}
-                  >
-                    <Button 
-                      type="primary" 
-                      icon={<PlusOutlined />}
-                      size="large"
-                      onClick={() => setCreateDrawerVisible(true)}
-                      className="gradient-button"
-                    >
-                      {t('strategies.create_first_button')}
-                    </Button>
-                  </Empty>
-                )
-              }}
-            />
-          )}
-        </Card>
-      ),
-    },
-    {
-      key: 'tracing',
-      label: t('strategies.tab_tracing'),
-      children: (
-        <Card bordered={false}>
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: '40px' }}>
-              <Spin tip={t('common.loading')} size="large" />
-            </div>
-          ) : (
-            <Table
-              columns={getColumns('tracing')}
-              dataSource={getDataSource('tracing')}
-              rowKey={(record) => record.routeId}
-              pagination={{ pageSize: 10, showSizeChanger: true }}
-              scroll={{ x: 800 }}
-              locale={{
-                emptyText: (
-                  <Empty 
-                    description={<span style={{ fontSize: '14px', color: '#64748B' }}>{t('strategies.empty_description')}</span>}
-                    image={<SafetyOutlined style={{ fontSize: 64, color: '#CBD5E1' }} />}
-                  >
-                    <Button 
-                      type="primary" 
-                      icon={<PlusOutlined />}
-                      size="large"
-                      onClick={() => setCreateDrawerVisible(true)}
-                      className="gradient-button"
-                    >
-                      {t('strategies.create_first_button')}
-                    </Button>
-                  </Empty>
-                )
-              }}
-            />
-          )}
-        </Card>
-      ),
-    },
-    {
-      key: 'auth',
-      label: t('strategies.tab_auth'),
-      children: (
-        <Card bordered={false}>
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: '40px' }}>
-              <Spin tip={t('common.loading')} size="large" />
-            </div>
-          ) : (
-            <Table
-              columns={getColumns('auth')}
-              dataSource={getDataSource('auth')}
-              rowKey={(record) => record.routeId}
-              pagination={{ pageSize: 10, showSizeChanger: true }}
-              scroll={{ x: 800 }}
-              locale={{
-                emptyText: (
-                  <Empty 
-                    description={<span style={{ fontSize: '14px', color: '#64748B' }}>{t('strategies.empty_description')}</span>}
-                    image={<SafetyOutlined style={{ fontSize: 64, color: '#CBD5E1' }} />}
-                  >
-                    <Button 
-                      type="primary" 
-                      icon={<PlusOutlined />}
-                      size="large"
-                      onClick={() => setCreateDrawerVisible(true)}
-                      className="gradient-button"
-                    >
-                      {t('strategies.create_first_button')}
-                    </Button>
-                  </Empty>
-                )
-              }}
-            />
-          )}
-        </Card>
-      ),
-    },
-  ];
-
-
-
   return (
-    <div className="page-container">
-      {/* Page Header */}
-      <div className="page-header">
-        <div className="page-title-group">
-          <h2>{t('strategies.page_title')}</h2>
-          <p>{t('strategies.page_subtitle')}</p>
+    <div className="strategies-page">
+      {/* Stats Bar */}
+      <div className="stats-bar">
+        <div className="stat-item">
+          <div className="stat-value">{totalStrategies}</div>
+          <div className="stat-label">{t('strategy.stats_total')}</div>
         </div>
-        <div className="page-actions">
-          <Dropdown menu={{ items: [
-            {
-              key: 'rateLimiter',
-              label: t('strategies.tab_rate_limiter'),
-              onClick: () => {
-                setActiveTab('rateLimiter');
-                setCreateDrawerVisible(true);
-              }
-            },
-            {
-              key: 'ipFilter',
-              label: t('strategies.tab_ip_filter'),
-              onClick: () => {
-                setActiveTab('ipFilter');
-                setCreateDrawerVisible(true);
-              }
-            },
-            {
-              key: 'timeout',
-              label: t('strategies.tab_timeout'),
-              onClick: () => {
-                setActiveTab('timeout');
-                setCreateDrawerVisible(true);
-              }
-            },
-            {
-              key: 'circuitBreaker',
-              label: t('strategies.tab_circuit_breaker'),
-              onClick: () => {
-                setActiveTab('circuitBreaker');
-                setCreateDrawerVisible(true);
-              }
-            },
-            {
-              key: 'tracing',
-              label: t('strategies.tab_tracing'),
-              onClick: () => {
-                setActiveTab('tracing');
-                setCreateDrawerVisible(true);
-              }
-            },
-            {
-              key: 'auth',
-              label: t('strategies.tab_auth'),
-              onClick: () => {
-                setActiveTab('auth');
-                setCreateDrawerVisible(true);
-              }
-            },
-          ]}}>
-            <Button 
-              type="primary" 
-              icon={<PlusOutlined />}
-              size="large"
-            >
-              {t('strategies.create_policy_button')}
-            </Button>
-          </Dropdown>
+        <Divider type="vertical" className="stat-divider" />
+        <div className="stat-item">
+          <div className="stat-value text-green-600">{enabledStrategies}</div>
+          <div className="stat-label">{t('strategy.stats_enabled')}</div>
+        </div>
+        <Divider type="vertical" className="stat-divider" />
+        <div className="stat-item">
+          <div className="stat-value text-blue-600">{globalStrategies}</div>
+          <div className="stat-label">{t('strategy.stats_global')}</div>
         </div>
       </div>
 
-      {/* Tabs with Premium Style */}
-      <Tabs 
-        activeKey={activeTab} 
-        onChange={setActiveTab}
-        items={items}
-        className="premium-tabs"
-      />
+      {/* Header */}
+      <div className="page-header-modern">
+        <div className="page-header-left">
+          <Title level={3} className="page-title-main">{t('strategy.title')}</Title>
+          <Text type="secondary">{t('strategy.description')}</Text>
+        </div>
+        <div className="page-header-right">
+          <Select value={filterType} onChange={setFilterType} style={{ width: 140 }}>
+            <Select.Option value="all">{t('common.all_types')}</Select.Option>
+            <Select.Option value="RATE_LIMITER">{t('strategy.type.rate_limiter')}</Select.Option>
+            <Select.Option value="IP_FILTER">{t('strategy.type.ip_filter')}</Select.Option>
+            <Select.Option value="TIMEOUT">{t('strategy.type.timeout')}</Select.Option>
+            <Select.Option value="CIRCUIT_BREAKER">{t('strategy.type.circuit_breaker')}</Select.Option>
+            <Select.Option value="AUTH">{t('strategy.type.auth')}</Select.Option>
+          </Select>
+          <Select value={filterScope} onChange={setFilterScope} style={{ width: 140 }}>
+            <Select.Option value="all">{t('common.all_scopes')}</Select.Option>
+            <Select.Option value="GLOBAL">{t('strategy.scope_global')}</Select.Option>
+            <Select.Option value="ROUTE">{t('strategy.scope_route')}</Select.Option>
+          </Select>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateDrawerVisible(true)} className="create-btn">
+            {t('strategy.create')}
+          </Button>
+        </div>
+      </div>
 
-      {/* Create Strategy Drawer */}
+      {/* Strategies Grid */}
+      <Spin spinning={loading}>
+        {filteredStrategies.length === 0 ? (
+          <Card className="empty-card">
+            <Empty
+              image={<ThunderboltOutlined className="empty-icon" />}
+              description={<span className="empty-text">{t('strategy.empty')}</span>}
+            >
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateDrawerVisible(true)}>
+                {t('strategy.create_first')}
+              </Button>
+            </Empty>
+          </Card>
+        ) : (
+          <div className="strategies-grid">
+            {filteredStrategies.map((strategy) => (
+              <Card key={strategy.strategyId} className={`strategy-card ${!strategy.enabled ? 'strategy-card-disabled' : ''}`} hoverable>
+                <div className="strategy-card-header">
+                  <div className="strategy-icon" style={{ background: `${getStrategyTypeColor(strategy.strategyType)}20`, color: getStrategyTypeColor(strategy.strategyType) }}>
+                    {getStrategyTypeIcon(strategy.strategyType)}
+                  </div>
+                  <div className="strategy-info">
+                    <Text strong className="strategy-name">{strategy.strategyName}</Text>
+                    <Tag color={getStrategyTypeColor(strategy.strategyType)} className="strategy-type-tag">
+                      {getStrategyTypeLabel(strategy.strategyType)}
+                    </Tag>
+                  </div>
+                  <Dropdown menu={{ items: getActionMenu(strategy) }} trigger={['click']} placement="bottomRight">
+                    <Button type="text" icon={<MoreOutlined />} className="action-btn" />
+                  </Dropdown>
+                </div>
+
+                <div className="strategy-meta">
+                  <Badge status={strategy.enabled ? 'success' : 'default'} text={strategy.enabled ? t('common.enabled') : t('common.disabled')} />
+                  <Tag icon={strategy.scope === 'GLOBAL' ? <GlobalOutlined /> : <ApiOutlined />} color={strategy.scope === 'GLOBAL' ? 'blue' : 'green'}>
+                    {strategy.scope === 'GLOBAL' ? t('strategy.scope_global') : t('strategy.scope_route')}
+                  </Tag>
+                </div>
+
+                {strategy.scope === 'ROUTE' && strategy.routeId && (
+                  <div className="strategy-route">
+                    <Text type="secondary">{t('strategy.bound_route')}:</Text>
+                    <Text code className="route-id">{strategy.routeId.substring(0, 16)}...</Text>
+                  </div>
+                )}
+
+                <div className="strategy-config">
+                  {Object.entries(strategy.config || {}).slice(0, 3).map(([key, value]) => (
+                    <div key={key} className="config-item">
+                      <Text type="secondary" className="config-key">{key}:</Text>
+                      <Text className="config-value">{String(value).substring(0, 20)}{String(value).length > 20 ? '...' : ''}</Text>
+                    </div>
+                  ))}
+                </div>
+
+                {strategy.description && (
+                  <div className="strategy-description">
+                    <Text type="secondary" ellipsis>{strategy.description}</Text>
+                  </div>
+                )}
+              </Card>
+            ))}
+          </div>
+        )}
+      </Spin>
+
+      {/* Create Drawer */}
       <Drawer
-        title={`${t('strategies.create')} - ${t(`strategies.${activeTab}`)}`}
+        title={t('strategy.create')}
         placement="right"
-        width={600}
+        width={480}
         open={createDrawerVisible}
-        onClose={() => {
-          setCreateDrawerVisible(false);
-          createForm.resetFields();
-        }}
+        onClose={() => { setCreateDrawerVisible(false); createForm.resetFields(); }}
       >
-        <Form
-          form={createForm}
-          layout="vertical"
-          onFinish={handleCreate}
-        >
-          {getCreateFormItems()}
-
-          <Form.Item>
-            <Space>
-              <Button type="primary" htmlType="submit" size="large">
-                {t('common.create')}
-              </Button>
-              <Button onClick={() => setCreateDrawerVisible(false)} size="large">
-                {t('common.cancel')}
-              </Button>
-            </Space>
+        <Form form={createForm} layout="vertical" onFinish={handleCreate}>
+          <Form.Item name="strategyName" label={t('strategy.name')} rules={[{ required: true }]}>
+            <Input placeholder={t('strategy.name_placeholder')} />
           </Form.Item>
+          <Form.Item name="strategyType" label={t('strategy.type')} rules={[{ required: true }]}>
+            <Select placeholder={t('strategy.type_placeholder')}>
+              <Select.Option value="RATE_LIMITER">{t('strategy.type.rate_limiter')}</Select.Option>
+              <Select.Option value="IP_FILTER">{t('strategy.type.ip_filter')}</Select.Option>
+              <Select.Option value="TIMEOUT">{t('strategy.type.timeout')}</Select.Option>
+              <Select.Option value="CIRCUIT_BREAKER">{t('strategy.type.circuit_breaker')}</Select.Option>
+              <Select.Option value="AUTH">{t('strategy.type.auth')}</Select.Option>
+            </Select>
+          </Form.Item>
+          <Form.Item name="scope" label={t('strategy.scope')} initialValue="GLOBAL">
+            <Radio.Group>
+              <Radio.Button value="GLOBAL"><GlobalOutlined /> {t('strategy.scope_global')}</Radio.Button>
+              <Radio.Button value="ROUTE"><ApiOutlined /> {t('strategy.scope_route')}</Radio.Button>
+            </Radio.Group>
+          </Form.Item>
+          <Form.Item noStyle shouldUpdate>
+            {({ getFieldValue }) => {
+              const scope = getFieldValue('scope');
+              if (scope === 'ROUTE') {
+                return (
+                  <Form.Item name="routeId" label={t('strategy.route_id')} rules={[{ required: true }]}>
+                    <Input placeholder={t('strategy.route_id_placeholder')} />
+                  </Form.Item>
+                );
+              }
+              return null;
+            }}
+          </Form.Item>
+          <Form.Item noStyle shouldUpdate>
+            {({ getFieldValue }) => renderConfigFields(getFieldValue('strategyType'), createForm)}
+          </Form.Item>
+          <Form.Item name="priority" label={t('strategy.priority')} initialValue={100}>
+            <Input type="number" />
+          </Form.Item>
+          <Form.Item name="description" label={t('strategy.description_label')}>
+            <Input.TextArea rows={2} />
+          </Form.Item>
+          <Form.Item name="enabled" label={t('strategy.enabled')} valuePropName="checked" initialValue={true}>
+            <Switch checkedChildren={t('common.enabled')} unCheckedChildren={t('common.disabled')} />
+          </Form.Item>
+          <div className="drawer-footer">
+            <Button onClick={() => setCreateDrawerVisible(false)}>{t('common.cancel')}</Button>
+            <Button type="primary" htmlType="submit">{t('common.create')}</Button>
+          </div>
+        </Form>
+      </Drawer>
+
+      {/* Edit Drawer */}
+      <Drawer
+        title={t('strategy.edit')}
+        placement="right"
+        width={480}
+        open={editDrawerVisible}
+        onClose={() => { setEditDrawerVisible(false); editForm.resetFields(); setSelectedStrategy(null); }}
+      >
+        <Form form={editForm} layout="vertical" onFinish={handleUpdate}>
+          <Form.Item name="strategyName" label={t('strategy.name')} rules={[{ required: true }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="scope" label={t('strategy.scope')}>
+            <Radio.Group>
+              <Radio.Button value="GLOBAL"><GlobalOutlined /> {t('strategy.scope_global')}</Radio.Button>
+              <Radio.Button value="ROUTE"><ApiOutlined /> {t('strategy.scope_route')}</Radio.Button>
+            </Radio.Group>
+          </Form.Item>
+          <Form.Item noStyle shouldUpdate>
+            {({ getFieldValue }) => {
+              const scope = getFieldValue('scope');
+              if (scope === 'ROUTE') {
+                return (
+                  <Form.Item name="routeId" label={t('strategy.route_id')} rules={[{ required: true }]}>
+                    <Input />
+                  </Form.Item>
+                );
+              }
+              return null;
+            }}
+          </Form.Item>
+          {selectedStrategy && renderConfigFields(selectedStrategy.strategyType, editForm)}
+          <Form.Item name="priority" label={t('strategy.priority')}>
+            <Input type="number" />
+          </Form.Item>
+          <Form.Item name="description" label={t('strategy.description_label')}>
+            <Input.TextArea rows={2} />
+          </Form.Item>
+          <Form.Item name="enabled" label={t('strategy.enabled')} valuePropName="checked">
+            <Switch checkedChildren={t('common.enabled')} unCheckedChildren={t('common.disabled')} />
+          </Form.Item>
+          <div className="drawer-footer">
+            <Button onClick={() => setEditDrawerVisible(false)}>{t('common.cancel')}</Button>
+            <Button type="primary" htmlType="submit">{t('common.update')}</Button>
+          </div>
         </Form>
       </Drawer>
     </div>

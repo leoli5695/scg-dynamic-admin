@@ -16,6 +16,13 @@ public interface ConfigCenterService {
     String getConfig(String dataId, String group);
 
     /**
+     * Check if configuration exists.
+     */
+    default boolean configExists(String dataId) {
+        return getConfig(dataId, "DEFAULT_GROUP") != null;
+    }
+
+    /**
      * Get all configuration data as Map.
      */
     Map<String, Object> getAllConfigData(String dataId, String group);

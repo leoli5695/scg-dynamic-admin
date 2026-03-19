@@ -1,18 +1,23 @@
 package com.leoli.gateway.refresher;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.center.spi.ConfigCenterService;
 import com.leoli.gateway.manager.StrategyManager;
+import com.leoli.gateway.model.StrategyDefinition;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
  * Strategy configuration refresher.
- * Listens to gateway-plugins.json changes and refreshes plugin strategies.
+ * Listens to per-strategy data IDs: config.gateway.strategy-{strategyId}
  *
  * @author leoli
  */
@@ -20,15 +25,16 @@ import org.springframework.stereotype.Component;
 @Component
 public class StrategyRefresher {
 
+    private static final String GROUP = "DEFAULT_GROUP";
+    private static final String STRATEGY_PREFIX = "config.gateway.strategy-";
+    private static final String STRATEGIES_INDEX = "config.gateway.metadata.strategies-index";
+
     private final StrategyManager strategyManager;
     private final ConfigCenterService configService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    private static final String GROUP = "DEFAULT_GROUP";
-    private static final String DATA_ID = "gateway-plugins.json";
-
-    // Store listener reference for proper removal on destroy
-    private ConfigCenterService.ConfigListener listener;
+    // Track active listeners: strategyId -> listener
+    private final Map<String, ConfigCenterService.ConfigListener> activeListeners = new ConcurrentHashMap<>();
 
     @Autowired
     public StrategyRefresher(StrategyManager strategyManager, ConfigCenterService configService) {
@@ -37,176 +43,124 @@ public class StrategyRefresher {
         log.info("StrategyRefresher initialized for config center: {}", configService.getCenterType());
     }
 
-    /**
-     * Initialize listener after bean construction
-     */
     @PostConstruct
     public void init() {
-        // Register listener to Nacos config center
-        listener = (dataId, group, newContent) -> {
-            log.info("Strategy config change detected: {}", dataId);
-            onConfigChange(dataId, newContent);
-        };
-        configService.addListener(DATA_ID, GROUP, listener);
-        log.info("StrategyRefresher registered listener for {}", DATA_ID);
-
-        // Load initial configuration
-        loadInitialConfig();
+        log.info("StrategyRefresher: Loading initial strategies...");
+        loadInitialStrategies();
     }
 
-    /**
-     * Cleanup before bean destruction
-     */
     @PreDestroy
     public void destroy() {
-        if (listener != null) {
-            configService.removeListener(DATA_ID, GROUP, listener);
-            log.info("StrategyRefresher removed listener for {}", DATA_ID);
+        // Remove all listeners
+        for (Map.Entry<String, ConfigCenterService.ConfigListener> entry : activeListeners.entrySet()) {
+            String dataId = STRATEGY_PREFIX + entry.getKey();
+            configService.removeListener(dataId, GROUP, entry.getValue());
         }
+        activeListeners.clear();
+        log.info("StrategyRefresher: All listeners removed");
     }
 
     /**
-     * Load initial configuration on startup
+     * Load initial strategies from index.
      */
-    private void loadInitialConfig() {
+    private void loadInitialStrategies() {
         try {
-            String initialConfig = configService.getConfig(DATA_ID, GROUP);
-            if (initialConfig != null && !initialConfig.isBlank()) {
-                log.info("Loading initial strategy configuration");
-                onConfigChange(DATA_ID, initialConfig);
-            } else {
-                log.warn("No initial strategy configuration found");
+            // Load strategy index
+            String indexContent = configService.getConfig(STRATEGIES_INDEX, GROUP);
+            if (indexContent == null || indexContent.isBlank()) {
+                log.info("No strategies index found, starting with empty cache");
+                return;
             }
+
+            List<String> strategyIds = objectMapper.readValue(indexContent, new TypeReference<List<String>>() {});
+            log.info("Found {} strategies in index", strategyIds.size());
+
+            // Load each strategy
+            for (String strategyId : strategyIds) {
+                loadStrategy(strategyId);
+            }
+
+            log.info("StrategyRefresher: Loaded {} strategies", strategyManager.getStrategyCount());
         } catch (Exception e) {
-            log.error("Failed to load initial strategy configuration: {}", e.getMessage(), e);
+            log.error("Failed to load initial strategies: {}", e.getMessage(), e);
         }
     }
 
     /**
-     * Reload configuration from Nacos manually (fallback when cache is invalid)
+     * Load a single strategy and register listener.
      */
-    public void reloadConfigFromNacos() {
-        log.info("Manually reloading strategy configuration from Nacos");
+    private void loadStrategy(String strategyId) {
+        String dataId = STRATEGY_PREFIX + strategyId;
         try {
-            String config = configService.getConfig(DATA_ID, GROUP);
-            if (config != null && !config.isBlank()) {
-                log.info("Successfully reloaded strategy configuration from Nacos");
-                onConfigChange(DATA_ID, config);
-            } else {
-                log.warn("No strategy configuration found in Nacos during manual reload");
-                strategyManager.clearCache();
+            // Get strategy content
+            String content = configService.getConfig(dataId, GROUP);
+            if (content != null && !content.isBlank()) {
+                StrategyDefinition strategy = objectMapper.readValue(content, StrategyDefinition.class);
+                if (strategy != null && strategy.isEnabled()) {
+                    strategyManager.putStrategy(strategyId, strategy);
+                    log.debug("Loaded strategy: {} (type={})", strategyId, strategy.getStrategyType());
+                }
             }
+
+            // Register listener for this strategy
+            registerListener(strategyId);
         } catch (Exception e) {
-            log.error("Failed to reload strategy configuration from Nacos: {}", e.getMessage(), e);
+            log.error("Failed to load strategy {}: {}", strategyId, e.getMessage());
         }
     }
 
     /**
-     * Handle config change event
+     * Register listener for a strategy.
      */
-    private void onConfigChange(String dataId, String newContent) {
-        log.info("Config changed: {}", dataId);
-
-        try {
-            // Parse and validate config
-            JsonNode root = objectMapper.readTree(newContent);
-            validateConfig(root);
-
-            // Update StrategyManager
-            strategyManager.loadConfig(newContent);
-
-            // Log details
-            logStrategyDetails(root);
-
-            log.info("Config {} refreshed successfully", dataId);
-        } catch (Exception e) {
-            log.error("Failed to refresh config {}: {}", dataId, e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Validate configuration structure
-     */
-    private void validateConfig(JsonNode root) {
-        if (!root.has("plugins")) {
-            log.warn("Configuration missing 'plugins' node");
-        }
-
-        if (root.has("plugins") && !root.get("plugins").isObject()) {
-            throw new IllegalArgumentException("'plugins' must be an object");
-        }
-
-        // Validate plugins structure
-        if (root.has("plugins")) {
-            JsonNode pluginsNode = root.get("plugins");
-
-            // Validate rateLimiters array
-            if (pluginsNode.has("rateLimiters") && !pluginsNode.get("rateLimiters").isArray()) {
-                throw new IllegalArgumentException("'plugins.rateLimiters' must be an array");
-            }
-
-            // Validate customHeaders array
-            if (pluginsNode.has("customHeaders") && !pluginsNode.get("customHeaders").isArray()) {
-                throw new IllegalArgumentException("'plugins.customHeaders' must be an array");
-            }
-
-            // Validate ipFilters array
-            if (pluginsNode.has("ipFilters") && !pluginsNode.get("ipFilters").isArray()) {
-                throw new IllegalArgumentException("'plugins.ipFilters' must be an array");
-            }
-
-            // Validate timeouts array
-            if (pluginsNode.has("timeouts") && !pluginsNode.get("timeouts").isArray()) {
-                throw new IllegalArgumentException("'plugins.timeouts' must be an array");
-            }
-
-            // Validate circuitBreakers array
-            if (pluginsNode.has("circuitBreakers") && !pluginsNode.get("circuitBreakers").isArray()) {
-                throw new IllegalArgumentException("'plugins.circuitBreakers' must be an array");
-            }
-        }
-
-        log.debug("Strategy config validation passed");
-    }
-
-    /**
-     * Log detailed strategy information
-     */
-    private void logStrategyDetails(JsonNode root) {
-        if (!root.has("plugins")) {
+    private void registerListener(String strategyId) {
+        if (activeListeners.containsKey(strategyId)) {
             return;
         }
 
-        JsonNode pluginsNode = root.get("plugins");
+        String dataId = STRATEGY_PREFIX + strategyId;
+        ConfigCenterService.ConfigListener listener = (d, g, content) -> {
+            log.info("Strategy config changed: {}", dataId);
+            onStrategyChange(strategyId, content);
+        };
 
-        // Log rate limiters
-        if (pluginsNode.has("rateLimiters")) {
-            int count = pluginsNode.get("rateLimiters").size();
-            log.info("  Rate Limiters: {} configured", count);
-        }
+        configService.addListener(dataId, GROUP, listener);
+        activeListeners.put(strategyId, listener);
+        log.debug("Registered listener for strategy: {}", strategyId);
+    }
 
-        // Log custom headers
-        if (pluginsNode.has("customHeaders")) {
-            int count = pluginsNode.get("customHeaders").size();
-            log.info("  Custom Headers: {} configured", count);
+    /**
+     * Handle strategy config change.
+     */
+    private void onStrategyChange(String strategyId, String content) {
+        try {
+            if (content == null || content.isBlank()) {
+                // Strategy was deleted
+                strategyManager.removeStrategy(strategyId);
+                activeListeners.remove(strategyId);
+                log.info("Strategy removed: {}", strategyId);
+            } else {
+                StrategyDefinition strategy = objectMapper.readValue(content, StrategyDefinition.class);
+                if (strategy != null && strategy.isEnabled()) {
+                    strategyManager.putStrategy(strategyId, strategy);
+                    log.info("Strategy updated: {} (type={})", strategyId, strategy.getStrategyType());
+                } else {
+                    // Strategy disabled
+                    strategyManager.removeStrategy(strategyId);
+                    log.info("Strategy disabled: {}", strategyId);
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to process strategy change for {}: {}", strategyId, e.getMessage());
         }
+    }
 
-        // Log IP filters
-        if (pluginsNode.has("ipFilters")) {
-            int count = pluginsNode.get("ipFilters").size();
-            log.info("  IP Filters: {} configured", count);
-        }
-
-        // Log timeouts
-        if (pluginsNode.has("timeouts")) {
-            int count = pluginsNode.get("timeouts").size();
-            log.info("  Timeouts: {} configured", count);
-        }
-
-        // Log circuit breakers
-        if (pluginsNode.has("circuitBreakers")) {
-            int count = pluginsNode.get("circuitBreakers").size();
-            log.info("  Circuit Breakers: {} configured", count);
-        }
+    /**
+     * Reload all strategies from config center.
+     */
+    public void reloadFromConfigCenter() {
+        log.info("Reloading all strategies from config center...");
+        strategyManager.clear();
+        activeListeners.clear();
+        loadInitialStrategies();
     }
 }

@@ -1,8 +1,6 @@
 package com.leoli.gateway.filter;
 
-import com.leoli.gateway.enums.StrategyType;
 import com.leoli.gateway.manager.StrategyManager;
-import com.leoli.gateway.model.TimeoutConfig;
 import com.leoli.gateway.util.RouteUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,26 +37,31 @@ public class TimeoutGlobalFilter implements GlobalFilter, Ordered {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String routeId = RouteUtils.getRouteId(exchange);
-        TimeoutConfig config = strategyManager.getConfig(StrategyType.TIMEOUT, routeId);
+        Map<String, Object> config = strategyManager.getTimeoutConfig(routeId);
 
-        if (config == null || !config.isEnabled()) {
+        if (config == null) {
             return chain.filter(exchange);
         }
 
+        Boolean enabled = (Boolean) config.get("enabled");
+        if (enabled == null || !enabled) {
+            return chain.filter(exchange);
+        }
+
+        int connectTimeout = config.get("connectTimeout") != null ? ((Number) config.get("connectTimeout")).intValue() : 5000;
+        int responseTimeout = config.get("responseTimeout") != null ? ((Number) config.get("responseTimeout")).intValue() : 30000;
+
         logger.debug("Applying timeout for route {}: connect={}ms, response={}ms",
-                routeId, config.getConnectTimeout(), config.getResponseTimeout());
+                routeId, connectTimeout, responseTimeout);
 
         // Modify route metadata; NettyRoutingFilter will read these two keys
         // and apply them to the Netty HttpClient
         Route route = exchange.getAttribute(GATEWAY_ROUTE_ATTR);
         if (route != null) {
             Map<String, Object> metadata = new HashMap<>(route.getMetadata());
-            // connect-timeout: Integer milliseconds
-            metadata.put(RouteMetadataUtils.CONNECT_TIMEOUT_ATTR, config.getConnectTimeout());
-            // response-timeout: Integer milliseconds (SCG per-route requires integer; NettyRoutingFilter reads via getLong())
-            metadata.put(RouteMetadataUtils.RESPONSE_TIMEOUT_ATTR, config.getResponseTimeout());
+            metadata.put(RouteMetadataUtils.CONNECT_TIMEOUT_ATTR, connectTimeout);
+            metadata.put(RouteMetadataUtils.RESPONSE_TIMEOUT_ATTR, responseTimeout);
 
-            // Rebuild Route with new metadata and write back to exchange attribute
             Route newRoute = Route.async()
                     .id(route.getId())
                     .uri(route.getUri())
@@ -75,9 +78,6 @@ public class TimeoutGlobalFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        // Must run before NettyRoutingFilter (Integer.MAX_VALUE)
-        // and after route matching (GATEWAY_ROUTE_ATTR is already set)
         return -200;
     }
 }
-

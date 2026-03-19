@@ -249,7 +249,7 @@ public class IPFilterGlobalFilter implements GlobalFilter, Ordered {
         String clientIp = getClientIp(exchange);
 
         // Get IP filter config for this route
-        Map<String, Object> ipFilterConfig = strategyManager.getConfig(StrategyType.IP_FILTER, routeId);
+        Map<String, Object> ipFilterConfig = strategyManager.getIPFilterConfig(routeId);
 
         if (ipFilterConfig != null && !ipFilterConfig.isEmpty()) {
             String mode = (String) ipFilterConfig.get("mode");
