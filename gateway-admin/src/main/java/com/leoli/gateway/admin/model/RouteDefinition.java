@@ -7,43 +7,104 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Route definition model
+ * Route definition model.
+ * Supports both single-service and multi-service routing (gray release).
  *
  * @author leoli
  */
 @Data
 public class RouteDefinition {
-    
+
     /**
      * Route ID
      */
     private String id;
-    
+
     /**
      * Route order
      */
     private int order = 0;
-    
+
     /**
-     * Target URI
+     * Target URI (for single-service mode, e.g., "lb://user-service").
+     * This field is kept for backward compatibility.
      */
     private String uri;
-    
+
+    /**
+     * Routing mode: SINGLE or MULTI.
+     * SINGLE: Route to a single service (traditional mode).
+     * MULTI: Route to multiple services with load balancing (gray release).
+     */
+    private RoutingMode mode = RoutingMode.SINGLE;
+
+    /**
+     * Single service ID (for SINGLE mode).
+     * Maps to a service in ServiceEntity.
+     */
+    private String serviceId;
+
+    /**
+     * Service bindings for multi-service routing (for MULTI mode).
+     * Each binding has serviceId, weight, and version.
+     */
+    private List<RouteServiceBinding> services = new ArrayList<>();
+
+    /**
+     * Gray release rules for multi-service routing.
+     * Rules are evaluated in order to determine target version.
+     */
+    private GrayRules grayRules;
+
     /**
      * Route predicate list
      */
     private List<PredicateDefinition> predicates = new ArrayList<>();
-    
+
     /**
      * Filter list
      */
     private List<FilterDefinition> filters = new ArrayList<>();
-    
+
     /**
      * Metadata
      */
     private Map<String, Object> metadata = new HashMap<>();
-    
+
+    /**
+     * Routing mode enumeration.
+     */
+    public enum RoutingMode {
+        /**
+         * Single service mode - route to one service.
+         */
+        SINGLE,
+
+        /**
+         * Multi-service mode - route to multiple services with load balancing.
+         */
+        MULTI
+    }
+
+    /**
+     * Check if this is multi-service mode.
+     */
+    public boolean isMultiService() {
+        return RoutingMode.MULTI.equals(mode) && services != null && !services.isEmpty();
+    }
+
+    /**
+     * Get all enabled service bindings with their weights.
+     */
+    public List<RouteServiceBinding> getEnabledServices() {
+        if (services == null) {
+            return new ArrayList<>();
+        }
+        return services.stream()
+                .filter(RouteServiceBinding::isEnabled)
+                .collect(java.util.stream.Collectors.toList());
+    }
+
     /**
      * Route predicate definition
      */
@@ -53,20 +114,20 @@ public class RouteDefinition {
          * Predicate name (e.g. Path, Host, Method)
          */
         private String name;
-        
+
         /**
          * Predicate arguments
          */
         private Map<String, String> args = new HashMap<>();
-        
+
         public PredicateDefinition() {}
-        
+
         public PredicateDefinition(String name, Map<String, String> args) {
             this.name = name;
             this.args = args;
         }
     }
-    
+
     /**
      * Filter definition
      */
@@ -76,14 +137,14 @@ public class RouteDefinition {
          * Filter name (e.g. StripPrefix, AddRequestHeader, RateLimiter)
          */
         private String name;
-        
+
         /**
          * Filter arguments
          */
         private Map<String, String> args = new HashMap<>();
-        
+
         public FilterDefinition() {}
-        
+
         public FilterDefinition(String name, Map<String, String> args) {
             this.name = name;
             this.args = args;

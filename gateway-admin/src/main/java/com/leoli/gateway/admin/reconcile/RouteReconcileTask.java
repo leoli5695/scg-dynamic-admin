@@ -4,6 +4,7 @@ import com.leoli.gateway.admin.center.ConfigCenterService;
 import com.leoli.gateway.admin.model.RouteDefinition;
 import com.leoli.gateway.admin.model.RouteEntity;
 import com.leoli.gateway.admin.repository.RouteRepository;
+import com.leoli.gateway.admin.service.AlertService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,19 +20,22 @@ import java.util.stream.Collectors;
 @Slf4j
 @Component
 public class RouteReconcileTask implements ReconcileTask<RouteEntity> {
-    
+
     private static final String ROUTE_PREFIX = "config.gateway.route-";
     private static final String ROUTES_INDEX = "config.gateway.metadata.routes-index";
     private static final String GROUP = "DEFAULT_GROUP";
-    
+
     @Autowired
     private RouteRepository routeRepository;
-    
+
     @Autowired
     private ConfigCenterService configCenterService;
-    
+
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private AlertService alertService;
     
     @Override
     public String getType() {
@@ -116,9 +120,14 @@ public class RouteReconcileTask implements ReconcileTask<RouteEntity> {
         List<String> routeIds = routeRepository.findAll().stream()
             .map(RouteEntity::getRouteId)  // Use routeId, not routeName
             .collect(Collectors.toList());
-        
+
         // Publish as JSON array directly, not stringified JSON
         configCenterService.publishConfig(ROUTES_INDEX, routeIds);
         log.debug("Routes index rebuilt with {} routes", routeIds.size());
+    }
+
+    @Override
+    public AlertService getAlertService() {
+        return alertService;
     }
 }

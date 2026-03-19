@@ -2,6 +2,7 @@ package com.leoli.gateway.refresher;
 
 import com.leoli.gateway.manager.RouteManager;
 import com.leoli.gateway.route.DynamicRouteDefinitionLocator;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.center.spi.ConfigCenterService;
 import jakarta.annotation.PostConstruct;
@@ -35,7 +36,8 @@ public class RouteRefresher {
     private final RouteManager routeManager;
     private final ConfigCenterService configService;
     private final DynamicRouteDefinitionLocator routeLocator;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     // Currently listening route IDs
     private final Set<String> listeningRouteIds = ConcurrentHashMap.newKeySet();
@@ -190,32 +192,46 @@ public class RouteRefresher {
      */
     private void addRouteListener(String routeId) {
         String routeDataId = ROUTE_PREFIX + routeId;
-        
-        // ✅ Check if route config exists in Nacos before adding listener
-        String routeConfig = configService.getConfig(routeDataId, GROUP);
-        if (routeConfig == null || routeConfig.isBlank()) {
-            log.warn("⚠️  Route config not found in Nacos: {}, skipping listener", routeDataId);
-            return;
+
+        // Try to load route config with retry
+        String routeConfig = null;
+        for (int i = 0; i < 3; i++) {
+            routeConfig = configService.getConfig(routeDataId, GROUP);
+            if (routeConfig != null && !routeConfig.isBlank()) {
+                break;
+            }
+            // Wait a bit before retry (Nacos eventual consistency)
+            try {
+                Thread.sleep(100 * (i + 1));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
         }
-        
-        // ✅ Load the route into RouteManager immediately
-        try {
-            RouteDefinition route = parseRoute(routeConfig);
-            routeManager.putRoute(routeId, route);
-            log.info("✅ Loaded route: {} -> {}", routeId, route.getUri());
-        } catch (Exception e) {
-            log.error("Failed to parse route: {}", routeId, e);
-            return;
+
+        if (routeConfig != null && !routeConfig.isBlank()) {
+            // Load the route into RouteManager immediately
+            try {
+                RouteDefinition route = parseRoute(routeConfig);
+                routeManager.putRoute(routeId, route);
+                log.info("✅ Loaded route: {} -> {} (route.id={}, predicates={})", 
+                    routeId, route.getUri(), route.getId(), route.getPredicates());
+            } catch (Exception e) {
+                log.error("Failed to parse route: {}", routeId, e);
+            }
+        } else {
+            log.warn("⚠️  Route config not found in Nacos after retries: {}, listener will wait for config", routeDataId);
         }
-        
+
+        // Always register listener (even if config not found yet, it may come later)
         ConfigCenterService.ConfigListener listener = (dataId, group, content) -> {
             onSingleRouteChange(routeId, content);
         };
-        
+
         configService.addListener(routeDataId, GROUP, listener);
         routeListeners.put(routeId, listener);
         listeningRouteIds.add(routeId);
-        
+
         log.info("✅ Added listener for route: {}", routeId);
     }
 

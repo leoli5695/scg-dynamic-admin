@@ -5,6 +5,7 @@ import com.leoli.gateway.admin.model.AuthConfig;
 import com.leoli.gateway.admin.model.StrategyEntity;
 import com.leoli.gateway.admin.repository.StrategyRepository;
 import com.leoli.gateway.admin.model.StrategyConfig;
+import com.leoli.gateway.admin.service.AlertService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,17 +22,20 @@ import java.util.Set;
 @Slf4j
 @Component
 public class StrategyReconcileTask implements ReconcileTask<StrategyEntity> {
-    
+
     private static final String PLUGINS_DATA_ID = "config.gateway.plugins.json";
-    
+
     @Autowired
     private StrategyRepository strategyRepository;
-    
+
     @Autowired
     private ConfigCenterService configCenterService;
-    
+
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private AlertService alertService;
     
     @Override
     public String getType() {
@@ -247,5 +251,10 @@ public class StrategyReconcileTask implements ReconcileTask<StrategyEntity> {
         } catch (Exception e) {
             log.error("Failed to process strategy {} from metadata", entity.getStrategyName(), e);
         }
+    }
+
+    @Override
+    public AlertService getAlertService() {
+        return alertService;
     }
 }

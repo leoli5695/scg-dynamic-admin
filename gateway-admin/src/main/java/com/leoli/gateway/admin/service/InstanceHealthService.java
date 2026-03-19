@@ -38,6 +38,10 @@ public class InstanceHealthService {
     private final ConcurrentHashMap<String, InstanceHealthDTO> healthStore =
             new ConcurrentHashMap<>();
 
+    // Track last alert time for each instance (avoid repeated alerts)
+    private final ConcurrentHashMap<String, Long> lastAlertTimeMap = new ConcurrentHashMap<>();
+    private static final long ALERT_COOLDOWN_MS = 300000; // 5 minutes
+
     @Value("${gateway.health.db-sync-enabled:false}")
     private boolean dbSyncEnabled;
 
@@ -62,27 +66,46 @@ public class InstanceHealthService {
             log.debug("Processing: {}:{}:{} [{}]", serviceId, ip, port,
                     health.isHealthy() ? "HEALTHY" : "UNHEALTHY");
 
-            // 1. Update local cache
+            // 1. Check if state changed (for alert deduplication)
             String key = buildKey(serviceId, ip, port);
+            InstanceHealthDTO previousHealth = healthStore.get(key);
+            boolean stateChanged = previousHealth == null ||
+                    previousHealth.isHealthy() != health.isHealthy();
+
+            // 2. Update local cache
             healthStore.put(key, health);
 
-            // 2. Sync to database (batch update)
+            // 3. Sync to database (batch update)
             if (dbSyncEnabled && healthRepository != null) {
                 syncToDatabase(health);
             }
 
-            // 3. Count statistics
+            // 4. Count statistics
             if (health.isHealthy()) {
                 healthyCount++;
             } else {
                 unhealthyCount++;
-                // 4. Send alert only if unhealthy
-                alertService.sendInstanceUnhealthyAlert(health);
+                // 5. Send alert only if state changed OR cooldown expired
+                if (stateChanged || shouldSendAlert(key)) {
+                    alertService.sendInstanceUnhealthyAlert(health);
+                    lastAlertTimeMap.put(key, System.currentTimeMillis());
+                }
             }
         }
 
         log.info("Synced {} health statuses from gateway {}: {} healthy, {} unhealthy",
                 healthList.size(), gatewayId, healthyCount, unhealthyCount);
+    }
+
+    /**
+     * Check if we should send an alert (cooldown expired).
+     */
+    private boolean shouldSendAlert(String key) {
+        Long lastAlertTime = lastAlertTimeMap.get(key);
+        if (lastAlertTime == null) {
+            return true;
+        }
+        return System.currentTimeMillis() - lastAlertTime > ALERT_COOLDOWN_MS;
     }
 
     /**

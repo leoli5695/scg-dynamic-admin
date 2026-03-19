@@ -1,5 +1,5 @@
 server:
-  port: 80
+  port: 8080
 
 spring:
   application:
@@ -116,6 +116,10 @@ gateway:
   health-check:
     endpoint: /actuator/health
     timeout: 3000
+    # Enable HTTP health check for application-level health verification
+    # TCP port check only verifies network connectivity, not application health
+    http-enabled: ${GATEWAY_HEALTH_CHECK_HTTP_ENABLED:true}
+    http-path: ${GATEWAY_HEALTH_CHECK_PATH:/actuator/health}
   
   # Rate Limiter Configuration
   rate-limiter:

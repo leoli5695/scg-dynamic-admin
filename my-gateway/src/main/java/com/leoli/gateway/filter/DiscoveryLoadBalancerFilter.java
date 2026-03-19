@@ -25,6 +25,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static com.leoli.gateway.filter.MultiServiceLoadBalancerFilter.TARGET_SERVICE_ID_ATTR;
+
 /**
  * Load Balancer Filter for static:// protocol
  * Uses StaticDiscoveryService to get instances and applies weighted round-robin
@@ -74,14 +76,26 @@ public class DiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
             }
 
             URI requestUri = (URI) exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR);
-            String serviceId = requestUri.getHost();
+            
+            // Check if MultiServiceLoadBalancerFilter has already selected a target service
+            String targetServiceId = exchange.getAttribute(TARGET_SERVICE_ID_ATTR);
+            String serviceId;
+            
+            if (targetServiceId != null) {
+                // Use the service selected by MultiServiceLoadBalancerFilter
+                serviceId = targetServiceId;
+                log.debug("Using pre-selected service from MultiServiceLoadBalancerFilter: {}", serviceId);
+            } else {
+                // Default: extract from URI host
+                serviceId = requestUri.getHost();
+            }
 
             // Get service instances from StaticDiscoveryService
             return chooseFromDiscovery(serviceId, exchange)
                     .flatMap(response -> {
                         if (!response.hasServer()) {
                             throw NotFoundException.create(true,
-                                    "Unable to find instance for " + url.getHost());
+                                    "Unable to find instance for " + serviceId);
                         }
 
                         ServiceInstance retrievedInstance = response.getServer();

@@ -75,6 +75,8 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
         // Get rate limit config from strategy manager
         RateLimitConfig config = getRateLimitConfig(routeId);
 
+        log.debug("Rate limiter filter - routeId: {}, enabled: {}, qps: {}", routeId, config.enabled, config.qps);
+
         if (!config.enabled) {
             return chain.filter(exchange);
         }
@@ -121,8 +123,11 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
     private RateLimitConfig getRateLimitConfig(String routeId) {
         Map<String, Object> configMap = strategyManager.getRateLimiterConfig(routeId);
 
+        log.debug("Rate limiter config for routeId {}: {}", routeId, configMap);
+
         if (configMap == null || configMap.isEmpty()) {
             // No config, use default (disabled)
+            log.debug("No rate limiter config found, using default (disabled)");
             RateLimitConfig defaultConfig = new RateLimitConfig();
             defaultConfig.enabled = false;
             return defaultConfig;
@@ -137,6 +142,8 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
         config.keyType = getStringValue(configMap, "keyType", "combined");
         config.headerName = getStringValue(configMap, "headerName", null);
         config.keyPrefix = getStringValue(configMap, "keyPrefix", "rate_limit:");
+
+        log.debug("Parsed rate limiter config: enabled={}, qps={}, burstCapacity={}", config.enabled, config.qps, config.burstCapacity);
 
         return config;
     }
@@ -191,7 +198,7 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
      */
     private RateLimiterWindow getOrCreateWindow(String key, RateLimitConfig config) {
         return rateLimiterCache.get(key, k ->
-                new RateLimiterWindow(config.qps, config.windowSizeMs));
+                new RateLimiterWindow(config.qps, config.burstCapacity, config.windowSizeMs));
     }
 
     /**
@@ -317,19 +324,27 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * Thread-safe sliding time window rate limiter
+     * Thread-safe sliding time window rate limiter with burst support
      */
     @Data
     public static class RateLimiterWindow {
-        private final int maxRequests;
+        private final int maxRequests;          // steady state rate (qps)
+        private final int burstCapacity;        // maximum burst capacity
         private final long windowSizeMs;
         private final AtomicInteger currentCount = new AtomicInteger(0);
+        private final AtomicInteger burstTokens = new AtomicInteger(0);  // current burst tokens available
         private final AtomicLong windowStartTime = new AtomicLong(System.currentTimeMillis());
         private final ReentrantLock lock = new ReentrantLock();
 
         public RateLimiterWindow(int maxRequests, long windowSizeMs) {
+            this(maxRequests, maxRequests * 2, windowSizeMs);
+        }
+
+        public RateLimiterWindow(int maxRequests, int burstCapacity, long windowSizeMs) {
             this.maxRequests = maxRequests;
+            this.burstCapacity = Math.max(burstCapacity, maxRequests);
             this.windowSizeMs = windowSizeMs;
+            this.burstTokens.set(this.burstCapacity);
         }
 
         public boolean tryAcquire() {
@@ -338,12 +353,26 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
                 long now = System.currentTimeMillis();
                 long windowStart = windowStartTime.get();
 
+                // Reset window if expired
                 if (now - windowStart >= windowSizeMs) {
                     currentCount.set(0);
+                    // Refill burst tokens proportionally to steady rate
+                    int newBurstTokens = Math.min(burstCapacity, maxRequests + burstTokens.get());
+                    burstTokens.set(newBurstTokens);
                     windowStartTime.set(now);
                 }
 
                 int count = currentCount.get();
+                int tokens = burstTokens.get();
+
+                // First try to use burst capacity if available and over steady rate
+                if (count >= maxRequests && tokens > 0) {
+                    burstTokens.decrementAndGet();
+                    currentCount.incrementAndGet();
+                    return true;
+                }
+
+                // Use steady state rate
                 if (count < maxRequests) {
                     currentCount.incrementAndGet();
                     return true;
@@ -356,7 +385,11 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
         }
 
         public int getRemaining() {
-            return Math.max(0, maxRequests - currentCount.get());
+            return Math.max(0, burstCapacity - currentCount.get());
+        }
+
+        public int getBurstRemaining() {
+            return burstTokens.get();
         }
     }
 }

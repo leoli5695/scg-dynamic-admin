@@ -1,16 +1,14 @@
 server:
-  port: 8080
+  port: 9090
 
 spring:
   application:
     name: gateway-admin
-  profiles:
-    active: dev
   datasource:
-    driver-class-name: org.h2.Driver
-    url: jdbc:h2:file:./data/gateway_db;DB_CLOSE_DELAY=-1;AUTO_SERVER=TRUE
-    username: sa
-    password:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/gateway_admin?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=utf8
+    username: root
+    password: 123456
   jpa:
     hibernate:
       ddl-auto: update  # Auto-create tables if not exist
@@ -18,12 +16,7 @@ spring:
     properties:
       hibernate:
         format_sql: true
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
-      settings:
-        web-allow-others: true
+        dialect: org.hibernate.dialect.MySQLDialect
   data:
     redis:
       host: 127.0.0.1
@@ -76,8 +69,14 @@ gateway:
   
   # Health Check Configuration
   health:
-    db-sync-enabled: true       # ✅ Enable database persistence
-    nacos-sync-enabled: false   # Disable Nacos sync for now
+    # Database persistence for health status
+    db-sync-enabled: true
+    # Nacos metadata sync (experimental)
+    nacos-sync-enabled: false
+    # Alert cooldown period (milliseconds) - avoid repeated alerts
+    alert-cooldown-ms: 300000  # 5 minutes
+    # Health status retention in memory (milliseconds)
+    memory-retention-ms: 600000  # 10 minutes
 
 management:
   endpoints:

@@ -287,6 +287,90 @@ public class StrategyManager {
     }
 
     /**
+     * Get retry config for route.
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getRetryConfig(String routeId) {
+        StrategyDefinition strategy = getStrategyForRoute(routeId, StrategyDefinition.TYPE_RETRY);
+        if (strategy == null) {
+            return null;
+        }
+        return strategy.getConfig();
+    }
+
+    /**
+     * Get CORS config for route.
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getCorsConfig(String routeId) {
+        StrategyDefinition strategy = getStrategyForRoute(routeId, StrategyDefinition.TYPE_CORS);
+        if (strategy == null) {
+            return null;
+        }
+        return strategy.getConfig();
+    }
+
+    /**
+     * Get access log config for route.
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getAccessLogConfig(String routeId) {
+        StrategyDefinition strategy = getStrategyForRoute(routeId, StrategyDefinition.TYPE_ACCESS_LOG);
+        if (strategy == null) {
+            return null;
+        }
+        return strategy.getConfig();
+    }
+
+    /**
+     * Get header operation config for route.
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getHeaderOpConfig(String routeId) {
+        StrategyDefinition strategy = getStrategyForRoute(routeId, StrategyDefinition.TYPE_HEADER_OP);
+        if (strategy == null) {
+            return null;
+        }
+        return strategy.getConfig();
+    }
+
+    /**
+     * Get cache config for route.
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getCacheConfig(String routeId) {
+        StrategyDefinition strategy = getStrategyForRoute(routeId, StrategyDefinition.TYPE_CACHE);
+        if (strategy == null) {
+            return null;
+        }
+        return strategy.getConfig();
+    }
+
+    /**
+     * Get security config for route.
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getSecurityConfig(String routeId) {
+        StrategyDefinition strategy = getStrategyForRoute(routeId, StrategyDefinition.TYPE_SECURITY);
+        if (strategy == null) {
+            return null;
+        }
+        return strategy.getConfig();
+    }
+
+    /**
+     * Get API version config for route.
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getApiVersionConfig(String routeId) {
+        StrategyDefinition strategy = getStrategyForRoute(routeId, StrategyDefinition.TYPE_API_VERSION);
+        if (strategy == null) {
+            return null;
+        }
+        return strategy.getConfig();
+    }
+
+    /**
      * Check if strategy type is enabled for route.
      */
     public boolean isStrategyEnabled(String routeId, String strategyType) {

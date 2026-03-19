@@ -16,42 +16,49 @@ import java.util.List;
 @Slf4j
 @Component
 public class ReconcileScheduler {
-    
+
     @Autowired
     private List<ReconcileTask<?>> reconcileTasks;
-    
+
     /**
      * Execute reconciliation for all entity types every 5 minutes.
      */
     @Scheduled(fixedDelay = 300000) // 5 minutes
     public void reconcileAll() {
-        log.info("🔄 Starting scheduled reconciliation for {} entity types...", reconcileTasks.size());
-        
+        log.info("Starting scheduled reconciliation for {} entity types...", reconcileTasks.size());
+
         int totalMissing = 0;
         int totalOrphans = 0;
+        int totalProtected = 0;
         int failedTasks = 0;
-        
+
         for (ReconcileTask<?> task : reconcileTasks) {
             try {
                 ReconcileResult result = task.reconcile();
-                
+
                 if (result.isSuccess()) {
-                    log.info("✅ {} reconciliation completed: +{} repaired, -{} orphans", 
-                             result.getType(), result.getMissingRepaired(), result.getOrphansRemoved());
+                    if (result.isProtectionTriggered()) {
+                        log.warn("[{}] Reconciliation completed with PROTECTION: +{} repaired, {} orphans PROTECTED (not removed)",
+                                 result.getType(), result.getMissingRepaired(), result.getProtectedOrphanCount());
+                        totalProtected += result.getProtectedOrphanCount();
+                    } else {
+                        log.info("[{}] Reconciliation completed: +{} repaired, -{} orphans",
+                                 result.getType(), result.getMissingRepaired(), result.getOrphansRemoved());
+                    }
                     totalMissing += result.getMissingRepaired();
                     totalOrphans += result.getOrphansRemoved();
                 } else {
-                    log.error("❌ {} reconciliation failed: {}", result.getType(), result.getErrorMessage());
+                    log.error("[{}] Reconciliation failed: {}", result.getType(), result.getErrorMessage());
                     failedTasks++;
                 }
-                
+
             } catch (Exception e) {
-                log.error("❌ {} reconciliation exception", task.getType(), e);
+                log.error("[{}] Reconciliation exception", task.getType(), e);
                 failedTasks++;
             }
         }
-        
-        log.info("📊 Reconciliation summary: Total repaired={}, Total orphans={}, Failed tasks={}", 
-                 totalMissing, totalOrphans, failedTasks);
+
+        log.info("Reconciliation summary: Total repaired={}, Total orphans removed={}, Protected orphans={}, Failed tasks={}",
+                 totalMissing, totalOrphans, totalProtected, failedTasks);
     }
 }

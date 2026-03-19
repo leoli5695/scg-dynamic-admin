@@ -4,6 +4,7 @@ import com.leoli.gateway.admin.model.ServiceEntity;
 import com.leoli.gateway.admin.repository.ServiceRepository;
 import com.leoli.gateway.admin.center.ConfigCenterService;
 import com.leoli.gateway.admin.model.ServiceDefinition;
+import com.leoli.gateway.admin.service.AlertService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,19 +20,22 @@ import java.util.stream.Collectors;
 @Slf4j
 @Component
 public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
-    
+
     private static final String SERVICE_PREFIX = "config.gateway.service-";
     private static final String SERVICES_INDEX = "config.gateway.metadata.services-index";
     private static final String GROUP = "DEFAULT_GROUP";
-    
+
     @Autowired
     private ServiceRepository serviceRepository;
-    
+
     @Autowired
     private ConfigCenterService configCenterService;
-    
+
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private AlertService alertService;
     
     @Override
     public String getType() {
@@ -117,9 +121,14 @@ public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
         List<String> serviceIds = serviceRepository.findAll().stream()
             .map(ServiceEntity::getServiceName)
             .collect(Collectors.toList());
-        
+
         // Publish as JSON array directly, not stringified JSON
         configCenterService.publishConfig(SERVICES_INDEX, serviceIds);
         log.debug("Services index rebuilt with {} services", serviceIds.size());
+    }
+
+    @Override
+    public AlertService getAlertService() {
+        return alertService;
     }
 }

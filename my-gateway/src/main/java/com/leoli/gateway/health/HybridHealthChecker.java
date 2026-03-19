@@ -427,14 +427,38 @@ public class HybridHealthChecker {
 
     /**
      * Cleanup expired cache (optional scheduled task).
+     * Only remove instances that are both idle AND healthy.
+     * Unhealthy instances are kept for retry and monitoring.
      */
     public void cleanupExpired() {
         long now = System.currentTimeMillis();
-        healthCache.asMap().entrySet().removeIf(entry -> {
+        int removedCount = 0;
+        int unhealthyKept = 0;
+
+        java.util.Iterator<java.util.Map.Entry<String, InstanceHealth>> iterator =
+                healthCache.asMap().entrySet().iterator();
+
+        while (iterator.hasNext()) {
+            java.util.Map.Entry<String, InstanceHealth> entry = iterator.next();
             InstanceHealth health = entry.getValue();
             Long lastTime = health.getLastRequestTime();
-            return lastTime != null && (now - lastTime) > 300000; // 5 minutes
-        });
-        log.info("Cleaned up expired health records");
+
+            // Keep unhealthy instances for retry
+            if (!health.isHealthy()) {
+                unhealthyKept++;
+                continue;
+            }
+
+            // Only remove healthy instances that have been idle too long
+            if (lastTime != null && (now - lastTime) > 600000) { // 10 minutes for healthy instances
+                iterator.remove();
+                removedCount++;
+            }
+        }
+
+        if (removedCount > 0 || unhealthyKept > 0) {
+            log.info("Cleanup completed: removed {} idle healthy instances, kept {} unhealthy instances for retry",
+                    removedCount, unhealthyKept);
+        }
     }
 }

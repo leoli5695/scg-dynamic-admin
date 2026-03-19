@@ -19,6 +19,8 @@ import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Circuit breaker global filter using Resilience4j.
@@ -34,6 +36,12 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
     private StrategyManager strategyManager;
 
     private final CircuitBreakerRegistry circuitBreakerRegistry = CircuitBreakerRegistry.ofDefaults();
+
+    // Cache for circuit breaker config versions to detect config changes
+    private final Map<String, String> circuitBreakerConfigHash = new ConcurrentHashMap<>();
+
+    // Lock for thread-safe circuit breaker creation
+    private final ReentrantLock createLock = new ReentrantLock();
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
@@ -56,6 +64,7 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
         CircuitBreaker circuitBreaker = getOrCreateCircuitBreaker(routeId, config);
 
         // Execute the filter chain with circuit breaker
+        // Note: CircuitBreakerOperator automatically handles success/error recording
         return chain.filter(exchange)
                 .transform(CircuitBreakerOperator.of(circuitBreaker))
                 .onErrorResume(CallNotPermittedException.class, ex -> {
@@ -67,34 +76,75 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
                     return exchange.getResponse().writeWith(
                             Mono.just(exchange.getResponse().bufferFactory().wrap(body.getBytes()))
                     );
-                })
-                .doOnError(ex -> {
-                    log.error("Request failed for route {}, recording error in circuit breaker", routeId, ex);
-                    circuitBreaker.onError(0, java.util.concurrent.TimeUnit.MILLISECONDS, ex);
-                })
-                .doOnSuccess(aVoid -> {
-                    circuitBreaker.onResult(0, java.util.concurrent.TimeUnit.MILLISECONDS, null);
                 });
     }
 
     /**
      * Get or create a circuit breaker with the given configuration.
+     * Thread-safe: uses lock to prevent race condition during creation/recreation.
      */
     private CircuitBreaker getOrCreateCircuitBreaker(String routeId, Map<String, Object> config) {
-        float failureRateThreshold = config.get("failureRateThreshold") != null 
-                ? ((Number) config.get("failureRateThreshold")).floatValue() : 50.0f;
-        long slowCallDurationThreshold = config.get("slowCallDurationThreshold") != null 
-                ? ((Number) config.get("slowCallDurationThreshold")).longValue() : 60000L;
-        float slowCallRateThreshold = config.get("slowCallRateThreshold") != null 
-                ? ((Number) config.get("slowCallRateThreshold")).floatValue() : 80.0f;
-        long waitDurationInOpenState = config.get("waitDurationInOpenState") != null 
-                ? ((Number) config.get("waitDurationInOpenState")).longValue() : 30000L;
-        int slidingWindowSize = config.get("slidingWindowSize") != null 
-                ? ((Number) config.get("slidingWindowSize")).intValue() : 10;
-        int minimumNumberOfCalls = config.get("minimumNumberOfCalls") != null 
-                ? ((Number) config.get("minimumNumberOfCalls")).intValue() : 5;
-        boolean automaticTransition = config.get("automaticTransitionFromOpenToHalfOpenEnabled") != null 
-                ? (Boolean) config.get("automaticTransitionFromOpenToHalfOpenEnabled") : true;
+        // Generate config hash to detect changes
+        String configHash = generateConfigHash(config);
+        String existingHash = circuitBreakerConfigHash.get(routeId);
+
+        // Fast path: check if we can use existing circuit breaker
+        if (existingHash != null && existingHash.equals(configHash)) {
+            CircuitBreaker existing = findCircuitBreaker(routeId);
+            if (existing != null) {
+                return existing;
+            }
+        }
+
+        // Slow path: need to create or recreate circuit breaker
+        createLock.lock();
+        try {
+            // Double-check after acquiring lock
+            existingHash = circuitBreakerConfigHash.get(routeId);
+            if (existingHash != null && existingHash.equals(configHash)) {
+                CircuitBreaker existing = findCircuitBreaker(routeId);
+                if (existing != null) {
+                    return existing;
+                }
+            }
+
+            // Config changed or first time - remove old if exists
+            if (findCircuitBreaker(routeId) != null) {
+                log.info("Circuit breaker config changed for route {}, recreating", routeId);
+                circuitBreakerRegistry.remove(routeId);
+            }
+
+            // Update config hash
+            circuitBreakerConfigHash.put(routeId, configHash);
+
+            // Create new circuit breaker
+            return createCircuitBreaker(routeId, config);
+        } finally {
+            createLock.unlock();
+        }
+    }
+
+    /**
+     * Find a circuit breaker by name from the registry.
+     */
+    private CircuitBreaker findCircuitBreaker(String name) {
+        return circuitBreakerRegistry.getAllCircuitBreakers().stream()
+                .filter(cb -> cb.getName().equals(name))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * Create a new circuit breaker with the given configuration.
+     */
+    private CircuitBreaker createCircuitBreaker(String routeId, Map<String, Object> config) {
+        float failureRateThreshold = getFloatValue(config, "failureRateThreshold", 50.0f);
+        long slowCallDurationThreshold = getLongValue(config, "slowCallDurationThreshold", 60000L);
+        float slowCallRateThreshold = getFloatValue(config, "slowCallRateThreshold", 80.0f);
+        long waitDurationInOpenState = getLongValue(config, "waitDurationInOpenState", 30000L);
+        int slidingWindowSize = getIntValue(config, "slidingWindowSize", 10);
+        int minimumNumberOfCalls = getIntValue(config, "minimumNumberOfCalls", 5);
+        boolean automaticTransition = getBooleanValue(config, "automaticTransitionFromOpenToHalfOpenEnabled", true);
 
         io.github.resilience4j.circuitbreaker.CircuitBreakerConfig circuitBreakerConfig =
                 io.github.resilience4j.circuitbreaker.CircuitBreakerConfig.custom()
@@ -108,6 +158,62 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
                         .build();
 
         return circuitBreakerRegistry.circuitBreaker(routeId, circuitBreakerConfig);
+    }
+
+    /**
+     * Remove circuit breaker for a route (called when strategy is deleted).
+     */
+    public void removeCircuitBreaker(String routeId) {
+        circuitBreakerRegistry.remove(routeId);
+        circuitBreakerConfigHash.remove(routeId);
+        log.info("Circuit breaker removed for route {}", routeId);
+    }
+
+    /**
+     * Generate a hash string from config for change detection.
+     */
+    private String generateConfigHash(Map<String, Object> config) {
+        return String.valueOf(config.hashCode());
+    }
+
+    private float getFloatValue(Map<String, Object> map, String key, float defaultValue) {
+        Object value = map.get(key);
+        if (value == null) return defaultValue;
+        if (value instanceof Number) return ((Number) value).floatValue();
+        try {
+            return Float.parseFloat(String.valueOf(value));
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    private long getLongValue(Map<String, Object> map, String key, long defaultValue) {
+        Object value = map.get(key);
+        if (value == null) return defaultValue;
+        if (value instanceof Number) return ((Number) value).longValue();
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    private int getIntValue(Map<String, Object> map, String key, int defaultValue) {
+        Object value = map.get(key);
+        if (value == null) return defaultValue;
+        if (value instanceof Number) return ((Number) value).intValue();
+        try {
+            return Integer.parseInt(String.valueOf(value));
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    private boolean getBooleanValue(Map<String, Object> map, String key, boolean defaultValue) {
+        Object value = map.get(key);
+        if (value == null) return defaultValue;
+        if (value instanceof Boolean) return (Boolean) value;
+        return Boolean.parseBoolean(String.valueOf(value));
     }
 
     @Override

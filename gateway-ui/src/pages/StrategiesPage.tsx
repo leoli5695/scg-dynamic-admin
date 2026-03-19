@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import {
   Card, Button, Space, Modal, message, Spin, Tag, Drawer, Form, Input, Select,
-  Empty, Dropdown, Tooltip, Badge, Divider, Typography, Switch, Radio
+  Empty, Dropdown, Tooltip, Badge, Divider, Typography, Switch, Radio, InputNumber
 } from 'antd';
 import {
   PlusOutlined, DeleteOutlined, EditOutlined, MoreOutlined,
   ThunderboltOutlined, StopOutlined, PlayCircleOutlined, GlobalOutlined,
-  ApiOutlined, SafetyOutlined, ClockCircleOutlined, KeyOutlined
+  ApiOutlined, SafetyOutlined, ClockCircleOutlined, KeyOutlined,
+  SyncOutlined, FileTextOutlined, SettingOutlined,
+  CloudOutlined, SecurityScanOutlined, NumberOutlined
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import api from '../utils/api';
@@ -74,6 +76,13 @@ const StrategiesPage: React.FC = () => {
       'TIMEOUT': t('strategy.type.timeout'),
       'CIRCUIT_BREAKER': t('strategy.type.circuit_breaker'),
       'AUTH': t('strategy.type.auth'),
+      'RETRY': t('strategy.type.retry'),
+      'CORS': t('strategy.type.cors'),
+      'ACCESS_LOG': t('strategy.type.access_log'),
+      'HEADER_OP': t('strategy.type.header_op'),
+      'CACHE': t('strategy.type.cache'),
+      'SECURITY': t('strategy.type.security'),
+      'API_VERSION': t('strategy.type.api_version'),
     };
     return labels[type] || type;
   };
@@ -85,6 +94,13 @@ const StrategiesPage: React.FC = () => {
       'TIMEOUT': <ClockCircleOutlined />,
       'CIRCUIT_BREAKER': <StopOutlined />,
       'AUTH': <KeyOutlined />,
+      'RETRY': <SyncOutlined />,
+      'CORS': <GlobalOutlined />,
+      'ACCESS_LOG': <FileTextOutlined />,
+      'HEADER_OP': <SettingOutlined />,
+      'CACHE': <CloudOutlined />,
+      'SECURITY': <SecurityScanOutlined />,
+      'API_VERSION': <NumberOutlined />,
     };
     return icons[type] || <ThunderboltOutlined />;
   };
@@ -96,8 +112,112 @@ const StrategiesPage: React.FC = () => {
       'TIMEOUT': '#fa8c16',
       'CIRCUIT_BREAKER': '#f5222d',
       'AUTH': '#2f54eb',
+      'RETRY': '#52c41a',
+      'CORS': '#1890ff',
+      'ACCESS_LOG': '#722ed1',
+      'HEADER_OP': '#13c2c2',
+      'CACHE': '#faad14',
+      'SECURITY': '#eb2f96',
+      'API_VERSION': '#52c41a',
     };
     return colors[type] || '#1890ff';
+  };
+
+  const buildConfig = (values: any, strategyType: string) => {
+    switch (strategyType) {
+      case 'RATE_LIMITER':
+        return {
+          qps: parseInt(values.qps) || 100,
+          burstCapacity: parseInt(values.burstCapacity) || 200,
+          timeUnit: values.timeUnit || 'second',
+          keyResolver: values.keyResolver || 'ip',
+          keyType: 'combined',
+          headerName: values.headerName,
+        };
+      case 'IP_FILTER':
+        return {
+          mode: values.mode || 'blacklist',
+          ipList: values.ipList ? values.ipList.split(',').map((ip: string) => ip.trim()) : [],
+        };
+      case 'TIMEOUT':
+        return {
+          connectTimeout: parseInt(values.connectTimeout) || 5000,
+          responseTimeout: parseInt(values.responseTimeout) || 30000,
+        };
+      case 'CIRCUIT_BREAKER':
+        return {
+          failureRateThreshold: parseFloat(values.failureRateThreshold) || 50,
+          slowCallDurationThreshold: parseInt(values.slowCallDurationThreshold) || 60000,
+          slowCallRateThreshold: 80.0,
+          waitDurationInOpenState: parseInt(values.waitDurationInOpenState) || 30000,
+          slidingWindowSize: parseInt(values.slidingWindowSize) || 10,
+          minimumNumberOfCalls: parseInt(values.minimumNumberOfCalls) || 5,
+          automaticTransitionFromOpenToHalfOpenEnabled: true,
+        };
+      case 'AUTH':
+        return {
+          authType: values.authType || 'JWT',
+          secretKey: values.secretKey,
+          apiKey: values.apiKey,
+          clientId: values.clientId,
+          clientSecret: values.clientSecret,
+          tokenEndpoint: values.tokenEndpoint,
+        };
+      case 'RETRY':
+        return {
+          maxAttempts: parseInt(values.maxAttempts) || 3,
+          retryIntervalMs: parseInt(values.retryIntervalMs) || 1000,
+          retryOnStatusCodes: values.retryOnStatusCodes ? values.retryOnStatusCodes.split(',').map((s: string) => parseInt(s.trim())) : [500, 502, 503, 504],
+        };
+      case 'CORS':
+        return {
+          allowedOrigins: values.allowedOrigins ? values.allowedOrigins.split(',').map((s: string) => s.trim()) : ['*'],
+          allowedMethods: values.allowedMethods ? values.allowedMethods.split(',').map((s: string) => s.trim()) : ['GET', 'POST', 'PUT', 'DELETE'],
+          allowedHeaders: values.allowedHeaders ? values.allowedHeaders.split(',').map((s: string) => s.trim()) : ['*'],
+          allowCredentials: values.allowCredentials || false,
+          maxAge: parseInt(values.maxAge) || 3600,
+        };
+      case 'ACCESS_LOG':
+        return {
+          logLevel: values.logLevel || 'NORMAL',
+          logRequestHeaders: values.logRequestHeaders !== false,
+          logResponseHeaders: values.logResponseHeaders !== false,
+          logRequestBody: values.logRequestBody || false,
+          logResponseBody: values.logResponseBody || false,
+          maxBodyLength: parseInt(values.maxBodyLength) || 1000,
+          samplingRate: parseInt(values.samplingRate) || 100,
+        };
+      case 'HEADER_OP':
+        return {
+          addRequestHeaders: values.addRequestHeaders ? JSON.parse(values.addRequestHeaders) : {},
+          addResponseHeaders: values.addResponseHeaders ? JSON.parse(values.addResponseHeaders) : {},
+          enableTraceId: values.enableTraceId !== false,
+          traceIdHeader: values.traceIdHeader || 'X-Trace-Id',
+        };
+      case 'CACHE':
+        return {
+          ttlSeconds: parseInt(values.ttlSeconds) || 60,
+          maxSize: parseInt(values.maxSize) || 10000,
+          cacheMethods: values.cacheMethods ? values.cacheMethods.split(',').map((s: string) => s.trim()) : ['GET', 'HEAD'],
+        };
+      case 'SECURITY':
+        return {
+          enableSqlInjectionProtection: values.enableSqlInjectionProtection !== false,
+          enableXssProtection: values.enableXssProtection !== false,
+          mode: values.mode || 'BLOCK',
+          checkParameters: values.checkParameters !== false,
+          checkBody: values.checkBody !== false,
+        };
+      case 'API_VERSION':
+        return {
+          versionMode: values.versionMode || 'PATH',
+          defaultVersion: values.defaultVersion || 'v1',
+          versionHeader: values.versionHeader || 'X-API-Version',
+          versionLocation: values.versionLocation || 'HEADER',
+        };
+      default:
+        return {};
+    }
   };
 
   const handleCreate = async (values: any) => {
@@ -110,56 +230,9 @@ const StrategiesPage: React.FC = () => {
         routeId: values.scope === 'ROUTE' ? values.routeId : undefined,
         priority: values.priority || 100,
         enabled: values.enabled !== false,
-        config: values.config || {},
+        config: buildConfig(values, values.strategyType),
         description: values.description,
       };
-
-      // Map form values to config based on strategy type
-      switch (values.strategyType) {
-        case 'RATE_LIMITER':
-          strategy.config = {
-            qps: parseInt(values.qps) || 100,
-            burstCapacity: parseInt(values.burstCapacity) || 200,
-            timeUnit: values.timeUnit || 'second',
-            keyResolver: values.keyResolver || 'ip',
-            keyType: 'combined',
-            headerName: values.headerName,
-          };
-          break;
-        case 'IP_FILTER':
-          strategy.config = {
-            mode: values.mode || 'blacklist',
-            ipList: values.ipList ? values.ipList.split(',').map((ip: string) => ip.trim()) : [],
-          };
-          break;
-        case 'TIMEOUT':
-          strategy.config = {
-            connectTimeout: parseInt(values.connectTimeout) || 5000,
-            responseTimeout: parseInt(values.responseTimeout) || 30000,
-          };
-          break;
-        case 'CIRCUIT_BREAKER':
-          strategy.config = {
-            failureRateThreshold: parseFloat(values.failureRateThreshold) || 50,
-            slowCallDurationThreshold: parseInt(values.slowCallDurationThreshold) || 60000,
-            slowCallRateThreshold: 80.0,
-            waitDurationInOpenState: parseInt(values.waitDurationInOpenState) || 30000,
-            slidingWindowSize: parseInt(values.slidingWindowSize) || 10,
-            minimumNumberOfCalls: parseInt(values.minimumNumberOfCalls) || 5,
-            automaticTransitionFromOpenToHalfOpenEnabled: true,
-          };
-          break;
-        case 'AUTH':
-          strategy.config = {
-            authType: values.authType || 'JWT',
-            secretKey: values.secretKey,
-            apiKey: values.apiKey,
-            clientId: values.clientId,
-            clientSecret: values.clientSecret,
-            tokenEndpoint: values.tokenEndpoint,
-          };
-          break;
-      }
 
       const response = await api.post('/api/strategies', strategy);
       if (response.data.code === 200) {
@@ -187,55 +260,8 @@ const StrategiesPage: React.FC = () => {
         priority: values.priority || 100,
         enabled: values.enabled !== false,
         description: values.description,
-        config: {},
+        config: buildConfig(values, selectedStrategy.strategyType),
       };
-
-      // Map form values to config based on strategy type
-      switch (selectedStrategy.strategyType) {
-        case 'RATE_LIMITER':
-          strategy.config = {
-            qps: parseInt(values.qps) || 100,
-            burstCapacity: parseInt(values.burstCapacity) || 200,
-            timeUnit: values.timeUnit || 'second',
-            keyResolver: values.keyResolver || 'ip',
-            keyType: 'combined',
-            headerName: values.headerName,
-          };
-          break;
-        case 'IP_FILTER':
-          strategy.config = {
-            mode: values.mode || 'blacklist',
-            ipList: values.ipList ? values.ipList.split(',').map((ip: string) => ip.trim()) : [],
-          };
-          break;
-        case 'TIMEOUT':
-          strategy.config = {
-            connectTimeout: parseInt(values.connectTimeout) || 5000,
-            responseTimeout: parseInt(values.responseTimeout) || 30000,
-          };
-          break;
-        case 'CIRCUIT_BREAKER':
-          strategy.config = {
-            failureRateThreshold: parseFloat(values.failureRateThreshold) || 50,
-            slowCallDurationThreshold: parseInt(values.slowCallDurationThreshold) || 60000,
-            slowCallRateThreshold: 80.0,
-            waitDurationInOpenState: parseInt(values.waitDurationInOpenState) || 30000,
-            slidingWindowSize: parseInt(values.slidingWindowSize) || 10,
-            minimumNumberOfCalls: parseInt(values.minimumNumberOfCalls) || 5,
-            automaticTransitionFromOpenToHalfOpenEnabled: true,
-          };
-          break;
-        case 'AUTH':
-          strategy.config = {
-            authType: values.authType || 'JWT',
-            secretKey: values.secretKey,
-            apiKey: values.apiKey,
-            clientId: values.clientId,
-            clientSecret: values.clientSecret,
-            tokenEndpoint: values.tokenEndpoint,
-          };
-          break;
-      }
 
       const response = await api.put(`/api/strategies/${selectedStrategy.strategyId}`, strategy);
       if (response.data.code === 200) {
@@ -312,6 +338,15 @@ const StrategiesPage: React.FC = () => {
       enabled: strategy.enabled,
       description: strategy.description,
       ...strategy.config,
+      // Handle array fields
+      ipList: strategy.config?.ipList?.join(', '),
+      retryOnStatusCodes: strategy.config?.retryOnStatusCodes?.join(', '),
+      allowedOrigins: strategy.config?.allowedOrigins?.join(', '),
+      allowedMethods: strategy.config?.allowedMethods?.join(', '),
+      allowedHeaders: strategy.config?.allowedHeaders?.join(', '),
+      cacheMethods: strategy.config?.cacheMethods?.join(', '),
+      addRequestHeaders: strategy.config?.addRequestHeaders ? JSON.stringify(strategy.config.addRequestHeaders) : '',
+      addResponseHeaders: strategy.config?.addResponseHeaders ? JSON.stringify(strategy.config.addResponseHeaders) : '',
     });
     setEditDrawerVisible(true);
   };
@@ -331,11 +366,11 @@ const StrategiesPage: React.FC = () => {
       case 'RATE_LIMITER':
         return (
           <>
-            <Form.Item name="qps" label={t('strategy.config.qps')} initialValue={100} extra={t('strategy.config.qps_desc')}>
-              <Input type="number" min={1} />
+            <Form.Item name="qps" label={t('strategy.config.qps')} initialValue={100}>
+              <InputNumber min={1} max={100000} style={{ width: '100%' }} />
             </Form.Item>
-            <Form.Item name="burstCapacity" label={t('strategy.config.burst_capacity')} initialValue={200} extra={t('strategy.config.burst_desc')}>
-              <Input type="number" min={1} />
+            <Form.Item name="burstCapacity" label={t('strategy.config.burst_capacity')} initialValue={200}>
+              <InputNumber min={0} style={{ width: '100%' }} />
             </Form.Item>
             <Form.Item name="timeUnit" label={t('strategy.config.time_unit')} initialValue="second">
               <Select>
@@ -344,26 +379,13 @@ const StrategiesPage: React.FC = () => {
                 <Select.Option value="hour">{t('strategy.config.hour')}</Select.Option>
               </Select>
             </Form.Item>
-            <Form.Item name="keyResolver" label={t('strategy.config.key_resolver')} initialValue="ip" extra={t('strategy.config.key_resolver_desc')}>
+            <Form.Item name="keyResolver" label={t('strategy.config.key_resolver')} initialValue="ip">
               <Select>
                 <Select.Option value="ip">{t('strategy.config.key_resolver_ip')}</Select.Option>
                 <Select.Option value="user">{t('strategy.config.key_resolver_user')}</Select.Option>
                 <Select.Option value="header">{t('strategy.config.key_resolver_header')}</Select.Option>
                 <Select.Option value="global">{t('strategy.config.key_resolver_global')}</Select.Option>
               </Select>
-            </Form.Item>
-            <Form.Item noStyle shouldUpdate>
-              {({ getFieldValue }) => {
-                const keyResolver = getFieldValue('keyResolver');
-                if (keyResolver === 'header') {
-                  return (
-                    <Form.Item name="headerName" label={t('strategy.config.header_name')} rules={[{ required: true }]}>
-                      <Input placeholder="X-Request-Id" />
-                    </Form.Item>
-                  );
-                }
-                return null;
-              }}
             </Form.Item>
           </>
         );
@@ -385,10 +407,10 @@ const StrategiesPage: React.FC = () => {
         return (
           <>
             <Form.Item name="connectTimeout" label={t('strategy.config.connect_timeout')} initialValue={5000}>
-              <Input type="number" addonAfter="ms" />
+              <InputNumber addonAfter="ms" style={{ width: '100%' }} />
             </Form.Item>
             <Form.Item name="responseTimeout" label={t('strategy.config.response_timeout')} initialValue={30000}>
-              <Input type="number" addonAfter="ms" />
+              <InputNumber addonAfter="ms" style={{ width: '100%' }} />
             </Form.Item>
           </>
         );
@@ -396,13 +418,13 @@ const StrategiesPage: React.FC = () => {
         return (
           <>
             <Form.Item name="failureRateThreshold" label={t('strategy.config.failure_rate')} initialValue={50}>
-              <Input type="number" addonAfter="%" />
+              <InputNumber min={0} max={100} addonAfter="%" style={{ width: '100%' }} />
             </Form.Item>
             <Form.Item name="waitDurationInOpenState" label={t('strategy.config.wait_duration')} initialValue={30000}>
-              <Input type="number" addonAfter="ms" />
+              <InputNumber addonAfter="ms" style={{ width: '100%' }} />
             </Form.Item>
             <Form.Item name="slidingWindowSize" label={t('strategy.config.sliding_window')} initialValue={10}>
-              <Input type="number" />
+              <InputNumber min={1} style={{ width: '100%' }} />
             </Form.Item>
           </>
         );
@@ -421,10 +443,160 @@ const StrategiesPage: React.FC = () => {
             </Form.Item>
           </>
         );
+      case 'RETRY':
+        return (
+          <>
+            <Form.Item name="maxAttempts" label={t('strategy.config.max_attempts')} initialValue={3}>
+              <InputNumber min={1} max={10} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item name="retryIntervalMs" label={t('strategy.config.retry_interval')} initialValue={1000}>
+              <InputNumber addonAfter="ms" style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item name="retryOnStatusCodes" label={t('strategy.config.retry_status_codes')} initialValue="500, 502, 503, 504">
+              <Input placeholder="500, 502, 503, 504" />
+            </Form.Item>
+          </>
+        );
+      case 'CORS':
+        return (
+          <>
+            <Form.Item name="allowedOrigins" label={t('strategy.config.allowed_origins')} initialValue="*">
+              <Input placeholder="http://localhost:3000, https://example.com" />
+            </Form.Item>
+            <Form.Item name="allowedMethods" label={t('strategy.config.allowed_methods')} initialValue="GET, POST, PUT, DELETE">
+              <Input placeholder="GET, POST, PUT, DELETE" />
+            </Form.Item>
+            <Form.Item name="allowedHeaders" label={t('strategy.config.allowed_headers')} initialValue="*">
+              <Input placeholder="Content-Type, Authorization" />
+            </Form.Item>
+            <Form.Item name="allowCredentials" label={t('strategy.config.allow_credentials')} valuePropName="checked" initialValue={false}>
+              <Switch />
+            </Form.Item>
+            <Form.Item name="maxAge" label={t('strategy.config.max_age')} initialValue={3600}>
+              <InputNumber addonAfter="s" style={{ width: '100%' }} />
+            </Form.Item>
+          </>
+        );
+      case 'ACCESS_LOG':
+        return (
+          <>
+            <Form.Item name="logLevel" label={t('strategy.config.log_level')} initialValue="NORMAL">
+              <Select>
+                <Select.Option value="MINIMAL">MINIMAL</Select.Option>
+                <Select.Option value="NORMAL">NORMAL</Select.Option>
+                <Select.Option value="VERBOSE">VERBOSE</Select.Option>
+              </Select>
+            </Form.Item>
+            <Form.Item name="logRequestHeaders" label={t('strategy.config.log_request_headers')} valuePropName="checked" initialValue={true}>
+              <Switch />
+            </Form.Item>
+            <Form.Item name="logResponseHeaders" label={t('strategy.config.log_response_headers')} valuePropName="checked" initialValue={true}>
+              <Switch />
+            </Form.Item>
+            <Form.Item name="logRequestBody" label={t('strategy.config.log_request_body')} valuePropName="checked" initialValue={false}>
+              <Switch />
+            </Form.Item>
+            <Form.Item name="logResponseBody" label={t('strategy.config.log_response_body')} valuePropName="checked" initialValue={false}>
+              <Switch />
+            </Form.Item>
+            <Form.Item name="samplingRate" label={t('strategy.config.sampling_rate')} initialValue={100}>
+              <InputNumber min={1} max={100} addonAfter="%" style={{ width: '100%' }} />
+            </Form.Item>
+          </>
+        );
+      case 'HEADER_OP':
+        return (
+          <>
+            <Form.Item name="enableTraceId" label={t('strategy.config.enable_trace_id')} valuePropName="checked" initialValue={true}>
+              <Switch />
+            </Form.Item>
+            <Form.Item name="traceIdHeader" label={t('strategy.config.trace_id_header')} initialValue="X-Trace-Id">
+              <Input />
+            </Form.Item>
+            <Form.Item name="addRequestHeaders" label={t('strategy.config.add_request_headers')}>
+              <Input.TextArea rows={2} placeholder='{"X-Custom-Header": "value"}' />
+            </Form.Item>
+            <Form.Item name="addResponseHeaders" label={t('strategy.config.add_response_headers')}>
+              <Input.TextArea rows={2} placeholder='{"X-Response-Header": "value"}' />
+            </Form.Item>
+          </>
+        );
+      case 'CACHE':
+        return (
+          <>
+            <Form.Item name="ttlSeconds" label={t('strategy.config.ttl_seconds')} initialValue={60}>
+              <InputNumber min={1} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item name="maxSize" label={t('strategy.config.max_size')} initialValue={10000}>
+              <InputNumber min={1} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item name="cacheMethods" label={t('strategy.config.cache_methods')} initialValue="GET, HEAD">
+              <Input placeholder="GET, HEAD" />
+            </Form.Item>
+          </>
+        );
+      case 'SECURITY':
+        return (
+          <>
+            <Form.Item name="mode" label={t('strategy.config.security_mode')} initialValue="BLOCK">
+              <Select>
+                <Select.Option value="DETECT">{t('strategy.config.detect_mode')}</Select.Option>
+                <Select.Option value="BLOCK">{t('strategy.config.block_mode')}</Select.Option>
+              </Select>
+            </Form.Item>
+            <Form.Item name="enableSqlInjectionProtection" label={t('strategy.config.sql_injection')} valuePropName="checked" initialValue={true}>
+              <Switch />
+            </Form.Item>
+            <Form.Item name="enableXssProtection" label={t('strategy.config.xss_protection')} valuePropName="checked" initialValue={true}>
+              <Switch />
+            </Form.Item>
+            <Form.Item name="checkParameters" label={t('strategy.config.check_params')} valuePropName="checked" initialValue={true}>
+              <Switch />
+            </Form.Item>
+            <Form.Item name="checkBody" label={t('strategy.config.check_body')} valuePropName="checked" initialValue={true}>
+              <Switch />
+            </Form.Item>
+          </>
+        );
+      case 'API_VERSION':
+        return (
+          <>
+            <Form.Item name="versionMode" label={t('strategy.config.version_mode')} initialValue="PATH">
+              <Select>
+                <Select.Option value="PATH">PATH</Select.Option>
+                <Select.Option value="HEADER">HEADER</Select.Option>
+                <Select.Option value="QUERY">QUERY</Select.Option>
+                <Select.Option value="SERVICE">SERVICE</Select.Option>
+              </Select>
+            </Form.Item>
+            <Form.Item name="defaultVersion" label={t('strategy.config.default_version')} initialValue="v1">
+              <Input placeholder="v1" />
+            </Form.Item>
+            <Form.Item name="versionHeader" label={t('strategy.config.version_header')} initialValue="X-API-Version">
+              <Input />
+            </Form.Item>
+          </>
+        );
       default:
         return null;
     }
   };
+
+  // Strategy type options for select
+  const strategyTypeOptions = [
+    { value: 'RATE_LIMITER', label: t('strategy.type.rate_limiter'), icon: <ThunderboltOutlined /> },
+    { value: 'IP_FILTER', label: t('strategy.type.ip_filter'), icon: <SafetyOutlined /> },
+    { value: 'TIMEOUT', label: t('strategy.type.timeout'), icon: <ClockCircleOutlined /> },
+    { value: 'CIRCUIT_BREAKER', label: t('strategy.type.circuit_breaker'), icon: <StopOutlined /> },
+    { value: 'AUTH', label: t('strategy.type.auth'), icon: <KeyOutlined /> },
+    { value: 'RETRY', label: t('strategy.type.retry'), icon: <SyncOutlined /> },
+    { value: 'CORS', label: t('strategy.type.cors'), icon: <GlobalOutlined /> },
+    { value: 'ACCESS_LOG', label: t('strategy.type.access_log'), icon: <FileTextOutlined /> },
+    { value: 'HEADER_OP', label: t('strategy.type.header_op'), icon: <SettingOutlined /> },
+    { value: 'CACHE', label: t('strategy.type.cache'), icon: <CloudOutlined /> },
+    { value: 'SECURITY', label: t('strategy.type.security'), icon: <SecurityScanOutlined /> },
+    { value: 'API_VERSION', label: t('strategy.type.api_version'), icon: <NumberOutlined /> },
+  ];
 
   return (
     <div className="strategies-page">
@@ -453,13 +625,11 @@ const StrategiesPage: React.FC = () => {
           <Text type="secondary">{t('strategy.description')}</Text>
         </div>
         <div className="page-header-right">
-          <Select value={filterType} onChange={setFilterType} style={{ width: 140 }}>
+          <Select value={filterType} onChange={setFilterType} style={{ width: 160 }}>
             <Select.Option value="all">{t('common.all_types')}</Select.Option>
-            <Select.Option value="RATE_LIMITER">{t('strategy.type.rate_limiter')}</Select.Option>
-            <Select.Option value="IP_FILTER">{t('strategy.type.ip_filter')}</Select.Option>
-            <Select.Option value="TIMEOUT">{t('strategy.type.timeout')}</Select.Option>
-            <Select.Option value="CIRCUIT_BREAKER">{t('strategy.type.circuit_breaker')}</Select.Option>
-            <Select.Option value="AUTH">{t('strategy.type.auth')}</Select.Option>
+            {strategyTypeOptions.map(opt => (
+              <Select.Option key={opt.value} value={opt.value}>{opt.label}</Select.Option>
+            ))}
           </Select>
           <Select value={filterScope} onChange={setFilterScope} style={{ width: 140 }}>
             <Select.Option value="all">{t('common.all_scopes')}</Select.Option>
@@ -552,11 +722,11 @@ const StrategiesPage: React.FC = () => {
           </Form.Item>
           <Form.Item name="strategyType" label={t('strategy.type')} rules={[{ required: true }]}>
             <Select placeholder={t('strategy.type_placeholder')}>
-              <Select.Option value="RATE_LIMITER">{t('strategy.type.rate_limiter')}</Select.Option>
-              <Select.Option value="IP_FILTER">{t('strategy.type.ip_filter')}</Select.Option>
-              <Select.Option value="TIMEOUT">{t('strategy.type.timeout')}</Select.Option>
-              <Select.Option value="CIRCUIT_BREAKER">{t('strategy.type.circuit_breaker')}</Select.Option>
-              <Select.Option value="AUTH">{t('strategy.type.auth')}</Select.Option>
+              {strategyTypeOptions.map(opt => (
+                <Select.Option key={opt.value} value={opt.value}>
+                  <Space>{opt.icon}{opt.label}</Space>
+                </Select.Option>
+              ))}
             </Select>
           </Form.Item>
           <Form.Item name="scope" label={t('strategy.scope')} initialValue="GLOBAL">
@@ -582,7 +752,7 @@ const StrategiesPage: React.FC = () => {
             {({ getFieldValue }) => renderConfigFields(getFieldValue('strategyType'), createForm)}
           </Form.Item>
           <Form.Item name="priority" label={t('strategy.priority')} initialValue={100}>
-            <Input type="number" />
+            <InputNumber style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item name="description" label={t('strategy.description_label')}>
             <Input.TextArea rows={2} />
@@ -630,7 +800,7 @@ const StrategiesPage: React.FC = () => {
           </Form.Item>
           {selectedStrategy && renderConfigFields(selectedStrategy.strategyType, editForm)}
           <Form.Item name="priority" label={t('strategy.priority')}>
-            <Input type="number" />
+            <InputNumber style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item name="description" label={t('strategy.description_label')}>
             <Input.TextArea rows={2} />
