@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  Card, Button, Space, Modal, message, Spin, Tag, Drawer, Form, Input, Switch,
+  Card, Button, Space, message, Spin, Tag, Modal, Form, Input, Switch,
   Select, Empty, Radio, Tooltip, Badge, Divider, Typography, Dropdown, Pagination
 } from 'antd';
 import {
@@ -225,9 +225,9 @@ const RoutesPage: React.FC = () => {
   const [services, setServices] = useState<Service[]>([]);
   const [nacosServices, setNacosServices] = useState<NacosService[]>([]);
   const [loading, setLoading] = useState(false);
-  const [createDrawerVisible, setCreateDrawerVisible] = useState(false);
-  const [editDrawerVisible, setEditDrawerVisible] = useState(false);
-  const [detailDrawerVisible, setDetailDrawerVisible] = useState(false);
+  const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [selectedRoute, setSelectedRoute] = useState<Route | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -346,7 +346,7 @@ const RoutesPage: React.FC = () => {
         if (response.data.code === 200) {
           message.success(t('routes.created_success'));
           createForm.resetFields();
-          setCreateDrawerVisible(false);
+          setCreateModalVisible(false);
           loadRoutes();
           loadServices();
         } else {
@@ -395,7 +395,7 @@ const RoutesPage: React.FC = () => {
         if (response.data.code === 200) {
           message.success(t('message.update_success'));
           editForm.resetFields();
-          setEditDrawerVisible(false);
+          setEditModalVisible(false);
           loadRoutes();
           loadServices();
         } else {
@@ -476,7 +476,7 @@ const RoutesPage: React.FC = () => {
 
   const showRouteDetail = (record: Route) => {
     setSelectedRoute(record);
-    setDetailDrawerVisible(true);
+    setDetailModalVisible(true);
   };
 
   const showRouteEdit = (record: Route) => {
@@ -515,7 +515,7 @@ const RoutesPage: React.FC = () => {
       filters: editFilters,
     });
 
-    setEditDrawerVisible(true);
+    setEditModalVisible(true);
   };
 
   const copyToClipboard = (text: string, label: string) => {
@@ -662,7 +662,7 @@ const RoutesPage: React.FC = () => {
             <Select.Option value="enabled">{t('common.enabled')}</Select.Option>
             <Select.Option value="disabled">{t('common.disabled')}</Select.Option>
           </Select>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateDrawerVisible(true)} className="create-btn">
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalVisible(true)} className="create-btn">
             {t('routes.create')}
           </Button>
         </div>
@@ -676,7 +676,7 @@ const RoutesPage: React.FC = () => {
               image={<CompassOutlined className="empty-icon" />}
               description={<span className="empty-text">{t('routes.empty_description')}</span>}
             >
-              <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateDrawerVisible(true)}>
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalVisible(true)}>
                 {t('routes.create_first')}
               </Button>
             </Empty>
@@ -784,14 +784,14 @@ const RoutesPage: React.FC = () => {
         )}
       </Spin>
 
-      {/* Create Route Drawer */}
-      <Drawer
+      {/* Create Route Modal */}
+      <Modal
         title={t('routes.create')}
-        placement="right"
-        size="large"
-        open={createDrawerVisible}
-        onClose={() => { setCreateDrawerVisible(false); createForm.resetFields(); }}
-        className="route-drawer"
+        
+        
+        open={createModalVisible}
+        onCancel={() => { setCreateModalVisible(false); createForm.resetFields(); }}
+        className="route-modal"
       >
         <Form form={createForm} layout="vertical" onFinish={handleCreate} initialValues={{ order: 0, enabled: true, targetType: 'static' }}>
           {/* Basic Info */}
@@ -893,21 +893,21 @@ const RoutesPage: React.FC = () => {
             <Switch checkedChildren={t('common.enabled')} unCheckedChildren={t('common.disabled')} />
           </Form.Item>
 
-          <div className="drawer-footer">
-            <Button onClick={() => setCreateDrawerVisible(false)}>{t('common.cancel')}</Button>
+          <div className="modal-footer">
+            <Button onClick={() => setCreateModalVisible(false)}>{t('common.cancel')}</Button>
             <Button type="primary" htmlType="submit">{t('routes.create')}</Button>
           </div>
         </Form>
-      </Drawer>
+      </Modal>
 
-      {/* Edit Route Drawer */}
-      <Drawer
-        title={t('routes.edit')}
-        placement="right"
-        size="large"
-        open={editDrawerVisible}
-        onClose={() => { setEditDrawerVisible(false); editForm.resetFields(); }}
-        className="route-drawer"
+      {/* Edit Route Modal */}
+      <Modal
+        title={<div className="modal-header"><EditOutlined className="modal-icon" /><span>{t('routes.edit')}</span></div>}
+        open={editModalVisible}
+        onCancel={() => { setEditModalVisible(false); editForm.resetFields(); }}
+        footer={null}
+        width={720}
+        className="route-modal"
       >
         <Form form={editForm} layout="vertical" onFinish={handleUpdate}>
           <Form.Item name="id" hidden><Input /></Form.Item>
@@ -1001,20 +1001,21 @@ const RoutesPage: React.FC = () => {
             </Form.List>
           </div>
 
-          <div className="drawer-footer">
-            <Button onClick={() => setEditDrawerVisible(false)}>{t('common.cancel')}</Button>
+          <div className="modal-footer">
+            <Button onClick={() => setEditModalVisible(false)}>{t('common.cancel')}</Button>
             <Button type="primary" htmlType="submit">{t('common.update')}</Button>
           </div>
         </Form>
-      </Drawer>
+      </Modal>
 
-      {/* Route Detail Drawer */}
-      <Drawer
-        title={t('routes.detail_title')}
-        placement="right"
-        size="large"
-        open={detailDrawerVisible}
-        onClose={() => setDetailDrawerVisible(false)}
+      {/* Route Detail Modal */}
+      <Modal
+        title={<div className="modal-header"><EyeOutlined className="modal-icon" /><span>{t('routes.detail_title')}</span></div>}
+        open={detailModalVisible}
+        onCancel={() => setDetailModalVisible(false)}
+        footer={null}
+        width={640}
+        className="route-modal"
       >
         {selectedRoute && (
           <div className="route-detail">
@@ -1075,7 +1076,7 @@ const RoutesPage: React.FC = () => {
             )}
           </div>
         )}
-      </Drawer>
+      </Modal>
     </div>
   );
 };

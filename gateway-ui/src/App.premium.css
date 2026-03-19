@@ -1320,3 +1320,76 @@
     display: none;
   }
 }
+
+/* ==================== Modal Styles ==================== */
+.strategy-modal .modal-header,
+.route-modal .modal-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.strategy-modal .modal-icon,
+.route-modal .modal-icon {
+  color: #1890ff;
+  font-size: 18px;
+}
+
+.strategy-modal .ant-modal-body,
+.route-modal .ant-modal-body {
+  padding: 24px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.strategy-modal .ant-form-item,
+.route-modal .ant-form-item {
+  margin-bottom: 16px;
+}
+
+.strategy-modal .ant-divider-horizontal.ant-divider-with-text,
+.route-modal .ant-divider-horizontal.ant-divider-with-text {
+  margin: 16px 0;
+  font-size: 13px;
+  color: #64748B;
+}
+
+.strategy-modal .modal-footer,
+.route-modal .modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #E2E8F0;
+}
+
+.strategy-modal .form-section,
+.route-modal .form-section {
+  margin-bottom: 20px;
+  padding: 16px;
+  background: #F8FAFC;
+  border-radius: 8px;
+}
+
+.strategy-modal .form-section-title,
+.route-modal .form-section-title {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.strategy-modal .form-item-row,
+.route-modal .form-item-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: #fff;
+  border-radius: 6px;
+  border: 1px solid #E2E8F0;
+}
