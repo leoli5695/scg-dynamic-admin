@@ -253,3 +253,40 @@
     flex-wrap: wrap;
   }
 }
+
+/* Strategy Modal Styles */
+.strategy-modal .modal-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.strategy-modal .modal-icon {
+  color: #1890ff;
+  font-size: 18px;
+}
+
+.strategy-modal .ant-modal-body {
+  padding: 24px;
+}
+
+.strategy-modal .ant-form-item {
+  margin-bottom: 16px;
+}
+
+.strategy-modal .ant-divider-horizontal.ant-divider-with-text {
+  margin: 16px 0;
+  font-size: 13px;
+  color: #64748B;
+}
+
+.strategy-modal .modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #E2E8F0;
+}

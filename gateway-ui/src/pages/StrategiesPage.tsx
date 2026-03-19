@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
-  Card, Button, Space, Modal, message, Spin, Tag, Drawer, Form, Input, Select,
-  Empty, Dropdown, Tooltip, Badge, Divider, Typography, Switch, Radio, InputNumber
+  Card, Button, Space, Modal, message, Spin, Tag, Form, Input, Select,
+  Empty, Dropdown, Tooltip, Badge, Divider, Typography, Switch, Radio, InputNumber, Row, Col
 } from 'antd';
 import {
   PlusOutlined, DeleteOutlined, EditOutlined, MoreOutlined,
@@ -32,8 +32,8 @@ interface StrategyDefinition {
 const StrategiesPage: React.FC = () => {
   const [strategies, setStrategies] = useState<StrategyDefinition[]>([]);
   const [loading, setLoading] = useState(false);
-  const [createDrawerVisible, setCreateDrawerVisible] = useState(false);
-  const [editDrawerVisible, setEditDrawerVisible] = useState(false);
+  const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [editModalVisible, setEditModalVisible] = useState(false);
   const [selectedStrategy, setSelectedStrategy] = useState<StrategyDefinition | null>(null);
   const [filterType, setFilterType] = useState<string>('all');
   const [filterScope, setFilterScope] = useState<string>('all');
@@ -238,7 +238,7 @@ const StrategiesPage: React.FC = () => {
       if (response.data.code === 200) {
         message.success(t('message.create_success'));
         createForm.resetFields();
-        setCreateDrawerVisible(false);
+        setCreateModalVisible(false);
         loadStrategies();
       } else {
         message.error(response.data.message);
@@ -267,7 +267,8 @@ const StrategiesPage: React.FC = () => {
       if (response.data.code === 200) {
         message.success(t('message.update_success'));
         editForm.resetFields();
-        setEditDrawerVisible(false);
+        setEditModalVisible(false);
+        setSelectedStrategy(null);
         loadStrategies();
       } else {
         message.error(response.data.message);
@@ -328,7 +329,7 @@ const StrategiesPage: React.FC = () => {
     }
   };
 
-  const openEditDrawer = (strategy: StrategyDefinition) => {
+  const openEditModal = (strategy: StrategyDefinition) => {
     setSelectedStrategy(strategy);
     editForm.setFieldsValue({
       strategyName: strategy.strategyName,
@@ -348,11 +349,11 @@ const StrategiesPage: React.FC = () => {
       addRequestHeaders: strategy.config?.addRequestHeaders ? JSON.stringify(strategy.config.addRequestHeaders) : '',
       addResponseHeaders: strategy.config?.addResponseHeaders ? JSON.stringify(strategy.config.addResponseHeaders) : '',
     });
-    setEditDrawerVisible(true);
+    setEditModalVisible(true);
   };
 
   const getActionMenu = (strategy: StrategyDefinition): MenuProps['items'] => [
-    { key: 'edit', icon: <EditOutlined />, label: t('common.edit'), onClick: () => openEditDrawer(strategy) },
+    { key: 'edit', icon: <EditOutlined />, label: t('common.edit'), onClick: () => openEditModal(strategy) },
     { type: 'divider' },
     strategy.enabled
       ? { key: 'disable', icon: <StopOutlined />, label: t('common.disable'), onClick: () => handleDisable(strategy) }
@@ -365,224 +366,307 @@ const StrategiesPage: React.FC = () => {
     switch (strategyType) {
       case 'RATE_LIMITER':
         return (
-          <>
-            <Form.Item name="qps" label={t('strategy.config.qps')} initialValue={100}>
-              <InputNumber min={1} max={100000} style={{ width: '100%' }} />
-            </Form.Item>
-            <Form.Item name="burstCapacity" label={t('strategy.config.burst_capacity')} initialValue={200}>
-              <InputNumber min={0} style={{ width: '100%' }} />
-            </Form.Item>
-            <Form.Item name="timeUnit" label={t('strategy.config.time_unit')} initialValue="second">
-              <Select>
-                <Select.Option value="second">{t('strategy.config.second')}</Select.Option>
-                <Select.Option value="minute">{t('strategy.config.minute')}</Select.Option>
-                <Select.Option value="hour">{t('strategy.config.hour')}</Select.Option>
-              </Select>
-            </Form.Item>
-            <Form.Item name="keyResolver" label={t('strategy.config.key_resolver')} initialValue="ip">
-              <Select>
-                <Select.Option value="ip">{t('strategy.config.key_resolver_ip')}</Select.Option>
-                <Select.Option value="user">{t('strategy.config.key_resolver_user')}</Select.Option>
-                <Select.Option value="header">{t('strategy.config.key_resolver_header')}</Select.Option>
-                <Select.Option value="global">{t('strategy.config.key_resolver_global')}</Select.Option>
-              </Select>
-            </Form.Item>
-          </>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="qps" label={t('strategy.config.qps')} initialValue={100}>
+                <InputNumber min={1} max={100000} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="burstCapacity" label={t('strategy.config.burst_capacity')} initialValue={200}>
+                <InputNumber min={0} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="timeUnit" label={t('strategy.config.time_unit')} initialValue="second">
+                <Select>
+                  <Select.Option value="second">{t('strategy.config.second')}</Select.Option>
+                  <Select.Option value="minute">{t('strategy.config.minute')}</Select.Option>
+                  <Select.Option value="hour">{t('strategy.config.hour')}</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="keyResolver" label={t('strategy.config.key_resolver')} initialValue="ip">
+                <Select>
+                  <Select.Option value="ip">{t('strategy.config.key_resolver_ip')}</Select.Option>
+                  <Select.Option value="user">{t('strategy.config.key_resolver_user')}</Select.Option>
+                  <Select.Option value="header">{t('strategy.config.key_resolver_header')}</Select.Option>
+                  <Select.Option value="global">{t('strategy.config.key_resolver_global')}</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
         );
       case 'IP_FILTER':
         return (
-          <>
-            <Form.Item name="mode" label={t('strategy.config.filter_mode')} initialValue="blacklist">
-              <Select>
-                <Select.Option value="blacklist">{t('strategy.config.blacklist')}</Select.Option>
-                <Select.Option value="whitelist">{t('strategy.config.whitelist')}</Select.Option>
-              </Select>
-            </Form.Item>
-            <Form.Item name="ipList" label={t('strategy.config.ip_list')}>
-              <Input.TextArea rows={3} placeholder="192.168.1.1, 10.0.0.0/24" />
-            </Form.Item>
-          </>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="mode" label={t('strategy.config.filter_mode')} initialValue="blacklist">
+                <Select>
+                  <Select.Option value="blacklist">{t('strategy.config.blacklist')}</Select.Option>
+                  <Select.Option value="whitelist">{t('strategy.config.whitelist')}</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={24}>
+              <Form.Item name="ipList" label={t('strategy.config.ip_list')}>
+                <Input.TextArea rows={2} placeholder="192.168.1.1, 10.0.0.0/24" />
+              </Form.Item>
+            </Col>
+          </Row>
         );
       case 'TIMEOUT':
         return (
-          <>
-            <Form.Item name="connectTimeout" label={t('strategy.config.connect_timeout')} initialValue={5000}>
-              <InputNumber addonAfter="ms" style={{ width: '100%' }} />
-            </Form.Item>
-            <Form.Item name="responseTimeout" label={t('strategy.config.response_timeout')} initialValue={30000}>
-              <InputNumber addonAfter="ms" style={{ width: '100%' }} />
-            </Form.Item>
-          </>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="connectTimeout" label={t('strategy.config.connect_timeout')} initialValue={5000}>
+                <InputNumber addonAfter="ms" style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="responseTimeout" label={t('strategy.config.response_timeout')} initialValue={30000}>
+                <InputNumber addonAfter="ms" style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+          </Row>
         );
       case 'CIRCUIT_BREAKER':
         return (
-          <>
-            <Form.Item name="failureRateThreshold" label={t('strategy.config.failure_rate')} initialValue={50}>
-              <InputNumber min={0} max={100} addonAfter="%" style={{ width: '100%' }} />
-            </Form.Item>
-            <Form.Item name="waitDurationInOpenState" label={t('strategy.config.wait_duration')} initialValue={30000}>
-              <InputNumber addonAfter="ms" style={{ width: '100%' }} />
-            </Form.Item>
-            <Form.Item name="slidingWindowSize" label={t('strategy.config.sliding_window')} initialValue={10}>
-              <InputNumber min={1} style={{ width: '100%' }} />
-            </Form.Item>
-          </>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="failureRateThreshold" label={t('strategy.config.failure_rate')} initialValue={50}>
+                <InputNumber min={0} max={100} addonAfter="%" style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="waitDurationInOpenState" label={t('strategy.config.wait_duration')} initialValue={30000}>
+                <InputNumber addonAfter="ms" style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="slidingWindowSize" label={t('strategy.config.sliding_window')} initialValue={10}>
+                <InputNumber min={1} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+          </Row>
         );
       case 'AUTH':
         return (
-          <>
-            <Form.Item name="authType" label={t('strategy.config.auth_type')} initialValue="JWT">
-              <Select>
-                <Select.Option value="JWT">JWT</Select.Option>
-                <Select.Option value="API_KEY">API Key</Select.Option>
-                <Select.Option value="OAUTH2">OAuth2</Select.Option>
-              </Select>
-            </Form.Item>
-            <Form.Item name="secretKey" label={t('strategy.config.secret_key')}>
-              <Input.Password />
-            </Form.Item>
-          </>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="authType" label={t('strategy.config.auth_type')} initialValue="JWT">
+                <Select>
+                  <Select.Option value="JWT">JWT</Select.Option>
+                  <Select.Option value="API_KEY">API Key</Select.Option>
+                  <Select.Option value="OAUTH2">OAuth2</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="secretKey" label={t('strategy.config.secret_key')}>
+                <Input.Password />
+              </Form.Item>
+            </Col>
+          </Row>
         );
       case 'RETRY':
         return (
-          <>
-            <Form.Item name="maxAttempts" label={t('strategy.config.max_attempts')} initialValue={3}>
-              <InputNumber min={1} max={10} style={{ width: '100%' }} />
-            </Form.Item>
-            <Form.Item name="retryIntervalMs" label={t('strategy.config.retry_interval')} initialValue={1000}>
-              <InputNumber addonAfter="ms" style={{ width: '100%' }} />
-            </Form.Item>
-            <Form.Item name="retryOnStatusCodes" label={t('strategy.config.retry_status_codes')} initialValue="500, 502, 503, 504">
-              <Input placeholder="500, 502, 503, 504" />
-            </Form.Item>
-          </>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item name="maxAttempts" label={t('strategy.config.max_attempts')} initialValue={3}>
+                <InputNumber min={1} max={10} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="retryIntervalMs" label={t('strategy.config.retry_interval')} initialValue={1000}>
+                <InputNumber addonAfter="ms" style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="retryOnStatusCodes" label={t('strategy.config.retry_status_codes')} initialValue="500, 502, 503, 504">
+                <Input placeholder="500,502" />
+              </Form.Item>
+            </Col>
+          </Row>
         );
       case 'CORS':
         return (
-          <>
-            <Form.Item name="allowedOrigins" label={t('strategy.config.allowed_origins')} initialValue="*">
-              <Input placeholder="http://localhost:3000, https://example.com" />
-            </Form.Item>
-            <Form.Item name="allowedMethods" label={t('strategy.config.allowed_methods')} initialValue="GET, POST, PUT, DELETE">
-              <Input placeholder="GET, POST, PUT, DELETE" />
-            </Form.Item>
-            <Form.Item name="allowedHeaders" label={t('strategy.config.allowed_headers')} initialValue="*">
-              <Input placeholder="Content-Type, Authorization" />
-            </Form.Item>
-            <Form.Item name="allowCredentials" label={t('strategy.config.allow_credentials')} valuePropName="checked" initialValue={false}>
-              <Switch />
-            </Form.Item>
-            <Form.Item name="maxAge" label={t('strategy.config.max_age')} initialValue={3600}>
-              <InputNumber addonAfter="s" style={{ width: '100%' }} />
-            </Form.Item>
-          </>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="allowedOrigins" label={t('strategy.config.allowed_origins')} initialValue="*">
+                <Input placeholder="http://localhost:3000" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="allowedMethods" label={t('strategy.config.allowed_methods')} initialValue="GET, POST, PUT, DELETE">
+                <Input placeholder="GET, POST" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="allowedHeaders" label={t('strategy.config.allowed_headers')} initialValue="*">
+                <Input placeholder="Content-Type" />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="allowCredentials" label={t('strategy.config.allow_credentials')} valuePropName="checked" initialValue={false}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="maxAge" label={t('strategy.config.max_age')} initialValue={3600}>
+                <InputNumber addonAfter="s" style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+          </Row>
         );
       case 'ACCESS_LOG':
         return (
-          <>
-            <Form.Item name="logLevel" label={t('strategy.config.log_level')} initialValue="NORMAL">
-              <Select>
-                <Select.Option value="MINIMAL">MINIMAL</Select.Option>
-                <Select.Option value="NORMAL">NORMAL</Select.Option>
-                <Select.Option value="VERBOSE">VERBOSE</Select.Option>
-              </Select>
-            </Form.Item>
-            <Form.Item name="logRequestHeaders" label={t('strategy.config.log_request_headers')} valuePropName="checked" initialValue={true}>
-              <Switch />
-            </Form.Item>
-            <Form.Item name="logResponseHeaders" label={t('strategy.config.log_response_headers')} valuePropName="checked" initialValue={true}>
-              <Switch />
-            </Form.Item>
-            <Form.Item name="logRequestBody" label={t('strategy.config.log_request_body')} valuePropName="checked" initialValue={false}>
-              <Switch />
-            </Form.Item>
-            <Form.Item name="logResponseBody" label={t('strategy.config.log_response_body')} valuePropName="checked" initialValue={false}>
-              <Switch />
-            </Form.Item>
-            <Form.Item name="samplingRate" label={t('strategy.config.sampling_rate')} initialValue={100}>
-              <InputNumber min={1} max={100} addonAfter="%" style={{ width: '100%' }} />
-            </Form.Item>
-          </>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item name="logLevel" label={t('strategy.config.log_level')} initialValue="NORMAL">
+                <Select>
+                  <Select.Option value="MINIMAL">MINIMAL</Select.Option>
+                  <Select.Option value="NORMAL">NORMAL</Select.Option>
+                  <Select.Option value="VERBOSE">VERBOSE</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="samplingRate" label={t('strategy.config.sampling_rate')} initialValue={100}>
+                <InputNumber min={1} max={100} addonAfter="%" style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="logRequestHeaders" label={t('strategy.config.log_request_headers')} valuePropName="checked" initialValue={true}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="logResponseHeaders" label={t('strategy.config.log_response_headers')} valuePropName="checked" initialValue={true}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="logRequestBody" label={t('strategy.config.log_request_body')} valuePropName="checked" initialValue={false}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="logResponseBody" label={t('strategy.config.log_response_body')} valuePropName="checked" initialValue={false}>
+                <Switch />
+              </Form.Item>
+            </Col>
+          </Row>
         );
       case 'HEADER_OP':
         return (
-          <>
-            <Form.Item name="enableTraceId" label={t('strategy.config.enable_trace_id')} valuePropName="checked" initialValue={true}>
-              <Switch />
-            </Form.Item>
-            <Form.Item name="traceIdHeader" label={t('strategy.config.trace_id_header')} initialValue="X-Trace-Id">
-              <Input />
-            </Form.Item>
-            <Form.Item name="addRequestHeaders" label={t('strategy.config.add_request_headers')}>
-              <Input.TextArea rows={2} placeholder='{"X-Custom-Header": "value"}' />
-            </Form.Item>
-            <Form.Item name="addResponseHeaders" label={t('strategy.config.add_response_headers')}>
-              <Input.TextArea rows={2} placeholder='{"X-Response-Header": "value"}' />
-            </Form.Item>
-          </>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="enableTraceId" label={t('strategy.config.enable_trace_id')} valuePropName="checked" initialValue={true}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="traceIdHeader" label={t('strategy.config.trace_id_header')} initialValue="X-Trace-Id">
+                <Input />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="addRequestHeaders" label={t('strategy.config.add_request_headers')}>
+                <Input.TextArea rows={2} placeholder='{"X-Custom": "value"}' />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="addResponseHeaders" label={t('strategy.config.add_response_headers')}>
+                <Input.TextArea rows={2} placeholder='{"X-Response": "value"}' />
+              </Form.Item>
+            </Col>
+          </Row>
         );
       case 'CACHE':
         return (
-          <>
-            <Form.Item name="ttlSeconds" label={t('strategy.config.ttl_seconds')} initialValue={60}>
-              <InputNumber min={1} style={{ width: '100%' }} />
-            </Form.Item>
-            <Form.Item name="maxSize" label={t('strategy.config.max_size')} initialValue={10000}>
-              <InputNumber min={1} style={{ width: '100%' }} />
-            </Form.Item>
-            <Form.Item name="cacheMethods" label={t('strategy.config.cache_methods')} initialValue="GET, HEAD">
-              <Input placeholder="GET, HEAD" />
-            </Form.Item>
-          </>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item name="ttlSeconds" label={t('strategy.config.ttl_seconds')} initialValue={60}>
+                <InputNumber min={1} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="maxSize" label={t('strategy.config.max_size')} initialValue={10000}>
+                <InputNumber min={1} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="cacheMethods" label={t('strategy.config.cache_methods')} initialValue="GET, HEAD">
+                <Input placeholder="GET, HEAD" />
+              </Form.Item>
+            </Col>
+          </Row>
         );
       case 'SECURITY':
         return (
-          <>
-            <Form.Item name="mode" label={t('strategy.config.security_mode')} initialValue="BLOCK">
-              <Select>
-                <Select.Option value="DETECT">{t('strategy.config.detect_mode')}</Select.Option>
-                <Select.Option value="BLOCK">{t('strategy.config.block_mode')}</Select.Option>
-              </Select>
-            </Form.Item>
-            <Form.Item name="enableSqlInjectionProtection" label={t('strategy.config.sql_injection')} valuePropName="checked" initialValue={true}>
-              <Switch />
-            </Form.Item>
-            <Form.Item name="enableXssProtection" label={t('strategy.config.xss_protection')} valuePropName="checked" initialValue={true}>
-              <Switch />
-            </Form.Item>
-            <Form.Item name="checkParameters" label={t('strategy.config.check_params')} valuePropName="checked" initialValue={true}>
-              <Switch />
-            </Form.Item>
-            <Form.Item name="checkBody" label={t('strategy.config.check_body')} valuePropName="checked" initialValue={true}>
-              <Switch />
-            </Form.Item>
-          </>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="mode" label={t('strategy.config.security_mode')} initialValue="BLOCK">
+                <Select>
+                  <Select.Option value="DETECT">{t('strategy.config.detect_mode')}</Select.Option>
+                  <Select.Option value="BLOCK">{t('strategy.config.block_mode')}</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="enableSqlInjectionProtection" label={t('strategy.config.sql_injection')} valuePropName="checked" initialValue={true}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="enableXssProtection" label={t('strategy.config.xss_protection')} valuePropName="checked" initialValue={true}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="checkParameters" label={t('strategy.config.check_params')} valuePropName="checked" initialValue={true}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="checkBody" label={t('strategy.config.check_body')} valuePropName="checked" initialValue={true}>
+                <Switch />
+              </Form.Item>
+            </Col>
+          </Row>
         );
       case 'API_VERSION':
         return (
-          <>
-            <Form.Item name="versionMode" label={t('strategy.config.version_mode')} initialValue="PATH">
-              <Select>
-                <Select.Option value="PATH">PATH</Select.Option>
-                <Select.Option value="HEADER">HEADER</Select.Option>
-                <Select.Option value="QUERY">QUERY</Select.Option>
-                <Select.Option value="SERVICE">SERVICE</Select.Option>
-              </Select>
-            </Form.Item>
-            <Form.Item name="defaultVersion" label={t('strategy.config.default_version')} initialValue="v1">
-              <Input placeholder="v1" />
-            </Form.Item>
-            <Form.Item name="versionHeader" label={t('strategy.config.version_header')} initialValue="X-API-Version">
-              <Input />
-            </Form.Item>
-          </>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="versionMode" label={t('strategy.config.version_mode')} initialValue="PATH">
+                <Select>
+                  <Select.Option value="PATH">PATH</Select.Option>
+                  <Select.Option value="HEADER">HEADER</Select.Option>
+                  <Select.Option value="QUERY">QUERY</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="defaultVersion" label={t('strategy.config.default_version')} initialValue="v1">
+                <Input placeholder="v1" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="versionHeader" label={t('strategy.config.version_header')} initialValue="X-API-Version">
+                <Input />
+              </Form.Item>
+            </Col>
+          </Row>
         );
       default:
         return null;
     }
   };
 
-  // Strategy type options for select
+  // Strategy type options for select dropdown
   const strategyTypeOptions = [
     { value: 'RATE_LIMITER', label: t('strategy.type.rate_limiter'), icon: <ThunderboltOutlined /> },
     { value: 'IP_FILTER', label: t('strategy.type.ip_filter'), icon: <SafetyOutlined /> },
@@ -636,7 +720,7 @@ const StrategiesPage: React.FC = () => {
             <Select.Option value="GLOBAL">{t('strategy.scope_global')}</Select.Option>
             <Select.Option value="ROUTE">{t('strategy.scope_route')}</Select.Option>
           </Select>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateDrawerVisible(true)} className="create-btn">
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalVisible(true)} className="create-btn">
             {t('strategy.create')}
           </Button>
         </div>
@@ -650,7 +734,7 @@ const StrategiesPage: React.FC = () => {
               image={<ThunderboltOutlined className="empty-icon" />}
               description={<span className="empty-text">{t('strategy.empty')}</span>}
             >
-              <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateDrawerVisible(true)}>
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalVisible(true)}>
                 {t('strategy.create_first')}
               </Button>
             </Empty>
@@ -708,83 +792,110 @@ const StrategiesPage: React.FC = () => {
         )}
       </Spin>
 
-      {/* Create Drawer */}
-      <Drawer
-        title={t('strategy.create')}
-        placement="right"
-        width={480}
-        open={createDrawerVisible}
-        onClose={() => { setCreateDrawerVisible(false); createForm.resetFields(); }}
+      {/* Create Modal */}
+      <Modal
+        title={<div className="modal-header"><PlusOutlined className="modal-icon" /><span>{t('strategy.create')}</span></div>}
+        open={createModalVisible}
+        onCancel={() => { setCreateModalVisible(false); createForm.resetFields(); }}
+        footer={null}
+        width={640}
+        className="strategy-modal"
       >
         <Form form={createForm} layout="vertical" onFinish={handleCreate}>
-          <Form.Item name="strategyName" label={t('strategy.name')} rules={[{ required: true }]}>
-            <Input placeholder={t('strategy.name_placeholder')} />
-          </Form.Item>
-          <Form.Item name="strategyType" label={t('strategy.type')} rules={[{ required: true }]}>
-            <Select placeholder={t('strategy.type_placeholder')}>
-              {strategyTypeOptions.map(opt => (
-                <Select.Option key={opt.value} value={opt.value}>
-                  <Space>{opt.icon}{opt.label}</Space>
-                </Select.Option>
-              ))}
-            </Select>
-          </Form.Item>
-          <Form.Item name="scope" label={t('strategy.scope')} initialValue="GLOBAL">
-            <Radio.Group>
-              <Radio.Button value="GLOBAL"><GlobalOutlined /> {t('strategy.scope_global')}</Radio.Button>
-              <Radio.Button value="ROUTE"><ApiOutlined /> {t('strategy.scope_route')}</Radio.Button>
-            </Radio.Group>
-          </Form.Item>
-          <Form.Item noStyle shouldUpdate>
-            {({ getFieldValue }) => {
-              const scope = getFieldValue('scope');
-              if (scope === 'ROUTE') {
-                return (
-                  <Form.Item name="routeId" label={t('strategy.route_id')} rules={[{ required: true }]}>
-                    <Input placeholder={t('strategy.route_id_placeholder')} />
-                  </Form.Item>
-                );
-              }
-              return null;
-            }}
-          </Form.Item>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="strategyName" label={t('strategy.name')} rules={[{ required: true }]}>
+                <Input placeholder={t('strategy.name_placeholder')} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="strategyType" label={t('strategy.type')} rules={[{ required: true }]}>
+                <Select placeholder={t('strategy.type_placeholder')}>
+                  {strategyTypeOptions.map(opt => (
+                    <Select.Option key={opt.value} value={opt.value}>
+                      <Space>{opt.icon}{opt.label}</Space>
+                    </Select.Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="scope" label={t('strategy.scope')} initialValue="GLOBAL">
+                <Radio.Group>
+                  <Radio.Button value="GLOBAL"><GlobalOutlined /> {t('strategy.scope_global')}</Radio.Button>
+                  <Radio.Button value="ROUTE"><ApiOutlined /> {t('strategy.scope_route')}</Radio.Button>
+                </Radio.Group>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item noStyle shouldUpdate>
+                {({ getFieldValue }) => {
+                  const scope = getFieldValue('scope');
+                  if (scope === 'ROUTE') {
+                    return (
+                      <Form.Item name="routeId" label={t('strategy.route_id')} rules={[{ required: true }]}>
+                        <Input placeholder={t('strategy.route_id_placeholder')} />
+                      </Form.Item>
+                    );
+                  }
+                  return null;
+                }}
+              </Form.Item>
+            </Col>
+          </Row>
+          <Divider plain>{t('strategy.config')}</Divider>
           <Form.Item noStyle shouldUpdate>
             {({ getFieldValue }) => renderConfigFields(getFieldValue('strategyType'), createForm)}
           </Form.Item>
-          <Form.Item name="priority" label={t('strategy.priority')} initialValue={100}>
-            <InputNumber style={{ width: '100%' }} />
-          </Form.Item>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item name="priority" label={t('strategy.priority')} initialValue={100}>
+                <InputNumber min={1} max={1000} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="enabled" label={t('strategy.enabled')} valuePropName="checked" initialValue={true}>
+                <Switch checkedChildren={t('common.enabled')} unCheckedChildren={t('common.disabled')} />
+              </Form.Item>
+            </Col>
+          </Row>
           <Form.Item name="description" label={t('strategy.description_label')}>
             <Input.TextArea rows={2} />
           </Form.Item>
-          <Form.Item name="enabled" label={t('strategy.enabled')} valuePropName="checked" initialValue={true}>
-            <Switch checkedChildren={t('common.enabled')} unCheckedChildren={t('common.disabled')} />
-          </Form.Item>
-          <div className="drawer-footer">
-            <Button onClick={() => setCreateDrawerVisible(false)}>{t('common.cancel')}</Button>
+          <div className="modal-footer">
+            <Button onClick={() => setCreateModalVisible(false)}>{t('common.cancel')}</Button>
             <Button type="primary" htmlType="submit">{t('common.create')}</Button>
           </div>
         </Form>
-      </Drawer>
+      </Modal>
 
-      {/* Edit Drawer */}
-      <Drawer
-        title={t('strategy.edit')}
-        placement="right"
-        width={480}
-        open={editDrawerVisible}
-        onClose={() => { setEditDrawerVisible(false); editForm.resetFields(); setSelectedStrategy(null); }}
+      {/* Edit Modal */}
+      <Modal
+        title={<div className="modal-header"><EditOutlined className="modal-icon" /><span>{t('strategy.edit')}</span></div>}
+        open={editModalVisible}
+        onCancel={() => { setEditModalVisible(false); editForm.resetFields(); setSelectedStrategy(null); }}
+        footer={null}
+        width={640}
+        className="strategy-modal"
       >
         <Form form={editForm} layout="vertical" onFinish={handleUpdate}>
-          <Form.Item name="strategyName" label={t('strategy.name')} rules={[{ required: true }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="scope" label={t('strategy.scope')}>
-            <Radio.Group>
-              <Radio.Button value="GLOBAL"><GlobalOutlined /> {t('strategy.scope_global')}</Radio.Button>
-              <Radio.Button value="ROUTE"><ApiOutlined /> {t('strategy.scope_route')}</Radio.Button>
-            </Radio.Group>
-          </Form.Item>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="strategyName" label={t('strategy.name')} rules={[{ required: true }]}>
+                <Input />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="scope" label={t('strategy.scope')}>
+                <Radio.Group>
+                  <Radio.Button value="GLOBAL"><GlobalOutlined /> {t('strategy.scope_global')}</Radio.Button>
+                  <Radio.Button value="ROUTE"><ApiOutlined /> {t('strategy.scope_route')}</Radio.Button>
+                </Radio.Group>
+              </Form.Item>
+            </Col>
+          </Row>
           <Form.Item noStyle shouldUpdate>
             {({ getFieldValue }) => {
               const scope = getFieldValue('scope');
@@ -798,22 +909,29 @@ const StrategiesPage: React.FC = () => {
               return null;
             }}
           </Form.Item>
+          <Divider plain>{t('strategy.config')}</Divider>
           {selectedStrategy && renderConfigFields(selectedStrategy.strategyType, editForm)}
-          <Form.Item name="priority" label={t('strategy.priority')}>
-            <InputNumber style={{ width: '100%' }} />
-          </Form.Item>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item name="priority" label={t('strategy.priority')}>
+                <InputNumber min={1} max={1000} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="enabled" label={t('strategy.enabled')} valuePropName="checked">
+                <Switch checkedChildren={t('common.enabled')} unCheckedChildren={t('common.disabled')} />
+              </Form.Item>
+            </Col>
+          </Row>
           <Form.Item name="description" label={t('strategy.description_label')}>
             <Input.TextArea rows={2} />
           </Form.Item>
-          <Form.Item name="enabled" label={t('strategy.enabled')} valuePropName="checked">
-            <Switch checkedChildren={t('common.enabled')} unCheckedChildren={t('common.disabled')} />
-          </Form.Item>
-          <div className="drawer-footer">
-            <Button onClick={() => setEditDrawerVisible(false)}>{t('common.cancel')}</Button>
+          <div className="modal-footer">
+            <Button onClick={() => setEditModalVisible(false)}>{t('common.cancel')}</Button>
             <Button type="primary" htmlType="submit">{t('common.update')}</Button>
           </div>
         </Form>
-      </Drawer>
+      </Modal>
     </div>
   );
 };
