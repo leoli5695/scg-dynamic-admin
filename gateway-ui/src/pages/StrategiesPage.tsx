@@ -122,6 +122,8 @@ const StrategiesPage: React.FC = () => {
             burstCapacity: parseInt(values.burstCapacity) || 200,
             timeUnit: values.timeUnit || 'second',
             keyResolver: values.keyResolver || 'ip',
+            keyType: 'combined',
+            headerName: values.headerName,
           };
           break;
         case 'IP_FILTER':
@@ -140,9 +142,11 @@ const StrategiesPage: React.FC = () => {
           strategy.config = {
             failureRateThreshold: parseFloat(values.failureRateThreshold) || 50,
             slowCallDurationThreshold: parseInt(values.slowCallDurationThreshold) || 60000,
+            slowCallRateThreshold: 80.0,
             waitDurationInOpenState: parseInt(values.waitDurationInOpenState) || 30000,
             slidingWindowSize: parseInt(values.slidingWindowSize) || 10,
             minimumNumberOfCalls: parseInt(values.minimumNumberOfCalls) || 5,
+            automaticTransitionFromOpenToHalfOpenEnabled: true,
           };
           break;
         case 'AUTH':
@@ -152,6 +156,7 @@ const StrategiesPage: React.FC = () => {
             apiKey: values.apiKey,
             clientId: values.clientId,
             clientSecret: values.clientSecret,
+            tokenEndpoint: values.tokenEndpoint,
           };
           break;
       }
@@ -193,6 +198,8 @@ const StrategiesPage: React.FC = () => {
             burstCapacity: parseInt(values.burstCapacity) || 200,
             timeUnit: values.timeUnit || 'second',
             keyResolver: values.keyResolver || 'ip',
+            keyType: 'combined',
+            headerName: values.headerName,
           };
           break;
         case 'IP_FILTER':
@@ -211,9 +218,11 @@ const StrategiesPage: React.FC = () => {
           strategy.config = {
             failureRateThreshold: parseFloat(values.failureRateThreshold) || 50,
             slowCallDurationThreshold: parseInt(values.slowCallDurationThreshold) || 60000,
+            slowCallRateThreshold: 80.0,
             waitDurationInOpenState: parseInt(values.waitDurationInOpenState) || 30000,
             slidingWindowSize: parseInt(values.slidingWindowSize) || 10,
             minimumNumberOfCalls: parseInt(values.minimumNumberOfCalls) || 5,
+            automaticTransitionFromOpenToHalfOpenEnabled: true,
           };
           break;
         case 'AUTH':
@@ -223,6 +232,7 @@ const StrategiesPage: React.FC = () => {
             apiKey: values.apiKey,
             clientId: values.clientId,
             clientSecret: values.clientSecret,
+            tokenEndpoint: values.tokenEndpoint,
           };
           break;
       }
