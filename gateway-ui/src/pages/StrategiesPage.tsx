@@ -321,11 +321,11 @@ const StrategiesPage: React.FC = () => {
       case 'RATE_LIMITER':
         return (
           <>
-            <Form.Item name="qps" label={t('strategy.config.qps')} initialValue={100}>
-              <Input type="number" />
+            <Form.Item name="qps" label={t('strategy.config.qps')} initialValue={100} extra={t('strategy.config.qps_desc')}>
+              <Input type="number" min={1} />
             </Form.Item>
-            <Form.Item name="burstCapacity" label={t('strategy.config.burst_capacity')} initialValue={200}>
-              <Input type="number" />
+            <Form.Item name="burstCapacity" label={t('strategy.config.burst_capacity')} initialValue={200} extra={t('strategy.config.burst_desc')}>
+              <Input type="number" min={1} />
             </Form.Item>
             <Form.Item name="timeUnit" label={t('strategy.config.time_unit')} initialValue="second">
               <Select>
@@ -333,6 +333,27 @@ const StrategiesPage: React.FC = () => {
                 <Select.Option value="minute">{t('strategy.config.minute')}</Select.Option>
                 <Select.Option value="hour">{t('strategy.config.hour')}</Select.Option>
               </Select>
+            </Form.Item>
+            <Form.Item name="keyResolver" label={t('strategy.config.key_resolver')} initialValue="ip" extra={t('strategy.config.key_resolver_desc')}>
+              <Select>
+                <Select.Option value="ip">{t('strategy.config.key_resolver_ip')}</Select.Option>
+                <Select.Option value="user">{t('strategy.config.key_resolver_user')}</Select.Option>
+                <Select.Option value="header">{t('strategy.config.key_resolver_header')}</Select.Option>
+                <Select.Option value="global">{t('strategy.config.key_resolver_global')}</Select.Option>
+              </Select>
+            </Form.Item>
+            <Form.Item noStyle shouldUpdate>
+              {({ getFieldValue }) => {
+                const keyResolver = getFieldValue('keyResolver');
+                if (keyResolver === 'header') {
+                  return (
+                    <Form.Item name="headerName" label={t('strategy.config.header_name')} rules={[{ required: true }]}>
+                      <Input placeholder="X-Request-Id" />
+                    </Form.Item>
+                  );
+                }
+                return null;
+              }}
             </Form.Item>
           </>
         );

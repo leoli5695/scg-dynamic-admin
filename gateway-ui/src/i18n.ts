@@ -428,6 +428,15 @@ const resources = {
       'strategy.config.sliding_window': 'Sliding Window Size',
       'strategy.config.auth_type': 'Auth Type',
       'strategy.config.secret_key': 'Secret Key',
+      'strategy.config.key_resolver': 'Key Resolver',
+      'strategy.config.key_resolver_desc': 'Dimension for rate limiting',
+      'strategy.config.key_resolver_ip': 'By IP Address',
+      'strategy.config.key_resolver_user': 'By User ID',
+      'strategy.config.key_resolver_header': 'By Header Value',
+      'strategy.config.key_resolver_global': 'Global',
+      'strategy.config.header_name': 'Header Name',
+      'strategy.config.qps_desc': 'Max requests per time unit',
+      'strategy.config.burst_desc': 'Max burst capacity',
       
       // Login
       'login.title': 'API Gateway Console',
@@ -847,6 +856,15 @@ const resources = {
       'strategy.config.sliding_window': '滑动窗口大小',
       'strategy.config.auth_type': '认证类型',
       'strategy.config.secret_key': '密钥',
+      'strategy.config.key_resolver': '限流维度',
+      'strategy.config.key_resolver_desc': '限流的维度：按IP、用户、请求头或全局',
+      'strategy.config.key_resolver_ip': '按IP地址',
+      'strategy.config.key_resolver_user': '按用户ID',
+      'strategy.config.key_resolver_header': '按请求头',
+      'strategy.config.key_resolver_global': '全局',
+      'strategy.config.header_name': '请求头名称',
+      'strategy.config.qps_desc': '每个时间单位内的最大请求数',
+      'strategy.config.burst_desc': '突发流量最大容量',
       
       // Strategies Page - Premium Chinese Labels
       'strategies.page_title': '策略管理',
