@@ -7,6 +7,7 @@ import com.leoli.gateway.admin.model.RouteResponse;
 import com.leoli.gateway.admin.center.ConfigCenterService;
 import com.leoli.gateway.admin.properties.GatewayAdminProperties;
 import com.leoli.gateway.admin.repository.RouteRepository;
+import com.leoli.gateway.admin.validation.RouteValidator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -154,9 +155,8 @@ public class RouteService {
    */
   @Transactional(rollbackFor = Exception.class)
   public RouteEntity createRoute(RouteDefinition route) {
-    if (route == null || route.getId() == null || route.getId().isEmpty()) {
-      throw new IllegalArgumentException("Invalid route definition");
-    }
+    // Validate route definition
+    RouteValidator.validateAndThrow(route);
 
     // Use route ID as business route name
     String routeName = route.getId();
@@ -233,8 +233,11 @@ public class RouteService {
 
   @Transactional(rollbackFor = Exception.class)
   public RouteEntity updateRouteByRouteId(String routeId, RouteDefinition route) {
-    if (route == null || routeId == null) {
-      throw new IllegalArgumentException("Invalid route definition or route_id");
+    // Validate route definition
+    RouteValidator.validateAndThrow(route);
+
+    if (routeId == null) {
+      throw new IllegalArgumentException("Route ID cannot be null");
     }
 
     RouteEntity entity = routeRepository.findByRouteId(routeId);

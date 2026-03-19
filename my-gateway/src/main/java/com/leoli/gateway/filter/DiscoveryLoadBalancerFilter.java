@@ -3,6 +3,7 @@ package com.leoli.gateway.filter;
 import com.leoli.gateway.discovery.staticdiscovery.StaticDiscoveryService;
 import com.leoli.gateway.health.HybridHealthChecker;
 import com.leoli.gateway.health.InstanceHealth;
+import com.leoli.gateway.util.SimpleResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.loadbalancer.LoadBalancerProperties;
@@ -58,7 +59,7 @@ public class DiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
 
         // Only process requests with lb:// protocol that were converted from static://
         // Skip native lb:// requests - let SCG's ReactiveLoadBalancerClientFilter handle them
-        if (url != null && "lb".equals(url.getScheme()) || "lb".equals(schemePrefix)) {
+        if ((url != null && "lb".equals(url.getScheme())) || "lb".equals(schemePrefix)) {
             // Check if this was originally a static:// request
             String originalUri = exchange.getAttribute("original_static_uri");
             if (originalUri == null) {
@@ -155,13 +156,8 @@ public class DiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
             List<ServiceInstance> instances = staticDiscoveryService.getInstances(serviceId);
 
             if (CollectionUtils.isEmpty(instances)) {
-                log.error("❌ No instances found for service: {} in StaticDiscoveryService - will throw 503", serviceId);
-                // ✅ Throw NotFoundException instead of returning Mono.empty()
-                // This ensures proper 503 response instead of silent 200
-                NotFoundException ex = NotFoundException.create(true,
-                        "No available instances for service: " + serviceId);
-                log.error("Throwing NotFoundException: {}", ex.getMessage());
-                return Mono.error(ex);
+                log.warn("No instances found for service: {} in StaticDiscoveryService", serviceId);
+                return Mono.empty();
             }
 
             log.info("Found {} instance(s) for service: {} in StaticDiscoveryService",
@@ -295,27 +291,6 @@ public class DiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
     @Override
     public int getOrder() {
         return 10150; // Same priority as native Filter
-    }
-
-    /**
-     * Simple Response implementation
-     */
-    private static class SimpleResponse<T> implements Response<T> {
-        private final T server;
-
-        SimpleResponse(T server) {
-            this.server = server;
-        }
-
-        @Override
-        public boolean hasServer() {
-            return server != null;
-        }
-
-        @Override
-        public T getServer() {
-            return server;
-        }
     }
 
     /**

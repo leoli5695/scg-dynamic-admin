@@ -1,17 +1,24 @@
 import { useState, useEffect } from 'react';
-import { Table, Button, Space, Modal, message, Typography, Spin, Tag, Drawer, Form, Input, Switch, Card, Descriptions, Select, Empty, Radio, Tooltip } from 'antd';
-import { PlusOutlined, DeleteOutlined, EyeOutlined, CopyOutlined, StopOutlined, PlayCircleOutlined, EditOutlined, CompassOutlined } from '@ant-design/icons';
-import type { ColumnsType } from 'antd/es/table';
+import {
+  Card, Button, Space, Modal, message, Spin, Tag, Drawer, Form, Input, Switch,
+  Select, Empty, Radio, Tooltip, Badge, Divider, Typography, Dropdown, Pagination
+} from 'antd';
+import {
+  PlusOutlined, DeleteOutlined, EyeOutlined, CopyOutlined, StopOutlined,
+  PlayCircleOutlined, EditOutlined, CompassOutlined, MoreOutlined,
+  ApiOutlined, BranchesOutlined, ThunderboltOutlined
+} from '@ant-design/icons';
+import type { MenuProps } from 'antd';
 import api from '../utils/api';
 import { useTranslation } from 'react-i18next';
 import copy from 'copy-to-clipboard';
 
-const { Title } = Typography;
+const { Text, Title } = Typography;
 const { TextArea } = Input;
 
 interface Route {
-  id: string;              // UUID (系统标识，用于删除)
-  routeName: string;       // route_name (业务名称)
+  id: string;
+  routeName: string;
   uri: string;
   predicates?: any[];
   filters?: any[];
@@ -32,15 +39,7 @@ interface NacosService {
   serviceName: string;
 }
 
-interface CreateRouteForm {
-  id: string;
-  uri: string;
-  description?: string;
-  order?: number;
-  enabled?: boolean;
-}
-
-// Predicate Item Component with dynamic rendering based on type
+// Predicate Item Component
 const PredicateItem: React.FC<{
   form: any;
   restField: any;
@@ -49,25 +48,12 @@ const PredicateItem: React.FC<{
   onRemove: (index: number) => void;
 }> = ({ form, restField, name, t, onRemove }) => {
   const [predicateType, setPredicateType] = useState<string>('');
-  
+
   return (
-    <div key={name} style={{ 
-      display: 'flex', 
-      alignItems: 'flex-start', 
-      marginBottom: 16,
-      padding: '12px 16px',
-      backgroundColor: '#f8fafc',
-      borderRadius: '8px',
-      border: '1px solid #e2e8f0'
-    }}>
-      <Form.Item
-        {...restField}
-        name={[name, 'name']}
-        noStyle
-        style={{ marginRight: 8 }}
-      >
-        <Select 
-          placeholder={t('routes.predicate_type')} 
+    <div key={name} className="form-item-row">
+      <Form.Item {...restField} name={[name, 'name']} noStyle>
+        <Select
+          placeholder={t('routes.predicate_type')}
           style={{ width: 150 }}
           onChange={(value) => setPredicateType(value)}
         >
@@ -77,17 +63,9 @@ const PredicateItem: React.FC<{
           <Select.Option value="Header">Header</Select.Option>
         </Select>
       </Form.Item>
-      <Form.Item
-        {...restField}
-        name={[name, 'args']}
-        noStyle
-      >
+      <Form.Item {...restField} name={[name, 'args']} noStyle>
         {predicateType === 'Method' ? (
-          <Select 
-            placeholder={t('routes.arguments')} 
-            style={{ width: 300 }}
-            mode="multiple"
-          >
+          <Select placeholder={t('routes.arguments')} style={{ width: 300 }} mode="multiple">
             <Select.Option value="GET">GET</Select.Option>
             <Select.Option value="POST">POST</Select.Option>
             <Select.Option value="PUT">PUT</Select.Option>
@@ -98,8 +76,8 @@ const PredicateItem: React.FC<{
           </Select>
         ) : predicateType === 'Header' ? (
           <Space.Compact style={{ width: 300 }}>
-            <Input 
-              placeholder="Header Name" 
+            <Input
+              placeholder="Header Name"
               style={{ width: '45%' }}
               onChange={(e) => {
                 const currentValue = form.getFieldValue(['predicates', name, 'args']);
@@ -107,8 +85,8 @@ const PredicateItem: React.FC<{
                 form.setFieldValue(['predicates', name, 'args'], newValue);
               }}
             />
-            <Input 
-              placeholder="Header Value" 
+            <Input
+              placeholder="Header Value"
               style={{ width: '55%' }}
               onChange={(e) => {
                 const currentValue = form.getFieldValue(['predicates', name, 'args']);
@@ -121,14 +99,12 @@ const PredicateItem: React.FC<{
           <Input placeholder={t('routes.arguments')} style={{ width: 300 }} />
         )}
       </Form.Item>
-      <Button type="dashed" danger onClick={() => onRemove(name)} icon={<DeleteOutlined />}>
-        {t('common.delete')}
-      </Button>
+      <Button type="text" danger onClick={() => onRemove(name)} icon={<DeleteOutlined />} />
     </div>
   );
 };
 
-// Filter Item Component with dynamic rendering based on type
+// Filter Item Component
 const FilterItem: React.FC<{
   form: any;
   restField: any;
@@ -137,87 +113,59 @@ const FilterItem: React.FC<{
   onRemove: (index: number) => void;
 }> = ({ form, restField, name, t, onRemove }) => {
   const [filterType, setFilterType] = useState<string>('');
-  
-  // Filters that need Key:Value input
+
   const needsKeyValueInput = [
-    'AddRequestHeader', 'SetRequestHeader',
-    'AddRequestParameter',
+    'AddRequestHeader', 'SetRequestHeader', 'AddRequestParameter',
     'AddResponseHeader', 'SetResponseHeader'
   ];
-  
-  // Filters that need single value input
-  const needsSingleInput = [
-    'RemoveRequestHeader', 'RemoveRequestParameter', 'RemoveResponseHeader',
-    'StripPrefix', 'PrefixPath', 'SetPath', 'SetStatus'
-  ];
-  
-  // RewritePath needs two inputs (regex and replacement)
+
   const isRewritePath = filterType === 'RewritePath';
-  
+
   return (
-    <div key={name} style={{ 
-      display: 'flex', 
-      alignItems: 'flex-start', 
-      marginBottom: 16,
-      padding: '12px 16px',
-      backgroundColor: '#f8fafc',
-      borderRadius: '8px',
-      border: '1px solid #e2e8f0'
-    }}>
-      <Form.Item
-        {...restField}
-        name={[name, 'name']}
-        noStyle
-        style={{ marginRight: 8 }}
-      >
-        <Select 
-          placeholder={t('routes.filter_type')} 
+    <div key={name} className="form-item-row">
+      <Form.Item {...restField} name={[name, 'name']} noStyle>
+        <Select
+          placeholder={t('routes.filter_type')}
           style={{ width: 200 }}
           onChange={(value) => setFilterType(value)}
         >
-          {/* Request Headers */}
-          <Select.OptGroup label="Request Headers">
-            <Select.Option value="AddRequestHeader">Add Request Header</Select.Option>
-            <Select.Option value="RemoveRequestHeader">Remove Request Header</Select.Option>
-            <Select.Option value="SetRequestHeader">Set Request Header</Select.Option>
+          <Select.OptGroup label={t('plugin.category.request_headers')}>
+            <Select.Option value="AddRequestHeader">{t('plugin.AddRequestHeader.name')}</Select.Option>
+            <Select.Option value="RemoveRequestHeader">{t('plugin.RemoveRequestHeader.name')}</Select.Option>
+            <Select.Option value="SetRequestHeader">{t('plugin.SetRequestHeader.name')}</Select.Option>
           </Select.OptGroup>
-          
-          {/* Request Parameters */}
-          <Select.OptGroup label="Request Parameters">
-            <Select.Option value="AddRequestParameter">Add Request Parameter</Select.Option>
-            <Select.Option value="RemoveRequestParameter">Remove Request Parameter</Select.Option>
+          <Select.OptGroup label={t('plugin.category.request_params')}>
+            <Select.Option value="AddRequestParameter">{t('plugin.AddRequestParameter.name')}</Select.Option>
+            <Select.Option value="RemoveRequestParameter">{t('plugin.RemoveRequestParameter.name')}</Select.Option>
           </Select.OptGroup>
-          
-          {/* Response Headers */}
-          <Select.OptGroup label="Response Headers">
-            <Select.Option value="AddResponseHeader">Add Response Header</Select.Option>
-            <Select.Option value="RemoveResponseHeader">Remove Response Header</Select.Option>
-            <Select.Option value="SetResponseHeader">Set Response Header</Select.Option>
+          <Select.OptGroup label={t('plugin.category.response_headers')}>
+            <Select.Option value="AddResponseHeader">{t('plugin.AddResponseHeader.name')}</Select.Option>
+            <Select.Option value="RemoveResponseHeader">{t('plugin.RemoveResponseHeader.name')}</Select.Option>
+            <Select.Option value="SetResponseHeader">{t('plugin.SetResponseHeader.name')}</Select.Option>
           </Select.OptGroup>
-          
-          {/* Path Modification */}
-          <Select.OptGroup label="Path Modification">
-            <Select.Option value="StripPrefix">Strip Prefix</Select.Option>
-            <Select.Option value="PrefixPath">Prefix Path</Select.Option>
-            <Select.Option value="RewritePath">Rewrite Path</Select.Option>
-            <Select.Option value="SetPath">Set Path</Select.Option>
+          <Select.OptGroup label={t('plugin.category.path_modification')}>
+            <Select.Option value="StripPrefix">{t('plugin.StripPrefix.name')}</Select.Option>
+            <Select.Option value="PrefixPath">{t('plugin.PrefixPath.name')}</Select.Option>
+            <Select.Option value="RewritePath">{t('plugin.RewritePath.name')}</Select.Option>
+            <Select.Option value="SetPath">{t('plugin.SetPath.name')}</Select.Option>
           </Select.OptGroup>
-          
-          {/* Status Code */}
-          <Select.OptGroup label="Status Code">
-            <Select.Option value="SetStatus">Set Status</Select.Option>
+          <Select.OptGroup label={t('plugin.category.status_code')}>
+            <Select.Option value="SetStatus">{t('plugin.SetStatus.name')}</Select.Option>
+            <Select.Option value="RedirectTo">{t('plugin.RedirectTo.name')}</Select.Option>
+          </Select.OptGroup>
+          <Select.OptGroup label={t('plugin.category.security')}>
+            <Select.Option value="SecureHeaders">{t('plugin.SecureHeaders.name')}</Select.Option>
+          </Select.OptGroup>
+          <Select.OptGroup label={t('plugin.category.request_size')}>
+            <Select.Option value="RequestSize">{t('plugin.RequestSize.name')}</Select.Option>
           </Select.OptGroup>
         </Select>
       </Form.Item>
-      <Form.Item
-        {...restField}
-        name={[name, 'args']}
-        noStyle
-      >
+      <Form.Item {...restField} name={[name, 'args']} noStyle>
         {needsKeyValueInput.includes(filterType) ? (
           <Space.Compact style={{ width: 320 }}>
-            <Input 
-              placeholder="Key" 
+            <Input
+              placeholder="Key"
               style={{ width: '45%' }}
               onChange={(e) => {
                 const currentValue = form.getFieldValue(['filters', name, 'args']);
@@ -225,8 +173,8 @@ const FilterItem: React.FC<{
                 form.setFieldValue(['filters', name, 'args'], newValue);
               }}
             />
-            <Input 
-              placeholder="Value" 
+            <Input
+              placeholder="Value"
               style={{ width: '55%' }}
               onChange={(e) => {
                 const currentValue = form.getFieldValue(['filters', name, 'args']);
@@ -237,8 +185,8 @@ const FilterItem: React.FC<{
           </Space.Compact>
         ) : isRewritePath ? (
           <Space.Compact style={{ width: 320 }}>
-            <Input 
-              placeholder="Regexp" 
+            <Input
+              placeholder="Regexp"
               style={{ width: '50%' }}
               onChange={(e) => {
                 const currentValue = form.getFieldValue(['filters', name, 'args']);
@@ -246,8 +194,8 @@ const FilterItem: React.FC<{
                 form.setFieldValue(['filters', name, 'args'], newValue);
               }}
             />
-            <Input 
-              placeholder="Replacement" 
+            <Input
+              placeholder="Replacement"
               style={{ width: '50%' }}
               onChange={(e) => {
                 const currentValue = form.getFieldValue(['filters', name, 'args']);
@@ -257,35 +205,17 @@ const FilterItem: React.FC<{
             />
           </Space.Compact>
         ) : (
-          <Input 
-            placeholder={t('routes.arguments')} 
-            style={{ width: 320 }}
-            disabled={!filterType}
-          />
+          <Input placeholder={t('routes.arguments')} style={{ width: 320 }} disabled={!filterType} />
         )}
       </Form.Item>
-      {/* Plugin Description */}
       {filterType && (
-        <div style={{ 
-          fontSize: 12, 
-          color: '#64748b', 
-          marginLeft: 12,
-          marginTop: -8,
-          padding: '8px 12px',
-          backgroundColor: '#f1f5f9',
-          borderRadius: '6px',
-          borderLeft: '3px solid #3b82f6'
-        }}>
+        <div className="plugin-desc">
           <Tooltip title={t(`plugin.${filterType}.detail`)}>
-            <span style={{ cursor: 'help' }}>
-              ℹ️ {t(`plugin.${filterType}.desc`)}...
-            </span>
+            <span style={{ cursor: 'help' }}>ℹ️ {t(`plugin.${filterType}.desc`)}...</span>
           </Tooltip>
         </div>
       )}
-      <Button type="dashed" danger onClick={() => onRemove(name)} icon={<DeleteOutlined />}>
-        {t('common.delete')}
-      </Button>
+      <Button type="text" danger onClick={() => onRemove(name)} icon={<DeleteOutlined />} />
     </div>
   );
 };
@@ -301,10 +231,11 @@ const RoutesPage: React.FC = () => {
   const [selectedRoute, setSelectedRoute] = useState<Route | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [selectedRows, setSelectedRows] = useState<React.Key[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12);
   const [createForm] = Form.useForm();
   const [editForm] = Form.useForm();
-  const [targetType, setTargetType] = useState<'static' | 'discovery'>('static'); // 明确的状态
+  const [targetType, setTargetType] = useState<'static' | 'discovery'>('static');
   const [editTargetType, setEditTargetType] = useState<'static' | 'discovery'>('static');
   const { t } = useTranslation();
 
@@ -312,6 +243,11 @@ const RoutesPage: React.FC = () => {
     loadRoutes();
     loadServices();
   }, []);
+
+  // Reset to first page when search/filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter]);
 
   const loadRoutes = async () => {
     try {
@@ -334,8 +270,7 @@ const RoutesPage: React.FC = () => {
     try {
       const response = await api.get('/api/services');
       if (response.data.code === 200) {
-        const serviceList = response.data.data || [];
-        setServices(serviceList);
+        setServices(response.data.data || []);
       }
     } catch (error: any) {
       console.error('Load services error:', error);
@@ -355,58 +290,37 @@ const RoutesPage: React.FC = () => {
   };
 
   const filteredRoutes = routes.filter(route => {
-    const matchesSearch = !searchTerm || 
+    const matchesSearch = !searchTerm ||
       route.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       route.routeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       route.uri.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = statusFilter === 'all' || 
+
+    const matchesStatus = statusFilter === 'all' ||
       (statusFilter === 'enabled' && route.enabled) ||
       (statusFilter === 'disabled' && !route.enabled);
-    
+
     return matchesSearch && matchesStatus;
   });
 
-  const handleBatchDelete = () => {
-    if (selectedRows.length === 0) return;
-    
-    Modal.confirm({
-      title: t('common.confirm'),
-      content: t('message.confirm_delete', { count: selectedRows.length }),
-      okText: t('common.delete'),
-      okType: 'danger',
-      cancelText: t('common.cancel'),
-      onOk: async () => {
-        try {
-          for (const routeId of selectedRows) {
-            await api.delete(`/api/routes/${routeId}`);
-          }
-          message.success(t('message.delete_success'));
-          setSelectedRows([]);
-          loadRoutes();
-        } catch (error: any) {
-          message.error(error.response?.data?.message || error.message);
-        }
-      },
-    });
-  };
+  // Pagination
+  const totalRoutes = routes.length;
+  const enabledRoutes = routes.filter(r => r.enabled).length;
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedRoutes = filteredRoutes.slice(startIndex, endIndex);
 
   const handleCreate = (values: any) => {
-    // Validate at least one Path predicate
     if (!values.predicates || values.predicates.length === 0) {
-      message.error('At least one predicate is required');
+      message.error(t('routes.predicate_required'));
       return;
     }
 
     const hasPathPredicate = values.predicates.some((p: any) => p.name === 'Path');
     if (!hasPathPredicate) {
-      message.error('At least one Path predicate is required');
+      message.error(t('routes.path_predicate_required'));
       return;
     }
 
-    // URI is already auto-generated, no need to build it
-
-    // Format predicates and filters
     const formattedPredicates = values.predicates.map((p: any) => ({
       name: p.name,
       args: parsePredicateArgs(p.name, p.args)
@@ -419,45 +333,43 @@ const RoutesPage: React.FC = () => {
 
     const routeData = {
       id: values.id,
-      uri: values.uri,  // Already in correct format
+      uri: values.uri,
       order: values.order || 0,
       enabled: values.enabled !== false,
       description: values.description,
       predicates: formattedPredicates,
       filters: formattedFilters
     };
-    
+
     api.post('/api/routes', routeData)
       .then(response => {
         if (response.data.code === 200) {
-          message.success('Created successfully');
+          message.success(t('routes.created_success'));
           createForm.resetFields();
           setCreateDrawerVisible(false);
           loadRoutes();
           loadServices();
         } else {
-          message.error('Failed to create route: ' + response.data.message);
+          message.error(t('routes.create_failed') + ': ' + response.data.message);
         }
       })
       .catch(error => {
-        message.error('Failed to create route: ' + (error.response?.data?.message || error.message));
+        message.error(t('routes.create_failed') + ': ' + (error.response?.data?.message || error.message));
       });
   };
 
   const handleUpdate = (values: any) => {
-    // Validate at least one Path predicate
     if (!values.predicates || values.predicates.length === 0) {
-      message.error('At least one predicate is required');
+      message.error(t('routes.predicate_required'));
       return;
     }
 
     const hasPathPredicate = values.predicates.some((p: any) => p.name === 'Path');
     if (!hasPathPredicate) {
-      message.error('At least one Path predicate is required');
+      message.error(t('routes.path_predicate_required'));
       return;
     }
 
-    // Format predicates and filters
     const formattedPredicates = values.predicates.map((p: any) => ({
       name: p.name,
       args: parsePredicateArgs(p.name, p.args)
@@ -470,14 +382,14 @@ const RoutesPage: React.FC = () => {
 
     const routeData = {
       id: values.id,
-      uri: values.uri,  // Already in correct format
+      uri: values.uri,
       order: values.order || 0,
       enabled: values.enabled !== false,
       description: values.description,
       predicates: formattedPredicates,
       filters: formattedFilters
     };
-    
+
     api.put(`/api/routes/${values.id}`, routeData)
       .then(response => {
         if (response.data.code === 200) {
@@ -487,15 +399,14 @@ const RoutesPage: React.FC = () => {
           loadRoutes();
           loadServices();
         } else {
-          message.error('Failed to update route: ' + response.data.message);
+          message.error(t('routes.update_failed') + ': ' + response.data.message);
         }
       })
       .catch(error => {
-        message.error('Failed to update route: ' + (error.response?.data?.message || error.message));
+        message.error(t('routes.update_failed') + ': ' + (error.response?.data?.message || error.message));
       });
   };
 
-  // Helper function to parse predicate args based on type
   const parsePredicateArgs = (type: string, args: string) => {
     switch (type) {
       case 'Path':
@@ -512,7 +423,6 @@ const RoutesPage: React.FC = () => {
     }
   };
 
-  // Helper function to parse filter args based on type
   const parseFilterArgs = (type: string, args: string) => {
     switch (type) {
       case 'StripPrefix':
@@ -531,7 +441,6 @@ const RoutesPage: React.FC = () => {
     }
   };
 
-  // Helper function to convert predicate args object back to string
   const stringifyPredicateArgs = (type: string, args: any): string => {
     if (!args) return '';
     switch (type) {
@@ -548,7 +457,6 @@ const RoutesPage: React.FC = () => {
     }
   };
 
-  // Helper function to convert filter args object back to string
   const stringifyFilterArgs = (type: string, args: any): string => {
     if (!args) return '';
     switch (type) {
@@ -573,8 +481,7 @@ const RoutesPage: React.FC = () => {
 
   const showRouteEdit = (record: Route) => {
     setEditTargetType(record.uri?.startsWith('lb://') ? 'discovery' : 'static');
-    
-    // Parse URI to get service ID
+
     let serviceId = '';
     let nacosServiceId = '';
     if (record.uri) {
@@ -584,18 +491,17 @@ const RoutesPage: React.FC = () => {
         serviceId = record.uri.substring(9);
       }
     }
-    
-    // Convert predicates and filters from object format to string format
+
     const editPredicates = (record.predicates || []).map((p: any) => ({
       name: p.name,
       args: stringifyPredicateArgs(p.name, p.args)
     }));
-    
+
     const editFilters = (record.filters || []).map((f: any) => ({
       name: f.name,
       args: stringifyFilterArgs(f.name, f.args)
     }));
-    
+
     editForm.setFieldsValue({
       id: record.id,
       routeName: record.routeName,
@@ -608,7 +514,7 @@ const RoutesPage: React.FC = () => {
       predicates: editPredicates,
       filters: editFilters,
     });
-    
+
     setEditDrawerVisible(true);
   };
 
@@ -626,26 +532,21 @@ const RoutesPage: React.FC = () => {
       cancelText: t('common.cancel'),
       onOk: async () => {
         try {
-          const routeIdToDelete = record.id;  // Use UUID for deletion
-          
+          const routeIdToDelete = record.id;
           if (!routeIdToDelete) {
             message.error(t('message.route_uuid_not_found'));
             return;
           }
-          
-          console.log('Deleting route with UUID:', routeIdToDelete);
-          
           const response = await api.delete(`/api/routes/${routeIdToDelete}`);
-          
           if (response.data.code === 200) {
             message.success(t('message.delete_success'));
             loadRoutes();
           } else {
-            message.error('Failed to delete route: ' + response.data.message);
+            message.error(t('routes.delete_failed') + ': ' + response.data.message);
           }
         } catch (error: any) {
           const errorMsg = error.response?.data?.message || error.message;
-          message.error('Failed to delete route: ' + errorMsg);
+          message.error(t('routes.delete_failed') + ': ' + errorMsg);
         }
       },
     });
@@ -653,257 +554,235 @@ const RoutesPage: React.FC = () => {
 
   const handleEnableRoute = async (record: Route) => {
     try {
-      const routeId = record.id;  // Use UUID
-      
+      const routeId = record.id;
       if (!routeId) {
-        message.error('Route ID not found');
+        message.error(t('routes.id_not_found'));
         return;
       }
-      
       const response = await api.post(`/api/routes/${routeId}/enable`);
-      
       if (response.data.code === 200) {
-        message.success('Route enabled successfully');
+        message.success(t('routes.enabled_success'));
         loadRoutes();
       } else {
-        message.error('Failed to enable route: ' + response.data.message);
+        message.error(t('routes.enable_failed') + ': ' + response.data.message);
       }
     } catch (error: any) {
       const errorMsg = error.response?.data?.message || error.message;
-      message.error('Failed to enable route: ' + errorMsg);
+      message.error(t('routes.enable_failed') + ': ' + errorMsg);
     }
   };
 
   const handleDisableRoute = async (record: Route) => {
     try {
-      const routeId = record.id;  // Use UUID
-      
+      const routeId = record.id;
       if (!routeId) {
-        message.error('Route ID not found');
+        message.error(t('routes.id_not_found'));
         return;
       }
-      
       const response = await api.post(`/api/routes/${routeId}/disable`);
-      
       if (response.data.code === 200) {
-        message.success('Route disabled successfully');
+        message.success(t('routes.disabled_success'));
         loadRoutes();
       } else {
-        message.error('Failed to disable route: ' + response.data.message);
+        message.error(t('routes.disable_failed') + ': ' + response.data.message);
       }
     } catch (error: any) {
       const errorMsg = error.response?.data?.message || error.message;
-      message.error('Failed to disable route: ' + errorMsg);
+      message.error(t('routes.disable_failed') + ': ' + errorMsg);
     }
   };
 
-  const rowSelection = {
-    selectedRowKeys: selectedRows,
-    onChange: (selectedRowKeys: React.Key[]) => {
-      setSelectedRows(selectedRowKeys);
-    },
-  };
-
-  const columns: ColumnsType<Route> = [
-    {
-      title: t('routes.id'),
-      dataIndex: 'id',
-      key: 'id',
-      width: 200,
-      render: (text) => (
-        <Space>
-          <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>{text}</span>
-          <Button 
-            type="text" 
-            size="small" 
-            icon={<CopyOutlined />} 
-            onClick={(e) => {
-              e.stopPropagation();
-              copy(text);
-              message.success(t('message.copied_to_clipboard', { label: t('routes.id') }));
-            }}
-          />
-        </Space>
-      ),
-    },
-    {
-      title: t('routes.name'),
-      dataIndex: 'routeName',
-      key: 'routeName',
-      width: 150,
-      render: (text) => (
-        <Space>
-          <span style={{ fontWeight: 500 }}>{text}</span>
-        </Space>
-      ),
-    },
-    {
-      title: t('routes.uri'),
-      dataIndex: 'uri',
-      key: 'uri',
-      width: 200,
-      render: (text) => (
-        <Typography.Text copyable={{ text }} style={{ fontFamily: 'monospace', fontSize: '12px' }}>
-          {text}
-        </Typography.Text>
-      ),
-    },
-    {
-      title: t('routes.order'),
-      dataIndex: 'order',
-      key: 'order',
-      width: 80,
-      render: (text) => (
-        <Typography.Text type="secondary">{text}</Typography.Text>
-      ),
-    },
-    {
-      title: t('routes.enabled'),
-      dataIndex: 'enabled',
-      key: 'enabled',
-      width: 100,
-      render: (enabled: boolean) => (
-        <Tag color={enabled ? 'green' : 'default'}>
-          {enabled ? t('common.enabled') : t('common.disabled')}
-        </Tag>
-      ),
-    },
-    {
-      title: t('routes.description'),
-      dataIndex: 'description',
-      key: 'description',
-      width: 200,
-      ellipsis: true,
-      render: (text) => (
-        <span style={{ fontSize: '12px', color: '#64748b' }}>
-          {text || '-'}
-        </span>
-      ),
-    },
-    {
-      title: t('common.actions'),
-      key: 'actions',
-      width: 180,
-      fixed: 'right',
-      render: (_, record) => (
-        <Space size="small">
-          <Button 
-            icon={<EditOutlined />} 
-            size="small"
-            onClick={() => showRouteEdit(record)}
-          >
-            {t('common.edit')}
-          </Button>
-          {record.enabled ? (
-            <Button 
-              icon={<StopOutlined />} 
-              size="small"
-              onClick={() => handleDisableRoute(record)}
-            >
-              {t('common.disable')}
-            </Button>
-          ) : (
-            <Button 
-              type="primary"
-              icon={<PlayCircleOutlined />} 
-              size="small"
-              onClick={() => handleEnableRoute(record)}
-            >
-              {t('common.enable')}
-            </Button>
-          )}
-          <Button 
-            icon={<EyeOutlined />} 
-            size="small"
-            onClick={() => showRouteDetail(record)}
-          >
-            {t('common.detail')}
-          </Button>
-          <Button 
-            danger
-            icon={<DeleteOutlined />} 
-            size="small"
-            onClick={() => handleDelete(record)}
-          >
-            {t('common.delete')}
-          </Button>
-        </Space>
-      ),
-    },
+  const getActionMenu = (route: Route): MenuProps['items'] => [
+    { key: 'edit', icon: <EditOutlined />, label: t('common.edit'), onClick: () => showRouteEdit(route) },
+    { key: 'detail', icon: <EyeOutlined />, label: t('common.detail'), onClick: () => showRouteDetail(route) },
+    { type: 'divider' },
+    route.enabled
+      ? { key: 'disable', icon: <StopOutlined />, label: t('common.disable'), onClick: () => handleDisableRoute(route) }
+      : { key: 'enable', icon: <PlayCircleOutlined />, label: t('common.enable'), onClick: () => handleEnableRoute(route) },
+    { type: 'divider' },
+    { key: 'delete', icon: <DeleteOutlined />, label: t('common.delete'), danger: true, onClick: () => handleDelete(route) },
   ];
 
+  const getPredicateTag = (predicate: any) => {
+    const name = predicate.name;
+    let value = '';
+    if (name === 'Path') value = predicate.args?.pattern || '/**';
+    else if (name === 'Host') value = predicate.args?.pattern || '';
+    else if (name === 'Method') value = Array.isArray(predicate.args?.methods) ? predicate.args.methods.join(', ') : '';
+    else if (name === 'Header') value = predicate.args?.name || '';
+    else value = JSON.stringify(predicate.args);
+
+    const desc = t(`predicate.${name}.detail`, { defaultValue: '' });
+
+    return (
+      <Tooltip key={name} title={desc} placement="top">
+        <Tag className="predicate-tag">
+          <BranchesOutlined /> {name}: <code>{value}</code>
+        </Tag>
+      </Tooltip>
+    );
+  };
+
   return (
-    <div className="page-container">
-      {/* Page Header */}
-      <div className="page-header">
-        <div className="page-title">
-          <h1 className="title">{t('routes.title')}</h1>
-          <span className="subtitle">{t('routes.description_helper')}</span>
+    <div className="routes-page">
+      {/* Stats Bar */}
+      <div className="stats-bar">
+        <div className="stat-item">
+          <div className="stat-value">{totalRoutes}</div>
+          <div className="stat-label">{t('routes.stats_routes')}</div>
         </div>
-        <div className="page-actions">
-          <Space>
-            <Input.Search
-              placeholder={t('routes.search_placeholder')}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{ width: 250 }}
-              allowClear
-            />
-            <Select
-              placeholder={t('routes.status_filter_placeholder')}
-              value={statusFilter}
-              onChange={setStatusFilter}
-              style={{ width: 150 }}
-              allowClear
-            >
-              <Select.Option value="all">{t('common.all')}</Select.Option>
-              <Select.Option value="enabled">{t('common.enabled')}</Select.Option>
-              <Select.Option value="disabled">{t('common.disabled')}</Select.Option>
-            </Select>
-            <Button 
-              danger
-              disabled={selectedRows.length === 0}
-              onClick={handleBatchDelete}
-            >
-              {t('common.batch_delete')}
-            </Button>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateDrawerVisible(true)}>
-              {t('routes.create')}
-            </Button>
-          </Space>
+        <Divider type="vertical" className="stat-divider" />
+        <div className="stat-item">
+          <div className="stat-value text-green-600">{enabledRoutes}</div>
+          <div className="stat-label">{t('routes.stats_enabled')}</div>
         </div>
       </div>
-      
-      {/* Content Card */}
-      <Card className="content-card" variant="borderless">
-        <Spin spinning={loading}>
-          <Table 
-            rowSelection={rowSelection}
-            columns={columns} 
-            dataSource={filteredRoutes} 
-            rowKey="id"
-            scroll={{ x: 1200 }}
-            locale={{
-              emptyText: (
-                <Empty 
-                  description={<span style={{ fontSize: '14px', color: '#64748B' }}>{t('routes.empty_description')}</span>}
-                  image={<CompassOutlined style={{ fontSize: 64, color: '#CBD5E1' }} />}
-                >
-                  <Button 
-                    type="primary" 
-                    icon={<PlusOutlined />}
-                    size="large"
-                    onClick={() => setCreateDrawerVisible(true)}
-                  >
-                    {t('routes.create_first')}
-                  </Button>
-                </Empty>
-              )
-            }}
-            pagination={{ pageSize: 10, showSizeChanger: true }}
+
+      {/* Header */}
+      <div className="page-header-modern">
+        <div className="page-header-left">
+          <Title level={3} className="page-title-main">{t('routes.title')}</Title>
+          <Text type="secondary">{t('routes.description_helper')}</Text>
+        </div>
+        <div className="page-header-right">
+          <Input.Search
+            placeholder={t('routes.search_placeholder')}
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            allowClear
+            className="search-input"
           />
-        </Spin>
-      </Card>
+          <Select
+            placeholder={t('routes.status_filter_placeholder')}
+            value={statusFilter}
+            onChange={setStatusFilter}
+            style={{ width: 140 }}
+          >
+            <Select.Option value="all">{t('common.all')}</Select.Option>
+            <Select.Option value="enabled">{t('common.enabled')}</Select.Option>
+            <Select.Option value="disabled">{t('common.disabled')}</Select.Option>
+          </Select>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateDrawerVisible(true)} className="create-btn">
+            {t('routes.create')}
+          </Button>
+        </div>
+      </div>
+
+      {/* Routes Grid */}
+      <Spin spinning={loading}>
+        {filteredRoutes.length === 0 ? (
+          <Card className="empty-card">
+            <Empty
+              image={<CompassOutlined className="empty-icon" />}
+              description={<span className="empty-text">{t('routes.empty_description')}</span>}
+            >
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateDrawerVisible(true)}>
+                {t('routes.create_first')}
+              </Button>
+            </Empty>
+          </Card>
+        ) : (
+          <>
+            <div className="routes-grid">
+              {paginatedRoutes.map((route) => {
+              const predicateCount = route.predicates?.length || 0;
+              const pluginCount = route.filters?.length || 0;
+              return (
+                <Card key={route.id} className="route-card" hoverable>
+                  <div className="route-card-header">
+                    <div className="route-info">
+                      <div className="route-icon"><ApiOutlined /></div>
+                      <div className="route-details">
+                        <Text strong className="route-name">{route.routeName || route.id.substring(0, 8)}</Text>
+                        <Text type="secondary" className="route-id">{route.id.substring(0, 16)}...</Text>
+                      </div>
+                    </div>
+                    <div className="route-status">
+                      <Badge status={route.enabled ? 'success' : 'default'} text={route.enabled ? t('common.enabled') : t('common.disabled')} />
+                    </div>
+                    <Dropdown menu={{ items: getActionMenu(route) }} trigger={['click']} placement="bottomRight">
+                      <Button type="text" icon={<MoreOutlined />} className="action-btn" />
+                    </Dropdown>
+                  </div>
+
+                  <div className="route-uri">
+                    <Text code>{route.uri}</Text>
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<CopyOutlined />}
+                      onClick={() => copyToClipboard(route.uri, 'URI')}
+                    />
+                  </div>
+
+                  {/* Predicates */}
+                  <div className="route-section">
+                    <Text type="secondary" className="section-label">
+                      <BranchesOutlined /> {t('routes.predicates')} ({predicateCount})
+                    </Text>
+                    <div className="tags-container">
+                      {predicateCount > 0 ? (
+                        route.predicates!.map((p, idx) => getPredicateTag(p))
+                      ) : (
+                        <Text type="secondary" className="no-data">{t('routes.no_predicates')}</Text>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Plugins */}
+                  <div className="route-section">
+                    <Text type="secondary" className="section-label">
+                      <ThunderboltOutlined /> {t('routes.plugins')} ({pluginCount})
+                    </Text>
+                    <div className="tags-container">
+                      {pluginCount > 0 ? (
+                        route.filters!.map((f, idx) => (
+                          <Tooltip key={idx} title={t(`plugin.${f.name}.detail`, { defaultValue: '' })} placement="top">
+                            <Tag className="plugin-tag">
+                              <ThunderboltOutlined /> {t(`plugin.${f.name}.name`, { defaultValue: f.name })}
+                            </Tag>
+                          </Tooltip>
+                        ))
+                      ) : (
+                        <Text type="secondary" className="no-data">{t('routes.no_plugins')}</Text>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Meta */}
+                  <div className="route-meta">
+                    <Text type="secondary">Order: {route.order ?? 0}</Text>
+                    {route.description && (
+                      <Tooltip title={route.description}>
+                        <Text type="secondary" ellipsis className="route-desc">{route.description}</Text>
+                      </Tooltip>
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
+            </div>
+            {/* Pagination */}
+            {filteredRoutes.length > pageSize && (
+              <div className="pagination-container">
+                <Pagination
+                  current={currentPage}
+                  pageSize={pageSize}
+                  total={filteredRoutes.length}
+                  onChange={(page, size) => {
+                    setCurrentPage(page);
+                    setPageSize(size);
+                  }}
+                  showSizeChanger
+                  showQuickJumper
+                  showTotal={(total) => t('routes.pagination_total', { total })}
+                  pageSizeOptions={['12', '24', '48', '96']}
+                />
+              </div>
+            )}
+          </>
+        )}
+      </Spin>
 
       {/* Create Route Drawer */}
       <Drawer
@@ -911,160 +790,78 @@ const RoutesPage: React.FC = () => {
         placement="right"
         size="large"
         open={createDrawerVisible}
-        onClose={() => {
-          setCreateDrawerVisible(false);
-          createForm.resetFields();
-        }}
+        onClose={() => { setCreateDrawerVisible(false); createForm.resetFields(); }}
+        className="route-drawer"
       >
-        <Form
-          form={createForm}
-          layout="vertical"
-          onFinish={handleCreate}
-          initialValues={{
-            order: 0,
-            enabled: true,
-            targetType: 'static'
-          }}
-        >
-          {/* Basic Info Section */}
-          <div style={{ marginBottom: 24 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 600, color: '#1e293b', marginBottom: 16 }}>{t('routes.basic_info')}</h3>
-            
-            <Form.Item
-              name="id"
-              label={t('routes.route_id_label')}
-              rules={[{ required: true, message: t('routes.name_required') }]}
-              extra={t('routes.route_id_helper')}
-            >
+        <Form form={createForm} layout="vertical" onFinish={handleCreate} initialValues={{ order: 0, enabled: true, targetType: 'static' }}>
+          {/* Basic Info */}
+          <div className="form-section">
+            <h3 className="form-section-title">{t('routes.basic_info')}</h3>
+            <Form.Item name="id" label={t('routes.route_id_label')} rules={[{ required: true }]} extra={t('routes.route_id_helper')}>
               <Input placeholder={t('routes.route_id_placeholder')} />
             </Form.Item>
-
-            <Form.Item
-              name="order"
-              label={t('routes.order')}
-              extra={t('routes.order_helper')}
-            >
+            <Form.Item name="order" label={t('routes.order')} extra={t('routes.order_helper')}>
               <Input type="number" placeholder="0" />
             </Form.Item>
-
-            <Form.Item
-              name="description"
-              label={t('routes.description_label')}
-            >
-              <TextArea rows={1} placeholder={t('routes.description_placeholder')} style={{ minHeight: '38px' }} />
+            <Form.Item name="description" label={t('routes.description_label')}>
+              <TextArea rows={1} placeholder={t('routes.description_placeholder')} />
             </Form.Item>
           </div>
 
-          {/* Target Section */}
-          <div style={{ marginBottom: 24, borderTop: '1px solid #e2e8f0', paddingTop: 24 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 600, color: '#1e293b', marginBottom: 16 }}>{t('routes.target_configuration')}</h3>
-            
-            <Form.Item
-              name="targetType"
-              label={t('routes.target_type_label')}
-              rules={[{ required: true }]}
-              initialValue="static"
-            >
+          {/* Target */}
+          <div className="form-section">
+            <h3 className="form-section-title">{t('routes.target_configuration')}</h3>
+            <Form.Item name="targetType" label={t('routes.target_type_label')} rules={[{ required: true }]}>
               <Radio.Group buttonStyle="solid" onChange={(e) => {
                 const newType = e.target.value;
-                setTargetType(newType); // 更新状态
-                if (newType === 'discovery') {
-                  loadNacosServices();
-                }
-                // Clear service selection and URI when type changes
-                createForm.setFieldsValue({
-                  serviceId: undefined,
-                  nacosServiceId: undefined,
-                  uri: ''
-                });
+                setTargetType(newType);
+                if (newType === 'discovery') loadNacosServices();
+                createForm.setFieldsValue({ serviceId: undefined, nacosServiceId: undefined, uri: '' });
               }}>
                 <Radio.Button value="static">{t('routes.static_node')}</Radio.Button>
                 <Radio.Button value="discovery">{t('routes.service_discovery')}</Radio.Button>
               </Radio.Group>
             </Form.Item>
 
-            {/* Static Node Service Selection */}
             {targetType === 'static' && (
-              <Form.Item 
-                name="serviceId"
-                label={t('routes.target_service')}
-                rules={[{ required: true, message: t('services.name_required') }]}
-                extra={t('routes.select_service')}
-              >
-                <Select 
-                  placeholder={t('routes.select_service')}
-                  onChange={(value) => {
-                    if (value) {
-                      createForm.setFieldValue('uri', `static://${value}`);
-                    } else {
-                      createForm.setFieldValue('uri', '');
-                    }
-                  }}
-                >
+              <Form.Item name="serviceId" label={t('routes.target_service')} rules={[{ required: true }]} extra={t('routes.select_service')}>
+                <Select placeholder={t('routes.select_service')} onChange={(value) => {
+                  createForm.setFieldValue('uri', value ? `static://${value}` : '');
+                }}>
                   {services.map(s => (
-                    <Select.Option key={s.serviceId} value={s.serviceId}>
-                      {s.serviceId} ({s.name})
-                    </Select.Option>
+                    <Select.Option key={s.serviceId} value={s.serviceId}>{s.serviceId} ({s.name})</Select.Option>
                   ))}
                 </Select>
               </Form.Item>
             )}
 
-            {/* Discovery Service Selection */}
             {targetType === 'discovery' && (
-              <Form.Item 
-                name="nacosServiceId"
-                label={t('routes.target_service_discovery')}
-                rules={[{ required: true, message: 'Please select a Nacos service' }]}
-                extra={t('routes.select_nacos_service')}
-              >
-                <Select 
-                  placeholder={t('routes.select_nacos_service')}
-                  showSearch
-                  onChange={(value) => {
-                    if (value) {
-                      createForm.setFieldValue('uri', `lb://${value}`);
-                    } else {
-                      createForm.setFieldValue('uri', '');
-                    }
-                  }}
-                >
+              <Form.Item name="nacosServiceId" label={t('routes.target_service_discovery')} rules={[{ required: true }]} extra={t('routes.select_nacos_service')}>
+                <Select placeholder={t('routes.select_nacos_service')} showSearch onChange={(value) => {
+                  createForm.setFieldValue('uri', value ? `lb://${value}` : '');
+                }}>
                   {nacosServices.map(s => (
-                    <Select.Option key={s.serviceName} value={s.serviceName}>
-                      {s.serviceName}
-                    </Select.Option>
+                    <Select.Option key={s.serviceName} value={s.serviceName}>{s.serviceName}</Select.Option>
                   ))}
                 </Select>
               </Form.Item>
             )}
 
-            <Form.Item
-              name="uri"
-              label={t('routes.target_uri')}
-              extra={t('routes.uri_auto_generated')}
-            >
+            <Form.Item name="uri" label={t('routes.target_uri')} extra={t('routes.uri_auto_generated')}>
               <Input placeholder={t('routes.uri_placeholder')} disabled />
             </Form.Item>
           </div>
 
-          {/* Predicates Section */}
-          <div style={{ marginBottom: 24, borderTop: '1px solid #e2e8f0', paddingTop: 24 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 600, color: '#1e293b', marginBottom: 16 }}>
-              {t('routes.predicates_section')} <span style={{ color: '#ef4444', fontSize: 12 }}>{t('routes.at_least_one_path')}</span>
+          {/* Predicates */}
+          <div className="form-section">
+            <h3 className="form-section-title">
+              {t('routes.predicates_section')} <span className="required-hint">{t('routes.at_least_one_path')}</span>
             </h3>
-            
             <Form.List name="predicates">
               {(fields, { add, remove }) => (
                 <>
                   {fields.map(({ key, name, ...restField }) => (
-                    <PredicateItem 
-                      key={key}
-                      form={createForm}
-                      restField={restField}
-                      name={name}
-                      t={t}
-                      onRemove={remove}
-                    />
+                    <PredicateItem key={key} form={createForm} restField={restField} name={name} t={t} onRemove={remove} />
                   ))}
                   <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
                     {t('routes.add_predicate')}
@@ -1074,210 +871,111 @@ const RoutesPage: React.FC = () => {
             </Form.List>
           </div>
 
-          {/* Route Plugins Section */}
-          <div style={{ marginBottom: 24, borderTop: '1px solid #e2e8f0', paddingTop: 24 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 600, color: '#1e293b', marginBottom: 16 }}>{t('routes.filters_section')}</h3>
-            
+          {/* Plugins */}
+          <div className="form-section">
+            <h3 className="form-section-title">{t('routes.filters_section')}</h3>
             <Form.List name="filters">
               {(fields, { add, remove }) => (
                 <>
                   {fields.map(({ key, name, ...restField }) => (
-                    <FilterItem 
-                      key={key}
-                      form={createForm}
-                      restField={restField}
-                      name={name}
-                      t={t}
-                      onRemove={remove}
-                    />
+                    <FilterItem key={key} form={createForm} restField={restField} name={name} t={t} onRemove={remove} />
                   ))}
                   <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
-                    {t('routes.add_filter')}
+                    {t('routes.add_plugin')}
                   </Button>
                 </>
               )}
             </Form.List>
           </div>
 
-          {/* Enable Switch */}
-          <Form.Item
-            name="enabled"
-            label={t('routes.enabled')}
-            valuePropName="checked"
-          >
+          {/* Enabled */}
+          <Form.Item name="enabled" label={t('routes.enabled')} valuePropName="checked">
             <Switch checkedChildren={t('common.enabled')} unCheckedChildren={t('common.disabled')} />
           </Form.Item>
 
-          <Form.Item style={{ borderTop: '1px solid #e2e8f0', paddingTop: 24, marginTop: 24 }}>
-            <Space>
-              <Button type="primary" htmlType="submit" size="large">
-                {t('routes.create')}
-              </Button>
-              <Button onClick={() => setCreateDrawerVisible(false)} size="large">
-                {t('common.cancel')}
-              </Button>
-            </Space>
-          </Form.Item>
+          <div className="drawer-footer">
+            <Button onClick={() => setCreateDrawerVisible(false)}>{t('common.cancel')}</Button>
+            <Button type="primary" htmlType="submit">{t('routes.create')}</Button>
+          </div>
         </Form>
       </Drawer>
-      
-      {/* Route Edit Drawer */}
+
+      {/* Edit Route Drawer */}
       <Drawer
         title={t('routes.edit')}
         placement="right"
         size="large"
         open={editDrawerVisible}
-        onClose={() => {
-          setEditDrawerVisible(false);
-          editForm.resetFields();
-        }}
+        onClose={() => { setEditDrawerVisible(false); editForm.resetFields(); }}
+        className="route-drawer"
       >
-        <Form
-          form={editForm}
-          layout="vertical"
-          onFinish={handleUpdate}
-        >
-          {/* Route ID (hidden, for submission) */}
-          <Form.Item name="id" hidden>
-            <Input />
+        <Form form={editForm} layout="vertical" onFinish={handleUpdate}>
+          <Form.Item name="id" hidden><Input /></Form.Item>
+
+          <Form.Item name="routeName" label={t('routes.route_name')} extra={t('routes.route_name_helper')}>
+            <Input disabled />
           </Form.Item>
-      
-          {/* Route Name */}
-          <Form.Item
-            name="routeName"
-            label={t('routes.route_name')}
-            rules={[{ required: true, message: t('routes.route_name_required') }]}
-            extra={t('routes.route_name_helper')}
-          >
-            <Input placeholder={t('routes.route_name_placeholder')} disabled />
-          </Form.Item>
-      
-          {/* Order */}
-          <Form.Item
-            name="order"
-            label={t('routes.order')}
-            extra={t('routes.order_helper')}
-          >
+
+          <Form.Item name="order" label={t('routes.order')} extra={t('routes.order_helper')}>
             <Input type="number" placeholder="0" />
           </Form.Item>
-      
-          {/* Description */}
-          <Form.Item
-            name="description"
-            label={t('routes.description_label')}
-          >
-            <TextArea rows={1} placeholder={t('routes.description_placeholder')} style={{ minHeight: '38px' }} />
+
+          <Form.Item name="description" label={t('routes.description_label')}>
+            <TextArea rows={1} placeholder={t('routes.description_placeholder')} />
           </Form.Item>
-      
-          {/* Target Section */}
-          <div style={{ marginBottom: 24, borderTop: '1px solid #e2e8f0', paddingTop: 24 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 600, color: '#1e293b', marginBottom: 16 }}>{t('routes.target_configuration')}</h3>
-                  
-            <Form.Item
-              name="targetType"
-              label={t('routes.target_type_label')}
-              rules={[{ required: true }]}
-            >
+
+          <div className="form-section">
+            <h3 className="form-section-title">{t('routes.target_configuration')}</h3>
+            <Form.Item name="targetType" label={t('routes.target_type_label')} rules={[{ required: true }]}>
               <Radio.Group buttonStyle="solid" onChange={(e) => {
                 const newType = e.target.value;
                 setEditTargetType(newType);
-                if (newType === 'discovery') {
-                  loadNacosServices();
-                }
-                // Clear service selection and URI when type changes
-                editForm.setFieldsValue({
-                  serviceId: undefined,
-                  nacosServiceId: undefined,
-                  uri: ''
-                });
+                if (newType === 'discovery') loadNacosServices();
+                editForm.setFieldsValue({ serviceId: undefined, nacosServiceId: undefined, uri: '' });
               }}>
                 <Radio.Button value="static">{t('routes.static_node')}</Radio.Button>
                 <Radio.Button value="discovery">{t('routes.service_discovery')}</Radio.Button>
               </Radio.Group>
             </Form.Item>
-      
-            {/* Static Node Service Selection */}
+
             {editTargetType === 'static' && (
-              <Form.Item 
-                name="serviceId"
-                label={t('routes.target_service')}
-                rules={[{ required: true, message: t('services.name_required') }]}
-                extra={t('routes.select_service')}
-              >
-                <Select 
-                  placeholder={t('routes.select_service')}
-                  onChange={(value) => {
-                    if (value) {
-                      editForm.setFieldValue('uri', `static://${value}`);
-                    } else {
-                      editForm.setFieldValue('uri', '');
-                    }
-                  }}
-                >
+              <Form.Item name="serviceId" label={t('routes.target_service')} rules={[{ required: true }]} extra={t('routes.select_service')}>
+                <Select placeholder={t('routes.select_service')} onChange={(value) => {
+                  editForm.setFieldValue('uri', value ? `static://${value}` : '');
+                }}>
                   {services.map(s => (
-                    <Select.Option key={s.serviceId} value={s.serviceId}>
-                      {s.serviceId} ({s.name})
-                    </Select.Option>
+                    <Select.Option key={s.serviceId} value={s.serviceId}>{s.serviceId} ({s.name})</Select.Option>
                   ))}
                 </Select>
               </Form.Item>
             )}
-      
-            {/* Discovery Service Selection */}
+
             {editTargetType === 'discovery' && (
-              <Form.Item 
-                name="nacosServiceId"
-                label={t('routes.target_service_discovery')}
-                rules={[{ required: true, message: 'Please select a Nacos service' }]}
-                extra={t('routes.select_nacos_service')}
-              >
-                <Select 
-                  placeholder={t('routes.select_nacos_service')}
-                  showSearch
-                  onChange={(value) => {
-                    if (value) {
-                      editForm.setFieldValue('uri', `lb://${value}`);
-                    } else {
-                      editForm.setFieldValue('uri', '');
-                    }
-                  }}
-                >
+              <Form.Item name="nacosServiceId" label={t('routes.target_service_discovery')} rules={[{ required: true }]} extra={t('routes.select_nacos_service')}>
+                <Select placeholder={t('routes.select_nacos_service')} showSearch onChange={(value) => {
+                  editForm.setFieldValue('uri', value ? `lb://${value}` : '');
+                }}>
                   {nacosServices.map(s => (
-                    <Select.Option key={s.serviceName} value={s.serviceName}>
-                      {s.serviceName}
-                    </Select.Option>
+                    <Select.Option key={s.serviceName} value={s.serviceName}>{s.serviceName}</Select.Option>
                   ))}
                 </Select>
               </Form.Item>
             )}
-      
-            <Form.Item
-              name="uri"
-              label={t('routes.target_uri')}
-              extra={t('routes.uri_auto_generated')}
-            >
-              <Input placeholder={t('routes.uri_placeholder')} disabled />
+
+            <Form.Item name="uri" label={t('routes.target_uri')} extra={t('routes.uri_auto_generated')}>
+              <Input disabled />
             </Form.Item>
           </div>
-      
-          {/* Predicates Section */}
-          <div style={{ marginBottom: 24, borderTop: '1px solid #e2e8f0', paddingTop: 24 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 600, color: '#1e293b', marginBottom: 16 }}>
-              {t('routes.predicates_section')} <span style={{ color: '#ef4444', fontSize: 12 }}>{t('routes.at_least_one_path')}</span>
+
+          <div className="form-section">
+            <h3 className="form-section-title">
+              {t('routes.predicates_section')} <span className="required-hint">{t('routes.at_least_one_path')}</span>
             </h3>
-                  
             <Form.List name="predicates">
               {(fields, { add, remove }) => (
                 <>
                   {fields.map(({ key, name, ...restField }) => (
-                    <PredicateItem 
-                      key={key}
-                      form={editForm}
-                      restField={restField}
-                      name={name}
-                      t={t}
-                      onRemove={remove}
-                    />
+                    <PredicateItem key={key} form={editForm} restField={restField} name={name} t={t} onRemove={remove} />
                   ))}
                   <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
                     {t('routes.add_predicate')}
@@ -1286,45 +984,30 @@ const RoutesPage: React.FC = () => {
               )}
             </Form.List>
           </div>
-      
-          {/* Route Plugins Section */}
-          <div style={{ marginBottom: 24, borderTop: '1px solid #e2e8f0', paddingTop: 24 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 600, color: '#1e293b', marginBottom: 16 }}>{t('routes.filters_section')}</h3>
-                  
+
+          <div className="form-section">
+            <h3 className="form-section-title">{t('routes.filters_section')}</h3>
             <Form.List name="filters">
               {(fields, { add, remove }) => (
                 <>
                   {fields.map(({ key, name, ...restField }) => (
-                    <FilterItem 
-                      key={key}
-                      form={editForm}
-                      restField={restField}
-                      name={name}
-                      t={t}
-                      onRemove={remove}
-                    />
+                    <FilterItem key={key} form={editForm} restField={restField} name={name} t={t} onRemove={remove} />
                   ))}
                   <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
-                    {t('routes.add_filter')}
+                    {t('routes.add_plugin')}
                   </Button>
                 </>
               )}
             </Form.List>
           </div>
-      
-          <Form.Item style={{ borderTop: '1px solid #e2e8f0', paddingTop: 24, marginTop: 24 }}>
-            <Space>
-              <Button type="primary" htmlType="submit" size="large">
-                {t('common.update')}
-              </Button>
-              <Button onClick={() => setEditDrawerVisible(false)} size="large">
-                {t('common.cancel')}
-              </Button>
-            </Space>
-          </Form.Item>
+
+          <div className="drawer-footer">
+            <Button onClick={() => setEditDrawerVisible(false)}>{t('common.cancel')}</Button>
+            <Button type="primary" htmlType="submit">{t('common.update')}</Button>
+          </div>
         </Form>
       </Drawer>
-      
+
       {/* Route Detail Drawer */}
       <Drawer
         title={t('routes.detail_title')}
@@ -1334,68 +1017,61 @@ const RoutesPage: React.FC = () => {
         onClose={() => setDetailDrawerVisible(false)}
       >
         {selectedRoute && (
-          <div>
-            <Descriptions bordered column={1} size="small">
-              <Descriptions.Item label={t('routes.name')}>
-                {selectedRoute.routeName}
-              </Descriptions.Item>
-              <Descriptions.Item label={t('routes.id')}>
-                <Space>
-                  {selectedRoute.id || 'N/A'}
-                  {selectedRoute.id && (
-                    <Button
-                      type="link"
-                      icon={<CopyOutlined />}
-                      size="small"
-                      onClick={() => copyToClipboard(selectedRoute.id, t('routes.id'))}
-                    />
-                  )}
-                </Space>
-              </Descriptions.Item>
-              <Descriptions.Item label={t('routes.uri')}>
-                <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>
-                  {selectedRoute.uri}
-                </span>
-              </Descriptions.Item>
-              <Descriptions.Item label={t('routes.order')}>
-                {selectedRoute.order ?? '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label={t('routes.enabled')}>
-                {selectedRoute.enabled !== false ? (
-                  <Tag color="success">{t('common.enabled')}</Tag>
-                ) : (
-                  <Tag color="default">{t('common.disabled')}</Tag>
-                )}
-              </Descriptions.Item>
-              <Descriptions.Item label={t('routes.description')}>
-                {selectedRoute.description || '-'}
-              </Descriptions.Item>
-            </Descriptions>
+          <div className="route-detail">
+            <div className="detail-item">
+              <Text type="secondary">{t('routes.name')}</Text>
+              <Text strong>{selectedRoute.routeName}</Text>
+            </div>
+            <div className="detail-item">
+              <Text type="secondary">{t('routes.id')}</Text>
+              <Space>
+                <Text code>{selectedRoute.id}</Text>
+                <Button type="link" size="small" icon={<CopyOutlined />} onClick={() => copyToClipboard(selectedRoute.id, t('routes.id'))} />
+              </Space>
+            </div>
+            <div className="detail-item">
+              <Text type="secondary">{t('routes.uri')}</Text>
+              <Text code>{selectedRoute.uri}</Text>
+            </div>
+            <div className="detail-item">
+              <Text type="secondary">{t('routes.order')}</Text>
+              <Text>{selectedRoute.order ?? '-'}</Text>
+            </div>
+            <div className="detail-item">
+              <Text type="secondary">{t('routes.enabled')}</Text>
+              <Tag color={selectedRoute.enabled ? 'success' : 'default'}>
+                {selectedRoute.enabled ? t('common.enabled') : t('common.disabled')}
+              </Tag>
+            </div>
+            {selectedRoute.description && (
+              <div className="detail-item">
+                <Text type="secondary">{t('routes.description')}</Text>
+                <Text>{selectedRoute.description}</Text>
+              </div>
+            )}
 
             {selectedRoute.predicates && selectedRoute.predicates.length > 0 && (
-              <Card title={t('routes.predicates')} size="small" style={{ marginTop: 16 }}>
-                {selectedRoute.predicates.map((predicate, index) => (
-                  <Card key={index} type="inner" size="small" style={{ marginBottom: 8 }}>
-                    <strong>{predicate.name}</strong>
-                    <pre style={{ margin: '8px 0', fontSize: '11px' }}>
-                      {JSON.stringify(predicate.args, null, 2)}
-                    </pre>
+              <div className="detail-section">
+                <h4>{t('routes.predicates')}</h4>
+                {selectedRoute.predicates.map((p, idx) => (
+                  <Card key={idx} size="small" className="detail-card">
+                    <Text strong>{p.name}</Text>
+                    <pre className="detail-json">{JSON.stringify(p.args, null, 2)}</pre>
                   </Card>
                 ))}
-              </Card>
+              </div>
             )}
 
             {selectedRoute.filters && selectedRoute.filters.length > 0 && (
-              <Card title={t('routes.filters')} size="small" style={{ marginTop: 16 }}>
-                {selectedRoute.filters.map((filter, index) => (
-                  <Card key={index} type="inner" size="small" style={{ marginBottom: 8 }}>
-                    <strong>{filter.name}</strong>
-                    <pre style={{ margin: '8px 0', fontSize: '11px' }}>
-                      {JSON.stringify(filter.args, null, 2)}
-                    </pre>
+              <div className="detail-section">
+                <h4>{t('routes.plugins')}</h4>
+                {selectedRoute.filters.map((f, idx) => (
+                  <Card key={idx} size="small" className="detail-card">
+                    <Text strong>{t(`plugin.${f.name}.name`, { defaultValue: f.name })}</Text>
+                    <pre className="detail-json">{JSON.stringify(f.args, null, 2)}</pre>
                   </Card>
                 ))}
-              </Card>
+              </div>
             )}
           </div>
         )}
@@ -1403,7 +1079,5 @@ const RoutesPage: React.FC = () => {
     </div>
   );
 };
-
-
 
 export default RoutesPage;

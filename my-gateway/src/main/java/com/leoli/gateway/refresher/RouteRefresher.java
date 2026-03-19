@@ -198,6 +198,16 @@ public class RouteRefresher {
             return;
         }
         
+        // ✅ Load the route into RouteManager immediately
+        try {
+            RouteDefinition route = parseRoute(routeConfig);
+            routeManager.putRoute(routeId, route);
+            log.info("✅ Loaded route: {} -> {}", routeId, route.getUri());
+        } catch (Exception e) {
+            log.error("Failed to parse route: {}", routeId, e);
+            return;
+        }
+        
         ConfigCenterService.ConfigListener listener = (dataId, group, content) -> {
             onSingleRouteChange(routeId, content);
         };
@@ -268,7 +278,7 @@ public class RouteRefresher {
     }
     
     /**
-     * Periodic 兜底 sync: check for missing routes every 1 minute.
+     * Periodic fallback sync: check for missing routes every 1 minute.
      * This is a safety net in case index listener missed updates.
      */
     @Scheduled(fixedRate = 60000) // 1 minute

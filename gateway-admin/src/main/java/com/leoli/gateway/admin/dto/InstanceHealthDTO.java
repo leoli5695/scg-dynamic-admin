@@ -5,13 +5,15 @@ import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 
 /**
- * 实例健康状态 DTO
+ * Instance health status DTO.
+ *
+ * @author leoli
  */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class InstanceHealthDTO {
-    
+
     private String serviceId;
     private String ip;
     private int port;

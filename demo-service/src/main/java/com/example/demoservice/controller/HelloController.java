@@ -99,4 +99,73 @@ public class HelloController {
         return result;
     }
 
+    /**
+     * Returns all request parameters – useful for testing AddRequestParameter plugin
+     */
+    @GetMapping("/params")
+    public Map<String, Object> params(HttpServletRequest request) {
+        String clientIp = request.getRemoteAddr();
+        String localIP = getLocalIP();
+        log.info("[Load Balance Test] Params request from {} -> Instance IP: {}, Port: {}", 
+                 clientIp, localIP, port);
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("message", "Request Parameters");
+        result.put("service", "demo-service");
+        result.put("port", port);
+        try {
+            result.put("ip", InetAddress.getLocalHost().getHostAddress());
+        } catch (UnknownHostException e) {
+            result.put("ip", "unknown");
+        }
+        
+        // Collect all request parameters
+        Map<String, String> params = new HashMap<>();
+        Enumeration<String> paramNames = request.getParameterNames();
+        while (paramNames.hasMoreElements()) {
+            String paramName = paramNames.nextElement();
+            params.put(paramName, request.getParameter(paramName));
+        }
+        result.put("params", params);
+        
+        // Also include headers
+        Map<String, String> headers = new HashMap<>();
+        Enumeration<String> headerNames = request.getHeaderNames();
+        while (headerNames.hasMoreElements()) {
+            String headerName = headerNames.nextElement();
+            headers.put(headerName, request.getHeader(headerName));
+        }
+        result.put("headers", headers);
+        
+        return result;
+    }
+
+    /**
+     * Returns request path info – useful for testing SetPath/RewritePath plugins
+     */
+    @GetMapping("/path/**")
+    public Map<String, Object> pathInfo(HttpServletRequest request) {
+        String clientIp = request.getRemoteAddr();
+        String localIP = getLocalIP();
+        log.info("[Load Balance Test] Path request from {} -> Instance IP: {}, Port: {}", 
+                 clientIp, localIP, port);
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("message", "Request Path Info");
+        result.put("service", "demo-service");
+        result.put("port", port);
+        try {
+            result.put("ip", InetAddress.getLocalHost().getHostAddress());
+        } catch (UnknownHostException e) {
+            result.put("ip", "unknown");
+        }
+        
+        result.put("requestURI", request.getRequestURI());
+        result.put("contextPath", request.getContextPath());
+        result.put("servletPath", request.getServletPath());
+        result.put("queryString", request.getQueryString());
+        
+        return result;
+    }
+
 }

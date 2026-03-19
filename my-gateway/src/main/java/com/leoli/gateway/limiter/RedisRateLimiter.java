@@ -9,7 +9,12 @@ import org.springframework.stereotype.Component;
 import java.util.Collections;
 
 /**
- * Redis 分布式限流器 - 基于 Lua 脚本实现原子性操作
+ * Redis distributed rate limiter - Atomic operations via Lua script.
+ * <p>
+ * Returns RateLimitResult with detailed status information,
+ * allowing proper fallback handling when Redis is unavailable.
+ *
+ * @author leoli
  */
 @Component
 @Slf4j
@@ -22,17 +27,22 @@ public class RedisRateLimiter {
     private DefaultRedisScript<Long> rateLimitScript;
 
     /**
-     * 尝试获取许可（分布式限流）
+     * Try to acquire a permit with detailed result.
+     * <p>
+     * This method properly distinguishes between:
+     * - Request allowed (Redis working, within limit)
+     * - Request denied (Redis working, limit exceeded)
+     * - Redis unavailable (should fallback to local limiter)
      *
-     * @param key          限流 key
-     * @param maxRequests  最大请求数
-     * @param windowSizeMs 窗口大小（毫秒）
-     * @return true-允许通过，false-拒绝
+     * @param key          Rate limit key
+     * @param maxRequests  Maximum requests allowed
+     * @param windowSizeMs Window size in milliseconds
+     * @return RateLimitResult with detailed status
      */
-    public boolean tryAcquire(String key, int maxRequests, long windowSizeMs) {
+    public RateLimitResult tryAcquireWithFallback(String key, int maxRequests, long windowSizeMs) {
         if (redisTemplate == null) {
-            log.warn("Redis not available, skipping distributed rate limiting");
-            return false; // Redis 不可用，返回 false 触发本地降级
+            log.debug("Redis template not available, should fallback to local limiter");
+            return RateLimitResult.fallback("Redis template not configured");
         }
 
         try {
@@ -45,25 +55,30 @@ public class RedisRateLimiter {
                     String.valueOf(maxRequests)
             );
 
-            boolean allowed = result != null && result == 1;
+            if (result == null) {
+                log.warn("Redis script returned null for key: {}, should fallback", key);
+                return RateLimitResult.fallback("Redis script returned null");
+            }
+
+            boolean allowed = result == 1;
 
             if (allowed) {
                 log.debug("Rate limit allowed for key: {}, remaining: {}", key, maxRequests);
+                return RateLimitResult.allowed(maxRequests);
             } else {
                 log.warn("Rate limit exceeded for key: {}", key);
+                return RateLimitResult.denied(0);
             }
 
-            return allowed;
-
         } catch (Exception e) {
-            // Redis 故障，记录日志并返回 false 触发本地降级
-            log.error("Redis rate limiter failed, will fallback to local: {}", e.getMessage());
-            return false;
+            // Redis failure - should fallback to local limiter
+            log.error("Redis rate limiter failed, should fallback to local: {}", e.getMessage());
+            return RateLimitResult.fallback(e);
         }
     }
 
     /**
-     * 检查 Redis 是否可用
+     * Check if Redis is available.
      */
     public boolean isRedisAvailable() {
         if (redisTemplate == null) {

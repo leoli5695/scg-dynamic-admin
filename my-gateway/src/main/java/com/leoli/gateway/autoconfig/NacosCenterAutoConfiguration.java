@@ -2,9 +2,11 @@ package com.leoli.gateway.autoconfig;
 
 import com.alibaba.nacos.api.NacosFactory;
 import com.alibaba.nacos.api.config.ConfigService;
+import com.alibaba.nacos.api.exception.NacosException;
 import com.alibaba.nacos.api.naming.NamingService;
 import com.leoli.gateway.center.nacos.NacosConfigService;
 import com.leoli.gateway.discovery.nacos.NacosDiscoveryService;
+import jakarta.annotation.PreDestroy;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -27,6 +29,10 @@ public class NacosCenterAutoConfiguration {
     private String namespace;
     private String serverAddr;
 
+    // Hold references for cleanup
+    private ConfigService configService;
+    private NamingService namingService;
+
     /**
      * Create Nacos ConfigService bean.
      */
@@ -43,9 +49,9 @@ public class NacosCenterAutoConfiguration {
             log.info("Using namespace: {}", namespace);
         }
 
-        ConfigService configService = NacosFactory.createConfigService(props);
+        this.configService = NacosFactory.createConfigService(props);
         log.info("Nacos ConfigService initialized successfully");
-        return configService;
+        return this.configService;
     }
 
     /**
@@ -66,9 +72,9 @@ public class NacosCenterAutoConfiguration {
         }
 
         try {
-            NamingService namingService = NacosFactory.createNamingService(props);
+            this.namingService = NacosFactory.createNamingService(props);
             log.info("Nacos NamingService initialized successfully");
-            return namingService;
+            return this.namingService;
         } catch (Exception e) {
             log.error("Failed to create Nacos NamingService. ServerAddr: {}, Namespace: {}. Error: {}",
                     actualServerAddr, namespace, e.getMessage(), e);
@@ -90,5 +96,33 @@ public class NacosCenterAutoConfiguration {
     @Bean
     public NacosDiscoveryService nacosDiscoveryService(NamingService nacosNamingService) {
         return new NacosDiscoveryService(nacosNamingService);
+    }
+
+    /**
+     * Cleanup Nacos resources on shutdown.
+     */
+    @PreDestroy
+    public void destroy() {
+        // Shutdown ConfigService
+        if (configService != null) {
+            try {
+                configService.shutDown();
+                log.info("Nacos ConfigService shut down successfully");
+            } catch (NacosException e) {
+                log.warn("Error shutting down Nacos ConfigService: {}", e.getMessage());
+            }
+        }
+
+        // Shutdown NamingService
+        if (namingService != null) {
+            try {
+                namingService.shutDown();
+                log.info("Nacos NamingService shut down successfully");
+            } catch (NacosException e) {
+                log.warn("Error shutting down Nacos NamingService: {}", e.getMessage());
+            }
+        }
+
+        log.info("Nacos resources cleanup completed");
     }
 }

@@ -1,5 +1,6 @@
 package com.leoli.gateway.filter;
 
+import com.leoli.gateway.config.TrustedProxyProperties;
 import com.leoli.gateway.enums.StrategyType;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.util.RouteUtils;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
+import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.Map;
 
@@ -20,6 +22,7 @@ import java.util.Map;
  * IP Filter Global Filter
  * <p>
  * Supports blacklist and whitelist modes with CIDR notation.
+ * Implements trusted proxy validation for X-Forwarded-For header.
  * </p>
  *
  * @author leoli
@@ -30,6 +33,9 @@ public class IPFilterGlobalFilter implements GlobalFilter, Ordered {
 
     @Autowired
     private StrategyManager strategyManager;
+
+    @Autowired
+    private TrustedProxyProperties trustedProxyProperties;
 
     /**
      * Check if IP is in the list (supports CIDR notation)
@@ -75,9 +81,28 @@ public class IPFilterGlobalFilter implements GlobalFilter, Ordered {
      * Convert IP address to long
      */
     private long ipToLong(String ipAddress) {
-        String[] octets = ipAddress.split("\\.");
-        long result = 0;
+        // Handle IPv6 addresses (use localhost mapping for simplicity)
+        if (ipAddress.contains(":")) {
+            // IPv6 loopback
+            if ("0:0:0:0:0:0:0:1".equals(ipAddress) || "::1".equals(ipAddress)) {
+                return ipToLong("127.0.0.1");
+            }
+            // For other IPv6, extract IPv4 if embedded, otherwise use hash
+            if (ipAddress.startsWith("::ffff:")) {
+                return ipToLong(ipAddress.substring(7));
+            }
+            // Default to 0 for non-IPv4-mapped IPv6
+            log.debug("IPv6 address not fully supported for CIDR matching: {}", ipAddress);
+            return 0;
+        }
 
+        String[] octets = ipAddress.split("\\.");
+        if (octets.length != 4) {
+            log.warn("Invalid IP address format: {}", ipAddress);
+            return 0;
+        }
+
+        long result = 0;
         for (int i = 0; i < 4; i++) {
             result = (result << 8) + Integer.parseInt(octets[i]);
         }
@@ -86,18 +111,125 @@ public class IPFilterGlobalFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * Get client IP address from exchange
+     * Get client IP address from exchange.
+     * <p>
+     * Security-aware implementation that validates X-Forwarded-For header
+     * against trusted proxy configuration.
+     * </p>
      */
     private String getClientIp(ServerWebExchange exchange) {
-        // Check X-Forwarded-For header first
-        String forwarded = exchange.getRequest().getHeaders().getFirst("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isEmpty()) {
-            return forwarded.split(",")[0].trim();
+        // Get the direct remote address (the actual TCP connection source)
+        String remoteIp = getRemoteAddress(exchange);
+
+        // If trusted proxy feature is disabled, always use direct remote address
+        if (!trustedProxyProperties.isEnabled()) {
+            log.debug("Trusted proxy disabled, using direct remote IP: {}", remoteIp);
+            return remoteIp;
         }
 
-        // Fallback to remote address
-        var addr = exchange.getRequest().getRemoteAddress();
-        return addr != null ? addr.getAddress().getHostAddress() : "unknown";
+        // Check if request comes from a trusted proxy
+        if (isTrustedProxy(remoteIp)) {
+            // Request is from trusted proxy, check X-Forwarded-For
+            String forwarded = exchange.getRequest().getHeaders().getFirst("X-Forwarded-For");
+
+            if (forwarded != null && !forwarded.isEmpty()) {
+                String clientIp = extractForwardedIp(forwarded);
+                log.debug("Request from trusted proxy {}, extracted client IP: {}", remoteIp, clientIp);
+                return clientIp;
+            } else {
+                log.debug("Request from trusted proxy {} but no X-Forwarded-For header, using remote IP", remoteIp);
+            }
+        } else {
+            // Request is NOT from trusted proxy, ignore X-Forwarded-For to prevent spoofing
+            log.debug("Request from non-trusted proxy {}, ignoring X-Forwarded-For header", remoteIp);
+        }
+
+        return remoteIp;
+    }
+
+    /**
+     * Get the remote address from exchange
+     */
+    private String getRemoteAddress(ServerWebExchange exchange) {
+        InetSocketAddress remoteAddress = exchange.getRequest().getRemoteAddress();
+        if (remoteAddress != null && remoteAddress.getAddress() != null) {
+            return remoteAddress.getAddress().getHostAddress();
+        }
+        return "unknown";
+    }
+
+    /**
+     * Check if the IP is from a trusted proxy
+     */
+    private boolean isTrustedProxy(String ip) {
+        // Check configured proxy IPs
+        List<String> proxyIps = trustedProxyProperties.getProxyIps();
+        if (proxyIps != null && !proxyIps.isEmpty()) {
+            if (isIPInRange(ip, proxyIps)) {
+                return true;
+            }
+        }
+
+        // Check if private networks are trusted
+        if (trustedProxyProperties.isTrustPrivateNetworks()) {
+            return isPrivateNetworkIP(ip);
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if IP belongs to private networks (RFC 1918)
+     * - 10.0.0.0/8
+     * - 172.16.0.0/12
+     * - 192.168.0.0/16
+     * - 127.0.0.0/8 (loopback)
+     */
+    private boolean isPrivateNetworkIP(String ip) {
+        // Handle IPv6 loopback
+        if ("0:0:0:0:0:0:0:1".equals(ip) || "::1".equals(ip)) {
+            return true;
+        }
+
+        // Only handle IPv4 for CIDR matching
+        if (ip.contains(":")) {
+            return false;
+        }
+
+        return isIPInCIDR(ip, "10.0.0.0/8") ||
+               isIPInCIDR(ip, "172.16.0.0/12") ||
+               isIPInCIDR(ip, "192.168.0.0/16") ||
+               isIPInCIDR(ip, "127.0.0.0/8");
+    }
+
+    /**
+     * Extract IP from X-Forwarded-For header based on configured position.
+     * Handles multiple IPs separated by comma.
+     */
+    private String extractForwardedIp(String forwarded) {
+        if (forwarded == null || forwarded.isEmpty()) {
+            return "unknown";
+        }
+
+        // Split by comma and trim
+        String[] ips = forwarded.split(",");
+        int maxIps = Math.min(ips.length, trustedProxyProperties.getMaxForwardedIps());
+
+        // Extract IP based on position configuration
+        String ip;
+        if (trustedProxyProperties.getPosition() == TrustedProxyProperties.ForwardedIpPosition.LAST) {
+            ip = ips[Math.min(maxIps - 1, ips.length - 1)].trim();
+        } else {
+            // Default: FIRST
+            ip = ips[0].trim();
+        }
+
+        // Remove port if present (e.g., "192.168.1.1:8080")
+        if (ip.contains(":") && !ip.startsWith("[")) {
+            ip = ip.substring(0, ip.lastIndexOf(":"));
+        }
+
+        return ip;
     }
 
     /**

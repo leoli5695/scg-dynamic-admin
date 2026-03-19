@@ -14,13 +14,8 @@ api.interceptors.request.use(
   (config) => {
     // Add auth token if needed
     const token = localStorage.getItem('token');
-    console.log('[API Interceptor] Request URL:', config.url);
-    console.log('[API Interceptor] Token present:', !!token);
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
-      console.log('[API Interceptor] Added Authorization header');
-    } else {
-      console.warn('[API Interceptor] No token found in localStorage!');
     }
     return config;
   },
@@ -36,12 +31,11 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401 || error.response?.status === 403) {
       // Handle unauthorized/forbidden access - redirect to login
-      console.error('Unauthorized/Forbidden access:', error.response?.data);
+      console.error('Unauthorized/Forbidden access');
       
       // Clear invalid token and redirect to login
       const token = localStorage.getItem('token');
       if (token) {
-        console.warn('[API Interceptor] Token is invalid/expired, clearing and redirecting to login...');
         localStorage.removeItem('token');
         localStorage.removeItem('user');
       }

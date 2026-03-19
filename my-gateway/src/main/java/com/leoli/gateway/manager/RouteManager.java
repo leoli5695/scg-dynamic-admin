@@ -1,6 +1,5 @@
 package com.leoli.gateway.manager;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.route.RouteDefinition;
 import org.springframework.stereotype.Component;
@@ -14,6 +13,8 @@ import java.util.stream.Collectors;
 /**
  * Route configuration manager with per-route caching.
  * Stores routes in a ConcurrentHashMap keyed by routeId for efficient incremental updates.
+ *
+ * @author leoli
  */
 @Slf4j
 @Component
@@ -65,7 +66,7 @@ public class RouteManager {
     }
 
     /**
-     * Clear all routes (only used in extreme cases).
+     * Clear all routes.
      */
     public void clearAll() {
         routeCache.clear();
@@ -78,68 +79,5 @@ public class RouteManager {
      */
     public int countRoutes() {
         return routeCache.size();
-    }
-
-    /**
-     * Legacy method for compatibility with GenericCacheManager-based loading.
-     * This is called by RouteRefresher when loading full config from Nacos.
-     */
-    @Deprecated
-    public void loadConfig(String config) {
-        // This method is kept for backward compatibility but should not be used in new code
-        log.warn("loadConfig() is deprecated, use putRoute()/removeRoute() instead");
-    }
-
-    /**
-     * Legacy method for compatibility.
-     */
-    @Deprecated
-    public JsonNode getCachedConfig() {
-        return null; // Not used in new architecture
-    }
-
-    /**
-     * Legacy method for compatibility.
-     */
-    @Deprecated
-    public boolean isCacheValid() {
-        return !routeCache.isEmpty();
-    }
-
-    /**
-     * Legacy method for compatibility.
-     */
-    @Deprecated
-    public JsonNode getFallbackConfig() {
-        return null; // Not used in new architecture
-    }
-
-    /**
-     * Clear cached configuration (legacy compatibility method).
-     */
-    public void clearCache() {
-        clearAll();
-    }
-
-    /**
-     * Count total number of routes from config (legacy compatibility method).
-     */
-    public int countRoutes(JsonNode root) {
-        if (root == null) {
-            return 0;
-        }
-
-        if (root.has("routes")) {
-            JsonNode routesNode = root.get("routes");
-            if (routesNode.isArray()) {
-                return routesNode.size();
-            }
-        } else if (root.isArray()) {
-            return root.size();
-        } else if (root.isObject()) {
-            return root.size();
-        }
-
-        return 0;
     }
 }

@@ -13,75 +13,77 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Nacos 元数据同步服务
+ * Nacos metadata sync service.
+ *
+ * @author leoli
  */
 @Service
 @Slf4j
 public class NacosMetadataSyncer {
-    
+
     @Autowired(required = false)
     private NamingService namingService;
-    
+
     @Autowired
     private NacosDiscoveryProperties nacosDiscoveryProperties;
-    
+
     @Value("${gateway.health.nacos-sync-enabled:false}")
     private boolean nacosSyncEnabled;
-    
+
     /**
-     * 同步健康状态到 Nacos
+     * Sync health status to Nacos.
      */
-    public void syncToNacos(String serviceId, String ip, int port, boolean healthy, 
-                           String unhealthyReason, String gatewayId) {
+    public void syncToNacos(String serviceId, String ip, int port, boolean healthy,
+                            String unhealthyReason, String gatewayId) {
         if (!nacosSyncEnabled || namingService == null) {
             log.debug("Nacos sync disabled or NamingService not available");
             return;
         }
-        
+
         try {
-            // 构建元数据
+            // Build metadata
             Map<String, String> metadata = new HashMap<>();
             metadata.put("healthy", String.valueOf(healthy));
             metadata.put("unhealthy-source", "GATEWAY_HEALTH_CHECK");
             metadata.put("unhealthy-time", String.valueOf(System.currentTimeMillis()));
             metadata.put("unhealthy-gateway", gatewayId);
-            
+
             if (!healthy && unhealthyReason != null) {
                 metadata.put("unhealthy-reason", unhealthyReason);
             }
-            
-            // 获取当前实例
+
+            // Get current instances
             List<Instance> instances = namingService.selectInstances(serviceId, true);
-            
-            // 查找匹配的实例
+
+            // Find matching instance
             for (Instance instance : instances) {
                 if (instance.getIp().equals(ip) && instance.getPort() == port) {
-                    // 更新元数据
+                    // Update metadata
                     updateInstanceMetadata(serviceId, instance, metadata);
-                    log.info("Synced instance {}:{}:{} to Nacos with health status: {}", 
-                             ip, port, serviceId, healthy ? "HEALTHY" : "UNHEALTHY");
+                    log.info("Synced instance {}:{}:{} to Nacos with health status: {}",
+                            ip, port, serviceId, healthy ? "HEALTHY" : "UNHEALTHY");
                     return;
                 }
             }
-            
+
             log.warn("Instance {}:{} not found in Nacos for service {}", ip, port, serviceId);
-            
+
         } catch (Exception e) {
             log.error("Failed to sync instance {}:{} to Nacos", ip, port, e);
-            // 不抛出异常，保证主流程正常
+            // Don't throw exception to keep main flow running
         }
     }
-    
+
     /**
-     * 更新实例元数据
+     * Update instance metadata.
      */
-    private void updateInstanceMetadata(String serviceName, Instance instance, 
-                                       Map<String, String> newMetadata) throws Exception {
-        // 合并现有元数据
+    private void updateInstanceMetadata(String serviceName, Instance instance,
+                                         Map<String, String> newMetadata) throws Exception {
+        // Merge existing metadata
         Map<String, String> mergedMetadata = new HashMap<>(instance.getMetadata());
         mergedMetadata.putAll(newMetadata);
-        
-        // 创建新实例对象并设置元数据
+
+        // Create new instance object with updated metadata
         Instance newInstance = new Instance();
         newInstance.setIp(instance.getIp());
         newInstance.setPort(instance.getPort());
@@ -91,19 +93,19 @@ public class NacosMetadataSyncer {
         newInstance.setClusterName(instance.getClusterName());
         newInstance.setServiceName(serviceName);
         newInstance.setMetadata(mergedMetadata);
-        
-        // 注册实例（会覆盖原有元数据）
+
+        // Register instance (will override existing metadata)
         namingService.registerInstance(serviceName, newInstance);
     }
-    
+
     /**
-     * 批量同步多个实例
+     * Batch sync multiple instances.
      */
     public void batchSyncToNacos(List<Map<String, Object>> instances, String gatewayId) {
         if (!nacosSyncEnabled || namingService == null) {
             return;
         }
-        
+
         for (Map<String, Object> instance : instances) {
             try {
                 String serviceId = (String) instance.get("serviceId");
@@ -111,9 +113,9 @@ public class NacosMetadataSyncer {
                 Integer port = (Integer) instance.get("port");
                 Boolean healthy = (Boolean) instance.get("healthy");
                 String reason = (String) instance.get("unhealthyReason");
-                
-                syncToNacos(serviceId, ip, port, healthy != null ? healthy : true, 
-                           reason, gatewayId);
+
+                syncToNacos(serviceId, ip, port, healthy != null ? healthy : true,
+                        reason, gatewayId);
             } catch (Exception e) {
                 log.error("Failed to sync instance to Nacos", e);
             }

@@ -15,11 +15,10 @@ import org.springframework.stereotype.Component;
  * Listens to gateway-plugins.json changes and refreshes plugin strategies.
  *
  * @author leoli
- * @version 1.0
  */
 @Slf4j
 @Component
-public class StrategyRefresher extends AbstractRefresher {
+public class StrategyRefresher {
 
     private final StrategyManager strategyManager;
     private final ConfigCenterService configService;
@@ -27,6 +26,9 @@ public class StrategyRefresher extends AbstractRefresher {
 
     private static final String GROUP = "DEFAULT_GROUP";
     private static final String DATA_ID = "gateway-plugins.json";
+
+    // Store listener reference for proper removal on destroy
+    private ConfigCenterService.ConfigListener listener;
 
     @Autowired
     public StrategyRefresher(StrategyManager strategyManager, ConfigCenterService configService) {
@@ -41,7 +43,7 @@ public class StrategyRefresher extends AbstractRefresher {
     @PostConstruct
     public void init() {
         // Register listener to Nacos config center
-        ConfigCenterService.ConfigListener listener = (dataId, group, newContent) -> {
+        listener = (dataId, group, newContent) -> {
             log.info("Strategy config change detected: {}", dataId);
             onConfigChange(dataId, newContent);
         };
@@ -57,12 +59,10 @@ public class StrategyRefresher extends AbstractRefresher {
      */
     @PreDestroy
     public void destroy() {
-        ConfigCenterService.ConfigListener listener = (dataId, group, newContent) -> {
-            log.info("Strategy config change detected: {}", dataId);
-            onConfigChange(dataId, newContent);
-        };
-        configService.removeListener(DATA_ID, GROUP, listener);
-        log.info("StrategyRefresher removed listener for {}", DATA_ID);
+        if (listener != null) {
+            configService.removeListener(DATA_ID, GROUP, listener);
+            log.info("StrategyRefresher removed listener for {}", DATA_ID);
+        }
     }
 
     /**
@@ -94,7 +94,6 @@ public class StrategyRefresher extends AbstractRefresher {
                 onConfigChange(DATA_ID, config);
             } else {
                 log.warn("No strategy configuration found in Nacos during manual reload");
-                // Clear StrategyManager cache
                 strategyManager.clearCache();
             }
         } catch (Exception e) {
@@ -102,45 +101,27 @@ public class StrategyRefresher extends AbstractRefresher {
         }
     }
 
-    @Override
-    protected Object parseConfig(String json) {
-        try {
-            // Parse JSON to JsonNode for validation
-            JsonNode root = objectMapper.readTree(json);
+    /**
+     * Handle config change event
+     */
+    private void onConfigChange(String dataId, String newContent) {
+        log.info("Config changed: {}", dataId);
 
-            // Validate configuration structure
+        try {
+            // Parse and validate config
+            JsonNode root = objectMapper.readTree(newContent);
             validateConfig(root);
 
             // Update StrategyManager
-            strategyManager.loadConfig(json);
+            strategyManager.loadConfig(newContent);
 
-            log.debug("Strategy config parsed successfully");
-            return root;
+            // Log details
+            logStrategyDetails(root);
+
+            log.info("Config {} refreshed successfully", dataId);
         } catch (Exception e) {
-            log.error("Failed to parse strategy config: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to parse strategy config", e);
+            log.error("Failed to refresh config {}: {}", dataId, e.getMessage(), e);
         }
-    }
-
-    @Override
-    protected void updateCache(Object config) {
-        // Cache is managed by StrategyManager
-        log.debug("Strategy config cache updated by StrategyManager");
-    }
-
-    @Override
-    protected void doRefresh(Object config) {
-        if (config == null || !(config instanceof JsonNode)) {
-            log.warn("Invalid strategy config, skipping refresh");
-            return;
-        }
-
-        JsonNode root = (JsonNode) config;
-
-        log.info("Strategy config refreshed successfully");
-
-        // Log detailed strategy information
-        logStrategyDetails(root);
     }
 
     /**
@@ -202,56 +183,30 @@ public class StrategyRefresher extends AbstractRefresher {
         if (pluginsNode.has("rateLimiters")) {
             int count = pluginsNode.get("rateLimiters").size();
             log.info("  Rate Limiters: {} configured", count);
-            pluginsNode.get("rateLimiters").forEach(limiter -> {
-                String routeId = limiter.has("routeId") ? limiter.get("routeId").asText() : "unknown";
-                int qps = limiter.has("qps") ? limiter.get("qps").asInt(0) : 0;
-                log.debug("    - Route '{}': QPS={}", routeId, qps);
-            });
         }
 
         // Log custom headers
         if (pluginsNode.has("customHeaders")) {
             int count = pluginsNode.get("customHeaders").size();
             log.info("  Custom Headers: {} configured", count);
-            pluginsNode.get("customHeaders").forEach(header -> {
-                String routeId = header.has("routeId") ? header.get("routeId").asText() : "unknown";
-                int headerCount = header.has("headers") ? header.get("headers").size() : 0;
-                log.debug("    - Route '{}': {} headers", routeId, headerCount);
-            });
         }
 
         // Log IP filters
         if (pluginsNode.has("ipFilters")) {
             int count = pluginsNode.get("ipFilters").size();
             log.info("  IP Filters: {} configured", count);
-            pluginsNode.get("ipFilters").forEach(filter -> {
-                String routeId = filter.has("routeId") ? filter.get("routeId").asText() : "unknown";
-                String mode = filter.has("mode") ? filter.get("mode").asText() : "blacklist";
-                int ipCount = filter.has("ipList") ? filter.get("ipList").size() : 0;
-                log.debug("    - Route '{}': mode={}, {} IPs", routeId, mode, ipCount);
-            });
         }
 
         // Log timeouts
         if (pluginsNode.has("timeouts")) {
             int count = pluginsNode.get("timeouts").size();
             log.info("  Timeouts: {} configured", count);
-            pluginsNode.get("timeouts").forEach(timeout -> {
-                String routeId = timeout.has("routeId") ? timeout.get("routeId").asText() : "unknown";
-                int connectTimeout = timeout.has("connectTimeout") ? timeout.get("connectTimeout").asInt(5000) : 5000;
-                log.debug("    - Route '{}': connect={}ms", routeId, connectTimeout);
-            });
         }
 
         // Log circuit breakers
         if (pluginsNode.has("circuitBreakers")) {
             int count = pluginsNode.get("circuitBreakers").size();
             log.info("  Circuit Breakers: {} configured", count);
-            pluginsNode.get("circuitBreakers").forEach(cb -> {
-                String routeId = cb.has("routeId") ? cb.get("routeId").asText() : "unknown";
-                int threshold = cb.has("failureThreshold") ? cb.get("failureThreshold").asInt(5) : 5;
-                log.debug("    - Route '{}': failureThreshold={}", routeId, threshold);
-            });
         }
     }
 }

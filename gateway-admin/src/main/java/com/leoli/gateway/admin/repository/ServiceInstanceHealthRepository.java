@@ -9,42 +9,44 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 /**
- * 服务实例健康状态 Repository
+ * Service instance health status repository.
+ *
+ * @author leoli
  */
 @Repository
 public interface ServiceInstanceHealthRepository extends JpaRepository<ServiceInstanceHealth, Long> {
-    
+
     /**
-     * 根据服务 ID、IP 和端口查询
+     * Find by service ID, IP and port.
      */
     @Query("SELECT h FROM ServiceInstanceHealth h WHERE h.serviceId = :serviceId AND h.ip = :ip AND h.port = :port")
     ServiceInstanceHealth findByServiceIdAndIpAndPort(
-        @Param("serviceId") String serviceId,
-        @Param("ip") String ip,
-        @Param("port") Integer port
+            @Param("serviceId") String serviceId,
+            @Param("ip") String ip,
+            @Param("port") Integer port
     );
-    
+
     /**
-     * ✅ 根据 IP 和端口查询（唯一键）
+     * Find by IP and port (unique key).
      */
     @Query("SELECT h FROM ServiceInstanceHealth h WHERE h.ip = :ip AND h.port = :port")
     ServiceInstanceHealth findByIpAndPort(
-        @Param("ip") String ip,
-        @Param("port") Integer port
+            @Param("ip") String ip,
+            @Param("port") Integer port
     );
-    
+
     /**
-     * 根据服务 ID 查询所有实例
+     * Find all instances by service ID.
      */
     List<ServiceInstanceHealth> findByServiceId(String serviceId);
-    
+
     /**
-     * 查询所有实例
+     * Find all instances.
      */
     List<ServiceInstanceHealth> findAll();
-    
+
     /**
-     * 根据服务 ID 和健康状态查询
+     * Find by service ID and health status.
      */
     List<ServiceInstanceHealth> findByServiceIdAndHealthStatus(String serviceId, String healthStatus);
 }

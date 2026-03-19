@@ -1,13 +1,15 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Layout, Menu, theme, Avatar, Dropdown, Space, message } from 'antd';
+import { Layout, Menu, theme, Avatar, Dropdown, Space, message, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
-import { 
+import {
   AppstoreOutlined,      // Services - 应用图标
-  SafetyOutlined,        // Strategies - 安全/策略图标  
+  SafetyOutlined,        // Strategies - 安全/策略图标
   DeploymentUnitOutlined, // Routes - 路由/部署图标
   UserOutlined,
   LogoutOutlined,
-  GatewayOutlined
+  GatewayOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined
 } from '@ant-design/icons';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import RoutesPage from './pages/RoutesPage';
@@ -39,6 +41,7 @@ function getItem(
 
 const App: React.FC = () => {
   const [current, setCurrent] = useState('services');
+  const [collapsed, setCollapsed] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [user, setUser] = useState<{ username: string; nickname: string; role: string } | null>(null);
   const navigate = useNavigate();
@@ -99,14 +102,14 @@ const App: React.FC = () => {
   };
 
   // User dropdown menu items
-  const userMenuItems: MenuItem[] = [
+  const userMenuItems: MenuItem[] = useMemo(() => [
     {
       key: 'logout',
       icon: <LogoutOutlined />,
-      label: 'Logout',
+      label: t('common.logout'),
       onClick: handleLogout
     }
-  ];
+  ], [t]);
 
   // If not logged in, show login page only
   if (!isLoggedIn) {
@@ -116,10 +119,25 @@ const App: React.FC = () => {
   return (
     <Layout style={{ minHeight: '100vh' }}>
       {/* Left Sidebar - Dark theme */}
-      <Sider width={220} theme="dark" className="sidebar-premium">
-        <div className="sidebar-logo">
-          <GatewayOutlined className="logo-icon" />
-          <span className="logo-text">API Gateway</span>
+      <Sider
+        width={220}
+        theme="dark"
+        className="sidebar-premium"
+        collapsible
+        collapsed={collapsed}
+        onCollapse={setCollapsed}
+        trigger={null}
+      >
+        <div className="sidebar-header">
+          <div className="sidebar-logo">
+            <GatewayOutlined className="logo-icon" />
+            {!collapsed && <span className="logo-text">API Gateway</span>}
+          </div>
+          <div className="sidebar-collapse-btn" onClick={() => setCollapsed(!collapsed)}>
+            <Tooltip title={collapsed ? t('common.expand') : t('common.collapse')} placement="right">
+              {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            </Tooltip>
+          </div>
         </div>
         <Menu
           theme="dark"

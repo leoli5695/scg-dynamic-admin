@@ -64,11 +64,28 @@ public class NacosConfigCenterService implements ConfigCenterService {
     }
 
     @PreDestroy
-    public void destroy() throws NacosException {
+    public void destroy() {
+        // Shutdown ConfigService
         if (configService != null) {
-            configService.shutDown();
-            log.info("Nacos Config Center shut down");
+            try {
+                configService.shutDown();
+                log.info("Nacos ConfigService shut down successfully");
+            } catch (NacosException e) {
+                log.warn("Error shutting down Nacos ConfigService: {}", e.getMessage());
+            }
         }
+
+        // Shutdown NamingService
+        if (namingService != null) {
+            try {
+                namingService.shutDown();
+                log.info("Nacos NamingService shut down successfully");
+            } catch (NacosException e) {
+                log.warn("Error shutting down Nacos NamingService: {}", e.getMessage());
+            }
+        }
+
+        log.info("Nacos Config Center fully shut down");
     }
 
     @Override

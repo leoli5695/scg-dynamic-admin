@@ -68,7 +68,23 @@ spring:
 gateway:
   center:
     type: ${GATEWAY_CENTER_TYPE:nacos}
-  
+
+  # Trusted Proxy Configuration for X-Forwarded-For validation
+  # When gateway is behind a reverse proxy (Nginx, CloudFlare, AWS ALB),
+  # configure trusted proxy IPs to securely extract real client IP.
+  trusted-proxy:
+    enabled: ${TRUSTED_PROXY_ENABLED:true}
+    # Trust all private network IPs as proxies (10.x, 172.16-31.x, 192.168.x, 127.x)
+    # Disable this in public cloud deployments with public-facing load balancers
+    trust-private-networks: ${TRUSTED_PROXY_PRIVATE_NETWORKS:true}
+    # Additional trusted proxy IPs (optional, supports CIDR notation)
+    # Example: proxy-ips: ["1.2.3.4", "5.6.7.0/24"]
+    proxy-ips: []
+    # Which IP to use from X-Forwarded-For chain: FIRST (client) or LAST (closest proxy)
+    position: FIRST
+    # Maximum IPs to process in X-Forwarded-For (DoS protection)
+    max-forwarded-ips: 10
+
   # Health Check Configuration
   health:
     enabled: true

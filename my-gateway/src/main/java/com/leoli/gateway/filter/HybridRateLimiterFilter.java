@@ -2,6 +2,7 @@ package com.leoli.gateway.filter;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.leoli.gateway.limiter.RateLimitResult;
 import com.leoli.gateway.limiter.RedisHealthChecker;
 import com.leoli.gateway.limiter.RedisRateLimiter;
 import com.leoli.gateway.util.RouteUtils;
@@ -21,6 +22,7 @@ import java.net.InetSocketAddress;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Hybrid Rate Limiter Filter - Redis + Local Dual-Layer Architecture
@@ -29,7 +31,12 @@ import java.util.concurrent.atomic.AtomicLong;
  * 1. Check switch: gateway.rate-limiter.redis.enabled (default true)
  * 2. If enabled → Check Redis availability (scheduled task detection)
  * 3. Redis available → Use Redis distributed rate limiting
- * 4. Redis unavailable → Fallback to local rate limiting (Caffeine sliding window)
+ * 4. Redis unavailable → Fallback to local rate limiting (smooth degradation)
+ * <p>
+ * Key improvements:
+ * - Proper fallback handling when Redis fails
+ * - Thread-safe local rate limiter with correct synchronization
+ * - Graceful degradation without sudden burst allowance
  *
  * @author leoli
  */
@@ -70,29 +77,31 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
         String rateLimitKey = buildRateLimitKey(routeId, clientId, config);
 
         // 1. Check if Redis rate limiting is enabled (default enabled)
-        if (redisLimitEnabled) {
-            redisHealthChecker.setRedisLimitEnabled(true);
+        if (redisLimitEnabled && redisHealthChecker.isRedisAvailableForRateLimiting()) {
+            log.debug("Using Redis distributed rate limiting for key: {}", rateLimitKey);
 
-            // 2. Check Redis availability (scheduled task detection)
-            if (redisHealthChecker.isRedisAvailableForRateLimiting()) {
-                log.debug("Using Redis distributed rate limiting for key: {}", rateLimitKey);
+            // 2. Try Redis rate limiting with proper fallback handling
+            RateLimitResult result = redisRateLimiter.tryAcquireWithFallback(rateLimitKey, config.qps, config.windowSizeMs);
 
-                // 3. Redis available → Use Redis rate limiting
-                boolean allowed = redisRateLimiter.tryAcquire(rateLimitKey, config.qps, config.windowSizeMs);
-
-                if (allowed) {
-                    return chain.filter(exchange);
-                } else {
-                    log.warn("Redis rate limit exceeded for key: {}, QPS: {}", rateLimitKey, config.qps);
-                    return rejectRequest(exchange);
-                }
+            if (result.isAllowed()) {
+                // Request allowed by Redis
+                return chain.filter(exchange);
+            } else if (!result.isShouldFallback()) {
+                // Rate limit exceeded (Redis working correctly)
+                log.warn("Redis rate limit exceeded for key: {}, QPS: {}", rateLimitKey, config.qps);
+                return rejectRequest(exchange);
             }
-        } else {
-            redisHealthChecker.setRedisLimitEnabled(false);
+            // else: Redis unavailable, fall through to local limiter
+            log.info("Redis unavailable for key: {}, falling back to local limiter. Reason: {}",
+                    rateLimitKey, result.getErrorMessage());
         }
 
-        // 4. Redis unavailable or switch disabled → Fallback to local rate limiting
-        log.debug("Falling back to local rate limiting for key: {}", rateLimitKey);
+        // 3. Fallback to local rate limiting
+        // This happens when:
+        // - Redis rate limiting is disabled
+        // - Redis is unavailable
+        // - Redis returned a fallback result
+        log.debug("Using local rate limiting for key: {}", rateLimitKey);
         RateLimiterWindow window = getOrCreateWindow(rateLimitKey, config);
 
         if (window.tryAcquire()) {
@@ -150,7 +159,7 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
      */
     private Mono<Void> rejectRequest(ServerWebExchange exchange) {
         exchange.getResponse().setStatusCode(HttpStatus.TOO_MANY_REQUESTS);
-        exchange.getResponse().getHeaders().add("X-RateLimit-Limit", "true");
+        exchange.getResponse().getHeaders().add("X-RateLimit-Limit", "exceeded");
         return exchange.getResponse().setComplete();
     }
 
@@ -161,14 +170,14 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
         RateLimitConfig config = new RateLimitConfig();
         config.enabled = true;
         config.qps = 100;
-        config.windowSizeMs = 1000; // 1 秒
+        config.windowSizeMs = 1000; // 1 second
         config.keyType = "combined";
         return config;
     }
 
     @Override
     public int getOrder() {
-        // 在 TracingFilter 和 AuthFilter 之后执行
+        // Execute after TracingFilter and AuthFilter
         return Ordered.HIGHEST_PRECEDENCE + 20;
     }
 
@@ -184,7 +193,15 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * Sliding time window rate limiter
+     * Thread-safe sliding time window rate limiter.
+     * <p>
+     * Uses a lock to prevent race conditions when:
+     * - Checking if window needs reset
+     * - Resetting the counter
+     * - Incrementing the counter
+     * <p>
+     * This ensures that exactly maxRequests are allowed per window,
+     * even under high concurrency.
      */
     @Data
     public static class RateLimiterWindow {
@@ -192,6 +209,9 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
         private final long windowSizeMs;
         private final AtomicInteger currentCount = new AtomicInteger(0);
         private final AtomicLong windowStartTime = new AtomicLong(System.currentTimeMillis());
+        
+        // Lock for thread-safe window reset
+        private final ReentrantLock lock = new ReentrantLock();
 
         public RateLimiterWindow(int maxRequests, long windowSizeMs) {
             this.maxRequests = maxRequests;
@@ -199,31 +219,42 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
         }
 
         /**
-         * Try to acquire a permit
+         * Try to acquire a permit.
+         * <p>
+         * Thread-safe implementation that:
+         * 1. Acquires lock
+         * 2. Checks if window needs reset
+         * 3. Resets if needed
+         * 4. Checks and increments counter
+         * 5. Releases lock
          *
          * @return true if request is allowed, false if limit exceeded
          */
-        public synchronized boolean tryAcquire() {
-            long now = System.currentTimeMillis();
-            long windowStart = windowStartTime.get();
+        public boolean tryAcquire() {
+            lock.lock();
+            try {
+                long now = System.currentTimeMillis();
+                long windowStart = windowStartTime.get();
 
-            // Check if window needs to be reset
-            if (now - windowStart >= windowSizeMs) {
-                // Time window has passed, reset counter
-                currentCount.set(0);
-                windowStartTime.set(now);
-                windowStart = now;
+                // Check if window needs to be reset
+                if (now - windowStart >= windowSizeMs) {
+                    // Time window has passed, reset counter atomically
+                    currentCount.set(0);
+                    windowStartTime.set(now);
+                }
+
+                // Check if limit exceeded
+                int count = currentCount.get();
+                if (count < maxRequests) {
+                    // Increment count
+                    currentCount.incrementAndGet();
+                    return true;
+                }
+
+                return false;
+            } finally {
+                lock.unlock();
             }
-
-            // Check if limit exceeded
-            int count = currentCount.get();
-            if (count < maxRequests) {
-                // Increment count
-                currentCount.incrementAndGet();
-                return true;
-            }
-
-            return false;
         }
 
         /**

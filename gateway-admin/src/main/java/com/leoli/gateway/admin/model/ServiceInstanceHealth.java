@@ -7,7 +7,9 @@ import lombok.AllArgsConstructor;
 import jakarta.persistence.*;
 
 /**
- * 服务实例健康状态实体
+ * Service instance health status entity.
+ *
+ * @author leoli
  */
 @Data
 @NoArgsConstructor
@@ -15,70 +17,70 @@ import jakarta.persistence.*;
 @Entity
 @Table(name = "service_instances")
 public class ServiceInstanceHealth {
-    
+
     /**
-     * 主键 ID
+     * Primary key ID.
      */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    
+
     /**
-     * 服务 ID
+     * Service ID.
      */
     @Column(name = "service_id", nullable = false, length = 100)
     private String serviceId;
-    
+
     /**
-     * IP 地址
+     * IP address.
      */
     @Column(name = "ip", nullable = false, length = 50)
     private String ip;
-    
+
     /**
-     * 端口
+     * Port number.
      */
     @Column(name = "port", nullable = false)
     private Integer port;
-    
+
     /**
-     * 健康状态：HEALTHY, UNHEALTHY
+     * Health status: HEALTHY, UNHEALTHY.
      */
     @Column(name = "health_status", length = 20)
     private String healthStatus = "HEALTHY";
-    
+
     /**
-     * 最后健康检查时间
+     * Last health check timestamp.
      */
     @Column(name = "last_health_check_time")
     private Long lastHealthCheckTime;
-    
+
     /**
-     * 不健康原因
+     * Unhealthy reason.
      */
     @Column(name = "unhealthy_reason", length = 500)
     private String unhealthyReason;
-    
+
     /**
-     * 连续失败次数
+     * Consecutive failure count.
      */
     @Column(name = "consecutive_failures")
     private Integer consecutiveFailures = 0;
-    
+
     /**
-     * 权重
+     * Instance weight.
      */
     @Column(name = "weight")
     private Integer weight = 100;
-    
+
     /**
-     * 创建时间
+     * Create timestamp.
      */
     @Column(name = "create_time")
     private Long createTime;
-    
+
     /**
-     * 更新时间
+     * Update timestamp.
      */
     @Column(name = "update_time")
     private Long updateTime;
