@@ -173,13 +173,13 @@ public class RouteService {
 
     // ✅ Note: RouteDefinition no longer has description field
     // Description is only stored in RouteEntity for UI display
-    
+
     // 1. Convert to entity and save to H2 database
     log.info("Saving route to database: {}", routeName);
     RouteEntity entity = routeConverter.toEntity(route);
     entity.setRouteName(routeName);
     entity.setRouteId(java.util.UUID.randomUUID().toString());
-    entity.setDescription(null); // No description in RouteDefinition, so null
+    entity.setDescription(route.getDescription()); // Save description to database only
     entity = routeRepository.save(entity);
     
     log.info("Route saved with DB id={}, route_name={}", 

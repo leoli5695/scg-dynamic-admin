@@ -28,6 +28,11 @@ public class RouteDefinition {
     private int order = 0;
 
     /**
+     * Route description (only for UI display, NOT pushed to Nacos)
+     */
+    private transient String description;
+
+    /**
      * Target URI (for single-service mode, e.g., "lb://user-service").
      * This field is kept for backward compatibility.
      */
