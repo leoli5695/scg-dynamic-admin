@@ -5,6 +5,7 @@ import {
   AppstoreOutlined,      // Services - 应用图标
   SafetyOutlined,        // Strategies - 安全/策略图标
   DeploymentUnitOutlined, // Routes - 路由/部署图标
+  DashboardOutlined,     // Monitor - 监控图标
   UserOutlined,
   LogoutOutlined,
   GatewayOutlined,
@@ -15,6 +16,7 @@ import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import RoutesPage from './pages/RoutesPage';
 import ServicesPage from './pages/ServicesPage';
 import StrategiesPage from './pages/StrategiesPage';
+import MonitorPage from './pages/MonitorPage';
 import LoginPage from './pages/LoginPage';
 import LanguageSwitcher from './components/LanguageSwitcher';
 import { useTranslation } from 'react-i18next';
@@ -56,6 +58,7 @@ const App: React.FC = () => {
     getItem(t('menu.services'), 'services', <AppstoreOutlined />),
     getItem(t('menu.routes'), 'routes', <DeploymentUnitOutlined />),
     getItem(t('menu.strategies'), 'strategies', <SafetyOutlined />),
+    getItem(t('menu.monitor'), 'monitor', <DashboardOutlined />),
   ], [t]);
 
   // Check login status on mount
@@ -96,6 +99,8 @@ const App: React.FC = () => {
         return <RoutesPage />;
       case 'strategies':
         return <StrategiesPage />;
+      case 'monitor':
+        return <MonitorPage />;
       default:
         return <ServicesPage />;
     }

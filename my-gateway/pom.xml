@@ -74,6 +74,12 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
+        <!-- Prometheus Registry for Metrics -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
         <!-- Caffeine Cache for Health Check -->
         <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>

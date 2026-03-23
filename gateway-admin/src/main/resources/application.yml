@@ -54,6 +54,9 @@ gateway:
       secret: ${GATEWAY_ADMIN_JWT_SECRET:mySecretKeyForJWTTokenGenerationWhichMustBeLongEnoughAndSecure}
       expiration: 86400000  # 24 hours in milliseconds
       enabled: true  # ✅ Enable JWT for production
+  # Prometheus configuration for Gateway monitoring
+  prometheus:
+    url: ${PROMETHEUS_URL:http://localhost:9091}
   consul:
     host: 127.0.0.1
     port: 8500
