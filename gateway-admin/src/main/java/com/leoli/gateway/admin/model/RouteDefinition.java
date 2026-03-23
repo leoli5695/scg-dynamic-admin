@@ -1,5 +1,6 @@
 package com.leoli.gateway.admin.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -13,6 +14,7 @@ import java.util.Map;
  * @author leoli
  */
 @Data
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class RouteDefinition {
 
     /**

@@ -15,7 +15,14 @@ import lombok.NoArgsConstructor;
 public class RouteServiceBinding {
 
     /**
-     * Service ID (UUID from ServiceEntity).
+     * Service type: STATIC (fixed nodes), NACOS (Nacos discovery), CONSUL (Consul discovery).
+     */
+    private ServiceType serviceType = ServiceType.STATIC;
+
+    /**
+     * Service ID.
+     * - STATIC: UUID from ServiceEntity
+     * - NACOS/CONSUL: service name registered in discovery server
      */
     private String serviceId;
 
@@ -47,23 +54,44 @@ public class RouteServiceBinding {
     private String description;
 
     /**
-     * Create a simple binding with default weight.
+     * Create a simple binding with default weight (STATIC type).
      */
     public static RouteServiceBinding of(String serviceId, String serviceName) {
-        return new RouteServiceBinding(serviceId, serviceName, 100, null, true, null);
+        return new RouteServiceBinding(ServiceType.STATIC, serviceId, serviceName, 100, null, true, null);
     }
 
     /**
-     * Create a binding with weight.
+     * Create a binding with type and service name (for NACOS/CONSUL).
+     */
+    public static RouteServiceBinding of(ServiceType serviceType, String serviceId, String serviceName) {
+        return new RouteServiceBinding(serviceType, serviceId, serviceName, 100, null, true, null);
+    }
+
+    /**
+     * Create a binding with weight (STATIC type).
      */
     public static RouteServiceBinding of(String serviceId, String serviceName, int weight) {
-        return new RouteServiceBinding(serviceId, serviceName, weight, null, true, null);
+        return new RouteServiceBinding(ServiceType.STATIC, serviceId, serviceName, weight, null, true, null);
     }
 
     /**
-     * Create a binding with weight and version.
+     * Create a binding with type, service name and weight.
+     */
+    public static RouteServiceBinding of(ServiceType serviceType, String serviceId, String serviceName, int weight) {
+        return new RouteServiceBinding(serviceType, serviceId, serviceName, weight, null, true, null);
+    }
+
+    /**
+     * Create a binding with weight and version (STATIC type).
      */
     public static RouteServiceBinding of(String serviceId, String serviceName, int weight, String version) {
-        return new RouteServiceBinding(serviceId, serviceName, weight, version, true, null);
+        return new RouteServiceBinding(ServiceType.STATIC, serviceId, serviceName, weight, version, true, null);
+    }
+
+    /**
+     * Create a full binding with all parameters.
+     */
+    public static RouteServiceBinding of(ServiceType serviceType, String serviceId, String serviceName, int weight, String version) {
+        return new RouteServiceBinding(serviceType, serviceId, serviceName, weight, version, true, null);
     }
 }

@@ -671,6 +671,129 @@ Redis + Local dual-layer architecture with automatic fallback:
 - Sliding window algorithm with burst capacity
 - Multiple key types: `ip`, `route`, `combined`, `user`, `header`
 
+#### 10.1.1 Redis Failover Strategy (Shadow Quota Method)
+
+**The Problem:**
+
+When Redis becomes unavailable, a naive fallback to local rate limiting causes a critical issue:
+
+```
+Scenario: 5 gateway nodes, global rate limit = 10,000 QPS
+
+Before Redis failure:
+  - Each node handles ~2,000 QPS (10,000 / 5)
+
+Redis fails (naive fallback):
+  - All 5 nodes reset their local counters to 0
+  - Each node independently allows up to its local limit
+  - Backend may receive 10,000+ QPS instantly → cascading failure
+```
+
+This is the difference between a **demo project** and a **production-grade system**.
+
+**Solution: Shadow Quota Method**
+
+We chose the "Shadow Quota" approach for graceful degradation:
+
+```
++------------------------------------------------------------------+
+|                    SHADOW QUOTA FAILOVER                         |
++------------------------------------------------------------------+
+
+  Redis Healthy State:
+  +-------------------------------------------------------------+
+  |  1. Periodically record global QPS snapshot (every 1s)     |
+  |  2. Monitor cluster node count via Nacos/Consul            |
+  |  3. Calculate: localQuota = globalQPS / nodeCount          |
+  +-------------------------------------------------------------+
+
+  Redis Failure Detected:
+  +-------------------------------------------------------------+
+  |  1. Switch to local rate limiting mode                      |
+  |  2. Inherit pre-calculated local quota (shadow quota)       |
+  |  3. Continue limiting at approximately the same rate        |
+  +-------------------------------------------------------------+
+
+  Example:
+  - Global limit: 10,000 QPS
+  - Cluster nodes: 5
+  - Shadow quota per node: 10,000 / 5 = 2,000 QPS
+  - When Redis fails: Each node continues at ~2,000 QPS
+  - Backend receives: ~10,000 QPS (no spike!)
+```
+
+**Why This Approach?**
+
+| Approach | Complexity | Traffic Behavior | Use Case |
+|----------|------------|------------------|----------|
+| **Reset Counter** | ⭐ | Traffic doubles/triples | Demo / Non-critical |
+| **Shadow Quota** (chosen) | ⭐⭐ | Smooth degradation | **Production** |
+| **Async Dual-Write** | ⭐⭐⭐⭐ | High performance, weak consistency | Extreme performance |
+
+**Implementation Design:**
+
+```java
+public class HybridRateLimiter {
+
+    // Snapshot of global QPS (updated every second)
+    private final AtomicLong globalQpsSnapshot = new AtomicLong(0);
+
+    // Cluster node count (from service discovery)
+    private final AtomicInteger clusterNodeCount = new AtomicInteger(1);
+
+    // Pre-calculated local quota for failover
+    private final AtomicLong shadowQuota = new AtomicLong(0);
+
+    // Redis health status
+    private volatile boolean redisHealthy = true;
+
+    @Scheduled(fixedRate = 1000)
+    public void updateShadowQuota() {
+        if (redisHealthy) {
+            long globalQps = fetchGlobalQpsFromRedis();
+            globalQpsSnapshot.set(globalQps);
+
+            int nodes = discoveryClient.getInstances("gateway").size();
+            clusterNodeCount.set(Math.max(1, nodes));
+
+            // Calculate shadow quota
+            long quota = globalQps / clusterNodeCount.get();
+            shadowQuota.set(quota);
+        }
+    }
+
+    public Mono<Boolean> allowRequest(String key) {
+        if (redisHealthy) {
+            return redisRateLimiter.allow(key)
+                .onErrorResume(e -> {
+                    degradeToLocal();
+                    return localRateLimiter.allow(key, shadowQuota.get());
+                });
+        }
+        return localRateLimiter.allow(key, shadowQuota.get());
+    }
+}
+```
+
+**Recovery Strategy:**
+
+When Redis recovers, we use **gradual traffic shifting** to avoid sudden state changes:
+
+```
+Redis Recovery Timeline:
+
+Second 0:  10% traffic to Redis, 90% local
+Second 1:  20% traffic to Redis, 80% local
+Second 2:  30% traffic to Redis, 70% local
+...
+Second 9:  100% traffic to Redis, fully recovered
+```
+
+This prevents:
+- Thundering herd to Redis
+- Sudden quota changes
+- Inconsistent behavior during transition
+
 ### 10.2 Strategy Management System
 
 Unified configuration management for all gateway strategies:

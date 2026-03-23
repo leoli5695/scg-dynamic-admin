@@ -5,6 +5,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.leoli.gateway.limiter.RateLimitResult;
 import com.leoli.gateway.limiter.RedisHealthChecker;
 import com.leoli.gateway.limiter.RedisRateLimiter;
+import com.leoli.gateway.limiter.ShadowQuotaManager;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.StrategyDefinition;
 import com.leoli.gateway.util.RouteUtils;
@@ -33,14 +34,18 @@ import java.util.concurrent.locks.ReentrantLock;
  * Features:
  * - Supports global and route-bound rate limiting strategies
  * - Redis distributed rate limiting with local fallback
+ * - Shadow Quota failover for graceful degradation
+ * - Gradual recovery when Redis comes back online
  * - Multiple key types: route, ip, combined, user, header
  * <p>
  * Execution Logic:
  * 1. Get rate limit config from StrategyManager (supports global and route-bound)
  * 2. Check if rate limiting is enabled for the route
- * 3. If enabled → Check Redis availability
- * 4. Redis available → Use Redis distributed rate limiting
- * 5. Redis unavailable → Fallback to local rate limiting
+ * 3. Register route with ShadowQuotaManager for failover tracking
+ * 4. If enabled → Check Redis availability
+ * 5. Redis available → Use Redis distributed rate limiting
+ * 6. During recovery → Probabilistic routing between Redis and local
+ * 7. Redis unavailable → Fallback to local rate limiting with shadow quota
  *
  * @author leoli
  */
@@ -57,8 +62,14 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
     @Autowired(required = false)
     private RedisRateLimiter redisRateLimiter;
 
+    @Autowired
+    private ShadowQuotaManager shadowQuotaManager;
+
     @Value("${gateway.rate-limiter.redis.enabled:true}")
     private boolean redisLimitEnabled;
+
+    @Value("${gateway.rate-limiter.shadow-quota.enabled:true}")
+    private boolean shadowQuotaEnabled;
 
     /**
      * Rate limiter cache: key = rateLimitKey, value = RateLimiterWindow
@@ -81,11 +92,19 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
+        // Register route with ShadowQuotaManager for failover tracking
+        if (shadowQuotaEnabled) {
+            shadowQuotaManager.registerRoute(routeId, config.qps);
+        }
+
         String clientId = extractClientId(exchange, config);
         String rateLimitKey = buildRateLimitKey(routeId, clientId, config);
 
-        // 1. Check if Redis rate limiting is enabled
-        if (redisLimitEnabled && redisHealthChecker.isRedisAvailableForRateLimiting()) {
+        // Check if we should use Redis for rate limiting
+        boolean shouldUseRedis = shouldUseRedisForRateLimiting();
+
+        // 1. Check if Redis rate limiting should be used
+        if (shouldUseRedis && redisLimitEnabled && redisHealthChecker.isRedisAvailableForRateLimiting()) {
             log.debug("Using Redis distributed rate limiting for key: {}", rateLimitKey);
 
             // 2. Try Redis rate limiting with proper fallback handling
@@ -103,17 +122,48 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
             log.info("Redis unavailable for key: {}, falling back to local limiter", rateLimitKey);
         }
 
-        // 3. Fallback to local rate limiting
+        // 3. Fallback to local rate limiting with shadow quota
         log.debug("Using local rate limiting for key: {}", rateLimitKey);
-        RateLimiterWindow window = getOrCreateWindow(rateLimitKey, config);
+
+        // Get shadow quota for graceful degradation
+        long localQuota = config.qps;
+        if (shadowQuotaEnabled && !shadowQuotaManager.isRedisHealthy()) {
+            localQuota = shadowQuotaManager.getShadowQuota(routeId, config.qps);
+            log.debug("Using shadow quota for route {}: {} (configured: {})", routeId, localQuota, config.qps);
+        }
+
+        RateLimiterWindow window = getOrCreateWindowWithQuota(rateLimitKey, (int) localQuota, config);
 
         if (window.tryAcquire()) {
             log.debug("Local rate limit allowed for key: {}, remaining: {}", rateLimitKey, window.getRemaining());
             return chain.filter(exchange);
         } else {
-            log.warn("Local rate limit exceeded for key: {}, QPS: {}", rateLimitKey, config.qps);
+            log.warn("Local rate limit exceeded for key: {}, quota: {}", rateLimitKey, localQuota);
             return rejectRequest(exchange, config);
         }
+    }
+
+    /**
+     * Determine if Redis should be used for rate limiting.
+     * During recovery phase, uses probabilistic routing.
+     */
+    private boolean shouldUseRedisForRateLimiting() {
+        if (!shadowQuotaEnabled) {
+            return true; // Shadow quota disabled, always use Redis if available
+        }
+
+        // Check if we're in recovery phase
+        if (!shadowQuotaManager.isRedisHealthy()) {
+            return false; // Redis is down
+        }
+
+        int recoveryProgress = shadowQuotaManager.getRecoveryProgress();
+        if (recoveryProgress >= 100) {
+            return true; // Fully recovered
+        }
+
+        // During recovery, use probabilistic routing
+        return shadowQuotaManager.shouldUseRedisDuringRecovery();
     }
 
     /**
@@ -199,6 +249,16 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
     private RateLimiterWindow getOrCreateWindow(String key, RateLimitConfig config) {
         return rateLimiterCache.get(key, k ->
                 new RateLimiterWindow(config.qps, config.burstCapacity, config.windowSizeMs));
+    }
+
+    /**
+     * Get or create rate limiter window with custom quota (for shadow quota support)
+     */
+    private RateLimiterWindow getOrCreateWindowWithQuota(String key, int quota, RateLimitConfig config) {
+        // Use shadow quota for the window, but keep original burst capacity ratio
+        int burstCapacity = (int) (quota * ((double) config.burstCapacity / config.qps));
+        return rateLimiterCache.get(key, k ->
+                new RateLimiterWindow(quota, Math.max(quota, burstCapacity), config.windowSizeMs));
     }
 
     /**

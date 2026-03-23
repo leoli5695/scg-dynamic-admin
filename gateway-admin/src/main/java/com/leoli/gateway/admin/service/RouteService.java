@@ -114,6 +114,10 @@ public class RouteService {
           response.setId(entity.getRouteId());  // UUID as primary key
           response.setRouteName(def.getId());  // route_name as business field
           response.setUri(def.getUri());
+          response.setMode(def.getMode());
+          response.setServiceId(def.getServiceId());
+          response.setServices(def.getServices());
+          response.setGrayRules(def.getGrayRules());
           response.setOrder(def.getOrder());
           response.setPredicates(def.getPredicates());
           response.setFilters(def.getFilters());
