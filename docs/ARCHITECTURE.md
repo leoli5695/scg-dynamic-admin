@@ -355,81 +355,90 @@ Implementation:
 
 ## 5. Cache Architecture
 
-### 5.1 Three-Level Cache
+### 5.1 Single-Layer Cache with Real-Time Push
+
+The gateway uses a **simple and effective** caching strategy:
 
 ```
 +------------------------------------------------------------------+
-|                       CACHE ARCHITECTURE                         |
+|                    CONFIG FLOW ARCHITECTURE                       |
 +------------------------------------------------------------------+
 
+                    Config Center (Nacos/Consul)
+                           |
+                           | Real-time Push (Listener)
+                           | < 100ms latency
+                           v
    +-------------------------------------------------------------+
-   |          L1: In-Memory (AtomicReference)                    |
+   |          In-Memory Cache (ConcurrentHashMap)                |
    |                                                             |
-   |   RouteManager.routeConfigCache                             |
-   |   ServiceManager.serviceConfigCache                         |
+   |   RouteManager.routeCache      - Route definitions          |
+   |   ServiceManager.instanceCache - Service instances          |
+   |   StrategyManager.strategyCache - Strategy configs          |
    |                                                             |
    |   - Nanosecond read latency                                 |
-   |   - Thread-safe (AtomicReference)                           |
-   |   - Auto-refresh on config change                           |
-   +-------------------------------------------------------------+
-                              |
-                              | Cache Miss
-                              v
-   +-------------------------------------------------------------+
-   |          L2: Fallback Cache (ConcurrentHashMap)             |
-   |                                                             |
-   |   GenericCacheManager.fallbackCaches                        |
-   |                                                             |
-   |   - Last known good configuration                           |
-   |   - Used when Nacos is unavailable                          |
-   |   - TTL-based expiration                                    |
-   +-------------------------------------------------------------+
-                              |
-                              | Cache Miss
-                              v
-   +-------------------------------------------------------------+
-   |          L3: Config Center (Nacos/Consul)                   |
-   |                                                             |
-   |   gateway-routes.json                                       |
-   |   gateway-services.json                                     |
-   |   gateway-strategies.json                                   |
-   |                                                             |
-   |   - Persistent storage                                      |
-   |   - Distributed consistency                                 |
-   |   - Real-time push via listener                             |
+   |   - Thread-safe                                             |
+   |   - Auto-refresh via Nacos listener                         |
    +-------------------------------------------------------------+
 ```
 
-### 5.2 Fallback Strategy
+**Design Principles:**
+
+| Principle | Description |
+|-----------|-------------|
+| **Keep It Simple** | Single cache layer, no complex fallback logic |
+| **Trust Nacos/Consul** | Rely on config center's real-time push capability |
+| **Fast Reads** | All reads from local memory, no network calls |
+
+**Why Not Multi-Level Cache?**
+
+A multi-level cache with fallback would be **over-engineering** for this use case:
+
+1. Nacos/Consul already provides high availability
+2. Real-time push ensures cache is always fresh
+3. If config center is down, bigger problems exist than stale cache
+4. Simpler code = easier debugging and maintenance
+
+### 5.2 Config Update Flow
 
 ```
 +------------------------------------------------------------------+
-|                    CACHE FALLBACK FLOW                           |
+|                    CONFIG UPDATE FLOW                            |
 +------------------------------------------------------------------+
 
-   getConfig(key)
-        |
-        v
-   +-------------+
-   | L1 Valid?   |---- Yes ---> Return L1 Cache
-   +------+------+
-          | No
+   Admin API (gateway-admin)
+          |
+          | 1. Save to MySQL
           v
    +-------------+
-   | Fetch from  |
-   |   Nacos     |
+   |   MySQL     |
+   | (Persist)   |
    +------+------+
           |
-          +---- Success ---> Update L1 + L2 --> Return Config
+          | 2. Publish to Nacos
+          v
+   +-------------+
+   |   Nacos     |
+   | Config Center|
+   +------+------+
           |
-          +---- Failure ---> Return L2 Fallback (if exists)
-                                   |
-                                   v
-                            +-------------+
-                            | Send Alert  |
-                            | (Nacos Down)|
-                            +-------------+
+          | 3. Push via Listener (< 100ms)
+          v
+   +-------------+
+   |  Gateway    |
+   |   Manager   |
+   |   (Cache)   |
+   +------+------+
+          |
+          | 4. Refresh Routes
+          v
+   +-------------+
+   | Spring Cloud|
+   |   Gateway   |
+   +-------------+
 ```
+
+**Total Latency:** Admin API -> Gateway update typically < 1 second
 
 ---
 
