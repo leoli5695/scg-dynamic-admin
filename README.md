@@ -286,7 +286,7 @@ curl http://localhost/api/hello
 .
 ├── my-gateway/                 # Core gateway runtime
 │   └── src/main/java/
-│       ├── filter/             # Global filters (17 filters)
+│       ├── filter/             # Global filters (18 filters)
 │       ├── auth/               # Authentication processors (Strategy pattern)
 │       ├── center/             # Config center SPI (Nacos/Consul)
 │       ├── discovery/          # Service discovery SPI
