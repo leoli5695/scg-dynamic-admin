@@ -604,7 +604,160 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
 
 ---
 
-## 10. Summary
+## 10. Design Highlights
+
+### 10.1 Hybrid Rate Limiting
+
+Redis + Local dual-layer architecture with automatic fallback:
+
+```
++------------------------------------------------------------------+
+|                    HYBRID RATE LIMITER                           |
++------------------------------------------------------------------+
+
+  Request arrives
+        |
+        v
+  +---------------+
+  | Redis Available?|
+  +-------+-------+
+      |         |
+     Yes        No
+      |         |
+      v         v
+  +-------+   +-------+
+  | Redis |   | Local |
+  | Limit |   | Limit |
+  +---+---+   +---+---+
+      |           |
+      +-----+-----+
+            |
+            v
+      +-----------+
+      | Allowed?  |
+      +-----+-----+
+            |
+       +----+----+
+       |         |
+      Yes        No
+       |         |
+       v         v
+   Continue    429
+   Request   Rejected
+```
+
+**Key Features:**
+- Redis distributed rate limiting for multi-instance deployment
+- Local Caffeine cache fallback when Redis unavailable
+- Sliding window algorithm with burst capacity
+- Multiple key types: `ip`, `route`, `combined`, `user`, `header`
+
+### 10.2 Strategy Management System
+
+Unified configuration management for all gateway strategies:
+
+```
++------------------------------------------------------------------+
+|                    STRATEGY MANAGER                               |
++------------------------------------------------------------------+
+
+  +-------------------------------------------------------------+
+  |                    Strategy Types                            |
+  |                                                              |
+  |  AUTH | IP_FILTER | RATE_LIMITER | CIRCUIT_BREAKER | TIMEOUT|
+  |  RETRY | CORS | CACHE | ACCESS_LOG | HEADER_OP | API_VERSION|
+  +-------------------------------------------------------------+
+                              |
+                              v
+  +-------------------------------------------------------------+
+  |                    Strategy Scope                            |
+  |                                                              |
+  |  GLOBAL (apply to all routes)                                |
+  |  ROUTE_BOUND (apply to specific route, higher priority)     |
+  +-------------------------------------------------------------+
+
+  Priority: ROUTE_BOUND > GLOBAL
+```
+
+### 10.3 Retry Mechanism
+
+Configurable retry with exponential backoff:
+
+```
+Request fails
+      |
+      v
++-------------+
+| Max retries?|---- Yes ----> Return error
++------+------+
+       | No
+       v
++-------------+
+| Should retry|---- No -----> Return error
+| (status/exception match)?
++------+------+
+       | Yes
+       v
++-------------+
+| Wait interval|
++------+------+
+       |
+       v
+  Retry request
+```
+
+**Configurable:**
+- Max retry attempts
+- Retry interval (with exponential backoff)
+- Retry on status codes: 500, 502, 503, 504
+- Retry on exceptions: ConnectException, SocketTimeoutException, IOException
+
+### 10.4 Response Caching
+
+Caffeine-based in-memory caching for GET/HEAD requests:
+
+```
++------------------------------------------------------------------+
+|                    RESPONSE CACHE FLOW                           |
++------------------------------------------------------------------+
+
+  GET/HEAD Request
+        |
+        v
+  +-------------+
+  | Cache hit?  |---- Yes ----> Return cached response (X-Cache: HIT)
+  +------+------+
+         | No
+         v
+  +-------------+
+  | Execute     |
+  | request     |
+  +------+------+
+         |
+         v
+  +-------------+
+  | 2xx response?|---- No -----> Don't cache
+  +------+------+
+         | Yes
+         v
+  +-------------+
+  | Cache-Control: no-cache?|---- Yes -----> Don't cache
+  +------+------+
+         | No
+         v
+    Cache response
+    with TTL
+```
+
+**Cache Features:**
+- Per-route cache configuration
+- Configurable TTL and max size
+- Vary headers support
+- Exclude path patterns
+
+---
+
+## 11. Summary
 
 This API Gateway architecture demonstrates:
 

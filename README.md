@@ -319,11 +319,25 @@ curl http://localhost/api/hello
 - [ ] **Connection Pooling** - HTTP connection pool per static service for better performance
 - [ ] **Graceful Drain** - Support instance drain mode for zero-downtime updates
 
-### Future Features
-- [ ] gRPC protocol support
-- [ ] WebSocket routing
-- [ ] OpenTelemetry integration
-- [ ] Plugin hot-reload mechanism
+### Rate Limiting Enhancements
+- [ ] **Distributed Token Bucket** - Consistent rate limiting across all gateway instances
+- [ ] **Dynamic QPS Adjustment** - Real-time QPS adjustment without restart
+- [ ] **Rate Limit Analytics** - Historical data and throttling pattern analysis
+
+### Observability Improvements
+- [ ] **OpenTelemetry Integration** - Native support for distributed tracing export
+- [ ] **Prometheus Metrics** - Built-in metrics endpoint for monitoring
+- [ ] **Access Log Aggregation** - Structured logging with ELK/Loki support
+
+### Security Enhancements
+- [ ] **mTLS Support** - Mutual TLS for service-to-service communication
+- [ ] **JWT Key Rotation** - Automatic JWT signing key rotation
+- [ ] **API Contract Validation** - OpenAPI schema validation for requests
+
+### Performance Optimizations
+- [ ] **gRPC Protocol Support** - Native gRPC routing and load balancing
+- [ ] **WebSocket Routing** - Full WebSocket proxy support
+- [ ] **Plugin Hot-Reload** - Dynamic filter loading without restart
 
 ---
 
