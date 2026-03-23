@@ -96,6 +96,12 @@
 
 ## Key Features
 
+### Service Discovery (Highlight)
+- **Dual Protocol Support** - `lb://` for Nacos/Consul discovery, `static://` for non-registered services
+- **Static Service Discovery** - Custom protocol for legacy systems, external APIs, and services not in service registry
+- **Weighted Round-Robin** - Nginx-style smooth load balancing with configurable instance weights
+- **Health-Aware Routing** - Unhealthy instances automatically skipped in multi-instance services
+
 ### Security
 - **Multi-Strategy Authentication** - JWT, API Key, Basic Auth, HMAC Signature, OAuth2
 - **IP Filtering** - Blacklist/Whitelist with CIDR support
@@ -109,7 +115,7 @@
 ### Observability
 - **Distributed Tracing** - Auto-generated TraceId with MDC logging
 - **Audit Logging** - Complete change history via AOP
-- **Health Checks** - Hybrid (active + passive) instance monitoring
+- **Hybrid Health Checks** - Active (TCP probe) + Passive (request monitoring) with real-time UI sync
 
 ### Dynamic Configuration
 - **Hot Reload** - Configuration changes take effect in < 1 second
@@ -302,6 +308,22 @@ curl http://localhost/api/hello
 │
 └── demo-service/               # Sample backend service
 ```
+
+---
+
+## Roadmap
+
+### Static Service Discovery Enhancements
+- [ ] **HTTP Health Endpoint** - Support custom health check paths per service
+- [ ] **Instance Metadata** - Custom labels for canary deployments and traffic splitting
+- [ ] **Connection Pooling** - HTTP connection pool per static service for better performance
+- [ ] **Graceful Drain** - Support instance drain mode for zero-downtime updates
+
+### Future Features
+- [ ] gRPC protocol support
+- [ ] WebSocket routing
+- [ ] OpenTelemetry integration
+- [ ] Plugin hot-reload mechanism
 
 ---
 

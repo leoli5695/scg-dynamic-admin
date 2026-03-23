@@ -71,9 +71,18 @@ Routes define how incoming requests are forwarded to backend services.
 
 ## 2. Service Discovery
 
-### 2.1 Dynamic Discovery (`lb://`)
+### 2.1 Dual Protocol Support
 
-Services registered in Nacos are automatically discovered.
+The gateway supports two service discovery protocols:
+
+| Protocol | Description | Use Case |
+|----------|-------------|----------|
+| `lb://` | Native SCG load balancing via Nacos/Consul | Services registered in service registry |
+| `static://` | Custom static service discovery | Legacy systems, external APIs, non-registered services |
+
+### 2.2 Dynamic Discovery (`lb://`)
+
+Services registered in Nacos/Consul are automatically discovered using Spring Cloud Gateway's native load balancer.
 
 ```yaml
 # application.yml
@@ -84,20 +93,79 @@ spring:
         server-addr: 127.0.0.1:8848
 ```
 
-### 2.2 Static Discovery (`static://`)
+### 2.3 Static Discovery (`static://`) - Highlight Feature
 
-For services not in Nacos, configure static instances:
+A custom protocol designed for services **not registered in Nacos/Consul**:
+
+```
++------------------------------------------------------------------+
+|                    STATIC PROTOCOL FLOW                          |
++------------------------------------------------------------------+
+
+  Route URI: static://my-service
+            |
+            v
+  +---------------------------+
+  | StaticProtocolGlobalFilter|  (Order: 10001)
+  | - Intercepts static://    |
+  | - Converts to lb://       |
+  +---------------------------+
+            |
+            v
+  +---------------------------+
+  | DiscoveryLoadBalancerFilter| (Order: 10150)
+  | - Gets instances from     |
+  |   ServiceManager          |
+  | - Health-aware selection  |
+  | - Weighted Round-Robin    |
+  +---------------------------+
+            |
+            v
+  +---------------------------+
+  | Backend Instance          |
+  | 192.168.1.10:8080        |
+  +---------------------------+
+```
+
+**Configuration Example:**
 
 ```json
 {
-  "name": "backend-service",
+  "name": "legacy-backend",
   "loadBalancer": "weighted",
   "instances": [
-    {"ip": "192.168.1.10", "port": 8080, "weight": 1},
-    {"ip": "192.168.1.11", "port": 8080, "weight": 2}
+    {"ip": "192.168.1.10", "port": 8080, "weight": 1, "enabled": true},
+    {"ip": "192.168.1.11", "port": 8080, "weight": 2, "enabled": true}
   ]
 }
 ```
+
+### 2.4 Weighted Round-Robin Load Balancing
+
+Nginx-style smooth weighted round-robin algorithm:
+
+```
+Instances: [A(weight=1), B(weight=2)]
+Distribution: A -> B -> B -> A -> B -> B ...  (exact 1:2 ratio)
+
+Algorithm:
+1. Add original weight to current weight for each instance
+2. Select instance with highest current weight
+3. Subtract total weight from selected instance's current weight
+```
+
+### 2.5 Health-Aware Routing
+
+**Multi-Instance Service:**
+- Unhealthy instances are **automatically skipped** in load balancing
+- Traffic routes only to healthy instances
+
+**Single-Instance Service:**
+- Unhealthy instance is **kept** for potential auto-recovery
+- Allows fast failure with automatic recovery when instance becomes healthy
+
+**Disabled Instances:**
+- Instances with `enabled: false` are **excluded** from load balancing
 
 ### 2.3 Load Balancing Algorithms
 
@@ -407,33 +475,108 @@ Response includes: X-Trace-Id: abc-123
 
 ### 9.1 Overview
 
-Hybrid health checking for service instances.
+Hybrid health checking for `static://` service instances with real-time status sync to admin console.
 
-### 9.2 Types
+```
++------------------------------------------------------------------+
+|                    HYBRID HEALTH CHECK                           |
++------------------------------------------------------------------+
 
-| Type | Description |
-|------|-------------|
-| **Passive** | Monitor request success/failure, mark unhealthy on consecutive failures |
-| **Active** | TCP port probing at scheduled intervals |
+  +-------------------+           +-------------------+
+  |   PASSIVE CHECK  |           |   ACTIVE CHECK   |
+  |                   |           |                   |
+  | - Request success |           | - TCP port probe |
+  | - Request failure |           | - Optional HTTP  |
+  | - Consecutive     |           | - Every 30s      |
+  |   failures >= 3   |           |                   |
+  +---------+---------+           +---------+---------+
+            |                               |
+            +---------------+---------------+
+                            |
+                            v
+                +-------------------+
+                |  Health Status    |
+                |  (in memory)      |
+                +---------+---------+
+                          |
+                          | Batch Sync
+                          v
+                +-------------------+
+                |  gateway-admin    |
+                |  (visible in UI)  |
+                +-------------------+
+```
 
-### 9.3 Configuration
+### 9.2 Check Types
+
+| Type | Trigger | Description |
+|------|---------|-------------|
+| **Passive** | Every request | Record success/failure, mark unhealthy after 3 consecutive failures |
+| **Active** | Every 30s | TCP port probe (optionally HTTP health endpoint) |
+
+### 9.3 Passive Health Check
+
+```
+Request arrives at gateway
+        |
+        v
++---------------+
+| Route to      |
+| instance      |
++-------+-------+
+        |
+   +----+----+
+   |         |
+   v         v
+Success   Failure (retry 3x)
+   |         |
+   v         v
+Record    Mark unhealthy
+success   if failures >= 3
+```
+
+### 9.4 Active Health Check
+
+- **Check Interval:** 30 seconds
+- **Check Method:** TCP port connectivity (optional HTTP `/actuator/health`)
+- **Timeout:** 3 seconds per check
 
 ```yaml
 gateway:
   health-check:
-    enabled: true
-    interval: 30000
-    failure-threshold: 3
-    recovery-threshold: 2
+    timeout: 3000
+    http-enabled: false        # Enable HTTP health check
+    http-path: /actuator/health
 ```
 
-### 9.4 Behavior
+### 9.5 Health Status Sync
+
+Instance health status is **automatically synced** to gateway-admin:
+
+- **Batch processing:** Health statuses are batched and pushed to admin
+- **Visible in UI:** Users can see instance health status in the web dashboard
+- **Network flap detection:** Mass state changes are detected and logged
+
+### 9.6 Health-Aware Routing Behavior
 
 | Scenario | Behavior |
 |----------|----------|
-| Multiple instances | Skip unhealthy instances in load balancing |
-| Single instance | Keep unhealthy instance (allow fast failure) |
-| Recovery | Auto-recover when health check passes |
+| **Multi-instance service** | Unhealthy instances are skipped in load balancing |
+| **Single-instance service** | Unhealthy instance is kept for potential auto-recovery |
+| **Disabled instance** | Excluded from load balancing regardless of health |
+| **Recovery** | Auto-recover when health check passes |
+
+### 9.7 Configuration
+
+```yaml
+gateway:
+  health:
+    failure-threshold: 3        # Mark unhealthy after N failures
+    recovery-time: 30000        # Auto-recovery check interval (ms)
+    idle-threshold: 300000      # Idle instance check threshold (ms)
+    batch-size: 50              # Batch sync size to admin
+    network-flap-threshold: 10  # Network flap detection threshold
+```
 
 ---
 
