@@ -6,7 +6,7 @@ import {
 import {
   PlusOutlined, DeleteOutlined, EditOutlined, MoreOutlined,
   ClusterOutlined, MinusCircleOutlined, CloudServerOutlined, ApiOutlined,
-  WarningOutlined, ExclamationCircleOutlined, CloseOutlined
+  WarningOutlined, ExclamationCircleOutlined, CloseOutlined, EyeOutlined
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import api from '../utils/api';
@@ -145,6 +145,7 @@ const ServicesPage: React.FC = () => {
   };
 
   const getActionMenu = (service: Service): MenuProps['items'] => [
+    { key: 'detail', icon: <EyeOutlined />, label: t('common.detail'), onClick: () => openServiceDetail(service) },
     { key: 'edit', icon: <EditOutlined />, label: t('common.edit'), onClick: () => openEditModal(service) },
     { type: 'divider' },
     { key: 'delete', icon: <DeleteOutlined />, label: t('common.delete'), danger: true, onClick: () => {
@@ -207,9 +208,8 @@ const ServicesPage: React.FC = () => {
               return (
                 <Card
                   key={service.name}
-                  className={`service-card ${hasNoAvailableInstances ? 'service-card-warning' : ''} ${selectedService?.name === service.name ? 'service-card-selected' : ''}`}
+                  className={`service-card ${hasNoAvailableInstances ? 'service-card-warning' : ''}`}
                   hoverable
-                  onClick={() => openServiceDetail(service)}
                 >
                   {hasNoAvailableInstances && (
                     <Alert
@@ -229,7 +229,7 @@ const ServicesPage: React.FC = () => {
                       </div>
                     </div>
                     <Dropdown menu={{ items: getActionMenu(service) }} trigger={['click']} placement="bottomRight">
-                      <Button type="text" icon={<MoreOutlined />} className="action-btn" onClick={e => e.stopPropagation()} />
+                      <Button type="text" icon={<MoreOutlined />} className="action-btn" />
                     </Dropdown>
                   </div>
                   <div className="service-meta">
@@ -241,9 +241,6 @@ const ServicesPage: React.FC = () => {
                       <Text type="secondary" className="instances-title">
                         <ApiOutlined /> {availableInstances.length}/{instanceCount} {t('services.available_instances')}
                       </Text>
-                      <Button type="link" size="small" onClick={e => { e.stopPropagation(); openEditModal(service); }}>
-                        <EditOutlined /> {t('common.edit')}
-                      </Button>
                     </div>
                     {instanceCount > 0 && (
                       <div className="instances-list">
