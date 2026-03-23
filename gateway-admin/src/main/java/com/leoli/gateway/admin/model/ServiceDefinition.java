@@ -13,22 +13,27 @@ import java.util.Map;
  */
 @Data
 public class ServiceDefinition {
-    
+
     /**
      * Service name
      */
     private String name;
-    
+
+    /**
+     * Service description
+     */
+    private String description;
+
     /**
      * Service instance list
      */
     private List<ServiceInstance> instances = new ArrayList<>();
-    
+
     /**
      * Load balancer strategy
      */
     private String loadBalancer = "round-robin";
-    
+
     /**
      * Service ID (UUID) for display purposes.
      * This is used to show "serviceId (serviceName)" in UI dropdowns.

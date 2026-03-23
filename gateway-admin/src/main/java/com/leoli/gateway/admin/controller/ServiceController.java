@@ -58,6 +58,7 @@ public class ServiceController {
             serviceMap.put("name", service.getName());
             serviceMap.put("loadBalancer", service.getLoadBalancer());
             serviceMap.put("serviceId", service.getServiceId());
+            serviceMap.put("description", service.getDescription());
 
             // Build instances list with healthy field
             List<Map<String, Object>> instancesList = new ArrayList<>();

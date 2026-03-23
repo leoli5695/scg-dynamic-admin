@@ -159,7 +159,15 @@ public class ServiceService {
     
     // 1. Update database fields
     log.info("Updating service in database: {}", serviceName);
-    // Don't update name field, use service_name instead
+    // Update description
+    entity.setDescription(service.getDescription());
+    // Update metadata JSON backup
+    try {
+      String configJson = objectMapper.writeValueAsString(service);
+      entity.setMetadata(configJson);
+    } catch (Exception e) {
+      log.warn("Failed to serialize service config to JSON", e);
+    }
     entity = serviceRepository.save(entity);
 
     // 2. Update memory cache
@@ -335,6 +343,9 @@ public class ServiceService {
     ServiceEntity entity = new ServiceEntity();
     // Don't set name field, use service_name instead
     // entity.setName(...) - removed
+    
+    // Set description
+    entity.setDescription(service.getDescription());
     
     // Set serviceId in ServiceDefinition BEFORE serialization
     // This ensures metadata JSON contains the correct serviceId
