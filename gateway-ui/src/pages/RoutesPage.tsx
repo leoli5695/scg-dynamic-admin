@@ -2,13 +2,13 @@ import { useState, useEffect } from 'react';
 import {
   Card, Button, Space, message, Spin, Tag, Modal, Form, Input, Switch,
   Select, Empty, Radio, Tooltip, Badge, Divider, Typography, Dropdown, Pagination,
-  InputNumber, Slider, Collapse
+  InputNumber, Slider, Collapse, Drawer
 } from 'antd';
 import {
   PlusOutlined, DeleteOutlined, EyeOutlined, CopyOutlined, StopOutlined,
   PlayCircleOutlined, EditOutlined, CompassOutlined, MoreOutlined,
   ApiOutlined, BranchesOutlined, ThunderboltOutlined, FileTextOutlined,
-  CloudOutlined, GlobalOutlined, FilterOutlined, SplitCellsOutlined
+  CloudOutlined, GlobalOutlined, FilterOutlined, SplitCellsOutlined, CloseOutlined
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import api from '../utils/api';
@@ -261,7 +261,7 @@ const RoutesPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
-  const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [detailDrawerVisible, setDetailDrawerVisible] = useState(false);
   const [selectedRoute, setSelectedRoute] = useState<Route | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -568,7 +568,7 @@ const RoutesPage: React.FC = () => {
 
   const showRouteDetail = (record: Route) => {
     setSelectedRoute(record);
-    setDetailModalVisible(true);
+    setDetailDrawerVisible(true);
   };
 
   const showRouteEdit = (record: Route) => {
@@ -1431,75 +1431,95 @@ const RoutesPage: React.FC = () => {
         </Form>
       </Modal>
 
-      {/* Route Detail Modal */}
-      <Modal
-        title={<div className="modal-header"><EyeOutlined className="modal-icon" /><span>{t('routes.detail_title')}</span></div>}
-        open={detailModalVisible}
-        onCancel={() => setDetailModalVisible(false)}
-        footer={null}
-        width={640}
-        className="route-modal"
+
+      {/* Route Detail Drawer */}
+      <Drawer
+        placement="right"
+        width={520}
+        open={detailDrawerVisible}
+        closable={false}
+        onClose={() => { setDetailDrawerVisible(false); setSelectedRoute(null); }}
+        className="route-detail-drawer"
+        mask={true}
+        maskClosable={true}
       >
         {selectedRoute && (
-          <div className="route-detail">
-            <div className="detail-item">
-              <Text type="secondary">{t('routes.name')}</Text>
-              <Text strong>{selectedRoute.routeName}</Text>
+          <div className="drawer-content">
+            <div className="drawer-header">
+              <div className="drawer-header-left">
+                <div className="drawer-icon route-icon"><ApiOutlined /></div>
+                <div className="drawer-title-wrapper">
+                  <Title level={4} className="drawer-title">{selectedRoute.routeName || 'Route Detail'}</Title>
+                  <Text type="secondary" copyable={{ text: selectedRoute.id }}>{selectedRoute.id?.substring(0, 20)}...</Text>
+                </div>
+              </div>
+              <Button type="text" icon={<CloseOutlined />} onClick={() => { setDetailDrawerVisible(false); setSelectedRoute(null); }} className="drawer-close-btn" />
             </div>
-            <div className="detail-item">
-              <Text type="secondary">{t('routes.id')}</Text>
-              <Space>
-                <Text code>{selectedRoute.id}</Text>
-                <Button type="link" size="small" icon={<CopyOutlined />} onClick={() => copyToClipboard(selectedRoute.id, t('routes.id'))} />
-              </Space>
+            <div className="drawer-status-bar">
+              <Badge status={selectedRoute.enabled ? 'success' : 'default'} text={selectedRoute.enabled ? t('common.enabled') : t('common.disabled')} />
+              <Tag color="blue">Order: {selectedRoute.order ?? 0}</Tag>
             </div>
-            <div className="detail-item">
-              <Text type="secondary">{t('routes.uri')}</Text>
-              <Text code>{selectedRoute.uri}</Text>
+            <div className="drawer-section">
+              <div className="section-title"><CloudOutlined /> {t('routes.target_uri')}</div>
+              <div className="uri-display"><Text code copyable>{selectedRoute.uri || 'N/A'}</Text></div>
             </div>
-            <div className="detail-item">
-              <Text type="secondary">{t('routes.order')}</Text>
-              <Text>{selectedRoute.order ?? '-'}</Text>
-            </div>
-            <div className="detail-item">
-              <Text type="secondary">{t('routes.enabled')}</Text>
-              <Tag color={selectedRoute.enabled ? 'success' : 'default'}>
-                {selectedRoute.enabled ? t('common.enabled') : t('common.disabled')}
-              </Tag>
-            </div>
+            {selectedRoute.mode === 'MULTI' && selectedRoute.services && selectedRoute.services.length > 0 && (
+              <div className="drawer-section">
+                <div className="section-title"><SplitCellsOutlined /> {t('routes.services')} <span className="count">{selectedRoute.services.length}</span></div>
+                <div className="services-detail-list">
+                  {selectedRoute.services.map((s, idx) => (
+                    <div key={idx} className={`service-detail-card ${s.enabled ? 'healthy' : 'unhealthy'}`}>
+                      <div className="service-main-info">
+                        <Text strong>{s.serviceName || s.serviceId}</Text>
+                        <Tag color={s.enabled ? 'green' : 'default'}>{s.enabled ? t('common.enabled') : t('common.disabled')}</Tag>
+                      </div>
+                      <div className="service-meta"><span>{t('routes.weight')}: {s.weight}%</span></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {selectedRoute.description && (
-              <div className="detail-item">
-                <Text type="secondary">{t('routes.description')}</Text>
-                <Text>{selectedRoute.description}</Text>
+              <div className="drawer-section">
+                <div className="section-title"><FileTextOutlined /> {t('routes.description')}</div>
+                <Text type="secondary">{selectedRoute.description}</Text>
               </div>
             )}
-
             {selectedRoute.predicates && selectedRoute.predicates.length > 0 && (
-              <div className="detail-section">
-                <h4>{t('routes.predicates')}</h4>
-                {selectedRoute.predicates.map((p, idx) => (
-                  <Card key={idx} size="small" className="detail-card">
-                    <Text strong>{p.name}</Text>
-                    <pre className="detail-json">{JSON.stringify(p.args, null, 2)}</pre>
-                  </Card>
-                ))}
+              <div className="drawer-section">
+                <div className="section-title"><BranchesOutlined /> {t('routes.predicates')} <span className="count">{selectedRoute.predicates.length}</span></div>
+                <div className="predicates-detail-list">
+                  {selectedRoute.predicates.map((p, idx) => (
+                    <div key={idx} className="predicate-detail-card">
+                      <Tag color="purple">{p.name}</Tag>
+                      <pre className="detail-json">{JSON.stringify(p.args, null, 2)}</pre>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
-
             {selectedRoute.filters && selectedRoute.filters.length > 0 && (
-              <div className="detail-section">
-                <h4>{t('routes.plugins')}</h4>
-                {selectedRoute.filters.map((f, idx) => (
-                  <Card key={idx} size="small" className="detail-card">
-                    <Text strong>{t(`plugin.${f.name}.name`, { defaultValue: f.name })}</Text>
-                    <pre className="detail-json">{JSON.stringify(f.args, null, 2)}</pre>
-                  </Card>
-                ))}
+              <div className="drawer-section">
+                <div className="section-title"><ThunderboltOutlined /> {t('routes.plugins')} <span className="count">{selectedRoute.filters.length}</span></div>
+                <div className="plugins-detail-list">
+                  {selectedRoute.filters.map((f, idx) => (
+                    <div key={idx} className="plugin-detail-card">
+                      <Tag color="blue">{t(`plugin.${f.name}.name`, { defaultValue: f.name })}</Tag>
+                      <pre className="detail-json">{JSON.stringify(f.args, null, 2)}</pre>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
+            <div className="drawer-actions">
+              <Button type="primary" icon={<EditOutlined />} onClick={() => { showRouteEdit(selectedRoute); setDetailDrawerVisible(false); }}>{t('common.edit')}</Button>
+              <Button danger icon={<DeleteOutlined />} onClick={() => {
+                Modal.confirm({ title: t('common.confirm'), content: t('message.confirm_delete_route', { name: selectedRoute.routeName || selectedRoute.id }), okText: t('common.delete'), okType: 'danger', cancelText: t('common.cancel'), onOk: () => handleDelete(selectedRoute) });
+              }}>{t('common.delete')}</Button>
+            </div>
           </div>
         )}
-      </Modal>
+      </Drawer>
     </div>
   );
 };
