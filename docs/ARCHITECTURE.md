@@ -230,15 +230,20 @@ Ensures data consistency between database and config center:
    |   |                                                                    |  |
    |   |  Order    Filter                    Function                      |  |
    |   |  -----    ---------------------     -------------------------    |  |
+   |   |  -500     SecurityGlobalFilter      Security hardening            |  |
+   |   |  -400     AccessLogGlobalFilter     Access logging                |  |
    |   |  -300     TraceIdGlobalFilter       Generate Trace ID + MDC       |  |
+   |   |  -300     CorsGlobalFilter          CORS handling                 |  |
    |   |  -280     IPFilterGlobalFilter      IP Blacklist/Whitelist        |  |
    |   |  -250     AuthenticationGlobalFilter JWT/API Key/OAuth2 Auth      |  |
    |   |  -200     TimeoutGlobalFilter       Connection/Response Timeout   |  |
-   |   |  -150     CircuitBreakerGlobalFilter Resilience4j Circuit Breaker |  |
-   |   |  -100     HybridRateLimiterFilter   Redis + Local Rate Limiting   |  |
-   |   |   ...     ...                       ...                          |  |
-   |   |  10000    StaticProtocolGlobalFilter static:// -> lb:// transform |  |
-   |   |  10150    DiscoveryLoadBalancerFilter Service Discovery + LB      |  |
+   |   |  -200     RetryGlobalFilter         Retry on failure              |  |
+   |   |  -150     ApiVersionGlobalFilter    API version routing           |  |
+   |   |  -100     CircuitBreakerGlobalFilter Resilience4j Circuit Breaker |  |
+   |   |   -50     HeaderOpGlobalFilter      Header manipulation           |  |
+   |   |    50     CacheGlobalFilter         Response caching              |  |
+   |   | 10001    StaticProtocolGlobalFilter static:// -> lb:// transform  |  |
+   |   | 10150    DiscoveryLoadBalancerFilter Service Discovery + LB       |  |
    |   |                                                                    |  |
    |   +-------------------------------------------------------------------+  |
    |                                   |                                      |
@@ -261,17 +266,22 @@ Ensures data consistency between database and config center:
 ```
 Request enters gateway
   |
-  +-- order -300  TraceId          --> Generate/propagate X-Trace-Id, MDC logging
-  |                                WHY FIRST? --> See everything for debugging
-  +-- order -280  IP Filter        --> Whitelist/blacklist check -> 403 if blocked
-  |                                WHY BEFORE AUTH? --> Fast rejection saves CPU (+37% TPS)
-  +-- order -250  Authentication   --> JWT/API Key/OAuth2 validation -> 401 if failed
-  |                                WHY AFTER IP FILTER? --> Don't waste JWT validation on bad IPs
-  +-- order -200  Timeout          --> Inject timeout params into route metadata
-  |                                WHY HERE? --> Protect downstream before routing
-  +-- order -100  Circuit Breaker  --> Check circuit status -> 503 if open
-  |                                WHY BEFORE RATE LIMIT? --> Downstream protection > self protection
-  +-- order  -50  Rate Limiter     --> Redis sliding-window -> 429 if exceeded
+  +-- order -500  Security        --> Security hardening first
+  +-- order -400  AccessLog       --> Log all requests for audit
+  +-- order -300  TraceId         --> Generate/propagate X-Trace-Id, MDC logging
+  |                                WHY EARLY? --> See everything for debugging
+  +-- order -300  CORS            --> Handle preflight requests
+  +-- order -280  IP Filter       --> Whitelist/blacklist check -> 403 if blocked
+  |                                WHY BEFORE AUTH? --> Fast rejection saves CPU
+  +-- order -250  Authentication  --> JWT/API Key/OAuth2 validation -> 401 if failed
+  +-- order -200  Timeout         --> Inject timeout params into route metadata
+  +-- order -200  Retry           --> Configure retry behavior
+  +-- order -150  API Version     --> Version-based routing
+  +-- order -100  Circuit Breaker --> Check circuit status -> 503 if open
+  +-- order  -50  Header Op       --> Add/modify headers
+  +-- order   50  Cache           --> Response caching
+  +-- order 10001 Static Protocol --> Transform static:// to lb://
+  +-- order 10150 Load Balancer   --> Service discovery + load balancing
   |                                WHY LAST? --> Final defense before routing
   +-- order 10001+ Routing         --> Forward to backend
 ```
