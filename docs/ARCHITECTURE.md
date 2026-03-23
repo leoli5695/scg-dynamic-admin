@@ -690,7 +690,7 @@ Unified configuration management for all gateway strategies:
 
 ### 10.3 Retry Mechanism
 
-Configurable retry with exponential backoff:
+Configurable retry with fixed interval:
 
 ```
 Request fails
@@ -708,7 +708,8 @@ Request fails
        | Yes
        v
 +-------------+
-| Wait interval|
+| Wait fixed  |
+| interval    |
 +------+------+
        |
        v
@@ -717,7 +718,7 @@ Request fails
 
 **Configurable:**
 - Max retry attempts
-- Retry interval (with exponential backoff)
+- Fixed retry interval (ms)
 - Retry on status codes: 500, 502, 503, 504
 - Retry on exceptions: ConnectException, SocketTimeoutException, IOException
 
