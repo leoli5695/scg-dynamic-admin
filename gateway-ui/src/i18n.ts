@@ -852,6 +852,16 @@ const resources = {
       'services.loadBalancer_placeholder': '例如 weighted, round-robin, random, least-connections',
       'services.description_placeholder': '可选描述',
       'services.description': '描述',
+      'services.basic_config': '基本配置',
+      'services.instances_helper': '添加后端服务实例',
+      'services.instance': '实例',
+      'services.ip_address': 'IP 地址',
+      'services.port': '端口',
+      'services.status': '状态',
+      'services.weight_helper': '权重越高，流量越多',
+      'services.name_readonly': '服务名称不可更改',
+      'services.loadBalancer_helper': '流量分配策略',
+      'services.description_helper_text': '服务简要描述',
       
       // Strategies
       'strategies.title': '策略管理',
