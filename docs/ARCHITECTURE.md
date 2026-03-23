@@ -1,398 +1,617 @@
-﻿# Architecture & Design Principles
+﻿# Architecture Design
 
-## 馃幀 Demo Video
-
-鈻讹笍 **[Watch on YouTube](https://youtu.be/JASijtZ5cNk)** 鈥?see the system in action.
+> This document describes the system architecture, design patterns, and implementation details for developers and architects.
 
 ---
 
-## 馃搳 Overall Architecture
+## 1. System Architecture
 
-```mermaid
-flowchart TD
-    Client[Client Request] --> Gateway["my-gateway :80"]
+### 1.1 Control Plane / Data Plane Separation
 
-    subgraph FilterChain["Global Filter Chain (Optimized Order)"]
-        direction TB
-        F0["TraceId (-300)<br/><i>Full visibility</i>"]
-        F1["IP Filter (-280)<br/><i>Fast rejection</i>"]
-        F2["Auth (-250)<br/><i>User identity</i>"]
-        F3["Timeout (-200)<br/><i>Protect downstream</i>"]
-        F4["Circuit Breaker (-100)<br/><i>Prevent cascade</i>"]
-        F5["Rate Limiter (-50)<br/><i>Last defense</i>"]
-        F6["Routing (10001+)"]
-        F0 --> F1 --> F2 --> F3 --> F4 --> F5 --> F6
-    end
+The system follows a modern **Control Plane / Data Plane** architecture pattern:
 
-    Gateway --> FilterChain
-    F6 --> Backend["demo-service :9000 / :9001"]
-
-    Admin["gateway-admin :8080"] -->|publish config| Nacos["Nacos Config :8848"]
-    Nacos -->|listener push <1s| Listeners["Config Listeners"]
-    Listeners --> Gateway
-
-    Nacos -->|service discovery| F6
-    Redis["Redis :6379"] -->|sliding window| F5
+```
++-----------------------------------------------------------------------------+
+|                              CONTROL PLANE                                   |
+|                                                                              |
+|   +---------------------------------------------------------------------+   |
+|   |                        gateway-admin (:9090)                        |   |
+|   |                                                                      |   |
+|   |    +-------------+   +-------------+   +-------------+             |   |
+|   |    | Controller  |   |   Service   |   |  Publisher  |             |   |
+|   |    |    Layer    |-->|    Layer    |-->|   Layer     |             |   |
+|   |    +-------------+   +------+------+   +------+------+             |   |
+|   |                             |                 |                     |   |
+|   |                             v                 v                     |   |
+|   |                      +-------------+   +-------------+             |   |
+|   |                      |   MySQL     |   | Config Center|             |   |
+|   |                      | (Persist)   |   |  (Nacos)    |             |   |
+|   |                      +-------------+   +-------------+             |   |
+|   +---------------------------------------------------------------------+   |
+|                                                                              |
++-----------------------------------------------------------------------------+
+                                       |
+                                       | Config Push
+                                       v
++-----------------------------------------------------------------------------+
+|                               DATA PLANE                                     |
+|                                                                              |
+|   +---------------------------------------------------------------------+   |
+|   |                          my-gateway (:80)                           |   |
+|   |                                                                      |   |
+|   |    +-------------------------------------------------------------+  |   |
+|   |    |                   Global Filter Chain                        |  |   |
+|   |    |                                                               |  |   |
+|   |    |  Request --> IP --> Auth --> Rate --> CB --> Timeout --> LB  |  |   |
+|   |    |                                                               |  |   |
+|   |    +-------------------------------------------------------------+  |   |
+|   |                             |                                        |   |
+|   |                             v                                        |   |
+|   |                      Backend Services                                |   |
+|   +---------------------------------------------------------------------+   |
+|                                                                              |
++-----------------------------------------------------------------------------+
 ```
 
-**Key Design Decisions:**
-1. 鉁?**Observability first** - TraceId sees everything
-2. 鉁?**Coarse before fine** - IP filter (fast) before auth (slow)
-3. 鉁?**Protection before function** - Timeout/Circuit breaker before routing
-4. 鉁?**Fast failure** - Reject early to save resources
+**Benefits:**
+- Configuration management separated from runtime traffic
+- Independent scaling of control and data planes
+- Zero-downtime configuration updates
 
 ---
 
-## 鈴?Filter Execution Order & Rationale
+## 2. Core Design Patterns
 
-### Why This Order?
+### 2.1 SPI (Service Provider Interface)
+
+The gateway uses SPI pattern for extensibility:
+
+```
++------------------------------------------------------------------+
+|                    ConfigCenterService (SPI)                     |
+|                                                                  |
+|   +---------------------------------------------------------+   |
+|   |  + getConfig(dataId, group): String                      |   |
+|   |  + publishConfig(dataId, group, content): void           |   |
+|   |  + addListener(dataId, group, listener): void            |   |
+|   +---------------------------------------------------------+   |
+|                              |                                   |
+|              +---------------+---------------+                  |
+|              v               v               v                  |
+|   +--------------+  +--------------+  +--------------+        |
+|   |    Nacos     |  |    Consul    |  |   (Custom)   |        |
+|   |ConfigService |  |ConfigService |  |ConfigService |        |
+|   +--------------+  +--------------+  +--------------+        |
+|                                                                  |
+|   @ConditionalOnProperty(name = "gateway.center.type")          |
++------------------------------------------------------------------+
+```
+
+**Supported SPIs:**
+
+| SPI Interface | Implementations | Switch Property |
+|---------------|-----------------|-----------------|
+| `ConfigCenterService` | Nacos, Consul | `gateway.center.type=nacos\|consul` |
+| `DiscoveryService` | Nacos, Consul, Static | URI scheme (`lb://` / `static://`) |
+| `AuthProcessor` | JWT, API Key, Basic, HMAC, OAuth2 | Strategy config `authType` |
+
+### 2.2 Strategy Pattern (Authentication)
+
+```
++------------------------------------------------------------------+
+|                     AuthProcessor (Interface)                    |
+|   +---------------------------------------------------------+   |
+|   |  + validate(exchange, config): Mono<Boolean>             |   |
+|   |  + getType(): AuthType                                    |   |
+|   +---------------------------------------------------------+   |
+|                              |                                   |
+|        +----------+----------+----------+----------+           |
+|        v          v          v          v          v           |
+|   +---------+ +---------+ +---------+ +---------+ +---------+ |
+|   |   JWT   | | API Key | |  Basic  | |  HMAC   | | OAuth2  | |
+|   |Processor| |Processor| |Processor| |Processor| |Processor| |
+|   +---------+ +---------+ +---------+ +---------+ +---------+ |
+|                                                                  |
++------------------------------------------------------------------+
+
+                         AuthProcessManager
+   +-------------------------------------------------------------+
+   |  private Map<AuthType, AuthProcessor> processors;           |
+   |                                                              |
+   |  public Mono<Boolean> authenticate(exchange, config) {      |
+   |      AuthProcessor processor = processors.get(config.type); |
+   |      return processor.validate(exchange, config);           |
+   |  }                                                          |
+   +-------------------------------------------------------------+
+```
+
+### 2.3 Observer Pattern (Configuration Refresh)
+
+```
++------------------------------------------------------------------+
+|                    Configuration Refresh Flow                    |
++------------------------------------------------------------------+
+
+   Nacos Config Center
+         |
+         | Config Change Event
+         v
+   +-----------------+
+   |  ConfigListener | -----------------------------+
+   +--------+--------+                              |
+            |                                       |
+            v                                       |
+   +-----------------+                              |
+   |   Refresher     |  (RouteRefresher, ServiceRefresher, |
+   |                 |   StrategyRefresher)                |
+   +--------+--------+                              |
+            |                                       |
+            v                                       |
+   +-----------------+      +-----------------+    |
+   |    Manager      | ---> |  Update Cache   |    |
+   | (RouteManager,  |      |  (AtomicRef)    |    |
+   |  ServiceManager)|      +-----------------+    |
+   +--------+--------+                             |
+            |                                       |
+            v                                       |
+   +-----------------+                              |
+   |    Locator      |                              |
+   | (RouteDefinition|                              |
+   |    Locator)     |                              |
+   +--------+--------+                              |
+            |                                       |
+            v                                       |
+   +-----------------+                              |
+   | RefreshRoutes   |                              |
+   |     Event       |                              |
+   +--------+--------+                              |
+            |                                       |
+            v                                       |
+   +-----------------+                              |
+   | Spring Cloud    | <----------------------------+
+   |    Gateway      |       Routes Updated (< 1 second)
+   +-----------------+
+```
+
+### 2.4 Dual-Write Pattern
+
+Ensures data consistency between database and config center:
+
+```
++------------------------------------------------------------------+
+|                      Dual-Write Transaction                      |
++------------------------------------------------------------------+
+
+   +-------------+     +-------------+     +-------------+
+   |  REST API   |     |   Service   |     | Transaction |
+   |  Request    |---->|   Layer     |---->|   Manager   |
+   +-------------+     +------+------+     +------+------+
+                              |                   |
+                   +----------+----------+        |
+                   |                     |        |
+                   v                     v        |
+            +-------------+      +-------------+  |
+            |    MySQL    |      |   Nacos     |  |
+            |  (Persist)  |      |  (Publish)  |  |
+            +------+------+      +------+------+  |
+                   |                    |         |
+                   |    +---------------+         |
+                   |    | Success?      |         |
+                   |    +-------+-------+         |
+                   |            |                 |
+                   |   No <-----+-----> Yes       |
+                   |    |               |         |
+                   v    v               v         |
+            +-------------+      +-------------+  |
+            |  Rollback   |      |   Commit    |<-+
+            |   (Undo)    |      |  (Success)  |
+            +-------------+      +-------------+
+```
+
+---
+
+## 3. Filter Chain Architecture
+
+### 3.1 Request Processing Pipeline
+
+```
++-----------------------------------------------------------------------------+
+|                        REQUEST PROCESSING PIPELINE                          |
++-----------------------------------------------------------------------------+
+
+   Client Request
+         |
+         v
+   +-------------------------------------------------------------------------+
+   |                           API Gateway (:80)                              |
+   |                                                                          |
+   |   +-------------------------------------------------------------------+  |
+   |   |                      Global Filter Chain                           |  |
+   |   |                                                                    |  |
+   |   |  Order    Filter                    Function                      |  |
+   |   |  -----    ---------------------     -------------------------    |  |
+   |   |  -300     TraceIdGlobalFilter       Generate Trace ID + MDC       |  |
+   |   |  -280     IPFilterGlobalFilter      IP Blacklist/Whitelist        |  |
+   |   |  -250     AuthenticationGlobalFilter JWT/API Key/OAuth2 Auth      |  |
+   |   |  -200     TimeoutGlobalFilter       Connection/Response Timeout   |  |
+   |   |  -150     CircuitBreakerGlobalFilter Resilience4j Circuit Breaker |  |
+   |   |  -100     HybridRateLimiterFilter   Redis + Local Rate Limiting   |  |
+   |   |   ...     ...                       ...                          |  |
+   |   |  10000    StaticProtocolGlobalFilter static:// -> lb:// transform |  |
+   |   |  10150    DiscoveryLoadBalancerFilter Service Discovery + LB      |  |
+   |   |                                                                    |  |
+   |   +-------------------------------------------------------------------+  |
+   |                                   |                                      |
+   +-----------------------------------|--------------------------------------+
+                                       |
+                                       v
+   +-------------------------------------------------------------------------+
+   |                          Backend Services                                |
+   |                                                                          |
+   |       +------------+    +------------+    +------------+                |
+   |       | Instance 1 |    | Instance 2 |    | Instance 3 |                |
+   |       |   :9000    |    |   :9001    |    |   :9002    |                |
+   |       +------------+    +------------+    +------------+                |
+   |                                                                          |
+   +-------------------------------------------------------------------------+
+```
+
+### 3.2 Filter Execution Order (Why This Order?)
 
 ```
 Request enters gateway
-  鈹?
-  鈻? order -300  TraceId          鈫?Generate/propagate X-Trace-Id, MDC logging
-  鈹?                               WHY FIRST? 鈫?See everything for debugging
-  鈻? order -280  IP Filter        鈫?Whitelist/blacklist check 鈫?403 if blocked
-  鈹?                               WHY BEFORE AUTH? 鈫?Fast rejection saves CPU (37% TPS gain)
-  鈻? order -250  Authentication   鈫?JWT/API Key/OAuth2 validation 鈫?401 if failed
-  鈹?                               WHY AFTER IP FILTER? 鈫?Don't waste JWT validation on bad IPs
-  鈻? order -200  Timeout          鈫?Inject timeout params into route metadata
-  鈹?                               WHY HERE? 鈫?Protect downstream before routing
-  鈻? order -100  Circuit Breaker  鈫?Check circuit status 鈫?503 if open
-  鈹?                               WHY BEFORE RATE LIMIT? 鈫?Downstream protection > self protection
-  鈻? order  -50  Rate Limiter     鈫?Redis sliding-window 鈫?429 if exceeded
-  鈹?                               WHY LAST? 鈫?Final defense before routing
-  鈻? order 10001+ Routing         鈫?Forward to backend
+  |
+  +-- order -300  TraceId          --> Generate/propagate X-Trace-Id, MDC logging
+  |                                WHY FIRST? --> See everything for debugging
+  +-- order -280  IP Filter        --> Whitelist/blacklist check -> 403 if blocked
+  |                                WHY BEFORE AUTH? --> Fast rejection saves CPU (+37% TPS)
+  +-- order -250  Authentication   --> JWT/API Key/OAuth2 validation -> 401 if failed
+  |                                WHY AFTER IP FILTER? --> Don't waste JWT validation on bad IPs
+  +-- order -200  Timeout          --> Inject timeout params into route metadata
+  |                                WHY HERE? --> Protect downstream before routing
+  +-- order -100  Circuit Breaker  --> Check circuit status -> 503 if open
+  |                                WHY BEFORE RATE LIMIT? --> Downstream protection > self protection
+  +-- order  -50  Rate Limiter     --> Redis sliding-window -> 429 if exceeded
+  |                                WHY LAST? --> Final defense before routing
+  +-- order 10001+ Routing         --> Forward to backend
 ```
 
-### Performance Impact: IP Filter Before Authentication
-
-This is a **deliberate performance optimization**:
-
-| Aspect | IP Filter | Authentication |
-|--------|-----------|----------------|
-| **Computation** | String matching (< 1ms) | JWT signature verification (~5ms) |
-| **Granularity** | Coarse (IP-based) | Fine (user/token-based) |
-| **Should Run First?** | 鉁?YES - reject obvious malicious requests | 鉂?NO - don't waste CPU |
-
-**Real-World Impact** (1000 req/s, 20% from blacklisted IPs):
-- **Old order (Auth first):** 1000 auth computations = 18ms avg, 620 TPS
-- **New order (IP first):** 800 auth computations = 12ms avg, **850 TPS (+37%)**
-
-**Lesson:** Layered defense with fast checks before slow ones.
+**Performance Impact:** IP Filter before Authentication provides **+37% TPS improvement**
 
 ---
 
-## 馃帹 Design Principles Summary
+## 4. Service Discovery Architecture
 
-### 1. Layered Defense (Defense in Depth)
+### 4.1 Dual Protocol Support
 
 ```
-Layer 1: IP Filter     鈫?Fast, coarse-grained (block obvious threats)
-Layer 2: Auth          鈫?Slow, fine-grained (verify user identity)
-Layer 3: Rate Limiter  鈫?Prevent abuse (QPS control)
-Layer 4: Circuit Breaker 鈫?Protect downstream (cascade failure prevention)
++------------------------------------------------------------------+
+|                    SERVICE DISCOVERY SPI                         |
++------------------------------------------------------------------+
+
+                        Route URI
+                            |
+            +---------------+---------------+
+            |                               |
+            v                               v
+   +-----------------+             +-----------------+
+   |   lb://name     |             | static://id     |
+   |  (Dynamic)      |             |  (Static)       |
+   +--------+--------+             +--------+--------+
+            |                               |
+            v                               v
+   +-----------------+             +-----------------+
+   |    Nacos        |             |   Service       |
+   | DiscoveryClient |             |   Manager       |
+   +--------+--------+             |  (Config)       |
+            |                      +--------+--------+
+            |                               |
+            v                               v
+   +-----------------+             +-----------------+
+   | Service Registry|             | gateway-services|
+   |  (Dynamic)      |             |     .json       |
+   +-----------------+             +-----------------+
+
+            |                               |
+            +---------------+---------------+
+                            |
+                            v
+                  +-----------------+
+                  |  Load Balancer  |
+                  | (Weighted RR)   |
+                  +--------+--------+
+                           |
+                           v
+                  +-----------------+
+                  | ServiceInstance |
+                  +-----------------+
 ```
 
-**Why This Order?**
-- Fast checks before slow checks (optimize performance)
-- Coarse before fine (reduce unnecessary computation)
-- External protection before internal protection (downstream first)
+### 4.2 Load Balancing
 
-**Result:** +37% TPS, -33% latency
+**Weighted Round-Robin Algorithm:**
+
+```
+Instances: [A(weight=1), B(weight=2), C(weight=1)]
+Total Weight: 4
+
+Selection Sequence: A -> B -> B -> C -> A -> B -> B -> C -> ...
+
+Implementation:
++--------------------------------------------------------------+
+|  AtomicInteger counter = new AtomicInteger(0);               |
+|                                                              |
+|  int index = Math.abs(counter.getAndIncrement() % totalWeight);|
+|                                                              |
+|  int currentWeight = 0;                                      |
+|  for (Instance inst : instances) {                           |
+|      currentWeight += inst.getWeight();                      |
+|      if (index < currentWeight) return inst;                 |
+|  }                                                           |
++--------------------------------------------------------------+
+```
 
 ---
 
-### 2. Strategy Pattern for Extensibility
+## 5. Cache Architecture
 
-**Problem:** Support multiple auth types without code explosion.
+### 5.1 Three-Level Cache
 
-**Solution:** Strategy Pattern + Spring Auto-Discovery
+```
++------------------------------------------------------------------+
+|                       CACHE ARCHITECTURE                         |
++------------------------------------------------------------------+
+
+   +-------------------------------------------------------------+
+   |          L1: In-Memory (AtomicReference)                    |
+   |                                                             |
+   |   RouteManager.routeConfigCache                             |
+   |   ServiceManager.serviceConfigCache                         |
+   |                                                             |
+   |   - Nanosecond read latency                                 |
+   |   - Thread-safe (AtomicReference)                           |
+   |   - Auto-refresh on config change                           |
+   +-------------------------------------------------------------+
+                              |
+                              | Cache Miss
+                              v
+   +-------------------------------------------------------------+
+   |          L2: Fallback Cache (ConcurrentHashMap)             |
+   |                                                             |
+   |   GenericCacheManager.fallbackCaches                        |
+   |                                                             |
+   |   - Last known good configuration                           |
+   |   - Used when Nacos is unavailable                          |
+   |   - TTL-based expiration                                    |
+   +-------------------------------------------------------------+
+                              |
+                              | Cache Miss
+                              v
+   +-------------------------------------------------------------+
+   |          L3: Config Center (Nacos/Consul)                   |
+   |                                                             |
+   |   gateway-routes.json                                       |
+   |   gateway-services.json                                     |
+   |   gateway-strategies.json                                   |
+   |                                                             |
+   |   - Persistent storage                                      |
+   |   - Distributed consistency                                 |
+   |   - Real-time push via listener                             |
+   +-------------------------------------------------------------+
+```
+
+### 5.2 Fallback Strategy
+
+```
++------------------------------------------------------------------+
+|                    CACHE FALLBACK FLOW                           |
++------------------------------------------------------------------+
+
+   getConfig(key)
+        |
+        v
+   +-------------+
+   | L1 Valid?   |---- Yes ---> Return L1 Cache
+   +------+------+
+          | No
+          v
+   +-------------+
+   | Fetch from  |
+   |   Nacos     |
+   +------+------+
+          |
+          +---- Success ---> Update L1 + L2 --> Return Config
+          |
+          +---- Failure ---> Return L2 Fallback (if exists)
+                                   |
+                                   v
+                            +-------------+
+                            | Send Alert  |
+                            | (Nacos Down)|
+                            +-------------+
+```
+
+---
+
+## 6. Module Details
+
+### 6.1 my-gateway (Core Runtime)
+
+```
+my-gateway/
+|-- src/main/java/com/leoli/gateway/
+|   |
+|   |-- filter/                    # Global Filters
+|   |   |-- AuthenticationGlobalFilter.java
+|   |   |-- CircuitBreakerGlobalFilter.java
+|   |   |-- HybridRateLimiterFilter.java
+|   |   |-- IPFilterGlobalFilter.java
+|   |   |-- TimeoutGlobalFilter.java
+|   |   |-- TraceIdGlobalFilter.java
+|   |   +-- ...
+|   |
+|   |-- auth/                      # Auth Processors (Strategy Pattern)
+|   |   |-- AuthProcessor.java              # Interface
+|   |   |-- AuthProcessManager.java         # Manager
+|   |   |-- JwtAuthProcessor.java
+|   |   |-- ApiKeyAuthProcessor.java
+|   |   |-- BasicAuthProcessor.java
+|   |   |-- HmacSignatureAuthProcessor.java
+|   |   +-- OAuth2AuthProcessor.java
+|   |
+|   |-- center/                    # Config Center SPI
+|   |   |-- spi/ConfigCenterService.java
+|   |   |-- nacos/NacosConfigService.java
+|   |   +-- consul/ConsulConfigService.java
+|   |
+|   |-- discovery/                 # Service Discovery SPI
+|   |   |-- spi/DiscoveryService.java
+|   |   |-- nacos/NacosDiscoveryService.java
+|   |   |-- consul/ConsulDiscoveryService.java
+|   |   +-- staticdiscovery/StaticDiscoveryService.java
+|   |
+|   |-- manager/                   # Configuration Managers
+|   |   |-- RouteManager.java
+|   |   |-- ServiceManager.java
+|   |   +-- StrategyManager.java
+|   |
+|   |-- refresher/                 # Config Refreshers
+|   |   |-- RouteRefresher.java
+|   |   |-- ServiceRefresher.java
+|   |   +-- StrategyRefresher.java
+|   |
+|   |-- route/                     # Route Locator
+|   |   +-- DynamicRouteDefinitionLocator.java
+|   |
+|   +-- limiter/                   # Rate Limiting
+|       |-- RedisRateLimiter.java
+|       +-- LocalRateLimiter.java
+```
+
+### 6.2 gateway-admin (Management Console)
+
+```
+gateway-admin/
+|-- src/main/java/com/leoli/gateway/admin/
+|   |
+|   |-- controller/                # REST API
+|   |   |-- RouteController.java
+|   |   |-- ServiceController.java
+|   |   |-- StrategyController.java
+|   |   +-- AuthController.java
+|   |
+|   |-- service/                   # Business Logic
+|   |   |-- RouteService.java              # DB + Nacos dual-write
+|   |   |-- ServiceService.java
+|   |   +-- StrategyService.java
+|   |
+|   |-- repository/                # Data Access
+|   |   |-- RouteRepository.java
+|   |   |-- ServiceRepository.java
+|   |   +-- StrategyRepository.java
+|   |
+|   |-- model/                     # Entities
+|   |   |-- RouteEntity.java
+|   |   |-- ServiceEntity.java
+|   |   +-- StrategyEntity.java
+|   |
+|   |-- center/                    # Config Publisher
+|   |   +-- ConfigCenterPublisher.java
+|   |
+|   +-- aspect/                    # AOP
+|       +-- AuditLogAspect.java
+```
+
+---
+
+## 7. Design Principles
+
+| Principle | Application |
+|-----------|-------------|
+| **SOLID** | Single responsibility per filter, Open for extension (SPI), Dependency inversion |
+| **DRY** | Shared ConfigCenterService, GenericCacheManager reusable |
+| **KISS** | Simple filter chain, clear separation of concerns |
+| **Defense in Depth** | IP filter -> Auth -> Rate limit -> Circuit breaker |
+| **Graceful Degradation** | Local rate limiter fallback, cache fallback when Nacos down |
+
+---
+
+## 8. Extensibility Guide
+
+### 8.1 Adding a New Authentication Type
 
 ```java
-// Contract
-interface AuthProcessor { process(); getAuthType(); }
+// 1. Implement AuthProcessor
+@Component
+public class CustomAuthProcessor extends AbstractAuthProcessor {
 
-// Implementations (auto-discovered by Spring)
-@Component class JwtAuthProcessor { ... }
-@Component class ApiKeyAuthProcessor { ... }
-@Component class OAuth2AuthProcessor { ... }
+    @Override
+    public AuthType getType() {
+        return AuthType.CUSTOM;  // Add to enum
+    }
 
-// Manager (routes automatically)
-@Component class AuthManager {
-    Map<String, AuthProcessor> processors; // Auto-populated by Spring
+    @Override
+    public Mono<Boolean> validate(ServerWebExchange exchange, AuthConfig config) {
+        // Custom validation logic
+        return Mono.just(true);
+    }
 }
+
+// 2. Register automatically via Spring @Component
+// No other changes needed - AuthProcessManager auto-discovers all processors
 ```
 
-**Benefits:**
-- 鉁?Add new auth type = 1 class (~50 lines)
-- 鉁?Zero configuration (Spring auto-registers)
-- 鉁?No modification to existing code (Open-Closed Principle)
-
----
-
-### 3. Reactive Programming for Performance
-
-**Technology Stack:**
-- Spring WebFlux (Reactor pattern)
-- Non-blocking I/O throughout
-- Backpressure support
-
-**Why Reactive?**
-- 鉁?Higher throughput with fewer threads
-- 鉁?Better resource utilization
-- 鉁?Natural fit for async operations (Redis, HTTP calls)
-
-**Example:**
-```java
-public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-    return authManager.authenticate(exchange, config)
-            .then(chain.filter(exchange))  // Chain continues asynchronously
-            .onErrorResume(ex -> handleError(ex, exchange));
-}
-```
-
----
-
-### 4. Configuration Externalization
-
-**All configs in Nacos:**
-- `gateway-routes.json` 鈥?Route definitions
-- `gateway-services.json` 鈥?Static service instances
-- `gateway-plugins.json` 鈥?Plugin configurations
-
-**Benefits:**
-- 鉁?Centralized management
-- 鉁?Hot-reload (< 1s propagation)
-- 鉁?Version control friendly
-- 鉁?Environment separation (dev/test/prod)
-
-**Trade-off:** No database persistence (by design for demo simplicity)
-
----
-
-### 5. Observability by Default
-
-**TraceId Propagation:**
-```
-Client Request
-  鈫?
-Gateway generates X-Trace-Id: abc-123
-  鈫?
-MDC.put("traceId") 鈫?All logs include [traceId=abc-123]
-  鈫?
-Forward with header: X-Trace-Id: abc-123
-  鈫?
-Backend services see same traceId
-```
-
-**Why Important?**
-- 鉁?Debug distributed systems easily
-- 鉁?Correlate logs across services
-- 鉁?Identify performance bottlenecks
-- 鉁?Compliance audit trail
-
----
-
-## 馃搳 Architecture Trade-offs
-
-| Decision | Benefit | Trade-off | When to Change |
-|----------|---------|-----------|----------------|
-| **Nacos-only config** | Simple, fast hot-reload | No DB persistence | Production needs DB backup |
-| **IP filter before auth** | +37% TPS | Slightly more complex order | Rarely needed |
-| **Strategy pattern** | Easy extension | More classes | Always worth it |
-| **Reactive stack** | High throughput | Learning curve | For high-concurrency scenarios |
-| **Embedded H2** | Demo simplicity | Not production-ready | Replace with MySQL/PostgreSQL |
-
----
-
-## 馃幆 For Upwork Clients
-
-### What This Demonstrates
-
-鉁?**Architecture Thinking** 鈥?Not just CRUD, but thoughtful design  
-鉁?**Production Awareness** 鈥?Performance optimization, layered defense  
-鉁?**Extensibility** 鈥?Strategy pattern, zero-config extension  
-鉁?**Best Practices** 鈥?Open-Closed Principle, dependency injection  
-鉁?**Documentation** 鈥?Clear, professional English  
-
-### How to Extend for Real Projects
-
-**Scenario 1: Need DingTalk Authentication**
-```bash
-# 1. Create DingTalkAuthProcessor.java (50 lines)
-# 2. Build & deploy
-# 3. Configure via API
-curl -X POST http://localhost:8080/api/plugins/auth \
-  -d '{"routeId":"api","authType":"DINGTALK"}'
-# Done!
-```
-
-**Scenario 2: Add Database Persistence**
-```bash
-# 1. Add MySQL dependency
-# 2. Create ConfigRepository extends JpaRepository
-# 3. Modify PluginService to save to DB + sync to Nacos
-# 4. Add @Scheduled to reload from DB on startup
-# Done!
-```
-
-**Scenario 3: Production Monitoring**
-```bash
-# 1. Add Prometheus dependency
-# 2. Enable /actuator/prometheus endpoint
-# 3. Deploy Grafana dashboard
-# 4. Import Spring Boot dashboard (ID: 11378)
-# Done!
-```
-
----
-
-**Last Updated:** 2024-03-09  
-**Version:** v1.0.0
-
-**Ready for production customization.** Contact me on Upwork for your project! 馃殌
-
-```
-Gateway Admin
-    鈹?
-    鈹? REST API (create / update / delete)
-    鈻?
-Nacos Config Center
-    鈹? gateway-routes.json
-    鈹? gateway-services.json
-    鈹? gateway-plugins.json
-    鈹?
-    鈹? Nacos listener push (< 1s)
-    鈻?
-my-gateway (Config Listeners)
-    鈹溾攢鈹€ NacosRouteDefinitionLocator  鈫? RefreshRoutesEvent  鈫? SCG CachingRouteLocator rebuild
-    鈹溾攢鈹€ StaticProtocolGlobalFilter   鈫? service cache cleared
-    鈹斺攢鈹€ NacosPluginConfigListener    鈫? GatewayConfigManager in-memory update
-```
-
----
-
-## 鈿?Real-Time Update Latency
-
-| Operation | Propagation Path | Effective Latency |
-|-----------|-----------------|-------------------|
-| Add / update / delete **route** | Nacos 鈫?`NacosRouteDefinitionLocator` 鈫?`RefreshRoutesEvent` 鈫?SCG rebuild | < 1 s |
-| Add / update / delete **service** | Nacos 鈫?`StaticProtocolGlobalFilter` listener 鈫?cache cleared | < 1 s |
-| Add / update / delete **plugin** | Nacos 鈫?`NacosPluginConfigListener` 鈫?`GatewayConfigManager` in-memory update | < 1 s |
-| Delete **entire plugin config file** | Nacos pushes empty content 鈫?`GatewayConfigManager` clears all plugin cache | < 1 s |
-
-> Deleting a route in the Admin Console causes the gateway to return **HTTP 404 immediately** 鈥?no restart required.
-
----
-
-## 馃椇锔?Nacos Config Data IDs
-
-| Data ID | Content | Consumer |
-|---------|---------|----------|
-| `gateway-routes.json` | Route definitions | `NacosRouteDefinitionLocator` |
-| `gateway-services.json` | Static service instances | `StaticProtocolGlobalFilter` |
-| `gateway-plugins.json` | Rate limiter / IP filter / Timeout / Circuit Breaker / **Authentication** | `GatewayConfigManager` |
-
----
-
-## 馃攼 Authentication Architecture: Strategy Pattern
-
-### Design Decision: Why Strategy Pattern?
-
-**Problem:** Need to support multiple authentication types (JWT, API Key, OAuth2, LDAP, SAML) without creating a maintenance nightmare.
-
-**Solution:** Strategy Pattern + Spring Auto-Discovery
+### 8.2 Adding a New Global Filter
 
 ```java
-// 1. Define unified contract
-public interface AuthProcessor {
-    Mono<Void> process(ServerWebExchange exchange, AuthConfig config);
-    String getAuthType();
-}
-
-// 2. Implement concrete strategies
 @Component
-public class JwtAuthProcessor implements AuthProcessor {
-    @Override public String getAuthType() { return "JWT"; }
-    @Override public Mono<Void> process(...) { /* JWT logic */ }
-}
+public class CustomGlobalFilter implements GlobalFilter, Ordered {
 
-@Component
-public class ApiKeyAuthProcessor implements AuthProcessor {
-    @Override public String getAuthType() { return "API_KEY"; }
-    @Override public Mono<Void> process(...) { /* API Key logic */ }
-}
-
-// 3. Manager routes requests automatically
-@Component
-public class AuthManager {
-    private final Map<String, AuthProcessor> processorMap;
-    
     @Autowired
-    public AuthManager(List<AuthProcessor> processors) {
-        // Auto-register all processors by authType
-        for (AuthProcessor p : processors) {
-            processorMap.put(p.getAuthType(), p);
+    private StrategyManager strategyManager;
+
+    @Override
+    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        String routeId = exchange.getAttribute(GATEWAY_ROUTE_ATTR);
+
+        // Get config from StrategyManager
+        CustomConfig config = strategyManager.getConfig(StrategyType.CUSTOM, routeId);
+
+        if (config != null && config.isEnabled()) {
+            // Apply filter logic
         }
+
+        return chain.filter(exchange);
     }
-    
-    public Mono<Void> authenticate(ServerWebExchange exchange, AuthConfig config) {
-        AuthProcessor processor = processorMap.get(config.getAuthType());
-        return processor != null ? processor.process(exchange, config) : Mono.empty();
+
+    @Override
+    public int getOrder() {
+        return -50;  // Define execution order
     }
 }
 ```
-
-### Benefits of This Design
-
-鉁?**Open-Closed Principle** 鈥?Add new auth types without modifying existing code  
-鉁?**Single Responsibility** 鈥?Each processor focuses on one auth type  
-鉁?**Dependency Injection** 鈥?Spring manages lifecycle and registration  
-鉁?**Zero Configuration** 鈥?No manual registration needed  
-鉁?**Testability** 鈥?Each processor can be tested independently  
-
-### How to Extend
-
-Add custom authentication in **3 simple steps**:
-
-```java
-// Step 1: Create new processor
-@Component
-public class DingTalkAuthProcessor extends AbstractAuthProcessor {
-    @Override
-    public String getAuthType() { return "DINGTALK"; }
-    
-    @Override
-    public Mono<Void> process(ServerWebExchange exchange, AuthConfig config) {
-        // Extract access_token from request
-        // Call DingTalk API to validate
-        // Add user info to exchange attributes
-        return Mono.empty(); // Success
-    }
-}
-
-// Step 2: Build & deploy (no other code changes!)
-
-// Step 3: Configure via Admin API
-curl -X POST http://localhost:8080/api/plugins/auth \
-  -H "Content-Type: application/json" \
-  -d '{"routeId":"api","authType":"DINGTALK","enabled":true}'
-
-// That's it! Spring auto-registers the new processor.
-```
-
-### Extensibility in Action
-
-| Requirement | Implementation Effort | Code Changes Needed |
-|-------------|----------------------|---------------------|
-| Add JWT support | 鉁?Done | N/A |
-| Add API Key support | 鉁?Done | N/A |
-| Add OAuth2 support | 鉁?Done | N/A |
-| Add DingTalk auth | 鈴?1 class (~50 lines) | **Only new class** |
-| Add WeChat auth | 鈴?1 class (~50 lines) | **Only new class** |
-| Add custom SSO | 鈴?1 class (~80 lines) | **Only new class** |
-
-**Key Insight:** The framework is designed for **zero-configuration extension**. New auth types are automatically discovered and registered by Spring.
 
 ---
+
+## 9. Performance Considerations
+
+| Optimization | Technique |
+|--------------|-----------|
+| **Cache TTL** | 5-minute TTL for route/service config, refresh on change |
+| **Async Publish** | Config publish to Nacos is async, doesn't block API response |
+| **Connection Pool** | Netty connection pool with elastic sizing |
+| **Reactive** | Non-blocking I/O throughout the filter chain |
+
+---
+
+## 10. Summary
+
+This API Gateway architecture demonstrates:
+
+- **Clean separation** of control plane (admin) and data plane (gateway)
+- **Extensible design** via SPI and Strategy patterns
+- **High availability** with fallback caching and graceful degradation
+- **Real-time configuration** with < 1 second propagation latency
+- **Enterprise features** including multi-auth, circuit breaking, and rate limiting
+
+For feature documentation, see [FEATURES.md](FEATURES.md).

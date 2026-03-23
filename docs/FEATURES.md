@@ -1,324 +1,565 @@
-﻿# Features Overview
+﻿# Features Documentation
 
-Complete guide to all production-grade features.
-
----
-
-## 1. Dynamic Route Management
-
-**Storage:** Nacos `gateway-routes.json`
-
-- Create/delete routes via REST API 鈥?**effective immediately, no restart**
-- Support multiple URI schemes: `static://`, `lb://`, `http://`
-- Hot-reload mechanism: Nacos push 鈫?clear cache 鈫?rebuild routes (< 1s)
+> Complete guide to all gateway features with configuration examples and API reference.
 
 ---
 
-## 2. Static Service Management (`static://`)
+## Table of Contents
 
-**Storage:** Nacos `gateway-services.json`
-
-For services not registered in Nacos 鈥?configure IP:Port list directly.
-
-- Dynamic instance management (add/remove/weight adjustment)
-- Load balancing strategies: `round-robin`, `weighted`, `random`
-- **Weighted round-robin**: Deterministic distribution (e.g., weight 1:2 鈫?exactly 1 to A, 2 to B every 3 requests)
+1. [Route Management](#1-route-management)
+2. [Service Discovery](#2-service-discovery)
+3. [Authentication](#3-authentication)
+4. [Rate Limiting](#4-rate-limiting)
+5. [Circuit Breaker](#5-circuit-breaker)
+6. [IP Filtering](#6-ip-filtering)
+7. [Timeout Control](#7-timeout-control)
+8. [Distributed Tracing](#8-distributed-tracing)
+9. [Health Checking](#9-health-checking)
+10. [API Reference](#10-api-reference)
 
 ---
 
-## 3. Plugin System
+## 1. Route Management
 
-All plugins managed in single Nacos config: `gateway-plugins.json`
+### 1.1 Overview
 
-### 3.1 Rate Limiter (Order: -50)
+Routes define how incoming requests are forwarded to backend services.
 
-**Implementation:** Redis ZSET sliding window
+**Configuration Storage:** Nacos `gateway-routes.json`
 
-| Key Type | Behavior |
-|----------|----------|
-| `ip` | Per-client IP counting |
-| `route` | Shared per route |
-| `combined` | Route + IP |
-| `header` | By request header value |
+### 1.2 Route Structure
 
-Exceed limit 鈫?**HTTP 429** with headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`
-
-**Config Example:**
 ```json
 {
-  "routeId": "api",
-  "qps": 100,
-  "timeUnit": "second",
-  "burstCapacity": 200,
-  "keyType": "ip"
+  "id": "user-service-route",
+  "uri": "lb://user-service",
+  "order": 0,
+  "predicates": [
+    {"name": "Path", "args": {"pattern": "/api/user/**"}}
+  ],
+  "filters": [
+    {"name": "StripPrefix", "args": {"parts": "1"}}
+  ],
+  "metadata": {
+    "timeout": 3000,
+    "retry": 3
+  }
 }
 ```
+
+### 1.3 URI Schemes
+
+| Scheme | Description | Example |
+|--------|-------------|---------|
+| `lb://` | Nacos service discovery | `lb://user-service` |
+| `static://` | Static configuration | `static://backend-service` |
+| `http://` | Direct HTTP endpoint | `http://localhost:8080` |
+
+### 1.4 API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/routes` | List all routes |
+| `GET` | `/api/routes/{id}` | Get route by ID |
+| `POST` | `/api/routes` | Create route |
+| `PUT` | `/api/routes/{id}` | Update route |
+| `DELETE` | `/api/routes/{id}` | Delete route |
+| `POST` | `/api/routes/{id}/enable` | Enable route |
+| `POST` | `/api/routes/{id}/disable` | Disable route |
 
 ---
 
-### 3.2 IP Access Control (Order: -280)
+## 2. Service Discovery
 
-**Modes:** Whitelist (allow only) or Blacklist (block)
+### 2.1 Dynamic Discovery (`lb://`)
 
-**IP Formats Supported:**
-- Exact: `192.168.1.100`
-- Wildcard: `192.168.1.*`
-- CIDR: `192.168.1.0/24`
+Services registered in Nacos are automatically discovered.
 
-Blocked 鈫?**HTTP 403 Forbidden**
+```yaml
+# application.yml
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848
+```
 
-**Why Order -280?** Runs **before authentication** to reject malicious IPs early, avoiding unnecessary JWT validation (37% TPS improvement).
+### 2.2 Static Discovery (`static://`)
+
+For services not in Nacos, configure static instances:
+
+```json
+{
+  "name": "backend-service",
+  "loadBalancer": "weighted",
+  "instances": [
+    {"ip": "192.168.1.10", "port": 8080, "weight": 1},
+    {"ip": "192.168.1.11", "port": 8080, "weight": 2}
+  ]
+}
+```
+
+### 2.3 Load Balancing Algorithms
+
+| Algorithm | Description |
+|-----------|-------------|
+| `round-robin` | Sequential distribution |
+| `weighted` | Weight-based distribution |
+| `random` | Random selection |
+
+**Weighted Round-Robin Example:**
+- Instance A (weight=1), Instance B (weight=2)
+- Distribution: A -> B -> B -> A -> B -> B (1:2 ratio)
+
+### 2.4 API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/services` | List all services |
+| `GET` | `/api/services/{name}` | Get service details |
+| `POST` | `/api/services` | Create service |
+| `PUT` | `/api/services/{name}` | Update service |
+| `DELETE` | `/api/services/{name}` | Delete service |
 
 ---
 
-### 3.3 Authentication Framework (Order: -250) 猸?
+## 3. Authentication
 
-**Design Pattern:** Strategy Pattern + Auto-Discovery
+### 3.1 Overview
 
-#### Architecture
+Multi-strategy authentication using the Strategy Pattern.
 
-```java
-// Unified interface
-public interface AuthProcessor {
-    Mono<Void> process(ServerWebExchange exchange, AuthConfig config);
-    String getAuthType();
-}
+**Filter Order:** -250
 
-// Auto-registered by Spring
-@Component
-public class JwtAuthProcessor implements AuthProcessor { ... }
-@Component
-public class ApiKeyAuthProcessor implements AuthProcessor { ... }
-@Component
-public class OAuth2AuthProcessor implements AuthProcessor { ... }
+### 3.2 Supported Types
 
-// Manager routes to appropriate processor
-@Component
-public class AuthManager {
-    @Autowired
-    public AuthManager(List<AuthProcessor> processors) {
-        // Auto-register all by authType
-    }
-}
-```
+| Type | Processor | Use Case |
+|------|-----------|----------|
+| `JWT` | `JwtAuthProcessor` | Stateless API authentication |
+| `API_KEY` | `ApiKeyAuthProcessor` | Simple partner access |
+| `BASIC` | `BasicAuthProcessor` | Simple username/password |
+| `HMAC` | `HmacSignatureAuthProcessor` | API signature verification |
+| `OAUTH2` | `OAuth2AuthProcessor` | Third-party SSO |
 
-#### Supported Types
+### 3.3 Configuration Examples
 
-| Type | Processor | Status | Use Case |
-|------|-----------|--------|----------|
-| **JWT** | `JwtAuthProcessor` | 鉁?Production | Stateless API auth |
-| **API Key** | `ApiKeyAuthProcessor` | 鉁?Production | Simple partner access |
-| **OAuth2** | `OAuth2AuthProcessor` | 鉁?Basic | Third-party SSO |
-| **LDAP** | `LdapAuthProcessor` | 鈿狅笍 Template | Enterprise AD (placeholder) |
-| **SAML** | `SamlAuthProcessor` | 鈿狅笍 Template | SSO (placeholder) |
-
-#### Why This Design?
-
-鉁?**Open-Closed Principle** 鈥?Add new auth types without modifying existing code  
-鉁?**Auto-Discovery** 鈥?Spring automatically registers `@Component`  
-鉁?**Zero Configuration** 鈥?No manual registration needed  
-鉁?**Flexibility** 鈥?Different routes can use different auth methods
-
-#### How to Extend
-
-Add custom auth in 3 steps:
-
-```java
-@Component
-public class DingTalkAuthProcessor extends AbstractAuthProcessor {
-    @Override
-    public String getAuthType() { return "DINGTALK"; }
-    
-    @Override
-    public Mono<Void> process(...) {
-        // Validate with DingTalk API
-        return Mono.empty(); // Success
-    }
-}
-// That's it! Spring auto-registers.
-```
-
-#### Config Examples
-
-**JWT:**
+**JWT Authentication:**
 ```json
 {
   "routeId": "secure-api",
   "authType": "JWT",
-  "secretKey": "your-32-char-secret"
+  "secretKey": "your-256-bit-secret-key-here",
+  "enabled": true
 }
 ```
 
-**API Key:**
+**API Key Authentication:**
 ```json
 {
-  "routeId": "internal-api",
+  "routeId": "partner-api",
   "authType": "API_KEY",
-  "apiKey": "sk-your-key"
+  "headerName": "X-API-Key",
+  "apiKey": "sk-your-api-key",
+  "enabled": true
 }
 ```
 
-#### Performance Impact
+**HMAC Signature:**
+```json
+{
+  "routeId": "webhook-api",
+  "authType": "HMAC",
+  "secretKey": "hmac-secret",
+  "algorithm": "HmacSHA256",
+  "enabled": true
+}
+```
 
-With IP filtering before auth:
-- **TPS:** 620 鈫?**850** (+37%)
-- **Latency:** 18ms 鈫?**12ms** (-33%)
+### 3.4 Extending Authentication
+
+Add custom authentication type:
+
+```java
+@Component
+public class CustomAuthProcessor extends AbstractAuthProcessor {
+
+    @Override
+    public AuthType getType() {
+        return AuthType.CUSTOM;
+    }
+
+    @Override
+    public Mono<Boolean> validate(ServerWebExchange exchange, AuthConfig config) {
+        // Custom validation logic
+        return Mono.just(true);
+    }
+}
+```
 
 ---
 
-### 3.4 Timeout Control (Order: -200)
+## 4. Rate Limiting
 
-Per-route connect and response timeouts.
+### 4.1 Overview
 
-| Field | Scope | On Expiry |
-|-------|-------|-----------|
-| `connectTimeout` | TCP handshake | HTTP 504 |
-| `responseTimeout` | Full request-response cycle | HTTP 504 |
+Hybrid rate limiting with Redis (distributed) + Local (fallback).
 
-**Config:**
+**Filter Order:** -100
+
+### 4.2 Configuration
+
+```json
+{
+  "routeId": "public-api",
+  "qps": 100,
+  "timeUnit": "second",
+  "burstCapacity": 200,
+  "keyType": "ip",
+  "enabled": true
+}
+```
+
+### 4.3 Key Types
+
+| Key Type | Description |
+|----------|-------------|
+| `ip` | Per-client IP rate limiting |
+| `route` | Shared limit per route |
+| `combined` | Route + IP combination |
+| `header` | Based on header value |
+
+### 4.4 Response Headers
+
+| Header | Description |
+|--------|-------------|
+| `X-RateLimit-Limit` | Maximum requests allowed |
+| `X-RateLimit-Remaining` | Remaining requests |
+| `X-RateLimit-Reset` | Reset timestamp |
+
+**Exceed Limit:** HTTP 429 Too Many Requests
+
+---
+
+## 5. Circuit Breaker
+
+### 5.1 Overview
+
+Protects downstream services from cascading failures using Resilience4j.
+
+**Filter Order:** -150
+
+### 5.2 State Machine
+
+```
+CLOSED (Normal)
+    |
+    +--> Failure rate > threshold --> OPEN (Reject all)
+                                        |
+                                        +--> After waitDuration --> HALF_OPEN (Test)
+                                                                        |
+                                    +-----------------------------------+
+                                    |
+                                    v
+                            Success --> CLOSED
+                            Failure --> OPEN
+```
+
+### 5.3 Configuration
+
+```json
+{
+  "routeId": "critical-service",
+  "failureRateThreshold": 50.0,
+  "slowCallDurationThreshold": 60000,
+  "slowCallRateThreshold": 80.0,
+  "waitDurationInOpenState": 30000,
+  "slidingWindowSize": 10,
+  "minimumNumberOfCalls": 5,
+  "enabled": true
+}
+```
+
+### 5.4 Parameters
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `failureRateThreshold` | Failure rate % to open circuit | 50 |
+| `waitDurationInOpenState` | Time to wait before half-open (ms) | 30000 |
+| `slidingWindowSize` | Number of calls in window | 10 |
+| `minimumNumberOfCalls` | Minimum calls before calculating rate | 5 |
+
+**Circuit Open:** HTTP 503 Service Unavailable
+
+---
+
+## 6. IP Filtering
+
+### 6.1 Overview
+
+IP blacklist/whitelist with CIDR support.
+
+**Filter Order:** -280 (before authentication for performance)
+
+### 6.2 Modes
+
+| Mode | Description |
+|------|-------------|
+| `blacklist` | Block listed IPs |
+| `whitelist` | Allow only listed IPs |
+
+### 6.3 IP Formats
+
+| Format | Example |
+|--------|---------|
+| Exact | `192.168.1.100` |
+| Wildcard | `192.168.1.*` |
+| CIDR | `192.168.1.0/24` |
+
+### 6.4 Configuration
+
+```json
+{
+  "routeId": "internal-api",
+  "mode": "whitelist",
+  "ipList": [
+    "10.0.0.0/8",
+    "192.168.0.0/16",
+    "172.16.0.0/12"
+  ],
+  "enabled": true
+}
+```
+
+**Blocked:** HTTP 403 Forbidden
+
+### 6.5 Performance Impact
+
+IP filtering before authentication provides **+37% TPS improvement** by rejecting malicious IPs early without JWT validation overhead.
+
+---
+
+## 7. Timeout Control
+
+### 7.1 Overview
+
+Per-route connection and response timeout control.
+
+**Filter Order:** -200
+
+### 7.2 Configuration
+
 ```json
 {
   "routeId": "slow-api",
   "connectTimeout": 5000,
-  "responseTimeout": 30000
+  "responseTimeout": 30000,
+  "enabled": true
 }
 ```
 
----
+### 7.3 Parameters
 
-### 3.5 Circuit Breaker (Order: -100) 猸?
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `connectTimeout` | TCP connection timeout (ms) | 5000 |
+| `responseTimeout` | Full response timeout (ms) | 30000 |
 
-**Implementation:** Resilience4j
-
-Prevents cascading failures by monitoring downstream health.
-
-**Behavior:**
-```
-CLOSED (Normal) 
-  鈫?Failure rate > threshold
-OPEN (Reject all 鈫?HTTP 503)
-  鈫?After waitDuration
-HALF_OPEN (Test one request)
-  鈫?Success        鈫?Failure
-CLOSED           OPEN
-```
-
-**Config:**
-```json
-{
-  "routeId": "user-service",
-  "failureRateThreshold": 50,
-  "waitDurationInOpenState": 30000,
-  "slidingWindowSize": 10
-}
-```
-
-**Why Important?**
-- 鉁?Protects downstream from overload
-- 鉁?Fast failure (immediate rejection)
-- 鉁?Automatic recovery
-- 鉁?Per-route isolation
+**Timeout:** HTTP 504 Gateway Timeout
 
 ---
 
-### 3.6 Distributed Tracing (Order: -300) 猸?
+## 8. Distributed Tracing
 
-Generates/propagates TraceId across all microservices.
+### 8.1 Overview
 
-**How It Works:**
+Automatic TraceId generation and propagation across services.
+
+**Filter Order:** -300 (first filter for full visibility)
+
+### 8.2 How It Works
+
 ```
 Client Request
-  鈫?
+    |
+    v
 Gateway generates X-Trace-Id: abc-123
-  鈫?
-MDC.put("traceId") 鈫?All logs: [traceId=abc-123]
-  鈫?
+    |
+    v
+MDC.put("traceId") --> All logs include [traceId=abc-123]
+    |
+    v
 Forward with header: X-Trace-Id: abc-123
-  鈫?
+    |
+    v
 Response includes: X-Trace-Id: abc-123
 ```
 
-**Benefits:**
-- 鉁?End-to-end visibility
-- 鉁?Simplified debugging (correlate logs by TraceId)
-- 鉁?Performance bottleneck identification
-- 鉁?Compliance audit trail
+### 8.3 Benefits
+
+- End-to-end request visibility
+- Log correlation across services
+- Performance bottleneck identification
+- Compliance audit trail
 
 ---
 
-## 4. Audit Logging
+## 9. Health Checking
 
-**Implementation:** Spring AOP
+### 9.1 Overview
 
-Automatically records all configuration changes:
-- Who changed what (operator)
-- What was changed (target)
-- When it happened (timestamp)
-- From which IP (ipAddress)
+Hybrid health checking for service instances.
 
-**Why Important for Production?**
-- 鉁?Security compliance
-- 鉁?Change tracking
-- 鉁?Incident investigation
-- 鉁?Accountability
+### 9.2 Types
+
+| Type | Description |
+|------|-------------|
+| **Passive** | Monitor request success/failure, mark unhealthy on consecutive failures |
+| **Active** | TCP port probing at scheduled intervals |
+
+### 9.3 Configuration
+
+```yaml
+gateway:
+  health-check:
+    enabled: true
+    interval: 30000
+    failure-threshold: 3
+    recovery-threshold: 2
+```
+
+### 9.4 Behavior
+
+| Scenario | Behavior |
+|----------|----------|
+| Multiple instances | Skip unhealthy instances in load balancing |
+| Single instance | Keep unhealthy instance (allow fast failure) |
+| Recovery | Auto-recover when health check passes |
 
 ---
 
-## 馃搳 Complete Filter Chain
+## 10. API Reference
+
+### 10.1 Route API
+
+```bash
+# List all routes
+GET /api/routes
+
+# Create route
+POST /api/routes
+Content-Type: application/json
+{
+  "id": "my-route",
+  "uri": "lb://my-service",
+  "predicates": [{"name": "Path", "args": {"pattern": "/api/**"}}]
+}
+
+# Update route
+PUT /api/routes/{id}
+
+# Delete route
+DELETE /api/routes/{id}
+```
+
+### 10.2 Service API
+
+```bash
+# List all services
+GET /api/services
+
+# Create static service
+POST /api/services
+Content-Type: application/json
+{
+  "name": "backend",
+  "instances": [{"ip": "127.0.0.1", "port": 8080}]
+}
+
+# Delete service
+DELETE /api/services/{name}
+```
+
+### 10.3 Strategy API
+
+```bash
+# Authentication
+GET  /api/strategies/auth
+POST /api/strategies/auth
+
+# Rate Limiter
+GET  /api/strategies/rate-limiter
+POST /api/strategies/rate-limiter
+
+# Circuit Breaker
+GET  /api/strategies/circuit-breaker
+POST /api/strategies/circuit-breaker
+
+# IP Filter
+GET  /api/strategies/ip-filter
+POST /api/strategies/ip-filter
+
+# Timeout
+GET  /api/strategies/timeout
+POST /api/strategies/timeout
+```
+
+---
+
+## 11. Filter Chain Summary
 
 ```
 Request Flow:
-鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
-鈹?TraceId (-300)              鈹?鈫?First: Full visibility
-鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
-           鈫?
-鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
-鈹?IP Filter (-280)            鈹?鈫?Coarse: Fast rejection
-鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
-           鈫?
-鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
-鈹?Authentication (-250)       鈹?鈫?Fine: User identity
-鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
-           鈫?
-鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
-鈹?Timeout (-200)              鈹?鈫?Protect downstream
-鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
-           鈫?
-鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
-鈹?Circuit Breaker (-100)      鈹?鈫?Prevent cascade failure
-鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
-           鈫?
-鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
-鈹?Rate Limiter (-50)          鈹?鈫?Last: Prevent overload
-鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
-           鈫?
-鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
-鈹?Routing (10001+)            鈹?鈫?Core: Forward to backend
-鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
++----------------------------------------------------------+
+| TraceId (-300)         --> Full visibility first         |
++----------------------------------------------------------+
+            |
+            v
++----------------------------------------------------------+
+| IP Filter (-280)       --> Fast rejection (coarse)       |
++----------------------------------------------------------+
+            |
+            v
++----------------------------------------------------------+
+| Authentication (-250)  --> User identity (fine)          |
++----------------------------------------------------------+
+            |
+            v
++----------------------------------------------------------+
+| Timeout (-200)         --> Protect downstream            |
++----------------------------------------------------------+
+            |
+            v
++----------------------------------------------------------+
+| Circuit Breaker (-150) --> Prevent cascade failure       |
++----------------------------------------------------------+
+            |
+            v
++----------------------------------------------------------+
+| Rate Limiter (-100)    --> Prevent overload              |
++----------------------------------------------------------+
+            |
+            v
++----------------------------------------------------------+
+| Routing (10001+)       --> Forward to backend            |
++----------------------------------------------------------+
 ```
 
 **Design Philosophy:**
-1. **Observability first** (TraceId sees everything)
-2. **Coarse before fine** (IP filter before auth)
-3. **Protection before function** (Timeout/Circuit before routing)
-4. **Fast failure** (Reject early, save resources)
+1. Observability first (TraceId sees everything)
+2. Coarse before fine (IP filter before auth)
+3. Protection before function (Timeout/CB before routing)
+4. Fast failure (Reject early, save resources)
 
 ---
 
-## 馃幆 Feature Comparison
+## 12. Configuration Files
 
-| Feature | Complexity | Production Ready? | When to Use |
-|---------|------------|-------------------|-------------|
-| **JWT Auth** | 猸愨瓙 | 鉁?Yes | Default for APIs |
-| **API Key** | 猸?| 鉁?Yes | Simple partner access |
-| **OAuth2** | 猸愨瓙猸愨瓙 | 鉁?With config | Third-party integration |
-| **LDAP/SAML** | 猸愨瓙猸愨瓙猸?| 鈿狅笍 Template | Enterprise (implement on demand) |
-| **Circuit Breaker** | 猸愨瓙猸?| 鉁?Yes | Critical downstream services |
-| **TraceId** | 猸?| 鉁?Yes | Always enable |
-| **Rate Limiter** | 猸愨瓙 | 鉁?Yes | Public APIs |
-| **IP Filter** | 猸?| 鉁?Yes | Internal networks |
+| File | Description |
+|------|-------------|
+| `gateway-routes.json` | Route definitions |
+| `gateway-services.json` | Static service instances |
+| `gateway-strategies.json` | All strategy configurations |
 
 ---
 
-**Last Updated:** 2024-03-09  
-**Version:** v1.0.0
+For architecture details, see [ARCHITECTURE.md](ARCHITECTURE.md).
