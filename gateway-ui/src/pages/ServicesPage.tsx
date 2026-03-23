@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Card, Button, Space, Modal, message, Spin, Tag, Form, Input, Select,
   Empty, Dropdown, Tooltip, Badge, Divider, Typography, Alert, Drawer
@@ -48,21 +48,8 @@ const ServicesPage: React.FC = () => {
   const [instances, setInstances] = useState<ServiceInstance[]>([]);
   const [editInstances, setEditInstances] = useState<ServiceInstance[]>([]);
   const { t } = useTranslation();
-  const drawerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { loadServices(); }, []);
-
-  // Click outside to close drawer
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (detailDrawerVisible && drawerRef.current && !drawerRef.current.contains(event.target as Node)) {
-        setDetailDrawerVisible(false);
-        setSelectedService(null);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [detailDrawerVisible]);
 
   const loadServices = async () => {
     try {
@@ -292,7 +279,7 @@ const ServicesPage: React.FC = () => {
         maskClosable={true}
       >
         {selectedService && (
-          <div className="drawer-content" ref={drawerRef}>
+          <div className="drawer-content">
             {/* Drawer Header */}
             <div className="drawer-header">
               <div className="drawer-header-left">
