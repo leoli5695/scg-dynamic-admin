@@ -274,6 +274,7 @@ const resources = {
       'services.name_readonly': 'Service name cannot be changed',
       'services.loadBalancer_helper': 'Traffic distribution strategy',
       'services.description_helper_text': 'Brief description of this service',
+      'services.unhealthy': 'Unhealthy',
       'services.invalid_ip': 'Invalid IP address',
       'services.invalid_port': 'Invalid port (1-65535)',
       'services.modal_no_instances_warning': 'No instances added yet. Please add at least one instance.',
@@ -862,6 +863,7 @@ const resources = {
       'services.name_readonly': '服务名称不可更改',
       'services.loadBalancer_helper': '流量分配策略',
       'services.description_helper_text': '服务简要描述',
+      'services.unhealthy': '不健康',
       
       // Strategies
       'strategies.title': '策略管理',

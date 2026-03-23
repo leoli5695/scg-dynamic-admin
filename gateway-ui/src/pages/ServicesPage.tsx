@@ -1,12 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Card, Button, Space, Modal, message, Spin, Tag, Form, Input, Select,
-  Empty, Dropdown, Tooltip, Badge, Divider, Typography, Alert
+  Empty, Dropdown, Tooltip, Badge, Divider, Typography, Alert, Drawer
 } from 'antd';
 import {
   PlusOutlined, DeleteOutlined, EditOutlined, MoreOutlined,
   ClusterOutlined, MinusCircleOutlined, CloudServerOutlined, ApiOutlined,
-  WarningOutlined, ExclamationCircleOutlined
+  WarningOutlined, ExclamationCircleOutlined, CloseOutlined
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import api from '../utils/api';
@@ -39,6 +39,8 @@ const ServicesPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
+  const [detailDrawerVisible, setDetailDrawerVisible] = useState(false);
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [createForm] = Form.useForm();
@@ -46,8 +48,21 @@ const ServicesPage: React.FC = () => {
   const [instances, setInstances] = useState<ServiceInstance[]>([]);
   const [editInstances, setEditInstances] = useState<ServiceInstance[]>([]);
   const { t } = useTranslation();
+  const drawerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { loadServices(); }, []);
+
+  // Click outside to close drawer
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (detailDrawerVisible && drawerRef.current && !drawerRef.current.contains(event.target as Node)) {
+        setDetailDrawerVisible(false);
+        setSelectedService(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [detailDrawerVisible]);
 
   const loadServices = async () => {
     try {
@@ -90,6 +105,10 @@ const ServicesPage: React.FC = () => {
       if (res.data.code === 200) {
         message.success(t('message.update_success'));
         editForm.resetFields(); setEditInstances([]); setEditModalVisible(false); loadServices();
+        // Update selected service if it's the one being edited
+        if (selectedService?.name === editingService.name) {
+          setSelectedService({ ...editingService, ...vals, instances: editInstances });
+        }
       } else { message.error(t('message.update_failed', { msg: res.data.message })); }
     } catch (e: any) { message.error(t('message.update_failed', { msg: e.response?.data?.message || e.message })); }
   };
@@ -105,8 +124,21 @@ const ServicesPage: React.FC = () => {
         return;
       }
       const res = await api.delete(`/api/services/${service.name}`);
-      if (res.data.code === 200) { message.success(t('message.delete_success')); loadServices(); }
+      if (res.data.code === 200) {
+        message.success(t('message.delete_success'));
+        loadServices();
+        // Close drawer if deleted service was selected
+        if (selectedService?.name === service.name) {
+          setDetailDrawerVisible(false);
+          setSelectedService(null);
+        }
+      }
     } catch (e: any) { message.error(t('message.delete_failed', { msg: e.response?.data?.message || e.message })); }
+  };
+
+  const openServiceDetail = (service: Service) => {
+    setSelectedService(service);
+    setDetailDrawerVisible(true);
   };
 
   const openEditModal = (service: Service) => {
@@ -132,6 +164,15 @@ const ServicesPage: React.FC = () => {
       Modal.confirm({ title: t('common.confirm'), content: t('message.confirm_delete_service', { name: service.name }), okText: t('common.delete'), okType: 'danger', cancelText: t('common.cancel'), onOk: () => handleDelete(service) });
     }},
   ];
+
+  const getLoadBalancerLabel = (lb: string) => {
+    switch (lb) {
+      case 'round-robin': return t('services.round_robin');
+      case 'random': return t('services.random');
+      case 'weighted': return t('services.weighted');
+      default: return lb;
+    }
+  };
 
   return (
     <div className="services-page">
@@ -173,13 +214,16 @@ const ServicesPage: React.FC = () => {
             {filteredServices.map((service) => {
               const status = getStatus(service);
               const instanceCount = service.instances?.length || 0;
-              // Check if there are any available instances
               const availableInstances = service.instances?.filter(inst => inst.enabled !== false) || [];
               const hasNoAvailableInstances = instanceCount === 0 || availableInstances.length === 0;
 
               return (
-                <Card key={service.name} className={`service-card ${hasNoAvailableInstances ? 'service-card-warning' : ''}`} hoverable>
-                  {/* Warning Alert */}
+                <Card
+                  key={service.name}
+                  className={`service-card ${hasNoAvailableInstances ? 'service-card-warning' : ''} ${selectedService?.name === service.name ? 'service-card-selected' : ''}`}
+                  hoverable
+                  onClick={() => openServiceDetail(service)}
+                >
                   {hasNoAvailableInstances && (
                     <Alert
                       type="warning"
@@ -198,7 +242,7 @@ const ServicesPage: React.FC = () => {
                       </div>
                     </div>
                     <Dropdown menu={{ items: getActionMenu(service) }} trigger={['click']} placement="bottomRight">
-                      <Button type="text" icon={<MoreOutlined />} className="action-btn" />
+                      <Button type="text" icon={<MoreOutlined />} className="action-btn" onClick={e => e.stopPropagation()} />
                     </Dropdown>
                   </div>
                   <div className="service-meta">
@@ -210,7 +254,9 @@ const ServicesPage: React.FC = () => {
                       <Text type="secondary" className="instances-title">
                         <ApiOutlined /> {availableInstances.length}/{instanceCount} {t('services.available_instances')}
                       </Text>
-                      <Button type="link" size="small" onClick={() => openEditModal(service)}><EditOutlined /> {t('common.edit')}</Button>
+                      <Button type="link" size="small" onClick={e => { e.stopPropagation(); openEditModal(service); }}>
+                        <EditOutlined /> {t('common.edit')}
+                      </Button>
                     </div>
                     {instanceCount > 0 && (
                       <div className="instances-list">
@@ -234,98 +280,326 @@ const ServicesPage: React.FC = () => {
         )}
       </Spin>
 
-      {/* Create Modal */}
-      <Modal title={<div className="modal-header"><PlusOutlined className="modal-icon" /><span>{t('services.create')}</span></div>} open={createModalVisible} onCancel={() => { setCreateModalVisible(false); createForm.resetFields(); setInstances([]); }} footer={null} width={640} className="service-modal">
-        <Form form={createForm} layout="vertical" onFinish={handleCreate}>
-          <div className="form-row">
-            <Form.Item name="name" label={t('services.name')} rules={[{ required: true }]} className="form-item-half"><Input placeholder={t('services.name_placeholder')} /></Form.Item>
-            <Form.Item name="loadBalancer" label={t('services.loadBalancer')} initialValue="weighted" className="form-item-half">
-              <Select>
-                <Select.Option value="round-robin">{t('services.round_robin')}</Select.Option>
-                <Select.Option value="random">{t('services.random')}</Select.Option>
-                <Select.Option value="weighted">{t('services.weighted')}</Select.Option>
-              </Select>
-            </Form.Item>
-          </div>
-          <Form.Item name="description" label={t('services.description')}><Input.TextArea rows={2} placeholder={t('services.description_placeholder')} /></Form.Item>
-          <Form.Item label={t('services.service_instances')} className="instances-form-item">
-            {/* Warning for no available instances in create modal */}
-            {(instances.length === 0 || instances.every(inst => inst.enabled === false)) && (
-              <Alert
-                type="warning"
-                showIcon
-                icon={<ExclamationCircleOutlined />}
-                message={instances.length === 0 ? t('services.modal_no_instances_warning') : t('services.modal_all_disabled_warning')}
-                className="modal-instances-warning"
-              />
-            )}
-            <div className="instances-container">
-              {instances.map((inst, i) => (
-                <div key={i} className="instance-row">
-                  <Input placeholder="IP" value={inst.ip} onChange={e => { const d = [...instances]; d[i] = { ...d[i], ip: e.target.value }; setInstances(d); }} className="instance-input-ip" />
-                  <Input type="number" placeholder="Port" value={inst.port} onChange={e => { const d = [...instances]; d[i] = { ...d[i], port: parseInt(e.target.value) || 8080 }; setInstances(d); }} className="instance-input-port" />
-                  <Input type="number" placeholder="Weight" value={inst.weight} onChange={e => { const d = [...instances]; d[i] = { ...d[i], weight: parseInt(e.target.value) || 1 }; setInstances(d); }} className="instance-input-weight" />
-                  <Select value={inst.enabled !== false ? 'enabled' : 'disabled'} onChange={v => { const d = [...instances]; d[i] = { ...d[i], enabled: v === 'enabled' }; setInstances(d); }} className="instance-input-status">
-                    <Select.Option value="enabled">{t('common.enabled')}</Select.Option>
-                    <Select.Option value="disabled">{t('common.disabled')}</Select.Option>
-                  </Select>
-                  <Button type="text" danger icon={<MinusCircleOutlined />} onClick={() => setInstances(instances.filter((_, idx) => idx !== i))} />
+      {/* Service Detail Drawer */}
+      <Drawer
+        placement="right"
+        width={480}
+        open={detailDrawerVisible}
+        closable={false}
+        onClose={() => { setDetailDrawerVisible(false); setSelectedService(null); }}
+        className="service-detail-drawer"
+        mask={true}
+        maskClosable={true}
+      >
+        {selectedService && (
+          <div className="drawer-content" ref={drawerRef}>
+            {/* Drawer Header */}
+            <div className="drawer-header">
+              <div className="drawer-header-left">
+                <div className="drawer-icon"><CloudServerOutlined /></div>
+                <div className="drawer-title-wrapper">
+                  <Title level={4} className="drawer-title">{selectedService.name}</Title>
+                  <Text type="secondary">{selectedService.serviceId || selectedService.name}</Text>
                 </div>
-              ))}
-              <Button type="dashed" onClick={() => setInstances([...instances, { ip: '', port: 8080, weight: 1, healthy: true, enabled: true }])} icon={<PlusOutlined />} block className="add-instance-btn">{t('services.add_instance')}</Button>
+              </div>
+              <Button
+                type="text"
+                icon={<CloseOutlined />}
+                onClick={() => { setDetailDrawerVisible(false); setSelectedService(null); }}
+                className="drawer-close-btn"
+              />
             </div>
-          </Form.Item>
-          <div className="modal-footer">
-            <Button onClick={() => setCreateModalVisible(false)}>{t('common.cancel')}</Button>
-            <Button type="primary" htmlType="submit">{t('common.create')}</Button>
+
+            {/* Status Bar */}
+            <div className="drawer-status-bar">
+              <Badge status={getStatus(selectedService).color as any} text={getStatus(selectedService).text} />
+              <Tag color="blue">{getLoadBalancerLabel(selectedService.loadBalancer || 'weighted')}</Tag>
+            </div>
+
+            {/* Description */}
+            {selectedService.description && (
+              <div className="drawer-section">
+                <Text type="secondary">{selectedService.description}</Text>
+              </div>
+            )}
+
+            {/* Instances */}
+            <div className="drawer-section">
+              <div className="section-title">
+                <ApiOutlined /> {t('services.instances')}
+                <span className="count">{selectedService.instances?.length || 0}</span>
+              </div>
+              {selectedService.instances && selectedService.instances.length > 0 ? (
+                <div className="instances-detail-list">
+                  {selectedService.instances.map((inst, idx) => (
+                    <div key={idx} className={`instance-detail-card ${inst.healthy !== false && inst.enabled !== false ? 'healthy' : 'unhealthy'}`}>
+                      <div className="instance-main-info">
+                        <div className="instance-address">
+                          <span className="instance-dot" />
+                          <Text strong>{inst.ip}:{inst.port}</Text>
+                        </div>
+                        <div className="instance-badges">
+                          {inst.enabled === false && <Tag color="red">{t('common.disabled')}</Tag>}
+                          {inst.healthy === false && <Tag color="orange">{t('services.unhealthy')}</Tag>}
+                          {inst.enabled !== false && inst.healthy !== false && <Tag color="green">{t('services.healthy')}</Tag>}
+                        </div>
+                      </div>
+                      <div className="instance-meta">
+                        <span>{t('services.weight')}: {inst.weight || 1}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <Empty description={t('services.no_instances_configured')} />
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="drawer-actions">
+              <Button type="primary" icon={<EditOutlined />} onClick={() => openEditModal(selectedService)}>
+                {t('common.edit')}
+              </Button>
+              <Button danger icon={<DeleteOutlined />} onClick={() => {
+                Modal.confirm({
+                  title: t('common.confirm'),
+                  content: t('message.confirm_delete_service', { name: selectedService.name }),
+                  okText: t('common.delete'),
+                  okType: 'danger',
+                  cancelText: t('common.cancel'),
+                  onOk: () => handleDelete(selectedService)
+                });
+              }}>
+                {t('common.delete')}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Drawer>
+
+      {/* Create Modal */}
+      <Modal
+        title={
+          <div className="modal-header-modern">
+            <div className="modal-title-wrapper">
+              <div className="modal-icon-wrapper">
+                <PlusOutlined />
+              </div>
+              <div className="modal-title-text">
+                <div className="modal-title">{t('services.create')}</div>
+                <div className="modal-subtitle">{t('services.create_description')}</div>
+              </div>
+            </div>
+          </div>
+        }
+        open={createModalVisible}
+        onCancel={() => { setCreateModalVisible(false); createForm.resetFields(); setInstances([]); }}
+        footer={null}
+        width={720}
+        className="service-modal service-create-modal"
+      >
+        <Form form={createForm} layout="vertical" onFinish={handleCreate}>
+          <div className="form-section-modern">
+            <div className="section-header">
+              <ClusterOutlined className="section-icon" />
+              <span className="section-title">{t('services.basic_config')}</span>
+            </div>
+            <div className="section-content">
+              <div className="form-row">
+                <Form.Item
+                  name="name"
+                  label={t('services.name')}
+                  rules={[{ required: true, message: t('services.name_required') }]}
+                  className="form-item-half"
+                  extra={t('services.name_helper')}
+                >
+                  <Input placeholder={t('services.name_placeholder')} size="large" />
+                </Form.Item>
+                <Form.Item
+                  name="loadBalancer"
+                  label={t('services.loadBalancer')}
+                  initialValue="weighted"
+                  className="form-item-half"
+                  extra={t('services.loadBalancer_helper')}
+                >
+                  <Select size="large" className="select-with-icon">
+                    <Select.Option value="round-robin"><span className="option-icon">🔄</span> {t('services.round_robin')}</Select.Option>
+                    <Select.Option value="random"><span className="option-icon">🎲</span> {t('services.random')}</Select.Option>
+                    <Select.Option value="weighted"><span className="option-icon">⚖️</span> {t('services.weighted')}</Select.Option>
+                  </Select>
+                </Form.Item>
+              </div>
+              <Form.Item
+                name="description"
+                label={t('services.description')}
+                extra={t('services.description_helper_text')}
+              >
+                <Input.TextArea
+                  rows={2}
+                  placeholder={t('services.description_placeholder')}
+                  size="large"
+                  showCount
+                  maxLength={500}
+                />
+              </Form.Item>
+            </div>
+          </div>
+
+          <div className="form-section-modern">
+            <div className="section-header">
+              <ApiOutlined className="section-icon" />
+              <span className="section-title">{t('services.service_instances')}</span>
+              <span className="section-subtitle">{t('services.instances_helper')}</span>
+            </div>
+            <div className="section-content">
+              {(instances.length === 0 || instances.every(inst => inst.enabled === false)) && (
+                <Alert
+                  type="warning"
+                  showIcon
+                  icon={<ExclamationCircleOutlined />}
+                  message={instances.length === 0 ? t('services.modal_no_instances_warning') : t('services.modal_all_disabled_warning')}
+                  className="modal-instances-warning"
+                />
+              )}
+              <div className="instances-container">
+                {instances.map((inst, i) => (
+                  <div key={i} className="instance-row-modern">
+                    <div className="instance-row-header">
+                      <span className="instance-label">{t('services.instance')} {i + 1}</span>
+                      <Button
+                        type="text"
+                        danger
+                        size="small"
+                        icon={<MinusCircleOutlined />}
+                        onClick={() => setInstances(instances.filter((_, idx) => idx !== i))}
+                        disabled={instances.length === 1}
+                      />
+                    </div>
+                    <div className="instance-row-grid">
+                      <Form.Item label={t('services.ip_address')} className="instance-form-item">
+                        <Input placeholder="192.168.1.100" value={inst.ip} onChange={e => { const d = [...instances]; d[i] = { ...d[i], ip: e.target.value }; setInstances(d); }} className="instance-input-ip" size="large" />
+                      </Form.Item>
+                      <Form.Item label={t('services.port')} className="instance-form-item">
+                        <Input type="number" placeholder="8080" value={inst.port} onChange={e => { const d = [...instances]; d[i] = { ...d[i], port: parseInt(e.target.value) || 8080 }; setInstances(d); }} className="instance-input-port" size="large" />
+                      </Form.Item>
+                      <Form.Item label={t('services.weight')} className="instance-form-item" extra={t('services.weight_helper')}>
+                        <Input type="number" placeholder="1" value={inst.weight} onChange={e => { const d = [...instances]; d[i] = { ...d[i], weight: parseInt(e.target.value) || 1 }; setInstances(d); }} className="instance-input-weight" size="large" min={1} max={100} />
+                      </Form.Item>
+                      <Form.Item label={t('services.status')} className="instance-form-item">
+                        <Select value={inst.enabled !== false ? 'enabled' : 'disabled'} onChange={v => { const d = [...instances]; d[i] = { ...d[i], enabled: v === 'enabled' }; setInstances(d); }} className="instance-input-status" size="large">
+                          <Select.Option value="enabled"><span className="status-dot status-dot-success"></span>{t('common.enabled')}</Select.Option>
+                          <Select.Option value="disabled"><span className="status-dot status-dot-default"></span>{t('common.disabled')}</Select.Option>
+                        </Select>
+                      </Form.Item>
+                    </div>
+                  </div>
+                ))}
+                <Button type="dashed" onClick={() => setInstances([...instances, { ip: '', port: 8080, weight: 1, healthy: true, enabled: true }])} icon={<PlusOutlined />} block className="add-instance-btn-modern" size="large">
+                  {t('services.add_instance')}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="modal-footer-modern">
+            <Button onClick={() => setCreateModalVisible(false)} size="large">{t('common.cancel')}</Button>
+            <Button type="primary" htmlType="submit" size="large" icon={<PlusOutlined />}>{t('common.create')}</Button>
           </div>
         </Form>
       </Modal>
 
       {/* Edit Modal */}
-      <Modal title={<div className="modal-header"><EditOutlined className="modal-icon" /><span>{t('services.edit')}</span></div>} open={editModalVisible} onCancel={() => { setEditModalVisible(false); editForm.resetFields(); setEditInstances([]); }} footer={null} width={640} className="service-modal">
-        <Form form={editForm} layout="vertical" onFinish={handleUpdate}>
-          <div className="form-row">
-            <Form.Item name="name" label={t('services.name')} className="form-item-half"><Input disabled /></Form.Item>
-            <Form.Item name="loadBalancer" label={t('services.loadBalancer')} className="form-item-half">
-              <Select>
-                <Select.Option value="round-robin">{t('services.round_robin')}</Select.Option>
-                <Select.Option value="random">{t('services.random')}</Select.Option>
-                <Select.Option value="weighted">{t('services.weighted')}</Select.Option>
-              </Select>
-            </Form.Item>
-          </div>
-          <Form.Item name="description" label={t('services.description')}><Input.TextArea rows={2} placeholder={t('services.description_placeholder')} /></Form.Item>
-          <Form.Item label={t('services.service_instances')} className="instances-form-item">
-            {/* Warning for no available instances in edit modal */}
-            {(editInstances.length === 0 || editInstances.every(inst => inst.enabled === false)) && (
-              <Alert
-                type="warning"
-                showIcon
-                icon={<ExclamationCircleOutlined />}
-                message={editInstances.length === 0 ? t('services.modal_no_instances_warning') : t('services.modal_all_disabled_warning')}
-                className="modal-instances-warning"
-              />
-            )}
-            <div className="instances-container">
-              {editInstances.map((inst, i) => (
-                <div key={i} className="instance-row">
-                  <Input placeholder="IP" value={inst.ip} onChange={e => { const d = [...editInstances]; d[i] = { ...d[i], ip: e.target.value }; setEditInstances(d); }} className="instance-input-ip" />
-                  <Input type="number" placeholder="Port" value={inst.port} onChange={e => { const d = [...editInstances]; d[i] = { ...d[i], port: parseInt(e.target.value) || 8080 }; setEditInstances(d); }} className="instance-input-port" />
-                  <Input type="number" placeholder="Weight" value={inst.weight} onChange={e => { const d = [...editInstances]; d[i] = { ...d[i], weight: parseInt(e.target.value) || 1 }; setEditInstances(d); }} className="instance-input-weight" />
-                  <Select value={inst.enabled !== false ? 'enabled' : 'disabled'} onChange={v => { const d = [...editInstances]; d[i] = { ...d[i], enabled: v === 'enabled' }; setEditInstances(d); }} className="instance-input-status">
-                    <Select.Option value="enabled">{t('common.enabled')}</Select.Option>
-                    <Select.Option value="disabled">{t('common.disabled')}</Select.Option>
-                  </Select>
-                  <Button type="text" danger icon={<MinusCircleOutlined />} onClick={() => setEditInstances(editInstances.filter((_, idx) => idx !== i))} />
-                </div>
-              ))}
-              <Button type="dashed" onClick={() => setEditInstances([...editInstances, { ip: '', port: 8080, weight: 1, healthy: true, enabled: true }])} icon={<PlusOutlined />} block className="add-instance-btn">{t('services.add_instance')}</Button>
+      <Modal
+        title={
+          <div className="modal-header-modern">
+            <div className="modal-title-wrapper">
+              <div className="modal-icon-wrapper edit">
+                <EditOutlined />
+              </div>
+              <div className="modal-title-text">
+                <div className="modal-title">{t('services.edit')}</div>
+                <div className="modal-subtitle">{t('services.edit_description')}</div>
+              </div>
             </div>
-          </Form.Item>
-          <div className="modal-footer">
-            <Button onClick={() => setEditModalVisible(false)}>{t('common.cancel')}</Button>
-            <Button type="primary" htmlType="submit">{t('common.update')}</Button>
+          </div>
+        }
+        open={editModalVisible}
+        onCancel={() => { setEditModalVisible(false); editForm.resetFields(); setEditInstances([]); }}
+        footer={null}
+        width={720}
+        className="service-modal service-edit-modal"
+      >
+        <Form form={editForm} layout="vertical" onFinish={handleUpdate}>
+          <div className="form-section-modern">
+            <div className="section-header">
+              <ClusterOutlined className="section-icon" />
+              <span className="section-title">{t('services.basic_config')}</span>
+            </div>
+            <div className="section-content">
+              <div className="form-row">
+                <Form.Item name="name" label={t('services.name')} className="form-item-half" extra={t('services.name_readonly')}>
+                  <Input disabled size="large" />
+                </Form.Item>
+                <Form.Item name="loadBalancer" label={t('services.loadBalancer')} className="form-item-half" extra={t('services.loadBalancer_helper')}>
+                  <Select size="large" className="select-with-icon">
+                    <Select.Option value="round-robin"><span className="option-icon">🔄</span> {t('services.round_robin')}</Select.Option>
+                    <Select.Option value="random"><span className="option-icon">🎲</span> {t('services.random')}</Select.Option>
+                    <Select.Option value="weighted"><span className="option-icon">⚖️</span> {t('services.weighted')}</Select.Option>
+                  </Select>
+                </Form.Item>
+              </div>
+              <Form.Item name="description" label={t('services.description')} extra={t('services.description_helper_text')}>
+                <Input.TextArea rows={2} placeholder={t('services.description_placeholder')} size="large" showCount maxLength={500} />
+              </Form.Item>
+            </div>
+          </div>
+
+          <div className="form-section-modern">
+            <div className="section-header">
+              <ApiOutlined className="section-icon" />
+              <span className="section-title">{t('services.service_instances')}</span>
+              <span className="section-subtitle">{t('services.instances_helper')}</span>
+            </div>
+            <div className="section-content">
+              {(editInstances.length === 0 || editInstances.every(inst => inst.enabled === false)) && (
+                <Alert type="warning" showIcon icon={<ExclamationCircleOutlined />} message={editInstances.length === 0 ? t('services.modal_no_instances_warning') : t('services.modal_all_disabled_warning')} className="modal-instances-warning" />
+              )}
+              <div className="instances-container">
+                {editInstances.map((inst, i) => (
+                  <div key={i} className="instance-row-modern">
+                    <div className="instance-row-header">
+                      <span className="instance-label">{t('services.instance')} {i + 1}</span>
+                      <Button type="text" danger size="small" icon={<MinusCircleOutlined />} onClick={() => setEditInstances(editInstances.filter((_, idx) => idx !== i))} disabled={editInstances.length === 1} />
+                    </div>
+                    <div className="instance-row-grid">
+                      <Form.Item label={t('services.ip_address')} className="instance-form-item">
+                        <Input placeholder="192.168.1.100" value={inst.ip} onChange={e => { const d = [...editInstances]; d[i] = { ...d[i], ip: e.target.value }; setEditInstances(d); }} className="instance-input-ip" size="large" />
+                      </Form.Item>
+                      <Form.Item label={t('services.port')} className="instance-form-item">
+                        <Input type="number" placeholder="8080" value={inst.port} onChange={e => { const d = [...editInstances]; d[i] = { ...d[i], port: parseInt(e.target.value) || 8080 }; setEditInstances(d); }} className="instance-input-port" size="large" />
+                      </Form.Item>
+                      <Form.Item label={t('services.weight')} className="instance-form-item" extra={t('services.weight_helper')}>
+                        <Input type="number" placeholder="1" value={inst.weight} onChange={e => { const d = [...editInstances]; d[i] = { ...d[i], weight: parseInt(e.target.value) || 1 }; setEditInstances(d); }} className="instance-input-weight" size="large" min={1} max={100} />
+                      </Form.Item>
+                      <Form.Item label={t('services.status')} className="instance-form-item">
+                        <Select value={inst.enabled !== false ? 'enabled' : 'disabled'} onChange={v => { const d = [...editInstances]; d[i] = { ...d[i], enabled: v === 'enabled' }; setEditInstances(d); }} className="instance-input-status" size="large">
+                          <Select.Option value="enabled"><span className="status-dot status-dot-success"></span>{t('common.enabled')}</Select.Option>
+                          <Select.Option value="disabled"><span className="status-dot status-dot-default"></span>{t('common.disabled')}</Select.Option>
+                        </Select>
+                      </Form.Item>
+                    </div>
+                  </div>
+                ))}
+                <Button type="dashed" onClick={() => setEditInstances([...editInstances, { ip: '', port: 8080, weight: 1, healthy: true, enabled: true }])} icon={<PlusOutlined />} block className="add-instance-btn-modern" size="large">
+                  {t('services.add_instance')}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="modal-footer-modern">
+            <Button onClick={() => setEditModalVisible(false)} size="large">{t('common.cancel')}</Button>
+            <Button type="primary" htmlType="submit" size="large" icon={<EditOutlined />}>{t('common.update')}</Button>
           </div>
         </Form>
       </Modal>
