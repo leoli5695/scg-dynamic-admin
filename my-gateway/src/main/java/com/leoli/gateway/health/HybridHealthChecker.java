@@ -27,7 +27,7 @@ public class HybridHealthChecker {
     @Autowired
     private RestTemplate restTemplate;
 
-    @Value("${gateway.admin.url:http://localhost:8080}")
+    @Value("${gateway.admin.url:http://localhost:9090}")
     private String adminUrl;
 
     @Value("${gateway.id:gateway-1}")

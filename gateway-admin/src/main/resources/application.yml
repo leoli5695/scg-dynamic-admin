@@ -6,7 +6,7 @@ spring:
     name: gateway-admin
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://127.0.0.1:3306/gateway_admin?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=utf8
+    url: jdbc:mysql://127.0.0.1:3306/gateway_admin?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: root
     password: 123456
   jpa:
@@ -49,6 +49,7 @@ gateway:
   center:
     type: nacos  # default config center type, can be 'nacos' or 'consul'
   admin:
+    url: ${GATEWAY_ADMIN_URL:http://localhost:9090}
     jwt:
       secret: ${GATEWAY_ADMIN_JWT_SECRET:mySecretKeyForJWTTokenGenerationWhichMustBeLongEnoughAndSecure}
       expiration: 86400000  # 24 hours in milliseconds

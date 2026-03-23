@@ -7,10 +7,8 @@ import com.leoli.gateway.admin.repository.ServiceInstanceHealthRepository;
 import com.leoli.gateway.admin.service.ServiceService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -35,12 +33,6 @@ public class ServiceController {
 
     @Autowired
     private ServiceInstanceHealthRepository instanceHealthRepository;
-
-    @Autowired
-    private RestTemplate restTemplate;
-
-    @Value("${gateway.admin.url:http://localhost:8080}")
-    private String gatewayAdminUrl;
 
     /**
      * Get all services with instance health status.

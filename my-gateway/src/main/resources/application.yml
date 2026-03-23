@@ -66,6 +66,9 @@ spring:
 # Gateway Center Configuration
 # Set type to 'nacos' (default) or 'consul' to switch between config centers
 gateway:
+  # Gateway instance identifier (used for health status reporting)
+  id: ${GATEWAY_ID:gateway-1}
+  # Admin service URL for health status sync and API calls
   admin:
     url: ${GATEWAY_ADMIN_URL:http://localhost:9090}
   center:
@@ -93,8 +96,6 @@ gateway:
     failure-threshold: 3
     recovery-time: 30000
     idle-threshold: 300000
-    admin-url: ${GATEWAY_ADMIN_URL:http://localhost:9090}
-    gateway-id: ${GATEWAY_ID:gateway-1}
     
     # Active health check interval (milliseconds)
     # Note: Gateway's main responsibility is routing, not health monitoring.
