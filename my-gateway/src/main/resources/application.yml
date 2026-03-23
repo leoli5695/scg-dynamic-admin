@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: 80  # 使用 80 端口作为网关入口
 
 spring:
   application:
@@ -66,6 +66,8 @@ spring:
 # Gateway Center Configuration
 # Set type to 'nacos' (default) or 'consul' to switch between config centers
 gateway:
+  admin:
+    url: ${GATEWAY_ADMIN_URL:http://localhost:9090}
   center:
     type: ${GATEWAY_CENTER_TYPE:nacos}
 
@@ -91,7 +93,7 @@ gateway:
     failure-threshold: 3
     recovery-time: 30000
     idle-threshold: 300000
-    admin-url: ${GATEWAY_ADMIN_URL:http://localhost:8080}
+    admin-url: ${GATEWAY_ADMIN_URL:http://localhost:9090}
     gateway-id: ${GATEWAY_ID:gateway-1}
     
     # Active health check interval (milliseconds)

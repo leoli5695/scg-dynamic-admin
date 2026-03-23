@@ -180,14 +180,17 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
      * Get secret key for access key from configuration.
      */
     private String getSecretKeyForAccessKey(String accessKey, AuthConfig config) {
-        // Check single access key/secret pair
-        if (config.getAccessKey() != null && config.getAccessKey().equals(accessKey)) {
-            return config.getSecretKey();
+        // Check multiple access keys if configured (priority over single key)
+        if (config.getAccessKeySecrets() != null && !config.getAccessKeySecrets().isEmpty()) {
+            String secret = config.getAccessKeySecrets().get(accessKey);
+            if (secret != null) {
+                return secret;
+            }
         }
         
-        // Check multiple access keys if configured
-        if (config.getAccessKeySecrets() != null) {
-            return config.getAccessKeySecrets().get(accessKey);
+        // Fallback to single access key/secret pair
+        if (config.getAccessKey() != null && config.getAccessKey().equals(accessKey)) {
+            return config.getSecretKey();
         }
         
         return null;

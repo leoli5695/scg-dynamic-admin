@@ -76,15 +76,28 @@ public class HybridHealthChecker {
     }
 
     /**
-     * Initialize instance (called when discovered from Nacos, initially healthy).
+     * Initialize instance (called when discovered from Nacos).
+     * Creates instance with PENDING status - actual health determined by active check.
      */
     public void initializeInstance(String serviceId, String ip, int port) {
         String key = InstanceHealth.buildKey(serviceId, ip, port);
 
         if (!healthCache.asMap().containsKey(key)) {
-            log.info("Initializing new instance from Nacos: {}:{}", ip, port);
-            InstanceHealth health = createHealthy(serviceId, ip, port);
+            log.info("Initializing new instance from config: {}:{} (pending health check)", ip, port);
+            // Create as unhealthy initially - will be marked healthy after active check passes
+            InstanceHealth health = new InstanceHealth();
+            health.setServiceId(serviceId);
+            health.setIp(ip);
+            health.setPort(port);
+            health.setHealthy(false);  // Initially unhealthy until checked
+            health.setUnhealthyReason("PENDING: Waiting for health check");
+            health.setConsecutiveFailures(0);
+            health.setLastRequestTime(System.currentTimeMillis());
+            health.setCheckType("INIT");
             healthCache.put(key, health);
+
+            // Queue for push to admin so it shows as pending/unhealthy
+            queueForBatchPush(serviceId, ip, port, false);
         }
     }
 

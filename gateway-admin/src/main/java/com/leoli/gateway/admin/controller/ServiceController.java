@@ -91,7 +91,9 @@ public class ServiceController {
                     if (health != null) {
                         instanceMap.put("healthy", "HEALTHY".equals(health.getHealthStatus()));
                     } else {
-                        instanceMap.put("healthy", true); // Default to healthy if no record
+                        // No health record means instance hasn't been checked yet
+                        // Default to false (unhealthy) until Gateway confirms it's healthy
+                        instanceMap.put("healthy", false);
                     }
 
                     instanceMap.put("metadata", instance.getMetadata());

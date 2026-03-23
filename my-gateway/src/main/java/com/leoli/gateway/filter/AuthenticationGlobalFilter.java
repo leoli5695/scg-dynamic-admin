@@ -88,6 +88,81 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
         if (configMap.get("customConfig") != null) {
             config.setCustomConfig((String) configMap.get("customConfig"));
         }
+        
+        // JWT configuration
+        if (configMap.get("jwtIssuer") != null) {
+            config.setJwtIssuer((String) configMap.get("jwtIssuer"));
+        }
+        if (configMap.get("jwtAudience") != null) {
+            config.setJwtAudience((String) configMap.get("jwtAudience"));
+        }
+        if (configMap.get("jwtAlgorithm") != null) {
+            config.setJwtAlgorithm((String) configMap.get("jwtAlgorithm"));
+        }
+        if (configMap.get("jwtPublicKey") != null) {
+            config.setJwtPublicKey((String) configMap.get("jwtPublicKey"));
+        }
+        if (configMap.get("jwtClockSkewSeconds") != null) {
+            config.setJwtClockSkewSeconds(((Number) configMap.get("jwtClockSkewSeconds")).intValue());
+        }
+        
+        // Basic Auth configuration
+        if (configMap.get("basicUsername") != null) {
+            config.setBasicUsername((String) configMap.get("basicUsername"));
+        }
+        if (configMap.get("basicPassword") != null) {
+            config.setBasicPassword((String) configMap.get("basicPassword"));
+        }
+        if (configMap.get("realm") != null) {
+            config.setRealm((String) configMap.get("realm"));
+        }
+        if (configMap.get("passwordHashAlgorithm") != null) {
+            config.setPasswordHashAlgorithm((String) configMap.get("passwordHashAlgorithm"));
+        }
+        
+        // API Key configuration
+        if (configMap.get("apiKeyHeader") != null) {
+            config.setApiKeyHeader((String) configMap.get("apiKeyHeader"));
+        }
+        if (configMap.get("apiKeyQueryParam") != null) {
+            config.setApiKeyQueryParam((String) configMap.get("apiKeyQueryParam"));
+        }
+        if (configMap.get("apiKeyPrefix") != null) {
+            config.setApiKeyPrefix((String) configMap.get("apiKeyPrefix"));
+        }
+        
+        // HMAC configuration
+        if (configMap.get("accessKey") != null) {
+            config.setAccessKey((String) configMap.get("accessKey"));
+        }
+        if (configMap.get("accessKeySecrets") != null) {
+            @SuppressWarnings("unchecked")
+            Map<String, String> secrets = (Map<String, String>) configMap.get("accessKeySecrets");
+            config.setAccessKeySecrets(secrets);
+        }
+        if (configMap.get("signatureAlgorithm") != null) {
+            config.setSignatureAlgorithm((String) configMap.get("signatureAlgorithm"));
+        }
+        if (configMap.get("clockSkewMinutes") != null) {
+            config.setClockSkewMinutes(((Number) configMap.get("clockSkewMinutes")).intValue());
+        }
+        if (configMap.get("requireNonce") != null) {
+            config.setRequireNonce((Boolean) configMap.get("requireNonce"));
+        }
+        if (configMap.get("validateContentMd5") != null) {
+            config.setValidateContentMd5((Boolean) configMap.get("validateContentMd5"));
+        }
+        
+        // OAuth2 configuration
+        if (configMap.get("requiredScopes") != null) {
+            config.setRequiredScopes((String) configMap.get("requiredScopes"));
+        }
+        if (configMap.get("userInfoEndpoint") != null) {
+            config.setUserInfoEndpoint((String) configMap.get("userInfoEndpoint"));
+        }
+        if (configMap.get("tokenCacheTtlSeconds") != null) {
+            config.setTokenCacheTtlSeconds(((Number) configMap.get("tokenCacheTtlSeconds")).intValue());
+        }
 
         return config;
     }
