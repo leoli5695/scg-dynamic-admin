@@ -2,16 +2,8 @@ package com.leoli.gateway.health;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestTemplate;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Health status sync task (Gateway → Admin)
@@ -23,15 +15,6 @@ public class HealthStatusSyncTask {
     
     @Autowired
     private HybridHealthChecker hybridHealthChecker;
-    
-    @Autowired
-    private RestTemplate restTemplate;
-    
-    @Value("${gateway.admin.url:http://localhost:9090}")
-    private String adminUrl;
-    
-    @Value("${gateway.id:gateway-1}")
-    private String gatewayId;
     
     /**
      * Periodically sync health status to Admin (every 10 seconds) - BATCH MODE

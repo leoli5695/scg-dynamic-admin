@@ -27,8 +27,11 @@ public class HybridHealthChecker {
     @Autowired
     private RestTemplate restTemplate;
 
+    @Autowired
+    private AdminServiceDiscovery adminServiceDiscovery;
+
     @Value("${gateway.admin.url:http://localhost:9090}")
-    private String adminUrl;
+    private String fallbackAdminUrl;
 
     @Value("${gateway.id:gateway-1}")
     private String gatewayId;
@@ -249,6 +252,8 @@ public class HybridHealthChecker {
      * Push a single batch to admin.
      */
     private void pushSingleBatch(List<InstanceHealth> batch) {
+        String adminUrl = adminServiceDiscovery.getAdminUrl();
+
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("X-Gateway-Id", gatewayId);
