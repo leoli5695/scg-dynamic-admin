@@ -51,9 +51,10 @@ Routes define how incoming requests are forwarded to backend services.
 
 | Scheme | Description | Example |
 |--------|-------------|---------|
-| `lb://` | Nacos service discovery | `lb://user-service` |
-| `static://` | Static configuration | `static://backend-service` |
-| `http://` | Direct HTTP endpoint | `http://localhost:8080` |
+| `lb://` | Dynamic service discovery via Nacos/Consul | `lb://user-service` |
+| `static://` | Static service discovery (custom protocol) | `static://backend-service` |
+
+> Note: `http://` is supported natively by Spring Cloud Gateway (not a custom feature of this project).
 
 ### 1.4 API Endpoints
 
