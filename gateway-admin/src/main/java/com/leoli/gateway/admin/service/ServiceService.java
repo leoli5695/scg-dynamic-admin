@@ -376,6 +376,10 @@ public class ServiceService {
       try {
         ServiceDefinition service = objectMapper.readValue(entity.getMetadata(), ServiceDefinition.class);
         if (service != null) {
+          // Merge description from entity if not in JSON (for backward compatibility)
+          if (service.getDescription() == null && entity.getDescription() != null) {
+            service.setDescription(entity.getDescription());
+          }
           return service;
         }
       } catch (Exception e) {
@@ -386,6 +390,7 @@ public class ServiceService {
     // Fallback: create minimal definition
     ServiceDefinition service = new ServiceDefinition();
     service.setName(entity.getServiceName());
+    service.setDescription(entity.getDescription());
     return service;
   }
 
