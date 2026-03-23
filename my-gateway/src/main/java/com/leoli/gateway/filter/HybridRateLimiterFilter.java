@@ -184,7 +184,8 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
         }
 
         RateLimitConfig config = new RateLimitConfig();
-        config.enabled = getBooleanValue(configMap, "enabled", false);
+        // If config exists, enable by default (strategy itself is already enabled)
+        config.enabled = getBooleanValue(configMap, "enabled", true);
         config.qps = getIntValue(configMap, "qps", 100);
         config.burstCapacity = getIntValue(configMap, "burstCapacity", config.qps * 2);
         config.windowSizeMs = getWindowSizeMs(configMap);

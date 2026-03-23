@@ -122,13 +122,18 @@ public class ServiceService {
     log.info("Service cached in memory: {}", serviceName);
 
     // 3. Push to Nacos (per-service format using service_id UUID)
-    // Note: Nacos config contains the original service object (with description field)
-    // But we only use it for gateway runtime, not for persistence
+    // Note: description is NOT pushed to Nacos, only stored in database
     String serviceDataId = SERVICE_PREFIX + entity.getServiceId();
-    
-    // Set serviceId in ServiceDefinition for Nacos config (used by gateway's ServiceManager)
-    service.setServiceId(entity.getServiceId());
-    configCenterService.publishConfig(serviceDataId, service);
+
+    // Create a copy without description for Nacos (gateway doesn't need it)
+    ServiceDefinition nacosConfig = new ServiceDefinition();
+    nacosConfig.setName(service.getName());
+    nacosConfig.setServiceId(entity.getServiceId());
+    nacosConfig.setLoadBalancer(service.getLoadBalancer());
+    nacosConfig.setInstances(service.getInstances());
+    // description intentionally NOT included
+
+    configCenterService.publishConfig(serviceDataId, nacosConfig);
     log.info("Service pushed to Nacos: {}", serviceDataId);
 
     // 4. Update services index
@@ -175,22 +180,15 @@ public class ServiceService {
     log.info("Service updated in cache: {}", serviceName);
 
     // 3. Push to Nacos (overwrite per-service key using service_id UUID)
-    // Note: description is NOT pushed to Nacos, it's only stored in database
     String serviceDataId = SERVICE_PREFIX + entity.getServiceId();
     
     // First remove old config (in case it was double-serialized), then publish new one
     configCenterService.removeConfig(serviceDataId);
     log.info("Removed old config from Nacos: {}", serviceDataId);
     
-    // Create a copy without description for Nacos (gateway doesn't need it)
-    ServiceDefinition nacosConfig = new ServiceDefinition();
-    nacosConfig.setName(service.getName());
-    nacosConfig.setServiceId(entity.getServiceId());
-    nacosConfig.setLoadBalancer(service.getLoadBalancer());
-    nacosConfig.setInstances(service.getInstances());
-    // description intentionally NOT set
-    
-    configCenterService.publishConfig(serviceDataId, nacosConfig);
+    // Set serviceId in ServiceDefinition for Nacos config (used by gateway's ServiceManager)
+    service.setServiceId(entity.getServiceId());
+    configCenterService.publishConfig(serviceDataId, service);  // ✅ Pass object directly
     log.info("Service updated in Nacos: {}", serviceDataId);
 
     log.info("Service updated successfully: {} (Database + Cache + Nacos)", serviceName);
@@ -383,6 +381,10 @@ public class ServiceService {
       try {
         ServiceDefinition service = objectMapper.readValue(entity.getMetadata(), ServiceDefinition.class);
         if (service != null) {
+          // Merge description from entity if not in JSON (for backward compatibility)
+          if (service.getDescription() == null && entity.getDescription() != null) {
+            service.setDescription(entity.getDescription());
+          }
           return service;
         }
       } catch (Exception e) {
@@ -393,6 +395,7 @@ public class ServiceService {
     // Fallback: create minimal definition
     ServiceDefinition service = new ServiceDefinition();
     service.setName(entity.getServiceName());
+    service.setDescription(entity.getDescription());
     return service;
   }
 

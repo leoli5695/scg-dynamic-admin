@@ -63,6 +63,9 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
 
         String routeId = route.getId();
 
+        // Debug: log route metadata
+        log.info("MultiServiceFilter - Route: {}, metadata: {}", routeId, route.getMetadata());
+
         // Try to get multi-service config from route metadata
         MultiServiceConfig config = extractMultiServiceConfig(route);
         if (config == null || !config.isMultiService()) {
@@ -238,6 +241,7 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
 
     /**
      * Select service version by weight using smooth weighted round-robin.
+     * Uses serviceId as unique identifier when version is null.
      */
     private String selectByWeight(String routeId, MultiServiceConfig config) {
         List<MultiServiceConfig.ServiceBinding> enabledServices = config.getEnabledServices();
@@ -246,56 +250,102 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
         }
 
         if (enabledServices.size() == 1) {
-            return enabledServices.get(0).getVersion();
+            // Return version if present, otherwise return serviceId
+            MultiServiceConfig.ServiceBinding binding = enabledServices.get(0);
+            return binding.getVersion() != null ? binding.getVersion() : binding.getServiceId();
         }
 
         // Smooth weighted round-robin (Nginx style)
         Map<String, Double> routeWeights = smoothWeightState.computeIfAbsent(routeId, k -> new ConcurrentHashMap<>());
 
         // Initialize weights if not exists
+        // Use version if present, otherwise use serviceId as unique identifier
         for (MultiServiceConfig.ServiceBinding binding : enabledServices) {
-            routeWeights.putIfAbsent(binding.getVersion(), 0.0);
+            String key = getBindingKey(binding);
+            routeWeights.putIfAbsent(key, 0.0);
         }
 
         // Calculate total weight and add to current weights
         double totalWeight = 0;
         for (MultiServiceConfig.ServiceBinding binding : enabledServices) {
             totalWeight += binding.getWeight();
-            routeWeights.put(binding.getVersion(),
-                    routeWeights.getOrDefault(binding.getVersion(), 0.0) + binding.getWeight());
+            String key = getBindingKey(binding);
+            routeWeights.put(key, routeWeights.getOrDefault(key, 0.0) + binding.getWeight());
         }
 
         // Find max current weight
-        String selectedVersion = null;
+        String selectedKey = null;
         double maxCurrentWeight = -1;
 
         for (MultiServiceConfig.ServiceBinding binding : enabledServices) {
-            double currentWeight = routeWeights.getOrDefault(binding.getVersion(), 0.0);
+            String key = getBindingKey(binding);
+            double currentWeight = routeWeights.getOrDefault(key, 0.0);
             if (currentWeight > maxCurrentWeight) {
                 maxCurrentWeight = currentWeight;
-                selectedVersion = binding.getVersion();
+                selectedKey = key;
             }
         }
 
         // Subtract total weight from selected
-        if (selectedVersion != null) {
-            routeWeights.put(selectedVersion, routeWeights.get(selectedVersion) - totalWeight);
+        if (selectedKey != null) {
+            routeWeights.put(selectedKey, routeWeights.get(selectedKey) - totalWeight);
+            // Return the version if present, otherwise return the key (which is serviceId)
+            MultiServiceConfig.ServiceBinding selectedBinding = getBindingByKey(config, selectedKey);
+            if (selectedBinding != null) {
+                return selectedBinding.getVersion() != null ? selectedBinding.getVersion() : selectedKey;
+            }
         }
 
-        return selectedVersion;
+        return selectedKey;
+    }
+
+    /**
+     * Get unique key for a service binding.
+     * Uses version if present, otherwise uses serviceId.
+     */
+    private String getBindingKey(MultiServiceConfig.ServiceBinding binding) {
+        return binding.getVersion() != null ? binding.getVersion() : binding.getServiceId();
+    }
+
+    /**
+     * Get service binding by key (version or serviceId).
+     */
+    private MultiServiceConfig.ServiceBinding getBindingByKey(MultiServiceConfig config, String key) {
+        if (config.getServices() == null) {
+            return null;
+        }
+
+        return config.getServices().stream()
+                .filter(MultiServiceConfig.ServiceBinding::isEnabled)
+                .filter(s -> key.equals(s.getVersion()) || key.equals(s.getServiceId()))
+                .findFirst()
+                .orElse(null);
     }
 
     /**
      * Get service binding by version.
+     * Also supports matching by serviceId when version is null.
      */
     private MultiServiceConfig.ServiceBinding getServiceBindingByVersion(MultiServiceConfig config, String version) {
         if (version == null || config.getServices() == null) {
             return null;
         }
 
-        return config.getServices().stream()
+        // First try to match by version
+        MultiServiceConfig.ServiceBinding binding = config.getServices().stream()
                 .filter(MultiServiceConfig.ServiceBinding::isEnabled)
                 .filter(s -> version.equals(s.getVersion()))
+                .findFirst()
+                .orElse(null);
+
+        if (binding != null) {
+            return binding;
+        }
+
+        // If no match by version, try to match by serviceId (for cases where version is null)
+        return config.getServices().stream()
+                .filter(MultiServiceConfig.ServiceBinding::isEnabled)
+                .filter(s -> version.equals(s.getServiceId()))
                 .findFirst()
                 .orElse(null);
     }

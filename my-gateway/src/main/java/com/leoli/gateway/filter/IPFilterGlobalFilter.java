@@ -441,9 +441,9 @@ public class IPFilterGlobalFilter implements GlobalFilter, Ordered {
         if (ipFilterConfig != null && !ipFilterConfig.isEmpty()) {
             String mode = getStringValue(ipFilterConfig, "mode", "blacklist");
             List<String> ipList = getStringListValue(ipFilterConfig, "ipList");
-            Boolean enabled = getBooleanValue(ipFilterConfig, "enabled", false);
-
-            if (Boolean.TRUE.equals(enabled) && ipList != null && !ipList.isEmpty()) {
+            
+            // IP list is configured, apply filter
+            if (ipList != null && !ipList.isEmpty()) {
                 boolean ipInRange = isIPInRange(clientIp, ipList);
 
                 if ("blacklist".equals(mode)) {

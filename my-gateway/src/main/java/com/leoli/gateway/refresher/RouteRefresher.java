@@ -1,6 +1,7 @@
 package com.leoli.gateway.refresher;
 
 import com.leoli.gateway.manager.RouteManager;
+import com.leoli.gateway.model.MultiServiceConfig;
 import com.leoli.gateway.route.DynamicRouteDefinitionLocator;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -14,8 +15,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -279,9 +282,93 @@ public class RouteRefresher {
 
     /**
      * Parse RouteDefinition from JSON.
+     * Also extracts multi-service config and stores in metadata.
      */
+    @SuppressWarnings("unchecked")
     private RouteDefinition parseRoute(String json) throws Exception {
-        return objectMapper.readValue(json, RouteDefinition.class);
+        // First parse as map to extract all fields
+        Map<String, Object> routeMap = objectMapper.readValue(json, Map.class);
+        
+        // Parse as standard RouteDefinition
+        RouteDefinition route = objectMapper.readValue(json, RouteDefinition.class);
+        
+        // Extract multi-service config and store in metadata
+        if (routeMap.containsKey("services") || routeMap.containsKey("mode")) {
+            try {
+                MultiServiceConfig multiConfig = new MultiServiceConfig();
+                
+                // Parse mode
+                if (routeMap.containsKey("mode")) {
+                    String modeStr = (String) routeMap.get("mode");
+                    multiConfig.setMode(MultiServiceConfig.RoutingMode.valueOf(modeStr));
+                }
+                
+                // Parse serviceId (for single mode)
+                if (routeMap.containsKey("serviceId")) {
+                    multiConfig.setServiceId((String) routeMap.get("serviceId"));
+                }
+                
+                // Parse services list
+                if (routeMap.containsKey("services")) {
+                    List<Map<String, Object>> servicesList = (List<Map<String, Object>>) routeMap.get("services");
+                    List<MultiServiceConfig.ServiceBinding> bindings = new ArrayList<>();
+                    
+                    for (Map<String, Object> svc : servicesList) {
+                        MultiServiceConfig.ServiceBinding binding = new MultiServiceConfig.ServiceBinding();
+                        binding.setServiceId((String) svc.get("serviceId"));
+                        binding.setServiceName((String) svc.get("serviceName"));
+                        if (svc.get("weight") != null) {
+                            binding.setWeight(((Number) svc.get("weight")).intValue());
+                        }
+                        binding.setVersion((String) svc.get("version"));
+                        if (svc.get("enabled") != null) {
+                            binding.setEnabled((Boolean) svc.get("enabled"));
+                        }
+                        bindings.add(binding);
+                    }
+                    multiConfig.setServices(bindings);
+                }
+                
+                // Parse gray rules if present and not null
+                if (routeMap.containsKey("grayRules") && routeMap.get("grayRules") != null) {
+                    Map<String, Object> grayRulesMap = (Map<String, Object>) routeMap.get("grayRules");
+                    MultiServiceConfig.GrayRuleConfig grayConfig = new MultiServiceConfig.GrayRuleConfig();
+                    if (grayRulesMap.get("enabled") != null) {
+                        grayConfig.setEnabled((Boolean) grayRulesMap.get("enabled"));
+                    }
+
+                    if (grayRulesMap.containsKey("rules") && grayRulesMap.get("rules") != null) {
+                        List<Map<String, Object>> rulesList = (List<Map<String, Object>>) grayRulesMap.get("rules");
+                        List<MultiServiceConfig.GrayRule> rules = new ArrayList<>();
+                        for (Map<String, Object> rule : rulesList) {
+                            MultiServiceConfig.GrayRule grayRule = new MultiServiceConfig.GrayRule();
+                            grayRule.setType((String) rule.get("type"));
+                            grayRule.setName((String) rule.get("name"));
+                            grayRule.setValue((String) rule.get("value"));
+                            grayRule.setTargetVersion((String) rule.get("targetVersion"));
+                            rules.add(grayRule);
+                        }
+                        grayConfig.setRules(rules);
+                    }
+                    multiConfig.setGrayRules(grayConfig);
+                }
+                
+                // Store in metadata
+                if (route.getMetadata() == null) {
+                    route.setMetadata(new HashMap<>());
+                }
+                route.getMetadata().put(MultiServiceConfig.METADATA_KEY, multiConfig);
+                
+                log.debug("Parsed multi-service config for route {}: mode={}, services={}", 
+                        route.getId(), multiConfig.getMode(), 
+                        multiConfig.getServices() != null ? multiConfig.getServices().size() : 0);
+                
+            } catch (Exception e) {
+                log.warn("Failed to parse multi-service config for route: {}", route.getId(), e);
+            }
+        }
+        
+        return route;
     }
 
     /**

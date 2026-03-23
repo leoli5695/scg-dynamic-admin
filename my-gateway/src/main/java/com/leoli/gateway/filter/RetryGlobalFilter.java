@@ -76,6 +76,10 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
                     log.info("Retrying request for route {}, attempt {}/{}",
                             RouteUtils.getRouteId(exchange), attempt + 1, config.maxAttempts);
 
+                    // Clear the selected instance URL so load balancer can choose a new one
+                    exchange.getAttributes().remove(org.springframework.cloud.gateway.support.ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR);
+                    exchange.getAttributes().remove("selected_instance");
+
                     // Wait before retry
                     return Mono.delay(java.time.Duration.ofMillis(config.retryIntervalMs))
                             .then(executeWithRetry(exchange, chain, config, attempt + 1));
@@ -181,7 +185,7 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        return -200; // Execute early, before other filters
+        return 10160; // Execute after DiscoveryLoadBalancerFilter (10150) to catch connection errors
     }
 
     /**
@@ -195,7 +199,8 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
         Set<String> retryOnExceptions = Set.of(
                 "java.net.ConnectException",
                 "java.net.SocketTimeoutException",
-                "java.io.IOException"
+                "java.io.IOException",
+                "org.springframework.cloud.gateway.support.NotFoundException"
         );
     }
 }

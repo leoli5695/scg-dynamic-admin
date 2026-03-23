@@ -43,11 +43,6 @@ public class TimeoutGlobalFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        Boolean enabled = (Boolean) config.get("enabled");
-        if (enabled == null || !enabled) {
-            return chain.filter(exchange);
-        }
-
         int connectTimeout = config.get("connectTimeout") != null ? ((Number) config.get("connectTimeout")).intValue() : 5000;
         int responseTimeout = config.get("responseTimeout") != null ? ((Number) config.get("responseTimeout")).intValue() : 30000;
 

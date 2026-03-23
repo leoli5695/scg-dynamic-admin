@@ -168,4 +168,29 @@ public class HelloController {
         return result;
     }
 
+    /**
+     * Delayed response – useful for testing timeout plugins
+     */
+    @GetMapping("/delay")
+    public Map<String, Object> delay(HttpServletRequest request) throws InterruptedException {
+        String delayMs = request.getParameter("ms");
+        long delay = delayMs != null ? Long.parseLong(delayMs) : 5000;
+        
+        log.info("[Timeout Test] Delaying response for {} ms on port {}", delay, port);
+        Thread.sleep(delay);
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("message", "Delayed Response");
+        result.put("service", "demo-service");
+        result.put("port", port);
+        result.put("delayMs", delay);
+        try {
+            result.put("ip", InetAddress.getLocalHost().getHostAddress());
+        } catch (UnknownHostException e) {
+            result.put("ip", "unknown");
+        }
+        
+        return result;
+    }
+
 }

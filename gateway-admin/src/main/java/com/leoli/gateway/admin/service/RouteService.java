@@ -209,9 +209,6 @@ public class RouteService {
     RouteEntity entity = routeRepository.findById(id)
         .orElseThrow(() -> new IllegalArgumentException("Route not found with DB id: " + id));
 
-    // ✅ Note: RouteDefinition no longer has description field
-    // Keep existing description in database unchanged
-    
     // Store configuration as JSON in metadata field for backup
     try {
       String configJson = objectMapper.writeValueAsString(route);
@@ -220,13 +217,32 @@ public class RouteService {
       log.warn("Failed to serialize route config to JSON", e);
     }
 
+    // Update description in database (not pushed to Nacos)
+    entity.setDescription(route.getDescription());
+
     // 1. Update database
     log.info("Updating route in database: {}", entity.getRouteName());
     entity = routeRepository.save(entity);
 
     // 2. Push to Nacos (overwrite per-route key using route_id UUID)
+    // Note: description is NOT pushed to Nacos, only stored in database
     String routeDataId = ROUTE_PREFIX + entity.getRouteId();
-    configCenterService.publishConfig(routeDataId, route);
+
+    // Create a copy without description for Nacos
+    RouteDefinition nacosConfig = new RouteDefinition();
+    nacosConfig.setId(route.getId());
+    nacosConfig.setOrder(route.getOrder());
+    nacosConfig.setUri(route.getUri());
+    nacosConfig.setMode(route.getMode());
+    nacosConfig.setServiceId(route.getServiceId());
+    nacosConfig.setServices(route.getServices());
+    nacosConfig.setGrayRules(route.getGrayRules());
+    nacosConfig.setPredicates(route.getPredicates());
+    nacosConfig.setFilters(route.getFilters());
+    nacosConfig.setMetadata(route.getMetadata());
+    // description intentionally NOT included
+
+    configCenterService.publishConfig(routeDataId, nacosConfig);
     log.info("Route updated in Nacos: {}", routeDataId);
 
     // Note: No need to update index since routeName didn't change

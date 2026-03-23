@@ -99,64 +99,104 @@ public class DiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
                         }
 
                         ServiceInstance retrievedInstance = response.getServer();
-                        URI uri = exchange.getRequest().getURI();
-                        String overrideScheme = retrievedInstance.isSecure() ? "https" : "http";
-                        if (schemePrefix != null) {
-                            overrideScheme = url.getScheme();
-                        }
-
-                        DelegatingServiceInstance serviceInstance =
-                                new DelegatingServiceInstance(retrievedInstance, overrideScheme);
-                        URI requestUrl = reconstructURI(serviceInstance, uri);
-
-                        if (log.isTraceEnabled()) {
-                            log.trace("LoadBalancerClientFilter url chosen: " + requestUrl);
-                        }
-
-                        exchange.getAttributes().put(
-                                ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR, requestUrl);
-
-                        // Store selected instance for health check
-                        exchange.getAttributes().put("selected_instance", retrievedInstance);
-
-                        return chain.filter(exchange)
-                                .doOnSuccess(aVoid -> {
-                                    // Request succeeded - record success
-                                    healthChecker.recordSuccess(
-                                            serviceId,
-                                            retrievedInstance.getHost(),
-                                            retrievedInstance.getPort()
-                                    );
-                                    log.trace("Recorded success for instance {}:{}",
-                                            retrievedInstance.getHost(), retrievedInstance.getPort());
-                                })
-                                .onErrorResume(error -> {
-                                    // Request failed - record failure
-                                    healthChecker.recordFailure(
-                                            serviceId,
-                                            retrievedInstance.getHost(),
-                                            retrievedInstance.getPort()
-                                    );
-                                    
-                                    // Check if this is a single-instance service and instance is unhealthy
-                                    boolean isSingleInstance = staticDiscoveryService.getInstances(serviceId).size() == 1;
-                                    InstanceHealth health = healthChecker.getHealth(serviceId, 
-                                            retrievedInstance.getHost(), retrievedInstance.getPort());
-                                    
-                                    String detailedMessage = buildDetailedErrorMessage(
-                                            serviceId, retrievedInstance, health, isSingleInstance, error);
-                                    
-                                    log.warn("{} - Health: {}, Error: {}", 
-                                            detailedMessage, health.isHealthy() ? "HEALTHY" : "UNHEALTHY", error.getMessage());
-                                    
-                                    // Create NotFoundException with detailed message for better error response
-                                    NotFoundException notFoundException = new NotFoundException(detailedMessage);
-                                    return Mono.error(notFoundException);
-                                });
+                        return executeWithInstanceRetry(exchange, chain, serviceId, retrievedInstance, 
+                                url, schemePrefix, new java.util.HashSet<>());
                     });
         } else {
             return chain.filter(exchange);
         }
+    }
+
+    /**
+     * Execute request with instance-level retry.
+     * If the current instance fails, try other available instances.
+     */
+    private Mono<Void> executeWithInstanceRetry(ServerWebExchange exchange, GatewayFilterChain chain,
+                                                 String serviceId, ServiceInstance instance,
+                                                 URI url, String schemePrefix,
+                                                 java.util.Set<String> triedInstances) {
+        URI uri = exchange.getRequest().getURI();
+        String overrideScheme = instance.isSecure() ? "https" : "http";
+        if (schemePrefix != null) {
+            overrideScheme = url.getScheme();
+        }
+
+        DelegatingServiceInstance serviceInstance =
+                new DelegatingServiceInstance(instance, overrideScheme);
+        URI requestUrl = reconstructURI(serviceInstance, uri);
+
+        if (log.isTraceEnabled()) {
+            log.trace("LoadBalancerClientFilter url chosen: " + requestUrl);
+        }
+
+        exchange.getAttributes().put(
+                ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR, requestUrl);
+
+        // Store selected instance for health check
+        exchange.getAttributes().put("selected_instance", instance);
+
+        // Mark this instance as tried
+        String instanceKey = instance.getHost() + ":" + instance.getPort();
+        triedInstances.add(instanceKey);
+
+        return chain.filter(exchange)
+                .doOnSuccess(aVoid -> {
+                    // Request succeeded - record success
+                    healthChecker.recordSuccess(
+                            serviceId,
+                            instance.getHost(),
+                            instance.getPort()
+                    );
+                    log.trace("Recorded success for instance {}:{}",
+                            instance.getHost(), instance.getPort());
+                })
+                .onErrorResume(error -> {
+                    // Request failed - record failure
+                    healthChecker.recordFailure(
+                            serviceId,
+                            instance.getHost(),
+                            instance.getPort()
+                    );
+
+                    log.warn("Request to instance {}:{} failed: {}",
+                            instance.getHost(), instance.getPort(), error.getMessage());
+
+                    // Try to find another instance that hasn't been tried
+                    List<ServiceInstance> allInstances = staticDiscoveryService.getInstances(serviceId);
+                    ServiceInstance nextInstance = null;
+
+                    for (ServiceInstance inst : allInstances) {
+                        String key = inst.getHost() + ":" + inst.getPort();
+                        if (!triedInstances.contains(key)) {
+                            // Check if instance is healthy (or at least not marked unhealthy)
+                            InstanceHealth health = healthChecker.getHealth(serviceId, inst.getHost(), inst.getPort());
+                            if (health == null || health.isHealthy()) {
+                                nextInstance = inst;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (nextInstance != null) {
+                        log.info("Retrying with different instance {}:{}", nextInstance.getHost(), nextInstance.getPort());
+                        return executeWithInstanceRetry(exchange, chain, serviceId, nextInstance,
+                                url, schemePrefix, triedInstances);
+                    }
+
+                    // No more instances to try - return error
+                    boolean isSingleInstance = allInstances.size() == 1;
+                    InstanceHealth health = healthChecker.getHealth(serviceId,
+                            instance.getHost(), instance.getPort());
+
+                    String detailedMessage = buildDetailedErrorMessage(
+                            serviceId, instance, health, isSingleInstance, error);
+
+                    log.warn("{} - Health: {}, Error: {}",
+                            detailedMessage, health != null && health.isHealthy() ? "HEALTHY" : "UNHEALTHY", error.getMessage());
+
+                    NotFoundException notFoundException = new NotFoundException(detailedMessage);
+                    return Mono.error(notFoundException);
+                });
     }
 
     /**

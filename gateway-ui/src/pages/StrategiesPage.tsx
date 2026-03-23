@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
 import {
   Card, Button, Space, Modal, message, Spin, Tag, Form, Input, Select,
-  Empty, Dropdown, Tooltip, Badge, Divider, Typography, Switch, Radio, InputNumber, Row, Col
+  Empty, Dropdown, Tooltip, Badge, Divider, Typography, Switch, Radio, InputNumber, Row, Col, Collapse
 } from 'antd';
 import {
   PlusOutlined, DeleteOutlined, EditOutlined, MoreOutlined,
   ThunderboltOutlined, StopOutlined, PlayCircleOutlined, GlobalOutlined,
   ApiOutlined, SafetyOutlined, ClockCircleOutlined, KeyOutlined,
   SyncOutlined, FileTextOutlined, SettingOutlined,
-  CloudOutlined, SecurityScanOutlined, NumberOutlined
+  CloudOutlined, SecurityScanOutlined, NumberOutlined, LockOutlined, UserOutlined
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import api from '../utils/api';
@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import './StrategiesPage.premium.css';
 
 const { Text, Title } = Typography;
+const { Panel } = Collapse;
 
 interface StrategyDefinition {
   strategyId: string;
@@ -453,22 +454,231 @@ const StrategiesPage: React.FC = () => {
         );
       case 'AUTH':
         return (
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="authType" label={t('strategy.config.auth_type')} initialValue="JWT">
-                <Select>
-                  <Select.Option value="JWT">JWT</Select.Option>
-                  <Select.Option value="API_KEY">API Key</Select.Option>
-                  <Select.Option value="OAUTH2">OAuth2</Select.Option>
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="secretKey" label={t('strategy.config.secret_key')}>
-                <Input.Password />
-              </Form.Item>
-            </Col>
-          </Row>
+          <>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item name="authType" label={t('strategy.config.auth_type')} initialValue="JWT">
+                  <Select>
+                    <Select.Option value="JWT"><KeyOutlined /> JWT</Select.Option>
+                    <Select.Option value="API_KEY"><ApiOutlined /> API Key</Select.Option>
+                    <Select.Option value="OAUTH2"><GlobalOutlined /> OAuth2</Select.Option>
+                    <Select.Option value="BASIC"><LockOutlined /> Basic Auth</Select.Option>
+                    <Select.Option value="HMAC"><SafetyOutlined /> HMAC Signature</Select.Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+            </Row>
+
+            {/* Dynamic fields based on auth type */}
+            <Form.Item noStyle shouldUpdate>
+              {({ getFieldValue }) => {
+                const authType = getFieldValue('authType');
+
+                switch (authType) {
+                  case 'JWT':
+                    return (
+                      <>
+                        <Row gutter={16}>
+                          <Col span={12}>
+                            <Form.Item name="secretKey" label={t('strategy.config.secret_key')}>
+                              <Input.Password placeholder="your-secret-key" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={12}>
+                            <Form.Item name="jwtAlgorithm" label={t('strategy.config.jwt_algorithm')} initialValue="HS256">
+                              <Select>
+                                <Select.Option value="HS256">HS256</Select.Option>
+                                <Select.Option value="HS512">HS512</Select.Option>
+                                <Select.Option value="RS256">RS256</Select.Option>
+                              </Select>
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                        <Row gutter={16}>
+                          <Col span={12}>
+                            <Form.Item name="jwtIssuer" label={t('strategy.config.jwt_issuer')}>
+                              <Input placeholder="my-app" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={12}>
+                            <Form.Item name="jwtAudience" label={t('strategy.config.jwt_audience')}>
+                              <Input placeholder="my-api" />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                        <Row gutter={16}>
+                          <Col span={12}>
+                            <Form.Item name="jwtClockSkewSeconds" label={t('strategy.config.jwt_clock_skew')} initialValue={60}>
+                              <InputNumber addonAfter="s" min={0} style={{ width: '100%' }} />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                      </>
+                    );
+
+                  case 'API_KEY':
+                    return (
+                      <>
+                        <Row gutter={16}>
+                          <Col span={12}>
+                            <Form.Item name="apiKey" label={t('strategy.config.api_key')}>
+                              <Input.Password placeholder="your-api-key" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={12}>
+                            <Form.Item name="apiKeyHeader" label={t('strategy.config.api_key_header')} initialValue="X-API-Key">
+                              <Input placeholder="X-API-Key" />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                        <Row gutter={16}>
+                          <Col span={12}>
+                            <Form.Item name="apiKeyPrefix" label={t('strategy.config.api_key_prefix')}>
+                              <Input placeholder="sk_live_" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={12}>
+                            <Form.Item name="apiKeyQueryParam" label={t('strategy.config.api_key_query_param')}>
+                              <Input placeholder="api_key" />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                      </>
+                    );
+
+                  case 'OAUTH2':
+                    return (
+                      <>
+                        <Row gutter={16}>
+                          <Col span={12}>
+                            <Form.Item name="clientId" label={t('strategy.config.client_id')}>
+                              <Input placeholder="client-id" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={12}>
+                            <Form.Item name="clientSecret" label={t('strategy.config.client_secret')}>
+                              <Input.Password placeholder="client-secret" />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                        <Row gutter={16}>
+                          <Col span={24}>
+                            <Form.Item name="tokenEndpoint" label={t('strategy.config.token_endpoint')}>
+                              <Input placeholder="https://auth.example.com/oauth/introspect" />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                        <Row gutter={16}>
+                          <Col span={24}>
+                            <Form.Item name="requiredScopes" label={t('strategy.config.required_scopes')}>
+                              <Input placeholder="read, write" />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                      </>
+                    );
+
+                  case 'BASIC':
+                    return (
+                      <>
+                        <Row gutter={16}>
+                          <Col span={12}>
+                            <Form.Item name="basicUsername" label={t('strategy.config.basic_username')}>
+                              <Input prefix={<UserOutlined />} placeholder="admin" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={12}>
+                            <Form.Item name="basicPassword" label={t('strategy.config.basic_password')}>
+                              <Input.Password placeholder="password" />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                        <Row gutter={16}>
+                          <Col span={12}>
+                            <Form.Item name="realm" label={t('strategy.config.realm')}>
+                              <Input placeholder="API Gateway" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={12}>
+                            <Form.Item name="passwordHashAlgorithm" label={t('strategy.config.password_hash')} initialValue="PLAIN">
+                              <Select>
+                                <Select.Option value="PLAIN">Plain Text</Select.Option>
+                                <Select.Option value="MD5">MD5</Select.Option>
+                                <Select.Option value="SHA256">SHA-256</Select.Option>
+                                <Select.Option value="BCRYPT">BCrypt</Select.Option>
+                              </Select>
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                        <Row gutter={16}>
+                          <Col span={24}>
+                            <Form.Item name="basicUsersJson" label={t('strategy.config.basic_users_json')} extra={t('strategy.config.basic_users_json_help')}>
+                              <Input.TextArea rows={3} placeholder='{"user1": "pass1", "user2": "pass2"}' />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                      </>
+                    );
+
+                  case 'HMAC':
+                    return (
+                      <>
+                        <Row gutter={16}>
+                          <Col span={12}>
+                            <Form.Item name="accessKey" label={t('strategy.config.access_key')}>
+                              <Input placeholder="AK123456789" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={12}>
+                            <Form.Item name="secretKey" label={t('strategy.config.secret_key')}>
+                              <Input.Password placeholder="your-secret-key" />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                        <Row gutter={16}>
+                          <Col span={12}>
+                            <Form.Item name="signatureAlgorithm" label={t('strategy.config.signature_algorithm')} initialValue="HMAC-SHA256">
+                              <Select>
+                                <Select.Option value="HMAC-SHA256">HMAC-SHA256</Select.Option>
+                                <Select.Option value="HMAC-SHA512">HMAC-SHA512</Select.Option>
+                                <Select.Option value="HMAC-SHA1">HMAC-SHA1</Select.Option>
+                              </Select>
+                            </Form.Item>
+                          </Col>
+                          <Col span={12}>
+                            <Form.Item name="clockSkewMinutes" label={t('strategy.config.clock_skew_minutes')} initialValue={5}>
+                              <InputNumber addonAfter="min" min={1} style={{ width: '100%' }} />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                        <Row gutter={16}>
+                          <Col span={8}>
+                            <Form.Item name="requireNonce" label={t('strategy.config.require_nonce')} valuePropName="checked" initialValue={true}>
+                              <Switch />
+                            </Form.Item>
+                          </Col>
+                          <Col span={8}>
+                            <Form.Item name="validateContentMd5" label={t('strategy.config.validate_content_md5')} valuePropName="checked" initialValue={false}>
+                              <Switch />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                        <Row gutter={16}>
+                          <Col span={24}>
+                            <Form.Item name="accessKeySecretsJson" label={t('strategy.config.access_key_secrets_json')} extra={t('strategy.config.access_key_secrets_json_help')}>
+                              <Input.TextArea rows={3} placeholder='{"AK1": "secret1", "AK2": "secret2"}' />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                      </>
+                    );
+
+                  default:
+                    return null;
+                }
+              }}
+            </Form.Item>
+          </>
         );
       case 'RETRY':
         return (
@@ -793,142 +1003,288 @@ const StrategiesPage: React.FC = () => {
       </Spin>
 
       {/* Create Modal */}
-      <Modal
-        title={<div className="modal-header"><PlusOutlined className="modal-icon" /><span>{t('strategy.create')}</span></div>}
+      <Modal 
+        title={
+          <div className="modal-header-modern">
+            <div className="modal-title-wrapper">
+              <div className="modal-icon-wrapper">
+                <PlusOutlined />
+              </div>
+              <div className="modal-title-text">
+                <div className="modal-title">{t('strategy.create')}</div>
+                <div className="modal-subtitle">{t('strategy.create_description')}</div>
+              </div>
+            </div>
+          </div>
+        }
         open={createModalVisible}
         onCancel={() => { setCreateModalVisible(false); createForm.resetFields(); }}
         footer={null}
-        width={640}
-        className="strategy-modal"
+        width={720}
+        className="strategy-modal strategy-create-modal"
       >
         <Form form={createForm} layout="vertical" onFinish={handleCreate}>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="strategyName" label={t('strategy.name')} rules={[{ required: true }]}>
-                <Input placeholder={t('strategy.name_placeholder')} />
+          {/* Basic Info Section */}
+          <div className="form-section-modern">
+            <div className="section-header">
+              <ThunderboltOutlined className="section-icon" />
+              <span className="section-title">{t('strategy.basic_info')}</span>
+            </div>
+            <div className="section-content">
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item 
+                    name="strategyName" 
+                    label={t('strategy.name')} 
+                    rules={[{ required: true }]}
+                    extra={t('strategy.name_helper')}
+                  >
+                    <Input placeholder={t('strategy.name_placeholder')} size="large" />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item 
+                    name="strategyType" 
+                    label={t('strategy.type')} 
+                    rules={[{ required: true }]}
+                    extra={t('strategy.type_helper')}
+                  >
+                    <Select placeholder={t('strategy.type_placeholder')} size="large">
+                      {strategyTypeOptions.map(opt => (
+                        <Select.Option key={opt.value} value={opt.value}>
+                          <Space>{opt.icon}{opt.label}</Space>
+                        </Select.Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item 
+                    name="scope" 
+                    label={t('strategy.scope')} 
+                    initialValue="GLOBAL"
+                    extra={t('strategy.scope_helper')}
+                  >
+                    <Radio.Group size="large">
+                      <Radio.Button value="GLOBAL"><GlobalOutlined /> {t('strategy.scope_global')}</Radio.Button>
+                      <Radio.Button value="ROUTE"><ApiOutlined /> {t('strategy.scope_route')}</Radio.Button>
+                    </Radio.Group>
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item noStyle shouldUpdate>
+                    {({ getFieldValue }) => {
+                      const scope = getFieldValue('scope');
+                      if (scope === 'ROUTE') {
+                        return (
+                          <Form.Item 
+                            name="routeId" 
+                            label={t('strategy.route_id')} 
+                            rules={[{ required: true }]}
+                            extra={t('strategy.route_id_helper')}
+                          >
+                            <Input placeholder={t('strategy.route_id_placeholder')} size="large" />
+                          </Form.Item>
+                        );
+                      }
+                      return null;
+                    }}
+                  </Form.Item>
+                </Col>
+              </Row>
+            </div>
+          </div>
+
+          {/* Configuration Section */}
+          <div className="form-section-modern">
+            <div className="section-header">
+              <SettingOutlined className="section-icon" />
+              <span className="section-title">{t('strategy.config')}</span>
+              <span className="section-subtitle">{t('strategy.config_helper')}</span>
+            </div>
+            <div className="section-content">
+              <Form.Item noStyle shouldUpdate>
+                {({ getFieldValue }) => renderConfigFields(getFieldValue('strategyType'), createForm)}
               </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="strategyType" label={t('strategy.type')} rules={[{ required: true }]}>
-                <Select placeholder={t('strategy.type_placeholder')}>
-                  {strategyTypeOptions.map(opt => (
-                    <Select.Option key={opt.value} value={opt.value}>
-                      <Space>{opt.icon}{opt.label}</Space>
-                    </Select.Option>
-                  ))}
-                </Select>
+            </div>
+          </div>
+
+          {/* Advanced Settings Section */}
+          <div className="form-section-modern">
+            <div className="section-header">
+              <SettingOutlined className="section-icon" />
+              <span className="section-title">{t('strategy.advanced_settings')}</span>
+            </div>
+            <div className="section-content">
+              <Row gutter={16}>
+                <Col span={8}>
+                  <Form.Item 
+                    name="priority" 
+                    label={t('strategy.priority')} 
+                    initialValue={100}
+                    extra={t('strategy.priority_helper')}
+                  >
+                    <InputNumber min={1} max={1000} style={{ width: '100%' }} size="large" />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item 
+                    name="enabled" 
+                    label={t('strategy.enabled')} 
+                    valuePropName="checked" 
+                    initialValue={true}
+                  >
+                    <Switch checkedChildren={t('common.enabled')} unCheckedChildren={t('common.disabled')} />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Form.Item 
+                name="description" 
+                label={t('strategy.description_label')}
+                extra={t('strategy.description_helper')}
+              >
+                <Input.TextArea rows={2} size="large" showCount maxLength={500} />
               </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="scope" label={t('strategy.scope')} initialValue="GLOBAL">
-                <Radio.Group>
-                  <Radio.Button value="GLOBAL"><GlobalOutlined /> {t('strategy.scope_global')}</Radio.Button>
-                  <Radio.Button value="ROUTE"><ApiOutlined /> {t('strategy.scope_route')}</Radio.Button>
-                </Radio.Group>
-              </Form.Item>
-            </Col>
-            <Col span={12}>
+            </div>
+          </div>
+
+          {/* Modal Footer */}
+          <div className="modal-footer-modern">
+            <Button onClick={() => setCreateModalVisible(false)} size="large">{t('common.cancel')}</Button>
+            <Button type="primary" htmlType="submit" size="large" icon={<PlusOutlined />}>{t('common.create')}</Button>
+          </div>
+        </Form>
+      </Modal>
+
+      {/* Edit Modal */}
+      <Modal 
+        title={
+          <div className="modal-header-modern">
+            <div className="modal-title-wrapper">
+              <div className="modal-icon-wrapper edit">
+                <EditOutlined />
+              </div>
+              <div className="modal-title-text">
+                <div className="modal-title">{t('strategy.edit')}</div>
+                <div className="modal-subtitle">{t('strategy.edit_description')}</div>
+              </div>
+            </div>
+          </div>
+        }
+        open={editModalVisible}
+        onCancel={() => { setEditModalVisible(false); editForm.resetFields(); setSelectedStrategy(null); }}
+        footer={null}
+        width={720}
+        className="strategy-modal strategy-edit-modal"
+      >
+        <Form form={editForm} layout="vertical" onFinish={handleUpdate}>
+          {/* Basic Info Section */}
+          <div className="form-section-modern">
+            <div className="section-header">
+              <ThunderboltOutlined className="section-icon" />
+              <span className="section-title">{t('strategy.basic_info')}</span>
+            </div>
+            <div className="section-content">
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item 
+                    name="strategyName" 
+                    label={t('strategy.name')} 
+                    rules={[{ required: true }]}
+                    extra={t('strategy.name_helper')}
+                  >
+                    <Input size="large" />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item 
+                    name="scope" 
+                    label={t('strategy.scope')}
+                    extra={t('strategy.scope_helper')}
+                  >
+                    <Radio.Group size="large">
+                      <Radio.Button value="GLOBAL"><GlobalOutlined /> {t('strategy.scope_global')}</Radio.Button>
+                      <Radio.Button value="ROUTE"><ApiOutlined /> {t('strategy.scope_route')}</Radio.Button>
+                    </Radio.Group>
+                  </Form.Item>
+                </Col>
+              </Row>
               <Form.Item noStyle shouldUpdate>
                 {({ getFieldValue }) => {
                   const scope = getFieldValue('scope');
                   if (scope === 'ROUTE') {
                     return (
-                      <Form.Item name="routeId" label={t('strategy.route_id')} rules={[{ required: true }]}>
-                        <Input placeholder={t('strategy.route_id_placeholder')} />
+                      <Form.Item 
+                        name="routeId" 
+                        label={t('strategy.route_id')} 
+                        rules={[{ required: true }]}
+                        extra={t('strategy.route_id_helper')}
+                      >
+                        <Input size="large" />
                       </Form.Item>
                     );
                   }
                   return null;
                 }}
               </Form.Item>
-            </Col>
-          </Row>
-          <Divider plain>{t('strategy.config')}</Divider>
-          <Form.Item noStyle shouldUpdate>
-            {({ getFieldValue }) => renderConfigFields(getFieldValue('strategyType'), createForm)}
-          </Form.Item>
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item name="priority" label={t('strategy.priority')} initialValue={100}>
-                <InputNumber min={1} max={1000} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="enabled" label={t('strategy.enabled')} valuePropName="checked" initialValue={true}>
-                <Switch checkedChildren={t('common.enabled')} unCheckedChildren={t('common.disabled')} />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Form.Item name="description" label={t('strategy.description_label')}>
-            <Input.TextArea rows={2} />
-          </Form.Item>
-          <div className="modal-footer">
-            <Button onClick={() => setCreateModalVisible(false)}>{t('common.cancel')}</Button>
-            <Button type="primary" htmlType="submit">{t('common.create')}</Button>
+            </div>
           </div>
-        </Form>
-      </Modal>
 
-      {/* Edit Modal */}
-      <Modal
-        title={<div className="modal-header"><EditOutlined className="modal-icon" /><span>{t('strategy.edit')}</span></div>}
-        open={editModalVisible}
-        onCancel={() => { setEditModalVisible(false); editForm.resetFields(); setSelectedStrategy(null); }}
-        footer={null}
-        width={640}
-        className="strategy-modal"
-      >
-        <Form form={editForm} layout="vertical" onFinish={handleUpdate}>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="strategyName" label={t('strategy.name')} rules={[{ required: true }]}>
-                <Input />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="scope" label={t('strategy.scope')}>
-                <Radio.Group>
-                  <Radio.Button value="GLOBAL"><GlobalOutlined /> {t('strategy.scope_global')}</Radio.Button>
-                  <Radio.Button value="ROUTE"><ApiOutlined /> {t('strategy.scope_route')}</Radio.Button>
-                </Radio.Group>
-              </Form.Item>
-            </Col>
-          </Row>
-          <Form.Item noStyle shouldUpdate>
-            {({ getFieldValue }) => {
-              const scope = getFieldValue('scope');
-              if (scope === 'ROUTE') {
-                return (
-                  <Form.Item name="routeId" label={t('strategy.route_id')} rules={[{ required: true }]}>
-                    <Input />
+          {/* Configuration Section */}
+          <div className="form-section-modern">
+            <div className="section-header">
+              <SettingOutlined className="section-icon" />
+              <span className="section-title">{t('strategy.config')}</span>
+              <span className="section-subtitle">{t('strategy.config_helper')}</span>
+            </div>
+            <div className="section-content">
+              {selectedStrategy && renderConfigFields(selectedStrategy.strategyType, editForm)}
+            </div>
+          </div>
+
+          {/* Advanced Settings Section */}
+          <div className="form-section-modern">
+            <div className="section-header">
+              <SettingOutlined className="section-icon" />
+              <span className="section-title">{t('strategy.advanced_settings')}</span>
+            </div>
+            <div className="section-content">
+              <Row gutter={16}>
+                <Col span={8}>
+                  <Form.Item 
+                    name="priority" 
+                    label={t('strategy.priority')}
+                    extra={t('strategy.priority_helper')}
+                  >
+                    <InputNumber min={1} max={1000} style={{ width: '100%' }} size="large" />
                   </Form.Item>
-                );
-              }
-              return null;
-            }}
-          </Form.Item>
-          <Divider plain>{t('strategy.config')}</Divider>
-          {selectedStrategy && renderConfigFields(selectedStrategy.strategyType, editForm)}
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item name="priority" label={t('strategy.priority')}>
-                <InputNumber min={1} max={1000} style={{ width: '100%' }} />
+                </Col>
+                <Col span={8}>
+                  <Form.Item 
+                    name="enabled" 
+                    label={t('strategy.enabled')} 
+                    valuePropName="checked"
+                  >
+                    <Switch checkedChildren={t('common.enabled')} unCheckedChildren={t('common.disabled')} />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Form.Item 
+                name="description" 
+                label={t('strategy.description_label')}
+                extra={t('strategy.description_helper')}
+              >
+                <Input.TextArea rows={2} size="large" showCount maxLength={500} />
               </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="enabled" label={t('strategy.enabled')} valuePropName="checked">
-                <Switch checkedChildren={t('common.enabled')} unCheckedChildren={t('common.disabled')} />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Form.Item name="description" label={t('strategy.description_label')}>
-            <Input.TextArea rows={2} />
-          </Form.Item>
-          <div className="modal-footer">
-            <Button onClick={() => setEditModalVisible(false)}>{t('common.cancel')}</Button>
-            <Button type="primary" htmlType="submit">{t('common.update')}</Button>
+            </div>
+          </div>
+
+          {/* Modal Footer */}
+          <div className="modal-footer-modern">
+            <Button onClick={() => setEditModalVisible(false)} size="large">{t('common.cancel')}</Button>
+            <Button type="primary" htmlType="submit" size="large" icon={<EditOutlined />}>{t('common.update')}</Button>
           </div>
         </Form>
       </Modal>

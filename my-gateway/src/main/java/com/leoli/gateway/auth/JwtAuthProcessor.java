@@ -1,9 +1,9 @@
 package com.leoli.gateway.auth;
 
 import com.leoli.gateway.model.AuthConfig;
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
+import io.jsonwebtoken.security.SignatureException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
@@ -11,10 +11,24 @@ import reactor.core.publisher.Mono;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyFactory;
+import java.security.PublicKey;
+import java.security.spec.X509EncodedKeySpec;
+import java.util.Base64;
+import java.util.Date;
+import java.util.Set;
 
 /**
  * JWT Authentication Processor.
- * Validates JWT tokens using HS256 algorithm.
+ * Validates JWT tokens with comprehensive security features.
+ * 
+ * Features:
+ * - HS256/HS512 symmetric key validation
+ * - RS256 asymmetric key validation
+ * - Issuer validation
+ * - Audience validation
+ * - Custom clock skew tolerance
+ * - Token claims extraction
  *
  * @author leoli
  */
@@ -40,46 +54,148 @@ public class JwtAuthProcessor extends AbstractAuthProcessor {
         String token = extractBearerToken(exchange);
 
         if (token == null || token.isEmpty()) {
-            logFailure(routeId, "Missing or empty JWT token");
-            return writeUnauthorizedResponse(exchange, "Missing or invalid Authorization header");
+            // Try to get token from query parameter as fallback
+            token = exchange.getRequest().getQueryParams().getFirst("token");
+            if (token == null || token.isEmpty()) {
+                logFailure(routeId, "Missing JWT token");
+                return writeUnauthorizedResponse(exchange, "Missing or invalid Authorization header");
+            }
         }
 
         // Validate JWT token
         try {
-            SecretKey key = getSigningKey(config.getSecretKey());
+            Claims claims = validateToken(token, config);
 
-            Claims claims = Jwts.parser()
-                    .verifyWith(key)
-                    .build()
-                    .parseSignedClaims(token)
-                    .getPayload();
-
-            // Optional: Add claims to exchange attributes for downstream use
+            // Add claims to exchange attributes for downstream use
             exchange.getAttributes().put("jwt_claims", claims);
             exchange.getAttributes().put("jwt_subject", claims.getSubject());
+            if (claims.get("roles") != null) {
+                exchange.getAttributes().put("jwt_roles", claims.get("roles"));
+            }
+            if (claims.get("permissions") != null) {
+                exchange.getAttributes().put("jwt_permissions", claims.get("permissions"));
+            }
 
             logSuccess(routeId);
             return Mono.empty(); // Continue the filter chain
 
+        } catch (ExpiredJwtException ex) {
+            logFailure(routeId, "JWT token expired: " + ex.getMessage());
+            return writeUnauthorizedResponse(exchange, "JWT token has expired");
+        } catch (UnsupportedJwtException ex) {
+            logFailure(routeId, "Unsupported JWT: " + ex.getMessage());
+            return writeUnauthorizedResponse(exchange, "Unsupported JWT token format");
+        } catch (MalformedJwtException ex) {
+            logFailure(routeId, "Malformed JWT: " + ex.getMessage());
+            return writeUnauthorizedResponse(exchange, "Malformed JWT token");
+        } catch (SignatureException ex) {
+            logFailure(routeId, "Invalid JWT signature: " + ex.getMessage());
+            return writeUnauthorizedResponse(exchange, "Invalid JWT signature");
+        } catch (IllegalArgumentException ex) {
+            logFailure(routeId, "Invalid JWT: " + ex.getMessage());
+            return writeUnauthorizedResponse(exchange, "Invalid JWT token");
         } catch (Exception ex) {
-            logFailure(routeId, ex.getMessage());
-            return writeUnauthorizedResponse(exchange, "Invalid JWT token: " + ex.getMessage());
+            logFailure(routeId, "JWT validation error: " + ex.getMessage());
+            return writeUnauthorizedResponse(exchange, "JWT validation failed: " + ex.getMessage());
         }
     }
 
     /**
-     * Get signing key from secret string.
-     * Ensures the key is at least 32 bytes for HS256.
+     * Validate JWT token and return claims.
      */
-    private SecretKey getSigningKey(String secret) {
+    private Claims validateToken(String token, AuthConfig config) throws Exception {
+        String algorithm = config.getJwtAlgorithm() != null ? config.getJwtAlgorithm().toUpperCase() : "HS256";
+        
+        JwtParserBuilder parserBuilder = Jwts.parser();
+        
+        switch (algorithm) {
+            case "HS256":
+            case "HS512":
+                SecretKey key = getSigningKey(config.getSecretKey(), algorithm);
+                parserBuilder.verifyWith(key);
+                break;
+            case "RS256":
+                PublicKey publicKey = getPublicKey(config.getJwtPublicKey());
+                parserBuilder.verifyWith(publicKey);
+                break;
+            default:
+                // Default to HS256
+                SecretKey defaultKey = getSigningKey(config.getSecretKey(), "HS256");
+                parserBuilder.verifyWith(defaultKey);
+        }
+
+        // Configure clock skew tolerance
+        long clockSkewSeconds = config.getJwtClockSkewSeconds() > 0 ? config.getJwtClockSkewSeconds() : 60;
+        parserBuilder.clockSkewSeconds(clockSkewSeconds);
+
+        // Validate issuer if configured
+        if (config.getJwtIssuer() != null && !config.getJwtIssuer().isEmpty()) {
+            parserBuilder.requireIssuer(config.getJwtIssuer());
+        }
+
+        // Validate audience if configured
+        if (config.getJwtAudience() != null && !config.getJwtAudience().isEmpty()) {
+            parserBuilder.requireAudience(config.getJwtAudience());
+        }
+
+        // Parse and validate
+        Jwt<?, Claims> jwt = parserBuilder.build().parseSignedClaims(token);
+        Claims claims = jwt.getPayload();
+
+        // Additional custom validations
+        validateCustomClaims(claims, config);
+
+        return claims;
+    }
+
+    /**
+     * Get signing key from secret string for HMAC algorithms.
+     */
+    private SecretKey getSigningKey(String secret, String algorithm) {
         if (secret == null || secret.isEmpty()) {
             throw new IllegalArgumentException("JWT secret key cannot be empty");
         }
 
-        // Ensure the secret is at least 32 bytes
-        String paddedSecret = secret.length() < 32 ?
-                secret + "0".repeat(32 - secret.length()) : secret;
+        // Ensure minimum key length for the algorithm
+        int minLength = "HS512".equals(algorithm) ? 64 : 32;
+        String paddedSecret = secret.length() < minLength ?
+                secret + "0".repeat(minLength - secret.length()) : secret;
 
         return Keys.hmacShaKeyFor(paddedSecret.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * Get public key for RS256 validation.
+     */
+    private PublicKey getPublicKey(String publicKeyPem) throws Exception {
+        if (publicKeyPem == null || publicKeyPem.isEmpty()) {
+            throw new IllegalArgumentException("JWT public key cannot be empty for RS256");
+        }
+
+        // Remove PEM headers if present
+        String publicKeyContent = publicKeyPem
+                .replace("-----BEGIN PUBLIC KEY-----", "")
+                .replace("-----END PUBLIC KEY-----", "")
+                .replaceAll("\\s+", "");
+
+        byte[] keyBytes = Base64.getDecoder().decode(publicKeyContent);
+        X509EncodedKeySpec spec = new X509EncodedKeySpec(keyBytes);
+        KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+        return keyFactory.generatePublic(spec);
+    }
+
+    /**
+     * Validate custom claims if configured.
+     */
+    private void validateCustomClaims(Claims claims, AuthConfig config) {
+        // Check token expiration explicitly for additional logging
+        Date expiration = claims.getExpiration();
+        if (expiration != null && expiration.before(new Date())) {
+            throw new ExpiredJwtException(null, claims, "Token expired at: " + expiration);
+        }
+
+        // Log token info for debugging
+        log.debug("JWT validated - Subject: {}, Issuer: {}, Expires: {}", 
+                claims.getSubject(), claims.getIssuer(), expiration);
     }
 }
