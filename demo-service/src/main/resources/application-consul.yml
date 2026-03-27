@@ -1,0 +1,44 @@
+# Consul Only Configuration
+server:
+  port: 9000
+
+spring:
+  application:
+    name: demo-service
+  cloud:
+    # Nacos 配置 - 完全禁用
+    nacos:
+      discovery:
+        enabled: false
+    
+    # Consul 配置
+    consul:
+      enabled: true
+      host: 127.0.0.1
+      port: 8500
+      scheme: http
+      discovery:
+        enabled: true
+        register: true
+        health-check-path: /actuator/health
+        health-check-interval: 10s
+        health-check-timeout: 5s
+        health-check-critical-timeout: 1m
+        instance-id: ${spring.application.name}-${server.port}-${random.value}
+        service-name: ${spring.application.name}
+        prefer-ip-address: true
+        ip-address: ${HOSTNAME}  # 使用容器名作为注册 IP，让 Consul 能访问健康检查
+        port: ${server.port}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    org.springframework.cloud.consul: INFO

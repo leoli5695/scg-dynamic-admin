@@ -1,9 +1,9 @@
 import axios from 'axios';
 
-// Create axios instance with baseURL for gateway-admin backend
+// Create axios instance - use empty baseURL to leverage Vite proxy in development
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:9090',
-  timeout: 10000,
+  baseURL: import.meta.env.VITE_API_BASE_URL || '',
+  timeout: 5 * 60 * 1000, // 5 minutes timeout for AI analysis
   headers: {
     'Content-Type': 'application/json',
   },

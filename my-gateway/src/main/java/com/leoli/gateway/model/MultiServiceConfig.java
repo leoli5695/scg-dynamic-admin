@@ -19,6 +19,11 @@ import java.util.List;
 public class MultiServiceConfig {
 
     /**
+     * Metadata key for storing in RouteDefinition.
+     */
+    public static final String METADATA_KEY = "multiServiceConfig";
+
+    /**
      * Routing mode: SINGLE or MULTI.
      */
     private RoutingMode mode = RoutingMode.SINGLE;
@@ -27,6 +32,12 @@ public class MultiServiceConfig {
      * Single service ID (for SINGLE mode).
      */
     private String serviceId;
+
+    /**
+     * Service type for single mode (STATIC or DISCOVERY).
+     * Defaults to STATIC for backward compatibility.
+     */
+    private ServiceBindingType serviceType = ServiceBindingType.STATIC;
 
     /**
      * Service bindings for multi-service routing.
@@ -42,22 +53,61 @@ public class MultiServiceConfig {
      * Routing mode enumeration.
      */
     public enum RoutingMode {
+        /**
+         * Single service mode - route to one service.
+         */
         SINGLE,
+
+        /**
+         * Multi-service mode - route to multiple services with weight/gray rules.
+         */
         MULTI
     }
 
     /**
-     * Service binding with weight and version.
+     * Service binding with weight, version, and type.
      */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
     public static class ServiceBinding {
+        /**
+         * Service ID (UUID or service name).
+         */
         private String serviceId;
+
+        /**
+         * Service display name.
+         */
         private String serviceName;
+
+        /**
+         * Weight for load balancing (1-100).
+         */
         private int weight = 100;
+
+        /**
+         * Service version for gray release.
+         */
         private String version;
+
+        /**
+         * Whether this binding is enabled.
+         */
         private boolean enabled = true;
+
+        /**
+         * Service binding type: STATIC or DISCOVERY.
+         * Defaults to STATIC for backward compatibility.
+         */
+        private ServiceBindingType type = ServiceBindingType.STATIC;
+
+        /**
+         * Convenience constructor without type (defaults to STATIC).
+         */
+        public ServiceBinding(String serviceId, String serviceName, int weight, String version, boolean enabled) {
+            this(serviceId, serviceName, weight, version, enabled, ServiceBindingType.STATIC);
+        }
     }
 
     /**
@@ -100,9 +150,4 @@ public class MultiServiceConfig {
                 .filter(ServiceBinding::isEnabled)
                 .collect(java.util.stream.Collectors.toList());
     }
-
-    /**
-     * Metadata key for storing in RouteDefinition.
-     */
-    public static final String METADATA_KEY = "multiServiceConfig";
 }

@@ -1,0 +1,6 @@
+# Consul Only Profile - 只注册到 Consul
+spring:
+  cloud:
+    nacos:
+      discovery:
+        enabled: false

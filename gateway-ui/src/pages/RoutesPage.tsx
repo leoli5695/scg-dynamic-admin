@@ -21,6 +21,9 @@ const { TextArea } = Input;
 // Routing mode enum - matches backend
 type RoutingMode = 'SINGLE' | 'MULTI';
 
+// Service binding type - matches backend ServiceBindingType enum
+type ServiceBindingType = 'STATIC' | 'DISCOVERY';
+
 // Route service binding - matches backend RouteServiceBinding
 interface RouteServiceBinding {
   serviceId: string;
@@ -29,6 +32,7 @@ interface RouteServiceBinding {
   version?: string;
   enabled: boolean;
   description?: string;
+  type?: ServiceBindingType; // STATIC or DISCOVERY, defaults to STATIC
 }
 
 // Gray rule - matches backend GrayRule
@@ -148,12 +152,25 @@ const FilterItem: React.FC<{
 }> = ({ form, restField, name, t, onRemove }) => {
   const [filterType, setFilterType] = useState<string>('');
 
+  // Filters that need name:value input (colon separated)
   const needsKeyValueInput = [
     'AddRequestHeader', 'SetRequestHeader', 'AddRequestParameter',
     'AddResponseHeader', 'SetResponseHeader'
   ];
 
+  // Filters that only need a single name input
+  const needsNameOnly = [
+    'RemoveRequestHeader', 'RemoveResponseHeader', 'RemoveRequestParameter'
+  ];
+
+  // Special handling for RewritePath (regexp,replacement with comma)
   const isRewritePath = filterType === 'RewritePath';
+
+  // Special handling for RedirectTo (status,url with comma)
+  const isRedirectTo = filterType === 'RedirectTo';
+
+  // SecureHeaders has no required parameters
+  const noParamsNeeded = filterType === 'SecureHeaders';
 
   return (
     <div key={name} className="form-item-row">
@@ -197,9 +214,10 @@ const FilterItem: React.FC<{
       </Form.Item>
       <Form.Item {...restField} name={[name, 'args']} noStyle>
         {needsKeyValueInput.includes(filterType) ? (
+          // name:value format (colon separated)
           <Space.Compact style={{ width: 320 }}>
             <Input
-              placeholder="Key"
+              placeholder="Name"
               style={{ width: '45%' }}
               onChange={(e) => {
                 const currentValue = form.getFieldValue(['filters', name, 'args']);
@@ -217,14 +235,18 @@ const FilterItem: React.FC<{
               }}
             />
           </Space.Compact>
+        ) : needsNameOnly.includes(filterType) ? (
+          // Single name input only
+          <Input placeholder="Header/Parameter Name" style={{ width: 320 }} />
         ) : isRewritePath ? (
+          // regexp,replacement format (comma separated) - SCG standard
           <Space.Compact style={{ width: 320 }}>
             <Input
               placeholder="Regexp"
               style={{ width: '50%' }}
               onChange={(e) => {
                 const currentValue = form.getFieldValue(['filters', name, 'args']);
-                const newValue = `${e.target.value}|${currentValue?.split('|')[1] || ''}`;
+                const newValue = `${e.target.value},${currentValue?.split(',')[1] || ''}`;
                 form.setFieldValue(['filters', name, 'args'], newValue);
               }}
             />
@@ -233,11 +255,42 @@ const FilterItem: React.FC<{
               style={{ width: '50%' }}
               onChange={(e) => {
                 const currentValue = form.getFieldValue(['filters', name, 'args']);
-                const newValue = `${currentValue?.split('|')[0] || ''}|${e.target.value}`;
+                const newValue = `${currentValue?.split(',')[0] || ''},${e.target.value}`;
                 form.setFieldValue(['filters', name, 'args'], newValue);
               }}
             />
           </Space.Compact>
+        ) : isRedirectTo ? (
+          // status,url format (comma separated) - SCG standard
+          <Space.Compact style={{ width: 320 }}>
+            <Select
+              placeholder="Status"
+              style={{ width: '35%' }}
+              onChange={(value) => {
+                const currentValue = form.getFieldValue(['filters', name, 'args']);
+                const newValue = `${value},${currentValue?.split(',')[1] || ''}`;
+                form.setFieldValue(['filters', name, 'args'], newValue);
+              }}
+            >
+              <Select.Option value="301">301</Select.Option>
+              <Select.Option value="302">302</Select.Option>
+              <Select.Option value="303">303</Select.Option>
+              <Select.Option value="307">307</Select.Option>
+              <Select.Option value="308">308</Select.Option>
+            </Select>
+            <Input
+              placeholder="URL"
+              style={{ width: '65%' }}
+              onChange={(e) => {
+                const currentValue = form.getFieldValue(['filters', name, 'args']);
+                const newValue = `${currentValue?.split(',')[0] || ''},${e.target.value}`;
+                form.setFieldValue(['filters', name, 'args'], newValue);
+              }}
+            />
+          </Space.Compact>
+        ) : noParamsNeeded ? (
+          // No parameters needed
+          <Input placeholder="(No parameters required)" style={{ width: 320 }} disabled />
         ) : (
           <Input placeholder={t('routes.arguments')} style={{ width: 320 }} disabled={!filterType} />
         )}
@@ -275,7 +328,12 @@ const RoutesPage: React.FC = () => {
   // Gray rules enabled state
   const [grayRulesEnabled, setGrayRulesEnabled] = useState(false);
   const [editGrayRulesEnabled, setEditGrayRulesEnabled] = useState(false);
+  // Store edit services list for gray rules dropdown (more reliable than Form.useWatch)
+  const [editServicesList, setEditServicesList] = useState<any[]>([]);
   const { t } = useTranslation();
+
+  // Watch services list for gray rules dropdown (reactive updates) - for create form only
+  const createFormServices = Form.useWatch('services', createForm);
 
   useEffect(() => {
     loadRoutes();
@@ -371,8 +429,9 @@ const RoutesPage: React.FC = () => {
     }));
 
     // Build route data based on routing mode
+    // Note: id (UUID) is generated by backend, routeName is the business name
     const routeData: any = {
-      id: values.id,
+      routeName: values.id,  // User input route name as business identifier
       order: values.order || 0,
       enabled: values.enabled !== false,
       description: values.description,
@@ -399,18 +458,35 @@ const RoutesPage: React.FC = () => {
         return;
       }
 
+      // Validate total weight equals 100%
+      const totalWeight = serviceBindings.reduce((sum: number, s: any) => sum + (s.weight || 0), 0);
+      if (totalWeight !== 100) {
+        message.error(t('routes.weight_must_be_100', { total: totalWeight }));
+        return;
+      }
+
       routeData.services = serviceBindings.map((s: any) => {
         // s.serviceId is now full URI (static://xxx or lb://xxx)
         const uriParts = (s.serviceId || '').split('://');
         const protocol = uriParts[0] || 'static';
-        const serviceName = uriParts[1] || s.serviceId;
+        const serviceId = uriParts[1] || s.serviceId;
+
+        // Derive type from protocol: static:// -> STATIC, lb:// -> DISCOVERY
+        const bindingType: ServiceBindingType = protocol === 'lb' ? 'DISCOVERY' : 'STATIC';
+
+        // For Nacos services (lb://), use serviceId directly as serviceName
+        // For static services, look up name from services list
+        const serviceName = protocol === 'lb'
+          ? serviceId
+          : (services.find(svc => svc.serviceId === serviceId)?.name || serviceId);
+
         return {
-          serviceId: serviceName,
-          serviceName: services.find(svc => svc.serviceId === serviceName)?.name || serviceName,
+          serviceId: serviceId,
+          serviceName: serviceName,
           weight: s.weight || 100,
           version: s.version,
           enabled: s.enabled !== false,
-          protocol: protocol
+          type: bindingType
         };
       });
 
@@ -462,6 +538,15 @@ const RoutesPage: React.FC = () => {
       return;
     }
 
+    // Validate multi-service weight if in MULTI mode
+    if (editRoutingMode === 'MULTI' && values.services && values.services.length > 0) {
+      const totalWeight = values.services.reduce((sum: number, s: any) => sum + (s.weight || 0), 0);
+      if (totalWeight !== 100) {
+        message.error(t('routes.weight_must_be_100', { total: totalWeight }));
+        return;
+      }
+    }
+
     const formattedPredicates = values.predicates.map((p: any) => ({
       name: p.name,
       args: parsePredicateArgs(p.name, p.args)
@@ -472,15 +557,78 @@ const RoutesPage: React.FC = () => {
       args: parseFilterArgs(f.name, f.args)
     }));
 
-    const routeData = {
-      id: values.id,
-      uri: values.uri,
+    // Build route data based on routing mode
+    // Note: id (UUID) is from path parameter, routeName is the business name
+    const routeData: any = {
+      routeName: values.routeName,  // Business name
       order: values.order || 0,
       enabled: values.enabled !== false,
       description: values.description,
       predicates: formattedPredicates,
-      filters: formattedFilters
+      filters: formattedFilters,
+      mode: editRoutingMode
     };
+
+    if (editRoutingMode === 'SINGLE') {
+      // Single service mode - serviceId is already full URI (static://xxx or lb://xxx)
+      const finalUri = values.serviceId || values.uri;
+      if (!finalUri) {
+        message.error(t('routes.uri_required'));
+        return;
+      }
+      routeData.uri = finalUri;
+      if (values.serviceId) {
+        const uriParts = values.serviceId.split('://');
+        if (uriParts.length === 2) {
+          routeData.serviceId = uriParts[1];
+        }
+      }
+    } else {
+      // Multi-service mode
+      const serviceBindings = values.services || [];
+      if (serviceBindings.length === 0) {
+        message.error(t('routes.at_least_one_service'));
+        return;
+      }
+
+      routeData.services = serviceBindings.map((s: any) => {
+        const uriParts = (s.serviceId || '').split('://');
+        const protocol = uriParts[0] || 'static';
+        const serviceId = uriParts[1] || s.serviceId;
+        const bindingType: ServiceBindingType = protocol === 'lb' ? 'DISCOVERY' : 'STATIC';
+
+        // For Nacos services (lb://), use serviceId directly as serviceName
+        // For static services, look up name from services list
+        const serviceName = protocol === 'lb'
+          ? serviceId
+          : (services.find(svc => svc.serviceId === serviceId)?.name || serviceId);
+
+        return {
+          serviceId: serviceId,
+          serviceName: serviceName,
+          weight: s.weight || 100,
+          version: s.version,
+          enabled: s.enabled !== false,
+          type: bindingType
+        };
+      });
+
+      // Add gray rules if enabled
+      if (editGrayRulesEnabled && values.grayRules && values.grayRules.length > 0) {
+        routeData.grayRules = {
+          enabled: true,
+          rules: values.grayRules.map((r: any) => ({
+            type: r.type,
+            name: r.name,
+            value: String(r.value),
+            targetVersion: r.targetVersion
+          }))
+        };
+      }
+
+      // Generate URI from first service for backward compatibility
+      routeData.uri = serviceBindings[0]?.serviceId || 'static://multi-service';
+    }
 
     api.put(`/api/routes/${values.id}`, routeData)
       .then(response => {
@@ -519,15 +667,34 @@ const RoutesPage: React.FC = () => {
     switch (type) {
       case 'StripPrefix':
         return { parts: parseInt(args) || 1 };
+      case 'PrefixPath':
+        return { prefix: args };
       case 'AddRequestHeader':
       case 'SetRequestHeader':
+      case 'AddResponseHeader':
+      case 'SetResponseHeader':
         const headerParts = args.split(':');
         return { name: headerParts[0] || '', value: headerParts[1] || '' };
+      case 'RemoveRequestHeader':
+      case 'RemoveResponseHeader':
+        return { name: args };
       case 'AddRequestParameter':
         const paramParts = args.split(':');
         return { name: paramParts[0] || '', value: paramParts[1] || '' };
+      case 'RemoveRequestParameter':
+        return { name: args };
       case 'SetPath':
         return { template: args };
+      case 'RewritePath':
+        const rewriteParts = args.split(',');
+        return { regexp: rewriteParts[0] || '', replacement: rewriteParts[1] || '' };
+      case 'SetStatus':
+        return { status: args };
+      case 'RequestSize':
+        return { maxSize: args };
+      case 'RedirectTo':
+        const redirectParts = args.split(',');
+        return { status: redirectParts[0] || '302', url: redirectParts[1] || '' };
       default:
         return { value: args };
     }
@@ -554,13 +721,30 @@ const RoutesPage: React.FC = () => {
     switch (type) {
       case 'StripPrefix':
         return String(args.parts || 1);
+      case 'PrefixPath':
+        return args.prefix || '';
       case 'AddRequestHeader':
       case 'SetRequestHeader':
+      case 'AddResponseHeader':
+      case 'SetResponseHeader':
         return `${args.name || ''}:${args.value || ''}`;
+      case 'RemoveRequestHeader':
+      case 'RemoveResponseHeader':
+        return args.name || '';
       case 'AddRequestParameter':
         return `${args.name || ''}:${args.value || ''}`;
+      case 'RemoveRequestParameter':
+        return args.name || '';
       case 'SetPath':
         return args.template || '';
+      case 'RewritePath':
+        return `${args.regexp || ''},${args.replacement || ''}`;
+      case 'SetStatus':
+        return args.status || '';
+      case 'RequestSize':
+        return args.maxSize || args.value || '';
+      case 'RedirectTo':
+        return `${args.status || '302'},${args.url || ''}`;
       default:
         return args.value || '';
     }
@@ -572,12 +756,9 @@ const RoutesPage: React.FC = () => {
   };
 
   const showRouteEdit = (record: Route) => {
-    let serviceId = '';
-    if (record.uri) {
-      if (record.uri.startsWith('static://')) {
-        serviceId = record.uri.substring(9);
-      }
-    }
+    // Extract full URI (with protocol) for serviceId field
+    // The Select component expects values like "static://serviceId" or "lb://serviceName"
+    let serviceIdForForm = record.uri || '';
 
     const editPredicates = (record.predicates || []).map((p: any) => ({
       name: p.name,
@@ -589,6 +770,19 @@ const RoutesPage: React.FC = () => {
       args: stringifyFilterArgs(f.name, f.args)
     }));
 
+    // Process services for multi-service mode - ensure serviceId has protocol prefix
+    // Infer type from nacosServices list, NOT from stored type field (which may be wrong)
+    const editServices = (record.services || []).map((s: any) => {
+      // If serviceId already has protocol, use it
+      if (s.serviceId && s.serviceId.includes('://')) {
+        return s;
+      }
+      // Infer protocol from nacosServices list (more reliable than stored type)
+      const isNacosService = nacosServices.some(ns => ns.serviceName === s.serviceId);
+      const protocol = isNacosService ? 'lb' : 'static';
+      return { ...s, serviceId: `${protocol}://${s.serviceId}` };
+    });
+
     editForm.setFieldsValue({
       id: record.id,
       routeName: record.routeName,
@@ -596,13 +790,17 @@ const RoutesPage: React.FC = () => {
       order: record.order,
       description: record.description,
       routingMode: record.mode || 'SINGLE',
-      serviceId: serviceId || undefined,
-      services: record.services || [],
+      serviceId: serviceIdForForm || undefined,
+      services: editServices,
       predicates: editPredicates,
       filters: editFilters,
+      enabled: record.enabled !== false,
+      grayRules: record.grayRules?.rules || [],
     });
     setEditRoutingMode(record.mode || 'SINGLE');
     setEditGrayRulesEnabled(record.grayRules?.enabled || false);
+    // Store services list for gray rules dropdown
+    setEditServicesList(editServices);
 
     setEditModalVisible(true);
   };
@@ -784,7 +982,22 @@ const RoutesPage: React.FC = () => {
                       <div className="route-icon"><ApiOutlined /></div>
                       <div className="route-details">
                         <Text strong className="route-name">{route.routeName || (route.id && route.id.substring(0, 8)) || 'Unknown'}</Text>
-                        <Text type="secondary" className="route-id">{route.id ? route.id.substring(0, 16) : 'N/A'}...</Text>
+                        <div className="route-id-row">
+                          <Text type="secondary" className="route-id">{route.id ? route.id.substring(0, 16) : 'N/A'}...</Text>
+                          <Tooltip title={t('common.copy')}>
+                            <Button
+                              type="text"
+                              size="small"
+                              icon={<CopyOutlined />}
+                              className="copy-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                copy(route.id || '');
+                                message.success(t('message.copy_success'));
+                              }}
+                            />
+                          </Tooltip>
+                        </div>
                       </div>
                     </div>
                     <div className="route-status">
@@ -911,8 +1124,8 @@ const RoutesPage: React.FC = () => {
               <span className="section-title">{t('routes.basic_info')}</span>
             </div>
             <div className="section-content">
-              <Form.Item name="id" label={t('routes.route_id_label')} rules={[{ required: true }]} extra={t('routes.route_id_helper')}>
-                <Input placeholder={t('routes.route_id_placeholder')} size="large" />
+              <Form.Item name="id" label={t('routes.route_name')} rules={[{ required: true }]} extra={t('routes.route_name_helper')}>
+                <Input placeholder={t('routes.route_name_placeholder')} size="large" />
               </Form.Item>
               <div className="form-row">
                 <Form.Item name="order" label={t('routes.order')} extra={t('routes.order_helper')} className="form-item-half">
@@ -979,6 +1192,32 @@ const RoutesPage: React.FC = () => {
                   <div style={{ marginBottom: '12px' }}>
                     <Text type="secondary">{t('routes.multi_service_helper')}</Text>
                   </div>
+                  {/* Real-time weight total indicator */}
+                  <Form.Item shouldUpdate noStyle>
+                    {({ getFieldValue }) => {
+                      const serviceList = getFieldValue('services') || [];
+                      const totalWeight = serviceList.reduce((sum: number, s: any) => sum + (s?.weight || 0), 0);
+                      const isValid = totalWeight === 100;
+                      return (
+                        <div style={{
+                          marginBottom: '12px',
+                          padding: '8px 12px',
+                          background: isValid ? '#f6ffed' : '#fff2e8',
+                          border: `1px solid ${isValid ? '#b7eb8f' : '#ffbb96'}`,
+                          borderRadius: '4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px'
+                        }}>
+                          {isValid ? (
+                            <Tag color="success">{t('routes.weight_total')}: {totalWeight}% ✓</Tag>
+                          ) : (
+                            <Tag color="warning">{t('routes.weight_total')}: {totalWeight}% (需为100%)</Tag>
+                          )}
+                        </div>
+                      );
+                    }}
+                  </Form.Item>
                   <Form.List name="services" initialValue={[{ weight: 100, enabled: true }]}>
                     {(fields, { add, remove }) => (
                       <>
@@ -992,7 +1231,26 @@ const RoutesPage: React.FC = () => {
                           }}>
                             <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                               <Form.Item {...restField} name={[name, 'serviceId']} noStyle rules={[{ required: true }]}>
-                                <Select placeholder={t('routes.select_service')} style={{ width: 240 }} showSearch>
+                                <Select 
+                                  placeholder={t('routes.select_service')} 
+                                  style={{ width: 240 }} 
+                                  showSearch
+                                  onChange={(value) => {
+                                    // Auto-fill serviceName based on selection
+                                    let serviceName = '';
+                                    if (value?.startsWith('static://')) {
+                                      const id = value.replace('static://', '');
+                                      const found = services.find(s => s.serviceId === id);
+                                      serviceName = found?.name || id;
+                                    } else if (value?.startsWith('lb://')) {
+                                      serviceName = value.replace('lb://', '');
+                                    }
+                                    // Update serviceName in the same service binding
+                                    const currentServices = createForm.getFieldValue('services') || [];
+                                    currentServices[name] = { ...currentServices[name], serviceName };
+                                    createForm.setFieldsValue({ services: currentServices });
+                                  }}
+                                >
                                   <Select.OptGroup label={<><CloudOutlined /> {t('routes.static_services')}</>}>
                                     {services.map(s => (
                                       <Select.Option key={`static-${s.serviceId}`} value={`static://${s.serviceId}`}>
@@ -1016,9 +1274,6 @@ const RoutesPage: React.FC = () => {
                                   style={{ width: 100 }}
                                   addonAfter="%"
                                 />
-                              </Form.Item>
-                              <Form.Item {...restField} name={[name, 'version']} noStyle>
-                                <Input placeholder={t('routes.version_placeholder')} style={{ width: 120 }} />
                               </Form.Item>
                               <Form.Item {...restField} name={[name, 'enabled']} noStyle valuePropName="checked" initialValue={true}>
                                 <Switch size="small" checkedChildren="ON" unCheckedChildren="OFF" />
@@ -1054,6 +1309,7 @@ const RoutesPage: React.FC = () => {
                         <>
                           {fields.map(({ key, name, ...restField }) => {
                             const ruleType = createForm.getFieldValue(['grayRules', name, 'type']) || 'HEADER';
+                            const configuredServices = createFormServices || [];
                             return (
                               <div key={key} style={{
                                 padding: '12px',
@@ -1068,7 +1324,7 @@ const RoutesPage: React.FC = () => {
                                       <Select.Option value="HEADER">Header</Select.Option>
                                       <Select.Option value="COOKIE">Cookie</Select.Option>
                                       <Select.Option value="QUERY">Query</Select.Option>
-                                      <Select.Option value="WEIGHT">Weight</Select.Option>
+                                      <Select.Option value="WEIGHT">Weight%</Select.Option>
                                     </Select>
                                   </Form.Item>
                                   {ruleType !== 'WEIGHT' && (
@@ -1083,9 +1339,26 @@ const RoutesPage: React.FC = () => {
                                       <Input placeholder={t('routes.gray_rule_value')} style={{ width: 120 }} />
                                     )}
                                   </Form.Item>
-                                  <Form.Item {...restField} name={[name, 'targetVersion']} noStyle>
-                                    <Input placeholder={t('routes.target_version')} style={{ width: 120 }} />
-                                  </Form.Item>
+                                  <Tooltip title={t('routes.target_service_tooltip')}>
+                                    <Form.Item {...restField} name={[name, 'targetVersion']} noStyle>
+                                      <Select
+                                        style={{ width: 160 }}
+                                        placeholder={t('routes.target_service')}
+                                        allowClear
+                                        showSearch
+                                      >
+                                        {configuredServices.map((s: any, idx: number) => {
+                                          const serviceId = s?.serviceId?.replace?.('static://', '').replace?.('lb://', '') || s?.serviceId;
+                                          const displayName = s?.serviceName || serviceId;
+                                          return (
+                                            <Select.Option key={idx} value={serviceId}>
+                                              {displayName}
+                                            </Select.Option>
+                                          );
+                                        })}
+                                      </Select>
+                                    </Form.Item>
+                                  </Tooltip>
                                   <Button type="text" danger onClick={() => remove(name)} icon={<DeleteOutlined />} />
                                 </div>
                               </div>
@@ -1251,6 +1524,32 @@ const RoutesPage: React.FC = () => {
                   <div style={{ marginBottom: '12px' }}>
                     <Text type="secondary">{t('routes.multi_service_helper')}</Text>
                   </div>
+                  {/* Real-time weight total indicator */}
+                  <Form.Item shouldUpdate noStyle>
+                    {({ getFieldValue }) => {
+                      const serviceList = getFieldValue('services') || [];
+                      const totalWeight = serviceList.reduce((sum: number, s: any) => sum + (s?.weight || 0), 0);
+                      const isValid = totalWeight === 100;
+                      return (
+                        <div style={{
+                          marginBottom: '12px',
+                          padding: '8px 12px',
+                          background: isValid ? '#f6ffed' : '#fff2e8',
+                          border: `1px solid ${isValid ? '#b7eb8f' : '#ffbb96'}`,
+                          borderRadius: '4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px'
+                        }}>
+                          {isValid ? (
+                            <Tag color="success">{t('routes.weight_total')}: {totalWeight}% ✓</Tag>
+                          ) : (
+                            <Tag color="warning">{t('routes.weight_total')}: {totalWeight}% (需为100%)</Tag>
+                          )}
+                        </div>
+                      );
+                    }}
+                  </Form.Item>
                   <Form.List name="services">
                     {(fields, { add, remove }) => (
                       <>
@@ -1264,7 +1563,26 @@ const RoutesPage: React.FC = () => {
                           }}>
                             <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                               <Form.Item {...restField} name={[name, 'serviceId']} noStyle rules={[{ required: true }]}>
-                                <Select placeholder={t('routes.select_service')} style={{ width: 240 }} showSearch>
+                                <Select 
+                                  placeholder={t('routes.select_service')} 
+                                  style={{ width: 240 }} 
+                                  showSearch
+                                  onChange={(value) => {
+                                    // Auto-fill serviceName based on selection
+                                    let serviceName = '';
+                                    if (value?.startsWith('static://')) {
+                                      const id = value.replace('static://', '');
+                                      const found = services.find(s => s.serviceId === id);
+                                      serviceName = found?.name || id;
+                                    } else if (value?.startsWith('lb://')) {
+                                      serviceName = value.replace('lb://', '');
+                                    }
+                                    // Update serviceName in the same service binding
+                                    const currentServices = editForm.getFieldValue('services') || [];
+                                    currentServices[name] = { ...currentServices[name], serviceName };
+                                    editForm.setFieldsValue({ services: currentServices });
+                                  }}
+                                >
                                   <Select.OptGroup label={<><CloudOutlined /> {t('routes.static_services')}</>}>
                                     {services.map(s => (
                                       <Select.Option key={`static-${s.serviceId}`} value={`static://${s.serviceId}`}>
@@ -1283,9 +1601,6 @@ const RoutesPage: React.FC = () => {
                               </Form.Item>
                               <Form.Item {...restField} name={[name, 'weight']} noStyle initialValue={100}>
                                 <InputNumber min={1} max={100} placeholder="Weight" style={{ width: 100 }} addonAfter="%" />
-                              </Form.Item>
-                              <Form.Item {...restField} name={[name, 'version']} noStyle>
-                                <Input placeholder={t('routes.version_placeholder')} style={{ width: 120 }} />
                               </Form.Item>
                               <Form.Item {...restField} name={[name, 'enabled']} noStyle valuePropName="checked" initialValue={true}>
                                 <Switch size="small" checkedChildren="ON" unCheckedChildren="OFF" />
@@ -1321,6 +1636,7 @@ const RoutesPage: React.FC = () => {
                         <>
                           {fields.map(({ key, name, ...restField }) => {
                             const ruleType = editForm.getFieldValue(['grayRules', name, 'type']) || 'HEADER';
+                            const configuredServices = editServicesList || [];
                             return (
                               <div key={key} style={{
                                 padding: '12px',
@@ -1335,7 +1651,7 @@ const RoutesPage: React.FC = () => {
                                       <Select.Option value="HEADER">Header</Select.Option>
                                       <Select.Option value="COOKIE">Cookie</Select.Option>
                                       <Select.Option value="QUERY">Query</Select.Option>
-                                      <Select.Option value="WEIGHT">Weight</Select.Option>
+                                      <Select.Option value="WEIGHT">Weight%</Select.Option>
                                     </Select>
                                   </Form.Item>
                                   {ruleType !== 'WEIGHT' && (
@@ -1350,9 +1666,26 @@ const RoutesPage: React.FC = () => {
                                       <Input placeholder={t('routes.gray_rule_value')} style={{ width: 120 }} />
                                     )}
                                   </Form.Item>
-                                  <Form.Item {...restField} name={[name, 'targetVersion']} noStyle>
-                                    <Input placeholder={t('routes.target_version')} style={{ width: 120 }} />
-                                  </Form.Item>
+                                  <Tooltip title={t('routes.target_service_tooltip')}>
+                                    <Form.Item {...restField} name={[name, 'targetVersion']} noStyle>
+                                      <Select
+                                        style={{ width: 160 }}
+                                        placeholder={t('routes.target_service')}
+                                        allowClear
+                                        showSearch
+                                      >
+                                        {configuredServices.map((s: any, idx: number) => {
+                                          const serviceId = s?.serviceId?.replace?.('static://', '').replace?.('lb://', '') || s?.serviceId;
+                                          const displayName = s?.serviceName || serviceId;
+                                          return (
+                                            <Select.Option key={idx} value={serviceId}>
+                                              {displayName}
+                                            </Select.Option>
+                                          );
+                                        })}
+                                      </Select>
+                                    </Form.Item>
+                                  </Tooltip>
                                   <Button type="text" danger onClick={() => remove(name)} icon={<DeleteOutlined />} />
                                 </div>
                               </div>
@@ -1458,11 +1791,22 @@ const RoutesPage: React.FC = () => {
             <div className="drawer-status-bar">
               <Badge status={selectedRoute.enabled ? 'success' : 'default'} text={selectedRoute.enabled ? t('common.enabled') : t('common.disabled')} />
               <Tag color="blue">Order: {selectedRoute.order ?? 0}</Tag>
+              <Tag color={selectedRoute.mode === 'MULTI' ? 'purple' : 'cyan'}>
+                {selectedRoute.mode === 'MULTI' ? t('routes.multi_service') : t('routes.single_service')}
+              </Tag>
             </div>
-            <div className="drawer-section">
-              <div className="section-title"><CloudOutlined /> {t('routes.target_uri')}</div>
-              <div className="uri-display"><Text code copyable>{selectedRoute.uri || 'N/A'}</Text></div>
-            </div>
+            {selectedRoute.mode === 'SINGLE' && (
+              <div className="drawer-section">
+                <div className="section-title"><CloudOutlined /> {t('routes.target_uri')}</div>
+                <div className="uri-display"><Text code copyable>{selectedRoute.uri || 'N/A'}</Text></div>
+              </div>
+            )}
+            {selectedRoute.mode === 'SINGLE' && selectedRoute.serviceId && (
+              <div className="drawer-section">
+                <div className="section-title"><CloudOutlined /> {t('routes.target_service')}</div>
+                <Text code>{selectedRoute.serviceId}</Text>
+              </div>
+            )}
             {selectedRoute.mode === 'MULTI' && selectedRoute.services && selectedRoute.services.length > 0 && (
               <div className="drawer-section">
                 <div className="section-title"><SplitCellsOutlined /> {t('routes.services')} <span className="count">{selectedRoute.services.length}</span></div>
@@ -1473,9 +1817,35 @@ const RoutesPage: React.FC = () => {
                         <Text strong>{s.serviceName || s.serviceId}</Text>
                         <Tag color={s.enabled ? 'green' : 'default'}>{s.enabled ? t('common.enabled') : t('common.disabled')}</Tag>
                       </div>
-                      <div className="service-meta"><span>{t('routes.weight')}: {s.weight}%</span></div>
+                      <div className="service-meta">
+                        <span>{t('routes.weight')}: {s.weight}%</span>
+                        {s.type && <Tag color={s.type === 'DISCOVERY' ? 'blue' : 'orange'} style={{ marginLeft: 8 }}>{s.type}</Tag>}
+                      </div>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+            {selectedRoute.grayRules?.enabled && selectedRoute.grayRules?.rules && selectedRoute.grayRules.rules.length > 0 && (
+              <div className="drawer-section">
+                <div className="section-title"><BranchesOutlined /> {t('routes.gray_rules')} <span className="count">{selectedRoute.grayRules.rules.length}</span></div>
+                <div className="gray-rules-detail-list">
+                  {selectedRoute.grayRules.rules.map((rule, idx) => {
+                    // Find service name from targetVersion (serviceId)
+                    const targetService = selectedRoute.services?.find((s: any) => {
+                      const sId = s?.serviceId?.replace?.('static://', '').replace?.('lb://', '') || s?.serviceId;
+                      return sId === rule.targetVersion;
+                    });
+                    const displayTarget = targetService?.serviceName || rule.targetVersion;
+                    return (
+                      <div key={idx} className="gray-rule-detail-card">
+                        <Tag color="gold">{rule.type}</Tag>
+                        {rule.type !== 'WEIGHT' && <Text code>{rule.name}={rule.value}</Text>}
+                        {rule.type === 'WEIGHT' && <Text>{rule.value}%</Text>}
+                        <Text type="secondary">→ {displayTarget}</Text>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

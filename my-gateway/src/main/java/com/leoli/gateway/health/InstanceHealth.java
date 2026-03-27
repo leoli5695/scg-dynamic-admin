@@ -24,10 +24,12 @@ public class InstanceHealth {
     private String unhealthyReason;
 
     /**
-     * Build unique key
+     * Build unique key - use only ip:port
+     * Same instance should have same health status across all services
      */
     public static String buildKey(String serviceId, String ip, int port) {
-        return serviceId + ":" + ip + ":" + port;
+        // Only use ip:port as key to ensure consistent health across services
+        return ip + ":" + port;
     }
 
     /**
@@ -35,13 +37,13 @@ public class InstanceHealth {
      */
     public static InstanceHealth fromKey(String key) {
         String[] parts = key.split(":");
-        if (parts.length != 3) {
+        if (parts.length != 2) {
             throw new IllegalArgumentException("Invalid key format: " + key);
         }
         return new InstanceHealth(
+                null,  // serviceId not stored in key
                 parts[0],
-                parts[1],
-                Integer.parseInt(parts[2]),
+                Integer.parseInt(parts[1]),
                 true,
                 0,
                 System.currentTimeMillis(),

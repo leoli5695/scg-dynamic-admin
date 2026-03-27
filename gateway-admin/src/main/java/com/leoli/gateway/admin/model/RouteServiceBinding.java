@@ -1,5 +1,7 @@
 package com.leoli.gateway.admin.model;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -16,7 +18,10 @@ public class RouteServiceBinding {
 
     /**
      * Service type: STATIC (fixed nodes), NACOS (Nacos discovery), CONSUL (Consul discovery).
+     * Accepts both "serviceType" and "type" from JSON.
      */
+    @JsonProperty("type")
+    @JsonAlias({"serviceType"})
     private ServiceType serviceType = ServiceType.STATIC;
 
     /**

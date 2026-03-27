@@ -1,16 +1,22 @@
 package com.leoli.gateway.admin.converter;
 
-import com.leoli.gateway.admin.model.RouteEntity;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.model.RouteDefinition;
+import com.leoli.gateway.admin.model.RouteEntity;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Converter between RouteDefinition and RouteEntity.
+ *
+ * Simplified design:
+ * - RouteEntity.routeId = RouteDefinition.id (UUID, primary key)
+ * - RouteEntity.routeName = RouteDefinition.routeName (business name)
+ * - RouteEntity.metadata = complete JSON config
  *
  * @author leoli
  */
@@ -18,8 +24,12 @@ import java.util.List;
 @Component
 public class RouteConverter {
 
+    @Autowired
+    private ObjectMapper objectMapper;
+
     /**
-     * Convert RouteDefinition to RouteEntity.
+     * Convert RouteDefinition to RouteEntity for new route creation.
+     * Generates new UUID for routeId.
      */
     public RouteEntity toEntity(RouteDefinition route) {
         if (route == null) {
@@ -27,26 +37,54 @@ public class RouteConverter {
         }
 
         RouteEntity entity = new RouteEntity();
-        // Don't set ID - let database auto-generate it
-        entity.setRouteName(route.getId());  // Use route ID as business route name
-        
-        // Store complete configuration in metadata field
+
+        // Use existing id if provided, otherwise generate new UUID
+        if (route.getId() != null && !route.getId().isEmpty()) {
+            entity.setRouteId(route.getId());
+        } else {
+            entity.setRouteId(java.util.UUID.randomUUID().toString());
+        }
+
+        entity.setRouteName(route.getRouteName());
+        entity.setEnabled(true);
+        entity.setDescription(route.getDescription());
+
+        // Store complete configuration in metadata
         try {
-            String configJson = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(route);
-            entity.setMetadata(configJson);
+            entity.setMetadata(objectMapper.writeValueAsString(route));
         } catch (Exception e) {
             log.warn("Failed to serialize route config to JSON", e);
         }
-        
-        entity.setEnabled(true); // Default to enabled
-        entity.setCreatedAt(LocalDateTime.now());
-        entity.setUpdatedAt(LocalDateTime.now());
 
         return entity;
     }
 
     /**
+     * Convert RouteDefinition to RouteEntity for update.
+     * Uses existing routeId from entity.
+     */
+    public RouteEntity toEntity(RouteDefinition route, RouteEntity existingEntity) {
+        if (route == null || existingEntity == null) {
+            return null;
+        }
+
+        // Keep the same routeId (primary key doesn't change)
+        existingEntity.setRouteName(route.getRouteName());
+        existingEntity.setDescription(route.getDescription());
+
+        // Store complete configuration in metadata
+        try {
+            existingEntity.setMetadata(objectMapper.writeValueAsString(route));
+        } catch (Exception e) {
+            log.warn("Failed to serialize route config to JSON", e);
+        }
+
+        return existingEntity;
+    }
+
+    /**
      * Convert RouteEntity to RouteDefinition.
+     * Restores complete configuration from metadata JSON.
      */
     public RouteDefinition toDefinition(RouteEntity entity) {
         if (entity == null) {
@@ -56,34 +94,23 @@ public class RouteConverter {
         // Try to restore from metadata JSON first
         if (entity.getMetadata() != null && !entity.getMetadata().isEmpty()) {
             try {
-                RouteDefinition route = new com.fasterxml.jackson.databind.ObjectMapper()
-                    .readValue(entity.getMetadata(), RouteDefinition.class);
+                RouteDefinition route = objectMapper.readValue(entity.getMetadata(), RouteDefinition.class);
                 if (route != null) {
+                    // Ensure id matches entity's routeId
+                    route.setId(entity.getRouteId());
+                    route.setRouteName(entity.getRouteName());
                     return route;
                 }
             } catch (Exception e) {
                 log.warn("Failed to deserialize route config from JSON, using fallback", e);
             }
         }
-        
+
         // Fallback: create minimal definition
         RouteDefinition route = new RouteDefinition();
-        route.setId(entity.getRouteName());
+        route.setId(entity.getRouteId());
+        route.setRouteName(entity.getRouteName());
         return route;
-    }
-
-    /**
-     * Batch convert RouteDefinitions to RouteEntities.
-     */
-    public List<RouteEntity> toEntities(List<RouteDefinition> routes) {
-        if (routes == null) {
-            return new ArrayList<>();
-        }
-        List<RouteEntity> entities = new ArrayList<>(routes.size());
-        for (RouteDefinition route : routes) {
-            entities.add(toEntity(route));
-        }
-        return entities;
     }
 
     /**
@@ -98,35 +125,5 @@ public class RouteConverter {
             routes.add(toDefinition(entity));
         }
         return routes;
-    }
-
-    /**
-     * Helper method to convert object to JSON string.
-     */
-    private String convertToJson(Object obj) {
-        try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            return mapper.writeValueAsString(obj);
-        } catch (Exception e) {
-            log.error("Error converting object to JSON", e);
-            return null;
-        }
-    }
-
-    /**
-     * Helper method to convert JSON string to object.
-     */
-    @SuppressWarnings("unchecked")
-    private <T> T convertFromJson(String json, Class<T> clazz) {
-        try {
-            if (json == null || json.isEmpty()) {
-                return null;
-            }
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            return mapper.readValue(json, clazz);
-        } catch (Exception e) {
-            log.error("Error converting JSON to object", e);
-            return null;
-        }
     }
 }

@@ -53,4 +53,29 @@ public class MonitorController {
         response.put("code", 200);
         return ResponseEntity.ok(response);
     }
+
+    /**
+     * Get history metrics for charts.
+     * @param hours Number of hours to look back (default 24, max 168 = 1 week)
+     */
+    @GetMapping("/history")
+    public ResponseEntity<Map<String, Object>> getHistory(
+            @RequestParam(defaultValue = "24") int hours) {
+        Map<String, Object> response = new HashMap<>();
+        
+        try {
+            // Limit to 1 week
+            int safeHours = Math.min(hours, 168);
+            Map<String, Object> history = prometheusService.getHistoryMetrics(safeHours);
+            response.put("code", 200);
+            response.put("data", history);
+            response.put("hours", safeHours);
+        } catch (Exception e) {
+            log.error("Failed to get history metrics: {}", e.getMessage());
+            response.put("code", 500);
+            response.put("message", "Failed to get history metrics: " + e.getMessage());
+        }
+        
+        return ResponseEntity.ok(response);
+    }
 }

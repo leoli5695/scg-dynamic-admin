@@ -6,7 +6,8 @@ import {
 import {
   PlusOutlined, DeleteOutlined, EditOutlined, MoreOutlined,
   ClusterOutlined, MinusCircleOutlined, CloudServerOutlined, ApiOutlined,
-  WarningOutlined, ExclamationCircleOutlined, CloseOutlined, EyeOutlined
+  WarningOutlined, ExclamationCircleOutlined, CloseOutlined, EyeOutlined,
+  CopyOutlined
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import api from '../utils/api';
@@ -138,10 +139,30 @@ const ServicesPage: React.FC = () => {
   const getStatus = (s: Service) => {
     const inst = s.instances || [];
     if (!inst.length) return { color: 'default', text: t('services.status_no_instances') };
-    const healthy = inst.filter(i => i.healthy !== false && i.enabled !== false).length;
-    if (healthy === inst.length) return { color: 'success', text: t('services.status_healthy') };
-    if (!healthy) return { color: 'error', text: t('services.status_all_down') };
-    return { color: 'warning', text: t('services.status_partial', { healthy, total: inst.length }) };
+
+    // 统计各类实例
+    const enabledInstances = inst.filter(i => i.enabled !== false);
+    const disabledCount = inst.filter(i => i.enabled === false).length;
+    const healthyEnabled = enabledInstances.filter(i => i.healthy !== false).length;
+    const unhealthyEnabled = enabledInstances.filter(i => i.healthy === false).length;
+
+    // 所有实例都被禁用
+    if (disabledCount === inst.length) {
+      return { color: 'default', text: t('services.status_all_disabled') };
+    }
+
+    // 所有启用的实例都不健康（宕机）
+    if (enabledInstances.length > 0 && healthyEnabled === 0) {
+      return { color: 'error', text: t('services.status_all_down') };
+    }
+
+    // 全部健康（已排除全部禁用的情况）
+    if (healthyEnabled === enabledInstances.length && disabledCount === 0) {
+      return { color: 'success', text: t('services.status_healthy') };
+    }
+
+    // 部分健康
+    return { color: 'warning', text: t('services.status_partial', { healthy: healthyEnabled, total: inst.length }) };
   };
 
   const getActionMenu = (service: Service): MenuProps['items'] => [
@@ -158,6 +179,7 @@ const ServicesPage: React.FC = () => {
       case 'round-robin': return t('services.round_robin');
       case 'random': return t('services.random');
       case 'weighted': return t('services.weighted');
+      case 'consistent-hash': return t('services.consistent_hash');
       default: return lb;
     }
   };
@@ -202,21 +224,34 @@ const ServicesPage: React.FC = () => {
             {filteredServices.map((service) => {
               const status = getStatus(service);
               const instanceCount = service.instances?.length || 0;
-              const availableInstances = service.instances?.filter(inst => inst.enabled !== false) || [];
-              const hasNoAvailableInstances = instanceCount === 0 || availableInstances.length === 0;
+              const instances = service.instances || [];
+              const enabledInstances = instances.filter(inst => inst.enabled !== false);
+              const healthyEnabled = enabledInstances.filter(inst => inst.healthy !== false).length;
+
+              // 判断警告类型
+              let warningMessage = null;
+              if (instanceCount === 0) {
+                warningMessage = t('services.no_instances_warning');
+              } else if (enabledInstances.length === 0) {
+                warningMessage = t('services.all_instances_disabled_warning');
+              } else if (healthyEnabled === 0) {
+                warningMessage = t('services.all_instances_down_warning');
+              }
+
+              const hasWarning = warningMessage !== null;
 
               return (
                 <Card
                   key={service.name}
-                  className={`service-card ${hasNoAvailableInstances ? 'service-card-warning' : ''}`}
+                  className={`service-card ${hasWarning ? 'service-card-warning' : ''}`}
                   hoverable
                 >
-                  {hasNoAvailableInstances && (
+                  {hasWarning && (
                     <Alert
                       type="warning"
                       showIcon
                       icon={<ExclamationCircleOutlined />}
-                      message={instanceCount === 0 ? t('services.no_instances_warning') : t('services.all_instances_disabled_warning')}
+                      message={warningMessage}
                       className="service-warning-alert"
                     />
                   )}
@@ -225,7 +260,22 @@ const ServicesPage: React.FC = () => {
                       <div className="service-icon"><CloudServerOutlined /></div>
                       <div className="service-details">
                         <Text strong className="service-name">{service.name}</Text>
-                        <Text type="secondary" className="service-id">{service.serviceId || service.name}</Text>
+                        <div className="service-id-row">
+                          <Text type="secondary" className="service-id">{service.serviceId || service.name}</Text>
+                          <Tooltip title={t('common.copy')}>
+                            <Button
+                              type="text"
+                              size="small"
+                              icon={<CopyOutlined />}
+                              className="copy-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigator.clipboard.writeText(service.serviceId || service.name);
+                                message.success(t('message.copy_success'));
+                              }}
+                            />
+                          </Tooltip>
+                        </div>
                       </div>
                     </div>
                     <Dropdown menu={{ items: getActionMenu(service) }} trigger={['click']} placement="bottomRight">
@@ -234,12 +284,12 @@ const ServicesPage: React.FC = () => {
                   </div>
                   <div className="service-meta">
                     <Badge status={status.color as any} text={status.text} />
-                    <Tag className="lb-tag">{service.loadBalancer || 'weighted'}</Tag>
+                    <Tag className="lb-tag">{getLoadBalancerLabel(service.loadBalancer || 'weighted')}</Tag>
                   </div>
                   <div className="instances-section">
                     <div className="instances-header">
                       <Text type="secondary" className="instances-title">
-                        <ApiOutlined /> {availableInstances.length}/{instanceCount} {t('services.available_instances')}
+                        <ApiOutlined /> {healthyEnabled}/{instanceCount} {t('services.available_instances')}
                       </Text>
                     </div>
                     {instanceCount > 0 && (
@@ -283,7 +333,21 @@ const ServicesPage: React.FC = () => {
                 <div className="drawer-icon"><CloudServerOutlined /></div>
                 <div className="drawer-title-wrapper">
                   <Title level={4} className="drawer-title">{selectedService.name}</Title>
-                  <Text type="secondary">{selectedService.serviceId || selectedService.name}</Text>
+                  <div className="drawer-id-row">
+                    <Text type="secondary">{selectedService.serviceId || selectedService.name}</Text>
+                    <Tooltip title={t('common.copy')}>
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<CopyOutlined />}
+                        className="copy-btn"
+                        onClick={() => {
+                          navigator.clipboard.writeText(selectedService.serviceId || selectedService.name);
+                          message.success(t('message.copy_success'));
+                        }}
+                      />
+                    </Tooltip>
+                  </div>
                 </div>
               </div>
               <Button
@@ -410,6 +474,7 @@ const ServicesPage: React.FC = () => {
                     <Select.Option value="round-robin"><span className="option-icon">🔄</span> {t('services.round_robin')}</Select.Option>
                     <Select.Option value="random"><span className="option-icon">🎲</span> {t('services.random')}</Select.Option>
                     <Select.Option value="weighted"><span className="option-icon">⚖️</span> {t('services.weighted')}</Select.Option>
+                    <Select.Option value="consistent-hash"><span className="option-icon">🔗</span> {t('services.consistent_hash')}</Select.Option>
                   </Select>
                 </Form.Item>
               </div>
@@ -529,6 +594,7 @@ const ServicesPage: React.FC = () => {
                     <Select.Option value="round-robin"><span className="option-icon">🔄</span> {t('services.round_robin')}</Select.Option>
                     <Select.Option value="random"><span className="option-icon">🎲</span> {t('services.random')}</Select.Option>
                     <Select.Option value="weighted"><span className="option-icon">⚖️</span> {t('services.weighted')}</Select.Option>
+                    <Select.Option value="consistent-hash"><span className="option-icon">🔗</span> {t('services.consistent_hash')}</Select.Option>
                   </Select>
                 </Form.Item>
               </div>

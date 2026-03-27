@@ -272,6 +272,101 @@ public class ServiceService {
   }
 
   /**
+   * Add an instance to a service.
+   */
+  @Transactional(rollbackFor = Exception.class)
+  public ServiceDefinition addInstance(String serviceName, ServiceDefinition.ServiceInstance instance) {
+    ServiceDefinition service = serviceCache.get(serviceName);
+    if (service == null) {
+      throw new IllegalArgumentException("Service not found: " + serviceName);
+    }
+    
+    // Check if instance already exists (by ip:port)
+    String instanceKey = instance.getIp() + ":" + instance.getPort();
+    for (ServiceDefinition.ServiceInstance existing : service.getInstances()) {
+      if ((existing.getIp() + ":" + existing.getPort()).equals(instanceKey)) {
+        throw new IllegalArgumentException("Instance already exists: " + instanceKey);
+      }
+    }
+    
+    // Add instance
+    service.getInstances().add(instance);
+    log.info("Added instance {} to service {}", instanceKey, serviceName);
+    
+    // Persist changes
+    ServiceEntity entity = updateService(serviceName, service);
+    return toDefinition(entity);
+  }
+
+  /**
+   * Remove an instance from a service.
+   */
+  @Transactional(rollbackFor = Exception.class)
+  public ServiceDefinition removeInstance(String serviceName, String instanceId) {
+    ServiceDefinition service = serviceCache.get(serviceName);
+    if (service == null) {
+      throw new IllegalArgumentException("Service not found: " + serviceName);
+    }
+    
+    // Find and remove instance
+    boolean removed = service.getInstances().removeIf(inst -> {
+      String key = inst.getIp() + ":" + inst.getPort();
+      return key.equals(instanceId) || 
+             (inst.getInstanceId() != null && inst.getInstanceId().equals(instanceId));
+    });
+    
+    if (!removed) {
+      throw new IllegalArgumentException("Instance not found: " + instanceId);
+    }
+    
+    log.info("Removed instance {} from service {}", instanceId, serviceName);
+    
+    // Persist changes
+    ServiceEntity entity = updateService(serviceName, service);
+    return toDefinition(entity);
+  }
+
+  /**
+   * Update instance status (enabled/healthy).
+   */
+  @Transactional(rollbackFor = Exception.class)
+  public ServiceDefinition updateInstanceStatus(String serviceName, String instanceId, 
+                                                  Boolean enabled, Boolean healthy) {
+    ServiceDefinition service = serviceCache.get(serviceName);
+    if (service == null) {
+      throw new IllegalArgumentException("Service not found: " + serviceName);
+    }
+    
+    // Find instance
+    ServiceDefinition.ServiceInstance targetInstance = null;
+    for (ServiceDefinition.ServiceInstance inst : service.getInstances()) {
+      String key = inst.getIp() + ":" + inst.getPort();
+      if (key.equals(instanceId) || 
+          (inst.getInstanceId() != null && inst.getInstanceId().equals(instanceId))) {
+        targetInstance = inst;
+        break;
+      }
+    }
+    
+    if (targetInstance == null) {
+      throw new IllegalArgumentException("Instance not found: " + instanceId);
+    }
+    
+    // Update status
+    if (enabled != null) {
+      targetInstance.setEnabled(enabled);
+      log.info("Set instance {} enabled={} in service {}", instanceId, enabled, serviceName);
+    }
+    
+    // Note: healthy status is managed by health checker, but we can override it
+    // This would typically be done through health sync, not manually
+    
+    // Persist changes
+    ServiceEntity entity = updateService(serviceName, service);
+    return toDefinition(entity);
+  }
+
+  /**
    * Load all services from database to cache.
    */
   private void loadServicesFromDatabase() {
@@ -291,12 +386,12 @@ public class ServiceService {
 
   /**
    * Rebuild services index from database.
-   * Only rebuilds when DB has data OR Nacos index is missing/corrupted.
+   * Only includes ENABLED services since disabled services have no config in Nacos.
    */
   private void rebuildServicesIndex() {
     try {
-      // Use service_id (UUID) instead of serviceName for consistency
-      List<String> serviceIds = serviceRepository.findAll().stream()
+      // Only query ENABLED services - disabled services have no config in Nacos
+      List<String> serviceIds = serviceRepository.findByEnabledTrue().stream()
           .map(ServiceEntity::getServiceId)  // Use serviceId, not serviceName
           .collect(Collectors.toList());
       
@@ -348,7 +443,10 @@ public class ServiceService {
     ServiceEntity entity = new ServiceEntity();
     // Don't set name field, use service_name instead
     // entity.setName(...) - removed
-    
+
+    // Set enabled to true by default for new services
+    entity.setEnabled(true);
+
     // Set description
     entity.setDescription(service.getDescription());
     

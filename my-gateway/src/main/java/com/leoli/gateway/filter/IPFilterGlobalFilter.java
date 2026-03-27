@@ -384,9 +384,9 @@ public class IPFilterGlobalFilter implements GlobalFilter, Ordered {
 
         // IPv4 private networks
         return isIPv4InCIDR(ip, "10.0.0.0", 8) ||
-               isIPv4InCIDR(ip, "172.16.0.0", 12) ||
-               isIPv4InCIDR(ip, "192.168.0.0", 16) ||
-               isIPv4InCIDR(ip, "127.0.0.0", 8);
+                isIPv4InCIDR(ip, "172.16.0.0", 12) ||
+                isIPv4InCIDR(ip, "192.168.0.0", 16) ||
+                isIPv4InCIDR(ip, "127.0.0.0", 8);
     }
 
     /**
@@ -441,7 +441,7 @@ public class IPFilterGlobalFilter implements GlobalFilter, Ordered {
         if (ipFilterConfig != null && !ipFilterConfig.isEmpty()) {
             String mode = getStringValue(ipFilterConfig, "mode", "blacklist");
             List<String> ipList = getStringListValue(ipFilterConfig, "ipList");
-            
+
             // IP list is configured, apply filter
             if (ipList != null && !ipList.isEmpty()) {
                 boolean ipInRange = isIPInRange(clientIp, ipList);

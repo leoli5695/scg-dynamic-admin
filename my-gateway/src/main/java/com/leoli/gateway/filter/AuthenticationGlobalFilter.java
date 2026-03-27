@@ -3,7 +3,6 @@ package com.leoli.gateway.filter;
 import com.leoli.gateway.auth.AuthProcessManager;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.AuthConfig;
-import com.leoli.gateway.model.StrategyDefinition;
 import com.leoli.gateway.util.RouteUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -63,7 +62,7 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
 
         AuthConfig config = new AuthConfig();
         config.setRouteId(routeId);
-        
+
         if (configMap.get("authType") != null) {
             config.setAuthType((String) configMap.get("authType"));
         }
@@ -88,7 +87,7 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
         if (configMap.get("customConfig") != null) {
             config.setCustomConfig((String) configMap.get("customConfig"));
         }
-        
+
         // JWT configuration
         if (configMap.get("jwtIssuer") != null) {
             config.setJwtIssuer((String) configMap.get("jwtIssuer"));
@@ -105,7 +104,7 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
         if (configMap.get("jwtClockSkewSeconds") != null) {
             config.setJwtClockSkewSeconds(((Number) configMap.get("jwtClockSkewSeconds")).intValue());
         }
-        
+
         // Basic Auth configuration
         if (configMap.get("basicUsername") != null) {
             config.setBasicUsername((String) configMap.get("basicUsername"));
@@ -119,7 +118,7 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
         if (configMap.get("passwordHashAlgorithm") != null) {
             config.setPasswordHashAlgorithm((String) configMap.get("passwordHashAlgorithm"));
         }
-        
+
         // API Key configuration
         if (configMap.get("apiKeyHeader") != null) {
             config.setApiKeyHeader((String) configMap.get("apiKeyHeader"));
@@ -130,7 +129,7 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
         if (configMap.get("apiKeyPrefix") != null) {
             config.setApiKeyPrefix((String) configMap.get("apiKeyPrefix"));
         }
-        
+
         // HMAC configuration
         if (configMap.get("accessKey") != null) {
             config.setAccessKey((String) configMap.get("accessKey"));
@@ -152,7 +151,7 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
         if (configMap.get("validateContentMd5") != null) {
             config.setValidateContentMd5((Boolean) configMap.get("validateContentMd5"));
         }
-        
+
         // OAuth2 configuration
         if (configMap.get("requiredScopes") != null) {
             config.setRequiredScopes((String) configMap.get("requiredScopes"));

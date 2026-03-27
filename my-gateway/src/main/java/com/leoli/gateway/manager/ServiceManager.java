@@ -25,6 +25,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Component
 public class ServiceManager {
 
+    // Load balancing strategy cache
+    private final Map<String, String> loadBalancerStrategyCache = new ConcurrentHashMap<>();
+
     // Service endpoint cache for fast lookup (single instance)
     private final Map<String, ServiceEndpoint> endpointCache = new ConcurrentHashMap<>();
 
@@ -53,8 +56,17 @@ public class ServiceManager {
         endpointCache.remove(serviceId);
         instanceCache.remove(serviceId);
         roundRobinCounters.remove(serviceId);
+        loadBalancerStrategyCache.remove(serviceId);
 
         log.debug("Parsing service config for: {}", serviceId);
+
+        // Parse loadBalancer strategy (default: weighted)
+        String loadBalancer = "weighted";
+        if (serviceNode.has("loadBalancer")) {
+            loadBalancer = serviceNode.get("loadBalancer").asText("weighted");
+        }
+        loadBalancerStrategyCache.put(serviceId, loadBalancer);
+        log.debug("Service {} loadBalancer strategy: {}", serviceId, loadBalancer);
 
         // Single endpoint mode
         if (serviceNode.has("endpoint")) {
@@ -97,18 +109,15 @@ public class ServiceManager {
             int port = instanceNode.get("port").asInt();
             int weight = instanceNode.has("weight") ? instanceNode.get("weight").asInt() : 1;
             boolean enabled = !instanceNode.has("enabled") || instanceNode.get("enabled").asBoolean(true);
-            boolean healthy = !instanceNode.has("healthy") || instanceNode.get("healthy").asBoolean(true);
+            // Note: 'healthy' from config is just initial status hint
+            // Actual health status is managed by HybridHealthChecker via active/passive checks
+            // We store ALL instances (including disabled ones) for health checking
 
-            if (enabled && healthy) {
-                String instanceEndpoint = "http://" + address + ":" + port;
-                instances.add(new ServiceInstance(serviceId, instanceEndpoint, weight));
+            String instanceEndpoint = "http://" + address + ":" + port;
+            instances.add(new ServiceInstance(serviceId, instanceEndpoint, weight, enabled));
 
-                log.debug("Loaded service instance: {} -> {}:{} (weight: {})",
-                        serviceId, address, port, weight);
-            } else {
-                log.debug("Skipping disabled/unhealthy instance: {}:{} (enabled: {}, healthy: {})",
-                        address, port, enabled, healthy);
-            }
+            log.debug("Loaded service instance: {} -> {}:{} (weight: {}, enabled: {})",
+                    serviceId, address, port, weight, enabled);
         }
 
         if (!instances.isEmpty()) {
@@ -117,10 +126,20 @@ public class ServiceManager {
             instanceCache.put(serviceId, instances);
             roundRobinCounters.put(serviceId, new AtomicInteger(0));
 
-            log.info("Loaded service '{}' with {} valid instances", serviceId, instances.size());
+            log.info("Loaded service '{}' with {} instances, loadBalancer: {}",
+                    serviceId, instances.size(), loadBalancer);
         } else {
-            log.warn("Service '{}' has no valid instances (all disabled or unhealthy)", serviceId);
+            log.warn("Service '{}' has no instances configured", serviceId);
         }
+    }
+
+    /**
+     * Get load balancer strategy for a service.
+     * @param serviceId Service ID
+     * @return Load balancer strategy (default: weighted)
+     */
+    public String getLoadBalancerStrategy(String serviceId) {
+        return loadBalancerStrategyCache.getOrDefault(serviceId, "weighted");
     }
 
     /**
@@ -159,6 +178,7 @@ public class ServiceManager {
         endpointCache.remove(serviceId);
         instanceCache.remove(serviceId);
         roundRobinCounters.remove(serviceId);
+        loadBalancerStrategyCache.remove(serviceId);
         log.info("Cleared cache for service: {}", serviceId);
     }
 
@@ -169,6 +189,7 @@ public class ServiceManager {
         endpointCache.clear();
         instanceCache.clear();
         roundRobinCounters.clear();
+        loadBalancerStrategyCache.clear();
         log.info("Cleared all service caches");
     }
 

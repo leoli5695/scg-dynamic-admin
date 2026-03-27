@@ -44,7 +44,8 @@ public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
     
     @Override
     public List<ServiceEntity> loadFromDB() {
-        return serviceRepository.findAll();
+        // Only load ENABLED services - disabled services should not be synced to Nacos
+        return serviceRepository.findByEnabledTrue();
     }
     
     @Override
@@ -84,20 +85,57 @@ public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
     
     @Override
     public void repairMissingInNacos(ServiceEntity entity) throws Exception {
+        // Skip disabled services - they should NOT be in Nacos
+        if (!entity.getEnabled()) {
+            log.debug("Skipping disabled service: {}", entity.getServiceId());
+            return;
+        }
+
         log.info("🔧 Repairing missing service in Nacos: {}", entity.getServiceId());
         
-        // Convert entity to ServiceDefinition
-        ServiceDefinition service = new ServiceDefinition();
-        service.setName(entity.getServiceName());  // Use serviceName instead of name
+        // Parse full ServiceDefinition from entity's metadata JSON
+        // This preserves instances, loadBalancer, and other configuration
+        ServiceDefinition service = parseServiceFromEntity(entity);
+        if (service == null) {
+            log.error("Failed to parse service definition from entity metadata, skipping repair for: {}", entity.getServiceId());
+            return;
+        }
         
         // Push to Nacos using service_id
         String serviceDataId = SERVICE_PREFIX + entity.getServiceId();
         configCenterService.publishConfig(serviceDataId, service);
         
-        log.info("✅ Repaired service: {}", entity.getServiceId());
+        log.info("✅ Repaired service: {} with {} instances", entity.getServiceId(), 
+                 service.getInstances() != null ? service.getInstances().size() : 0);
         
         // Rebuild services index to ensure consistency
         rebuildServicesIndex();
+    }
+    
+    /**
+     * Parse ServiceDefinition from ServiceEntity's metadata JSON.
+     * Falls back to minimal definition if parsing fails.
+     */
+    private ServiceDefinition parseServiceFromEntity(ServiceEntity entity) {
+        // Try to restore from JSON backup in metadata field
+        if (entity.getMetadata() != null && !entity.getMetadata().isEmpty()) {
+            try {
+                ServiceDefinition service = objectMapper.readValue(entity.getMetadata(), ServiceDefinition.class);
+                if (service != null) {
+                    log.debug("Successfully parsed service definition from metadata for: {}", entity.getServiceName());
+                    return service;
+                }
+            } catch (Exception e) {
+                log.warn("Failed to parse service from metadata JSON, falling back to minimal definition: {}", e.getMessage());
+            }
+        }
+        
+        // Fallback: create minimal definition (should rarely happen)
+        log.warn("Creating minimal service definition for: {} (no valid metadata)", entity.getServiceName());
+        ServiceDefinition service = new ServiceDefinition();
+        service.setName(entity.getServiceName());
+        service.setServiceId(entity.getServiceId());
+        return service;
     }
     
     @Override
@@ -116,15 +154,17 @@ public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
     
     /**
      * Rebuild services index from database.
+     * Only includes ENABLED services since disabled services have no config in Nacos.
      */
     private void rebuildServicesIndex() throws Exception {
-        List<String> serviceIds = serviceRepository.findAll().stream()
-            .map(ServiceEntity::getServiceName)
+        // Use serviceId (UUID), not serviceName - consistent with ServiceService.rebuildServicesIndex()
+        List<String> serviceIds = serviceRepository.findByEnabledTrue().stream()
+            .map(ServiceEntity::getServiceId)  // Use serviceId, not serviceName
             .collect(Collectors.toList());
 
         // Publish as JSON array directly, not stringified JSON
         configCenterService.publishConfig(SERVICES_INDEX, serviceIds);
-        log.debug("Services index rebuilt with {} services", serviceIds.size());
+        log.debug("Services index rebuilt with {} enabled services", serviceIds.size());
     }
 
     @Override

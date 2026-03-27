@@ -25,6 +25,9 @@ public class InstanceDiscoveryService {
     private HybridHealthChecker hybridHealthChecker;
 
     @Autowired
+    private ActiveHealthChecker activeHealthChecker;
+
+    @Autowired
     private DiscoveryClient discoveryClient;  // Nacos dynamic discovery
 
     @Autowired
@@ -82,7 +85,7 @@ public class InstanceDiscoveryService {
                 for (ServiceInstance instance : staticInstances) {
                     String key = buildInstanceKey(serviceId, instance.getHost(), instance.getPort());
 
-                    // If new instance, add to cache (initially healthy)
+                    // If new instance, initialize and trigger immediate health check
                     if (knownInstances.add(key)) {
                         log.info("Discovered new static instance: {}", key);
                         hybridHealthChecker.initializeInstance(
@@ -90,6 +93,9 @@ public class InstanceDiscoveryService {
                                 instance.getHost(),
                                 instance.getPort()
                         );
+                        // Trigger immediate health check for new instance
+                        // This ensures we don't route to unhealthy instances before scheduled check
+                        triggerImmediateHealthCheck(serviceId, instance.getHost(), instance.getPort());
                     }
 
                     // Add to check list
@@ -146,6 +152,22 @@ public class InstanceDiscoveryService {
      */
     private String buildInstanceKey(String serviceId, String ip, int port) {
         return serviceId + ":" + ip + ":" + port;
+    }
+
+    /**
+     * Trigger immediate health check for a newly discovered instance.
+     * This runs asynchronously to avoid blocking the discovery process.
+     */
+    private void triggerImmediateHealthCheck(String serviceId, String ip, int port) {
+        // Run health check asynchronously to avoid blocking
+        java.util.concurrent.CompletableFuture.runAsync(() -> {
+            try {
+                log.info("Triggering immediate health check for new instance: {}:{}", ip, port);
+                activeHealthChecker.probe(serviceId, ip, port);
+            } catch (Exception e) {
+                log.warn("Immediate health check failed for {}:{}: {}", ip, port, e.getMessage());
+            }
+        });
     }
 
     /**

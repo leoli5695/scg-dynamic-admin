@@ -23,14 +23,18 @@
   "license": "ISC",
   "dependencies": {
     "@ant-design/icons": "^6.1.0",
+    "@nivo/core": "^0.99.0",
+    "@nivo/line": "^0.99.0",
     "antd": "^6.3.2",
     "axios": "^1.13.6",
     "copy-to-clipboard": "^3.3.3",
+    "echarts": "^6.0.0",
     "i18next": "^25.8.18",
     "i18next-browser-languagedetector": "^8.2.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-i18next": "^16.5.8",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^7.13.1"
   }
 }

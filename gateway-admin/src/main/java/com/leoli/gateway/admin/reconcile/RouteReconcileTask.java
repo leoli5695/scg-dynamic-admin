@@ -44,7 +44,8 @@ public class RouteReconcileTask implements ReconcileTask<RouteEntity> {
     
     @Override
     public List<RouteEntity> loadFromDB() {
-        return routeRepository.findAll();
+        // Only load ENABLED routes - disabled routes should not be synced to Nacos
+        return routeRepository.findByEnabledTrue();
     }
     
     @Override
@@ -70,8 +71,14 @@ public class RouteReconcileTask implements ReconcileTask<RouteEntity> {
     
     @Override
     public void repairMissingInNacos(RouteEntity entity) throws Exception {
+        // Skip disabled routes - they should NOT be in Nacos
+        if (!entity.getEnabled()) {
+            log.debug("Skipping disabled route: {}", entity.getRouteId());
+            return;
+        }
+
         log.info("🔧 Repairing missing route in Nacos: {}", entity.getRouteId());
-        
+
         // Restore from metadata JSON if available, otherwise create minimal definition
         RouteDefinition route = null;
         if (entity.getMetadata() != null && !entity.getMetadata().isEmpty()) {
@@ -82,18 +89,19 @@ public class RouteReconcileTask implements ReconcileTask<RouteEntity> {
                 log.warn("Failed to deserialize route config, using fallback", e);
             }
         }
-        
+
         if (route == null) {
             route = new RouteDefinition();
-            route.setId(entity.getRouteName());
+            route.setId(entity.getRouteId());
+            route.setRouteName(entity.getRouteName());
         }
-        
+
         // Push to Nacos using route_id
         String routeDataId = ROUTE_PREFIX + entity.getRouteId();
         configCenterService.publishConfig(routeDataId, route);
-        
+
         log.info("✅ Repaired route: {}", entity.getRouteId());
-        
+
         // Rebuild routes index to ensure consistency
         rebuildRoutesIndex();
     }
@@ -114,16 +122,17 @@ public class RouteReconcileTask implements ReconcileTask<RouteEntity> {
     
     /**
      * Rebuild routes index from database.
+     * Only includes ENABLED routes - disabled routes should not be in Nacos.
      */
     private void rebuildRoutesIndex() throws Exception {
-        // Use route_id (UUID) instead of routeName for consistency
-        List<String> routeIds = routeRepository.findAll().stream()
-            .map(RouteEntity::getRouteId)  // Use routeId, not routeName
+        // Only include ENABLED routes - disabled routes should NOT be in index
+        List<String> routeIds = routeRepository.findByEnabledTrue().stream()
+            .map(RouteEntity::getRouteId)
             .collect(Collectors.toList());
 
         // Publish as JSON array directly, not stringified JSON
         configCenterService.publishConfig(ROUTES_INDEX, routeIds);
-        log.debug("Routes index rebuilt with {} routes", routeIds.size());
+        log.debug("Routes index rebuilt with {} enabled routes", routeIds.size());
     }
 
     @Override

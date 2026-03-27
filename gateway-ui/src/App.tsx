@@ -6,6 +6,9 @@ import {
   SafetyOutlined,        // Strategies - 安全/策略图标
   DeploymentUnitOutlined, // Routes - 路由/部署图标
   DashboardOutlined,     // Monitor - 监控图标
+  BellOutlined,          // Alert - 告警图标
+  SafetyCertificateOutlined, // Certificate - 证书图标
+  ApiOutlined,           // Trace - 追踪图标
   UserOutlined,
   LogoutOutlined,
   GatewayOutlined,
@@ -17,6 +20,9 @@ import RoutesPage from './pages/RoutesPage';
 import ServicesPage from './pages/ServicesPage';
 import StrategiesPage from './pages/StrategiesPage';
 import MonitorPage from './pages/MonitorPage';
+import AlertPage from './pages/AlertPage';
+import CertificatePage from './pages/CertificatePage';
+import TracePage from './pages/TracePage';
 import LoginPage from './pages/LoginPage';
 import LanguageSwitcher from './components/LanguageSwitcher';
 import { useTranslation } from 'react-i18next';
@@ -58,7 +64,10 @@ const App: React.FC = () => {
     getItem(t('menu.services'), 'services', <AppstoreOutlined />),
     getItem(t('menu.routes'), 'routes', <DeploymentUnitOutlined />),
     getItem(t('menu.strategies'), 'strategies', <SafetyOutlined />),
+    getItem(t('menu.certificates'), 'certificates', <SafetyCertificateOutlined />),
+    getItem(t('menu.trace'), 'trace', <ApiOutlined />),
     getItem(t('menu.monitor'), 'monitor', <DashboardOutlined />),
+    getItem(t('menu.alerts'), 'alerts', <BellOutlined />),
   ], [t]);
 
   // Check login status on mount
@@ -99,8 +108,14 @@ const App: React.FC = () => {
         return <RoutesPage />;
       case 'strategies':
         return <StrategiesPage />;
+      case 'certificates':
+        return <CertificatePage />;
+      case 'trace':
+        return <TracePage />;
       case 'monitor':
         return <MonitorPage />;
+      case 'alerts':
+        return <AlertPage />;
       default:
         return <ServicesPage />;
     }
@@ -123,7 +138,7 @@ const App: React.FC = () => {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      {/* Left Sidebar - Dark theme */}
+      {/* Left Sidebar - Fixed position */}
       <Sider
         width={220}
         theme="dark"
@@ -132,6 +147,14 @@ const App: React.FC = () => {
         collapsed={collapsed}
         onCollapse={setCollapsed}
         trigger={null}
+        style={{
+          overflow: 'auto',
+          height: '100vh',
+          position: 'fixed',
+          left: 0,
+          top: 0,
+          bottom: 0,
+        }}
       >
         <div className="sidebar-header">
           <div className="sidebar-logo">
@@ -154,7 +177,7 @@ const App: React.FC = () => {
       </Sider>
       
       {/* Main Content Area */}
-      <Layout>
+      <Layout style={{ marginLeft: collapsed ? 80 : 220, transition: 'margin-left 0.2s' }}>
         <Header className="main-header">
           <div className="header-left">
             <h1 className="header-title">{t('app.console_title')}</h1>
@@ -172,7 +195,7 @@ const App: React.FC = () => {
             )}
           </div>
         </Header>
-        <Content className="main-content">
+        <Content className="main-content" style={{ overflow: 'auto' }}>
           {renderContent()}
         </Content>
         

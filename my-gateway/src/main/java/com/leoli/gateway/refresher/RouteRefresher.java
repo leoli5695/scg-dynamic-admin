@@ -250,6 +250,9 @@ public class RouteRefresher {
             listeningRouteIds.remove(routeId);
             log.info("🗑️  Removed listener for route: {}", routeId);
         }
+        // Always remove from routeManager (route may exist even without listener)
+        routeManager.removeRoute(routeId);
+        log.info("🗑️  Removed route from manager: {}", routeId);
     }
 
     /**
@@ -307,7 +310,18 @@ public class RouteRefresher {
                 if (routeMap.containsKey("serviceId")) {
                     multiConfig.setServiceId((String) routeMap.get("serviceId"));
                 }
-                
+
+                // Parse serviceType if explicitly set, otherwise infer from URI scheme
+                if (routeMap.containsKey("serviceType") && routeMap.get("serviceType") != null) {
+                    String typeStr = (String) routeMap.get("serviceType");
+                    multiConfig.setServiceType(com.leoli.gateway.model.ServiceBindingType.fromString(typeStr));
+                } else {
+                    // Auto-infer from route URI scheme
+                    com.leoli.gateway.model.ServiceBindingType inferredType = inferServiceTypeFromUri(route.getUri());
+                    multiConfig.setServiceType(inferredType);
+                    log.debug("Route {} auto-inferred serviceType: {} from URI: {}", route.getId(), inferredType, route.getUri());
+                }
+
                 // Parse services list
                 if (routeMap.containsKey("services")) {
                     List<Map<String, Object>> servicesList = (List<Map<String, Object>>) routeMap.get("services");
@@ -323,6 +337,11 @@ public class RouteRefresher {
                         binding.setVersion((String) svc.get("version"));
                         if (svc.get("enabled") != null) {
                             binding.setEnabled((Boolean) svc.get("enabled"));
+                        }
+                        // Parse service binding type (STATIC or DISCOVERY)
+                        if (svc.get("type") != null) {
+                            String typeStr = (String) svc.get("type");
+                            binding.setType(com.leoli.gateway.model.ServiceBindingType.fromString(typeStr));
                         }
                         bindings.add(binding);
                     }
@@ -378,6 +397,23 @@ public class RouteRefresher {
         Set<String> result = new HashSet<>(set1);
         result.removeAll(set2);
         return result;
+    }
+
+    /**
+     * Infer service binding type from URI scheme.
+     * - lb:// -> DISCOVERY (Nacos service discovery)
+     * - static:// -> STATIC (static configuration)
+     * - others -> STATIC (default)
+     */
+    private com.leoli.gateway.model.ServiceBindingType inferServiceTypeFromUri(java.net.URI uri) {
+        if (uri == null) {
+            return com.leoli.gateway.model.ServiceBindingType.STATIC;
+        }
+        String scheme = uri.getScheme();
+        if ("lb".equalsIgnoreCase(scheme)) {
+            return com.leoli.gateway.model.ServiceBindingType.DISCOVERY;
+        }
+        return com.leoli.gateway.model.ServiceBindingType.STATIC;
     }
     
     /**

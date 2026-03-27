@@ -3,35 +3,35 @@ server:
 
 spring:
   application:
-    name: demo-service
-  cloud:
+#    name: demo-service
+#  cloud:
     # 多注册中心配置 - 使用 primary 指定主注册中心
     primary-service-registry: nacos  # 或 consul
     
     # Nacos 配置
-    nacos:
-      discovery:
-        enabled: true  # 启用 Nacos 服务发现
-        server-addr: 127.0.0.1:8848
-        namespace: public
-        group: DEFAULT_GROUP
-        heart-beat-interval: 5000
-        heart-beat-timeout: 15000
-        ip: 127.0.0.1
-        register-enabled: true
-        weight: 1.0
-        instance-enabled: true
-        discovery-enabled: true  # 启用服务发现
-    
-    # Consul 配置
-    consul:
-      enabled: false  # 默认禁用 Consul，避免 Bean 冲突
-      host: 127.0.0.1
-      port: 8500
-      scheme: http
-      discovery:
-        enabled: false  # 默认禁用服务发现
-        register: false
+#    nacos:
+#      discovery:
+#        enabled: true  # 启用 Nacos 服务发现
+#        server-addr: 127.0.0.1:8848
+#        namespace: public
+#        group: DEFAULT_GROUP
+#        heart-beat-interval: 5000
+#        heart-beat-timeout: 15000
+#        ip: 127.0.0.1
+#        register-enabled: true
+#        weight: 1.0
+#        instance-enabled: true
+#        discovery-enabled: true  # 启用服务发现
+#
+#    # Consul 配置
+#    consul:
+#      enabled: false  # 默认禁用 Consul，避免 Bean 冲突
+#      host: 127.0.0.1
+#      port: 8500
+#      scheme: http
+#      discovery:
+#        enabled: false  # 默认禁用服务发现
+#        register: false
 
 management:
   endpoints:

@@ -2,6 +2,7 @@ package com.leoli.gateway.admin.controller;
 
 import com.leoli.gateway.admin.model.RouteResponse;
 import com.leoli.gateway.admin.model.RouteDefinition;
+import com.leoli.gateway.admin.model.RouteEntity;
 import com.leoli.gateway.admin.service.RouteService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,7 +44,7 @@ public class RouteController {
      */
     @GetMapping("/{id}")
     public ResponseEntity<Map<String, Object>> getRouteById(@PathVariable String id) {
-        RouteDefinition route = routeService.getRoute(id);
+        RouteResponse route = routeService.getRouteResponse(id);
         Map<String, Object> result = new HashMap<>();
         if (route != null) {
             result.put("code", 200);
@@ -64,11 +65,28 @@ public class RouteController {
     public ResponseEntity<Map<String, Object>> createRoute(@RequestBody RouteDefinition route) {
         try {
             log.info("Creating route: {}", route.getId());
-            routeService.createRoute(route);
+            RouteEntity entity = routeService.createRoute(route);
+            
+            // Build RouteResponse with UUID
+            RouteResponse response = new RouteResponse();
+            response.setId(entity.getRouteId());  // UUID
+            response.setRouteName(route.getId());  // routeName
+            response.setUri(route.getUri());
+            response.setMode(route.getMode());
+            response.setServiceId(route.getServiceId());
+            response.setServices(route.getServices());
+            response.setGrayRules(route.getGrayRules());
+            response.setOrder(route.getOrder());
+            response.setPredicates(route.getPredicates());
+            response.setFilters(route.getFilters());
+            response.setMetadata(route.getMetadata());
+            response.setEnabled(true);
+            response.setDescription(route.getDescription());
+            
             Map<String, Object> result = new HashMap<>();
             result.put("code", 200);
             result.put("message", "Route created successfully");
-            result.put("data", route);
+            result.put("data", response);
             return ResponseEntity.ok(result);
         } catch (IllegalArgumentException e) {
             log.warn("Failed to create route: {}", e.getMessage());

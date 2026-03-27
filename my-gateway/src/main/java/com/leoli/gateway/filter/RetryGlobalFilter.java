@@ -7,12 +7,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
+import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
+import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -59,6 +61,14 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
      */
     private Mono<Void> executeWithRetry(ServerWebExchange exchange, GatewayFilterChain chain,
                                          RetryConfig config, int attempt) {
+        // Save original gateway request URL on first attempt
+        if (attempt == 0) {
+            URI originalUrl = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR);
+            if (originalUrl != null) {
+                exchange.getAttributes().put("retry_original_url", originalUrl);
+            }
+        }
+
         return chain.filter(exchange)
                 .onErrorResume(throwable -> {
                     // Check if we should retry
@@ -76,8 +86,13 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
                     log.info("Retrying request for route {}, attempt {}/{}",
                             RouteUtils.getRouteId(exchange), attempt + 1, config.maxAttempts);
 
-                    // Clear the selected instance URL so load balancer can choose a new one
-                    exchange.getAttributes().remove(org.springframework.cloud.gateway.support.ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR);
+                    // Restore original URL so load balancer can choose a new instance
+                    URI originalUrl = exchange.getAttribute("retry_original_url");
+                    if (originalUrl != null) {
+                        exchange.getAttributes().put(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR, originalUrl);
+                    }
+
+                    // Clear instance selection markers
                     exchange.getAttributes().remove("selected_instance");
 
                     // Wait before retry
@@ -100,6 +115,11 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
         // Check cause
         Throwable cause = throwable.getCause();
         if (cause != null && config.retryOnExceptions.contains(cause.getClass().getName())) {
+            return true;
+        }
+
+        // Check for NotFoundException (connection failures, no instances, etc.)
+        if (throwable instanceof org.springframework.cloud.gateway.support.NotFoundException) {
             return true;
         }
 
@@ -185,7 +205,7 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        return 10160; // Execute after DiscoveryLoadBalancerFilter (10150) to catch connection errors
+        return 9999; // Execute before RouteToRequestUrlFilter (10000) and MultiServiceLoadBalancerFilter (10001)
     }
 
     /**

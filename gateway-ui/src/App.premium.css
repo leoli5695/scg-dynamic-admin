@@ -190,7 +190,9 @@
 .main-content {
   background: #f8fafc !important;
   padding: 24px !important;
-  min-height: calc(100vh - 56px - 48px);
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* ==================== Footer ==================== */

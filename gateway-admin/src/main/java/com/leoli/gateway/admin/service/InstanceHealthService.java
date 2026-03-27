@@ -151,19 +151,11 @@ public class InstanceHealthService {
                 entity.setServiceId(dto.getServiceId());
                 entity.setIp(dto.getIp());
                 entity.setPort(dto.getPort());
-                // enabled field is controlled by Nacos config, don't set here
                 entity.setHealthStatus(dto.isHealthy() ? "HEALTHY" : "UNHEALTHY");
                 entity.setCreateTime(System.currentTimeMillis());
-            } else {
-                // Update service ID if reassigned
-                if (!entity.getServiceId().equals(dto.getServiceId())) {
-                    log.info("Instance {}:{} reassigned from {} to {}",
-                            dto.getIp(), dto.getPort(),
-                            entity.getServiceId(), dto.getServiceId());
-                    entity.setServiceId(dto.getServiceId());
-                }
-                // Only update health status, not enabled (preserve user config)
             }
+            // DO NOT update serviceId - keep the first service that registered this instance
+            // This ensures consistent health status across all services
 
             // Update health status
             entity.setHealthStatus(dto.isHealthy() ? "HEALTHY" : "UNHEALTHY");
@@ -174,9 +166,10 @@ public class InstanceHealthService {
             entity.setUpdateTime(System.currentTimeMillis());
 
             healthRepository.save(entity);
-            log.debug("Synced instance health to database: {}:{}:{} [{}]",
-                    dto.getServiceId(), dto.getIp(), dto.getPort(),
-                    dto.isHealthy() ? "HEALTHY" : "UNHEALTHY");
+            log.debug("Synced instance health to database: {}:{} [{}] (serviceId={})",
+                    dto.getIp(), dto.getPort(),
+                    dto.isHealthy() ? "HEALTHY" : "UNHEALTHY",
+                    entity.getServiceId());
         } catch (Exception e) {
             log.error("Failed to sync health status to database", e);
             // Don't throw exception to keep main flow running

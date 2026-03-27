@@ -2,7 +2,7 @@ package com.leoli.gateway.filter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.model.MultiServiceConfig;
-import com.leoli.gateway.util.RouteUtils;
+import com.leoli.gateway.model.ServiceBindingType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
@@ -15,19 +15,26 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.net.URI;
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Multi-service load balancer filter for gray release.
+ * Multi-service load balancer filter for gray release and service selection.
  * <p>
- * Execution order: MultiServiceLoadBalancerFilter (-100) -> DiscoveryLoadBalancerFilter (10150)
+ * Execution order:
+ * 1. RouteToRequestUrlFilter (MIN_VALUE) - sets GATEWAY_REQUEST_URL_ATTR with path/query
+ * 2. MultiServiceLoadBalancerFilter (-100) - this filter, selects service and sets lb://
+ * 3. DiscoveryLoadBalancerFilter (10150) - handles STATIC type (marked with ORIGINAL_STATIC_URI_ATTR)
+ * 4. SCG ReactiveLoadBalancer - handles DISCOVERY type (native lb:// without mark)
  * <p>
  * This filter handles:
- * 1. Multi-service routing with weight-based load balancing
- * 2. Gray release rules (header/cookie/query/weight)
- * 3. Selects target service and stores in exchange attributes for downstream filters
+ * 1. Single-service mode: Direct routing to one service (STATIC or DISCOVERY)
+ * 2. Multi-service mode: Weight-based selection among multiple services
+ * 3. Gray release rules (header/cookie/query/weight)
+ * 4. Always sets lb:// URI, with ORIGINAL_STATIC_URI_ATTR to distinguish STATIC vs DISCOVERY
  *
  * @author leoli
  */
@@ -54,6 +61,16 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
      */
     public static final String TARGET_VERSION_ATTR = "targetVersion";
 
+    /**
+     * Attribute key for marking static service (to be handled by DiscoveryLoadBalancerFilter).
+     */
+    public static final String ORIGINAL_STATIC_URI_ATTR = "original_static_uri";
+
+    /**
+     * Attribute key for marking service binding type.
+     */
+    public static final String SERVICE_BINDING_TYPE_ATTR = "serviceBindingType";
+
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         Route route = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR);
@@ -63,18 +80,86 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
 
         String routeId = route.getId();
 
-        // Debug: log route metadata
-        log.info("MultiServiceFilter - Route: {}, metadata: {}", routeId, route.getMetadata());
-
         // Try to get multi-service config from route metadata
         MultiServiceConfig config = extractMultiServiceConfig(route);
-        if (config == null || !config.isMultiService()) {
-            // Single service mode, let DiscoveryLoadBalancerFilter handle it
-            log.debug("Route {} is single-service mode, skipping multi-service selection", routeId);
+        if (config == null) {
+            // No config, skip
+            log.debug("Route {} has no multi-service config, skipping", routeId);
             return chain.filter(exchange);
         }
 
-        log.debug("Route {} is multi-service mode with {} services", routeId, config.getServices().size());
+        // Handle based on routing mode
+        if (config.getMode() == MultiServiceConfig.RoutingMode.SINGLE) {
+            return handleSingleServiceMode(exchange, chain, routeId, config);
+        } else {
+            return handleMultiServiceMode(exchange, chain, routeId, config);
+        }
+    }
+
+    /**
+     * Handle single-service mode routing.
+     * Route URI is already correct, no need to modify.
+     * Just mark STATIC type for DiscoveryLoadBalancerFilter.
+     */
+    private Mono<Void> handleSingleServiceMode(ServerWebExchange exchange, GatewayFilterChain chain,
+                                               String routeId, MultiServiceConfig config) {
+        String targetServiceId = config.getServiceId();
+        if (targetServiceId == null || targetServiceId.isEmpty()) {
+            log.warn("Route {} is SINGLE mode but has no serviceId configured", routeId);
+            return chain.filter(exchange);
+        }
+
+        // Get service type: infer from URI scheme if not explicitly set
+        ServiceBindingType serviceType = config.getServiceType();
+        if (serviceType == null) {
+            // Auto-infer from route URI scheme
+            URI routeUri = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR) != null
+                    ? ((org.springframework.cloud.gateway.route.Route) exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR)).getUri()
+                    : null;
+            serviceType = inferServiceTypeFromUri(routeUri);
+        }
+
+        // Store service info for downstream filters
+        exchange.getAttributes().put(TARGET_SERVICE_ID_ATTR, targetServiceId);
+        exchange.getAttributes().put(SERVICE_BINDING_TYPE_ATTR, serviceType);
+
+        // For STATIC type, mark it so DiscoveryLoadBalancerFilter will handle it
+        if (serviceType == ServiceBindingType.STATIC) {
+            exchange.getAttributes().put(ORIGINAL_STATIC_URI_ATTR, "static://" + targetServiceId);
+        }
+
+        log.debug("Single-service routing: route={}, service={}, type={}", routeId, targetServiceId, serviceType);
+
+        return chain.filter(exchange);
+    }
+
+    /**
+     * Infer service binding type from URI scheme.
+     * - lb:// -> DISCOVERY (Nacos service discovery)
+     * - static:// -> STATIC (static configuration)
+     */
+    private ServiceBindingType inferServiceTypeFromUri(URI uri) {
+        if (uri == null) {
+            return ServiceBindingType.STATIC;
+        }
+        String scheme = uri.getScheme();
+        if ("lb".equalsIgnoreCase(scheme)) {
+            return ServiceBindingType.DISCOVERY;
+        }
+        return ServiceBindingType.STATIC;
+    }
+
+    /**
+     * Handle multi-service mode routing with weight/gray rules.
+     */
+    private Mono<Void> handleMultiServiceMode(ServerWebExchange exchange, GatewayFilterChain chain,
+                                              String routeId, MultiServiceConfig config) {
+        if (!config.isMultiService()) {
+            log.warn("Route {} marked as MULTI but has no services configured", routeId);
+            return chain.filter(exchange);
+        }
+
+        log.debug("Route {} MULTI mode with {} services", routeId, config.getServices().size());
 
         // Step 1: Check gray rules first
         String targetVersion = matchGrayRules(exchange, config);
@@ -96,26 +181,43 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
             }
         }
 
-        // Step 4: Store selected service ID for DiscoveryLoadBalancerFilter
+        // Step 4: Get service info
         String targetServiceId = selectedBinding.getServiceId();
-        exchange.getAttributes().put(TARGET_SERVICE_ID_ATTR, targetServiceId);
-        exchange.getAttributes().put(TARGET_VERSION_ATTR, targetVersion);
-
-        // Step 5: Update URI to use selected service
-        URI originalUri = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR);
-        if (originalUri != null) {
-            URI newUri = URI.create("lb://" + targetServiceId + originalUri.getPath());
-            if (originalUri.getQuery() != null) {
-                newUri = URI.create(newUri.toString() + "?" + originalUri.getQuery());
-            }
-            exchange.getAttributes().put(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR, newUri);
-            exchange.getAttributes().put("original_static_uri", "static://" + targetServiceId);
+        ServiceBindingType serviceType = selectedBinding.getType();
+        if (serviceType == null) {
+            serviceType = ServiceBindingType.STATIC; // Default for backward compatibility
         }
 
-        log.info("Multi-service routing: route={}, selected service={}, version={}, weight={}",
-                routeId, targetServiceId, targetVersion, selectedBinding.getWeight());
+        // Step 5: Store service info for downstream filters
+        exchange.getAttributes().put(TARGET_SERVICE_ID_ATTR, targetServiceId);
+        exchange.getAttributes().put(TARGET_VERSION_ATTR, targetVersion);
+        exchange.getAttributes().put(SERVICE_BINDING_TYPE_ATTR, serviceType);
+
+        // Step 6: Transform URI based on service type
+        transformUriForServiceType(exchange, targetServiceId, serviceType);
+
+        log.info("Multi-service routing: route={}, service={}, version={}, type={}, weight={}",
+                routeId, targetServiceId, targetVersion, serviceType, selectedBinding.getWeight());
 
         return chain.filter(exchange);
+    }
+
+    /**
+     * Transform URI for multi-service mode.
+     * Only called when selected service differs from route URI.
+     *
+     * - STATIC:  static://serviceId + ORIGINAL_STATIC_URI_ATTR → DiscoveryLoadBalancerFilter handles
+     * - DISCOVERY: lb://serviceId (no mark) → SCG native ReactiveLoadBalancer handles
+     */
+    private void transformUriForServiceType(ServerWebExchange exchange, String serviceId, ServiceBindingType type) {
+        // Build new URI with appropriate scheme (path/query handled by downstream filters)
+        String scheme = (type == ServiceBindingType.STATIC) ? "static" : "lb";
+        URI newUri = URI.create(scheme + "://" + serviceId);
+        exchange.getAttributes().put(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR, newUri);
+
+        if (type == ServiceBindingType.STATIC) {
+            exchange.getAttributes().put(ORIGINAL_STATIC_URI_ATTR, "static://" + serviceId);
+        }
     }
 
     /**
@@ -352,8 +454,9 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        // Execute before DiscoveryLoadBalancerFilter (10150)
-        return -100;
+        // Execute after RouteToRequestUrlFilter (10000) but before DiscoveryLoadBalancerFilter (10150)
+        // RouteToRequestUrlFilter sets GATEWAY_REQUEST_URL_ATTR, we need to modify it after that
+        return 10001;
     }
 
     /**

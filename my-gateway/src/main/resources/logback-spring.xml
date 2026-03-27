@@ -20,7 +20,15 @@
     <logger name="org.springframework.boot.actuate" level="WARN"/>
     <logger name="org.springframework.cloud.client" level="WARN"/>
     <logger name="org.springframework.cloud.commons" level="WARN"/>
-    
+
+    <!-- 抑制 WebFlux 和 Actuator DEBUG 日志 -->
+    <logger name="org.springframework.web.server.adapter.HttpWebHandlerAdapter" level="WARN"/>
+    <logger name="org.springframework.boot.actuate.endpoint.web.reactive.WebFluxEndpointHandlerMapping" level="WARN"/>
+    <logger name="org.springframework.web.reactive.result.method.annotation.ResponseEntityResultHandler" level="WARN"/>
+    <logger name="org.springframework.core.codec.CharSequenceEncoder" level="WARN"/>
+    <logger name="org.springframework.web.HttpLogging" level="WARN"/>
+    <logger name="org.springframework.web.client.RestTemplate" level="WARN"/>
+
     <!-- 健康检查模块日志（可调为 DEBUG） -->
     <logger name="com.example.gateway.health" level="INFO"/>
     <logger name="com.example.gateway.filter" level="INFO"/>

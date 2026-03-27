@@ -1,0 +1,5 @@
+# Nacos Only Profile - 只注册到 Nacos
+spring:
+  cloud:
+    consul:
+      enabled: false

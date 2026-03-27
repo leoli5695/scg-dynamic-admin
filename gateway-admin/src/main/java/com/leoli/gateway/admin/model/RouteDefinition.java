@@ -1,7 +1,9 @@
 package com.leoli.gateway.admin.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -11,6 +13,10 @@ import java.util.Map;
  * Route definition model.
  * Supports both single-service and multi-service routing (gray release).
  *
+ * Key design:
+ * - id: UUID (primary key, used as Nacos config key)
+ * - routeName: Business name for display (e.g., "user-service-route")
+ *
  * @author leoli
  */
 @Data
@@ -18,9 +24,15 @@ import java.util.Map;
 public class RouteDefinition {
 
     /**
-     * Route ID
+     * Route ID (UUID) - Primary identifier, used as Nacos config key.
+     * Format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
      */
     private String id;
+
+    /**
+     * Route name - Business name for display.
+     */
+    private String routeName;
 
     /**
      * Route order
@@ -96,6 +108,7 @@ public class RouteDefinition {
     /**
      * Check if this is multi-service mode.
      */
+    @JsonIgnore
     public boolean isMultiService() {
         return RoutingMode.MULTI.equals(mode) && services != null && !services.isEmpty();
     }
@@ -103,6 +116,7 @@ public class RouteDefinition {
     /**
      * Get all enabled service bindings with their weights.
      */
+    @JsonIgnore
     public List<RouteServiceBinding> getEnabledServices() {
         if (services == null) {
             return new ArrayList<>();
@@ -127,7 +141,8 @@ public class RouteDefinition {
          */
         private Map<String, String> args = new HashMap<>();
 
-        public PredicateDefinition() {}
+        public PredicateDefinition() {
+        }
 
         public PredicateDefinition(String name, Map<String, String> args) {
             this.name = name;
@@ -150,7 +165,8 @@ public class RouteDefinition {
          */
         private Map<String, String> args = new HashMap<>();
 
-        public FilterDefinition() {}
+        public FilterDefinition() {
+        }
 
         public FilterDefinition(String name, Map<String, String> args) {
             this.name = name;

@@ -40,20 +40,30 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
 
     // SQL Injection patterns
     private static final List<Pattern> SQL_INJECTION_PATTERNS = Arrays.asList(
-            // SQL keywords
-            Pattern.compile("(?i)(\\b(select|insert|update|delete|drop|create|alter|truncate|exec|execute)\\b.*\\b(from|into|table|database|set|where)\\b)", Pattern.CASE_INSENSITIVE),
+            // SQL keywords with context
+            Pattern.compile("(?i)(\\b(select|insert|update|delete|drop|create|alter|truncate|exec|execute)\\b.*\\b(from|into|table|database|set|where)\\b)"),
             // Union-based
-            Pattern.compile("(?i)(union\\s+(all\\s+)?select)", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("(?i)(union\\s+(all\\s+)?select)"),
             // Comment injection
-            Pattern.compile("(?i)(--|/\\*|\\*/|#)", Pattern.CASE_INSENSITIVE),
-            // Boolean-based
-            Pattern.compile("(?i)(\\b(and|or)\\b\\s+\\d+\\s*=\\s*\\d+)", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("(--|/\\*|\\*/|#)"),
+            // Boolean-based (with or without quotes): OR '1'='1', OR 1=1, OR 'a'='a'
+            Pattern.compile("(?i)(\\b(and|or)\\b\\s+(['\"]?\\w+['\"]?\\s*=\\s*['\"]?\\w+['\"]?))"),
+            // Tautology: '1'='1', 1=1, 'a'='a'
+            Pattern.compile("(?i)(['\"]\\s*=\\s*['\"])"),
+            // Single quote followed by SQL keyword
+            Pattern.compile("(?i)('\\s*(or|and)\\s+)"),
             // Time-based
-            Pattern.compile("(?i)(sleep\\s*\\(|benchmark\\s*\\(|waitfor\\s+delay)", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("(?i)(sleep\\s*\\(|benchmark\\s*\\(|waitfor\\s+delay|pg_sleep\\s*\\()"),
             // Error-based
-            Pattern.compile("(?i)(convert\\s*\\(|cast\\s*\\(|extractvalue\\s*\\(|updatexml\\s*\\()", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("(?i)(convert\\s*\\(|cast\\s*\\(|extractvalue\\s*\\(|updatexml\\s*\\()"),
             // Stacked queries
-            Pattern.compile(";\\s*(select|insert|update|delete|drop)", Pattern.CASE_INSENSITIVE)
+            Pattern.compile(";\\s*(?i)(select|insert|update|delete|drop)"),
+            // SQL functions commonly used in injection
+            Pattern.compile("(?i)(concat\\s*\\(|char\\s*\\(|substr\\s*\\(|substring\\s*\\(|ascii\\s*\\(|length\\s*\\()"),
+            // Information schema access
+            Pattern.compile("(?i)(information_schema\\.)"),
+            // Quote escape patterns
+            Pattern.compile("('\\s*(;|%3B|--|%2D%2D))")
     );
 
     // XSS patterns
@@ -86,7 +96,16 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
 
         // Get security config
         Map<String, Object> config = strategyManager.getSecurityConfig(routeId);
-        if (config == null || !getBoolValue(config, "enabled", true)) {
+
+        log.info("SecurityGlobalFilter - routeId: {}, hasConfig: {}", routeId, config != null);
+
+        if (config == null) {
+            log.debug("No security config for route: {}, skipping", routeId);
+            return chain.filter(exchange);
+        }
+
+        if (!getBoolValue(config, "enabled", true)) {
+            log.debug("Security disabled for route: {}", routeId);
             return chain.filter(exchange);
         }
 
@@ -98,6 +117,7 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
         if (excludePaths != null && !excludePaths.isEmpty()) {
             for (String excludePath : excludePaths) {
                 if (path.matches(excludePath.replace("*", ".*"))) {
+                    log.debug("Path {} excluded from security check", path);
                     return chain.filter(exchange);
                 }
             }
@@ -109,6 +129,9 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
         boolean enableSqlInjection = getBoolValue(config, "enableSqlInjectionProtection", true);
         boolean enableXss = getBoolValue(config, "enableXssProtection", true);
         String mode = getStringValue(config, "mode", "BLOCK");
+
+        log.info("Security check enabled - SQL: {}, XSS: {}, mode: {}, checkBody: {}",
+                enableSqlInjection, enableXss, mode, checkBody);
 
         List<String> threats = new ArrayList<>();
 

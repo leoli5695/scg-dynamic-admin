@@ -1,5 +1,11 @@
 server:
-  port: 80  # 使用 80 端口作为网关入口
+  port: ${SERVER_PORT:80}  # HTTP port
+  # HTTPS Configuration - disabled by default, use dynamic SSL loading via gateway.ssl.enabled
+  ssl:
+    enabled: ${SERVER_SSL_ENABLED:false}
+  # Additional HTTPS port
+  http2:
+    enabled: true
 
 spring:
   application:
@@ -22,6 +28,7 @@ spring:
       discovery:
         server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
         namespace: ${NACOS_NAMESPACE:}
+        ip: 127.0.0.1  # Force registration with localhost IP
 
     # Consul Configuration (alternative to Nacos)
     consul:
@@ -49,6 +56,8 @@ spring:
       httpclient:
         pool:
           type: ELASTIC
+    # Note: Actuator endpoints are available on management port (8081)
+    # Access http://gateway:8081/actuator/health or http://gateway:8081/actuator/prometheus
 
   # Redis Configuration (for distributed rate limiting)
   redis:
@@ -70,7 +79,7 @@ gateway:
   id: ${GATEWAY_ID:gateway-1}
   # Admin service URL for health status sync and API calls
   admin:
-    url: ${GATEWAY_ADMIN_URL:http://localhost:9090}
+    url: ${GATEWAY_ADMIN_URL:http://127.0.0.1:9090}
   center:
     type: ${GATEWAY_CENTER_TYPE:nacos}
 
@@ -130,6 +139,15 @@ gateway:
     redis:
       enabled: ${REDIS_LIMITER_ENABLED:true}
 
+  # SSL/HTTPS Configuration
+  ssl:
+    # Enable HTTPS on port 443
+    enabled: ${GATEWAY_SSL_ENABLED:true}
+    # Auto-load certificates from Admin API
+    auto-load: ${GATEWAY_SSL_AUTO_LOAD:true}
+    # Certificate refresh interval (ms)
+    refresh-interval: ${GATEWAY_SSL_REFRESH_INTERVAL:30000}
+
 logging:
   level:
     # 核心日志
@@ -151,6 +169,8 @@ logging:
     org.springframework.cloud.client: WARN
     org.springframework.cloud.commons: WARN
 management:
+  server:
+    port: 8081  # Separate port for actuator endpoints (bypasses gateway routing)
   endpoints:
     web:
       exposure:

@@ -8,7 +8,8 @@ import {
   ThunderboltOutlined, StopOutlined, PlayCircleOutlined, GlobalOutlined,
   ApiOutlined, SafetyOutlined, ClockCircleOutlined, KeyOutlined,
   SyncOutlined, FileTextOutlined, SettingOutlined,
-  CloudOutlined, SecurityScanOutlined, NumberOutlined, LockOutlined, UserOutlined
+  CloudOutlined, SecurityScanOutlined, NumberOutlined, LockOutlined, UserOutlined,
+  CopyOutlined
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import api from '../utils/api';
@@ -32,6 +33,7 @@ interface StrategyDefinition {
 
 const StrategiesPage: React.FC = () => {
   const [strategies, setStrategies] = useState<StrategyDefinition[]>([]);
+  const [routes, setRoutes] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -44,7 +46,19 @@ const StrategiesPage: React.FC = () => {
 
   useEffect(() => {
     loadStrategies();
+    loadRoutes();
   }, []);
+
+  const loadRoutes = async () => {
+    try {
+      const response = await api.get('/api/routes');
+      if (response.data.code === 200) {
+        setRoutes(response.data.data || []);
+      }
+    } catch (error: any) {
+      console.error('Load routes error:', error);
+    }
+  };
 
   const loadStrategies = async () => {
     try {
@@ -158,11 +172,35 @@ const StrategiesPage: React.FC = () => {
       case 'AUTH':
         return {
           authType: values.authType || 'JWT',
+          // JWT fields
           secretKey: values.secretKey,
+          jwtAlgorithm: values.jwtAlgorithm,
+          jwtIssuer: values.jwtIssuer,
+          jwtAudience: values.jwtAudience,
+          jwtClockSkewSeconds: values.jwtClockSkewSeconds ? parseInt(values.jwtClockSkewSeconds) : undefined,
+          // API_KEY fields
           apiKey: values.apiKey,
+          apiKeyHeader: values.apiKeyHeader,
+          apiKeyPrefix: values.apiKeyPrefix,
+          apiKeyQueryParam: values.apiKeyQueryParam,
+          // OAUTH2 fields
           clientId: values.clientId,
           clientSecret: values.clientSecret,
           tokenEndpoint: values.tokenEndpoint,
+          requiredScopes: values.requiredScopes,
+          // BASIC fields
+          basicUsername: values.basicUsername,
+          basicPassword: values.basicPassword,
+          realm: values.realm,
+          passwordHashAlgorithm: values.passwordHashAlgorithm,
+          basicUsersJson: values.basicUsersJson,
+          // HMAC fields
+          accessKey: values.accessKey,
+          signatureAlgorithm: values.signatureAlgorithm,
+          clockSkewMinutes: values.clockSkewMinutes ? parseInt(values.clockSkewMinutes) : undefined,
+          requireNonce: values.requireNonce,
+          validateContentMd5: values.validateContentMd5,
+          accessKeySecretsJson: values.accessKeySecretsJson,
         };
       case 'RETRY':
         return {
@@ -459,11 +497,11 @@ const StrategiesPage: React.FC = () => {
               <Col span={12}>
                 <Form.Item name="authType" label={t('strategy.config.auth_type')} initialValue="JWT">
                   <Select>
-                    <Select.Option value="JWT"><KeyOutlined /> JWT</Select.Option>
-                    <Select.Option value="API_KEY"><ApiOutlined /> API Key</Select.Option>
-                    <Select.Option value="OAUTH2"><GlobalOutlined /> OAuth2</Select.Option>
-                    <Select.Option value="BASIC"><LockOutlined /> Basic Auth</Select.Option>
-                    <Select.Option value="HMAC"><SafetyOutlined /> HMAC Signature</Select.Option>
+                    <Select.Option value="JWT"><KeyOutlined /> {t('strategy.auth_type.jwt')}</Select.Option>
+                    <Select.Option value="API_KEY"><ApiOutlined /> {t('strategy.auth_type.api_key')}</Select.Option>
+                    <Select.Option value="OAUTH2"><GlobalOutlined /> {t('strategy.auth_type.oauth2')}</Select.Option>
+                    <Select.Option value="BASIC"><LockOutlined /> {t('strategy.auth_type.basic')}</Select.Option>
+                    <Select.Option value="HMAC"><SafetyOutlined /> {t('strategy.auth_type.hmac')}</Select.Option>
                   </Select>
                 </Form.Item>
               </Col>
@@ -602,10 +640,10 @@ const StrategiesPage: React.FC = () => {
                           <Col span={12}>
                             <Form.Item name="passwordHashAlgorithm" label={t('strategy.config.password_hash')} initialValue="PLAIN">
                               <Select>
-                                <Select.Option value="PLAIN">Plain Text</Select.Option>
-                                <Select.Option value="MD5">MD5</Select.Option>
-                                <Select.Option value="SHA256">SHA-256</Select.Option>
-                                <Select.Option value="BCRYPT">BCrypt</Select.Option>
+                                <Select.Option value="PLAIN">{t('strategy.hash.plain')}</Select.Option>
+                                <Select.Option value="MD5">{t('strategy.hash.md5')}</Select.Option>
+                                <Select.Option value="SHA256">{t('strategy.hash.sha256')}</Select.Option>
+                                <Select.Option value="BCRYPT">{t('strategy.hash.bcrypt')}</Select.Option>
                               </Select>
                             </Form.Item>
                           </Col>
@@ -736,9 +774,9 @@ const StrategiesPage: React.FC = () => {
             <Col span={8}>
               <Form.Item name="logLevel" label={t('strategy.config.log_level')} initialValue="NORMAL">
                 <Select>
-                  <Select.Option value="MINIMAL">MINIMAL</Select.Option>
-                  <Select.Option value="NORMAL">NORMAL</Select.Option>
-                  <Select.Option value="VERBOSE">VERBOSE</Select.Option>
+                  <Select.Option value="MINIMAL">{t('strategy.log_level.minimal')}</Select.Option>
+                  <Select.Option value="NORMAL">{t('strategy.log_level.normal')}</Select.Option>
+                  <Select.Option value="VERBOSE">{t('strategy.log_level.verbose')}</Select.Option>
                 </Select>
               </Form.Item>
             </Col>
@@ -853,9 +891,9 @@ const StrategiesPage: React.FC = () => {
             <Col span={12}>
               <Form.Item name="versionMode" label={t('strategy.config.version_mode')} initialValue="PATH">
                 <Select>
-                  <Select.Option value="PATH">PATH</Select.Option>
-                  <Select.Option value="HEADER">HEADER</Select.Option>
-                  <Select.Option value="QUERY">QUERY</Select.Option>
+                  <Select.Option value="PATH">{t('strategy.version_mode.path')}</Select.Option>
+                  <Select.Option value="HEADER">{t('strategy.version_mode.header')}</Select.Option>
+                  <Select.Option value="QUERY">{t('strategy.version_mode.query')}</Select.Option>
                 </Select>
               </Form.Item>
             </Col>
@@ -959,9 +997,24 @@ const StrategiesPage: React.FC = () => {
                   </div>
                   <div className="strategy-info">
                     <Text strong className="strategy-name">{strategy.strategyName}</Text>
-                    <Tag color={getStrategyTypeColor(strategy.strategyType)} className="strategy-type-tag">
-                      {getStrategyTypeLabel(strategy.strategyType)}
-                    </Tag>
+                    <div className="strategy-id-row">
+                      <Tag color={getStrategyTypeColor(strategy.strategyType)} className="strategy-type-tag">
+                        {getStrategyTypeLabel(strategy.strategyType)}
+                      </Tag>
+                      <Tooltip title={t('common.copy_id')}>
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<CopyOutlined />}
+                          className="copy-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigator.clipboard.writeText(strategy.strategyId);
+                            message.success(t('message.copy_success'));
+                          }}
+                        />
+                      </Tooltip>
+                    </div>
                   </div>
                   <Dropdown menu={{ items: getActionMenu(strategy) }} trigger={['click']} placement="bottomRight">
                     <Button type="text" icon={<MoreOutlined />} className="action-btn" />
@@ -983,12 +1036,15 @@ const StrategiesPage: React.FC = () => {
                 )}
 
                 <div className="strategy-config">
-                  {Object.entries(strategy.config || {}).slice(0, 3).map(([key, value]) => (
-                    <div key={key} className="config-item">
-                      <Text type="secondary" className="config-key">{key}:</Text>
-                      <Text className="config-value">{String(value).substring(0, 20)}{String(value).length > 20 ? '...' : ''}</Text>
-                    </div>
-                  ))}
+                  {Object.entries(strategy.config || {}).slice(0, 3).map(([key, value]) => {
+                    const displayValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+                    return (
+                      <div key={key} className="config-item">
+                        <Text type="secondary" className="config-key">{key}:</Text>
+                        <Text className="config-value">{displayValue.substring(0, 30)}{displayValue.length > 30 ? '...' : ''}</Text>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {strategy.description && (
@@ -1085,7 +1141,13 @@ const StrategiesPage: React.FC = () => {
                             rules={[{ required: true }]}
                             extra={t('strategy.route_id_helper')}
                           >
-                            <Input placeholder={t('strategy.route_id_placeholder')} size="large" />
+                            <Select placeholder={t('strategy.route_id_placeholder')} size="large" showSearch optionFilterProp="children">
+                              {routes.map(route => (
+                                <Select.Option key={route.id} value={route.id}>
+                                  {route.routeName || route.id}
+                                </Select.Option>
+                              ))}
+                            </Select>
                           </Form.Item>
                         );
                       }
@@ -1222,7 +1284,13 @@ const StrategiesPage: React.FC = () => {
                         rules={[{ required: true }]}
                         extra={t('strategy.route_id_helper')}
                       >
-                        <Input size="large" />
+                        <Select size="large" showSearch optionFilterProp="children">
+                          {routes.map(route => (
+                            <Select.Option key={route.id} value={route.id}>
+                              {route.routeName || route.id}
+                            </Select.Option>
+                          ))}
+                        </Select>
                       </Form.Item>
                     );
                   }

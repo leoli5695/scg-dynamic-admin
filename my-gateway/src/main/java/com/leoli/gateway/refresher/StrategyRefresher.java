@@ -11,8 +11,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -47,6 +49,7 @@ public class StrategyRefresher {
     public void init() {
         log.info("StrategyRefresher: Loading initial strategies...");
         loadInitialStrategies();
+        registerIndexListener();
     }
 
     @PreDestroy
@@ -162,5 +165,58 @@ public class StrategyRefresher {
         strategyManager.clear();
         activeListeners.clear();
         loadInitialStrategies();
+    }
+
+    /**
+     * Register listener for strategies index changes.
+     * When index changes, reload all strategies.
+     */
+    private void registerIndexListener() {
+        ConfigCenterService.ConfigListener indexListener = (dataId, group, content) -> {
+            log.info("Strategies index changed, reloading strategies...");
+            onIndexChange(content);
+        };
+        configService.addListener(STRATEGIES_INDEX, GROUP, indexListener);
+        log.info("Registered listener for strategies index");
+    }
+
+    /**
+     * Handle strategies index change.
+     */
+    private void onIndexChange(String content) {
+        try {
+            if (content == null || content.isBlank()) {
+                // All strategies removed
+                strategyManager.clear();
+                activeListeners.clear();
+                log.info("All strategies cleared");
+                return;
+            }
+
+            List<String> newStrategyIds = objectMapper.readValue(content, new TypeReference<List<String>>() {});
+            log.info("Index contains {} strategies", newStrategyIds.size());
+
+            // Find strategies to remove (in cache but not in new index)
+            Set<String> toRemove = new HashSet<>(activeListeners.keySet());
+            toRemove.removeAll(newStrategyIds);
+
+            // Remove strategies no longer in index
+            for (String strategyId : toRemove) {
+                strategyManager.removeStrategy(strategyId);
+                activeListeners.remove(strategyId);
+                log.info("Removed strategy: {}", strategyId);
+            }
+
+            // Load new or updated strategies
+            for (String strategyId : newStrategyIds) {
+                if (!activeListeners.containsKey(strategyId)) {
+                    loadStrategy(strategyId);
+                }
+            }
+
+            log.info("StrategyRefresher: Now have {} strategies", strategyManager.getStrategyCount());
+        } catch (Exception e) {
+            log.error("Failed to process index change: {}", e.getMessage(), e);
+        }
     }
 }

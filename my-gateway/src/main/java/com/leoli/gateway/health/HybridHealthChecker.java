@@ -81,6 +81,7 @@ public class HybridHealthChecker {
     /**
      * Initialize instance (called when discovered from Nacos).
      * Creates instance with PENDING status - actual health determined by active check.
+     * If instance already exists in cache, marks it as needing re-check.
      */
     public void initializeInstance(String serviceId, String ip, int port) {
         String key = InstanceHealth.buildKey(serviceId, ip, port);
@@ -101,6 +102,17 @@ public class HybridHealthChecker {
 
             // Queue for push to admin so it shows as pending/unhealthy
             queueForBatchPush(serviceId, ip, port, false);
+        } else {
+            // Instance already in cache - mark as needing re-check
+            InstanceHealth existing = healthCache.getIfPresent(key);
+            if (existing != null) {
+                log.info("Instance {}:{} already in cache, marking for re-check (current healthy={})",
+                        ip, port, existing.isHealthy());
+                // Mark as pending re-check so health check will run
+                existing.setUnhealthyReason("PENDING: Configuration changed, awaiting re-check");
+                existing.setCheckType("REINIT");
+                // Don't change healthy status - let the health check update it
+            }
         }
     }
 
@@ -361,13 +373,16 @@ public class HybridHealthChecker {
 
     /**
      * Get instance health status.
+     * Returns null if instance has not been checked yet (caller should handle this case).
      */
     public InstanceHealth getHealth(String serviceId, String ip, int port) {
         String key = InstanceHealth.buildKey(serviceId, ip, port);
         InstanceHealth health = healthCache.getIfPresent(key);
 
         if (health == null) {
-            return createHealthy(serviceId, ip, port);
+            // Instance not in cache - return null to indicate "unknown" status
+            // Caller should handle this case (e.g., trigger health check or treat as unhealthy)
+            return null;
         }
 
         // Check if should auto-recover
@@ -380,6 +395,14 @@ public class HybridHealthChecker {
         }
 
         return health;
+    }
+    
+    /**
+     * Check if instance has been health-checked before.
+     */
+    public boolean hasHealthRecord(String serviceId, String ip, int port) {
+        String key = InstanceHealth.buildKey(serviceId, ip, port);
+        return healthCache.getIfPresent(key) != null;
     }
 
     /**
@@ -477,6 +500,29 @@ public class HybridHealthChecker {
         if (removedCount > 0 || unhealthyKept > 0) {
             log.info("Cleanup completed: removed {} idle healthy instances, kept {} unhealthy instances for retry",
                     removedCount, unhealthyKept);
+        }
+    }
+
+    /**
+     * Clear all health records for a service.
+     * Called when service configuration is updated or deleted.
+     */
+    public void clearServiceInstances(String serviceId) {
+        List<String> keysToRemove = new ArrayList<>();
+        
+        for (java.util.Map.Entry<String, InstanceHealth> entry : healthCache.asMap().entrySet()) {
+            InstanceHealth health = entry.getValue();
+            if (serviceId.equals(health.getServiceId())) {
+                keysToRemove.add(entry.getKey());
+            }
+        }
+
+        for (String key : keysToRemove) {
+            healthCache.invalidate(key);
+        }
+
+        if (!keysToRemove.isEmpty()) {
+            log.info("Cleared {} health records for service: {}", keysToRemove.size(), serviceId);
         }
     }
 }

@@ -1,0 +1,39 @@
+server:
+  port: 9091
+
+spring:
+  application:
+    name: gateway-admin-test
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/gateway_admin_test?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+    username: root
+    password: 123456
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.MySQLDialect
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      database: 1
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848
+        namespace: public
+        group: DEFAULT_GROUP
+      config:
+        server-addr: 127.0.0.1:8848
+        namespace: public
+        group: DEFAULT_GROUP
+
+logging:
+  level:
+    com.leoli.gateway: DEBUG
+    org.springframework.web: DEBUG

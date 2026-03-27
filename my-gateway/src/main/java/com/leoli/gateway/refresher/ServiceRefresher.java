@@ -3,6 +3,8 @@ package com.leoli.gateway.refresher;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.center.spi.ConfigCenterService;
+import com.leoli.gateway.health.ActiveHealthChecker;
+import com.leoli.gateway.health.HybridHealthChecker;
 import com.leoli.gateway.manager.ServiceManager;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -35,6 +37,8 @@ public class ServiceRefresher {
     private final ConfigCenterService configService;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ServiceManager serviceManager;
+    private final HybridHealthChecker hybridHealthChecker;
+    private final ActiveHealthChecker activeHealthChecker;
 
     // Currently listening service IDs
     private final Set<String> listeningServiceIds = ConcurrentHashMap.newKeySet();
@@ -44,10 +48,14 @@ public class ServiceRefresher {
 
     @Autowired
     public ServiceRefresher(ConfigCenterService configService,
-                           ServiceManager serviceManager) {
+                           ServiceManager serviceManager,
+                           HybridHealthChecker hybridHealthChecker,
+                           ActiveHealthChecker activeHealthChecker) {
         this.configService = configService;
         this.serviceManager = serviceManager;
-        log.info("ServiceRefresher initialized with per-service incremental refresh");
+        this.hybridHealthChecker = hybridHealthChecker;
+        this.activeHealthChecker = activeHealthChecker;
+        log.info("ServiceRefresher initialized with per-service incremental refresh and health check");
     }
 
     /**
@@ -126,20 +134,65 @@ public class ServiceRefresher {
     private void onSingleServiceChange(String serviceId, String content) {
         try {
             if (content == null || content.isBlank()) {
-                // Service deleted
+                // Service deleted or disabled - clear all caches
                 serviceManager.clearServiceCache(serviceId);
-                log.info("🗑️  Service deleted: {}", serviceId);
+                hybridHealthChecker.clearServiceInstances(serviceId);
+                log.info("🗑️  Service deleted/disabled: {}", serviceId);
             } else {
-                // Service created or updated
+                // Service created or updated - clear old cache and reload
+                hybridHealthChecker.clearServiceInstances(serviceId);
                 JsonNode serviceNode = objectMapper.readTree(content);
                 validateServiceConfig(serviceNode, serviceId);
                 serviceManager.parseAndCacheService(serviceId, serviceNode);
-                log.info("✏️  Service updated: {}", serviceId);
+                log.info("✏️  Service created/updated: {}", serviceId);
+
+                // Trigger health check for all instances
+                triggerHealthCheckForService(serviceId);
             }
 
         } catch (Exception e) {
             log.error("Failed to process service change: {}", serviceId, e);
         }
+    }
+
+    /**
+     * Trigger health check for all instances of a service.
+     * Called after service cache is cleared and reloaded.
+     */
+    private void triggerHealthCheckForService(String serviceId) {
+        List<ServiceManager.ServiceInstance> instances = serviceManager.getServiceInstances(serviceId);
+        if (instances == null || instances.isEmpty()) {
+            return;
+        }
+
+        log.info("🏥 Triggering health check for {} instances of service: {}", instances.size(), serviceId);
+
+        // Run health checks asynchronously
+        java.util.concurrent.CompletableFuture.runAsync(() -> {
+            for (ServiceManager.ServiceInstance instance : instances) {
+                try {
+                    // Initialize instance in health cache (marks as PENDING)
+                    hybridHealthChecker.initializeInstance(
+                            serviceId,
+                            instance.getIp(),
+                            instance.getPort()
+                    );
+
+                    // Immediately probe the instance
+                    activeHealthChecker.probe(
+                            serviceId,
+                            instance.getIp(),
+                            instance.getPort()
+                    );
+
+                    log.debug("Health check completed for instance {}:{}", instance.getIp(), instance.getPort());
+                } catch (Exception e) {
+                    log.warn("Health check failed for instance {}:{}: {}",
+                            instance.getIp(), instance.getPort(), e.getMessage());
+                }
+            }
+            log.info("✅ Health check completed for service: {}", serviceId);
+        });
     }
 
     /**
@@ -194,6 +247,9 @@ public class ServiceRefresher {
             validateServiceConfig(serviceNode, serviceId);
             serviceManager.parseAndCacheService(serviceId, serviceNode);
             log.info("✅ Loaded service: {}", serviceId);
+
+            // Trigger health check for all instances
+            triggerHealthCheckForService(serviceId);
         } catch (Exception e) {
             log.error("Failed to parse service: {}", serviceId, e);
             return;

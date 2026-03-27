@@ -41,34 +41,29 @@ public class ServiceController {
     public ResponseEntity<Map<String, Object>> getAllServices() {
         List<ServiceDefinition> services = serviceManager.getAllServices();
 
-        // ✅ Build response with health status dynamically injected
+        // Get ALL instance health records (by ip:port, not serviceId)
+        // This ensures same instance shows same health across all services
+        List<ServiceInstanceHealth> allHealthRecords = instanceHealthRepository.findAll();
+        
+        // Map for quick lookup by ip:port
+        Map<String, ServiceInstanceHealth> healthMap = new HashMap<>();
+        for (ServiceInstanceHealth health : allHealthRecords) {
+            String key = health.getIp() + ":" + health.getPort();
+            healthMap.put(key, health);
+        }
+
+        // Build response with health status
         List<Object> servicesWithHealth = new ArrayList<>();
 
         for (ServiceDefinition service : services) {
-            // Create response map (don't modify cached config)
             Map<String, Object> serviceMap = new HashMap<>();
             serviceMap.put("name", service.getName());
             serviceMap.put("loadBalancer", service.getLoadBalancer());
             serviceMap.put("serviceId", service.getServiceId());
             serviceMap.put("description", service.getDescription());
 
-            // Build instances list with healthy field
             List<Map<String, Object>> instancesList = new ArrayList<>();
             if (service.getInstances() != null) {
-                String serviceId = service.getServiceId();
-
-                // Get instance health from SERVICE_INSTANCES table
-                List<ServiceInstanceHealth> instanceHealthList =
-                        serviceId != null ? instanceHealthRepository.findByServiceId(serviceId) : new ArrayList<>();
-
-                // Map for quick lookup
-                Map<String, ServiceInstanceHealth> healthMap = new HashMap<>();
-                for (ServiceInstanceHealth health : instanceHealthList) {
-                    String key = health.getIp() + ":" + health.getPort();
-                    healthMap.put(key, health);
-                }
-
-                // Convert each instance and add healthy field
                 for (ServiceDefinition.ServiceInstance instance : service.getInstances()) {
                     Map<String, Object> instanceMap = new HashMap<>();
                     instanceMap.put("instanceId", instance.getInstanceId());
@@ -77,14 +72,12 @@ public class ServiceController {
                     instanceMap.put("weight", instance.getWeight());
                     instanceMap.put("enabled", instance.isEnabled());
 
-                    // ✅ Inject healthy field from database
+                    // Get health by ip:port (not serviceId)
                     String key = instance.getIp() + ":" + instance.getPort();
                     ServiceInstanceHealth health = healthMap.get(key);
                     if (health != null) {
                         instanceMap.put("healthy", "HEALTHY".equals(health.getHealthStatus()));
                     } else {
-                        // No health record means instance hasn't been checked yet
-                        // Default to false (unhealthy) until Gateway confirms it's healthy
                         instanceMap.put("healthy", false);
                     }
 
@@ -230,46 +223,95 @@ public class ServiceController {
 
     /**
      * Add a service instance.
-     * TODO: Implement in future version
      */
     @PostMapping("/{name}/instances")
     public ResponseEntity<Map<String, Object>> addServiceInstance(
             @PathVariable String name,
             @RequestBody ServiceDefinition.ServiceInstance instance) {
-        Map<String, Object> result = new HashMap<>();
-        result.put("code", 501);
-        result.put("message", "Not implemented yet: addServiceInstance");
-        return ResponseEntity.status(501).body(result);
+        try {
+            log.info("Adding instance to service {}: {}:{}", name, instance.getIp(), instance.getPort());
+            ServiceDefinition updated = serviceManager.addInstance(name, instance);
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 200);
+            result.put("data", updated);
+            result.put("message", "Instance added successfully");
+            return ResponseEntity.ok(result);
+        } catch (IllegalArgumentException e) {
+            log.warn("Failed to add instance: {}", e.getMessage());
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 400);
+            result.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(result);
+        } catch (Exception e) {
+            log.error("Failed to add instance", e);
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 500);
+            result.put("message", "Failed to add instance: " + e.getMessage());
+            return ResponseEntity.status(500).body(result);
+        }
     }
 
     /**
      * Remove a service instance.
-     * TODO: Implement in future version
      */
     @DeleteMapping("/{name}/instances/{instanceId}")
     public ResponseEntity<Map<String, Object>> removeServiceInstance(
             @PathVariable String name,
             @PathVariable String instanceId) {
-        Map<String, Object> result = new HashMap<>();
-        result.put("code", 501);
-        result.put("message", "Not implemented yet: removeServiceInstance");
-        return ResponseEntity.status(501).body(result);
+        try {
+            log.info("Removing instance {} from service {}", instanceId, name);
+            ServiceDefinition updated = serviceManager.removeInstance(name, instanceId);
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 200);
+            result.put("data", updated);
+            result.put("message", "Instance removed successfully");
+            return ResponseEntity.ok(result);
+        } catch (IllegalArgumentException e) {
+            log.warn("Failed to remove instance: {}", e.getMessage());
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 404);
+            result.put("message", e.getMessage());
+            return ResponseEntity.status(404).body(result);
+        } catch (Exception e) {
+            log.error("Failed to remove instance", e);
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 500);
+            result.put("message", "Failed to remove instance: " + e.getMessage());
+            return ResponseEntity.status(500).body(result);
+        }
     }
 
     /**
-     * Update service instance status (healthy/enabled).
-     * TODO: Implement in future version
+     * Update service instance status (enabled/healthy).
      */
     @PutMapping("/{name}/instances/{instanceId}/status")
     public ResponseEntity<Map<String, Object>> updateInstanceStatus(
             @PathVariable String name,
             @PathVariable String instanceId,
-            @RequestParam boolean healthy,
-            @RequestParam boolean enabled) {
-        Map<String, Object> result = new HashMap<>();
-        result.put("code", 501);
-        result.put("message", "Not implemented yet: updateInstanceStatus");
-        return ResponseEntity.status(501).body(result);
+            @RequestBody Map<String, Boolean> statusRequest) {
+        try {
+            Boolean enabled = statusRequest.get("enabled");
+            Boolean healthy = statusRequest.get("healthy");
+            log.info("Updating instance {} status in service {}: enabled={}, healthy={}", instanceId, name, enabled, healthy);
+            ServiceDefinition updated = serviceManager.updateInstanceStatus(name, instanceId, enabled, healthy);
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 200);
+            result.put("data", updated);
+            result.put("message", "Instance status updated successfully");
+            return ResponseEntity.ok(result);
+        } catch (IllegalArgumentException e) {
+            log.warn("Failed to update instance status: {}", e.getMessage());
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 404);
+            result.put("message", e.getMessage());
+            return ResponseEntity.status(404).body(result);
+        } catch (Exception e) {
+            log.error("Failed to update instance status", e);
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 500);
+            result.put("message", "Failed to update instance status: " + e.getMessage());
+            return ResponseEntity.status(500).body(result);
+        }
     }
 
     /**

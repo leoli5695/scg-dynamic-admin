@@ -1,0 +1,41 @@
+# Nacos Only Configuration
+server:
+  port: 9000
+
+spring:
+  application:
+    name: demo-service
+  cloud:
+    # Nacos 配置
+    nacos:
+      discovery:
+        enabled: true
+        server-addr: 127.0.0.1:8848
+        namespace: public
+        group: DEFAULT_GROUP
+        heart-beat-interval: 5000
+        heart-beat-timeout: 15000
+        ip: 127.0.0.1
+        register-enabled: true
+        weight: 1.0
+        instance-enabled: true
+        discovery-enabled: true
+    
+    # Consul 配置 - 完全禁用
+    consul:
+      enabled: false
+      discovery:
+        enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.alibaba.nacos: INFO
