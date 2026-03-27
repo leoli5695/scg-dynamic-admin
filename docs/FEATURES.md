@@ -7,15 +7,20 @@
 ## Table of Contents
 
 1. [Route Management](#1-route-management)
-2. [Service Discovery](#2-service-discovery)
-3. [Authentication](#3-authentication)
-4. [Rate Limiting](#4-rate-limiting)
-5. [Circuit Breaker](#5-circuit-breaker)
-6. [IP Filtering](#6-ip-filtering)
-7. [Timeout Control](#7-timeout-control)
-8. [Distributed Tracing](#8-distributed-tracing)
-9. [Health Checking](#9-health-checking)
-10. [API Reference](#10-api-reference)
+2. [Multi-Service Routing & Gray Release](#2-multi-service-routing--gray-release)
+3. [Service Discovery](#3-service-discovery)
+4. [SSL Termination](#4-ssl-termination)
+5. [Authentication](#5-authentication)
+6. [Rate Limiting](#6-rate-limiting)
+7. [Circuit Breaker](#7-circuit-breaker)
+8. [IP Filtering](#8-ip-filtering)
+9. [Timeout Control](#9-timeout-control)
+10. [Response Caching](#10-response-caching)
+11. [Monitoring & Alerts](#11-monitoring--alerts)
+12. [Request Tracing](#12-request-tracing)
+13. [AI-Powered Analysis](#13-ai-powered-analysis)
+14. [Email Notifications](#14-email-notifications)
+15. [API Reference](#15-api-reference)
 
 ---
 
@@ -32,6 +37,7 @@ Routes define how incoming requests are forwarded to backend services.
 ```json
 {
   "id": "user-service-route",
+  "routeName": "User Service Route",
   "uri": "lb://user-service",
   "order": 0,
   "predicates": [
@@ -40,10 +46,7 @@ Routes define how incoming requests are forwarded to backend services.
   "filters": [
     {"name": "StripPrefix", "args": {"parts": "1"}}
   ],
-  "metadata": {
-    "timeout": 3000,
-    "retry": 3
-  }
+  "enabled": true
 }
 ```
 
@@ -52,11 +55,22 @@ Routes define how incoming requests are forwarded to backend services.
 | Scheme | Description | Example |
 |--------|-------------|---------|
 | `lb://` | Dynamic service discovery via Nacos/Consul | `lb://user-service` |
-| `static://` | Static service discovery (custom protocol) | `static://backend-service` |
+| `static://` | Static service discovery | `static://backend-service` |
+| `http://` | Direct HTTP endpoint | `http://192.168.1.10:8080` |
 
-> Note: `http://` is supported natively by Spring Cloud Gateway (not a custom feature of this project).
+### 1.4 Predicates
 
-### 1.4 API Endpoints
+| Predicate | Description | Example |
+|-----------|-------------|---------|
+| `Path` | URL path pattern | `/api/user/**` |
+| `Host` | Host header match | `**.example.com` |
+| `Method` | HTTP method | `GET,POST` |
+| `Header` | Header existence/match | `X-Request-Id, \d+` |
+| `Query` | Query parameter | `userId` |
+| `After` | After time | `2024-01-01T00:00:00+08:00` |
+| `Before` | Before time | `2024-12-31T23:59:59+08:00` |
+
+### 1.5 API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -70,65 +84,100 @@ Routes define how incoming requests are forwarded to backend services.
 
 ---
 
-## 2. Service Discovery
+## 2. Multi-Service Routing & Gray Release
 
-### 2.1 Dual Protocol Support
+### 2.1 Overview
 
-The gateway supports two service discovery protocols:
+Multi-service routing allows a single route to distribute traffic across multiple backend services with configurable weights and rules.
+
+### 2.2 Configuration
+
+```json
+{
+  "id": "user-route",
+  "mode": "MULTI",
+  "services": [
+    {
+      "serviceId": "user-v1",
+      "serviceName": "User Service V1",
+      "weight": 90,
+      "type": "DISCOVERY",
+      "enabled": true
+    },
+    {
+      "serviceId": "user-v2",
+      "serviceName": "User Service V2",
+      "weight": 10,
+      "type": "DISCOVERY",
+      "enabled": true
+    }
+  ],
+  "grayRules": {
+    "enabled": true,
+    "rules": [
+      {
+        "type": "HEADER",
+        "name": "X-Version",
+        "value": "v2",
+        "targetVersion": "user-v2"
+      }
+    ]
+  }
+}
+```
+
+### 2.3 Gray Rule Types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `HEADER` | Match HTTP header | `X-Version: v2` |
+| `COOKIE` | Match cookie value | `version=v2` |
+| `QUERY` | Match URL parameter | `?version=v2` |
+| `WEIGHT` | Percentage-based | `10%` to v2 |
+
+### 2.4 Rule Matching Logic
+
+```
+Request arrives
+      │
+      ▼
+┌─────────────────┐
+│ Check Gray Rules│
+└────────┬────────┘
+         │
+    ┌────┴────┐
+    │         │
+   Match    No Match
+    │         │
+    ▼         ▼
+  Route to  Use Weight
+  Target    Distribution
+  Service
+```
+
+**First-match-wins:** Rules are evaluated in order. First matching rule wins.
+
+### 2.5 Use Cases
+
+| Use Case | Configuration |
+|----------|---------------|
+| **Canary Deployment** | 5% traffic to new version via WEIGHT rule |
+| **Beta Testing** | Route users with `X-Beta: true` header to beta service |
+| **A/B Testing** | Use COOKIE rule to split users into groups |
+| **Internal Testing** | Route internal IPs to staging via HEADER rule |
+
+---
+
+## 3. Service Discovery
+
+### 3.1 Dual Protocol Support
 
 | Protocol | Description | Use Case |
 |----------|-------------|----------|
-| `lb://` | Native SCG load balancing via Nacos/Consul | Services registered in service registry |
-| `static://` | Custom static service discovery | Legacy systems, external APIs, non-registered services |
+| `lb://` | Dynamic discovery via Nacos/Consul | Services in service registry |
+| `static://` | Static service discovery | Legacy systems, external APIs |
 
-### 2.2 Dynamic Discovery (`lb://`)
-
-Services registered in Nacos/Consul are automatically discovered using Spring Cloud Gateway's native load balancer.
-
-```yaml
-# application.yml
-spring:
-  cloud:
-    nacos:
-      discovery:
-        server-addr: 127.0.0.1:8848
-```
-
-### 2.3 Static Discovery (`static://`) - Highlight Feature
-
-A custom protocol designed for services **not registered in Nacos/Consul**:
-
-```
-+------------------------------------------------------------------+
-|                    STATIC PROTOCOL FLOW                          |
-+------------------------------------------------------------------+
-
-  Route URI: static://my-service
-            |
-            v
-  +---------------------------+
-  | StaticProtocolGlobalFilter|  (Order: 10001)
-  | - Intercepts static://    |
-  | - Converts to lb://       |
-  +---------------------------+
-            |
-            v
-  +---------------------------+
-  | DiscoveryLoadBalancerFilter| (Order: 10150)
-  | - Gets instances from     |
-  |   ServiceManager          |
-  | - Health-aware selection  |
-  | - Weighted Round-Robin    |
-  +---------------------------+
-            |
-            v
-  +---------------------------+
-  | Backend Instance          |
-  | 192.168.1.10:8080        |
-  +---------------------------+
-```
-
-**Configuration Example:**
+### 3.2 Static Service Configuration
 
 ```json
 {
@@ -141,66 +190,83 @@ A custom protocol designed for services **not registered in Nacos/Consul**:
 }
 ```
 
-### 2.4 Weighted Round-Robin Load Balancing
+### 3.3 Load Balancing Strategies
 
-Nginx-style smooth weighted round-robin algorithm:
+| Strategy | Description | Best For |
+|----------|-------------|----------|
+| `weighted` | Smooth weighted round-robin | Uneven instance capacity |
+| `round-robin` | Sequential distribution | Equal capacity instances |
+| `random` | Random selection | Simple scenarios |
+| `consistent-hash` | Hash-based (client IP/header) | Session stickiness |
 
-```
-Instances: [A(weight=1), B(weight=2)]
-Distribution: A -> B -> B -> A -> B -> B ...  (exact 1:2 ratio)
+### 3.4 Health-Aware Routing
 
-Algorithm:
-1. Add original weight to current weight for each instance
-2. Select instance with highest current weight
-3. Subtract total weight from selected instance's current weight
-```
-
-### 2.5 Health-Aware Routing
-
-**Multi-Instance Service:**
-- Unhealthy instances are **automatically skipped** in load balancing
-- Traffic routes only to healthy instances
-
-**Single-Instance Service:**
-- Unhealthy instance is **kept** for potential auto-recovery
-- Allows fast failure with automatic recovery when instance becomes healthy
-
-**Disabled Instances:**
-- Instances with `enabled: false` are **excluded** from load balancing
-
-### 2.3 Load Balancing Algorithms
-
-| Algorithm | Description |
-|-----------|-------------|
-| `round-robin` | Sequential distribution |
-| `weighted` | Weight-based distribution |
-| `random` | Random selection |
-
-**Weighted Round-Robin Example:**
-- Instance A (weight=1), Instance B (weight=2)
-- Distribution: A -> B -> B -> A -> B -> B (1:2 ratio)
-
-### 2.4 API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/services` | List all services |
-| `GET` | `/api/services/{name}` | Get service details |
-| `POST` | `/api/services` | Create service |
-| `PUT` | `/api/services/{name}` | Update service |
-| `DELETE` | `/api/services/{name}` | Delete service |
+- Unhealthy instances are **automatically skipped**
+- Disabled instances are **excluded** from load balancing
+- Health status synced to admin UI in real-time
 
 ---
 
-## 3. Authentication
+## 4. SSL Termination
 
-### 3.1 Overview
+### 4.1 Overview
+
+The gateway provides HTTPS termination on port 8443 with dynamic certificate management.
+
+### 4.2 Configuration
+
+```yaml
+gateway:
+  ssl:
+    enabled: true
+    port: 8443
+    cert-path: /opt/certificates
+```
+
+### 4.3 Certificate Management
+
+| Feature | Description |
+|---------|-------------|
+| **Formats** | PEM, PKCS12 (.p12/.pfx), JKS |
+| **Multi-domain** | Multiple certificates for different domains |
+| **Hot-reload** | Certificates loaded without restart |
+| **Expiry monitoring** | Alerts before certificates expire |
+
+### 4.4 Certificate Upload
+
+```bash
+# Upload PEM certificate
+POST /api/ssl/upload
+Content-Type: multipart/form-data
+
+file: certificate.pem
+key: private.key
+domain: api.example.com
+
+# Upload PKCS12
+POST /api/ssl/upload-pkcs12
+file: certificate.p12
+password: changeit
+domain: api.example.com
+```
+
+### 4.5 Certificate Status
+
+| Status | Description |
+|--------|-------------|
+| `VALID` | Certificate is valid |
+| `EXPIRING_SOON` | Expires within 30 days |
+| `EXPIRED` | Certificate has expired |
+
+---
+
+## 5. Authentication
+
+### 5.1 Overview
 
 Multi-strategy authentication using the Strategy Pattern.
 
-**Filter Order:** -250
-
-### 3.2 Supported Types
+### 5.2 Supported Types
 
 | Type | Processor | Use Case |
 |------|-----------|----------|
@@ -210,14 +276,15 @@ Multi-strategy authentication using the Strategy Pattern.
 | `HMAC` | `HmacSignatureAuthProcessor` | API signature verification |
 | `OAUTH2` | `OAuth2AuthProcessor` | Third-party SSO |
 
-### 3.3 Configuration Examples
+### 5.3 Configuration Examples
 
 **JWT Authentication:**
 ```json
 {
   "routeId": "secure-api",
   "authType": "JWT",
-  "secretKey": "your-256-bit-secret-key-here",
+  "secretKey": "your-256-bit-secret",
+  "issuer": "my-app",
   "enabled": true
 }
 ```
@@ -244,103 +311,73 @@ Multi-strategy authentication using the Strategy Pattern.
 }
 ```
 
-### 3.4 Extending Authentication
-
-Add custom authentication type:
-
-```java
-@Component
-public class CustomAuthProcessor extends AbstractAuthProcessor {
-
-    @Override
-    public AuthType getType() {
-        return AuthType.CUSTOM;
-    }
-
-    @Override
-    public Mono<Boolean> validate(ServerWebExchange exchange, AuthConfig config) {
-        // Custom validation logic
-        return Mono.just(true);
-    }
-}
-```
-
 ---
 
-## 4. Rate Limiting
+## 6. Rate Limiting
 
-### 4.1 Overview
+### 6.1 Overview
 
 Hybrid rate limiting with Redis (distributed) + Local (fallback).
 
-**Filter Order:** -100
-
-### 4.2 Configuration
+### 6.2 Configuration
 
 ```json
 {
   "routeId": "public-api",
   "qps": 100,
-  "timeUnit": "second",
   "burstCapacity": 200,
   "keyType": "ip",
   "enabled": true
 }
 ```
 
-### 4.3 Key Types
+### 6.3 Key Types
 
 | Key Type | Description |
 |----------|-------------|
-| `ip` | Per-client IP rate limiting |
+| `ip` | Per-client IP |
 | `route` | Shared limit per route |
 | `combined` | Route + IP combination |
 | `header` | Based on header value |
 
-### 4.4 Response Headers
+### 6.4 Redis Failover
 
-| Header | Description |
-|--------|-------------|
-| `X-RateLimit-Limit` | Maximum requests allowed |
-| `X-RateLimit-Remaining` | Remaining requests |
-| `X-RateLimit-Reset` | Reset timestamp |
-
-**Exceed Limit:** HTTP 429 Too Many Requests
+When Redis is unavailable, the gateway automatically:
+1. Switches to local rate limiting
+2. Uses pre-calculated shadow quota
+3. Gradually shifts traffic back when Redis recovers
 
 ---
 
-## 5. Circuit Breaker
+## 7. Circuit Breaker
 
-### 5.1 Overview
+### 7.1 Overview
 
 Protects downstream services from cascading failures using Resilience4j.
 
-**Filter Order:** -150
-
-### 5.2 State Machine
+### 7.2 State Machine
 
 ```
 CLOSED (Normal)
-    |
-    +--> Failure rate > threshold --> OPEN (Reject all)
-                                        |
-                                        +--> After waitDuration --> HALF_OPEN (Test)
-                                                                        |
-                                    +-----------------------------------+
-                                    |
-                                    v
-                            Success --> CLOSED
-                            Failure --> OPEN
+    │
+    └──▶ Failure rate > threshold ──▶ OPEN (Reject all)
+                                        │
+                                        └──▶ After waitDuration ──▶ HALF_OPEN (Test)
+                                                                      │
+                                          ┌───────────────────────────┘
+                                          │
+                                          ▼
+                                    Success ──▶ CLOSED
+                                    Failure ──▶ OPEN
 ```
 
-### 5.3 Configuration
+### 7.3 Configuration
 
 ```json
 {
   "routeId": "critical-service",
   "failureRateThreshold": 50.0,
   "slowCallDurationThreshold": 60000,
-  "slowCallRateThreshold": 80.0,
   "waitDurationInOpenState": 30000,
   "slidingWindowSize": 10,
   "minimumNumberOfCalls": 5,
@@ -348,35 +385,22 @@ CLOSED (Normal)
 }
 ```
 
-### 5.4 Parameters
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `failureRateThreshold` | Failure rate % to open circuit | 50 |
-| `waitDurationInOpenState` | Time to wait before half-open (ms) | 30000 |
-| `slidingWindowSize` | Number of calls in window | 10 |
-| `minimumNumberOfCalls` | Minimum calls before calculating rate | 5 |
-
-**Circuit Open:** HTTP 503 Service Unavailable
-
 ---
 
-## 6. IP Filtering
+## 8. IP Filtering
 
-### 6.1 Overview
+### 8.1 Overview
 
 IP blacklist/whitelist with CIDR support.
 
-**Filter Order:** -280 (before authentication for performance)
-
-### 6.2 Modes
+### 8.2 Modes
 
 | Mode | Description |
 |------|-------------|
 | `blacklist` | Block listed IPs |
 | `whitelist` | Allow only listed IPs |
 
-### 6.3 IP Formats
+### 8.3 IP Formats
 
 | Format | Example |
 |--------|---------|
@@ -384,38 +408,26 @@ IP blacklist/whitelist with CIDR support.
 | Wildcard | `192.168.1.*` |
 | CIDR | `192.168.1.0/24` |
 
-### 6.4 Configuration
+### 8.4 Configuration
 
 ```json
 {
   "routeId": "internal-api",
   "mode": "whitelist",
-  "ipList": [
-    "10.0.0.0/8",
-    "192.168.0.0/16",
-    "172.16.0.0/12"
-  ],
+  "ipList": ["10.0.0.0/8", "192.168.0.0/16"],
   "enabled": true
 }
 ```
 
-**Blocked:** HTTP 403 Forbidden
-
-### 6.5 Performance Impact
-
-IP filtering before authentication provides **+37% TPS improvement** by rejecting malicious IPs early without JWT validation overhead.
-
 ---
 
-## 7. Timeout Control
+## 9. Timeout Control
 
-### 7.1 Overview
+### 9.1 Overview
 
 Per-route connection and response timeout control.
 
-**Filter Order:** -200
-
-### 7.2 Configuration
+### 9.2 Configuration
 
 ```json
 {
@@ -426,174 +438,169 @@ Per-route connection and response timeout control.
 }
 ```
 
-### 7.3 Parameters
-
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `connectTimeout` | TCP connection timeout (ms) | 5000 |
 | `responseTimeout` | Full response timeout (ms) | 30000 |
 
-**Timeout:** HTTP 504 Gateway Timeout
+---
+
+## 10. Response Caching
+
+### 10.1 Overview
+
+Caffeine-based in-memory caching for GET/HEAD requests.
+
+### 10.2 Configuration
+
+```json
+{
+  "routeId": "static-api",
+  "ttl": 300,
+  "maxSize": 1000,
+  "enabled": true
+}
+```
+
+### 10.3 Cache Headers
+
+| Header | Description |
+|--------|-------------|
+| `X-Cache` | `HIT` or `MISS` |
+| `Age` | Seconds since cached |
 
 ---
 
-## 8. Distributed Tracing
+## 11. Monitoring & Alerts
 
-### 8.1 Overview
+### 11.1 Metrics
 
-Automatic TraceId generation and propagation across services.
+| Category | Metrics |
+|----------|---------|
+| **JVM** | Heap used/max, GC count/time |
+| **CPU** | Process/system usage |
+| **Threads** | Live, daemon, peak |
+| **HTTP** | Requests/sec, response time, error rate |
 
-**Filter Order:** -300 (first filter for full visibility)
+### 11.2 Alert Thresholds
 
-### 8.2 How It Works
-
+```json
+{
+  "cpu": {
+    "processThreshold": 80,
+    "systemThreshold": 90
+  },
+  "memory": {
+    "heapThreshold": 85
+  },
+  "http": {
+    "errorRateThreshold": 5,
+    "responseTimeThreshold": 2000
+  }
+}
 ```
-Client Request
-    |
-    v
-Gateway generates X-Trace-Id: abc-123
-    |
-    v
-MDC.put("traceId") --> All logs include [traceId=abc-123]
-    |
-    v
-Forward with header: X-Trace-Id: abc-123
-    |
-    v
-Response includes: X-Trace-Id: abc-123
-```
 
-### 8.3 Benefits
+### 11.3 Notification Channels
 
-- End-to-end request visibility
-- Log correlation across services
-- Performance bottleneck identification
-- Compliance audit trail
+- Email (SMTP with HTML templates)
+- AI-generated alert content with recommendations
 
 ---
 
-## 9. Health Checking
+## 12. Request Tracing
 
-### 9.1 Overview
+### 12.1 Overview
 
-Hybrid health checking for `static://` service instances with real-time status sync to admin console.
+Capture error and slow requests for debugging.
 
-```
-+------------------------------------------------------------------+
-|                    HYBRID HEALTH CHECK                           |
-+------------------------------------------------------------------+
+### 12.2 Trace Types
 
-  +-------------------+           +-------------------+
-  |   PASSIVE CHECK  |           |   ACTIVE CHECK   |
-  |                   |           |                   |
-  | - Request success |           | - TCP port probe |
-  | - Request failure |           | - Optional HTTP  |
-  | - Consecutive     |           | - Every 30s      |
-  |   failures >= 3   |           |                   |
-  +---------+---------+           +---------+---------+
-            |                               |
-            +---------------+---------------+
-                            |
-                            v
-                +-------------------+
-                |  Health Status    |
-                |  (in memory)      |
-                +---------+---------+
-                          |
-                          | Batch Sync
-                          v
-                +-------------------+
-                |  gateway-admin    |
-                |  (visible in UI)  |
-                +-------------------+
-```
+| Type | Description |
+|------|-------------|
+| `ERROR` | Failed requests (4xx/5xx) |
+| `SLOW` | Requests exceeding threshold |
+| `ALL` | All requests (sampling) |
 
-### 9.2 Check Types
+### 12.3 API Endpoints
 
-| Type | Trigger | Description |
-|------|---------|-------------|
-| **Passive** | Every request | Record success/failure, mark unhealthy after 3 consecutive failures |
-| **Active** | Every 30s | TCP port probe (optionally HTTP health endpoint) |
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/traces/errors` | Get error traces |
+| `GET` | `/api/traces/slow` | Get slow traces |
+| `GET` | `/api/traces/{id}` | Get trace details |
+| `POST` | `/api/traces/{id}/replay` | Replay request |
 
-### 9.3 Passive Health Check
-
-```
-Request arrives at gateway
-        |
-        v
-+---------------+
-| Route to      |
-| instance      |
-+-------+-------+
-        |
-   +----+----+
-   |         |
-   v         v
-Success   Failure (retry 3x)
-   |         |
-   v         v
-Record    Mark unhealthy
-success   if failures >= 3
-```
-
-### 9.4 Active Health Check
-
-- **Check Interval:** 30 seconds
-- **Check Method:** TCP port connectivity (optional HTTP `/actuator/health`)
-- **Timeout:** 3 seconds per check
-
-```yaml
-gateway:
-  health-check:
-    timeout: 3000
-    http-enabled: false        # Enable HTTP health check
-    http-path: /actuator/health
-```
-
-### 9.5 Health Status Sync
-
-Instance health status is **automatically synced** to gateway-admin:
-
-- **Batch processing:** Health statuses are batched and pushed to admin
-- **Visible in UI:** Users can see instance health status in the web dashboard
-- **Network flap detection:** Mass state changes are detected and logged
-
-### 9.6 Health-Aware Routing Behavior
-
-| Scenario | Behavior |
-|----------|----------|
-| **Multi-instance service** | Unhealthy instances are skipped in load balancing |
-| **Single-instance service** | Unhealthy instance is kept for potential auto-recovery |
-| **Disabled instance** | Excluded from load balancing regardless of health |
-| **Recovery** | Auto-recover when health check passes |
-
-### 9.7 Configuration
-
-```yaml
-gateway:
-  health:
-    failure-threshold: 3        # Mark unhealthy after N failures
-    recovery-time: 30000        # Auto-recovery check interval (ms)
-    idle-threshold: 300000      # Idle instance check threshold (ms)
-    batch-size: 50              # Batch sync size to admin
-    network-flap-threshold: 10  # Network flap detection threshold
-```
-
----
-
-## 10. API Reference
-
-### 10.1 Route API
+### 12.4 Replay Feature
 
 ```bash
-# List all routes
+POST /api/traces/{id}/replay
+{
+  "gatewayUrl": "http://localhost:80"
+}
+```
+
+Re-executes the captured request for debugging.
+
+---
+
+## 13. AI-Powered Analysis
+
+### 13.1 Supported Providers
+
+| Provider | Models | Configuration |
+|----------|--------|---------------|
+| OpenAI | GPT-4, GPT-3.5 | API key + base URL |
+| Anthropic | Claude 3 | API key |
+| Qwen | qwen-plus, qwen-turbo | API key |
+| DeepSeek | deepseek-chat | API key |
+| Ollama | llama2, mistral | Local URL |
+
+### 13.2 Features
+
+- **Metrics Analysis**: Upload current metrics, get AI insights
+- **Alert Content Generation**: AI-written alerts with recommendations
+- **Multi-language**: Chinese/English support
+
+---
+
+## 14. Email Notifications
+
+### 14.1 Configuration
+
+```json
+{
+  "host": "smtp.example.com",
+  "port": 587,
+  "username": "alerts@example.com",
+  "password": "password",
+  "from": "Gateway Alerts <alerts@example.com>",
+  "useStartTls": true
+}
+```
+
+### 14.2 Test Email
+
+```bash
+POST /api/email/test
+{
+  "to": "admin@example.com"
+}
+```
+
+---
+
+## 15. API Reference
+
+### 15.1 Route API
+
+```bash
+# List routes
 GET /api/routes
 
 # Create route
 POST /api/routes
-Content-Type: application/json
 {
-  "id": "my-route",
+  "routeName": "My Route",
   "uri": "lb://my-service",
   "predicates": [{"name": "Path", "args": {"pattern": "/api/**"}}]
 }
@@ -603,136 +610,92 @@ PUT /api/routes/{id}
 
 # Delete route
 DELETE /api/routes/{id}
+
+# Enable/Disable
+POST /api/routes/{id}/enable
+POST /api/routes/{id}/disable
 ```
 
-### 10.2 Service API
+### 15.2 Service API
 
 ```bash
-# List all services
+# List services
 GET /api/services
 
-# Create static service
+# Create service
 POST /api/services
-Content-Type: application/json
 {
-  "name": "backend",
+  "name": "my-service",
   "instances": [{"ip": "127.0.0.1", "port": 8080}]
 }
-
-# Delete service
-DELETE /api/services/{name}
 ```
 
-### 10.3 Strategy API
+### 15.3 SSL Certificate API
 
 ```bash
-# Authentication
-GET  /api/strategies/auth
-POST /api/strategies/auth
+# List certificates
+GET /api/ssl
 
-# Rate Limiter
-GET  /api/strategies/rate-limiter
-POST /api/strategies/rate-limiter
+# Upload PEM
+POST /api/ssl/upload
 
-# Circuit Breaker
-GET  /api/strategies/circuit-breaker
-POST /api/strategies/circuit-breaker
+# Upload PKCS12
+POST /api/ssl/upload-pkcs12
 
-# IP Filter
-GET  /api/strategies/ip-filter
-POST /api/strategies/ip-filter
+# Delete certificate
+DELETE /api/ssl/{id}
+```
 
-# Timeout
-GET  /api/strategies/timeout
-POST /api/strategies/timeout
+### 15.4 Monitoring API
+
+```bash
+# Get metrics
+GET /api/monitor/metrics
+
+# Get history
+GET /api/monitor/history?range=1h
+
+# AI analysis
+POST /api/monitor/analyze
 ```
 
 ---
 
-## 11. Filter Chain Summary
+## Filter Chain Summary
 
 ```
 Request Flow:
-+----------------------------------------------------------+
-| Security (-500)        --> Hardening first                |
-+----------------------------------------------------------+
-            |
-            v
-+----------------------------------------------------------+
-| AccessLog (-400)       --> Log all requests               |
-+----------------------------------------------------------+
-            |
-            v
-+----------------------------------------------------------+
-| TraceId (-300)         --> Full visibility                |
-+----------------------------------------------------------+
-            |
-            v
-+----------------------------------------------------------+
-| CORS (-300)            --> Handle preflight               |
-+----------------------------------------------------------+
-            |
-            v
-+----------------------------------------------------------+
-| IP Filter (-280)       --> Fast rejection (coarse)        |
-+----------------------------------------------------------+
-            |
-            v
-+----------------------------------------------------------+
-| Authentication (-250)  --> User identity (fine)           |
-+----------------------------------------------------------+
-            |
-            v
-+----------------------------------------------------------+
-| Timeout (-200)         --> Protect downstream             |
-+----------------------------------------------------------+
-            |
-            v
-+----------------------------------------------------------+
-| Retry (-200)           --> Retry on failure               |
-+----------------------------------------------------------+
-            |
-            v
-+----------------------------------------------------------+
-| Circuit Breaker (-100) --> Prevent cascade failure        |
-+----------------------------------------------------------+
-            |
-            v
-+----------------------------------------------------------+
-| Header Op (-50)        --> Add/modify headers             |
-+----------------------------------------------------------+
-            |
-            v
-+----------------------------------------------------------+
-| Cache (50)             --> Response caching               |
-+----------------------------------------------------------+
-            |
-            v
-+----------------------------------------------------------+
-| Static Protocol (10001)--> Transform static://            |
-+----------------------------------------------------------+
-            |
-            v
-+----------------------------------------------------------+
-| Load Balancer (10150)  --> Forward to backend             |
-+----------------------------------------------------------+
+┌─────────────────────────────────────────────────────────────┐
+│ Security (-500)        → Security hardening first           │
+├─────────────────────────────────────────────────────────────┤
+│ AccessLog (-400)       → Log all requests                   │
+├─────────────────────────────────────────────────────────────┤
+│ TraceId (-300)         → Full visibility                    │
+├─────────────────────────────────────────────────────────────┤
+│ IP Filter (-280)       → Fast rejection                     │
+├─────────────────────────────────────────────────────────────┤
+│ Authentication (-250)  → User identity                      │
+├─────────────────────────────────────────────────────────────┤
+│ Timeout (-200)         → Protect downstream                 │
+├─────────────────────────────────────────────────────────────┤
+│ Retry (-200)           → Retry on failure                   │
+├─────────────────────────────────────────────────────────────┤
+│ Circuit Breaker (-100) → Prevent cascade failure            │
+├─────────────────────────────────────────────────────────────┤
+│ Header Op (-50)        → Add/modify headers                 │
+├─────────────────────────────────────────────────────────────┤
+│ Cache (50)             → Response caching                   │
+├─────────────────────────────────────────────────────────────┤
+│ Multi-Service LB (10001) → Multi-service routing            │
+├─────────────────────────────────────────────────────────────┤
+│ Discovery LB (10150)   → Forward to backend                 │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 **Design Philosophy:**
 1. Observability first (TraceId sees everything)
 2. Coarse before fine (IP filter before auth)
 3. Protection before function (Timeout/CB before routing)
-4. Fast failure (Reject early, save resources)
-
----
-
-## 12. Configuration Files
-
-| File | Description |
-|------|-------------|
-| `gateway-routes.json` | Route definitions |
-| `gateway-services.json` | Static service instances |
-| `gateway-strategies.json` | All strategy configurations |
 
 ---
 

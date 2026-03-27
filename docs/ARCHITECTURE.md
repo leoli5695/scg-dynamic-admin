@@ -909,5 +909,267 @@ This API Gateway architecture demonstrates:
 - **High availability** with fallback caching and graceful degradation
 - **Real-time configuration** with < 1 second propagation latency
 - **Enterprise features** including multi-auth, circuit breaking, and rate limiting
+- **Multi-service routing** with gray release support for canary deployments
+- **SSL termination** with dynamic certificate loading and expiry monitoring
+
+---
+
+## 12. Multi-Service Routing Architecture
+
+### 12.1 Overview
+
+Multi-service routing enables a single route to distribute traffic across multiple backend services with configurable weights and rules.
+
+```
++------------------------------------------------------------------+
+|                    MULTI-SERVICE ROUTING FLOW                     |
++------------------------------------------------------------------+
+
+   Incoming Request
+         |
+         v
+   +-------------------+
+   | Route Definition  |
+   | mode: MULTI       |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Match Gray Rules  |
+   | (Header/Cookie/   |
+   |  Query/Weight)    |
+   +--------+----------+
+            |
+      +-----+-----+
+      |           |
+    Match      No Match
+      |           |
+      v           v
+   +------+   +-------------------+
+   |Route |   | Weight-based      |
+   |to    |   | Selection         |
+   |Target |   | (Smooth RR)       |
+   +------+   +--------+----------+
+      |                 |
+      +--------+--------+
+               |
+               v
+   +-------------------+
+   | Service Binding   |
+   | (STATIC/          |
+   |  DISCOVERY)       |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Load Balancer     |
+   | (Select Instance) |
+   +-------------------+
+```
+
+### 12.2 Gray Rule Matching
+
+```
++------------------------------------------------------------------+
+|                    GRAY RULE PRIORITY                             |
++------------------------------------------------------------------+
+
+   Rules evaluated in order (first-match-wins):
+
+   1. HEADER rule    --> If X-Version: v2, route to v2
+   2. COOKIE rule    --> If cookie[version]=v2, route to v2
+   3. QUERY rule     --> If ?version=v2, route to v2
+   4. WEIGHT rule    --> 10% of traffic to v2
+
+   Default: Weight-based distribution
+```
+
+### 12.3 Service Binding Types
+
+| Type | Protocol | Use Case |
+|------|----------|----------|
+| `DISCOVERY` | `lb://service-name` | Services registered in Nacos/Consul |
+| `STATIC` | `static://service-id` | Fixed IP:port instances |
+
+---
+
+## 13. SSL Termination Architecture
+
+### 13.1 Overview
+
+The gateway provides HTTPS termination with dynamic certificate management.
+
+```
++------------------------------------------------------------------+
+|                    SSL TERMINATION FLOW                           |
++------------------------------------------------------------------+
+
+   HTTPS Request (:8443)
+         |
+         v
+   +-------------------+
+   | SSL Handshake     |
+   | (SNI Selection)   |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Certificate Store |
+   | (Multi-domain)    |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | SSL Termination   |
+   +--------+----------+
+            |
+            | HTTP Request
+            v
+   +-------------------+
+   | HTTP Gateway (:80)|
+   | Filter Chain      |
+   +-------------------+
+```
+
+### 13.2 Certificate Management
+
+```
++------------------------------------------------------------------+
+|                    CERTIFICATE LIFECYCLE                          |
++------------------------------------------------------------------+
+
+   Upload Certificate
+         |
+         v
+   +-------------------+
+   | Parse Certificate |
+   | - Extract domain  |
+   | - Extract expiry  |
+   | - Validate chain  |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Store in DB       |
+   | + File System     |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Push to Gateway   |
+   | (Hot-reload)      |
+   +-------------------+
+```
+
+### 13.3 Certificate Status
+
+| Status | Condition | Action |
+|--------|-----------|--------|
+| `VALID` | > 30 days to expiry | Normal operation |
+| `EXPIRING_SOON` | < 30 days to expiry | Send alert email |
+| `EXPIRED` | Past expiry date | Block usage, alert |
+
+---
+
+## 14. Request Tracing Architecture
+
+### 14.1 Trace Capture Flow
+
+```
++------------------------------------------------------------------+
+|                    REQUEST TRACING                                |
++------------------------------------------------------------------+
+
+   Request arrives
+         |
+         v
+   +-------------------+
+   | TraceCapture      |
+   | GlobalFilter      |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Response Status?  |
+   +--------+----------+
+            |
+      +-----+-----+
+      |           |
+   Error       Slow (>threshold)
+      |           |
+      +-----+-----+
+            |
+            v
+   +-------------------+
+   | Capture:          |
+   | - Request headers |
+   | - Request body    |
+   | - Response status |
+   | - Latency         |
+   | - Target instance |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Store in DB       |
+   | (RequestTrace)    |
+   +-------------------+
+```
+
+### 14.2 Replay Capability
+
+```
++------------------------------------------------------------------+
+|                    REQUEST REPLAY                                 |
++------------------------------------------------------------------+
+
+   Select captured request
+         |
+         v
+   +-------------------+
+   | Reconstruct:      |
+   | - Method          |
+   | - Path            |
+   | - Headers         |
+   | - Body            |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Execute against   |
+   | specified gateway |
+   +-------------------+
+```
+
+---
+
+## 15. AI Integration Architecture
+
+### 15.1 Supported Providers
+
+```
++------------------------------------------------------------------+
+|                    AI PROVIDER SPI                                |
++------------------------------------------------------------------+
+
+   AiAnalysisService
+         |
+         +-- OpenAI (GPT-4, GPT-3.5)
+         +-- Anthropic (Claude 3)
+         +-- Qwen (qwen-plus, qwen-turbo)
+         +-- DeepSeek (deepseek-chat)
+         +-- Ollama (local models)
+```
+
+### 15.2 Use Cases
+
+| Feature | Description |
+|---------|-------------|
+| **Metrics Analysis** | Analyze current metrics, identify anomalies |
+| **Alert Generation** | Generate alert content with recommendations |
+| **Trend Prediction** | Predict resource needs based on history |
+
+---
 
 For feature documentation, see [FEATURES.md](FEATURES.md).
+For quick start guide, see [QUICK_START.md](QUICK_START.md).
