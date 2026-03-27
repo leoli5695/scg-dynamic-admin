@@ -291,8 +291,6 @@ Default credentials: `admin` / `admin123`
 | [QUICK_START.md](docs/QUICK_START.md) | Step-by-step setup guide |
 | [FEATURES.md](docs/FEATURES.md) | Complete feature documentation with examples |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture & design patterns |
-| [FUNCTIONAL_SPEC.md](docs/FUNCTIONAL_SPEC.md) | Functional specification |
-| [GIT_WORKFLOW.md](docs/GIT_WORKFLOW.md) | Git workflow and conventions |
 
 ---
 
