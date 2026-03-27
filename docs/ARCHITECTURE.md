@@ -240,9 +240,9 @@ Ensures data consistency between database and config center:
    |   |  -200     RetryGlobalFilter         Retry on failure              |  |
    |   |  -150     ApiVersionGlobalFilter    API version routing           |  |
    |   |  -100     CircuitBreakerGlobalFilter Resilience4j Circuit Breaker |  |
-   |   |   -50     HeaderOpGlobalFilter      Header manipulation           |  |
+   |   |  -50     HeaderOpGlobalFilter      Header manipulation           |  |
    |   |    50     CacheGlobalFilter         Response caching              |  |
-   |   | 10001    StaticProtocolGlobalFilter static:// -> lb:// transform  |  |
+   |   | 10001    MultiServiceLoadBalancerFilter Multi-service routing      |  |
    |   | 10150    DiscoveryLoadBalancerFilter Service Discovery + LB       |  |
    |   |                                                                    |  |
    |   +-------------------------------------------------------------------+  |
@@ -280,10 +280,10 @@ Request enters gateway
   +-- order -100  Circuit Breaker --> Check circuit status -> 503 if open
   +-- order  -50  Header Op       --> Add/modify headers
   +-- order   50  Cache           --> Response caching
-  +-- order 10001 Static Protocol --> Transform static:// to lb://
-  +-- order 10150 Load Balancer   --> Service discovery + load balancing
+  +-- order 10001 Multi-Service  --> Multi-service routing + gray release
+  +-- order 10150 Load Balancer  --> Service discovery + load balancing
   |                                WHY LAST? --> Final defense before routing
-  +-- order 10001+ Routing         --> Forward to backend
+  +-- order 10150+ Routing        --> Forward to backend
 ```
 
 **Performance Impact:** IP Filter before Authentication provides **+37% TPS improvement**
