@@ -156,11 +156,104 @@ public class ConsulConfigCenterService implements ConfigCenterService {
         return "consul";
     }
 
+    // ==================== Namespace-aware methods ====================
+    // Consul doesn't have native namespace support, so we use key prefix
+
+    @Override
+    public <T> T getConfig(String dataId, String namespace, Class<T> type) {
+        // For Consul, namespace is added to key prefix
+        String effectiveKey = buildKeyWithNamespace(dataId, namespace);
+        try {
+            GetValue value = consulClient.getKVValue(effectiveKey).getValue();
+            if (value == null) {
+                return null;
+            }
+            String content = new String(Base64.getDecoder().decode(value.getValue()), StandardCharsets.UTF_8);
+            return objectMapper.readValue(content, type);
+        } catch (Exception ex) {
+            log.error("Failed to get config from Consul: key={}, error={}", effectiveKey, ex.getMessage());
+            return null;
+        }
+    }
+
+    @Override
+    public <T> T getConfig(String dataId, String namespace, com.fasterxml.jackson.core.type.TypeReference<T> typeReference) {
+        String effectiveKey = buildKeyWithNamespace(dataId, namespace);
+        try {
+            GetValue value = consulClient.getKVValue(effectiveKey).getValue();
+            if (value == null) {
+                return null;
+            }
+            String content = new String(Base64.getDecoder().decode(value.getValue()), StandardCharsets.UTF_8);
+            return objectMapper.readValue(content, typeReference);
+        } catch (Exception ex) {
+            log.error("Failed to get config from Consul: key={}, error={}", effectiveKey, ex.getMessage());
+            return null;
+        }
+    }
+
+    @Override
+    public boolean publishConfig(String dataId, String namespace, Object config) {
+        String effectiveKey = buildKeyWithNamespace(dataId, namespace);
+        try {
+            String content = objectMapper.writeValueAsString(config);
+            return consulClient.setKVValue(effectiveKey, content).getValue();
+        } catch (Exception ex) {
+            log.error("Failed to publish config to Consul: key={}, error={}", effectiveKey, ex.getMessage());
+            return false;
+        }
+    }
+
+    @Override
+    public boolean removeConfig(String dataId, String namespace) {
+        String effectiveKey = buildKeyWithNamespace(dataId, namespace);
+        try {
+            consulClient.deleteKVValue(effectiveKey);
+            return true;
+        } catch (Exception ex) {
+            log.error("Failed to remove config from Consul: key={}, error={}", effectiveKey, ex.getMessage());
+            return false;
+        }
+    }
+
+    @Override
+    public boolean configExists(String dataId, String namespace) {
+        String effectiveKey = buildKeyWithNamespace(dataId, namespace);
+        try {
+            GetValue value = consulClient.getKVValue(effectiveKey).getValue();
+            return value != null;
+        } catch (Exception ex) {
+            return false;
+        }
+    }
+
+    @Override
+    public String getDefaultNamespace() {
+        // Consul doesn't use namespace, return empty
+        return "";
+    }
+
+    @Override
+    public String getDefaultGroup() {
+        return properties.getConsul().getPrefix();
+    }
+
     /**
      * Build Consul KV key from dataId.
      * Example: dataId="gateway-plugins.json" -> key="config/gateway-plugins.json"
      */
     private String buildKey(String dataId) {
         return properties.getConsul().getPrefix() + "/" + dataId;
+    }
+
+    /**
+     * Build Consul KV key with namespace prefix.
+     * Example: namespace="instance-1", dataId="route-123" -> key="config/instance-1/route-123"
+     */
+    private String buildKeyWithNamespace(String dataId, String namespace) {
+        if (namespace == null || namespace.isEmpty()) {
+            return buildKey(dataId);
+        }
+        return properties.getConsul().getPrefix() + "/" + namespace + "/" + dataId;
     }
 }

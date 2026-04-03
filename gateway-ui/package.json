@@ -25,6 +25,7 @@
     "@ant-design/icons": "^6.1.0",
     "@nivo/core": "^0.99.0",
     "@nivo/line": "^0.99.0",
+    "@nivo/pie": "^0.99.0",
     "antd": "^6.3.2",
     "axios": "^1.13.6",
     "copy-to-clipboard": "^3.3.3",

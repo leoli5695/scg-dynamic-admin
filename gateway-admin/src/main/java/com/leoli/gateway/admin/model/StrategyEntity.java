@@ -26,6 +26,13 @@ public class StrategyEntity {
      */
     @Column(name = "strategy_id", length = 255, unique = true)
     private String strategyId;
+
+    /**
+     * Instance ID (UUID) - Associated gateway instance.
+     * Used for configuration isolation per gateway instance.
+     */
+    @Column(name = "instance_id", length = 36)
+    private String instanceId;
     
     /**
      * Strategy name (business identifier).

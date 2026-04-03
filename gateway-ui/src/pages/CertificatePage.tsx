@@ -38,7 +38,11 @@ interface CertificateStats {
   expiringList: SslCertificate[];
 }
 
-const CertificatePage: React.FC = () => {
+interface CertificatePageProps {
+  instanceId?: string;
+}
+
+const CertificatePage: React.FC<CertificatePageProps> = ({ instanceId }) => {
   const [loading, setLoading] = useState(false);
   const [certificates, setCertificates] = useState<SslCertificate[]>([]);
   const [stats, setStats] = useState<CertificateStats | null>(null);
@@ -54,9 +58,10 @@ const CertificatePage: React.FC = () => {
   const loadCertificates = async () => {
     try {
       setLoading(true);
+      const params = instanceId ? { instanceId } : {};
       const [certsRes, statsRes] = await Promise.all([
-        api.get('/api/ssl'),
-        api.get('/api/ssl/stats')
+        api.get('/api/ssl', { params }),
+        api.get('/api/ssl/stats', { params })
       ]);
       setCertificates(certsRes.data || []);
       setStats(statsRes.data || null);
@@ -70,7 +75,7 @@ const CertificatePage: React.FC = () => {
 
   useEffect(() => {
     loadCertificates();
-  }, []);
+  }, [instanceId]);
 
   // 读取文件内容
   const readFileContent = (file: File): Promise<string> => {
@@ -89,6 +94,8 @@ const CertificatePage: React.FC = () => {
         domain: values.domain,
       };
 
+      const params = instanceId ? { instanceId } : {};
+
       if (values.certType === 'PEM') {
         // 使用文件内容或文本内容
         payload.certContent = uploadMode === 'file' ? certFileContent : values.certContent;
@@ -99,12 +106,12 @@ const CertificatePage: React.FC = () => {
           return;
         }
         
-        await api.post('/api/ssl/pem', payload);
+        await api.post('/api/ssl/pem', payload, { params });
       } else {
         payload.certType = values.certType;
         payload.keystoreContent = values.keystoreContent;
         payload.password = values.password;
-        await api.post('/api/ssl/keystore', payload);
+        await api.post('/api/ssl/keystore', payload, { params });
       }
 
       message.success(t('cert.upload_success'));
@@ -121,7 +128,8 @@ const CertificatePage: React.FC = () => {
 
   const handleToggleEnabled = async (id: number, enabled: boolean) => {
     try {
-      await api.put(`/api/ssl/${id}/enabled?enabled=${enabled}`);
+      const params = instanceId ? { instanceId } : {};
+      await api.put(`/api/ssl/${id}/enabled?enabled=${enabled}`, null, { params });
       message.success(t('cert.update_success'));
       loadCertificates();
     } catch (e) {
@@ -132,7 +140,8 @@ const CertificatePage: React.FC = () => {
 
   const handleDelete = async (id: number) => {
     try {
-      await api.delete(`/api/ssl/${id}`);
+      const params = instanceId ? { instanceId } : {};
+      await api.delete(`/api/ssl/${id}`, { params });
       message.success(t('cert.delete_success'));
       loadCertificates();
     } catch (e) {
@@ -143,7 +152,8 @@ const CertificatePage: React.FC = () => {
 
   const handleRefreshStatus = async () => {
     try {
-      await api.post('/api/ssl/refresh-status');
+      const params = instanceId ? { instanceId } : {};
+      await api.post('/api/ssl/refresh-status', null, { params });
       message.success(t('cert.refresh_success'));
       loadCertificates();
     } catch (e) {
@@ -241,22 +251,22 @@ const CertificatePage: React.FC = () => {
       {/* Statistics Cards */}
       <Row gutter={16} style={{ marginBottom: 24 }}>
         <Col span={6}>
-          <Card>
+          <Card className="certificate-stat-card">
             <Statistic title={t('cert.total')} value={stats?.total || 0} />
           </Card>
         </Col>
         <Col span={6}>
-          <Card>
+          <Card className="certificate-stat-card">
             <Statistic title={t('cert.valid')} value={stats?.valid || 0} valueStyle={{ color: '#3f8600' }} />
           </Card>
         </Col>
         <Col span={6}>
-          <Card>
+          <Card className="certificate-stat-card">
             <Statistic title={t('cert.expiring_soon')} value={stats?.expiringSoon || 0} valueStyle={{ color: '#faad14' }} />
           </Card>
         </Col>
         <Col span={6}>
-          <Card>
+          <Card className="certificate-stat-card">
             <Statistic title={t('cert.expired')} value={stats?.expired || 0} valueStyle={{ color: '#cf1322' }} />
           </Card>
         </Col>
@@ -275,6 +285,7 @@ const CertificatePage: React.FC = () => {
       {/* Certificate Table */}
       <Card>
         <Table
+          className="certificate-table"
           loading={loading}
           dataSource={certificates}
           columns={columns}

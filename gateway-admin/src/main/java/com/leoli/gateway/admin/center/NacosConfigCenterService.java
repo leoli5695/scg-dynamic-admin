@@ -52,6 +52,9 @@ public class NacosConfigCenterService implements ConfigCenterService {
     // Local cache for fallback: dataId -> content
     private final Map<String, String> localCache = new ConcurrentHashMap<>();
 
+    // ConfigService cache per namespace: namespace -> ConfigService
+    private final Map<String, ConfigService> namespaceConfigServiceCache = new ConcurrentHashMap<>();
+
     // Nacos availability status
     private volatile boolean nacosAvailable = true;
     private volatile long lastFailureTime = 0;
@@ -335,6 +338,167 @@ public class NacosConfigCenterService implements ConfigCenterService {
     @Override
     public String getConfigCenterType() {
         return "nacos";
+    }
+
+    // ==================== Namespace-aware methods ====================
+
+    /**
+     * Get ConfigService for a specific namespace.
+     * Creates a new ConfigService if not cached.
+     */
+    private ConfigService getConfigServiceForNamespace(String targetNamespace) throws NacosException {
+        // Use default namespace if target is null or empty
+        String effectiveNamespace = (targetNamespace == null || targetNamespace.isEmpty())
+                ? namespace : targetNamespace;
+
+        // Normalize namespace (empty string for public namespace)
+        String cacheKey = (effectiveNamespace == null || effectiveNamespace.isEmpty() || "public".equals(effectiveNamespace))
+                ? "" : effectiveNamespace;
+
+        // Check cache first
+        ConfigService cached = namespaceConfigServiceCache.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+
+        // Create new ConfigService for this namespace
+        Properties properties = new Properties();
+        properties.put("serverAddr", serverAddr);
+        if (cacheKey != null && !cacheKey.isEmpty() && !"public".equals(cacheKey)) {
+            properties.put("namespace", cacheKey);
+        }
+        properties.put("group", group);
+
+        ConfigService nsConfigService = new NacosConfigService(properties);
+        namespaceConfigServiceCache.put(cacheKey, nsConfigService);
+        log.info("Created ConfigService for namespace: {}", cacheKey.isEmpty() ? "public" : cacheKey);
+        return nsConfigService;
+    }
+
+    @Override
+    public <T> T getConfig(String dataId, String targetNamespace, Class<T> type) {
+        String effectiveNamespace = (targetNamespace == null || targetNamespace.isEmpty())
+                ? namespace : targetNamespace;
+
+        // For default namespace, use existing method
+        if (effectiveNamespace == null || effectiveNamespace.isEmpty() || effectiveNamespace.equals(namespace)) {
+            return getConfig(dataId, type);
+        }
+
+        // For other namespaces, get specific ConfigService
+        try {
+            ConfigService nsConfigService = getConfigServiceForNamespace(targetNamespace);
+            String content = nsConfigService.getConfig(dataId, group, 5000);
+            if (content != null && !content.trim().isEmpty()) {
+                return objectMapper.readValue(content, type);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to get config from namespace {}: {}", effectiveNamespace, e.getMessage());
+        }
+        return null;
+    }
+
+    @Override
+    public <T> T getConfig(String dataId, String targetNamespace, com.fasterxml.jackson.core.type.TypeReference<T> typeReference) {
+        String effectiveNamespace = (targetNamespace == null || targetNamespace.isEmpty())
+                ? namespace : targetNamespace;
+
+        // For default namespace, use existing method
+        if (effectiveNamespace == null || effectiveNamespace.isEmpty() || effectiveNamespace.equals(namespace)) {
+            return getConfig(dataId, typeReference);
+        }
+
+        // For other namespaces, get specific ConfigService
+        try {
+            ConfigService nsConfigService = getConfigServiceForNamespace(targetNamespace);
+            String content = nsConfigService.getConfig(dataId, group, 5000);
+            if (content != null && !content.trim().isEmpty()) {
+                return objectMapper.readValue(content, typeReference);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to get config from namespace {}: {}", effectiveNamespace, e.getMessage());
+        }
+        return null;
+    }
+
+    @Override
+    public boolean publishConfig(String dataId, String targetNamespace, Object config) {
+        String effectiveNamespace = (targetNamespace == null || targetNamespace.isEmpty())
+                ? namespace : targetNamespace;
+
+        // For default namespace, use existing method
+        if (effectiveNamespace == null || effectiveNamespace.isEmpty() || effectiveNamespace.equals(namespace)) {
+            return publishConfig(dataId, config);
+        }
+
+        // For other namespaces, get specific ConfigService
+        try {
+            ConfigService nsConfigService = getConfigServiceForNamespace(targetNamespace);
+            String content = objectMapper.writeValueAsString(config);
+            boolean result = nsConfigService.publishConfig(dataId, group, content, ConfigType.JSON.getType());
+            if (result) {
+                log.info("Published config to Nacos namespace {}: dataId={}", effectiveNamespace, dataId);
+            }
+            return result;
+        } catch (Exception e) {
+            log.error("Failed to publish config to namespace {}: {}", effectiveNamespace, e.getMessage());
+            return false;
+        }
+    }
+
+    @Override
+    public boolean removeConfig(String dataId, String targetNamespace) {
+        String effectiveNamespace = (targetNamespace == null || targetNamespace.isEmpty())
+                ? namespace : targetNamespace;
+
+        // For default namespace, use existing method
+        if (effectiveNamespace == null || effectiveNamespace.isEmpty() || effectiveNamespace.equals(namespace)) {
+            return removeConfig(dataId);
+        }
+
+        // For other namespaces, get specific ConfigService
+        try {
+            ConfigService nsConfigService = getConfigServiceForNamespace(targetNamespace);
+            boolean result = nsConfigService.removeConfig(dataId, group);
+            if (result) {
+                log.info("Removed config from Nacos namespace {}: dataId={}", effectiveNamespace, dataId);
+            }
+            return result;
+        } catch (Exception e) {
+            log.error("Failed to remove config from namespace {}: {}", effectiveNamespace, e.getMessage());
+            return false;
+        }
+    }
+
+    @Override
+    public boolean configExists(String dataId, String targetNamespace) {
+        String effectiveNamespace = (targetNamespace == null || targetNamespace.isEmpty())
+                ? namespace : targetNamespace;
+
+        // For default namespace, use existing method
+        if (effectiveNamespace == null || effectiveNamespace.isEmpty() || effectiveNamespace.equals(namespace)) {
+            return configExists(dataId);
+        }
+
+        // For other namespaces, get specific ConfigService
+        try {
+            ConfigService nsConfigService = getConfigServiceForNamespace(targetNamespace);
+            String content = nsConfigService.getConfig(dataId, group, 3000);
+            return content != null && !content.trim().isEmpty();
+        } catch (Exception e) {
+            log.warn("Failed to check config existence in namespace {}: {}", effectiveNamespace, e.getMessage());
+            return false;
+        }
+    }
+
+    @Override
+    public String getDefaultNamespace() {
+        return namespace != null ? namespace : "";
+    }
+
+    @Override
+    public String getDefaultGroup() {
+        return group != null ? group : "DEFAULT_GROUP";
     }
 
     /**

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Form, Input, Button, message, Typography, Divider } from 'antd';
-import { UserOutlined, LockOutlined, GatewayOutlined, GlobalOutlined } from '@ant-design/icons';
+import { UserOutlined, LockOutlined, GlobalOutlined, ApiOutlined, CloudOutlined, SafetyOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { useTranslation } from 'react-i18next';
@@ -248,24 +248,51 @@ const LoginPage: React.FC = () => {
 
   return (
     <div className="login-container">
-      {/* Animated background with tech rays and meteors */}
+      {/* Premium animated background */}
       <div className="login-background">
-        <canvas ref={canvasRef} className="tech-rays-canvas" />
-        <div className="bg-gradient"></div>
+        {/* Ambient glow layers */}
+        <div className="bg-ambient-1"></div>
+        <div className="bg-ambient-2"></div>
+        <div className="bg-ambient-3"></div>
+        
+        {/* Gradient orbs */}
+        <div className="gradient-orb gradient-orb-1"></div>
+        <div className="gradient-orb gradient-orb-2"></div>
+        <div className="gradient-orb gradient-orb-3"></div>
+        
+        {/* Grid pattern */}
         <div className="bg-grid"></div>
-        <div className="bg-glow glow-1"></div>
-        <div className="bg-glow glow-2"></div>
+        
+        {/* Floating particles */}
+        <div className="particles">
+          <div className="particle"></div>
+          <div className="particle"></div>
+          <div className="particle"></div>
+          <div className="particle"></div>
+          <div className="particle"></div>
+          <div className="particle"></div>
+          <div className="particle"></div>
+          <div className="particle"></div>
+          <div className="particle"></div>
+        </div>
+        
+        {/* Tech rays canvas */}
+        <canvas ref={canvasRef} className="tech-rays-canvas" />
       </div>
 
-      {/* Login card */}
+      {/* Login card - Glassmorphism */}
       <div className="login-card">
         <div className="login-brand">
           <div className="brand-icon-wrapper">
-            <GatewayOutlined className="brand-icon" />
+            <div className="brand-icon-content">
+              <ApiOutlined className="brand-icon-main" />
+              <CloudOutlined className="brand-icon-bg" />
+            </div>
           </div>
           <Title level={2} className="brand-title">
-            API Gateway Console
+            {t('login.title')}
           </Title>
+          <span className="brand-subtitle">{t('login.subtitle')}</span>
         </div>
 
         <div className="login-form-section">

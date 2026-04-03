@@ -1,5 +1,6 @@
 package com.leoli.gateway.auth;
 
+import com.leoli.gateway.enums.AuthType;
 import com.leoli.gateway.model.AuthConfig;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
@@ -24,7 +25,16 @@ public interface AuthProcessor {
     /**
      * Get the authentication type supported by this processor.
      *
-     * @return authentication type (e.g., "JWT", "API_KEY", "OAUTH2")
+     * @return authentication type enum
      */
-    String getAuthType();
+    AuthType getAuthType();
+
+    /**
+     * Get the authentication type code (for backward compatibility).
+     *
+     * @return authentication type code string
+     */
+    default String getAuthTypeCode() {
+        return getAuthType().getCode();
+    }
 }

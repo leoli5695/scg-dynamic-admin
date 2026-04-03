@@ -51,11 +51,12 @@ public class AlertCheckService {
     private static final double DEFAULT_THREAD_THRESHOLD = 90.0;
     private static final double DEFAULT_INSTANCE_THRESHOLD = 1.0;
 
-    // Warning level multiplier (warning = threshold * 0.8)
-    private static final double WARNING_MULTIPLIER = 0.8;
+    // Critical level multiplier (critical = threshold * 1.2)
+    // Only send CRITICAL alert when value exceeds threshold by 20%
+    private static final double CRITICAL_MULTIPLIER = 1.2;
 
-    // Cooldown period for alerts (in minutes)
-    private static final int ALERT_COOLDOWN_MINUTES = 5;
+    // Cooldown period for alerts (in minutes) - increased to reduce spam
+    private static final int ALERT_COOLDOWN_MINUTES = 15;
 
     // Track last alert times to avoid spam
     private final Map<String, LocalDateTime> lastAlertTimes = new HashMap<>();
@@ -176,6 +177,7 @@ public class AlertCheckService {
 
     /**
      * Check thread count alerts.
+     * Calculates thread usage percentage based on peak threads.
      */
     @SuppressWarnings("unchecked")
     private void checkThreadAlerts(Map<String, Object> metrics, Map<String, Object> thresholds, AlertConfig config) {
@@ -189,9 +191,25 @@ public class AlertCheckService {
         }
 
         double liveThreads = getDoubleValue(threads, "liveThreads");
+        double peakThreads = getDoubleValue(threads, "peakThreads");
         double threadThreshold = getDoubleValue(threadConfig, "activeThreshold", DEFAULT_THREAD_THRESHOLD);
 
-        checkMetricAgainstThreshold("THREAD_COUNT", "Live Thread Count", liveThreads, threadThreshold, config, "");
+        // Calculate thread usage percentage based on peak threads
+        // This is more meaningful than comparing raw thread count to a percentage threshold
+        if (peakThreads > 0) {
+            double threadUsagePercent = (liveThreads / peakThreads) * 100;
+            log.debug("Thread usage: {}% (live: {}, peak: {}, threshold: {}%)",
+                threadUsagePercent, liveThreads, peakThreads, threadThreshold);
+            checkMetricAgainstThreshold("THREAD_USAGE", "Thread Usage Percentage", threadUsagePercent, threadThreshold, config, "%");
+        } else {
+            // If peak threads is 0, treat threshold as raw count threshold
+            // This handles the case where we don't have peak data
+            log.debug("Peak threads is 0, using raw count comparison: live={}, threshold={}", liveThreads, threadThreshold);
+            // Only alert if threshold is likely a count (> 100), otherwise skip
+            if (threadThreshold > 100) {
+                checkMetricAgainstThreshold("THREAD_COUNT", "Live Thread Count", liveThreads, threadThreshold, config, "");
+            }
+        }
     }
 
     /**
@@ -231,28 +249,29 @@ public class AlertCheckService {
 
     /**
      * Check a metric against threshold and send alert if exceeded.
-     * Warning level: threshold * 0.8
-     * Critical level: threshold
+     * WARNING level: when value reaches threshold (user configured value)
+     * CRITICAL level: when value exceeds threshold by 20%
      */
-    private void checkMetricAgainstThreshold(String alertType, String metricName, 
+    private void checkMetricAgainstThreshold(String alertType, String metricName,
                                               double currentValue, double threshold,
                                               AlertConfig config, String unit) {
-        double warningThreshold = threshold * WARNING_MULTIPLIER;
+        double criticalThreshold = threshold * CRITICAL_MULTIPLIER;
 
         String level = null;
         double exceededThreshold = 0;
 
-        if (currentValue >= threshold) {
+        // Only trigger alert when actually reaching the threshold
+        if (currentValue >= criticalThreshold) {
             level = "CRITICAL";
-            exceededThreshold = threshold;
-        } else if (currentValue >= warningThreshold) {
+            exceededThreshold = criticalThreshold;
+        } else if (currentValue >= threshold) {
             level = "WARNING";
-            exceededThreshold = warningThreshold;
+            exceededThreshold = threshold;
         }
 
         if (level != null && shouldSendAlert(alertType)) {
-            log.info("Alert triggered: {} - {} = {} (threshold: {}, warning: {})", 
-                alertType, metricName, currentValue, threshold, warningThreshold);
+            log.info("Alert triggered: {} - {} = {} (threshold: {}, critical: {})",
+                alertType, metricName, currentValue, threshold, criticalThreshold);
 
             // Generate alert content using AI
             String content = alertContentGenerator.generateAlertContent(
@@ -272,7 +291,7 @@ public class AlertCheckService {
 
             // Save alert history with error message
             saveAlertHistory(alertType, level, metricName, currentValue,
-                exceededThreshold, title, content, recipients, sendResult.isSuccess(), 
+                exceededThreshold, title, content, recipients, sendResult.isSuccess(),
                 sendResult.isSuccess() ? null : sendResult.getErrorMessage());
 
             // Update last alert time
@@ -567,6 +586,7 @@ public class AlertCheckService {
             case "HTTP_ERROR_RATE" -> "HTTP错误率";
             case "RESPONSE_TIME" -> "响应时间";
             case "THREAD_COUNT" -> "线程数";
+            case "THREAD_USAGE" -> "线程使用率";
             case "INSTANCE_DOWN" -> "实例宕机";
             default -> alertType;
         };
@@ -583,6 +603,7 @@ public class AlertCheckService {
             case "HTTP_ERROR_RATE" -> "HTTP Error Rate";
             case "RESPONSE_TIME" -> "Response Time";
             case "THREAD_COUNT" -> "Thread Count";
+            case "THREAD_USAGE" -> "Thread Usage";
             case "INSTANCE_DOWN" -> "Instance Down";
             default -> alertType;
         };

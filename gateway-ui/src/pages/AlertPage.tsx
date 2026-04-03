@@ -71,7 +71,11 @@ interface EmailConfig {
   lastTestError: string;
 }
 
-const AlertPage: React.FC = () => {
+interface AlertPageProps {
+  instanceId?: string;
+}
+
+const AlertPage: React.FC<AlertPageProps> = ({ instanceId }) => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [config, setConfig] = useState<AlertConfig | null>(null);
@@ -86,18 +90,56 @@ const AlertPage: React.FC = () => {
   const [emailForm] = Form.useForm();
   const { t } = useTranslation();
 
+  // Default threshold values
+  const defaultThresholdConfig = {
+    cpu: { processThreshold: 80, systemThreshold: 90, enabled: true },
+    memory: { heapThreshold: 85, enabled: true },
+    http: { errorRateThreshold: 5, responseTimeThreshold: 2000, enabled: true },
+    instance: { unhealthyThreshold: 1, enabled: true },
+    thread: { activeThreshold: 90, enabled: true }
+  };
+
   // Load config
   const loadConfig = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/api/alerts/config');
+      const params = instanceId ? `?instanceId=${instanceId}` : '';
+      const res = await api.get(`/api/alerts/config${params}`);
       if (res.data.code === 200) {
         setConfig(res.data.data);
         setEmails(res.data.data.emailRecipients || []);
+
+        // Merge with default values to ensure all fields have values
+        const serverThreshold = res.data.data.thresholdConfig || {};
+        const mergedThreshold = {
+          cpu: {
+            processThreshold: serverThreshold.cpu?.processThreshold ?? defaultThresholdConfig.cpu.processThreshold,
+            systemThreshold: serverThreshold.cpu?.systemThreshold ?? defaultThresholdConfig.cpu.systemThreshold,
+            enabled: serverThreshold.cpu?.enabled ?? defaultThresholdConfig.cpu.enabled
+          },
+          memory: {
+            heapThreshold: serverThreshold.memory?.heapThreshold ?? defaultThresholdConfig.memory.heapThreshold,
+            enabled: serverThreshold.memory?.enabled ?? defaultThresholdConfig.memory.enabled
+          },
+          http: {
+            errorRateThreshold: serverThreshold.http?.errorRateThreshold ?? defaultThresholdConfig.http.errorRateThreshold,
+            responseTimeThreshold: serverThreshold.http?.responseTimeThreshold ?? defaultThresholdConfig.http.responseTimeThreshold,
+            enabled: serverThreshold.http?.enabled ?? defaultThresholdConfig.http.enabled
+          },
+          instance: {
+            unhealthyThreshold: serverThreshold.instance?.unhealthyThreshold ?? defaultThresholdConfig.instance.unhealthyThreshold,
+            enabled: serverThreshold.instance?.enabled ?? defaultThresholdConfig.instance.enabled
+          },
+          thread: {
+            activeThreshold: serverThreshold.thread?.activeThreshold ?? defaultThresholdConfig.thread.activeThreshold,
+            enabled: serverThreshold.thread?.enabled ?? defaultThresholdConfig.thread.enabled
+          }
+        };
+
         form.setFieldsValue({
           emailLanguage: res.data.data.emailLanguage || 'zh',
           enabled: res.data.data.enabled,
-          ...res.data.data.thresholdConfig
+          ...mergedThreshold
         });
       }
     } catch (e) {
@@ -278,7 +320,8 @@ const AlertPage: React.FC = () => {
   // Clear history
   const handleClearHistory = async () => {
     try {
-      const res = await api.delete('/api/alerts/history');
+      const params = instanceId ? `?instanceId=${instanceId}` : '';
+      const res = await api.delete(`/api/alerts/history${params}`);
       if (res.data.code === 200) {
         message.success(res.data.message || 'History cleared');
         loadHistory();
@@ -300,43 +343,62 @@ const AlertPage: React.FC = () => {
     }
   };
 
-  // History columns
+  // History columns - 自适应列宽
   const historyColumns = [
     {
       title: t('alert.time') || 'Time',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      width: 160,
-      render: (text: string) => new Date(text).toLocaleString()
+      render: (text: string) => (
+        <span style={{ color: '#cbd5e1', fontFamily: 'JetBrains Mono, monospace', fontSize: 13.5 }}>
+          {new Date(text).toLocaleString()}
+        </span>
+      )
     },
     {
       title: t('alert.type') || 'Type',
       dataIndex: 'alertType',
       key: 'alertType',
-      width: 100,
-      render: (text: string) => <Tag>{text}</Tag>
+      render: (text: string) => (
+        <Tag className="type-tag">
+          {text}
+        </Tag>
+      )
     },
     {
       title: t('alert.level') || 'Level',
       dataIndex: 'alertLevel',
       key: 'alertLevel',
-      width: 100,
-      render: (text: string) => <Tag color={getLevelColor(text)}>{text}</Tag>
+      render: (text: string) => {
+        // Map level to specific tag class
+        const tagClass = text === 'WARNING' ? 'warning-tag' : 
+                        text === 'CRITICAL' ? 'critical-tag' : 
+                        text === 'ERROR' ? 'error-tag' : 'info-tag';
+        return (
+          <Tag className={tagClass}>
+            {text}
+          </Tag>
+        );
+      }
     },
     {
       title: t('alert.title') || 'Title',
       dataIndex: 'title',
       key: 'title',
-      ellipsis: true
+      ellipsis: true,
+      render: (text: string) => (
+        <span style={{ color: '#e2e8f0', fontSize: 14, fontWeight: 500 }}>
+          {text}
+        </span>
+      )
     },
     {
       title: t('alert.status') || 'Status',
       dataIndex: 'status',
       key: 'status',
-      width: 80,
       render: (text: string) => (
-        <Tag color={text === 'SENT' ? 'green' : 'red'}>
-          {text === 'SENT' ? (t('alert.sent') || 'Sent') : (t('alert.failed') || 'Failed')}
+        <Tag className={text === 'SENT' ? 'sent-tag' : 'failed-tag'}>
+          {text === 'SENT' ? (t('alert.sent') || '已发送') : (t('alert.failed') || '发送失败')}
         </Tag>
       )
     }
@@ -347,29 +409,32 @@ const AlertPage: React.FC = () => {
   }
 
   return (
-    <div className="alert-page">
-      <div className="page-header">
-        <Title level={4} style={{ margin: 0 }}><BellOutlined style={{ marginRight: 8 }} />{t('alert.title') || 'Alert Configuration'}</Title>
-        <Space>
+    <div className="alert-settings-container">
+      <div className="alert-page-header">
+        <div className="alert-header-title">
+          <BellOutlined className="alert-header-icon" />
+          <Title level={3} style={{ margin: 0 }}>{t('alert.title') || 'Alert Configuration'}</Title>
+        </div>
+        <Space className="alert-header-actions">
           <Popconfirm
             title={t('alert.test_email_confirm') || 'Send test email to all recipients?'}
             onConfirm={handleTestEmail}
           >
-            <Button icon={<SendOutlined />} disabled={emails.length === 0}>
+            <Button icon={<SendOutlined />} disabled={emails.length === 0} className="test-email-btn">
               {t('alert.test_email') || 'Test Email'}
             </Button>
           </Popconfirm>
-          <Button type="primary" onClick={handleSave} loading={saving}>
+          <Button type="primary" onClick={handleSave} loading={saving} className="save-config-btn">
             {t('alert.save_config') || 'Save Configuration'}
           </Button>
         </Space>
       </div>
 
-      <Form form={form} layout="vertical">
-        <Row gutter={[16, 16]}>
+      <Form form={form} layout="vertical" className="alert-form">
+        <div className="settings-grid">
           {/* Email Settings */}
-          <Col xs={24} lg={12}>
-            <Card title={<Space><MailOutlined />{t('alert.email_settings') || 'Email Settings'}</Space>} className="settings-card">
+          <div className="settings-card-wrapper">
+            <Card title={<Space><MailOutlined />{t('alert.email_settings') || 'Email Settings'}</Space>} className="settings-card email-settings-card">
               <Form.Item label={t('alert.email_recipients') || 'Email Recipients'}>
                 <Space.Compact style={{ width: '100%' }}>
                   <Input
@@ -403,14 +468,14 @@ const AlertPage: React.FC = () => {
               </Form.Item>
 
               <Form.Item name="enabled" label={t('alert.enabled') || 'Enable Alerts'} valuePropName="checked">
-                <Switch checkedChildren={t('common.enabled') || 'ON'} unCheckedChildren={t('common.disabled') || 'OFF'} />
+                <Switch checkedChildren={t('common.enabled') || 'ON'} unCheckedChildren={t('common.disabled') || 'OFF'} className="alert-switch" />
               </Form.Item>
             </Card>
-          </Col>
+          </div>
 
           {/* Current Metrics */}
-          <Col xs={24} lg={12}>
-            <Card title={<Space><AlertOutlined />{t('alert.current_metrics') || 'Current Metrics'}</Space>} className="metrics-card">
+          <div className="settings-card-wrapper">
+            <Card title={<Space><AlertOutlined />{t('alert.current_metrics') || 'Current Metrics'}</Space>} className="settings-card metrics-card">
               {currentMetrics ? (
                 <Row gutter={[16, 16]}>
                   <Col span={12}>
@@ -454,110 +519,131 @@ const AlertPage: React.FC = () => {
                 <Spin />
               )}
             </Card>
-          </Col>
-        </Row>
+          </div>
+        </div>
+
+        {/* Alert History */}
 
         {/* Threshold Configuration */}
-        <Card title={<Space><SettingOutlined />{t('alert.threshold_config') || 'Threshold Configuration'}</Space>} style={{ marginTop: 16 }}>
-          <Row gutter={[24, 16]}>
+        <Card title={<Space><SettingOutlined />{t('alert.threshold_config') || 'Threshold Configuration'}</Space>} className="threshold-config-card">
+          <div className="threshold-grid">
             {/* CPU */}
-            <Col xs={24} md={12} lg={8}>
-              <Card size="small" title={
-                <Space>
+            <Card size="small" className="threshold-card threshold-card-cpu" title={
+                <div className="threshold-card-title">
                   <Form.Item name={['cpu', 'enabled']} valuePropName="checked" noStyle>
-                    <Switch size="small" />
+                    <Switch size="small" className="threshold-switch" />
                   </Form.Item>
                   <span>CPU {t('alert.threshold') || 'Threshold'}</span>
-                </Space>
+                </div>
               }>
-                <Row gutter={16}>
-                  <Col span={12}>
-                    <Form.Item name={['cpu', 'processThreshold']} label={t('alert.process_cpu') || 'Process CPU (%)'}>
-                      <InputNumber min={0} max={100} style={{ width: '100%' }} />
-                    </Form.Item>
-                  </Col>
-                  <Col span={12}>
-                    <Form.Item name={['cpu', 'systemThreshold']} label={t('alert.system_cpu') || 'System CPU (%)'}>
-                      <InputNumber min={0} max={100} style={{ width: '100%' }} />
-                    </Form.Item>
-                  </Col>
-                </Row>
+                <div className="threshold-card-content">
+                  <div className="threshold-input-row">
+                    <div className="threshold-input-col">
+                      <label className="threshold-label">{t('alert.process_cpu') || 'Process CPU (%)'}</label>
+                      <Form.Item name={['cpu', 'processThreshold']} noStyle>
+                        <InputNumber className="threshold-input" min={0} max={100} placeholder="80" />
+                      </Form.Item>
+                    </div>
+                    <div className="threshold-input-col">
+                      <label className="threshold-label">{t('alert.system_cpu') || 'System CPU (%)'}</label>
+                      <Form.Item name={['cpu', 'systemThreshold']} noStyle>
+                        <InputNumber className="threshold-input" min={0} max={100} placeholder="90" />
+                      </Form.Item>
+                    </div>
+                  </div>
+                </div>
               </Card>
-            </Col>
 
             {/* Memory */}
-            <Col xs={24} md={12} lg={8}>
-              <Card size="small" title={
-                <Space>
+            <Card size="small" className="threshold-card threshold-card-memory" title={
+                <div className="threshold-card-title">
                   <Form.Item name={['memory', 'enabled']} valuePropName="checked" noStyle>
-                    <Switch size="small" />
+                    <Switch size="small" className="threshold-switch" />
                   </Form.Item>
                   <span>{t('monitor.jvm_memory') || 'Memory'} {t('alert.threshold') || 'Threshold'}</span>
-                </Space>
+                </div>
               }>
-                <Form.Item name={['memory', 'heapThreshold']} label={t('alert.heap_threshold') || 'Heap Usage (%)'}>
-                  <InputNumber min={0} max={100} style={{ width: '100%' }} />
-                </Form.Item>
+                <div className="threshold-card-content">
+                  <div className="threshold-input-row">
+                    <div className="threshold-input-col">
+                      <label className="threshold-label">{t('alert.heap_threshold') || 'Heap Usage (%)'}</label>
+                      <Form.Item name={['memory', 'heapThreshold']} noStyle>
+                        <InputNumber className="threshold-input" min={0} max={100} placeholder="85" />
+                      </Form.Item>
+                    </div>
+                  </div>
+                </div>
               </Card>
-            </Col>
 
             {/* HTTP */}
-            <Col xs={24} md={12} lg={8}>
-              <Card size="small" title={
-                <Space>
+            <Card size="small" className="threshold-card threshold-card-http" title={
+                <div className="threshold-card-title">
                   <Form.Item name={['http', 'enabled']} valuePropName="checked" noStyle>
-                    <Switch size="small" />
+                    <Switch size="small" className="threshold-switch" />
                   </Form.Item>
                   <span>HTTP {t('alert.threshold') || 'Threshold'}</span>
-                </Space>
+                </div>
               }>
-                <Row gutter={16}>
-                  <Col span={12}>
-                    <Form.Item name={['http', 'errorRateThreshold']} label={t('alert.error_rate') || 'Error Rate (%)'}>
-                      <InputNumber min={0} max={100} style={{ width: '100%' }} />
-                    </Form.Item>
-                  </Col>
-                  <Col span={12}>
-                    <Form.Item name={['http', 'responseTimeThreshold']} label={t('alert.response_time') || 'Response (ms)'}>
-                      <InputNumber min={0} style={{ width: '100%' }} />
-                    </Form.Item>
-                  </Col>
-                </Row>
+                <div className="threshold-card-content">
+                  <div className="threshold-input-row">
+                    <div className="threshold-input-col">
+                      <label className="threshold-label">{t('alert.error_rate') || 'Error Rate (%)'}</label>
+                      <Form.Item name={['http', 'errorRateThreshold']} noStyle>
+                        <InputNumber className="threshold-input" min={0} max={100} placeholder="5" />
+                      </Form.Item>
+                    </div>
+                    <div className="threshold-input-col">
+                      <label className="threshold-label">{t('alert.response_time') || 'Response (ms)'}</label>
+                      <Form.Item name={['http', 'responseTimeThreshold']} noStyle>
+                        <InputNumber className="threshold-input" min={0} placeholder="2000" />
+                      </Form.Item>
+                    </div>
+                  </div>
+                </div>
               </Card>
-            </Col>
 
             {/* Instance */}
-            <Col xs={24} md={12} lg={8}>
-              <Card size="small" title={
-                <Space>
+            <Card size="small" className="threshold-card threshold-card-instance" title={
+                <div className="threshold-card-title">
                   <Form.Item name={['instance', 'enabled']} valuePropName="checked" noStyle>
-                    <Switch size="small" />
+                    <Switch size="small" className="threshold-switch" />
                   </Form.Item>
                   <span>{t('alert.instance_health') || 'Instance Health'}</span>
-                </Space>
+                </div>
               }>
-                <Form.Item name={['instance', 'unhealthyThreshold']} label={t('alert.unhealthy_threshold') || 'Unhealthy Count'}>
-                  <InputNumber min={0} style={{ width: '100%' }} />
-                </Form.Item>
+                <div className="threshold-card-content">
+                  <div className="threshold-input-row">
+                    <div className="threshold-input-col">
+                      <label className="threshold-label">{t('alert.unhealthy_threshold') || 'Unhealthy Count'}</label>
+                      <Form.Item name={['instance', 'unhealthyThreshold']} noStyle>
+                        <InputNumber className="threshold-input" min={0} placeholder="1" />
+                      </Form.Item>
+                    </div>
+                  </div>
+                </div>
               </Card>
-            </Col>
 
             {/* Thread */}
-            <Col xs={24} md={12} lg={8}>
-              <Card size="small" title={
-                <Space>
+            <Card size="small" className="threshold-card threshold-card-thread" title={
+                <div className="threshold-card-title">
                   <Form.Item name={['thread', 'enabled']} valuePropName="checked" noStyle>
-                    <Switch size="small" />
+                    <Switch size="small" className="threshold-switch" />
                   </Form.Item>
                   <span>{t('alert.thread_usage') || 'Thread Usage'}</span>
-                </Space>
+                </div>
               }>
-                <Form.Item name={['thread', 'activeThreshold']} label={t('alert.thread_threshold') || 'Usage (%)'}>
-                  <InputNumber min={0} max={100} style={{ width: '100%' }} />
-                </Form.Item>
+                <div className="threshold-card-content">
+                  <div className="threshold-input-row">
+                    <div className="threshold-input-col">
+                      <label className="threshold-label">{t('alert.thread_threshold') || 'Usage (%)'}</label>
+                      <Form.Item name={['thread', 'activeThreshold']} noStyle>
+                        <InputNumber className="threshold-input" min={0} max={100} placeholder="90" />
+                      </Form.Item>
+                    </div>
+                  </div>
+                </div>
               </Card>
-            </Col>
-          </Row>
+            </div>
         </Card>
       </Form>
 
@@ -586,12 +672,19 @@ const AlertPage: React.FC = () => {
           columns={historyColumns}
           rowKey="id"
           loading={historyLoading}
-          pagination={{ pageSize: 10 }}
-          size="small"
+          pagination={{ 
+            pageSize: 10,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            showTotal: (total) => `共 ${total} 条`
+          }}
+          className="alert-history-table"
           expandable={{
             expandedRowRender: (record) => (
-              <div style={{ padding: 12, background: '#fafafa' }}>
-                <Text>{record.content}</Text>
+              <div className="alert-detail-content">
+                <p style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: '1.75', color: '#e2e8f0', margin: 0 }}>
+                  {record.content}
+                </p>
               </div>
             )
           }}

@@ -33,10 +33,18 @@ public class SslCertificateController {
     /**
      * Get all certificates
      * @param enabled Optional filter by enabled status
+     * @param instanceId Optional instance ID to filter certificates
      */
     @GetMapping
     public ResponseEntity<List<SslCertificate>> getAllCertificates(
-            @RequestParam(required = false) Boolean enabled) {
+            @RequestParam(required = false) Boolean enabled,
+            @RequestParam(required = false) String instanceId) {
+        if (instanceId != null && !instanceId.isEmpty()) {
+            if (enabled != null && enabled) {
+                return ResponseEntity.ok(sslCertificateService.getEnabledCertificates(instanceId));
+            }
+            return ResponseEntity.ok(sslCertificateService.getAllCertificates(instanceId));
+        }
         if (enabled != null) {
             return ResponseEntity.ok(sslCertificateService.getCertificatesByEnabled(enabled));
         }
@@ -55,9 +63,18 @@ public class SslCertificateController {
 
     /**
      * Get certificate by domain
+     * @param domain Domain name
+     * @param instanceId Optional instance ID
      */
     @GetMapping("/domain/{domain}")
-    public ResponseEntity<SslCertificate> getCertificateByDomain(@PathVariable String domain) {
+    public ResponseEntity<SslCertificate> getCertificateByDomain(
+            @PathVariable String domain,
+            @RequestParam(required = false) String instanceId) {
+        if (instanceId != null && !instanceId.isEmpty()) {
+            return sslCertificateService.getCertificateByDomain(instanceId, domain)
+                    .map(ResponseEntity::ok)
+                    .orElse(ResponseEntity.notFound().build());
+        }
         return sslCertificateService.getCertificateByDomain(domain)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
@@ -73,19 +90,27 @@ public class SslCertificateController {
 
     /**
      * Get expiring certificates
+     * @param days Days threshold
+     * @param instanceId Optional instance ID
      */
     @GetMapping("/expiring")
     public ResponseEntity<List<SslCertificate>> getExpiringCertificates(
-            @RequestParam(defaultValue = "30") int days) {
+            @RequestParam(defaultValue = "30") int days,
+            @RequestParam(required = false) String instanceId) {
+        if (instanceId != null && !instanceId.isEmpty()) {
+            return ResponseEntity.ok(sslCertificateService.getExpiringCertificates(instanceId, days));
+        }
         return ResponseEntity.ok(sslCertificateService.getExpiringCertificates(days));
     }
 
     /**
      * Upload PEM certificate (certificate content + private key)
+     * @param instanceId Optional instance ID
      */
     @PostMapping("/pem")
     public ResponseEntity<?> uploadPemCertificate(
             @RequestBody(required = false) Map<String, String> body,
+            @RequestParam(required = false) String instanceId,
             @RequestParam(required = false) String certName,
             @RequestParam(required = false) String domain,
             @RequestParam(required = false) String certContent,
@@ -98,7 +123,7 @@ public class SslCertificateController {
             String key = keyContent != null ? keyContent : body.get("keyContent");
             
             SslCertificate sslCert = sslCertificateService.uploadPemCertificate(
-                    name, dom, cert, key);
+                    instanceId, name, dom, cert, key);
             return ResponseEntity.ok(sslCert);
         } catch (Exception e) {
             log.error("Failed to upload PEM certificate", e);
@@ -108,19 +133,21 @@ public class SslCertificateController {
 
     /**
      * Upload PEM certificate via files
+     * @param instanceId Optional instance ID
      */
     @PostMapping("/pem/files")
     public ResponseEntity<?> uploadPemFiles(
             @RequestParam String certName,
             @RequestParam String domain,
             @RequestParam("certFile") MultipartFile certFile,
-            @RequestParam("keyFile") MultipartFile keyFile) {
+            @RequestParam("keyFile") MultipartFile keyFile,
+            @RequestParam(required = false) String instanceId) {
         try {
             String certContent = new String(certFile.getBytes(), StandardCharsets.UTF_8);
             String keyContent = new String(keyFile.getBytes(), StandardCharsets.UTF_8);
 
             SslCertificate cert = sslCertificateService.uploadPemCertificate(
-                    certName, domain, certContent, keyContent);
+                    instanceId, certName, domain, certContent, keyContent);
             return ResponseEntity.ok(cert);
         } catch (Exception e) {
             log.error("Failed to upload PEM files", e);
@@ -130,6 +157,7 @@ public class SslCertificateController {
 
     /**
      * Upload JKS/P12 keystore
+     * @param instanceId Optional instance ID
      */
     @PostMapping("/keystore")
     public ResponseEntity<?> uploadKeystore(
@@ -137,10 +165,11 @@ public class SslCertificateController {
             @RequestParam String domain,
             @RequestParam String certType,
             @RequestParam String keystoreContent,
-            @RequestParam String password) {
+            @RequestParam String password,
+            @RequestParam(required = false) String instanceId) {
         try {
             SslCertificate cert = sslCertificateService.uploadKeystore(
-                    certName, domain, certType, keystoreContent, password);
+                    instanceId, certName, domain, certType, keystoreContent, password);
             return ResponseEntity.ok(cert);
         } catch (Exception e) {
             log.error("Failed to upload keystore", e);
@@ -150,6 +179,7 @@ public class SslCertificateController {
 
     /**
      * Upload keystore via file
+     * @param instanceId Optional instance ID
      */
     @PostMapping("/keystore/file")
     public ResponseEntity<?> uploadKeystoreFile(
@@ -157,12 +187,13 @@ public class SslCertificateController {
             @RequestParam String domain,
             @RequestParam String certType,
             @RequestParam("keystoreFile") MultipartFile keystoreFile,
-            @RequestParam String password) {
+            @RequestParam String password,
+            @RequestParam(required = false) String instanceId) {
         try {
             String keystoreContent = Base64.getEncoder().encodeToString(keystoreFile.getBytes());
 
             SslCertificate cert = sslCertificateService.uploadKeystore(
-                    certName, domain, certType, keystoreContent, password);
+                    instanceId, certName, domain, certType, keystoreContent, password);
             return ResponseEntity.ok(cert);
         } catch (Exception e) {
             log.error("Failed to upload keystore file", e);

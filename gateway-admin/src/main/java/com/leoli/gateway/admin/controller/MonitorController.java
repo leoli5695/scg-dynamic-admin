@@ -24,13 +24,15 @@ public class MonitorController {
 
     /**
      * Get all Gateway metrics.
+     * @param instanceId Optional instance ID to filter metrics for a specific instance
      */
     @GetMapping("/metrics")
-    public ResponseEntity<Map<String, Object>> getMetrics() {
+    public ResponseEntity<Map<String, Object>> getMetrics(
+            @RequestParam(required = false) String instanceId) {
         Map<String, Object> response = new HashMap<>();
 
         try {
-            Map<String, Object> metrics = prometheusService.getGatewayMetrics();
+            Map<String, Object> metrics = prometheusService.getGatewayMetrics(instanceId);
             response.put("code", 200);
             response.put("data", metrics);
             response.put("prometheusAvailable", prometheusService.isAvailable());
@@ -57,16 +59,18 @@ public class MonitorController {
     /**
      * Get history metrics for charts.
      * @param hours Number of hours to look back (default 24, max 168 = 1 week)
+     * @param instanceId Optional instance ID to filter metrics for a specific instance
      */
     @GetMapping("/history")
     public ResponseEntity<Map<String, Object>> getHistory(
-            @RequestParam(defaultValue = "24") int hours) {
+            @RequestParam(defaultValue = "24") int hours,
+            @RequestParam(required = false) String instanceId) {
         Map<String, Object> response = new HashMap<>();
         
         try {
             // Limit to 1 week
             int safeHours = Math.min(hours, 168);
-            Map<String, Object> history = prometheusService.getHistoryMetrics(safeHours);
+            Map<String, Object> history = prometheusService.getHistoryMetrics(safeHours, instanceId);
             response.put("code", 200);
             response.put("data", history);
             response.put("hours", safeHours);

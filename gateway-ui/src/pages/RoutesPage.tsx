@@ -1,14 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, memo, useMemo, useRef } from 'react';
 import {
   Card, Button, Space, message, Spin, Tag, Modal, Form, Input, Switch,
   Select, Empty, Radio, Tooltip, Badge, Divider, Typography, Dropdown, Pagination,
-  InputNumber, Slider, Collapse, Drawer
+  InputNumber, Slider, Collapse, Drawer, Popconfirm
 } from 'antd';
 import {
   PlusOutlined, DeleteOutlined, EyeOutlined, CopyOutlined, StopOutlined,
   PlayCircleOutlined, EditOutlined, CompassOutlined, MoreOutlined,
   ApiOutlined, BranchesOutlined, ThunderboltOutlined, FileTextOutlined,
-  CloudOutlined, GlobalOutlined, FilterOutlined, SplitCellsOutlined, CloseOutlined
+  CloudOutlined, GlobalOutlined, FilterOutlined, SplitCellsOutlined, CloseOutlined,
+  SearchOutlined
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import api from '../utils/api';
@@ -66,6 +67,48 @@ interface Route {
   metadata?: any;
 }
 
+// Separate component for route action dropdown to prevent re-renders
+interface RouteActionDropdownProps {
+  route: Route;
+  onEdit: (route: Route) => void;
+  onDetail: (route: Route) => void;
+  onToggle: (route: Route) => void;
+  onDelete: (route: Route) => void;
+}
+
+const RouteActionDropdown = memo(({ route, onEdit, onDetail, onToggle, onDelete }: RouteActionDropdownProps) => {
+  const { t } = useTranslation();
+
+  const handleEdit = useCallback(() => onEdit(route), [onEdit, route]);
+  const handleDetail = useCallback(() => onDetail(route), [onDetail, route]);
+  const handleToggle = useCallback(() => onToggle(route), [onToggle, route]);
+  const handleDelete = useCallback(() => onDelete(route), [onDelete, route]);
+
+  return (
+    <Space>
+      <Tooltip title={t('common.edit')}>
+        <Button type="text" size="small" icon={<EditOutlined />} className="action-btn" onClick={handleEdit} />
+      </Tooltip>
+      <Tooltip title={t('common.detail')}>
+        <Button type="text" size="small" icon={<EyeOutlined />} className="action-btn" onClick={handleDetail} />
+      </Tooltip>
+      <Tooltip title={route.enabled ? t('common.disable') : t('common.enable')}>
+        <Button type="text" size="small" icon={route.enabled ? <StopOutlined /> : <PlayCircleOutlined />} className="action-btn" onClick={handleToggle} />
+      </Tooltip>
+      <Popconfirm
+        title={`${t('common.delete')}: ${route.routeName || route.id}`}
+        onConfirm={handleDelete}
+        okText={t('common.confirm')}
+        cancelText={t('common.cancel')}
+      >
+        <Tooltip title={t('common.delete')}>
+          <Button type="text" size="small" danger icon={<DeleteOutlined />} className="action-btn" />
+        </Tooltip>
+      </Popconfirm>
+    </Space>
+  );
+});
+
 interface Service {
   name: string;
   serviceId: string;
@@ -92,8 +135,13 @@ const PredicateItem: React.FC<{
       <Form.Item {...restField} name={[name, 'name']} noStyle>
         <Select
           placeholder={t('routes.predicate_type')}
-          style={{ width: 150 }}
+          style={{ 
+            width: 150,
+            backgroundColor: 'rgba(0, 0, 0, 0.3)',
+            border: '1px solid rgba(148, 163, 184, 0.15)'
+          }}
           onChange={(value) => setPredicateType(value)}
+          suffixIcon={<span style={{ color: '#94a3b8', fontSize: '12px' }}>▼</span>}
         >
           <Select.Option value="Path">Path</Select.Option>
           <Select.Option value="Host">Host</Select.Option>
@@ -103,7 +151,16 @@ const PredicateItem: React.FC<{
       </Form.Item>
       <Form.Item {...restField} name={[name, 'args']} noStyle>
         {predicateType === 'Method' ? (
-          <Select placeholder={t('routes.arguments')} style={{ width: 300 }} mode="multiple">
+          <Select 
+            placeholder={t('routes.arguments')} 
+            style={{ 
+              width: 300,
+              backgroundColor: 'rgba(0, 0, 0, 0.3)',
+              border: '1px solid rgba(148, 163, 184, 0.15)'
+            }} 
+            mode="multiple"
+            suffixIcon={<span style={{ color: '#94a3b8', fontSize: '12px' }}>▼</span>}
+          >
             <Select.Option value="GET">GET</Select.Option>
             <Select.Option value="POST">POST</Select.Option>
             <Select.Option value="PUT">PUT</Select.Option>
@@ -116,7 +173,12 @@ const PredicateItem: React.FC<{
           <Space.Compact style={{ width: 300 }}>
             <Input
               placeholder="Header Name"
-              style={{ width: '45%' }}
+              style={{ 
+                width: '45%',
+                backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                border: '1px solid rgba(148, 163, 184, 0.15)',
+                color: '#e2e8f0'
+              }}
               onChange={(e) => {
                 const currentValue = form.getFieldValue(['predicates', name, 'args']);
                 const newValue = `${e.target.value}:${currentValue?.split(':')[1] || ''}`;
@@ -125,7 +187,12 @@ const PredicateItem: React.FC<{
             />
             <Input
               placeholder="Header Value"
-              style={{ width: '55%' }}
+              style={{ 
+                width: '55%',
+                backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                border: '1px solid rgba(148, 163, 184, 0.15)',
+                color: '#e2e8f0'
+              }}
               onChange={(e) => {
                 const currentValue = form.getFieldValue(['predicates', name, 'args']);
                 const newValue = `${currentValue?.split(':')[0] || ''}:${e.target.value}`;
@@ -134,10 +201,34 @@ const PredicateItem: React.FC<{
             />
           </Space.Compact>
         ) : (
-          <Input placeholder={t('routes.arguments')} style={{ width: 300 }} />
+          <Input 
+            placeholder={t('routes.arguments')} 
+            style={{ 
+              width: 300,
+              backgroundColor: 'rgba(0, 0, 0, 0.3)',
+              border: '1px solid rgba(148, 163, 184, 0.15)',
+              color: '#e2e8f0'
+            }} 
+          />
         )}
       </Form.Item>
-      <Button type="text" danger onClick={() => onRemove(name)} icon={<DeleteOutlined />} />
+      <Tooltip title={t('common.delete')}>
+        <Button 
+          type="text" 
+          onClick={() => onRemove(name)} 
+          icon={<DeleteOutlined />}
+          style={{ 
+            color: '#ef4444',
+            opacity: 0.8,
+            padding: '4px 8px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+          onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
+        />
+      </Tooltip>
     </div>
   );
 };
@@ -177,8 +268,13 @@ const FilterItem: React.FC<{
       <Form.Item {...restField} name={[name, 'name']} noStyle>
         <Select
           placeholder={t('routes.filter_type')}
-          style={{ width: 200 }}
+          style={{ 
+            width: 160,
+            backgroundColor: 'rgba(0, 0, 0, 0.3)',
+            border: '1px solid rgba(148, 163, 184, 0.15)'
+          }}
           onChange={(value) => setFilterType(value)}
+          suffixIcon={<span style={{ color: '#94a3b8', fontSize: '12px' }}>▼</span>}
         >
           <Select.OptGroup label={t('plugin.category.request_headers')}>
             <Select.Option value="AddRequestHeader">{t('plugin.AddRequestHeader.name')}</Select.Option>
@@ -214,63 +310,98 @@ const FilterItem: React.FC<{
       </Form.Item>
       <Form.Item {...restField} name={[name, 'args']} noStyle>
         {needsKeyValueInput.includes(filterType) ? (
-          // name:value format (colon separated)
-          <Space.Compact style={{ width: 320 }}>
+          // name:value format (colon separated) - 分开显示
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <Input
               placeholder="Name"
-              style={{ width: '45%' }}
+              style={{ 
+                width: 110,
+                backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                border: '1px solid rgba(148, 163, 184, 0.15)',
+                color: '#e2e8f0'
+              }}
               onChange={(e) => {
                 const currentValue = form.getFieldValue(['filters', name, 'args']);
                 const newValue = `${e.target.value}:${currentValue?.split(':')[1] || ''}`;
                 form.setFieldValue(['filters', name, 'args'], newValue);
               }}
             />
+            <span style={{ color: '#64748b' }}>:</span>
             <Input
               placeholder="Value"
-              style={{ width: '55%' }}
+              style={{ 
+                width: 110,
+                backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                border: '1px solid rgba(148, 163, 184, 0.15)',
+                color: '#e2e8f0'
+              }}
               onChange={(e) => {
                 const currentValue = form.getFieldValue(['filters', name, 'args']);
                 const newValue = `${currentValue?.split(':')[0] || ''}:${e.target.value}`;
                 form.setFieldValue(['filters', name, 'args'], newValue);
               }}
             />
-          </Space.Compact>
+          </div>
         ) : needsNameOnly.includes(filterType) ? (
           // Single name input only
-          <Input placeholder="Header/Parameter Name" style={{ width: 320 }} />
+          <Input 
+            placeholder="Header/Parameter Name" 
+            style={{ 
+              width: 240,
+              backgroundColor: 'rgba(0, 0, 0, 0.3)',
+              border: '1px solid rgba(148, 163, 184, 0.15)',
+              color: '#e2e8f0'
+            }} 
+          />
         ) : isRewritePath ? (
           // regexp,replacement format (comma separated) - SCG standard
-          <Space.Compact style={{ width: 320 }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <Input
               placeholder="Regexp"
-              style={{ width: '50%' }}
+              style={{ 
+                width: 110,
+                backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                border: '1px solid rgba(148, 163, 184, 0.15)',
+                color: '#e2e8f0'
+              }}
               onChange={(e) => {
                 const currentValue = form.getFieldValue(['filters', name, 'args']);
                 const newValue = `${e.target.value},${currentValue?.split(',')[1] || ''}`;
                 form.setFieldValue(['filters', name, 'args'], newValue);
               }}
             />
+            <span style={{ color: '#64748b' }}>→</span>
             <Input
               placeholder="Replacement"
-              style={{ width: '50%' }}
+              style={{ 
+                width: 110,
+                backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                border: '1px solid rgba(148, 163, 184, 0.15)',
+                color: '#e2e8f0'
+              }}
               onChange={(e) => {
                 const currentValue = form.getFieldValue(['filters', name, 'args']);
                 const newValue = `${currentValue?.split(',')[0] || ''},${e.target.value}`;
                 form.setFieldValue(['filters', name, 'args'], newValue);
               }}
             />
-          </Space.Compact>
+          </div>
         ) : isRedirectTo ? (
           // status,url format (comma separated) - SCG standard
-          <Space.Compact style={{ width: 320 }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <Select
               placeholder="Status"
-              style={{ width: '35%' }}
+              style={{ 
+                width: 80,
+                backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                border: '1px solid rgba(148, 163, 184, 0.15)'
+              }}
               onChange={(value) => {
                 const currentValue = form.getFieldValue(['filters', name, 'args']);
                 const newValue = `${value},${currentValue?.split(',')[1] || ''}`;
                 form.setFieldValue(['filters', name, 'args'], newValue);
               }}
+              suffixIcon={<span style={{ color: '#94a3b8', fontSize: '12px' }}>▼</span>}
             >
               <Select.Option value="301">301</Select.Option>
               <Select.Option value="302">302</Select.Option>
@@ -280,37 +411,82 @@ const FilterItem: React.FC<{
             </Select>
             <Input
               placeholder="URL"
-              style={{ width: '65%' }}
+              style={{ 
+                width: 150,
+                backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                border: '1px solid rgba(148, 163, 184, 0.15)',
+                color: '#e2e8f0'
+              }}
               onChange={(e) => {
                 const currentValue = form.getFieldValue(['filters', name, 'args']);
                 const newValue = `${currentValue?.split(',')[0] || ''},${e.target.value}`;
                 form.setFieldValue(['filters', name, 'args'], newValue);
               }}
             />
-          </Space.Compact>
+          </div>
         ) : noParamsNeeded ? (
           // No parameters needed
-          <Input placeholder="(No parameters required)" style={{ width: 320 }} disabled />
+          <Input 
+            placeholder="(No parameters required)" 
+            style={{ 
+              width: 240,
+              backgroundColor: 'rgba(0, 0, 0, 0.3)',
+              border: '1px solid rgba(148, 163, 184, 0.15)',
+              color: '#e2e8f0'
+            }} 
+            disabled 
+          />
         ) : (
-          <Input placeholder={t('routes.arguments')} style={{ width: 320 }} disabled={!filterType} />
+          <Input 
+            placeholder={t('routes.arguments')} 
+            style={{ 
+              width: 240,
+              backgroundColor: 'rgba(0, 0, 0, 0.3)',
+              border: '1px solid rgba(148, 163, 184, 0.15)',
+              color: '#e2e8f0'
+            }} 
+            disabled={!filterType} 
+          />
         )}
       </Form.Item>
       {filterType && (
         <div className="plugin-desc">
           <Tooltip title={t(`plugin.${filterType}.detail`)}>
-            <span style={{ cursor: 'help' }}>ℹ️ {t(`plugin.${filterType}.desc`)}...</span>
+            <span style={{ cursor: 'help' }}>ℹ️ {t(`plugin.${filterType}.desc`)}</span>
           </Tooltip>
         </div>
       )}
-      <Button type="text" danger onClick={() => onRemove(name)} icon={<DeleteOutlined />} />
+      <Tooltip title={t('common.delete')}>
+        <Button 
+          type="text" 
+          onClick={() => onRemove(name)} 
+          icon={<DeleteOutlined />}
+          style={{ 
+            color: '#ef4444',
+            opacity: 0.8,
+            padding: '4px 8px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+          onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
+        />
+      </Tooltip>
     </div>
   );
 };
 
-const RoutesPage: React.FC = () => {
+interface RoutesPageProps {
+  instanceId?: string;
+}
+
+const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
   const [routes, setRoutes] = useState<Route[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [nacosServices, setNacosServices] = useState<NacosService[]>([]);
+  // Use ref to store nacosServices for stable callback references
+  const nacosServicesRef = useRef<NacosService[]>(nacosServices);
   const [loading, setLoading] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -339,17 +515,23 @@ const RoutesPage: React.FC = () => {
     loadRoutes();
     loadServices();
     loadNacosServices();
-  }, []);
+  }, [instanceId]);
 
   // Reset to first page when search/filter changes
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, statusFilter]);
 
-  const loadRoutes = async () => {
+  // Keep ref in sync with nacosServices state for stable callback references
+  useEffect(() => {
+    nacosServicesRef.current = nacosServices;
+  }, [nacosServices]);
+
+  const loadRoutes = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await api.get('/api/routes');
+      const params = instanceId ? { instanceId } : {};
+      const response = await api.get('/api/routes', { params });
       if (response.data.code === 200) {
         setRoutes(response.data.data || []);
       } else {
@@ -361,11 +543,12 @@ const RoutesPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [t, instanceId]);
 
   const loadServices = async () => {
     try {
-      const response = await api.get('/api/services');
+      const params = instanceId ? { instanceId } : {};
+      const response = await api.get('/api/services', { params });
       if (response.data.code === 200) {
         setServices(response.data.data || []);
       }
@@ -507,7 +690,8 @@ const RoutesPage: React.FC = () => {
       routeData.uri = serviceBindings[0]?.serviceId || 'static://multi-service';
     }
 
-    api.post('/api/routes', routeData)
+    const params = instanceId ? { instanceId } : {};
+    api.post('/api/routes', routeData, { params })
       .then(response => {
         if (response.data.code === 200) {
           message.success(t('routes.created_success'));
@@ -750,12 +934,16 @@ const RoutesPage: React.FC = () => {
     }
   };
 
-  const showRouteDetail = (record: Route) => {
+  const showRouteDetail = useCallback((record: Route) => {
     setSelectedRoute(record);
     setDetailDrawerVisible(true);
-  };
+  }, []);
 
-  const showRouteEdit = (record: Route) => {
+  const showRouteEdit = useCallback((record: Route) => {
+    // 先关闭详情 Drawer
+    setDetailDrawerVisible(false);
+    setSelectedRoute(null);
+
     // Extract full URI (with protocol) for serviceId field
     // The Select component expects values like "static://serviceId" or "lb://serviceName"
     let serviceIdForForm = record.uri || '';
@@ -772,13 +960,14 @@ const RoutesPage: React.FC = () => {
 
     // Process services for multi-service mode - ensure serviceId has protocol prefix
     // Infer type from nacosServices list, NOT from stored type field (which may be wrong)
+    // Use ref to avoid dependency on nacosServices state
     const editServices = (record.services || []).map((s: any) => {
       // If serviceId already has protocol, use it
       if (s.serviceId && s.serviceId.includes('://')) {
         return s;
       }
       // Infer protocol from nacosServices list (more reliable than stored type)
-      const isNacosService = nacosServices.some(ns => ns.serviceName === s.serviceId);
+      const isNacosService = nacosServicesRef.current.some(ns => ns.serviceName === s.serviceId);
       const protocol = isNacosService ? 'lb' : 'static';
       return { ...s, serviceId: `${protocol}://${s.serviceId}` };
     });
@@ -803,14 +992,14 @@ const RoutesPage: React.FC = () => {
     setEditServicesList(editServices);
 
     setEditModalVisible(true);
-  };
+  }, [editForm]);
 
   const copyToClipboard = (text: string, label: string) => {
     copy(text);
     message.success(t('message.copied_to_clipboard', { label }));
   };
 
-  const handleDelete = (record: Route) => {
+  const handleDelete = useCallback((record: Route) => {
     Modal.confirm({
       title: t('common.confirm'),
       content: t('message.confirm_delete_route', { name: record.routeName, routeId: record.id || 'N/A' }),
@@ -837,9 +1026,9 @@ const RoutesPage: React.FC = () => {
         }
       },
     });
-  };
+  }, [t, loadRoutes]);
 
-  const handleEnableRoute = async (record: Route) => {
+  const handleEnableRoute = useCallback(async (record: Route) => {
     try {
       const routeId = record.id;
       if (!routeId) {
@@ -857,9 +1046,9 @@ const RoutesPage: React.FC = () => {
       const errorMsg = error.response?.data?.message || error.message;
       message.error(t('routes.enable_failed') + ': ' + errorMsg);
     }
-  };
+  }, [t, loadRoutes]);
 
-  const handleDisableRoute = async (record: Route) => {
+  const handleDisableRoute = useCallback(async (record: Route) => {
     try {
       const routeId = record.id;
       if (!routeId) {
@@ -877,18 +1066,16 @@ const RoutesPage: React.FC = () => {
       const errorMsg = error.response?.data?.message || error.message;
       message.error(t('routes.disable_failed') + ': ' + errorMsg);
     }
-  };
+  }, [t, loadRoutes]);
 
-  const getActionMenu = (route: Route): MenuProps['items'] => [
-    { key: 'edit', icon: <EditOutlined />, label: t('common.edit'), onClick: () => showRouteEdit(route) },
-    { key: 'detail', icon: <EyeOutlined />, label: t('common.detail'), onClick: () => showRouteDetail(route) },
-    { type: 'divider' },
-    route.enabled
-      ? { key: 'disable', icon: <StopOutlined />, label: t('common.disable'), onClick: () => handleDisableRoute(route) }
-      : { key: 'enable', icon: <PlayCircleOutlined />, label: t('common.enable'), onClick: () => handleEnableRoute(route) },
-    { type: 'divider' },
-    { key: 'delete', icon: <DeleteOutlined />, label: t('common.delete'), danger: true, onClick: () => handleDelete(route) },
-  ];
+  // Combined toggle handler for enable/disable
+  const handleToggleRoute = useCallback((record: Route) => {
+    if (record.enabled) {
+      handleDisableRoute(record);
+    } else {
+      handleEnableRoute(record);
+    }
+  }, [handleEnableRoute, handleDisableRoute]);
 
   const getPredicateTag = (predicate: any) => {
     const name = predicate.name;
@@ -901,10 +1088,22 @@ const RoutesPage: React.FC = () => {
 
     const desc = t(`predicate.${name}.detail`, { defaultValue: '' });
 
+    // Premium predicate tag style - soft blue with subtle border
+    const predicateTagStyle: React.CSSProperties = {
+      borderRadius: '9999px',
+      padding: '4px 12px',
+      fontSize: '13px',
+      fontWeight: 500,
+      backgroundColor: 'rgba(59, 130, 246, 0.15)',
+      color: '#60a5fa',
+      border: '1px solid rgba(59, 130, 246, 0.3)',
+      cursor: 'help',
+    };
+
     return (
       <Tooltip key={name} title={desc} placement="top">
-        <Tag className="predicate-tag">
-          <BranchesOutlined /> {name}: <code>{value}</code>
+        <Tag style={predicateTagStyle} className="predicate-tag">
+          <BranchesOutlined /> {name}: <code style={{ fontFamily: 'JetBrains Mono, monospace' }}>{value}</code>
         </Tag>
       </Tooltip>
     );
@@ -932,12 +1131,20 @@ const RoutesPage: React.FC = () => {
           <Text type="secondary">{t('routes.page_description_helper')}</Text>
         </div>
         <div className="page-header-right">
-          <Input.Search
+          <Input
             placeholder={t('routes.search_placeholder')}
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             allowClear
             className="search-input"
+            suffix={
+              <Button 
+                type="text" 
+                icon={<SearchOutlined />} 
+                onClick={() => {}}
+                style={{ color: '#94a3b8' }}
+              />
+            }
           />
           <Select
             placeholder={t('routes.status_filter_placeholder')}
@@ -1003,9 +1210,13 @@ const RoutesPage: React.FC = () => {
                     <div className="route-status">
                       <Badge status={route.enabled ? 'success' : 'default'} text={route.enabled ? t('common.enabled') : t('common.disabled')} />
                     </div>
-                    <Dropdown menu={{ items: getActionMenu(route) }} trigger={['click']} placement="bottomRight">
-                      <Button type="text" icon={<MoreOutlined />} className="action-btn" />
-                    </Dropdown>
+                    <RouteActionDropdown
+                      route={route}
+                      onEdit={showRouteEdit}
+                      onDetail={showRouteDetail}
+                      onToggle={handleToggleRoute}
+                      onDelete={handleDelete}
+                    />
                   </div>
 
                   {/* Target Service(s) */}
@@ -1047,13 +1258,27 @@ const RoutesPage: React.FC = () => {
                     </Text>
                     <div className="tags-container">
                       {pluginCount > 0 ? (
-                        route.filters!.map((f, idx) => (
-                          <Tooltip key={idx} title={t(`plugin.${f.name}.detail`, { defaultValue: '' })} placement="top">
-                            <Tag className="plugin-tag">
-                              <ThunderboltOutlined /> {t(`plugin.${f.name}.name`, { defaultValue: f.name })}
-                            </Tag>
-                          </Tooltip>
-                        ))
+                        route.filters!.map((f, idx) => {
+                          // Premium plugin tag style - soft green with subtle border
+                          const pluginTagStyle: React.CSSProperties = {
+                            borderRadius: '9999px',
+                            padding: '4px 12px',
+                            fontSize: '13px',
+                            fontWeight: 500,
+                            backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                            color: '#34d399',
+                            border: '1px solid rgba(16, 185, 129, 0.3)',
+                            cursor: 'help',
+                          };
+
+                          return (
+                            <Tooltip key={idx} title={t(`plugin.${f.name}.detail`, { defaultValue: '' })} placement="top">
+                              <Tag style={pluginTagStyle} className="plugin-tag">
+                                <ThunderboltOutlined /> {t(`plugin.${f.name}.name`, { defaultValue: f.name })}
+                              </Tag>
+                            </Tooltip>
+                          );
+                        })
                       ) : (
                         <Text type="secondary" className="no-data">{t('routes.no_plugins')}</Text>
                       )}
@@ -1115,6 +1340,7 @@ const RoutesPage: React.FC = () => {
         footer={null}
         width={720}
         className="route-modal route-create-modal"
+        destroyOnClose
       >
         <Form form={createForm} layout="vertical" onFinish={handleCreate} initialValues={{ order: 0, enabled: true, routingMode: 'SINGLE' }}>
           {/* Basic Info Section */}
@@ -1124,18 +1350,18 @@ const RoutesPage: React.FC = () => {
               <span className="section-title">{t('routes.basic_info')}</span>
             </div>
             <div className="section-content">
-              <Form.Item name="id" label={t('routes.route_name')} rules={[{ required: true }]} extra={t('routes.route_name_helper')}>
+              <Form.Item name="id" label={t('routes.route_name')} rules={[{ required: true }]}>
                 <Input placeholder={t('routes.route_name_placeholder')} size="large" />
               </Form.Item>
               <div className="form-row">
-                <Form.Item name="order" label={t('routes.order')} extra={t('routes.order_helper')} className="form-item-half">
+                <Form.Item name="order" label={t('routes.order')} className="form-item-half">
                   <Input type="number" placeholder="0" size="large" />
                 </Form.Item>
                 <Form.Item name="enabled" label={t('routes.enabled')} valuePropName="checked" className="form-item-half" style={{ paddingTop: '24px' }}>
                   <Switch checkedChildren={t('common.enabled')} unCheckedChildren={t('common.disabled')} />
                 </Form.Item>
               </div>
-              <Form.Item name="description" label={t('routes.description_label')} extra={t('routes.description_helper')}>
+              <Form.Item name="description" label={t('routes.description_label')}>
                 <TextArea rows={2} placeholder={t('routes.description_placeholder')} size="large" showCount maxLength={500} />
               </Form.Item>
             </div>
@@ -1146,11 +1372,10 @@ const RoutesPage: React.FC = () => {
             <div className="section-header">
               <ApiOutlined className="section-icon" />
               <span className="section-title">{t('routes.target_configuration')}</span>
-              <span className="section-subtitle">{t('routes.target_helper')}</span>
             </div>
             <div className="section-content">
               {/* Routing Mode Selection */}
-              <Form.Item name="routingMode" label={t('routes.routing_mode_label')} rules={[{ required: true }]} extra={t('routes.routing_mode_helper')}>
+              <Form.Item name="routingMode" label={t('routes.routing_mode_label')} rules={[{ required: true }]}>
                 <Radio.Group buttonStyle="solid" onChange={(e) => {
                   const newMode = e.target.value;
                   setRoutingMode(newMode);
@@ -1163,22 +1388,24 @@ const RoutesPage: React.FC = () => {
 
               {/* Single Service Mode */}
               {routingMode === 'SINGLE' && (
-                <Form.Item name="serviceId" label={t('routes.target_service')} rules={[{ required: true }]} extra={t('routes.select_service')}>
+                <Form.Item name="serviceId" label={t('routes.target_service')} rules={[{ required: true }]}>
                   <Select placeholder={t('routes.select_service')} size="large" onChange={(value) => {
                     // value is already in format: "static://serviceId" or "lb://serviceName"
                     createForm.setFieldValue('uri', value || '');
                   }} showSearch>
-                    <Select.OptGroup label={<><CloudOutlined /> {t('routes.static_services')}</>}>
+                    <Select.OptGroup label={<><CloudOutlined style={{ marginRight: 6 }} /> {t('routes.static_services')}</>}>
                       {services.map(s => (
                         <Select.Option key={`static-${s.serviceId}`} value={`static://${s.serviceId}`}>
-                          {s.name || s.serviceId} <Text type="secondary">(Static)</Text>
+                          <span>{s.name || s.serviceId}</span>
+                          <span className="service-option-tag static">Static</span>
                         </Select.Option>
                       ))}
                     </Select.OptGroup>
-                    <Select.OptGroup label={<><GlobalOutlined /> {t('routes.nacos_services')}</>}>
+                    <Select.OptGroup label={<><GlobalOutlined style={{ marginRight: 6 }} /> {t('routes.nacos_services')}</>}>
                       {nacosServices.map(s => (
                         <Select.Option key={`lb-${s.serviceName}`} value={`lb://${s.serviceName}`}>
-                          {s.serviceName} <Text type="secondary">(Nacos)</Text>
+                          <span>{s.serviceName}</span>
+                          <span className="service-option-tag nacos">Nacos</span>
                         </Select.Option>
                       ))}
                     </Select.OptGroup>
@@ -1189,9 +1416,6 @@ const RoutesPage: React.FC = () => {
               {/* Multi-Service Mode */}
               {routingMode === 'MULTI' && (
                 <>
-                  <div style={{ marginBottom: '12px' }}>
-                    <Text type="secondary">{t('routes.multi_service_helper')}</Text>
-                  </div>
                   {/* Real-time weight total indicator */}
                   <Form.Item shouldUpdate noStyle>
                     {({ getFieldValue }) => {
@@ -1202,8 +1426,8 @@ const RoutesPage: React.FC = () => {
                         <div style={{
                           marginBottom: '12px',
                           padding: '8px 12px',
-                          background: isValid ? '#f6ffed' : '#fff2e8',
-                          border: `1px solid ${isValid ? '#b7eb8f' : '#ffbb96'}`,
+                          background: isValid ? '#1a3a1a' : '#2a2520',
+                          border: `1px solid ${isValid ? '#3d8b3d' : '#8b5a2b'}`,
                           borderRadius: '4px',
                           display: 'flex',
                           alignItems: 'center',
@@ -1223,17 +1447,18 @@ const RoutesPage: React.FC = () => {
                       <>
                         {fields.map(({ key, name, ...restField }) => (
                           <div key={key} style={{
-                            padding: '12px',
-                            marginBottom: '8px',
-                            background: '#fafafa',
+                            padding: '8px 10px',
+                            marginBottom: '6px',
+                            background: '#1a2338',
                             borderRadius: '6px',
-                            border: '1px solid #e8e8e8'
+                            border: '1px solid rgba(148, 163, 184, 0.15)'
                           }}>
-                            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'nowrap' }}>
                               <Form.Item {...restField} name={[name, 'serviceId']} noStyle rules={[{ required: true }]}>
-                                <Select 
-                                  placeholder={t('routes.select_service')} 
-                                  style={{ width: 240 }} 
+                                <Select
+                                  placeholder={t('routes.select_service')}
+                                  style={{ width: 220, flexShrink: 0 }}
+                                  size="middle"
                                   showSearch
                                   onChange={(value) => {
                                     // Auto-fill serviceName based on selection
@@ -1251,17 +1476,19 @@ const RoutesPage: React.FC = () => {
                                     createForm.setFieldsValue({ services: currentServices });
                                   }}
                                 >
-                                  <Select.OptGroup label={<><CloudOutlined /> {t('routes.static_services')}</>}>
+                                  <Select.OptGroup label={<><CloudOutlined style={{ marginRight: 6 }} /> {t('routes.static_services')}</>}>
                                     {services.map(s => (
                                       <Select.Option key={`static-${s.serviceId}`} value={`static://${s.serviceId}`}>
-                                        {s.name || s.serviceId} <Text type="secondary">(Static)</Text>
+                                        <span>{s.name || s.serviceId}</span>
+                                        <span className="service-option-tag static">Static</span>
                                       </Select.Option>
                                     ))}
                                   </Select.OptGroup>
-                                  <Select.OptGroup label={<><GlobalOutlined /> {t('routes.nacos_services')}</>}>
+                                  <Select.OptGroup label={<><GlobalOutlined style={{ marginRight: 6 }} /> {t('routes.nacos_services')}</>}>
                                     {nacosServices.map(s => (
                                       <Select.Option key={`lb-${s.serviceName}`} value={`lb://${s.serviceName}`}>
-                                        {s.serviceName} <Text type="secondary">(Nacos)</Text>
+                                        <span>{s.serviceName}</span>
+                                        <span className="service-option-tag nacos">Nacos</span>
                                       </Select.Option>
                                     ))}
                                   </Select.OptGroup>
@@ -1271,7 +1498,8 @@ const RoutesPage: React.FC = () => {
                                 <InputNumber
                                   min={1} max={100}
                                   placeholder="Weight"
-                                  style={{ width: 100 }}
+                                  size="middle"
+                                  style={{ width: 90, flexShrink: 0 }}
                                   addonAfter="%"
                                 />
                               </Form.Item>
@@ -1279,7 +1507,7 @@ const RoutesPage: React.FC = () => {
                                 <Switch size="small" checkedChildren="ON" unCheckedChildren="OFF" />
                               </Form.Item>
                               {fields.length > 1 && (
-                                <Button type="text" danger onClick={() => remove(name)} icon={<DeleteOutlined />} />
+                                <Button type="text" danger onClick={() => remove(name)} icon={<DeleteOutlined />} style={{ flexShrink: 0, padding: '4px' }} />
                               )}
                             </div>
                           </div>
@@ -1300,7 +1528,6 @@ const RoutesPage: React.FC = () => {
                       checkedChildren={t('routes.gray_rules_enabled')}
                       unCheckedChildren={t('routes.gray_rules_disabled')}
                     />
-                    <Text type="secondary">{t('routes.gray_rules_helper')}</Text>
                   </div>
 
                   {grayRulesEnabled && (
@@ -1312,15 +1539,23 @@ const RoutesPage: React.FC = () => {
                             const configuredServices = createFormServices || [];
                             return (
                               <div key={key} style={{
-                                padding: '12px',
-                                marginBottom: '8px',
-                                background: '#fff7e6',
+                                padding: '8px 10px',
+                                marginBottom: '6px',
+                                background: '#2a2520',
                                 borderRadius: '6px',
-                                border: '1px solid #ffd591'
+                                border: '1px solid #8b5a2b'
                               }}>
-                                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'nowrap' }}>
                                   <Form.Item {...restField} name={[name, 'type']} noStyle initialValue="HEADER">
-                                    <Select style={{ width: 100 }} placeholder={t('routes.rule_type')}>
+                                    <Select
+                                      style={{
+                                        width: 85,
+                                        flexShrink: 0
+                                      }}
+                                      placeholder={t('routes.rule_type')}
+                                      size="small"
+                                      suffixIcon={<span style={{ color: '#94a3b8', fontSize: '12px' }}>▼</span>}
+                                    >
                                       <Select.Option value="HEADER">Header</Select.Option>
                                       <Select.Option value="COOKIE">Cookie</Select.Option>
                                       <Select.Option value="QUERY">Query</Select.Option>
@@ -1329,23 +1564,41 @@ const RoutesPage: React.FC = () => {
                                   </Form.Item>
                                   {ruleType !== 'WEIGHT' && (
                                     <Form.Item {...restField} name={[name, 'name']} noStyle>
-                                      <Input placeholder={t('routes.gray_rule_name')} style={{ width: 120 }} />
+                                      <Input
+                                        placeholder={t('routes.gray_rule_name')}
+                                        style={{ width: 90, flexShrink: 0 }}
+                                        size="small"
+                                      />
                                     </Form.Item>
                                   )}
                                   <Form.Item {...restField} name={[name, 'value']} noStyle>
                                     {ruleType === 'WEIGHT' ? (
-                                      <InputNumber min={1} max={100} placeholder="%" style={{ width: 80 }} addonAfter="%" />
+                                      <InputNumber
+                                        min={1}
+                                        max={100}
+                                        placeholder="%"
+                                        style={{ width: 70, flexShrink: 0 }}
+                                        addonAfter="%"
+                                        size="small"
+                                      />
                                     ) : (
-                                      <Input placeholder={t('routes.gray_rule_value')} style={{ width: 120 }} />
+                                      <Input
+                                        placeholder={t('routes.gray_rule_value')}
+                                        style={{ width: 90, flexShrink: 0 }}
+                                        size="small"
+                                      />
                                     )}
                                   </Form.Item>
                                   <Tooltip title={t('routes.target_service_tooltip')}>
                                     <Form.Item {...restField} name={[name, 'targetVersion']} noStyle>
                                       <Select
-                                        style={{ width: 160 }}
+                                        style={{ width: 150, flexShrink: 0 }}
                                         placeholder={t('routes.target_service')}
                                         allowClear
                                         showSearch
+                                        size="small"
+                                        suffixIcon={<span style={{ color: '#94a3b8', fontSize: '12px' }}>▼</span>}
+                                        popupClassName="gray-rule-select-dropdown"
                                       >
                                         {configuredServices.map((s: any, idx: number) => {
                                           const serviceId = s?.serviceId?.replace?.('static://', '').replace?.('lb://', '') || s?.serviceId;
@@ -1359,7 +1612,9 @@ const RoutesPage: React.FC = () => {
                                       </Select>
                                     </Form.Item>
                                   </Tooltip>
-                                  <Button type="text" danger onClick={() => remove(name)} icon={<DeleteOutlined />} />
+                                  {fields.length > 1 && (
+                                    <Button type="text" danger onClick={() => remove(name)} icon={<DeleteOutlined />} />
+                                  )}
                                 </div>
                               </div>
                             );
@@ -1376,7 +1631,7 @@ const RoutesPage: React.FC = () => {
 
               {/* URI Display (for backward compatibility) */}
               {routingMode === 'SINGLE' && (
-                <Form.Item name="uri" label={t('routes.target_uri')} extra={t('routes.uri_auto_generated')}>
+                <Form.Item name="uri" label={t('routes.target_uri')}>
                   <Input placeholder={t('routes.uri_placeholder')} disabled size="large" />
                 </Form.Item>
               )}
@@ -1388,7 +1643,6 @@ const RoutesPage: React.FC = () => {
             <div className="section-header">
               <ThunderboltOutlined className="section-icon" />
               <span className="section-title">{t('routes.predicates_section')}</span>
-              <span className="section-subtitle">{t('routes.at_least_one_path')}</span>
             </div>
             <div className="section-content">
               <Form.List name="predicates">
@@ -1411,7 +1665,6 @@ const RoutesPage: React.FC = () => {
             <div className="section-header">
               <FilterOutlined className="section-icon" />
               <span className="section-title">{t('routes.filters_section')}</span>
-              <span className="section-subtitle">{t('routes.filters_helper')}</span>
             </div>
             <div className="section-content">
               <Form.List name="filters">
@@ -1457,6 +1710,7 @@ const RoutesPage: React.FC = () => {
         footer={null}
         width={720}
         className="route-modal route-edit-modal"
+        destroyOnClose
       >
         <Form form={editForm} layout="vertical" onFinish={handleUpdate}>
           <Form.Item name="id" hidden><Input /></Form.Item>
@@ -1468,18 +1722,18 @@ const RoutesPage: React.FC = () => {
               <span className="section-title">{t('routes.basic_info')}</span>
             </div>
             <div className="section-content">
-              <Form.Item name="routeName" label={t('routes.route_name')} extra={t('routes.route_name_readonly')}>
+              <Form.Item name="routeName" label={t('routes.route_name')}>
                 <Input disabled size="large" />
               </Form.Item>
               <div className="form-row">
-                <Form.Item name="order" label={t('routes.order')} extra={t('routes.order_helper')} className="form-item-half">
+                <Form.Item name="order" label={t('routes.order')} className="form-item-half">
                   <Input type="number" placeholder="0" size="large" />
                 </Form.Item>
                 <Form.Item name="enabled" label={t('routes.enabled')} valuePropName="checked" className="form-item-half" style={{ paddingTop: '24px' }}>
                   <Switch checkedChildren={t('common.enabled')} unCheckedChildren={t('common.disabled')} />
                 </Form.Item>
               </div>
-              <Form.Item name="description" label={t('routes.description_label')} extra={t('routes.description_helper')}>
+              <Form.Item name="description" label={t('routes.description_label')}>
                 <TextArea rows={2} placeholder={t('routes.description_placeholder')} size="large" showCount maxLength={500} />
               </Form.Item>
             </div>
@@ -1490,7 +1744,6 @@ const RoutesPage: React.FC = () => {
             <div className="section-header">
               <ApiOutlined className="section-icon" />
               <span className="section-title">{t('routes.target_configuration')}</span>
-              <span className="section-subtitle">{t('routes.target_helper')}</span>
             </div>
             <div className="section-content">
               {/* Routing Mode Selection */}
@@ -1507,7 +1760,7 @@ const RoutesPage: React.FC = () => {
 
               {/* Single Service Mode */}
               {editRoutingMode === 'SINGLE' && (
-                <Form.Item name="serviceId" label={t('routes.target_service')} rules={[{ required: true }]} extra={t('routes.select_service')}>
+                <Form.Item name="serviceId" label={t('routes.target_service')} rules={[{ required: true }]}>
                   <Select placeholder={t('routes.select_service')} size="large" onChange={(value) => {
                     editForm.setFieldValue('uri', value ? `static://${value}` : '');
                   }} showSearch>
@@ -1521,9 +1774,6 @@ const RoutesPage: React.FC = () => {
               {/* Multi-Service Mode */}
               {editRoutingMode === 'MULTI' && (
                 <>
-                  <div style={{ marginBottom: '12px' }}>
-                    <Text type="secondary">{t('routes.multi_service_helper')}</Text>
-                  </div>
                   {/* Real-time weight total indicator */}
                   <Form.Item shouldUpdate noStyle>
                     {({ getFieldValue }) => {
@@ -1534,8 +1784,8 @@ const RoutesPage: React.FC = () => {
                         <div style={{
                           marginBottom: '12px',
                           padding: '8px 12px',
-                          background: isValid ? '#f6ffed' : '#fff2e8',
-                          border: `1px solid ${isValid ? '#b7eb8f' : '#ffbb96'}`,
+                          background: isValid ? '#1a3a1a' : '#2a2520',
+                          border: `1px solid ${isValid ? '#3d8b3d' : '#8b5a2b'}`,
                           borderRadius: '4px',
                           display: 'flex',
                           alignItems: 'center',
@@ -1555,17 +1805,18 @@ const RoutesPage: React.FC = () => {
                       <>
                         {fields.map(({ key, name, ...restField }) => (
                           <div key={key} style={{
-                            padding: '12px',
-                            marginBottom: '8px',
-                            background: '#fafafa',
+                            padding: '8px 10px',
+                            marginBottom: '6px',
+                            background: '#1a2338',
                             borderRadius: '6px',
-                            border: '1px solid #e8e8e8'
+                            border: '1px solid rgba(148, 163, 184, 0.15)'
                           }}>
-                            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'nowrap' }}>
                               <Form.Item {...restField} name={[name, 'serviceId']} noStyle rules={[{ required: true }]}>
-                                <Select 
-                                  placeholder={t('routes.select_service')} 
-                                  style={{ width: 240 }} 
+                                <Select
+                                  placeholder={t('routes.select_service')}
+                                  style={{ width: 220, flexShrink: 0 }}
+                                  size="middle"
                                   showSearch
                                   onChange={(value) => {
                                     // Auto-fill serviceName based on selection
@@ -1583,30 +1834,32 @@ const RoutesPage: React.FC = () => {
                                     editForm.setFieldsValue({ services: currentServices });
                                   }}
                                 >
-                                  <Select.OptGroup label={<><CloudOutlined /> {t('routes.static_services')}</>}>
+                                  <Select.OptGroup label={<><CloudOutlined style={{ marginRight: 6 }} /> {t('routes.static_services')}</>}>
                                     {services.map(s => (
                                       <Select.Option key={`static-${s.serviceId}`} value={`static://${s.serviceId}`}>
-                                        {s.name || s.serviceId} <Text type="secondary">(Static)</Text>
+                                        <span>{s.name || s.serviceId}</span>
+                                        <span className="service-option-tag static">Static</span>
                                       </Select.Option>
                                     ))}
                                   </Select.OptGroup>
-                                  <Select.OptGroup label={<><GlobalOutlined /> {t('routes.nacos_services')}</>}>
+                                  <Select.OptGroup label={<><GlobalOutlined style={{ marginRight: 6 }} /> {t('routes.nacos_services')}</>}>
                                     {nacosServices.map(s => (
                                       <Select.Option key={`lb-${s.serviceName}`} value={`lb://${s.serviceName}`}>
-                                        {s.serviceName} <Text type="secondary">(Nacos)</Text>
+                                        <span>{s.serviceName}</span>
+                                        <span className="service-option-tag nacos">Nacos</span>
                                       </Select.Option>
                                     ))}
                                   </Select.OptGroup>
                                 </Select>
                               </Form.Item>
                               <Form.Item {...restField} name={[name, 'weight']} noStyle initialValue={100}>
-                                <InputNumber min={1} max={100} placeholder="Weight" style={{ width: 100 }} addonAfter="%" />
+                                <InputNumber min={1} max={100} placeholder="Weight" style={{ width: 100, flexShrink: 0 }} addonAfter="%" />
                               </Form.Item>
                               <Form.Item {...restField} name={[name, 'enabled']} noStyle valuePropName="checked" initialValue={true}>
                                 <Switch size="small" checkedChildren="ON" unCheckedChildren="OFF" />
                               </Form.Item>
                               {fields.length > 1 && (
-                                <Button type="text" danger onClick={() => remove(name)} icon={<DeleteOutlined />} />
+                                <Button type="text" danger onClick={() => remove(name)} icon={<DeleteOutlined />} style={{ flexShrink: 0 }} />
                               )}
                             </div>
                           </div>
@@ -1627,7 +1880,6 @@ const RoutesPage: React.FC = () => {
                       checkedChildren={t('routes.gray_rules_enabled')}
                       unCheckedChildren={t('routes.gray_rules_disabled')}
                     />
-                    <Text type="secondary">{t('routes.gray_rules_helper')}</Text>
                   </div>
 
                   {editGrayRulesEnabled && (
@@ -1641,13 +1893,23 @@ const RoutesPage: React.FC = () => {
                               <div key={key} style={{
                                 padding: '12px',
                                 marginBottom: '8px',
-                                background: '#fff7e6',
+                                background: '#2a2520',
                                 borderRadius: '6px',
-                                border: '1px solid #ffd591'
+                                border: '1px solid #8b5a2b'
                               }}>
-                                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'nowrap' }}>
                                   <Form.Item {...restField} name={[name, 'type']} noStyle initialValue="HEADER">
-                                    <Select style={{ width: 100 }} placeholder={t('routes.rule_type')}>
+                                    <Select 
+                                      style={{ 
+                                        width: 90, 
+                                        flexShrink: 0,
+                                        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                                        border: '1px solid rgba(148, 163, 184, 0.15)'
+                                      }} 
+                                      placeholder={t('routes.rule_type')}
+                                      size="small"
+                                      suffixIcon={<span style={{ color: '#94a3b8', fontSize: '12px' }}>▼</span>}
+                                    >
                                       <Select.Option value="HEADER">Header</Select.Option>
                                       <Select.Option value="COOKIE">Cookie</Select.Option>
                                       <Select.Option value="QUERY">Query</Select.Option>
@@ -1656,23 +1918,47 @@ const RoutesPage: React.FC = () => {
                                   </Form.Item>
                                   {ruleType !== 'WEIGHT' && (
                                     <Form.Item {...restField} name={[name, 'name']} noStyle>
-                                      <Input placeholder={t('routes.gray_rule_name')} style={{ width: 120 }} />
+                                      <Input 
+                                        placeholder={t('routes.gray_rule_name')} 
+                                        style={{ 
+                                          width: 100, 
+                                          flexShrink: 0,
+                                          backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                                          border: '1px solid rgba(148, 163, 184, 0.15)',
+                                          color: '#e2e8f0'
+                                        }} 
+                                        size="small"
+                                      />
                                     </Form.Item>
                                   )}
                                   <Form.Item {...restField} name={[name, 'value']} noStyle>
                                     {ruleType === 'WEIGHT' ? (
-                                      <InputNumber min={1} max={100} placeholder="%" style={{ width: 80 }} addonAfter="%" />
+                                      <InputNumber
+                                        min={1}
+                                        max={100}
+                                        placeholder="%"
+                                        style={{ width: 70, flexShrink: 0 }}
+                                        addonAfter="%"
+                                        size="small"
+                                      />
                                     ) : (
-                                      <Input placeholder={t('routes.gray_rule_value')} style={{ width: 120 }} />
+                                      <Input
+                                        placeholder={t('routes.gray_rule_value')}
+                                        style={{ width: 90, flexShrink: 0 }}
+                                        size="small"
+                                      />
                                     )}
                                   </Form.Item>
                                   <Tooltip title={t('routes.target_service_tooltip')}>
                                     <Form.Item {...restField} name={[name, 'targetVersion']} noStyle>
                                       <Select
-                                        style={{ width: 160 }}
+                                        style={{ width: 150, flexShrink: 0 }}
                                         placeholder={t('routes.target_service')}
                                         allowClear
                                         showSearch
+                                        size="small"
+                                        suffixIcon={<span style={{ color: '#94a3b8', fontSize: '12px' }}>▼</span>}
+                                        popupClassName="gray-rule-select-dropdown"
                                       >
                                         {configuredServices.map((s: any, idx: number) => {
                                           const serviceId = s?.serviceId?.replace?.('static://', '').replace?.('lb://', '') || s?.serviceId;
@@ -1686,7 +1972,9 @@ const RoutesPage: React.FC = () => {
                                       </Select>
                                     </Form.Item>
                                   </Tooltip>
-                                  <Button type="text" danger onClick={() => remove(name)} icon={<DeleteOutlined />} />
+                                  {fields.length > 1 && (
+                                    <Button type="text" danger onClick={() => remove(name)} icon={<DeleteOutlined />} />
+                                  )}
                                 </div>
                               </div>
                             );
@@ -1703,7 +1991,7 @@ const RoutesPage: React.FC = () => {
 
               {/* URI Display (for backward compatibility) */}
               {editRoutingMode === 'SINGLE' && (
-                <Form.Item name="uri" label={t('routes.target_uri')} extra={t('routes.uri_auto_generated')}>
+                <Form.Item name="uri" label={t('routes.target_uri')}>
                   <Input disabled size="large" />
                 </Form.Item>
               )}
@@ -1715,7 +2003,6 @@ const RoutesPage: React.FC = () => {
             <div className="section-header">
               <ThunderboltOutlined className="section-icon" />
               <span className="section-title">{t('routes.predicates_section')}</span>
-              <span className="section-subtitle">{t('routes.at_least_one_path')}</span>
             </div>
             <div className="section-content">
               <Form.List name="predicates">
@@ -1738,7 +2025,6 @@ const RoutesPage: React.FC = () => {
             <div className="section-header">
               <FilterOutlined className="section-icon" />
               <span className="section-title">{t('routes.filters_section')}</span>
-              <span className="section-subtitle">{t('routes.filters_helper')}</span>
             </div>
             <div className="section-content">
               <Form.List name="filters">
@@ -1775,6 +2061,8 @@ const RoutesPage: React.FC = () => {
         className="route-detail-drawer"
         mask={true}
         maskClosable={true}
+        destroyOnClose
+        style={{ zIndex: 999 }}
       >
         {selectedRoute && (
           <div className="drawer-content">
@@ -1882,7 +2170,7 @@ const RoutesPage: React.FC = () => {
               </div>
             )}
             <div className="drawer-actions">
-              <Button type="primary" icon={<EditOutlined />} onClick={() => { showRouteEdit(selectedRoute); setDetailDrawerVisible(false); }}>{t('common.edit')}</Button>
+              <Button type="primary" icon={<EditOutlined />} onClick={() => showRouteEdit(selectedRoute)}>{t('common.edit')}</Button>
               <Button danger icon={<DeleteOutlined />} onClick={() => {
                 Modal.confirm({ title: t('common.confirm'), content: t('message.confirm_delete_route', { name: selectedRoute.routeName || selectedRoute.id }), okText: t('common.delete'), okType: 'danger', cancelText: t('common.cancel'), onOk: () => handleDelete(selectedRoute) });
               }}>{t('common.delete')}</Button>

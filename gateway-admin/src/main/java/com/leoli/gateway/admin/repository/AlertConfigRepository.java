@@ -13,4 +13,19 @@ public interface AlertConfigRepository extends JpaRepository<AlertConfig, Long> 
     Optional<AlertConfig> findByEnabledTrue();
 
     List<AlertConfig> findByEnabled(Boolean enabled);
+
+    /**
+     * Find alert config by instanceId
+     */
+    Optional<AlertConfig> findByInstanceId(String instanceId);
+
+    /**
+     * Find alert config by instanceId and enabled
+     */
+    Optional<AlertConfig> findByInstanceIdAndEnabledTrue(String instanceId);
+
+    /**
+     * Find all alert configs by instanceId
+     */
+    List<AlertConfig> findByInstanceIdIn(List<String> instanceIds);
 }

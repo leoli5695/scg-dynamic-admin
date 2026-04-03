@@ -26,6 +26,13 @@ public class ServiceEntity {
      */
     @Column(name = "service_name", nullable = false, unique = true, length = 255)
     private String serviceName;
+
+    /**
+     * Instance ID (UUID) - Associated gateway instance.
+     * Used for configuration isolation per gateway instance.
+     */
+    @Column(name = "instance_id", length = 36)
+    private String instanceId;
     
     /**
      * Service ID (UUID), kept for backward compatibility.

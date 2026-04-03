@@ -1,5 +1,6 @@
 package com.leoli.gateway.auth;
 
+import com.leoli.gateway.enums.AuthType;
 import com.leoli.gateway.model.AuthConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
@@ -28,44 +29,37 @@ public class OAuth2AuthProcessor extends AbstractAuthProcessor {
     }
 
     @Override
-    public String getAuthType() {
-        return "OAUTH2";
+    public AuthType getAuthType() {
+        return AuthType.OAUTH2;
     }
 
     @Override
     public Mono<Void> process(ServerWebExchange exchange, AuthConfig config) {
         if (!isValidConfig(config)) {
-            log.debug("OAuth2 auth config is invalid for route: {}", config != null ? config.getRouteId() : "unknown");
-            return Mono.empty();
+            log.debug("OAuth2 auth config is invalid");
+            return Mono.error(new RuntimeException("Invalid OAuth2 auth configuration"));
         }
-        String routeId = config.getRouteId();
 
         // Extract access token from Authorization header
         String accessToken = extractBearerToken(exchange);
 
         if (accessToken == null || accessToken.isEmpty()) {
-            logFailure(routeId, "Missing or empty access token");
-            return writeUnauthorizedResponse(exchange, "Missing or invalid Authorization header");
+            logFailure("OAuth2", "Missing or empty access token");
+            return Mono.error(new RuntimeException("Missing or invalid Authorization header"));
         }
+        
+        log.debug("Validating OAuth2 token...");
+        
         // Validate token with OAuth2 server
         return validateTokenWithServer(accessToken, config)
-                .flatMap(validationResult -> {
-                    if (Boolean.TRUE.equals(validationResult.get("active"))) {
-                        // Token is valid, add user info to exchange
-                        exchange.getAttributes().put("oauth2_token_active", true);
-                        exchange.getAttributes().put("oauth2_username", validationResult.get("username"));
-                        exchange.getAttributes().put("oauth2_scope", validationResult.get("scope"));
-
-                        logSuccess(routeId);
-                        return Mono.empty();
-                    } else {
-                        logFailure(routeId, "Token is inactive or expired");
-                        return writeUnauthorizedResponse(exchange, "Invalid or expired access token");
-                    }
+                .doOnNext(result -> {
+                    logSuccess("OAuth2 token validated");
+                    exchange.getAttributes().put("oauth2_token_active", true);
                 })
+                .then()
                 .onErrorResume(ex -> {
-                    log.error("OAuth2 validation failed for route {}: {}", routeId, ex.getMessage());
-                    return writeUnauthorizedResponse(exchange, "Token validation failed: " + ex.getMessage());
+                    log.error("OAuth2 validation failed: {}", ex.getMessage());
+                    return Mono.error(new RuntimeException("Token validation failed: " + ex.getMessage()));
                 });
     }
 

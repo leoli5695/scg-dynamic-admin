@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, memo, useMemo } from 'react';
 import {
   Card, Button, Space, Modal, message, Spin, Tag, Form, Input, Select,
-  Empty, Dropdown, Tooltip, Badge, Divider, Typography, Switch, Radio, InputNumber, Row, Col, Collapse
+  Empty, Dropdown, Tooltip, Badge, Divider, Typography, Switch, Radio, InputNumber, Row, Col, Collapse, Statistic, Popconfirm
 } from 'antd';
 import {
   PlusOutlined, DeleteOutlined, EditOutlined, MoreOutlined,
@@ -31,7 +31,48 @@ interface StrategyDefinition {
   description?: string;
 }
 
-const StrategiesPage: React.FC = () => {
+// Separate component for strategy action dropdown to prevent re-renders
+interface StrategyActionDropdownProps {
+  strategy: StrategyDefinition;
+  onEdit: (strategy: StrategyDefinition) => void;
+  onToggle: (strategy: StrategyDefinition) => void;
+  onDelete: (strategy: StrategyDefinition) => void;
+}
+
+const StrategyActionDropdown = memo(({ strategy, onEdit, onToggle, onDelete }: StrategyActionDropdownProps) => {
+  const { t } = useTranslation();
+
+  const handleEdit = useCallback(() => onEdit(strategy), [onEdit, strategy]);
+  const handleToggle = useCallback(() => onToggle(strategy), [onToggle, strategy]);
+  const handleDelete = useCallback(() => onDelete(strategy), [onDelete, strategy]);
+
+  return (
+    <Space>
+      <Tooltip title={t('common.edit')}>
+        <Button type="text" size="small" icon={<EditOutlined />} className="action-btn" onClick={handleEdit} />
+      </Tooltip>
+      <Tooltip title={strategy.enabled ? t('common.disable') : t('common.enable')}>
+        <Button type="text" size="small" icon={strategy.enabled ? <StopOutlined /> : <PlayCircleOutlined />} className="action-btn" onClick={handleToggle} />
+      </Tooltip>
+      <Popconfirm
+        title={`${t('common.delete')}: ${strategy.strategyName}`}
+        onConfirm={handleDelete}
+        okText={t('common.confirm')}
+        cancelText={t('common.cancel')}
+      >
+        <Tooltip title={t('common.delete')}>
+          <Button type="text" size="small" danger icon={<DeleteOutlined />} className="action-btn" />
+        </Tooltip>
+      </Popconfirm>
+    </Space>
+  );
+});
+
+interface StrategiesPageProps {
+  instanceId?: string;
+}
+
+const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
   const [strategies, setStrategies] = useState<StrategyDefinition[]>([]);
   const [routes, setRoutes] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -47,11 +88,12 @@ const StrategiesPage: React.FC = () => {
   useEffect(() => {
     loadStrategies();
     loadRoutes();
-  }, []);
+  }, [instanceId]);
 
   const loadRoutes = async () => {
     try {
-      const response = await api.get('/api/routes');
+      const params = instanceId ? { instanceId } : {};
+      const response = await api.get('/api/routes', { params });
       if (response.data.code === 200) {
         setRoutes(response.data.data || []);
       }
@@ -60,10 +102,11 @@ const StrategiesPage: React.FC = () => {
     }
   };
 
-  const loadStrategies = async () => {
+  const loadStrategies = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await api.get('/api/strategies');
+      const params = instanceId ? { instanceId } : {};
+      const response = await api.get('/api/strategies', { params });
       if (response.data.code === 200) {
         setStrategies(response.data.data || []);
       }
@@ -72,7 +115,7 @@ const StrategiesPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [t, instanceId]);
 
   const filteredStrategies = strategies.filter(s => {
     const matchesType = filterType === 'all' || s.strategyType === filterType;
@@ -121,21 +164,45 @@ const StrategiesPage: React.FC = () => {
   };
 
   const getStrategyTypeColor = (type: string) => {
-    const colors: Record<string, string> = {
-      'RATE_LIMITER': '#722ed1',
-      'IP_FILTER': '#13c2c2',
-      'TIMEOUT': '#fa8c16',
-      'CIRCUIT_BREAKER': '#f5222d',
-      'AUTH': '#2f54eb',
-      'RETRY': '#52c41a',
-      'CORS': '#1890ff',
-      'ACCESS_LOG': '#722ed1',
-      'HEADER_OP': '#13c2c2',
-      'CACHE': '#faad14',
-      'SECURITY': '#eb2f96',
-      'API_VERSION': '#52c41a',
+    // Unified to 4 semantic colors
+    const semanticColors: Record<string, string> = {
+      // Blue - Rate Limiter
+      'RATE_LIMITER': 'rate-limiter',
+      // Orange - Timeout/Retry
+      'TIMEOUT': 'timeout-retry',
+      'RETRY': 'timeout-retry',
+      // Red - Circuit Breaker
+      'CIRCUIT_BREAKER': 'circuit-breaker',
+      // Green - Enabled/Global (for scope badge)
+      'IP_FILTER': 'enabled-global',
+      'AUTH': 'enabled-global',
+      'CORS': 'enabled-global',
+      'ACCESS_LOG': 'enabled-global',
+      'HEADER_OP': 'enabled-global',
+      'CACHE': 'enabled-global',
+      'SECURITY': 'enabled-global',
+      'API_VERSION': 'enabled-global',
     };
-    return colors[type] || '#1890ff';
+    return semanticColors[type] || 'rate-limiter';
+  };
+
+  const getStrategyTypeColorValue = (type: string) => {
+    // Return actual color value for icon background
+    const colors: Record<string, string> = {
+      'RATE_LIMITER': '#3b82f6',
+      'TIMEOUT': '#f59e0b',
+      'RETRY': '#f59e0b',
+      'CIRCUIT_BREAKER': '#ef4444',
+      'IP_FILTER': '#10b981',
+      'AUTH': '#10b981',
+      'CORS': '#10b981',
+      'ACCESS_LOG': '#10b981',
+      'HEADER_OP': '#10b981',
+      'CACHE': '#10b981',
+      'SECURITY': '#10b981',
+      'API_VERSION': '#10b981',
+    };
+    return colors[type] || '#3b82f6';
   };
 
   const buildConfig = (values: any, strategyType: string) => {
@@ -273,7 +340,8 @@ const StrategiesPage: React.FC = () => {
         description: values.description,
       };
 
-      const response = await api.post('/api/strategies', strategy);
+      const params = instanceId ? { instanceId } : {};
+      const response = await api.post('/api/strategies', strategy, { params });
       if (response.data.code === 200) {
         message.success(t('message.create_success'));
         createForm.resetFields();
@@ -317,7 +385,7 @@ const StrategiesPage: React.FC = () => {
     }
   };
 
-  const handleDelete = (strategy: StrategyDefinition) => {
+  const handleDelete = useCallback((strategy: StrategyDefinition) => {
     Modal.confirm({
       title: t('common.confirm'),
       content: t('message.confirm_delete_strategy', { name: strategy.strategyName }),
@@ -338,9 +406,9 @@ const StrategiesPage: React.FC = () => {
         }
       },
     });
-  };
+  }, [t, loadStrategies]);
 
-  const handleEnable = async (strategy: StrategyDefinition) => {
+  const handleEnable = useCallback(async (strategy: StrategyDefinition) => {
     try {
       const response = await api.post(`/api/strategies/${strategy.strategyId}/enable`);
       if (response.data.code === 200) {
@@ -352,9 +420,9 @@ const StrategiesPage: React.FC = () => {
     } catch (error: any) {
       message.error(error.response?.data?.message || error.message);
     }
-  };
+  }, [t, loadStrategies]);
 
-  const handleDisable = async (strategy: StrategyDefinition) => {
+  const handleDisable = useCallback(async (strategy: StrategyDefinition) => {
     try {
       const response = await api.post(`/api/strategies/${strategy.strategyId}/disable`);
       if (response.data.code === 200) {
@@ -366,9 +434,18 @@ const StrategiesPage: React.FC = () => {
     } catch (error: any) {
       message.error(error.response?.data?.message || error.message);
     }
-  };
+  }, [t, loadStrategies]);
 
-  const openEditModal = (strategy: StrategyDefinition) => {
+  // Combined toggle handler
+  const handleToggle = useCallback((strategy: StrategyDefinition) => {
+    if (strategy.enabled) {
+      handleDisable(strategy);
+    } else {
+      handleEnable(strategy);
+    }
+  }, [handleEnable, handleDisable]);
+
+  const openEditModal = useCallback((strategy: StrategyDefinition) => {
     setSelectedStrategy(strategy);
     editForm.setFieldsValue({
       strategyName: strategy.strategyName,
@@ -389,17 +466,7 @@ const StrategiesPage: React.FC = () => {
       addResponseHeaders: strategy.config?.addResponseHeaders ? JSON.stringify(strategy.config.addResponseHeaders) : '',
     });
     setEditModalVisible(true);
-  };
-
-  const getActionMenu = (strategy: StrategyDefinition): MenuProps['items'] => [
-    { key: 'edit', icon: <EditOutlined />, label: t('common.edit'), onClick: () => openEditModal(strategy) },
-    { type: 'divider' },
-    strategy.enabled
-      ? { key: 'disable', icon: <StopOutlined />, label: t('common.disable'), onClick: () => handleDisable(strategy) }
-      : { key: 'enable', icon: <PlayCircleOutlined />, label: t('common.enable'), onClick: () => handleEnable(strategy) },
-    { type: 'divider' },
-    { key: 'delete', icon: <DeleteOutlined />, label: t('common.delete'), danger: true, onClick: () => handleDelete(strategy) },
-  ];
+  }, [editForm]);
 
   const renderConfigFields = (strategyType: string, form: any) => {
     switch (strategyType) {
@@ -932,23 +999,60 @@ const StrategiesPage: React.FC = () => {
 
   return (
     <div className="strategies-page">
-      {/* Stats Bar */}
-      <div className="stats-bar">
-        <div className="stat-item">
-          <div className="stat-value">{totalStrategies}</div>
-          <div className="stat-label">{t('strategy.stats_total')}</div>
-        </div>
-        <Divider type="vertical" className="stat-divider" />
-        <div className="stat-item">
-          <div className="stat-value text-green-600">{enabledStrategies}</div>
-          <div className="stat-label">{t('strategy.stats_enabled')}</div>
-        </div>
-        <Divider type="vertical" className="stat-divider" />
-        <div className="stat-item">
-          <div className="stat-value text-blue-600">{globalStrategies}</div>
-          <div className="stat-label">{t('strategy.stats_global')}</div>
-        </div>
-      </div>
+      {/* Premium Stats Cards */}
+      <Row gutter={[16, 16]} style={{ marginBottom: 32 }}>
+        <Col xs={24} sm={8}>
+          <Card className="stats-card stats-card-primary" size="small">
+            <div className="stats-card-content">
+              <div className="stats-icon-wrapper">
+                <ThunderboltOutlined className="stats-icon" />
+              </div>
+              <div className="stats-info">
+                <Statistic
+                  title={<span className="stats-title">{t('strategy.stats_total')}</span>}
+                  value={totalStrategies}
+                  valueStyle={{ fontFamily: "'JetBrains Mono', monospace" }}
+                />
+                <span className="stats-subtitle">Total Strategies</span>
+              </div>
+            </div>
+          </Card>
+        </Col>
+        <Col xs={24} sm={8}>
+          <Card className="stats-card stats-card-success" size="small">
+            <div className="stats-card-content">
+              <div className="stats-icon-wrapper">
+                <PlayCircleOutlined className="stats-icon" />
+              </div>
+              <div className="stats-info">
+                <Statistic
+                  title={<span className="stats-title">{t('strategy.stats_enabled')}</span>}
+                  value={enabledStrategies}
+                  valueStyle={{ fontFamily: "'JetBrains Mono', monospace" }}
+                />
+                <span className="stats-subtitle">Active Strategies</span>
+              </div>
+            </div>
+          </Card>
+        </Col>
+        <Col xs={24} sm={8}>
+          <Card className="stats-card stats-card-info" size="small">
+            <div className="stats-card-content">
+              <div className="stats-icon-wrapper">
+                <GlobalOutlined className="stats-icon" />
+              </div>
+              <div className="stats-info">
+                <Statistic
+                  title={<span className="stats-title">{t('strategy.stats_global')}</span>}
+                  value={globalStrategies}
+                  valueStyle={{ fontFamily: "'JetBrains Mono', monospace" }}
+                />
+                <span className="stats-subtitle">Global Scope</span>
+              </div>
+            </div>
+          </Card>
+        </Col>
+      </Row>
 
       {/* Header */}
       <div className="page-header-modern">
@@ -992,13 +1096,13 @@ const StrategiesPage: React.FC = () => {
             {filteredStrategies.map((strategy) => (
               <Card key={strategy.strategyId} className={`strategy-card ${!strategy.enabled ? 'strategy-card-disabled' : ''}`} hoverable>
                 <div className="strategy-card-header">
-                  <div className="strategy-icon" style={{ background: `${getStrategyTypeColor(strategy.strategyType)}20`, color: getStrategyTypeColor(strategy.strategyType) }}>
+                  <div className="strategy-icon" style={{ background: `${getStrategyTypeColorValue(strategy.strategyType)}20`, color: getStrategyTypeColorValue(strategy.strategyType) }}>
                     {getStrategyTypeIcon(strategy.strategyType)}
                   </div>
                   <div className="strategy-info">
                     <Text strong className="strategy-name">{strategy.strategyName}</Text>
                     <div className="strategy-id-row">
-                      <Tag color={getStrategyTypeColor(strategy.strategyType)} className="strategy-type-tag">
+                      <Tag className={`strategy-type-tag ${getStrategyTypeColor(strategy.strategyType)}`}>
                         {getStrategyTypeLabel(strategy.strategyType)}
                       </Tag>
                       <Tooltip title={t('common.copy_id')}>
@@ -1016,9 +1120,12 @@ const StrategiesPage: React.FC = () => {
                       </Tooltip>
                     </div>
                   </div>
-                  <Dropdown menu={{ items: getActionMenu(strategy) }} trigger={['click']} placement="bottomRight">
-                    <Button type="text" icon={<MoreOutlined />} className="action-btn" />
-                  </Dropdown>
+                  <StrategyActionDropdown
+                    strategy={strategy}
+                    onEdit={openEditModal}
+                    onToggle={handleToggle}
+                    onDelete={handleDelete}
+                  />
                 </div>
 
                 <div className="strategy-meta">
@@ -1036,15 +1143,20 @@ const StrategiesPage: React.FC = () => {
                 )}
 
                 <div className="strategy-config">
-                  {Object.entries(strategy.config || {}).slice(0, 3).map(([key, value]) => {
+                  {Object.entries(strategy.config || {}).slice(0, 2).map(([key, value]) => {
                     const displayValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
                     return (
                       <div key={key} className="config-item">
                         <Text type="secondary" className="config-key">{key}:</Text>
-                        <Text className="config-value">{displayValue.substring(0, 30)}{displayValue.length > 30 ? '...' : ''}</Text>
+                        <Text className="config-value" title={displayValue}>{displayValue.substring(0, 25)}{displayValue.length > 25 ? '...' : ''}</Text>
                       </div>
                     );
                   })}
+                  {Object.keys(strategy.config || {}).length > 2 && (
+                    <Text type="secondary" style={{ fontSize: '11px', marginTop: '2px' }}>
+                      +{Object.keys(strategy.config || {}).length - 2} more
+                    </Text>
+                  )}
                 </div>
 
                 {strategy.description && (

@@ -42,6 +42,45 @@ public class AlertConfigService {
     }
 
     /**
+     * Get alert configuration for a specific instance.
+     */
+    public Optional<AlertConfig> getConfigByInstanceId(String instanceId) {
+        if (instanceId == null || instanceId.isEmpty()) {
+            return getActiveConfig();
+        }
+        return alertConfigRepository.findByInstanceId(instanceId);
+    }
+
+    /**
+     * Get or create alert configuration for a specific instance.
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public AlertConfig getOrCreateConfigByInstanceId(String instanceId) {
+        if (instanceId == null || instanceId.isEmpty()) {
+            return getActiveConfig().orElseGet(this::createDefaultConfig);
+        }
+
+        return alertConfigRepository.findByInstanceId(instanceId)
+                .orElseGet(() -> createDefaultConfigForInstance(instanceId));
+    }
+
+    /**
+     * Create default alert configuration for a specific instance.
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public AlertConfig createDefaultConfigForInstance(String instanceId) {
+        AlertConfig config = new AlertConfig();
+        config.setInstanceId(instanceId);
+        config.setConfigName("Default Alert Config");
+        config.setEmailRecipients("[]");
+        config.setEmailLanguage("zh");
+        config.setThresholdConfig(getDefaultThresholdConfig());
+        config.setEnabled(true);
+
+        return alertConfigRepository.save(config);
+    }
+
+    /**
      * Get all alert configurations.
      */
     public List<AlertConfig> getAllConfigs() {
@@ -66,16 +105,6 @@ public class AlertConfigService {
         // Validate threshold config JSON
         if (config.getThresholdConfig() != null && !config.getThresholdConfig().isEmpty()) {
             validateThresholdConfig(config.getThresholdConfig());
-        }
-
-        // If this config is enabled, disable others
-        if (Boolean.TRUE.equals(config.getEnabled())) {
-            alertConfigRepository.findByEnabled(true).forEach(c -> {
-                if (!c.getId().equals(config.getId())) {
-                    c.setEnabled(false);
-                    alertConfigRepository.save(c);
-                }
-            });
         }
 
         return alertConfigRepository.save(config);

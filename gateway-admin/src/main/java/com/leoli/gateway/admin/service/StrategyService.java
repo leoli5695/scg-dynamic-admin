@@ -2,10 +2,12 @@ package com.leoli.gateway.admin.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.center.ConfigCenterService;
+import com.leoli.gateway.admin.model.GatewayInstanceEntity;
 import com.leoli.gateway.admin.model.StrategyConfig;
 import com.leoli.gateway.admin.model.StrategyDefinition;
 import com.leoli.gateway.admin.model.StrategyEntity;
 import com.leoli.gateway.admin.properties.GatewayAdminProperties;
+import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
 import com.leoli.gateway.admin.repository.StrategyRepository;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -47,10 +50,25 @@ public class StrategyService {
     @Autowired
     private StrategyConfigValidator configValidator;
 
+    @Autowired
+    private GatewayInstanceRepository gatewayInstanceRepository;
+
     @PostConstruct
     public void init() {
         loadStrategiesFromDatabase();
         log.info("StrategyService initialized with per-strategy Nacos storage");
+    }
+
+    /**
+     * Get Nacos namespace from instance ID.
+     * Returns null for default namespace if instance not found.
+     */
+    private String getNacosNamespace(String instanceId) {
+        if (instanceId == null || instanceId.isEmpty()) {
+            return null; // Use default namespace
+        }
+        Optional<GatewayInstanceEntity> instance = gatewayInstanceRepository.findByInstanceId(instanceId);
+        return instance.map(GatewayInstanceEntity::getNacosNamespace).orElse(null);
     }
 
     /**
@@ -70,17 +88,18 @@ public class StrategyService {
                         continue;
                     }
 
+                    String nacosNamespace = getNacosNamespace(entity.getInstanceId());
                     String strategyDataId = STRATEGY_PREFIX + entity.getStrategyId();
-                    if (!configCenterService.configExists(strategyDataId)) {
+                    if (!configCenterService.configExists(strategyDataId, nacosNamespace)) {
                         StrategyDefinition strategy = toDefinition(entity);
-                        configCenterService.publishConfig(strategyDataId, strategy);
+                        configCenterService.publishConfig(strategyDataId, nacosNamespace, strategy);
                         recoveredCount++;
-                        log.info("Recovered missing strategy in Nacos: {}", strategyDataId);
+                        log.info("Recovered missing strategy in Nacos: {} (namespace: {})", strategyDataId, nacosNamespace);
                     }
                 }
 
                 if (recoveredCount > 0) {
-                    updateStrategiesIndex(getAllStrategyIds());
+                    log.info("Recovered {} missing strategies in Nacos on startup", recoveredCount);
                 }
             }
         } catch (Exception e) {
@@ -99,6 +118,16 @@ public class StrategyService {
     }
 
     /**
+     * Get all strategies for a specific instance.
+     */
+    public List<StrategyDefinition> getAllStrategiesByInstanceId(String instanceId) {
+        List<StrategyEntity> entities = strategyRepository.findByInstanceId(instanceId);
+        return entities.stream()
+                .map(this::toDefinition)
+                .collect(Collectors.toList());
+    }
+
+    /**
      * Get strategy by ID.
      */
     public StrategyDefinition getStrategy(String strategyId) {
@@ -107,6 +136,13 @@ public class StrategyService {
             return null;
         }
         return toDefinition(entity);
+    }
+
+    /**
+     * Get strategy entity by ID - for audit logging.
+     */
+    public StrategyEntity getStrategyEntity(String strategyId) {
+        return strategyRepository.findByStrategyId(strategyId);
     }
 
     /**
@@ -157,6 +193,16 @@ public class StrategyService {
      */
     @Transactional(rollbackFor = Exception.class)
     public StrategyEntity createStrategy(StrategyDefinition strategy) {
+        return createStrategy(strategy, null);
+    }
+
+    /**
+     * Create a new strategy for a specific instance.
+     * @param strategy Strategy definition
+     * @param instanceId Gateway instance ID (optional, uses default namespace if null)
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public StrategyEntity createStrategy(StrategyDefinition strategy, String instanceId) {
         if (strategy == null || strategy.getStrategyName() == null) {
             throw new IllegalArgumentException("Invalid strategy definition");
         }
@@ -164,8 +210,13 @@ public class StrategyService {
         // Validate strategy configuration
         validateStrategyConfig(strategy);
 
-        // Check if name already exists
-        StrategyEntity existing = strategyRepository.findByStrategyName(strategy.getStrategyName());
+        // Check if name already exists (within instance scope if instanceId provided)
+        StrategyEntity existing;
+        if (instanceId != null && !instanceId.isEmpty()) {
+            existing = strategyRepository.findByStrategyNameAndInstanceId(strategy.getStrategyName(), instanceId);
+        } else {
+            existing = strategyRepository.findByStrategyName(strategy.getStrategyName());
+        }
         if (existing != null) {
             throw new IllegalArgumentException("Strategy name already exists: " + strategy.getStrategyName());
         }
@@ -174,21 +225,22 @@ public class StrategyService {
         String strategyId = UUID.randomUUID().toString();
         strategy.setStrategyId(strategyId);
 
+        // Get Nacos namespace from instance
+        String nacosNamespace = getNacosNamespace(instanceId);
+
         // Save to database
         StrategyEntity entity = toEntity(strategy);
         entity.setStrategyId(strategyId);
+        entity.setInstanceId(instanceId);
         entity = strategyRepository.save(entity);
-        log.info("Strategy saved to database: {} (ID: {})", strategy.getStrategyName(), strategyId);
+        log.info("Strategy saved to database: {} (ID: {}, instanceId: {})", strategy.getStrategyName(), strategyId, instanceId);
 
-        // Publish to Nacos if enabled
+        // Publish to Nacos if enabled (with namespace)
         if (strategy.isEnabled()) {
             String strategyDataId = STRATEGY_PREFIX + strategyId;
-            configCenterService.publishConfig(strategyDataId, strategy);
-            log.info("Strategy published to Nacos: {}", strategyDataId);
+            configCenterService.publishConfig(strategyDataId, nacosNamespace, strategy);
+            log.info("Strategy published to Nacos: {} (namespace: {})", strategyDataId, nacosNamespace);
         }
-
-        // Update index
-        updateStrategiesIndex(getAllStrategyIds());
 
         return entity;
     }
@@ -209,6 +261,9 @@ public class StrategyService {
         if (entity == null) {
             throw new IllegalArgumentException("Strategy not found: " + strategyId);
         }
+
+        // Get Nacos namespace from instance
+        String nacosNamespace = getNacosNamespace(entity.getInstanceId());
 
         // Check name uniqueness if changed
         if (!entity.getStrategyName().equals(strategy.getStrategyName())) {
@@ -240,18 +295,15 @@ public class StrategyService {
         entity = strategyRepository.save(entity);
         log.info("Strategy updated in database: {}", strategy.getStrategyName());
 
-        // Update Nacos
+        // Update Nacos (with namespace)
         String strategyDataId = STRATEGY_PREFIX + strategyId;
         if (strategy.isEnabled()) {
-            configCenterService.publishConfig(strategyDataId, strategy);
-            log.info("Strategy updated in Nacos: {}", strategyDataId);
+            configCenterService.publishConfig(strategyDataId, nacosNamespace, strategy);
+            log.info("Strategy updated in Nacos: {} (namespace: {})", strategyDataId, nacosNamespace);
         } else {
-            configCenterService.removeConfig(strategyDataId);
-            log.info("Disabled strategy removed from Nacos: {}", strategyDataId);
+            configCenterService.removeConfig(strategyDataId, nacosNamespace);
+            log.info("Disabled strategy removed from Nacos: {} (namespace: {})", strategyDataId, nacosNamespace);
         }
-
-        // Update index
-        updateStrategiesIndex(getAllStrategyIds());
 
         return entity;
     }
@@ -268,17 +320,17 @@ public class StrategyService {
 
         log.info("Deleting strategy: {} (ID: {})", entity.getStrategyName(), strategyId);
 
-        // Remove from Nacos
+        // Get Nacos namespace from instance
+        String nacosNamespace = getNacosNamespace(entity.getInstanceId());
+
+        // Remove from Nacos (with namespace)
         String strategyDataId = STRATEGY_PREFIX + strategyId;
-        configCenterService.removeConfig(strategyDataId);
-        log.info("Strategy removed from Nacos: {}", strategyDataId);
+        configCenterService.removeConfig(strategyDataId, nacosNamespace);
+        log.info("Strategy removed from Nacos: {} (namespace: {})", strategyDataId, nacosNamespace);
 
         // Delete from database
         strategyRepository.delete(entity);
         log.info("Strategy deleted from database: {}", strategyId);
-
-        // Update index
-        updateStrategiesIndex(getAllStrategyIds());
     }
 
     /**
@@ -296,17 +348,18 @@ public class StrategyService {
             return;
         }
 
+        // Get Nacos namespace from instance
+        String nacosNamespace = getNacosNamespace(entity.getInstanceId());
+
         entity.setEnabled(true);
         strategyRepository.save(entity);
         log.info("Strategy enabled in database: {}", strategyId);
 
-        // Publish to Nacos
+        // Publish to Nacos (with namespace)
         StrategyDefinition strategy = toDefinition(entity);
         String strategyDataId = STRATEGY_PREFIX + strategyId;
-        configCenterService.publishConfig(strategyDataId, strategy);
-        log.info("Strategy published to Nacos: {}", strategyDataId);
-
-        updateStrategiesIndex(getAllStrategyIds());
+        configCenterService.publishConfig(strategyDataId, nacosNamespace, strategy);
+        log.info("Strategy published to Nacos: {} (namespace: {})", strategyDataId, nacosNamespace);
     }
 
     /**
@@ -324,16 +377,17 @@ public class StrategyService {
             return;
         }
 
+        // Get Nacos namespace from instance
+        String nacosNamespace = getNacosNamespace(entity.getInstanceId());
+
         entity.setEnabled(false);
         strategyRepository.save(entity);
         log.info("Strategy disabled in database: {}", strategyId);
 
-        // Remove from Nacos
+        // Remove from Nacos (with namespace)
         String strategyDataId = STRATEGY_PREFIX + strategyId;
-        configCenterService.removeConfig(strategyDataId);
-        log.info("Strategy removed from Nacos: {}", strategyDataId);
-
-        updateStrategiesIndex(getAllStrategyIds());
+        configCenterService.removeConfig(strategyDataId, nacosNamespace);
+        log.info("Strategy removed from Nacos: {} (namespace: {})", strategyDataId, nacosNamespace);
     }
 
     /**

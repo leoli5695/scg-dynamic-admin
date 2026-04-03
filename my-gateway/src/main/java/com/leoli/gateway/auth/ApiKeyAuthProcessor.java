@@ -1,5 +1,6 @@
 package com.leoli.gateway.auth;
 
+import com.leoli.gateway.enums.AuthType;
 import com.leoli.gateway.model.AuthConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -14,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * API Key Authentication Processor.
  * Validates requests using API Key from header or query parameter.
- * 
+ *
  * Features:
  * - Single or multiple API keys support
  * - Configurable header name
@@ -30,33 +31,31 @@ public class ApiKeyAuthProcessor extends AbstractAuthProcessor {
 
     // Default header name
     private static final String DEFAULT_API_KEY_HEADER = "X-API-Key";
-    
+
     // Common alternative header names
     private static final Set<String> COMMON_HEADERS = Set.of(
-            "X-API-Key", "X-Api-Key", "Api-Key", "ApiKey", 
+            "X-API-Key", "X-Api-Key", "Api-Key", "ApiKey",
             "Authorization", "X-Auth-Token"
     );
 
     @Override
-    public String getAuthType() {
-        return "API_KEY";
+    public AuthType getAuthType() {
+        return AuthType.API_KEY;
     }
 
     @Override
     public Mono<Void> process(ServerWebExchange exchange, AuthConfig config) {
         if (!isValidConfig(config)) {
-            log.debug("API Key auth config is invalid for route: {}", config != null ? config.getRouteId() : "unknown");
-            return Mono.empty();
+            log.debug("API Key auth config is invalid");
+            return Mono.error(new RuntimeException("Invalid API Key auth configuration"));
         }
-
-        String routeId = config.getRouteId();
 
         // Extract API Key from configured source
         String apiKey = extractApiKey(exchange, config);
 
         if (apiKey == null || apiKey.isEmpty()) {
-            logFailure(routeId, "Missing API Key");
-            return writeUnauthorizedResponse(exchange, "Missing API Key");
+            logFailure("API_KEY", "Missing API Key");
+            return Mono.error(new RuntimeException("Missing API Key"));
         }
 
         // Validate API Key
@@ -69,17 +68,17 @@ public class ApiKeyAuthProcessor extends AbstractAuthProcessor {
                         if (validation.getMetadata() != null) {
                             exchange.getAttributes().put("api_key_metadata", validation.getMetadata());
                         }
-                        
-                        logSuccess(routeId);
-                        return Mono.empty();
+
+                        logSuccess("API Key validated: " + maskApiKey(apiKey));
+                        return Mono.<Void>empty();
                     } else {
-                        logFailure(routeId, "Invalid API Key: " + validation.getReason());
-                        return writeUnauthorizedResponse(exchange, validation.getReason());
+                        logFailure("API_KEY", "Invalid API Key: " + validation.getReason());
+                        return Mono.<Void>error(new RuntimeException(validation.getReason()));
                     }
                 })
                 .onErrorResume(ex -> {
-                    log.error("API Key validation error for route {}: {}", routeId, ex.getMessage());
-                    return writeUnauthorizedResponse(exchange, "API Key validation failed");
+                    log.error("API Key validation error: {}", ex.getMessage());
+                    return Mono.error(new RuntimeException("API Key validation failed"));
                 });
     }
 

@@ -49,7 +49,11 @@ interface TraceStats {
   recentErrors: RequestTrace[];
 }
 
-const TracePage: React.FC = () => {
+interface TracePageProps {
+  instanceId?: string;
+}
+
+const TracePage: React.FC<TracePageProps> = ({ instanceId }) => {
   const [loading, setLoading] = useState(false);
   const [traces, setTraces] = useState<RequestTrace[]>([]);
   const [stats, setStats] = useState<TraceStats | null>(null);
@@ -65,9 +69,11 @@ const TracePage: React.FC = () => {
   const loadTraces = async () => {
     try {
       setLoading(true);
+      const params: any = { page: 0, size: 50 };
+      if (instanceId) params.instanceId = instanceId;
       const [tracesRes, statsRes] = await Promise.all([
-        api.get('/api/traces/errors', { params: { page: 0, size: 50 } }),
-        api.get('/api/traces/stats')
+        api.get('/api/traces/errors', { params }),
+        api.get('/api/traces/stats', { params: instanceId ? { instanceId } : {} })
       ]);
       setTraces(tracesRes.data?.content || []);
       setStats(statsRes.data || null);
@@ -81,12 +87,14 @@ const TracePage: React.FC = () => {
 
   useEffect(() => {
     loadTraces();
-  }, []);
+  }, [instanceId]);
 
   const loadSlowTraces = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/api/traces/slow', { params: { page: 0, size: 50, thresholdMs: 3000 } });
+      const params: any = { page: 0, size: 50, thresholdMs: 3000 };
+      if (instanceId) params.instanceId = instanceId;
+      const res = await api.get('/api/traces/slow', { params });
       setTraces(res.data?.content || []);
     } catch (e) {
       console.error('Failed to load slow traces:', e);
@@ -126,7 +134,9 @@ const TracePage: React.FC = () => {
 
   const handleDeleteOldTraces = async () => {
     try {
-      const res = await api.delete('/api/traces/old?daysToKeep=7');
+      const params: any = { daysToKeep: 7 };
+      if (instanceId) params.instanceId = instanceId;
+      const res = await api.delete('/api/traces/old', { params });
       message.success(`${res.data.deleted} ${t('trace.deleted')}`);
       loadTraces();
     } catch (e) {
@@ -137,7 +147,9 @@ const TracePage: React.FC = () => {
 
   const handleDeleteAllTraces = async () => {
     try {
-      const res = await api.delete('/api/traces/all');
+      const params: any = {};
+      if (instanceId) params.instanceId = instanceId;
+      const res = await api.delete('/api/traces/all', { params });
       message.success(`${res.data.deleted} ${t('trace.deleted')}`);
       loadTraces();
     } catch (e) {
@@ -169,20 +181,22 @@ const TracePage: React.FC = () => {
       title: t('trace.trace_id'),
       dataIndex: 'traceId',
       key: 'traceId',
-      width: 200,
+      width: 180,
+      ellipsis: true,
       render: (text: string) => <Text copyable style={{ fontSize: 12 }}>{text?.substring(0, 16)}...</Text>
     },
     {
       title: t('trace.method'),
       dataIndex: 'method',
       key: 'method',
-      width: 80,
+      width: 90,
       render: (method: string) => <Tag color={getMethodColor(method)}>{method}</Tag>
     },
     {
       title: t('trace.path'),
       dataIndex: 'path',
       key: 'path',
+      width: 300,
       ellipsis: true,
       render: (path: string, record: RequestTrace) => (
         <Tooltip title={record.uri}>
@@ -194,7 +208,7 @@ const TracePage: React.FC = () => {
       title: t('trace.status'),
       dataIndex: 'statusCode',
       key: 'statusCode',
-      width: 80,
+      width: 90,
       render: (code: number) => <Badge status={getStatusColor(code)} text={code} />
     },
     {
@@ -212,20 +226,21 @@ const TracePage: React.FC = () => {
       title: t('trace.client_ip'),
       dataIndex: 'clientIp',
       key: 'clientIp',
-      width: 130,
+      width: 150,
+      ellipsis: true,
     },
     {
       title: t('trace.time'),
       dataIndex: 'traceTime',
       key: 'traceTime',
-      width: 160,
+      width: 180,
       render: (time: string) => time ? new Date(time).toLocaleString() : '-'
     },
     {
       title: t('trace.replay_count'),
       dataIndex: 'replayCount',
       key: 'replayCount',
-      width: 80,
+      width: 110,
       render: (count: number) => <Badge count={count} showZero style={{ backgroundColor: '#1890ff' }} />
     },
     {
@@ -257,22 +272,22 @@ const TracePage: React.FC = () => {
       {/* Statistics Cards */}
       <Row gutter={16} style={{ marginBottom: 24 }}>
         <Col span={6}>
-          <Card>
+          <Card className="tracing-stat-card">
             <Statistic title={t('trace.total')} value={stats?.total || 0} />
           </Card>
         </Col>
         <Col span={6}>
-          <Card>
+          <Card className="tracing-stat-card">
             <Statistic title={t('trace.errors_today')} value={stats?.errorsToday || 0} valueStyle={{ color: '#cf1322' }} />
           </Card>
         </Col>
         <Col span={6}>
-          <Card>
+          <Card className="tracing-stat-card">
             <Statistic title={t('trace.errors_last_hour')} value={stats?.errorsLastHour || 0} valueStyle={{ color: '#faad14' }} />
           </Card>
         </Col>
         <Col span={6}>
-          <Card>
+          <Card className="tracing-stat-card">
             <Statistic title={t('trace.replay_count')} value={traces.reduce((sum, t) => sum + (t.replayCount || 0), 0)} />
           </Card>
         </Col>
@@ -303,6 +318,7 @@ const TracePage: React.FC = () => {
         </Tabs>
 
         <Table
+          className="tracing-table"
           loading={loading}
           dataSource={traces}
           columns={columns}
@@ -319,6 +335,7 @@ const TracePage: React.FC = () => {
         width={700}
         onClose={() => setDetailDrawerVisible(false)}
         open={detailDrawerVisible}
+        style={{ zIndex: 999 }}
       >
         {selectedTrace && (
           <div>

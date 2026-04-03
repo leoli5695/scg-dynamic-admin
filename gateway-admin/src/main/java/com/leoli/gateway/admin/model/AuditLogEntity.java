@@ -20,6 +20,13 @@ public class AuditLogEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /**
+     * Instance ID (UUID) - Associated gateway instance.
+     * Used for configuration isolation per gateway instance.
+     */
+    @Column(name = "instance_id", length = 36)
+    private String instanceId;
+
     @Column(length = 100)
     private String operator;
 
@@ -31,6 +38,9 @@ public class AuditLogEntity {
 
     @Column(name = "target_id", length = 255)
     private String targetId;
+
+    @Column(name = "target_name", length = 255)
+    private String targetName;
 
     @Column(columnDefinition = "TEXT")
     private String oldValue;

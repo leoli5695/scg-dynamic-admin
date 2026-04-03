@@ -18,6 +18,21 @@ public interface SslCertificateRepository extends JpaRepository<SslCertificate, 
     Optional<SslCertificate> findByDomain(String domain);
 
     /**
+     * Find certificate by instanceId and domain
+     */
+    Optional<SslCertificate> findByInstanceIdAndDomain(String instanceId, String domain);
+
+    /**
+     * Find all certificates by instanceId
+     */
+    List<SslCertificate> findByInstanceId(String instanceId);
+
+    /**
+     * Find all enabled certificates by instanceId
+     */
+    List<SslCertificate> findByInstanceIdAndEnabledTrue(String instanceId);
+
+    /**
      * Find all enabled certificates
      */
     List<SslCertificate> findByEnabled(Boolean enabled);
@@ -28,16 +43,33 @@ public interface SslCertificateRepository extends JpaRepository<SslCertificate, 
     List<SslCertificate> findByStatus(String status);
 
     /**
+     * Find certificates by instanceId and status
+     */
+    List<SslCertificate> findByInstanceIdAndStatus(String instanceId, String status);
+
+    /**
      * Find certificates expiring within given days
      */
     @Query("SELECT c FROM SslCertificate c WHERE c.enabled = true AND c.validTo BETWEEN :now AND :endDate")
     List<SslCertificate> findExpiringSoon(LocalDateTime now, LocalDateTime endDate);
 
     /**
+     * Find certificates expiring within given days for a specific instance
+     */
+    @Query("SELECT c FROM SslCertificate c WHERE c.instanceId = :instanceId AND c.enabled = true AND c.validTo BETWEEN :now AND :endDate")
+    List<SslCertificate> findExpiringSoonByInstanceId(String instanceId, LocalDateTime now, LocalDateTime endDate);
+
+    /**
      * Find all valid certificates for a route
      */
     @Query("SELECT c FROM SslCertificate c WHERE c.enabled = true AND c.status = 'VALID'")
     List<SslCertificate> findAllValidCertificates();
+
+    /**
+     * Find all valid certificates by instanceId
+     */
+    @Query("SELECT c FROM SslCertificate c WHERE c.instanceId = :instanceId AND c.enabled = true AND c.status = 'VALID'")
+    List<SslCertificate> findAllValidCertificatesByInstanceId(String instanceId);
 
     /**
      * Find expired certificates
@@ -49,4 +81,9 @@ public interface SslCertificateRepository extends JpaRepository<SslCertificate, 
      * Count certificates by status
      */
     long countByStatus(String status);
+
+    /**
+     * Count certificates by instanceId and status
+     */
+    long countByInstanceIdAndStatus(String instanceId, String status);
 }

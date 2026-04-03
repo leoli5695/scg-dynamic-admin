@@ -1,12 +1,17 @@
 package com.leoli.gateway.admin.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.model.RouteResponse;
 import com.leoli.gateway.admin.model.RouteDefinition;
 import com.leoli.gateway.admin.model.RouteEntity;
+import com.leoli.gateway.admin.service.AuditLogService;
 import com.leoli.gateway.admin.service.RouteService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -26,12 +31,41 @@ public class RouteController {
     @Autowired
     private RouteService routeService;
 
+    @Autowired
+    private AuditLogService auditLogService;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    private String getOperator() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.isAuthenticated() ? auth.getName() : "anonymous";
+    }
+
+    private String getIpAddress(HttpServletRequest request) {
+        String ip = request.getHeader("X-Forwarded-For");
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getHeader("X-Real-IP");
+        }
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getRemoteAddr();
+        }
+        return ip;
+    }
+
     /**
      * Get all routes.
+     * @param instanceId Optional instance ID to filter routes
      */
     @GetMapping
-    public ResponseEntity<Map<String, Object>> getAllRoutes() {
-        List<RouteResponse> routes = routeService.getAllRoutes();
+    public ResponseEntity<Map<String, Object>> getAllRoutes(
+            @RequestParam(required = false) String instanceId) {
+        List<RouteResponse> routes;
+        if (instanceId != null && !instanceId.isEmpty()) {
+            routes = routeService.getAllRoutesByInstanceId(instanceId);
+        } else {
+            routes = routeService.getAllRoutes();
+        }
         Map<String, Object> result = new HashMap<>();
         result.put("code", 200);
         result.put("message", "success");
@@ -60,13 +94,22 @@ public class RouteController {
 
     /**
      * Create a route.
+     * @param instanceId Optional instance ID for configuration isolation
      */
     @PostMapping
-    public ResponseEntity<Map<String, Object>> createRoute(@RequestBody RouteDefinition route) {
+    public ResponseEntity<Map<String, Object>> createRoute(
+            @RequestBody RouteDefinition route,
+            @RequestParam(required = false) String instanceId,
+            HttpServletRequest request) {
         try {
-            log.info("Creating route: {}", route.getId());
-            RouteEntity entity = routeService.createRoute(route);
-            
+            log.info("Creating route: {} for instance: {}", route.getId(), instanceId);
+            RouteEntity entity = routeService.createRoute(route, instanceId);
+
+            // Record audit log - CREATE
+            String newValue = objectMapper.writeValueAsString(route);
+            auditLogService.recordAuditLog(getOperator(), "CREATE", "ROUTE", entity.getRouteId(),
+                    route.getRouteName(), null, newValue, getIpAddress(request));
+
             // Build RouteResponse with UUID
             RouteResponse response = new RouteResponse();
             response.setId(entity.getRouteId());  // UUID
@@ -82,7 +125,7 @@ public class RouteController {
             response.setMetadata(route.getMetadata());
             response.setEnabled(true);
             response.setDescription(route.getDescription());
-            
+
             Map<String, Object> result = new HashMap<>();
             result.put("code", 200);
             result.put("message", "Route created successfully");
@@ -107,16 +150,28 @@ public class RouteController {
      * Update a route by route_id (UUID).
      */
     @PutMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> updateRoute(@PathVariable String id, 
-                                                           @RequestBody RouteDefinition route) {
+    public ResponseEntity<Map<String, Object>> updateRoute(@PathVariable String id,
+                                                           @RequestBody RouteDefinition route,
+                                                           HttpServletRequest request) {
         try {
             log.info("Updating route: {}", id);
             // Validate UUID format
             if (!isValidUUID(id)) {
                 throw new IllegalArgumentException("Invalid route ID format: " + id);
             }
+
+            // Get old value before update
+            RouteEntity oldEntity = routeService.getRouteEntityByRouteId(id);
+            String oldValue = oldEntity != null ? oldEntity.getMetadata() : null;
+
             // Use route_id (UUID) for update
             routeService.updateRouteByRouteId(id, route);
+
+            // Record audit log - UPDATE
+            String newValue = objectMapper.writeValueAsString(route);
+            auditLogService.recordAuditLog(getOperator(), "UPDATE", "ROUTE", id,
+                    route.getRouteName(), oldValue, newValue, getIpAddress(request));
+
             Map<String, Object> result = new HashMap<>();
             result.put("code", 200);
             result.put("message", "Route updated successfully");
@@ -141,15 +196,26 @@ public class RouteController {
      * Delete a route by route_id (UUID).
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> deleteRoute(@PathVariable String id) {
+    public ResponseEntity<Map<String, Object>> deleteRoute(@PathVariable String id, HttpServletRequest request) {
         try {
             log.info("Deleting route: {}", id);
             // Validate UUID format
             if (!isValidUUID(id)) {
                 throw new IllegalArgumentException("Invalid route ID format: " + id);
             }
+
+            // Get old value before delete
+            RouteEntity oldEntity = routeService.getRouteEntityByRouteId(id);
+            String oldValue = oldEntity != null ? oldEntity.getMetadata() : null;
+            String targetName = oldEntity != null ? oldEntity.getRouteName() : id;
+
             // Delete by route_id
             routeService.deleteRouteByRouteId(id);
+
+            // Record audit log - DELETE
+            auditLogService.recordAuditLog(getOperator(), "DELETE", "ROUTE", id,
+                    targetName, oldValue, null, getIpAddress(request));
+
             Map<String, Object> result = new HashMap<>();
             result.put("code", 200);
             result.put("message", "Route deleted successfully");
@@ -173,13 +239,28 @@ public class RouteController {
      * Enable a route by route_id (UUID).
      */
     @PostMapping("/{id}/enable")
-    public ResponseEntity<Map<String, Object>> enableRoute(@PathVariable String id) {
+    public ResponseEntity<Map<String, Object>> enableRoute(@PathVariable String id, HttpServletRequest request) {
         try {
             log.info("Enabling route: {}", id);
             if (!isValidUUID(id)) {
                 throw new IllegalArgumentException("Invalid route ID format: " + id);
             }
+
+            // Get old value before enable
+            RouteEntity oldEntity = routeService.getRouteEntityByRouteId(id);
+            String oldValue = oldEntity != null ? oldEntity.getMetadata() : null;
+            String targetName = oldEntity != null ? oldEntity.getRouteName() : id;
+
             routeService.enableRouteByRouteId(id);
+
+            // Get new value after enable
+            RouteEntity newEntity = routeService.getRouteEntityByRouteId(id);
+            String newValue = newEntity != null ? newEntity.getMetadata() : null;
+
+            // Record audit log - ENABLE
+            auditLogService.recordAuditLog(getOperator(), "ENABLE", "ROUTE", id,
+                    targetName, oldValue, newValue, getIpAddress(request));
+
             Map<String, Object> result = new HashMap<>();
             result.put("code", 200);
             result.put("message", "Route enabled successfully");
@@ -203,13 +284,28 @@ public class RouteController {
      * Disable a route by route_id (UUID).
      */
     @PostMapping("/{id}/disable")
-    public ResponseEntity<Map<String, Object>> disableRoute(@PathVariable String id) {
+    public ResponseEntity<Map<String, Object>> disableRoute(@PathVariable String id, HttpServletRequest request) {
         try {
             log.info("Disabling route: {}", id);
             if (!isValidUUID(id)) {
                 throw new IllegalArgumentException("Invalid route ID format: " + id);
             }
+
+            // Get old value before disable
+            RouteEntity oldEntity = routeService.getRouteEntityByRouteId(id);
+            String oldValue = oldEntity != null ? oldEntity.getMetadata() : null;
+            String targetName = oldEntity != null ? oldEntity.getRouteName() : id;
+
             routeService.disableRouteByRouteId(id);
+
+            // Get new value after disable
+            RouteEntity newEntity = routeService.getRouteEntityByRouteId(id);
+            String newValue = newEntity != null ? newEntity.getMetadata() : null;
+
+            // Record audit log - DISABLE
+            auditLogService.recordAuditLog(getOperator(), "DISABLE", "ROUTE", id,
+                    targetName, oldValue, newValue, getIpAddress(request));
+
             Map<String, Object> result = new HashMap<>();
             result.put("code", 200);
             result.put("message", "Route disabled successfully");

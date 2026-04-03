@@ -24,6 +24,13 @@ public class RequestTrace {
     private Long id;
 
     /**
+     * Instance ID (UUID) - Associated gateway instance.
+     * Used for configuration isolation per gateway instance.
+     */
+    @Column(name = "instance_id", length = 36)
+    private String instanceId;
+
+    /**
      * Unique trace ID (for correlation)
      */
     @Column(name = "trace_id", length = 36, unique = true)

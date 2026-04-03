@@ -20,6 +20,13 @@ public class SslCertificate {
     private Long id;
 
     /**
+     * Instance ID (UUID) - Associated gateway instance.
+     * Used for configuration isolation per gateway instance.
+     */
+    @Column(name = "instance_id", length = 36)
+    private String instanceId;
+
+    /**
      * Certificate name for display
      */
     @Column(name = "cert_name", nullable = false, length = 100)

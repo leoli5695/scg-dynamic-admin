@@ -1,13 +1,18 @@
 package com.leoli.gateway.admin.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.center.NacosConfigCenterService;
 import com.leoli.gateway.admin.model.ServiceDefinition;
 import com.leoli.gateway.admin.model.ServiceInstanceHealth;
 import com.leoli.gateway.admin.repository.ServiceInstanceHealthRepository;
+import com.leoli.gateway.admin.service.AuditLogService;
 import com.leoli.gateway.admin.service.ServiceService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
@@ -34,12 +39,41 @@ public class ServiceController {
     @Autowired
     private ServiceInstanceHealthRepository instanceHealthRepository;
 
+    @Autowired
+    private AuditLogService auditLogService;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    private String getOperator() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.isAuthenticated() ? auth.getName() : "anonymous";
+    }
+
+    private String getIpAddress(HttpServletRequest request) {
+        String ip = request.getHeader("X-Forwarded-For");
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getHeader("X-Real-IP");
+        }
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getRemoteAddr();
+        }
+        return ip;
+    }
+
     /**
      * Get all services with instance health status.
+     * @param instanceId Optional instance ID to filter services
      */
     @GetMapping
-    public ResponseEntity<Map<String, Object>> getAllServices() {
-        List<ServiceDefinition> services = serviceManager.getAllServices();
+    public ResponseEntity<Map<String, Object>> getAllServices(
+            @RequestParam(required = false) String instanceId) {
+        List<ServiceDefinition> services;
+        if (instanceId != null && !instanceId.isEmpty()) {
+            services = serviceManager.getAllServicesByInstanceId(instanceId);
+        } else {
+            services = serviceManager.getAllServices();
+        }
 
         // Get ALL instance health records (by ip:port, not serviceId)
         // This ensures same instance shows same health across all services
@@ -139,12 +173,27 @@ public class ServiceController {
 
     /**
      * Register a service.
+     * @param instanceId Optional instance ID for configuration isolation
      */
     @PostMapping
-    public ResponseEntity<Map<String, Object>> createService(@RequestBody ServiceDefinition service) {
+    public ResponseEntity<Map<String, Object>> createService(
+            @RequestBody ServiceDefinition service,
+            @RequestParam(required = false) String instanceId,
+            HttpServletRequest request) {
         try {
-            log.info("Creating service: {}", service.getName());
-            serviceManager.createService(service);
+            log.info("Creating service: {} for instance: {}", service.getName(), instanceId);
+
+            // Get old value before create (should be null)
+            ServiceDefinition oldService = serviceManager.getServiceByName(service.getName());
+            String oldValue = oldService != null ? objectMapper.writeValueAsString(oldService) : null;
+
+            serviceManager.createService(service, instanceId);
+
+            // Record audit log - CREATE
+            String newValue = objectMapper.writeValueAsString(service);
+            auditLogService.recordAuditLog(getOperator(), "CREATE", "SERVICE", service.getServiceId(),
+                    service.getName(), oldValue, newValue, getIpAddress(request));
+
             Map<String, Object> result = new HashMap<>();
             result.put("code", 200);
             result.put("message", "Service registered successfully");
@@ -170,10 +219,22 @@ public class ServiceController {
      */
     @PutMapping("/{name}")
     public ResponseEntity<Map<String, Object>> updateService(@PathVariable String name,
-                                                             @RequestBody ServiceDefinition service) {
+                                                             @RequestBody ServiceDefinition service,
+                                                             HttpServletRequest request) {
         try {
             log.info("Updating service: {}", name);
+
+            // Get old value before update
+            ServiceDefinition oldService = serviceManager.getServiceByName(name);
+            String oldValue = oldService != null ? objectMapper.writeValueAsString(oldService) : null;
+
             serviceManager.updateService(name, service);
+
+            // Record audit log - UPDATE
+            String newValue = objectMapper.writeValueAsString(service);
+            auditLogService.recordAuditLog(getOperator(), "UPDATE", "SERVICE", service.getServiceId(),
+                    service.getName(), oldValue, newValue, getIpAddress(request));
+
             Map<String, Object> result = new HashMap<>();
             result.put("code", 200);
             result.put("message", "Service updated successfully");
@@ -198,10 +259,20 @@ public class ServiceController {
      * Delete a service.
      */
     @DeleteMapping("/{name}")
-    public ResponseEntity<Map<String, Object>> deleteService(@PathVariable String name) {
+    public ResponseEntity<Map<String, Object>> deleteService(@PathVariable String name, HttpServletRequest request) {
         try {
             log.info("Deleting service: {}", name);
+
+            // Get old value before delete
+            ServiceDefinition oldService = serviceManager.getServiceByName(name);
+            String oldValue = oldService != null ? objectMapper.writeValueAsString(oldService) : null;
+
             serviceManager.deleteService(name);
+
+            // Record audit log - DELETE
+            auditLogService.recordAuditLog(getOperator(), "DELETE", "SERVICE", name,
+                    name, oldValue, null, getIpAddress(request));
+
             Map<String, Object> result = new HashMap<>();
             result.put("code", 200);
             result.put("message", "Service deleted successfully");
@@ -227,10 +298,22 @@ public class ServiceController {
     @PostMapping("/{name}/instances")
     public ResponseEntity<Map<String, Object>> addServiceInstance(
             @PathVariable String name,
-            @RequestBody ServiceDefinition.ServiceInstance instance) {
+            @RequestBody ServiceDefinition.ServiceInstance instance,
+            HttpServletRequest request) {
         try {
             log.info("Adding instance to service {}: {}:{}", name, instance.getIp(), instance.getPort());
+
+            // Get old value before add
+            ServiceDefinition oldService = serviceManager.getServiceByName(name);
+            String oldValue = oldService != null ? objectMapper.writeValueAsString(oldService) : null;
+
             ServiceDefinition updated = serviceManager.addInstance(name, instance);
+
+            // Record audit log - ADD_INSTANCE
+            String newValue = objectMapper.writeValueAsString(updated);
+            auditLogService.recordAuditLog(getOperator(), "ADD_INSTANCE", "SERVICE", name,
+                    name, oldValue, newValue, getIpAddress(request));
+
             Map<String, Object> result = new HashMap<>();
             result.put("code", 200);
             result.put("data", updated);
@@ -257,10 +340,22 @@ public class ServiceController {
     @DeleteMapping("/{name}/instances/{instanceId}")
     public ResponseEntity<Map<String, Object>> removeServiceInstance(
             @PathVariable String name,
-            @PathVariable String instanceId) {
+            @PathVariable String instanceId,
+            HttpServletRequest request) {
         try {
             log.info("Removing instance {} from service {}", instanceId, name);
+
+            // Get old value before remove
+            ServiceDefinition oldService = serviceManager.getServiceByName(name);
+            String oldValue = oldService != null ? objectMapper.writeValueAsString(oldService) : null;
+
             ServiceDefinition updated = serviceManager.removeInstance(name, instanceId);
+
+            // Record audit log - REMOVE_INSTANCE
+            String newValue = objectMapper.writeValueAsString(updated);
+            auditLogService.recordAuditLog(getOperator(), "REMOVE_INSTANCE", "SERVICE", name,
+                    name, oldValue, newValue, getIpAddress(request));
+
             Map<String, Object> result = new HashMap<>();
             result.put("code", 200);
             result.put("data", updated);
@@ -288,12 +383,24 @@ public class ServiceController {
     public ResponseEntity<Map<String, Object>> updateInstanceStatus(
             @PathVariable String name,
             @PathVariable String instanceId,
-            @RequestBody Map<String, Boolean> statusRequest) {
+            @RequestBody Map<String, Boolean> statusRequest,
+            HttpServletRequest request) {
         try {
             Boolean enabled = statusRequest.get("enabled");
             Boolean healthy = statusRequest.get("healthy");
             log.info("Updating instance {} status in service {}: enabled={}, healthy={}", instanceId, name, enabled, healthy);
+
+            // Get old value before update
+            ServiceDefinition oldService = serviceManager.getServiceByName(name);
+            String oldValue = oldService != null ? objectMapper.writeValueAsString(oldService) : null;
+
             ServiceDefinition updated = serviceManager.updateInstanceStatus(name, instanceId, enabled, healthy);
+
+            // Record audit log - UPDATE_INSTANCE
+            String newValue = objectMapper.writeValueAsString(updated);
+            auditLogService.recordAuditLog(getOperator(), "UPDATE_INSTANCE", "SERVICE", name,
+                    name, oldValue, newValue, getIpAddress(request));
+
             Map<String, Object> result = new HashMap<>();
             result.put("code", 200);
             result.put("data", updated);

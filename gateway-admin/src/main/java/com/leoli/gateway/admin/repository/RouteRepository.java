@@ -30,4 +30,24 @@ public interface RouteRepository extends JpaRepository<RouteEntity, String> {
      * Check if route name exists.
      */
     boolean existsByRouteName(String routeName);
+
+    /**
+     * Find all routes by instance ID.
+     */
+    List<RouteEntity> findByInstanceId(String instanceId);
+
+    /**
+     * Find enabled routes by instance ID.
+     */
+    List<RouteEntity> findByInstanceIdAndEnabledTrue(String instanceId);
+
+    /**
+     * Find route by route ID and instance ID.
+     */
+    Optional<RouteEntity> findByRouteIdAndInstanceId(String routeId, String instanceId);
+
+    /**
+     * Check if route name exists within an instance.
+     */
+    boolean existsByRouteNameAndInstanceId(String routeName, String instanceId);
 }

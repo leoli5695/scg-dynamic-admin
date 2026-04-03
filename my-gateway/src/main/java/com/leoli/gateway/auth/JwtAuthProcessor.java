@@ -1,5 +1,6 @@
 package com.leoli.gateway.auth;
 
+import com.leoli.gateway.enums.AuthType;
 import com.leoli.gateway.model.AuthConfig;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
@@ -21,7 +22,7 @@ import java.util.Set;
 /**
  * JWT Authentication Processor.
  * Validates JWT tokens with comprehensive security features.
- * 
+ *
  * Features:
  * - HS256/HS512 symmetric key validation
  * - RS256 asymmetric key validation
@@ -37,18 +38,16 @@ import java.util.Set;
 public class JwtAuthProcessor extends AbstractAuthProcessor {
 
     @Override
-    public String getAuthType() {
-        return "JWT";
+    public AuthType getAuthType() {
+        return AuthType.JWT;
     }
 
     @Override
     public Mono<Void> process(ServerWebExchange exchange, AuthConfig config) {
         if (!isValidConfig(config)) {
-            log.debug("JWT auth config is invalid for route: {}", config != null ? config.getRouteId() : "unknown");
-            return Mono.empty();
+            log.debug("JWT auth config is invalid");
+            return Mono.error(new RuntimeException("Invalid JWT auth configuration"));
         }
-
-        String routeId = config.getRouteId();
 
         // Extract JWT token from Authorization header
         String token = extractBearerToken(exchange);
@@ -57,8 +56,8 @@ public class JwtAuthProcessor extends AbstractAuthProcessor {
             // Try to get token from query parameter as fallback
             token = exchange.getRequest().getQueryParams().getFirst("token");
             if (token == null || token.isEmpty()) {
-                logFailure(routeId, "Missing JWT token");
-                return writeUnauthorizedResponse(exchange, "Missing or invalid Authorization header");
+                logFailure("JWT", "Missing JWT token");
+                return Mono.error(new RuntimeException("Missing or invalid Authorization header"));
             }
         }
 
@@ -76,27 +75,27 @@ public class JwtAuthProcessor extends AbstractAuthProcessor {
                 exchange.getAttributes().put("jwt_permissions", claims.get("permissions"));
             }
 
-            logSuccess(routeId);
+            logSuccess("JWT validated for subject: " + claims.getSubject());
             return Mono.empty(); // Continue the filter chain
 
         } catch (ExpiredJwtException ex) {
-            logFailure(routeId, "JWT token expired: " + ex.getMessage());
-            return writeUnauthorizedResponse(exchange, "JWT token has expired");
+            logFailure("JWT", "JWT token expired: " + ex.getMessage());
+            return Mono.error(new RuntimeException("JWT token has expired"));
         } catch (UnsupportedJwtException ex) {
-            logFailure(routeId, "Unsupported JWT: " + ex.getMessage());
-            return writeUnauthorizedResponse(exchange, "Unsupported JWT token format");
+            logFailure("JWT", "Unsupported JWT: " + ex.getMessage());
+            return Mono.error(new RuntimeException("Unsupported JWT token format"));
         } catch (MalformedJwtException ex) {
-            logFailure(routeId, "Malformed JWT: " + ex.getMessage());
-            return writeUnauthorizedResponse(exchange, "Malformed JWT token");
+            logFailure("JWT", "Malformed JWT: " + ex.getMessage());
+            return Mono.error(new RuntimeException("Malformed JWT token"));
         } catch (SignatureException ex) {
-            logFailure(routeId, "Invalid JWT signature: " + ex.getMessage());
-            return writeUnauthorizedResponse(exchange, "Invalid JWT signature");
+            logFailure("JWT", "Invalid JWT signature: " + ex.getMessage());
+            return Mono.error(new RuntimeException("Invalid JWT signature"));
         } catch (IllegalArgumentException ex) {
-            logFailure(routeId, "Invalid JWT: " + ex.getMessage());
-            return writeUnauthorizedResponse(exchange, "Invalid JWT token");
+            logFailure("JWT", "Invalid JWT: " + ex.getMessage());
+            return Mono.error(new RuntimeException("Invalid JWT token"));
         } catch (Exception ex) {
-            logFailure(routeId, "JWT validation error: " + ex.getMessage());
-            return writeUnauthorizedResponse(exchange, "JWT validation failed: " + ex.getMessage());
+            logFailure("JWT", "JWT validation error: " + ex.getMessage());
+            return Mono.error(new RuntimeException("JWT validation failed: " + ex.getMessage()));
         }
     }
 

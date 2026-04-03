@@ -370,31 +370,155 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
           </div>
         </div>
       ) : (
-        <div>
-          <div style={{ marginBottom: 16 }}>
-            <Button onClick={() => setResult('')}>
-              {t('ai.reanalyze') || '重新分析'}
-            </Button>
+        <div className="ai-analysis-result">
+          <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Space>
+              <Button onClick={() => setResult('')} icon={<ThunderboltOutlined />}>
+                {t('ai.reanalyze') || '重新分析'}
+              </Button>
+              <Tag color="blue" icon={<CheckCircleOutlined />}>Analysis Complete</Tag>
+            </Space>
           </div>
-          <div className="ai-result" style={{
-            padding: 16,
-            background: '#f5f5f5',
-            borderRadius: 8,
-            maxHeight: 400,
-            overflow: 'auto'
-          }}>
-            <ReactMarkdown>{result}</ReactMarkdown>
+          
+          <div className="ai-result-container">
+            <div className="ai-result-content">
+              <ReactMarkdown>{result}</ReactMarkdown>
+            </div>
           </div>
         </div>
       )}
 
       <style>{`
-        .ai-result h1 { font-size: 18px; border-bottom: 1px solid #ddd; padding-bottom: 8px; }
-        .ai-result h2 { font-size: 16px; color: #1890ff; margin-top: 16px; }
-        .ai-result h3 { font-size: 14px; color: #52c41a; }
-        .ai-result ul, .ai-result ol { padding-left: 20px; }
-        .ai-result li { margin-bottom: 4px; }
-        .ai-result code { background: #e8e8e8; padding: 2px 6px; border-radius: 4px; }
+        .ai-analysis-result {
+          display: flex;
+          flex-direction: column;
+        }
+        
+        .ai-result-container {
+          background: var(--bg-section, #0f172a);
+          border: 1px solid var(--border-color, #1e293b);
+          border-radius: 12px;
+          padding: 20px;
+          max-height: 500px;
+          overflow: auto;
+        }
+        
+        .ai-result-content {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+          line-height: 1.7;
+        }
+        
+        .ai-result-content h1 {
+          font-size: 18px;
+          font-weight: 600;
+          color: var(--text-primary, #e2e8f0);
+          border-bottom: 2px solid var(--border-color, #1e293b);
+          padding-bottom: 10px;
+          margin-top: 24px;
+          margin-bottom: 16px;
+        }
+        
+        .ai-result-content h2 {
+          font-size: 16px;
+          font-weight: 600;
+          color: var(--text-primary, #e2e8f0);
+          margin-top: 20px;
+          margin-bottom: 12px;
+        }
+        
+        .ai-result-content h3 {
+          font-size: 14px;
+          font-weight: 500;
+          color: var(--text-secondary, #94a3b8);
+          margin-top: 16px;
+          margin-bottom: 10px;
+        }
+        
+        .ai-result-content p {
+          color: var(--text-primary, #e2e8f0);
+          margin-bottom: 12px;
+          line-height: 1.7;
+        }
+        
+        .ai-result-content ul,
+        .ai-result-content ol {
+          padding-left: 24px;
+          margin-bottom: 12px;
+          color: var(--text-primary, #e2e8f0);
+        }
+        
+        .ai-result-content li {
+          margin-bottom: 8px;
+          line-height: 1.6;
+        }
+        
+        .ai-result-content code {
+          background: var(--bg-code, #020617);
+          padding: 3px 8px;
+          border-radius: 6px;
+          font-family: 'JetBrains Mono', 'SF Mono', 'Monaco', 'Consolas', monospace;
+          font-size: 12px;
+          color: var(--text-primary, #e2e8f0);
+          border: 1px solid var(--border-color, #1e293b);
+        }
+        
+        .ai-result-content pre {
+          background: var(--bg-code, #020617);
+          padding: 12px;
+          border-radius: 8px;
+          overflow: auto;
+          margin: 12px 0;
+          border: 1px solid var(--border-color, #1e293b);
+        }
+        
+        .ai-result-content pre code {
+          background: transparent;
+          padding: 0;
+          border: none;
+        }
+        
+        .ai-result-content blockquote {
+          border-left: 3px solid var(--border-color, #1e293b);
+          padding-left: 12px;
+          margin: 12px 0;
+          color: var(--text-secondary, #94a3b8);
+          background: rgba(255, 255, 255, 0.02);
+          padding: 10px 12px;
+          border-radius: 4px;
+        }
+        
+        .ai-result-content strong {
+          font-weight: 600;
+          color: var(--text-primary, #e2e8f0);
+        }
+        
+        .ai-result-content table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 12px 0;
+          background: var(--bg-card, #1a2338);
+          border-radius: 8px;
+          overflow: hidden;
+        }
+        
+        .ai-result-content th {
+          background: var(--bg-section, #0f172a);
+          padding: 10px 12px;
+          text-align: left;
+          font-weight: 600;
+          color: var(--text-primary, #e2e8f0);
+          border-bottom: 1px solid var(--border-color, #1e293b);
+        }
+        
+        .ai-result-content td {
+          padding: 10px 12px;
+          color: var(--text-primary, #e2e8f0);
+          border-bottom: 1px solid var(--border-divider, #1e293b);
+        }
+        
+        .ai-result-content tr:last-child td {
+          border-bottom: none;
+        }
       `}</style>
     </Modal>
   );

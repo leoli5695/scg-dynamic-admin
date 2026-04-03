@@ -19,6 +19,13 @@ public class AlertConfig {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /**
+     * Instance ID (UUID) - Associated gateway instance.
+     * Used for configuration isolation per gateway instance.
+     */
+    @Column(name = "instance_id", length = 36)
+    private String instanceId;
+
     @Column(name = "config_name", nullable = false, length = 100)
     private String configName = "Default Alert Config";
 

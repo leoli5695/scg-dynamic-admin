@@ -20,4 +20,24 @@ public interface ServiceRepository extends JpaRepository<ServiceEntity, Long> {
     ServiceEntity findByServiceName(String serviceName);
 
     List<ServiceEntity> findByEnabledTrue();
+
+    /**
+     * Find all services by instance ID.
+     */
+    List<ServiceEntity> findByInstanceId(String instanceId);
+
+    /**
+     * Find enabled services by instance ID.
+     */
+    List<ServiceEntity> findByInstanceIdAndEnabledTrue(String instanceId);
+
+    /**
+     * Find service by service name and instance ID.
+     */
+    ServiceEntity findByServiceNameAndInstanceId(String serviceName, String instanceId);
+
+    /**
+     * Check if service name exists within an instance.
+     */
+    boolean existsByServiceNameAndInstanceId(String serviceName, String instanceId);
 }

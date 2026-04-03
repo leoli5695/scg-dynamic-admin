@@ -44,16 +44,17 @@ public class PrometheusService {
 
     /**
      * Get Gateway instances metrics from Prometheus.
+     * @param instanceId Optional instance ID to filter metrics for a specific instance
      */
-    public Map<String, Object> getGatewayMetrics() {
+    public Map<String, Object> getGatewayMetrics(String instanceId) {
         Map<String, Object> metrics = new LinkedHashMap<>();
 
         try {
             // Gateway instances (from Nacos/Consul discovery)
-            metrics.put("instances", getGatewayInstances());
+            metrics.put("instances", getGatewayInstances(instanceId));
 
             // Try to get metrics from Prometheus first
-            Map<String, Object> jvmMemory = getJvmMemory();
+            Map<String, Object> jvmMemory = getJvmMemory(instanceId);
             if (isMetricsEmpty(jvmMemory)) {
                 // Prometheus has no data, fetch directly from gateway
                 log.info("Prometheus has no data, fetching metrics directly from gateway");
@@ -61,14 +62,14 @@ public class PrometheusService {
             } else {
                 // Use Prometheus data
                 metrics.put("jvmMemory", jvmMemory);
-                metrics.put("gc", getGCMetrics());
-                metrics.put("threads", getThreadMetrics());
-                metrics.put("httpRequests", getHttpRequestStats());
-                metrics.put("httpStatus", getHttpStatusDistribution());
-                metrics.put("cpu", getCpuUsage());
-                metrics.put("process", getProcessInfo());
-                metrics.put("disk", getDiskInfo());
-                metrics.put("gateway", getGatewaySpecificMetrics());
+                metrics.put("gc", getGCMetrics(instanceId));
+                metrics.put("threads", getThreadMetrics(instanceId));
+                metrics.put("httpRequests", getHttpRequestStats(instanceId));
+                metrics.put("httpStatus", getHttpStatusDistribution(instanceId));
+                metrics.put("cpu", getCpuUsage(instanceId));
+                metrics.put("process", getProcessInfo(instanceId));
+                metrics.put("disk", getDiskInfo(instanceId));
+                metrics.put("gateway", getGatewaySpecificMetrics(instanceId));
             }
 
         } catch (Exception e) {
@@ -77,6 +78,25 @@ public class PrometheusService {
         }
 
         return metrics;
+    }
+
+    /**
+     * Get Gateway instances metrics from Prometheus (all instances).
+     */
+    public Map<String, Object> getGatewayMetrics() {
+        return getGatewayMetrics(null);
+    }
+
+    /**
+     * Build instance filter for Prometheus query.
+     * If instanceId is provided, adds instance label filter.
+     */
+    private String buildInstanceFilter(String instanceId) {
+        if (instanceId != null && !instanceId.isEmpty()) {
+            // Use instanceId as the instance label value
+            return ",instance=\"" + instanceId + "\"";
+        }
+        return "";
     }
 
     /**
@@ -231,20 +251,22 @@ public class PrometheusService {
 
     /**
      * Get Gateway instances from Prometheus.
+     * @param instanceId Optional instance ID to filter for a specific instance
      */
-    private List<Map<String, Object>> getGatewayInstances() {
+    private List<Map<String, Object>> getGatewayInstances(String instanceId) {
         List<Map<String, Object>> instances = new ArrayList<>();
 
         try {
             // Query for gateway instances (using application tag)
-            String query = "up{application=\"my-gateway\"}";
+            String instanceFilter = buildInstanceFilter(instanceId);
+            String query = "up{application=\"my-gateway\"" + instanceFilter + "}";
             String result = queryPrometheus(query);
 
             JsonNode root = objectMapper.readTree(result);
             JsonNode data = root.path("data").path("result");
 
             // Check if we have actual metrics data from Prometheus
-            boolean hasPrometheusMetrics = hasActualMetricsData();
+            boolean hasPrometheusMetrics = hasActualMetricsData(instanceId);
 
             // Also check if gateway is directly accessible (more reliable)
             boolean gatewayAccessible = checkGatewayDirectly();
@@ -277,14 +299,14 @@ public class PrometheusService {
             // If no instances found from Prometheus, but gateway is accessible
             if (instances.isEmpty() && gatewayAccessible) {
                 Map<String, Object> placeholder = new HashMap<>();
-                placeholder.put("instance", "gateway-1");
+                placeholder.put("instance", instanceId != null ? instanceId : "gateway-1");
                 placeholder.put("job", "gateway");
                 placeholder.put("status", "UP");
                 instances.add(placeholder);
             } else if (instances.isEmpty()) {
                 // No data at all
                 Map<String, Object> placeholder = new HashMap<>();
-                placeholder.put("instance", "localhost:80");
+                placeholder.put("instance", instanceId != null ? instanceId : "localhost:80");
                 placeholder.put("job", "gateway");
                 placeholder.put("status", "PENDING");
                 instances.add(placeholder);
@@ -320,11 +342,13 @@ public class PrometheusService {
      * Check if we have actual metrics data from the gateway.
      * This is more reliable than the 'up' metric when there are network issues between
      * Prometheus and the gateway.
+     * @param instanceId Optional instance ID to filter for a specific instance
      */
-    private boolean hasActualMetricsData() {
+    private boolean hasActualMetricsData(String instanceId) {
         try {
             // Check if we can get JVM memory data - this proves we're getting real metrics
-            String query = "sum(jvm_memory_used_bytes{application=\"my-gateway\"})";
+            String instanceFilter = buildInstanceFilter(instanceId);
+            String query = "sum(jvm_memory_used_bytes{application=\"my-gateway\"" + instanceFilter + "})";
             String result = queryPrometheus(query);
             double value = extractValue(result, -1);
             return value > 0;
@@ -335,19 +359,21 @@ public class PrometheusService {
 
     /**
      * Get JVM memory metrics.
+     * @param instanceId Optional instance ID to filter for a specific instance
      */
-    private Map<String, Object> getJvmMemory() {
+    private Map<String, Object> getJvmMemory(String instanceId) {
         Map<String, Object> memory = new HashMap<>();
+        String instanceFilter = buildInstanceFilter(instanceId);
 
         try {
             // JVM Heap Used (sum of all heap regions)
-            String usedQuery = "sum(jvm_memory_used_bytes{application=\"my-gateway\",area=\"heap\"})";
+            String usedQuery = "sum(jvm_memory_used_bytes{application=\"my-gateway\"" + instanceFilter + ",area=\"heap\"})";
             String usedResult = queryPrometheus(usedQuery);
             double heapUsed = extractValue(usedResult, 0.0);
             memory.put("heapUsed", heapUsed);
 
             // JVM Heap Max
-            String maxQuery = "sum(jvm_memory_max_bytes{application=\"my-gateway\",area=\"heap\"})";
+            String maxQuery = "sum(jvm_memory_max_bytes{application=\"my-gateway\"" + instanceFilter + ",area=\"heap\"})";
             String maxResult = queryPrometheus(maxQuery);
             double heapMax = extractValue(maxResult, 0.0);
             memory.put("heapMax", heapMax);
@@ -358,7 +384,7 @@ public class PrometheusService {
             }
 
             // Non-heap memory
-            String nonHeapQuery = "sum(jvm_memory_used_bytes{application=\"my-gateway\",area=\"nonheap\"})";
+            String nonHeapQuery = "sum(jvm_memory_used_bytes{application=\"my-gateway\"" + instanceFilter + ",area=\"nonheap\"})";
             String nonHeapResult = queryPrometheus(nonHeapQuery);
             memory.put("nonHeapUsed", extractValue(nonHeapResult, 0.0));
 
@@ -371,24 +397,26 @@ public class PrometheusService {
 
     /**
      * Get HTTP request statistics.
+     * @param instanceId Optional instance ID to filter for a specific instance
      */
-    private Map<String, Object> getHttpRequestStats() {
+    private Map<String, Object> getHttpRequestStats(String instanceId) {
         Map<String, Object> stats = new HashMap<>();
+        String instanceFilter = buildInstanceFilter(instanceId);
 
         try {
             // Request count (rate per second over 1 minute)
-            String countQuery = "sum(rate(http_server_requests_seconds_count{application=\"my-gateway\"}[1m]))";
+            String countQuery = "sum(rate(http_server_requests_seconds_count{application=\"my-gateway\"" + instanceFilter + "}[1m]))";
             String countResult = queryPrometheus(countQuery);
             stats.put("requestsPerSecond", extractValue(countResult, 0.0));
 
             // Average response time
-            String avgQuery = "sum(rate(http_server_requests_seconds_sum{application=\"my-gateway\"}[1m])) / sum(rate(http_server_requests_seconds_count{application=\"my-gateway\"}[1m]))";
+            String avgQuery = "sum(rate(http_server_requests_seconds_sum{application=\"my-gateway\"" + instanceFilter + "}[1m])) / sum(rate(http_server_requests_seconds_count{application=\"my-gateway\"" + instanceFilter + "}[1m]))";
             String avgResult = queryPrometheus(avgQuery);
             double avgTime = extractValue(avgResult, 0.0);
             stats.put("avgResponseTimeMs", Math.round(avgTime * 1000));
 
             // Error rate
-            String errorQuery = "sum(rate(http_server_requests_seconds_count{application=\"my-gateway\",status=~\"5..\"}[1m])) / sum(rate(http_server_requests_seconds_count{application=\"my-gateway\"}[1m])) * 100";
+            String errorQuery = "sum(rate(http_server_requests_seconds_count{application=\"my-gateway\"" + instanceFilter + ",status=~\"5..\"}[1m])) / sum(rate(http_server_requests_seconds_count{application=\"my-gateway\"" + instanceFilter + "}[1m])) * 100";
             String errorResult = queryPrometheus(errorQuery);
             stats.put("errorRate", Math.round(extractValue(errorResult, 0.0) * 100) / 100.0);
 
@@ -401,19 +429,21 @@ public class PrometheusService {
 
     /**
      * Get CPU usage.
+     * @param instanceId Optional instance ID to filter for a specific instance
      */
-    private Map<String, Object> getCpuUsage() {
+    private Map<String, Object> getCpuUsage(String instanceId) {
         Map<String, Object> cpu = new HashMap<>();
+        String instanceFilter = buildInstanceFilter(instanceId);
 
         try {
             // System CPU usage
-            String systemQuery = "system_cpu_usage{application=\"my-gateway\"}";
+            String systemQuery = "system_cpu_usage{application=\"my-gateway\"" + instanceFilter + "}";
             String systemResult = queryPrometheus(systemQuery);
             double systemUsage = extractValue(systemResult, 0.0);
             cpu.put("systemUsage", Math.round(systemUsage * 10000) / 100.0);
 
             // Process CPU usage
-            String processQuery = "process_cpu_usage{application=\"my-gateway\"}";
+            String processQuery = "process_cpu_usage{application=\"my-gateway\"" + instanceFilter + "}";
             String processResult = queryPrometheus(processQuery);
             double processUsage = extractValue(processResult, 0.0);
             cpu.put("processUsage", Math.round(processUsage * 10000) / 100.0);
@@ -432,13 +462,15 @@ public class PrometheusService {
 
     /**
      * Get Gateway specific metrics.
+     * @param instanceId Optional instance ID to filter for a specific instance
      */
-    private Map<String, Object> getGatewaySpecificMetrics() {
+    private Map<String, Object> getGatewaySpecificMetrics(String instanceId) {
         Map<String, Object> gateway = new HashMap<>();
+        String instanceFilter = buildInstanceFilter(instanceId);
 
         try {
             // Route count from Spring Cloud Gateway
-            String routeQuery = "spring_cloud_gateway_routes_count{application=\"my-gateway\"}";
+            String routeQuery = "spring_cloud_gateway_routes_count{application=\"my-gateway\"" + instanceFilter + "}";
             String routeResult = queryPrometheus(routeQuery);
             gateway.put("routeCount", extractValue(routeResult, 0));
 
@@ -451,24 +483,26 @@ public class PrometheusService {
 
     /**
      * Get GC metrics.
+     * @param instanceId Optional instance ID to filter for a specific instance
      */
-    private Map<String, Object> getGCMetrics() {
+    private Map<String, Object> getGCMetrics(String instanceId) {
         Map<String, Object> gc = new HashMap<>();
+        String instanceFilter = buildInstanceFilter(instanceId);
 
         try {
             // GC count (total in last 5 minutes)
-            String countQuery = "sum(increase(jvm_gc_pause_seconds_count{application=\"my-gateway\"}[5m]))";
+            String countQuery = "sum(increase(jvm_gc_pause_seconds_count{application=\"my-gateway\"" + instanceFilter + "}[5m]))";
             String countResult = queryPrometheus(countQuery);
             gc.put("gcCount", extractValue(countResult, 0));
 
             // GC total time (seconds in last 5 minutes)
-            String timeQuery = "sum(increase(jvm_gc_pause_seconds_sum{application=\"my-gateway\"}[5m]))";
+            String timeQuery = "sum(increase(jvm_gc_pause_seconds_sum{application=\"my-gateway\"" + instanceFilter + "}[5m]))";
             String timeResult = queryPrometheus(timeQuery);
             double gcTime = extractValue(timeResult, 0.0);
             gc.put("gcTimeSeconds", Math.round(gcTime * 1000) / 1000.0);
 
             // GC overhead percent
-            String overheadQuery = "jvm_gc_overhead_percent{application=\"my-gateway\"}";
+            String overheadQuery = "jvm_gc_overhead_percent{application=\"my-gateway\"" + instanceFilter + "}";
             String overheadResult = queryPrometheus(overheadQuery);
             double overhead = extractValue(overheadResult, 0.0);
             gc.put("gcOverheadPercent", Math.round(overhead * 100) / 100.0);
@@ -482,23 +516,25 @@ public class PrometheusService {
 
     /**
      * Get Thread metrics.
+     * @param instanceId Optional instance ID to filter for a specific instance
      */
-    private Map<String, Object> getThreadMetrics() {
+    private Map<String, Object> getThreadMetrics(String instanceId) {
         Map<String, Object> threads = new HashMap<>();
+        String instanceFilter = buildInstanceFilter(instanceId);
 
         try {
             // Live threads
-            String liveQuery = "jvm_threads_live_threads{application=\"my-gateway\"}";
+            String liveQuery = "jvm_threads_live_threads{application=\"my-gateway\"" + instanceFilter + "}";
             String liveResult = queryPrometheus(liveQuery);
             threads.put("liveThreads", extractValue(liveResult, 0));
 
             // Daemon threads
-            String daemonQuery = "jvm_threads_daemon_threads{application=\"my-gateway\"}";
+            String daemonQuery = "jvm_threads_daemon_threads{application=\"my-gateway\"" + instanceFilter + "}";
             String daemonResult = queryPrometheus(daemonQuery);
             threads.put("daemonThreads", extractValue(daemonResult, 0));
 
             // Peak threads
-            String peakQuery = "jvm_threads_peak_threads{application=\"my-gateway\"}";
+            String peakQuery = "jvm_threads_peak_threads{application=\"my-gateway\"" + instanceFilter + "}";
             String peakResult = queryPrometheus(peakQuery);
             threads.put("peakThreads", extractValue(peakResult, 0));
 
@@ -511,23 +547,25 @@ public class PrometheusService {
 
     /**
      * Get HTTP status distribution.
+     * @param instanceId Optional instance ID to filter for a specific instance
      */
-    private Map<String, Object> getHttpStatusDistribution() {
+    private Map<String, Object> getHttpStatusDistribution(String instanceId) {
         Map<String, Object> status = new HashMap<>();
+        String instanceFilter = buildInstanceFilter(instanceId);
 
         try {
             // 2xx responses rate
-            String success2xxQuery = "sum(rate(http_server_requests_seconds_count{application=\"my-gateway\",status=~\"2..\"}[5m]))";
+            String success2xxQuery = "sum(rate(http_server_requests_seconds_count{application=\"my-gateway\"" + instanceFilter + ",status=~\"2..\"}[5m]))";
             String success2xxResult = queryPrometheus(success2xxQuery);
             status.put("status2xx", extractValue(success2xxResult, 0.0));
 
             // 4xx responses rate
-            String client4xxQuery = "sum(rate(http_server_requests_seconds_count{application=\"my-gateway\",status=~\"4..\"}[5m]))";
+            String client4xxQuery = "sum(rate(http_server_requests_seconds_count{application=\"my-gateway\"" + instanceFilter + ",status=~\"4..\"}[5m]))";
             String client4xxResult = queryPrometheus(client4xxQuery);
             status.put("status4xx", extractValue(client4xxResult, 0.0));
 
             // 5xx responses rate
-            String server5xxQuery = "sum(rate(http_server_requests_seconds_count{application=\"my-gateway\",status=~\"5..\"}[5m]))";
+            String server5xxQuery = "sum(rate(http_server_requests_seconds_count{application=\"my-gateway\"" + instanceFilter + ",status=~\"5..\"}[5m]))";
             String server5xxResult = queryPrometheus(server5xxQuery);
             status.put("status5xx", extractValue(server5xxResult, 0.0));
 
@@ -540,13 +578,15 @@ public class PrometheusService {
 
     /**
      * Get Process info.
+     * @param instanceId Optional instance ID to filter for a specific instance
      */
-    private Map<String, Object> getProcessInfo() {
+    private Map<String, Object> getProcessInfo(String instanceId) {
         Map<String, Object> process = new HashMap<>();
+        String instanceFilter = buildInstanceFilter(instanceId);
 
         try {
             // Process uptime in seconds
-            String uptimeQuery = "process_uptime_seconds{application=\"my-gateway\"}";
+            String uptimeQuery = "process_uptime_seconds{application=\"my-gateway\"" + instanceFilter + "}";
             String uptimeResult = queryPrometheus(uptimeQuery);
             double uptimeSeconds = extractValue(uptimeResult, 0.0);
             process.put("uptimeSeconds", Math.round(uptimeSeconds));
@@ -566,20 +606,22 @@ public class PrometheusService {
 
     /**
      * Get Disk info.
+     * @param instanceId Optional instance ID to filter for a specific instance
      */
-    private Map<String, Object> getDiskInfo() {
+    private Map<String, Object> getDiskInfo(String instanceId) {
         Map<String, Object> disk = new HashMap<>();
+        String instanceFilter = buildInstanceFilter(instanceId);
 
         try {
             // Disk free space
-            String freeQuery = "disk_free_bytes{application=\"my-gateway\"}";
+            String freeQuery = "disk_free_bytes{application=\"my-gateway\"" + instanceFilter + "}";
             String freeResult = queryPrometheus(freeQuery);
             double freeBytes = extractValue(freeResult, 0.0);
             disk.put("freeBytes", freeBytes);
             disk.put("freeGB", Math.round(freeBytes / (1024 * 1024 * 1024) * 100) / 100.0);
 
             // Disk total space
-            String totalQuery = "disk_total_bytes{application=\"my-gateway\"}";
+            String totalQuery = "disk_total_bytes{application=\"my-gateway\"" + instanceFilter + "}";
             String totalResult = queryPrometheus(totalQuery);
             double totalBytes = extractValue(totalResult, 0.0);
             disk.put("totalBytes", totalBytes);
@@ -689,43 +731,45 @@ public class PrometheusService {
     /**
      * Get history metrics for charts.
      * @param hours Number of hours to look back (default 24)
+     * @param instanceId Optional instance ID to filter for a specific instance
      */
-    public Map<String, Object> getHistoryMetrics(int hours) {
+    public Map<String, Object> getHistoryMetrics(int hours, String instanceId) {
         Map<String, Object> history = new LinkedHashMap<>();
         
         long end = System.currentTimeMillis() / 1000;
         long start = end - (hours * 3600L);
         String step = hours <= 1 ? "1m" : hours <= 6 ? "5m" : "15m";
+        String instanceFilter = buildInstanceFilter(instanceId);
         
         try {
             // JVM Heap Memory History
             history.put("heapMemory", queryRange(
-                    "sum(jvm_memory_used_bytes{application=\"my-gateway\",area=\"heap\"})",
+                    "sum(jvm_memory_used_bytes{application=\"my-gateway\"" + instanceFilter + ",area=\"heap\"})",
                     start, end, step));
             
             // CPU Usage History
             history.put("cpuUsage", queryRange(
-                    "system_cpu_usage{application=\"my-gateway\"}",
+                    "system_cpu_usage{application=\"my-gateway\"" + instanceFilter + "}",
                     start, end, step));
             
             // HTTP Requests Rate History
             history.put("requestRate", queryRange(
-                    "sum(rate(http_server_requests_seconds_count{application=\"my-gateway\"}[1m]))",
+                    "sum(rate(http_server_requests_seconds_count{application=\"my-gateway\"" + instanceFilter + "}[1m]))",
                     start, end, step));
             
             // Response Time History
             history.put("responseTime", queryRange(
-                    "sum(rate(http_server_requests_seconds_sum{application=\"my-gateway\"}[1m])) / sum(rate(http_server_requests_seconds_count{application=\"my-gateway\"}[1m]))",
+                    "sum(rate(http_server_requests_seconds_sum{application=\"my-gateway\"" + instanceFilter + "}[1m])) / sum(rate(http_server_requests_seconds_count{application=\"my-gateway\"" + instanceFilter + "}[1m]))",
                     start, end, step));
             
             // GC Time History
             history.put("gcTime", queryRange(
-                    "sum(rate(jvm_gc_pause_seconds_sum{application=\"my-gateway\"}[5m]))",
+                    "sum(rate(jvm_gc_pause_seconds_sum{application=\"my-gateway\"" + instanceFilter + "}[5m]))",
                     start, end, step));
             
             // Thread Count History
             history.put("threadCount", queryRange(
-                    "jvm_threads_live_threads{application=\"my-gateway\"}",
+                    "jvm_threads_live_threads{application=\"my-gateway\"" + instanceFilter + "}",
                     start, end, step));
                     
         } catch (Exception e) {
@@ -733,5 +777,13 @@ public class PrometheusService {
         }
         
         return history;
+    }
+
+    /**
+     * Get history metrics for charts (all instances).
+     * @param hours Number of hours to look back (default 24)
+     */
+    public Map<String, Object> getHistoryMetrics(int hours) {
+        return getHistoryMetrics(hours, null);
     }
 }

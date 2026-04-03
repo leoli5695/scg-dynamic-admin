@@ -29,6 +29,13 @@ public class RouteEntity {
     @Id
     @Column(name = "route_id", length = 36, nullable = false)
     private String routeId;
+
+    /**
+     * Instance ID (UUID) - Associated gateway instance.
+     * Used for configuration isolation per gateway instance.
+     */
+    @Column(name = "instance_id", length = 36)
+    private String instanceId;
     
     /**
      * Business route name for display (e.g., "user-service-route").

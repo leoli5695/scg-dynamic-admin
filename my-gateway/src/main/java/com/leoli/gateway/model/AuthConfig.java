@@ -1,5 +1,6 @@
 package com.leoli.gateway.model;
 
+import com.leoli.gateway.enums.AuthType;
 import lombok.Data;
 
 import java.util.Map;
@@ -26,9 +27,24 @@ public class AuthConfig {
     private String routeId;
 
     /**
-     * Authentication type: JWT, API_KEY, OAUTH2, BASIC, HMAC.
+     * Authentication type code: JWT, API_KEY, OAUTH2, BASIC, HMAC.
+     * Stored as String for JSON serialization compatibility.
      */
     private String authType;
+
+    /**
+     * Get AuthType enum from authType code.
+     */
+    public AuthType getAuthTypeEnum() {
+        return AuthType.fromCode(authType);
+    }
+
+    /**
+     * Set authType from AuthType enum.
+     */
+    public void setAuthTypeEnum(AuthType type) {
+        this.authType = type != null ? type.getCode() : null;
+    }
 
     /**
      * Whether authentication is enabled.

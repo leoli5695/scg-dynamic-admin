@@ -19,4 +19,29 @@ public interface AlertHistoryRepository extends JpaRepository<AlertHistory, Long
     List<AlertHistory> findByCreatedAtAfterOrderByCreatedAtDesc(LocalDateTime since);
 
     List<AlertHistory> findByAlertTypeAndCreatedAtAfterOrderByCreatedAtDesc(String alertType, LocalDateTime since);
+
+    /**
+     * Find alert history by instanceId
+     */
+    Page<AlertHistory> findByInstanceIdOrderByCreatedAtDesc(String instanceId, Pageable pageable);
+
+    /**
+     * Find alert history by instanceId and alert type
+     */
+    Page<AlertHistory> findByInstanceIdAndAlertTypeOrderByCreatedAtDesc(String instanceId, String alertType, Pageable pageable);
+
+    /**
+     * Find alert history by instanceId after a given time
+     */
+    List<AlertHistory> findByInstanceIdAndCreatedAtAfterOrderByCreatedAtDesc(String instanceId, LocalDateTime since);
+
+    /**
+     * Count alerts by instanceId
+     */
+    long countByInstanceId(String instanceId);
+
+    /**
+     * Delete all alerts by instanceId
+     */
+    void deleteByInstanceId(String instanceId);
 }

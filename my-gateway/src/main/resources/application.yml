@@ -80,6 +80,16 @@ gateway:
   # Admin service URL for health status sync and API calls
   admin:
     url: ${GATEWAY_ADMIN_URL:http://127.0.0.1:9090}
+  
+  # Heartbeat Configuration
+  # Gateway reports heartbeat to Admin Console for instance health monitoring
+  heartbeat:
+    enabled: ${GATEWAY_HEARTBEAT_ENABLED:true}
+    interval-ms: ${GATEWAY_HEARTBEAT_INTERVAL:10000}
+    timeout-ms: ${GATEWAY_HEARTBEAT_TIMEOUT:5000}
+    initial-delay-ms: ${GATEWAY_HEARTBEAT_INITIAL_DELAY:30000}
+    max-retries: ${GATEWAY_HEARTBEAT_MAX_RETRIES:3}
+    retry-interval-ms: ${GATEWAY_HEARTBEAT_RETRY_INTERVAL:1000}
   center:
     type: ${GATEWAY_CENTER_TYPE:nacos}
 

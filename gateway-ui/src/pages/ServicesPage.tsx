@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import {
   Card, Button, Space, Modal, message, Spin, Tag, Form, Input, Select,
-  Empty, Dropdown, Tooltip, Badge, Divider, Typography, Alert, Drawer
+  Empty, Dropdown, Tooltip, Badge, Divider, Typography, Alert, Drawer,
+  Row, Col, Statistic, Popconfirm
 } from 'antd';
 import {
   PlusOutlined, DeleteOutlined, EditOutlined, MoreOutlined,
   ClusterOutlined, MinusCircleOutlined, CloudServerOutlined, ApiOutlined,
   WarningOutlined, ExclamationCircleOutlined, CloseOutlined, EyeOutlined,
-  CopyOutlined
+  CopyOutlined, CheckCircleOutlined, CloseCircleOutlined, SearchOutlined,
+  ReloadOutlined, ThunderboltOutlined, LinkOutlined, TrophyOutlined
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import api from '../utils/api';
@@ -35,7 +37,235 @@ const IPV4_REGEX = /^(\d{1,3}\.){3}\d{1,3}$/;
 const isValidIP = (ip: string) => ip && IPV4_REGEX.test(ip) && ip.split('.').map(Number).every(o => o >= 0 && o <= 255);
 const isValidPort = (port: number) => Number.isInteger(port) && port > 0 && port < 65536;
 
-const ServicesPage: React.FC = () => {
+// Separate component for action dropdown to prevent re-renders
+interface ServiceActionDropdownProps {
+  service: Service;
+  onDetail: (service: Service) => void;
+  onEdit: (service: Service) => void;
+  onDelete: (service: Service) => void;
+}
+
+const ServiceActionDropdown = memo(({ service, onDetail, onEdit, onDelete }: ServiceActionDropdownProps) => {
+  const { t } = useTranslation();
+
+  const handleDetailClick = useCallback(() => onDetail(service), [onDetail, service]);
+  const handleEditClick = useCallback(() => onEdit(service), [onEdit, service]);
+  const handleDeleteClick = useCallback(() => onDelete(service), [onDelete, service]);
+
+  return (
+    <Space>
+      <Tooltip title={t('common.detail')}>
+        <Button type="text" size="small" icon={<EyeOutlined />} className="action-btn" onClick={handleDetailClick} />
+      </Tooltip>
+      <Tooltip title={t('common.edit')}>
+        <Button type="text" size="small" icon={<EditOutlined />} className="action-btn" onClick={handleEditClick} />
+      </Tooltip>
+      <Popconfirm
+        title={`${t('common.delete')}: ${service.name}`}
+        onConfirm={handleDeleteClick}
+        okText={t('common.confirm')}
+        cancelText={t('common.cancel')}
+      >
+        <Tooltip title={t('common.delete')}>
+          <Button type="text" size="small" danger icon={<DeleteOutlined />} className="action-btn" />
+        </Tooltip>
+      </Popconfirm>
+    </Space>
+  );
+});
+
+interface ServicesPageProps {
+  instanceId?: string;
+}
+
+// Separate component for service card to prevent re-renders when drawer opens
+interface ServiceCardProps {
+  service: Service;
+  onDetail: (service: Service) => void;
+  onEdit: (service: Service) => void;
+  onDelete: (service: Service) => void;
+  getStatus: (s: Service) => { color: string; text: string };
+  getLoadBalancerLabel: (lb: string) => string;
+}
+
+const ServiceCard = memo(({ service, onDetail, onEdit, onDelete, getStatus, getLoadBalancerLabel }: ServiceCardProps) => {
+  const { t } = useTranslation();
+  const status = useMemo(() => getStatus(service), [getStatus, service]);
+  const instanceCount = service.instances?.length || 0;
+  const instances = service.instances || [];
+  const enabledInstances = useMemo(() => instances.filter(inst => inst.enabled !== false), [instances]);
+  const healthyEnabled = useMemo(() => enabledInstances.filter(inst => inst.healthy !== false).length, [enabledInstances]);
+
+  const warningMessage = useMemo(() => {
+    if (instanceCount === 0) return t('services.no_instances_warning');
+    if (enabledInstances.length === 0) return t('services.all_instances_disabled_warning');
+    if (healthyEnabled === 0) return t('services.all_instances_down_warning');
+    return null;
+  }, [t, instanceCount, enabledInstances.length, healthyEnabled]);
+
+  const handleCopyId = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(service.serviceId || service.name);
+    message.success(t('message.copy_success'));
+  }, [t, service.serviceId, service.name]);
+
+  return (
+    <Card
+      className={`service-card ${warningMessage ? 'service-card-warning' : ''}`}
+      hoverable
+      style={{ minHeight: '260px', height: '100%' }}
+    >
+      {warningMessage && (
+        <Alert
+          type="warning"
+          showIcon
+          icon={<ExclamationCircleOutlined />}
+          message={warningMessage}
+          className="service-warning-alert"
+          style={{ marginBottom: 16, background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)' }}
+        />
+      )}
+      <div className="service-card-header">
+        <div className="service-info">
+          <div className="service-icon"><CloudServerOutlined /></div>
+          <div className="service-details">
+            <Text strong className="service-name">{service.name}</Text>
+            <div className="service-id-row">
+              <Text type="secondary" className="service-id">{service.serviceId || service.name}</Text>
+              <Tooltip title={t('common.copy')}>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<CopyOutlined />}
+                  className="copy-btn"
+                  onClick={handleCopyId}
+                />
+              </Tooltip>
+            </div>
+          </div>
+        </div>
+        <ServiceActionDropdown
+          service={service}
+          onDetail={onDetail}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      </div>
+      <div className="service-meta">
+        <Badge status={status.color as any} text={status.text} />
+        <Tag className="lb-tag">{getLoadBalancerLabel(service.loadBalancer || 'weighted')}</Tag>
+      </div>
+      <div className="instances-section" style={{ flex: 1 }}>
+        <div className="instances-header">
+          <Text type="secondary" className="instances-title">
+            <ApiOutlined /> {healthyEnabled}/{instanceCount} {t('services.available_instances')}
+          </Text>
+        </div>
+        {instanceCount > 0 && (
+          <div className="instances-list">
+            {instances.slice(0, 5).map((inst, idx) => (
+              <Tag
+                key={idx}
+                className={`instance-tag ${inst.healthy !== false && inst.enabled !== false ? 'instance-tag-healthy' : 'instance-tag-unhealthy'}`}
+                bordered={false}
+              >
+                <span className="instance-dot" style={{ background: inst.healthy !== false && inst.enabled !== false ? '#10b981' : '#ef4444' }} />
+                <span className="instance-addr">{inst.ip}:{inst.port}</span>
+                {inst.enabled === false && (
+                  <Tag color="red" style={{ marginLeft: 4, fontSize: 12 }}>{t('common.disabled')}</Tag>
+                )}
+              </Tag>
+            ))}
+            {instanceCount > 5 && (
+              <Tag className="instance-tag instance-tag-more">
+                +{instanceCount - 5} more
+              </Tag>
+            )}
+          </div>
+        )}
+        {instanceCount === 0 && (
+          <Text type="secondary" className="no-instances">
+            {t('services.no_instances_configured')}
+          </Text>
+        )}
+      </div>
+    </Card>
+  );
+});
+
+// Separate component for instance input row to prevent full page re-render
+interface InstanceRowProps {
+  instance: ServiceInstance;
+  index: number;
+  onChange: (index: number, field: string, value: any) => void;
+  onRemove: (index: number) => void;
+  canRemove: boolean;
+  t: (key: string) => string;
+}
+
+const InstanceRow = ({ instance, index, onChange, onRemove, canRemove, t }: InstanceRowProps) => {
+  return (
+    <div className="instance-row-modern">
+      <div className="instance-row-header">
+        <span className="instance-label">{t('services.instance')} {index + 1}</span>
+        <Button
+          type="text"
+          danger
+          size="small"
+          icon={<MinusCircleOutlined />}
+          onClick={() => onRemove(index)}
+          disabled={!canRemove}
+        />
+      </div>
+      <div className="instance-row-grid">
+        <Form.Item label={t('services.ip_address')} className="instance-form-item">
+          <Input 
+            placeholder="192.168.1.100" 
+            value={instance.ip} 
+            onChange={e => onChange(index, 'ip', e.target.value)} 
+            className="instance-input-ip" 
+            size="large" 
+          />
+        </Form.Item>
+        <Form.Item label={t('services.port')} className="instance-form-item">
+          <Input 
+            type="number" 
+            placeholder="8080" 
+            value={instance.port} 
+            onChange={e => onChange(index, 'port', parseInt(e.target.value) || 8080)} 
+            className="instance-input-port" 
+            size="large" 
+          />
+        </Form.Item>
+        <Form.Item label={t('services.weight')} className="instance-form-item">
+          <Input 
+            type="number" 
+            placeholder="1" 
+            value={instance.weight} 
+            onChange={e => onChange(index, 'weight', parseInt(e.target.value) || 1)} 
+            className="instance-input-weight" 
+            size="large" 
+            min={1} 
+            max={100} 
+          />
+        </Form.Item>
+        <Form.Item label={t('services.status')} className="instance-form-item">
+          <Select 
+            value={instance.enabled !== false ? 'enabled' : 'disabled'} 
+            onChange={v => onChange(index, 'enabled', v === 'enabled')} 
+            className="instance-input-status" 
+            size="large"
+          >
+            <Select.Option value="enabled"><span className="status-dot status-dot-success"></span>{t('common.enabled')}</Select.Option>
+            <Select.Option value="disabled"><span className="status-dot status-dot-default"></span>{t('common.disabled')}</Select.Option>
+          </Select>
+        </Form.Item>
+      </div>
+    </div>
+  );
+};
+
+const ServicesPage: React.FC<ServicesPageProps> = ({ instanceId }) => {
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
@@ -50,23 +280,89 @@ const ServicesPage: React.FC = () => {
   const [editInstances, setEditInstances] = useState<ServiceInstance[]>([]);
   const { t } = useTranslation();
 
-  useEffect(() => { loadServices(); }, []);
+  useEffect(() => { loadServices(); }, [instanceId]);
 
-  const loadServices = async () => {
+  // Stable callback for closing drawer - prevents re-renders
+  const handleCloseDrawer = useCallback(() => {
+    setDetailDrawerVisible(false);
+    setSelectedService(null);
+  }, []);
+
+  const loadServices = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await api.get('/api/services');
+      const params = instanceId ? { instanceId } : {};
+      const res = await api.get('/api/services', { params });
       if (res.data.code === 200) setServices(res.data.data || []);
     } catch (e: any) {
       message.error(t('message.load_services_failed', { error: e.message }));
     } finally {
       setLoading(false);
     }
-  };
+  }, [t, instanceId]);
 
-  const filteredServices = services.filter(s => !searchTerm || s.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  // Optimized instance update handlers
+  const handleInstanceChange = useCallback((index: number, field: string, value: any) => {
+    setInstances(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  }, []);
+
+  const handleEditInstanceChange = useCallback((index: number, field: string, value: any) => {
+    setEditInstances(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  }, []);
+
+  const handleRemoveInstance = useCallback((index: number) => {
+    setInstances(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleRemoveEditInstance = useCallback((index: number) => {
+    setEditInstances(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
+  // Memoize filtered services to avoid recalculation on every render
+  const filteredServices = useMemo(() => 
+    services.filter(s => !searchTerm || s.name.toLowerCase().includes(searchTerm.toLowerCase())),
+    [services, searchTerm]
+  );
+  
   const totalServices = services.length;
-  const healthyServices = services.filter(s => s.instances && s.instances.some(i => i.healthy !== false)).length;
+  
+  const healthyServices = useMemo(() => 
+    services.filter(s => s.instances && s.instances.some(i => i.healthy !== false)).length,
+    [services]
+  );
+
+  // Memoize status calculation
+  const getStatus = useCallback((s: Service) => {
+    const inst = s.instances || [];
+    if (!inst.length) return { color: 'default', text: t('services.status_no_instances') };
+
+    const enabledInstances = inst.filter(i => i.enabled !== false);
+    const disabledCount = inst.filter(i => i.enabled === false).length;
+    const healthyEnabled = enabledInstances.filter(i => i.healthy !== false).length;
+    const unhealthyEnabled = enabledInstances.filter(i => i.healthy === false).length;
+
+    if (disabledCount === inst.length) {
+      return { color: 'default', text: t('services.status_all_disabled') };
+    }
+
+    if (enabledInstances.length > 0 && healthyEnabled === 0) {
+      return { color: 'error', text: t('services.status_all_down') };
+    }
+
+    if (healthyEnabled === enabledInstances.length && disabledCount === 0) {
+      return { color: 'success', text: t('services.status_healthy') };
+    }
+
+    return { color: 'warning', text: t('services.status_partial', { healthy: healthyEnabled, total: inst.length }) };
+  }, [t]);
 
   const handleCreate = async (vals: any) => {
     for (const inst of instances) {
@@ -74,7 +370,8 @@ const ServicesPage: React.FC = () => {
       if (!isValidPort(inst.port)) { message.error(t('message.invalid_port', { index: 1, port: inst.port })); return; }
     }
     try {
-      const res = await api.post('/api/services', { ...vals, instances, loadBalancer: vals.loadBalancer || 'weighted' });
+      const params = instanceId ? { instanceId } : {};
+      const res = await api.post('/api/services', { ...vals, instances, loadBalancer: vals.loadBalancer || 'weighted' }, { params });
       if (res.data.code === 200) {
         message.success(t('message.create_success'));
         createForm.resetFields(); setInstances([]); setCreateModalVisible(false); loadServices();
@@ -101,7 +398,7 @@ const ServicesPage: React.FC = () => {
     } catch (e: any) { message.error(t('message.update_failed', { msg: e.response?.data?.message || e.message })); }
   };
 
-  const handleDelete = async (service: Service) => {
+  const handleDelete = useCallback(async (service: Service) => {
     try {
       const usage = await api.get(`/api/services/${service.name}/usage`);
       if (usage.data.data?.length > 0) {
@@ -122,59 +419,41 @@ const ServicesPage: React.FC = () => {
         }
       }
     } catch (e: any) { message.error(t('message.delete_failed', { msg: e.response?.data?.message || e.message })); }
-  };
+  }, [t, selectedService, loadServices]);
 
-  const openServiceDetail = (service: Service) => {
+  // Stable callbacks for opening modals/drawers
+  const openServiceDetail = useCallback((service: Service) => {
     setSelectedService(service);
     setDetailDrawerVisible(true);
-  };
+  }, []);
 
-  const openEditModal = (service: Service) => {
+  const openEditModal = useCallback((service: Service) => {
+    // 先关闭 Drawer
+    setDetailDrawerVisible(false);
+    setSelectedService(null);
+    // 直接打开编辑弹框
     setEditingService(service);
     setEditInstances(service.instances || []);
-    editForm.setFieldsValue({ name: service.name, loadBalancer: service.loadBalancer, description: service.description });
+    editForm.setFieldsValue({
+      name: service.name,
+      loadBalancer: service.loadBalancer,
+      description: service.description
+    });
     setEditModalVisible(true);
-  };
+  }, [editForm]);
 
-  const getStatus = (s: Service) => {
-    const inst = s.instances || [];
-    if (!inst.length) return { color: 'default', text: t('services.status_no_instances') };
+  const handleDeleteClick = useCallback((service: Service) => {
+    Modal.confirm({
+      title: t('common.confirm'),
+      content: t('message.confirm_delete_service', { name: service.name }),
+      okText: t('common.delete'),
+      okType: 'danger',
+      cancelText: t('common.cancel'),
+      onOk: () => handleDelete(service)
+    });
+  }, [t, handleDelete]);
 
-    // 统计各类实例
-    const enabledInstances = inst.filter(i => i.enabled !== false);
-    const disabledCount = inst.filter(i => i.enabled === false).length;
-    const healthyEnabled = enabledInstances.filter(i => i.healthy !== false).length;
-    const unhealthyEnabled = enabledInstances.filter(i => i.healthy === false).length;
-
-    // 所有实例都被禁用
-    if (disabledCount === inst.length) {
-      return { color: 'default', text: t('services.status_all_disabled') };
-    }
-
-    // 所有启用的实例都不健康（宕机）
-    if (enabledInstances.length > 0 && healthyEnabled === 0) {
-      return { color: 'error', text: t('services.status_all_down') };
-    }
-
-    // 全部健康（已排除全部禁用的情况）
-    if (healthyEnabled === enabledInstances.length && disabledCount === 0) {
-      return { color: 'success', text: t('services.status_healthy') };
-    }
-
-    // 部分健康
-    return { color: 'warning', text: t('services.status_partial', { healthy: healthyEnabled, total: inst.length }) };
-  };
-
-  const getActionMenu = (service: Service): MenuProps['items'] => [
-    { key: 'detail', icon: <EyeOutlined />, label: t('common.detail'), onClick: () => openServiceDetail(service) },
-    { key: 'edit', icon: <EditOutlined />, label: t('common.edit'), onClick: () => openEditModal(service) },
-    { type: 'divider' },
-    { key: 'delete', icon: <DeleteOutlined />, label: t('common.delete'), danger: true, onClick: () => {
-      Modal.confirm({ title: t('common.confirm'), content: t('message.confirm_delete_service', { name: service.name }), okText: t('common.delete'), okType: 'danger', cancelText: t('common.cancel'), onOk: () => handleDelete(service) });
-    }},
-  ];
-
-  const getLoadBalancerLabel = (lb: string) => {
+  const getLoadBalancerLabel = useCallback((lb: string) => {
     switch (lb) {
       case 'round-robin': return t('services.round_robin');
       case 'random': return t('services.random');
@@ -182,22 +461,65 @@ const ServicesPage: React.FC = () => {
       case 'consistent-hash': return t('services.consistent_hash');
       default: return lb;
     }
-  };
+  }, [t]);
 
   return (
     <div className="services-page">
-      {/* Stats Bar */}
-      <div className="stats-bar">
-        <div className="stat-item">
-          <div className="stat-value">{totalServices}</div>
-          <div className="stat-label">{t('services.stats_services')}</div>
-        </div>
-        <Divider type="vertical" className="stat-divider" />
-        <div className="stat-item">
-          <div className="stat-value text-green-600">{healthyServices}</div>
-          <div className="stat-label">{t('services.stats_healthy')}</div>
-        </div>
-      </div>
+      {/* Premium Stats Cards with gradients */}
+      <Row gutter={[16, 16]} style={{ marginBottom: 32 }}>
+        <Col xs={24} sm={8}>
+          <Card className="stats-card stats-card-primary" size="small">
+            <div className="stats-card-content">
+              <div className="stats-icon-wrapper">
+                <ClusterOutlined className="stats-icon" />
+              </div>
+              <div className="stats-info">
+                <Statistic
+                  title={<span className="stats-title">{t('services.stats_services')}</span>}
+                  value={totalServices}
+                  valueStyle={{ fontFamily: "'JetBrains Mono', monospace" }}
+                  prefix={<span className="stats-value-prefix"></span>}
+                />
+                <span className="stats-subtitle">Total Services</span>
+              </div>
+            </div>
+          </Card>
+        </Col>
+        <Col xs={24} sm={8}>
+          <Card className="stats-card stats-card-success" size="small">
+            <div className="stats-card-content">
+              <div className="stats-icon-wrapper">
+                <CheckCircleOutlined className="stats-icon" />
+              </div>
+              <div className="stats-info">
+                <Statistic
+                  title={<span className="stats-title">{t('services.stats_healthy')}</span>}
+                  value={healthyServices}
+                  valueStyle={{ fontFamily: "'JetBrains Mono', monospace" }}
+                />
+                <span className="stats-subtitle">Healthy Services</span>
+              </div>
+            </div>
+          </Card>
+        </Col>
+        <Col xs={24} sm={8}>
+          <Card className="stats-card stats-card-danger" size="small">
+            <div className="stats-card-content">
+              <div className="stats-icon-wrapper">
+                <CloseCircleOutlined className="stats-icon" />
+              </div>
+              <div className="stats-info">
+                <Statistic
+                  title={<span className="stats-title">{t('services.stats_unhealthy')}</span>}
+                  value={totalServices - healthyServices}
+                  valueStyle={{ fontFamily: "'JetBrains Mono', monospace" }}
+                />
+                <span className="stats-subtitle">Unhealthy Services</span>
+              </div>
+            </div>
+          </Card>
+        </Col>
+      </Row>
 
       {/* Header */}
       <div className="page-header-modern">
@@ -206,7 +528,21 @@ const ServicesPage: React.FC = () => {
           <Text type="secondary">{t('services.description_helper')}</Text>
         </div>
         <div className="page-header-right">
-          <Input.Search placeholder={t('services.search_placeholder')} value={searchTerm} onChange={e => setSearchTerm(e.target.value)} allowClear className="search-input" />
+          <Input
+            placeholder={t('services.search_placeholder')}
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            allowClear
+            className="search-input"
+            suffix={
+              <Button 
+                type="text" 
+                icon={<SearchOutlined />} 
+                onClick={() => {}}
+                style={{ color: '#94a3b8' }}
+              />
+            }
+          />
           <Button type="primary" icon={<PlusOutlined />} onClick={() => { setInstances([{ ip: '', port: 8080, weight: 1, healthy: true, enabled: true }]); setCreateModalVisible(true); }} className="create-btn">{t('services.create')}</Button>
         </div>
       </div>
@@ -221,95 +557,17 @@ const ServicesPage: React.FC = () => {
           </Card>
         ) : (
           <div className="services-grid">
-            {filteredServices.map((service) => {
-              const status = getStatus(service);
-              const instanceCount = service.instances?.length || 0;
-              const instances = service.instances || [];
-              const enabledInstances = instances.filter(inst => inst.enabled !== false);
-              const healthyEnabled = enabledInstances.filter(inst => inst.healthy !== false).length;
-
-              // 判断警告类型
-              let warningMessage = null;
-              if (instanceCount === 0) {
-                warningMessage = t('services.no_instances_warning');
-              } else if (enabledInstances.length === 0) {
-                warningMessage = t('services.all_instances_disabled_warning');
-              } else if (healthyEnabled === 0) {
-                warningMessage = t('services.all_instances_down_warning');
-              }
-
-              const hasWarning = warningMessage !== null;
-
-              return (
-                <Card
-                  key={service.name}
-                  className={`service-card ${hasWarning ? 'service-card-warning' : ''}`}
-                  hoverable
-                >
-                  {hasWarning && (
-                    <Alert
-                      type="warning"
-                      showIcon
-                      icon={<ExclamationCircleOutlined />}
-                      message={warningMessage}
-                      className="service-warning-alert"
-                    />
-                  )}
-                  <div className="service-card-header">
-                    <div className="service-info">
-                      <div className="service-icon"><CloudServerOutlined /></div>
-                      <div className="service-details">
-                        <Text strong className="service-name">{service.name}</Text>
-                        <div className="service-id-row">
-                          <Text type="secondary" className="service-id">{service.serviceId || service.name}</Text>
-                          <Tooltip title={t('common.copy')}>
-                            <Button
-                              type="text"
-                              size="small"
-                              icon={<CopyOutlined />}
-                              className="copy-btn"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigator.clipboard.writeText(service.serviceId || service.name);
-                                message.success(t('message.copy_success'));
-                              }}
-                            />
-                          </Tooltip>
-                        </div>
-                      </div>
-                    </div>
-                    <Dropdown menu={{ items: getActionMenu(service) }} trigger={['click']} placement="bottomRight">
-                      <Button type="text" icon={<MoreOutlined />} className="action-btn" />
-                    </Dropdown>
-                  </div>
-                  <div className="service-meta">
-                    <Badge status={status.color as any} text={status.text} />
-                    <Tag className="lb-tag">{getLoadBalancerLabel(service.loadBalancer || 'weighted')}</Tag>
-                  </div>
-                  <div className="instances-section">
-                    <div className="instances-header">
-                      <Text type="secondary" className="instances-title">
-                        <ApiOutlined /> {healthyEnabled}/{instanceCount} {t('services.available_instances')}
-                      </Text>
-                    </div>
-                    {instanceCount > 0 && (
-                      <div className="instances-list">
-                        {service.instances!.slice(0, 3).map((inst, idx) => (
-                          <div key={idx} className={`instance-chip ${inst.healthy !== false && inst.enabled !== false ? 'healthy' : 'unhealthy'}`}>
-                            <span className="instance-dot" />
-                            <span className="instance-addr">{inst.ip}:{inst.port}</span>
-                            {inst.enabled === false && <Tag color="red" className="disabled-tag">{t('common.disabled')}</Tag>}
-                            {service.instances!.length > 1 && <span className="instance-weight">w:{inst.weight || 1}</span>}
-                          </div>
-                        ))}
-                        {instanceCount > 3 && <div className="instance-chip more">+{instanceCount - 3} more</div>}
-                      </div>
-                    )}
-                    {instanceCount === 0 && <Text type="secondary" className="no-instances">{t('services.no_instances_configured')}</Text>}
-                  </div>
-                </Card>
-              );
-            })}
+            {filteredServices.map((service) => (
+              <ServiceCard
+                key={service.name}
+                service={service}
+                onDetail={openServiceDetail}
+                onEdit={openEditModal}
+                onDelete={handleDeleteClick}
+                getStatus={getStatus}
+                getLoadBalancerLabel={getLoadBalancerLabel}
+              />
+            ))}
           </div>
         )}
       </Spin>
@@ -320,10 +578,12 @@ const ServicesPage: React.FC = () => {
         width={480}
         open={detailDrawerVisible}
         closable={false}
-        onClose={() => { setDetailDrawerVisible(false); setSelectedService(null); }}
+        onClose={handleCloseDrawer}
         className="service-detail-drawer"
         mask={true}
         maskClosable={true}
+        destroyOnClose
+        style={{ zIndex: 999 }}
       >
         {selectedService && (
           <div className="drawer-content">
@@ -353,7 +613,7 @@ const ServicesPage: React.FC = () => {
               <Button
                 type="text"
                 icon={<CloseOutlined />}
-                onClick={() => { setDetailDrawerVisible(false); setSelectedService(null); }}
+                onClick={handleCloseDrawer}
                 className="drawer-close-btn"
               />
             </div>
@@ -445,6 +705,9 @@ const ServicesPage: React.FC = () => {
         footer={null}
         width={720}
         className="service-modal service-create-modal"
+        destroyOnClose
+        maskClosable={true}
+        focusTriggerAfterClose
       >
         <Form form={createForm} layout="vertical" onFinish={handleCreate}>
           <div className="form-section-modern">
@@ -459,7 +722,6 @@ const ServicesPage: React.FC = () => {
                   label={t('services.name')}
                   rules={[{ required: true, message: t('services.name_required') }]}
                   className="form-item-half"
-                  extra={t('services.name_helper')}
                 >
                   <Input placeholder={t('services.name_placeholder')} size="large" />
                 </Form.Item>
@@ -468,20 +730,49 @@ const ServicesPage: React.FC = () => {
                   label={t('services.loadBalancer')}
                   initialValue="weighted"
                   className="form-item-half"
-                  extra={t('services.loadBalancer_helper')}
                 >
-                  <Select size="large" className="select-with-icon">
-                    <Select.Option value="round-robin"><span className="option-icon">🔄</span> {t('services.round_robin')}</Select.Option>
-                    <Select.Option value="random"><span className="option-icon">🎲</span> {t('services.random')}</Select.Option>
-                    <Select.Option value="weighted"><span className="option-icon">⚖️</span> {t('services.weighted')}</Select.Option>
-                    <Select.Option value="consistent-hash"><span className="option-icon">🔗</span> {t('services.consistent_hash')}</Select.Option>
+                  <Select size="large" className="select-with-icon" dropdownClassName="loadBalancer-dropdown" optionLabelProp="label">
+                    <Select.Option value="weighted" label={<span className="custom-select-label"><TrophyOutlined className="option-icon" /><span className="option-title">{t('services.weighted')}</span></span>}>
+                      <span className="option-wrapper">
+                        <TrophyOutlined className="option-icon" />
+                        <span className="option-text">
+                          <span className="option-title">{t('services.weighted')}</span>
+                          <span className="option-desc">平滑加权轮询，推荐</span>
+                        </span>
+                      </span>
+                    </Select.Option>
+                    <Select.Option value="round-robin" label={<span className="custom-select-label"><ReloadOutlined className="option-icon" /><span className="option-title">{t('services.round_robin')}</span></span>}>
+                      <span className="option-wrapper">
+                        <ReloadOutlined className="option-icon" />
+                        <span className="option-text">
+                          <span className="option-title">{t('services.round_robin')}</span>
+                          <span className="option-desc">简单轮询分发</span>
+                        </span>
+                      </span>
+                    </Select.Option>
+                    <Select.Option value="random" label={<span className="custom-select-label"><ThunderboltOutlined className="option-icon" /><span className="option-title">{t('services.random')}</span></span>}>
+                      <span className="option-wrapper">
+                        <ThunderboltOutlined className="option-icon" />
+                        <span className="option-text">
+                          <span className="option-title">{t('services.random')}</span>
+                          <span className="option-desc">随机选择</span>
+                        </span>
+                      </span>
+                    </Select.Option>
+                    <Select.Option value="consistent-hash" label={<span className="custom-select-label"><LinkOutlined className="option-icon" /><span className="option-title">{t('services.consistent_hash')}</span></span>}>
+                      <span className="option-wrapper">
+                        <LinkOutlined className="option-icon" />
+                        <span className="option-text">
+                          <span className="option-title">{t('services.consistent_hash')}</span>
+                          <span className="option-desc">基于哈希值，适合会话保持</span>
+                        </span>
+                      </span>
+                    </Select.Option>
                   </Select>
                 </Form.Item>
               </div>
               <Form.Item
                 name="description"
-                label={t('services.description')}
-                extra={t('services.description_helper_text')}
               >
                 <Input.TextArea
                   rows={2}
@@ -512,36 +803,15 @@ const ServicesPage: React.FC = () => {
               )}
               <div className="instances-container">
                 {instances.map((inst, i) => (
-                  <div key={i} className="instance-row-modern">
-                    <div className="instance-row-header">
-                      <span className="instance-label">{t('services.instance')} {i + 1}</span>
-                      <Button
-                        type="text"
-                        danger
-                        size="small"
-                        icon={<MinusCircleOutlined />}
-                        onClick={() => setInstances(instances.filter((_, idx) => idx !== i))}
-                        disabled={instances.length === 1}
-                      />
-                    </div>
-                    <div className="instance-row-grid">
-                      <Form.Item label={t('services.ip_address')} className="instance-form-item">
-                        <Input placeholder="192.168.1.100" value={inst.ip} onChange={e => { const d = [...instances]; d[i] = { ...d[i], ip: e.target.value }; setInstances(d); }} className="instance-input-ip" size="large" />
-                      </Form.Item>
-                      <Form.Item label={t('services.port')} className="instance-form-item">
-                        <Input type="number" placeholder="8080" value={inst.port} onChange={e => { const d = [...instances]; d[i] = { ...d[i], port: parseInt(e.target.value) || 8080 }; setInstances(d); }} className="instance-input-port" size="large" />
-                      </Form.Item>
-                      <Form.Item label={t('services.weight')} className="instance-form-item" extra={t('services.weight_helper')}>
-                        <Input type="number" placeholder="1" value={inst.weight} onChange={e => { const d = [...instances]; d[i] = { ...d[i], weight: parseInt(e.target.value) || 1 }; setInstances(d); }} className="instance-input-weight" size="large" min={1} max={100} />
-                      </Form.Item>
-                      <Form.Item label={t('services.status')} className="instance-form-item">
-                        <Select value={inst.enabled !== false ? 'enabled' : 'disabled'} onChange={v => { const d = [...instances]; d[i] = { ...d[i], enabled: v === 'enabled' }; setInstances(d); }} className="instance-input-status" size="large">
-                          <Select.Option value="enabled"><span className="status-dot status-dot-success"></span>{t('common.enabled')}</Select.Option>
-                          <Select.Option value="disabled"><span className="status-dot status-dot-default"></span>{t('common.disabled')}</Select.Option>
-                        </Select>
-                      </Form.Item>
-                    </div>
-                  </div>
+                  <InstanceRow
+                    key={i}
+                    instance={inst}
+                    index={i}
+                    onChange={handleInstanceChange}
+                    onRemove={handleRemoveInstance}
+                    canRemove={instances.length > 1}
+                    t={t}
+                  />
                 ))}
                 <Button type="dashed" onClick={() => setInstances([...instances, { ip: '', port: 8080, weight: 1, healthy: true, enabled: true }])} icon={<PlusOutlined />} block className="add-instance-btn-modern" size="large">
                   {t('services.add_instance')}
@@ -573,10 +843,17 @@ const ServicesPage: React.FC = () => {
           </div>
         }
         open={editModalVisible}
-        onCancel={() => { setEditModalVisible(false); editForm.resetFields(); setEditInstances([]); }}
+        onCancel={() => {
+          setEditModalVisible(false);
+          editForm.resetFields();
+          setEditInstances([]);
+        }}
         footer={null}
         width={720}
         className="service-modal service-edit-modal"
+        destroyOnClose
+        maskClosable={true}
+        focusTriggerAfterClose
       >
         <Form form={editForm} layout="vertical" onFinish={handleUpdate}>
           <div className="form-section-modern">
@@ -586,19 +863,51 @@ const ServicesPage: React.FC = () => {
             </div>
             <div className="section-content">
               <div className="form-row">
-                <Form.Item name="name" label={t('services.name')} className="form-item-half" extra={t('services.name_readonly')}>
+                <Form.Item name="name" label={t('services.name')} className="form-item-half">
                   <Input disabled size="large" />
                 </Form.Item>
-                <Form.Item name="loadBalancer" label={t('services.loadBalancer')} className="form-item-half" extra={t('services.loadBalancer_helper')}>
-                  <Select size="large" className="select-with-icon">
-                    <Select.Option value="round-robin"><span className="option-icon">🔄</span> {t('services.round_robin')}</Select.Option>
-                    <Select.Option value="random"><span className="option-icon">🎲</span> {t('services.random')}</Select.Option>
-                    <Select.Option value="weighted"><span className="option-icon">⚖️</span> {t('services.weighted')}</Select.Option>
-                    <Select.Option value="consistent-hash"><span className="option-icon">🔗</span> {t('services.consistent_hash')}</Select.Option>
+                <Form.Item name="loadBalancer" label={t('services.loadBalancer')} className="form-item-half">
+                  <Select size="large" className="select-with-icon" dropdownClassName="loadBalancer-dropdown" optionLabelProp="label">
+                    <Select.Option value="weighted" label={<span className="custom-select-label"><TrophyOutlined className="option-icon" /><span className="option-title">{t('services.weighted')}</span></span>}>
+                      <span className="option-wrapper">
+                        <TrophyOutlined className="option-icon" />
+                        <span className="option-text">
+                          <span className="option-title">{t('services.weighted')}</span>
+                          <span className="option-desc">平滑加权轮询，推荐</span>
+                        </span>
+                      </span>
+                    </Select.Option>
+                    <Select.Option value="round-robin" label={<span className="custom-select-label"><ReloadOutlined className="option-icon" /><span className="option-title">{t('services.round_robin')}</span></span>}>
+                      <span className="option-wrapper">
+                        <ReloadOutlined className="option-icon" />
+                        <span className="option-text">
+                          <span className="option-title">{t('services.round_robin')}</span>
+                          <span className="option-desc">简单轮询分发</span>
+                        </span>
+                      </span>
+                    </Select.Option>
+                    <Select.Option value="random" label={<span className="custom-select-label"><ThunderboltOutlined className="option-icon" /><span className="option-title">{t('services.random')}</span></span>}>
+                      <span className="option-wrapper">
+                        <ThunderboltOutlined className="option-icon" />
+                        <span className="option-text">
+                          <span className="option-title">{t('services.random')}</span>
+                          <span className="option-desc">随机选择</span>
+                        </span>
+                      </span>
+                    </Select.Option>
+                    <Select.Option value="consistent-hash" label={<span className="custom-select-label"><LinkOutlined className="option-icon" /><span className="option-title">{t('services.consistent_hash')}</span></span>}>
+                      <span className="option-wrapper">
+                        <LinkOutlined className="option-icon" />
+                        <span className="option-text">
+                          <span className="option-title">{t('services.consistent_hash')}</span>
+                          <span className="option-desc">基于哈希值，适合会话保持</span>
+                        </span>
+                      </span>
+                    </Select.Option>
                   </Select>
                 </Form.Item>
               </div>
-              <Form.Item name="description" label={t('services.description')} extra={t('services.description_helper_text')}>
+              <Form.Item name="description">
                 <Input.TextArea rows={2} placeholder={t('services.description_placeholder')} size="large" showCount maxLength={500} />
               </Form.Item>
             </div>
@@ -616,29 +925,15 @@ const ServicesPage: React.FC = () => {
               )}
               <div className="instances-container">
                 {editInstances.map((inst, i) => (
-                  <div key={i} className="instance-row-modern">
-                    <div className="instance-row-header">
-                      <span className="instance-label">{t('services.instance')} {i + 1}</span>
-                      <Button type="text" danger size="small" icon={<MinusCircleOutlined />} onClick={() => setEditInstances(editInstances.filter((_, idx) => idx !== i))} disabled={editInstances.length === 1} />
-                    </div>
-                    <div className="instance-row-grid">
-                      <Form.Item label={t('services.ip_address')} className="instance-form-item">
-                        <Input placeholder="192.168.1.100" value={inst.ip} onChange={e => { const d = [...editInstances]; d[i] = { ...d[i], ip: e.target.value }; setEditInstances(d); }} className="instance-input-ip" size="large" />
-                      </Form.Item>
-                      <Form.Item label={t('services.port')} className="instance-form-item">
-                        <Input type="number" placeholder="8080" value={inst.port} onChange={e => { const d = [...editInstances]; d[i] = { ...d[i], port: parseInt(e.target.value) || 8080 }; setEditInstances(d); }} className="instance-input-port" size="large" />
-                      </Form.Item>
-                      <Form.Item label={t('services.weight')} className="instance-form-item" extra={t('services.weight_helper')}>
-                        <Input type="number" placeholder="1" value={inst.weight} onChange={e => { const d = [...editInstances]; d[i] = { ...d[i], weight: parseInt(e.target.value) || 1 }; setEditInstances(d); }} className="instance-input-weight" size="large" min={1} max={100} />
-                      </Form.Item>
-                      <Form.Item label={t('services.status')} className="instance-form-item">
-                        <Select value={inst.enabled !== false ? 'enabled' : 'disabled'} onChange={v => { const d = [...editInstances]; d[i] = { ...d[i], enabled: v === 'enabled' }; setEditInstances(d); }} className="instance-input-status" size="large">
-                          <Select.Option value="enabled"><span className="status-dot status-dot-success"></span>{t('common.enabled')}</Select.Option>
-                          <Select.Option value="disabled"><span className="status-dot status-dot-default"></span>{t('common.disabled')}</Select.Option>
-                        </Select>
-                      </Form.Item>
-                    </div>
-                  </div>
+                  <InstanceRow
+                    key={i}
+                    instance={inst}
+                    index={i}
+                    onChange={handleEditInstanceChange}
+                    onRemove={handleRemoveEditInstance}
+                    canRemove={editInstances.length > 1}
+                    t={t}
+                  />
                 ))}
                 <Button type="dashed" onClick={() => setEditInstances([...editInstances, { ip: '', port: 8080, weight: 1, healthy: true, enabled: true }])} icon={<PlusOutlined />} block className="add-instance-btn-modern" size="large">
                   {t('services.add_instance')}

@@ -1,7 +1,9 @@
 package com.leoli.gateway.admin.service;
 
+import com.leoli.gateway.admin.model.GatewayInstanceEntity;
 import com.leoli.gateway.admin.model.RouteEntity;
 import com.leoli.gateway.admin.model.ServiceEntity;
+import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
 import com.leoli.gateway.admin.repository.ServiceRepository;
 import com.leoli.gateway.admin.center.ConfigCenterService;
 import com.leoli.gateway.admin.model.ServiceDefinition;
@@ -16,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -44,6 +47,9 @@ public class ServiceService {
 
   @Autowired
   private ObjectMapper objectMapper;
+
+  @Autowired
+  private GatewayInstanceRepository gatewayInstanceRepository;
 
   // Local cache: serviceName -> ServiceDefinition
   private final ConcurrentHashMap<String, ServiceDefinition> serviceCache = new ConcurrentHashMap<>();
@@ -88,33 +94,81 @@ public class ServiceService {
   }
 
   /**
+   * Get Nacos namespace from instance ID.
+   * Returns null for default namespace if instance not found.
+   */
+  private String getNacosNamespace(String instanceId) {
+    if (instanceId == null || instanceId.isEmpty()) {
+      return null; // Use default namespace
+    }
+    Optional<GatewayInstanceEntity> instance = gatewayInstanceRepository.findByInstanceId(instanceId);
+    return instance.map(GatewayInstanceEntity::getNacosNamespace).orElse(null);
+  }
+
+  /**
+   * Get all services for a specific instance.
+   */
+  public List<ServiceDefinition> getAllServicesByInstanceId(String instanceId) {
+    List<ServiceEntity> entities = serviceRepository.findByInstanceId(instanceId);
+    List<ServiceDefinition> result = new ArrayList<>();
+    for (ServiceEntity entity : entities) {
+      ServiceDefinition definition = toDefinition(entity);
+      if (definition != null) {
+        definition.setServiceId(entity.getServiceId());
+        result.add(definition);
+      }
+    }
+    return result;
+  }
+
+  /**
    * Create service with dual-write to database and Nacos (per-service format).
    * Description is saved to database only, not pushed to Nacos metadata.
    */
   @Transactional(rollbackFor = Exception.class)
   public ServiceEntity createService(ServiceDefinition service) {
+    return createService(service, null);
+  }
+
+  /**
+   * Create service for a specific instance with dual-write to database and Nacos.
+   * @param service Service definition
+   * @param instanceId Gateway instance ID (optional, uses default namespace if null)
+   */
+  @Transactional(rollbackFor = Exception.class)
+  public ServiceEntity createService(ServiceDefinition service, String instanceId) {
     if (service == null || service.getName() == null || service.getName().isEmpty()) {
       throw new IllegalArgumentException("Invalid service definition");
     }
 
     String serviceName = service.getName();
-        
-    if (serviceCache.containsKey(serviceName)) {
-      throw new IllegalArgumentException("Service already exists: " + serviceName);
+
+    // Check existence based on instance scope
+    if (instanceId != null && !instanceId.isEmpty()) {
+      if (serviceRepository.existsByServiceNameAndInstanceId(serviceName, instanceId)) {
+        throw new IllegalArgumentException("Service already exists in this instance: " + serviceName);
+      }
+    } else {
+      if (serviceCache.containsKey(serviceName)) {
+        throw new IllegalArgumentException("Service already exists: " + serviceName);
+      }
     }
-        
+
     // Generate UUID first (needed for both DB and Nacos)
     String generatedServiceId = java.util.UUID.randomUUID().toString();
-    
+
     // Set serviceId in ServiceDefinition BEFORE converting to entity
-    // This ensures metadata JSON contains the correct serviceId
     service.setServiceId(generatedServiceId);
-    
-    // 1. Convert to entity and save to H2 database
-    log.info("Saving service to database: {}", serviceName);
+
+    // Get Nacos namespace from instance
+    String nacosNamespace = getNacosNamespace(instanceId);
+
+    // 1. Convert to entity and save to database
+    log.info("Saving service to database: {}, instanceId={}", serviceName, instanceId);
     ServiceEntity entity = toEntity(service);
     entity.setServiceName(serviceName);
     entity.setServiceId(generatedServiceId);
+    entity.setInstanceId(instanceId);
     entity = serviceRepository.save(entity);
 
     // 2. Update memory cache
@@ -122,23 +176,18 @@ public class ServiceService {
     log.info("Service cached in memory: {}", serviceName);
 
     // 3. Push to Nacos (per-service format using service_id UUID)
-    // Note: description is NOT pushed to Nacos, only stored in database
     String serviceDataId = SERVICE_PREFIX + entity.getServiceId();
 
-    // Create a copy without description for Nacos (gateway doesn't need it)
+    // Create a copy without description for Nacos
     ServiceDefinition nacosConfig = new ServiceDefinition();
     nacosConfig.setName(service.getName());
     nacosConfig.setServiceId(entity.getServiceId());
     nacosConfig.setLoadBalancer(service.getLoadBalancer());
     nacosConfig.setInstances(service.getInstances());
-    // description intentionally NOT included
 
-    configCenterService.publishConfig(serviceDataId, nacosConfig);
-    log.info("Service pushed to Nacos: {}", serviceDataId);
+    configCenterService.publishConfig(serviceDataId, nacosNamespace, nacosConfig);
+    log.info("Service pushed to Nacos: {} (namespace: {})", serviceDataId, nacosNamespace);
 
-    // 4. Update services index
-    rebuildServicesIndex();
-    
     log.info("Service created successfully: {} (Database + Cache + Nacos)", serviceName);
     return entity;
   }
@@ -158,10 +207,13 @@ public class ServiceService {
     if (entity == null) {
       throw new IllegalArgumentException("Service not found: " + serviceName);
     }
-    
+
     // Ensure serviceId is set (use existing one from entity)
     service.setServiceId(entity.getServiceId());
-    
+
+    // Get Nacos namespace from instance
+    String nacosNamespace = getNacosNamespace(entity.getInstanceId());
+
     // 1. Update database fields
     log.info("Updating service in database: {}", serviceName);
     // Update description
@@ -181,15 +233,15 @@ public class ServiceService {
 
     // 3. Push to Nacos (overwrite per-service key using service_id UUID)
     String serviceDataId = SERVICE_PREFIX + entity.getServiceId();
-    
-    // First remove old config (in case it was double-serialized), then publish new one
-    configCenterService.removeConfig(serviceDataId);
-    log.info("Removed old config from Nacos: {}", serviceDataId);
-    
-    // Set serviceId in ServiceDefinition for Nacos config (used by gateway's ServiceManager)
+
+    // First remove old config, then publish new one
+    configCenterService.removeConfig(serviceDataId, nacosNamespace);
+    log.info("Removed old config from Nacos: {} (namespace: {})", serviceDataId, nacosNamespace);
+
+    // Set serviceId in ServiceDefinition for Nacos config
     service.setServiceId(entity.getServiceId());
-    configCenterService.publishConfig(serviceDataId, service);  // ✅ Pass object directly
-    log.info("Service updated in Nacos: {}", serviceDataId);
+    configCenterService.publishConfig(serviceDataId, nacosNamespace, service);
+    log.info("Service updated in Nacos: {} (namespace: {})", serviceDataId, nacosNamespace);
 
     log.info("Service updated successfully: {} (Database + Cache + Nacos)", serviceName);
     return entity;
@@ -249,8 +301,11 @@ public class ServiceService {
     if (entity == null) {
       throw new IllegalArgumentException("Service not found: " + serviceName);
     }
-    
+
     log.info("Deleting service: {} (DB id: {})", serviceName, entity.getId());
+
+    // Get Nacos namespace from instance
+    String nacosNamespace = getNacosNamespace(entity.getInstanceId());
 
     // 1. Remove from cache first
     serviceCache.remove(serviceName);
@@ -258,16 +313,13 @@ public class ServiceService {
 
     // 2. Delete from Nacos (remove config using service_id UUID)
     String serviceDataId = SERVICE_PREFIX + entity.getServiceId();
-    configCenterService.removeConfig(serviceDataId);
-    log.info("Service removed from Nacos: {}", serviceDataId);
+    configCenterService.removeConfig(serviceDataId, nacosNamespace);
+    log.info("Service removed from Nacos: {} (namespace: {})", serviceDataId, nacosNamespace);
 
     // 3. Delete from database
     serviceRepository.delete(entity);
     log.info("Service deleted from database: {}", entity.getId());
 
-    // 4. Update services index
-    rebuildServicesIndex();
-    
     log.info("Service deleted successfully: {} (Database + Cache + Nacos)", serviceName);
   }
 

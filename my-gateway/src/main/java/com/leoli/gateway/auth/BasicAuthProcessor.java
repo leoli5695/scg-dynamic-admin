@@ -1,5 +1,6 @@
 package com.leoli.gateway.auth;
 
+import com.leoli.gateway.enums.AuthType;
 import com.leoli.gateway.model.AuthConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -15,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Basic Authentication Processor.
  * Validates HTTP Basic Authentication credentials.
- * 
+ *
  * Features:
  * - Standard HTTP Basic Auth (RFC 7617)
  * - Multiple user credentials support
@@ -30,28 +31,27 @@ public class BasicAuthProcessor extends AbstractAuthProcessor {
 
     private static final String BASIC_PREFIX = "Basic ";
     private static final String WWW_AUTHENTICATE_HEADER = "WWW-Authenticate";
-    
+
     // In-memory user cache (can be replaced with external store)
     private final Map<String, UserCredentials> userCache = new ConcurrentHashMap<>();
 
     @Override
-    public String getAuthType() {
-        return "BASIC";
+    public AuthType getAuthType() {
+        return AuthType.BASIC;
     }
 
     @Override
     public Mono<Void> process(ServerWebExchange exchange, AuthConfig config) {
         if (!isValidConfig(config)) {
-            log.debug("Basic auth config is invalid for route: {}", config != null ? config.getRouteId() : "unknown");
-            return Mono.empty();
+            log.debug("Basic auth config is invalid");
+            return Mono.error(new RuntimeException("Invalid Basic auth configuration"));
         }
 
-        String routeId = config.getRouteId();
         String authHeader = exchange.getRequest().getHeaders().getFirst(org.springframework.http.HttpHeaders.AUTHORIZATION);
 
         if (authHeader == null || !authHeader.startsWith(BASIC_PREFIX)) {
-            logFailure(routeId, "Missing or invalid Authorization header");
-            return writeUnauthorizedResponseWithRealm(exchange, config, "Missing Authorization header");
+            logFailure("BASIC", "Missing or invalid Authorization header");
+            return Mono.error(new RuntimeException("Missing Authorization header"));
         }
 
         // Decode Basic Auth credentials
@@ -60,15 +60,15 @@ public class BasicAuthProcessor extends AbstractAuthProcessor {
         try {
             credentials = new String(Base64.getDecoder().decode(base64Credentials), StandardCharsets.UTF_8);
         } catch (IllegalArgumentException e) {
-            logFailure(routeId, "Invalid Base64 encoding");
-            return writeUnauthorizedResponseWithRealm(exchange, config, "Invalid credentials format");
+            logFailure("BASIC", "Invalid Base64 encoding");
+            return Mono.error(new RuntimeException("Invalid credentials format"));
         }
 
         // Extract username and password
         String[] parts = credentials.split(":", 2);
         if (parts.length != 2) {
-            logFailure(routeId, "Invalid credentials format");
-            return writeUnauthorizedResponseWithRealm(exchange, config, "Invalid credentials format");
+            logFailure("BASIC", "Invalid credentials format");
+            return Mono.error(new RuntimeException("Invalid credentials format"));
         }
 
         String username = parts[0];
@@ -81,17 +81,17 @@ public class BasicAuthProcessor extends AbstractAuthProcessor {
                         // Add user info to exchange attributes
                         exchange.getAttributes().put("auth_user", username);
                         exchange.getAttributes().put("auth_type", "BASIC");
-                        
-                        logSuccess(routeId);
-                        return Mono.empty();
+
+                        logSuccess("Basic auth validated for user: " + username);
+                        return Mono.<Void>empty();
                     } else {
-                        logFailure(routeId, "Invalid credentials for user: " + username);
-                        return writeUnauthorizedResponseWithRealm(exchange, config, "Invalid username or password");
+                        logFailure("BASIC", "Invalid credentials for user: " + username);
+                        return Mono.<Void>error(new RuntimeException("Invalid username or password"));
                     }
                 })
                 .onErrorResume(ex -> {
-                    log.error("Basic auth validation error for route {}: {}", routeId, ex.getMessage());
-                    return writeUnauthorizedResponseWithRealm(exchange, config, "Authentication error");
+                    log.error("Basic auth validation error: {}", ex.getMessage());
+                    return Mono.error(new RuntimeException("Authentication error"));
                 });
     }
 

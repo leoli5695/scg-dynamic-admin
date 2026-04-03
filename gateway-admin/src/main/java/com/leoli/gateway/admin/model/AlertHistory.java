@@ -24,6 +24,13 @@ public class AlertHistory {
     private Long id;
 
     /**
+     * Instance ID (UUID) - Associated gateway instance.
+     * Used for configuration isolation per gateway instance.
+     */
+    @Column(name = "instance_id", length = 36)
+    private String instanceId;
+
+    /**
      * Alert type: CPU, MEMORY, HTTP_ERROR, RESPONSE_TIME, INSTANCE, THREAD
      */
     @Column(name = "alert_type", nullable = false, length = 50)

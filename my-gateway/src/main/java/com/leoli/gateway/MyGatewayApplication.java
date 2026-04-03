@@ -1,5 +1,6 @@
 package com.leoli.gateway;
 
+import com.leoli.gateway.config.HeartbeatProperties;
 import com.leoli.gateway.config.TrustedProxyProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -8,7 +9,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication()
 @EnableScheduling
-@EnableConfigurationProperties(TrustedProxyProperties.class)
+@EnableConfigurationProperties({TrustedProxyProperties.class, HeartbeatProperties.class})
 public class MyGatewayApplication {
 
     public static void main(String[] args) {

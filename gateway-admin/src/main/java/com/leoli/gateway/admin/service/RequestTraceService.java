@@ -74,6 +74,14 @@ public class RequestTraceService {
     }
 
     /**
+     * Get recent error traces for a specific instance
+     */
+    public List<RequestTrace> getRecentErrors(String instanceId, int limit) {
+        Pageable pageable = PageRequest.of(0, limit);
+        return requestTraceRepository.findRecentErrorsByInstanceId(instanceId, pageable);
+    }
+
+    /**
      * Get all traces with pagination
      */
     public Page<RequestTrace> getAllTraces(int page, int size, String sortBy, String sortDir) {
@@ -85,11 +93,30 @@ public class RequestTraceService {
     }
 
     /**
+     * Get all traces for a specific instance with pagination
+     */
+    public Page<RequestTrace> getAllTraces(String instanceId, int page, int size, String sortBy, String sortDir) {
+        Sort sort = sortDir.equalsIgnoreCase("asc")
+                ? Sort.by(sortBy).ascending()
+                : Sort.by(sortBy).descending();
+        Pageable pageable = PageRequest.of(page, size, sort);
+        return requestTraceRepository.findByInstanceId(instanceId, pageable);
+    }
+
+    /**
      * Get error traces (4xx and 5xx) with pagination
      */
     public Page<RequestTrace> getErrorTraces(int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("traceTime").descending());
         return requestTraceRepository.findErrorTraces(400, pageable);
+    }
+
+    /**
+     * Get error traces for a specific instance with pagination
+     */
+    public Page<RequestTrace> getErrorTraces(String instanceId, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("traceTime").descending());
+        return requestTraceRepository.findErrorTracesByInstanceId(instanceId, 400, pageable);
     }
 
     /**
@@ -101,11 +128,27 @@ public class RequestTraceService {
     }
 
     /**
+     * Get slow request traces for a specific instance
+     */
+    public Page<RequestTrace> getSlowTraces(String instanceId, int page, int size, long thresholdMs) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("latencyMs").descending());
+        return requestTraceRepository.findSlowRequestsByInstanceId(instanceId, thresholdMs, pageable);
+    }
+
+    /**
      * Get traces by time range
      */
     public Page<RequestTrace> getTracesByTimeRange(LocalDateTime start, LocalDateTime end, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("traceTime").descending());
         return requestTraceRepository.findByTimeRange(start, end, pageable);
+    }
+
+    /**
+     * Get traces by time range for a specific instance
+     */
+    public Page<RequestTrace> getTracesByTimeRange(String instanceId, LocalDateTime start, LocalDateTime end, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("traceTime").descending());
+        return requestTraceRepository.findByInstanceIdAndTimeRange(instanceId, start, end, pageable);
     }
 
     /**
@@ -116,10 +159,24 @@ public class RequestTraceService {
     }
 
     /**
+     * Get traces by route ID and instanceId
+     */
+    public List<RequestTrace> getTracesByRouteId(String instanceId, String routeId) {
+        return requestTraceRepository.findByInstanceIdAndRouteId(instanceId, routeId);
+    }
+
+    /**
      * Get traces by client IP
      */
     public List<RequestTrace> getTracesByClientIp(String clientIp) {
         return requestTraceRepository.findByClientIp(clientIp);
+    }
+
+    /**
+     * Get traces by client IP and instanceId
+     */
+    public List<RequestTrace> getTracesByClientIp(String instanceId, String clientIp) {
+        return requestTraceRepository.findByInstanceIdAndClientIp(instanceId, clientIp);
     }
 
     /**
@@ -261,6 +318,15 @@ public class RequestTraceService {
     }
 
     /**
+     * Delete old traces for a specific instance
+     */
+    @Transactional
+    public int deleteOldTraces(String instanceId, int daysToKeep) {
+        LocalDateTime before = LocalDateTime.now().minusDays(daysToKeep);
+        return requestTraceRepository.deleteOldTracesByInstanceId(instanceId, before);
+    }
+
+    /**
      * Delete all traces
      */
     @Transactional
@@ -271,10 +337,27 @@ public class RequestTraceService {
     }
 
     /**
+     * Delete all traces for a specific instance
+     */
+    @Transactional
+    public long deleteAllTraces(String instanceId) {
+        long count = requestTraceRepository.countByInstanceId(instanceId);
+        requestTraceRepository.deleteByInstanceId(instanceId);
+        return count;
+    }
+
+    /**
      * Count errors in time range
      */
     public long countErrorsInTimeRange(LocalDateTime start, LocalDateTime end) {
         return requestTraceRepository.countErrorsInTimeRange(start, end);
+    }
+
+    /**
+     * Count errors in time range for a specific instance
+     */
+    public long countErrorsInTimeRange(String instanceId, LocalDateTime start, LocalDateTime end) {
+        return requestTraceRepository.countErrorsInTimeRangeByInstanceId(instanceId, start, end);
     }
 
     /**
@@ -297,6 +380,30 @@ public class RequestTraceService {
 
         // Recent errors
         stats.put("recentErrors", getRecentErrors(10));
+
+        return stats;
+    }
+
+    /**
+     * Get trace statistics for a specific instance
+     */
+    public Map<String, Object> getTraceStats(String instanceId) {
+        Map<String, Object> stats = new HashMap<>();
+
+        // Total count
+        stats.put("total", requestTraceRepository.countByInstanceId(instanceId));
+
+        // Error count today
+        LocalDateTime startOfDay = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0);
+        LocalDateTime endOfDay = startOfDay.plusDays(1);
+        stats.put("errorsToday", countErrorsInTimeRange(instanceId, startOfDay, endOfDay));
+
+        // Error count last hour
+        LocalDateTime oneHourAgo = LocalDateTime.now().minusHours(1);
+        stats.put("errorsLastHour", countErrorsInTimeRange(instanceId, oneHourAgo, LocalDateTime.now()));
+
+        // Recent errors
+        stats.put("recentErrors", getRecentErrors(instanceId, 10));
 
         return stats;
     }

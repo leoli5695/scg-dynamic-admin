@@ -3,9 +3,11 @@ package com.leoli.gateway.admin.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.center.ConfigCenterService;
 import com.leoli.gateway.admin.converter.RouteConverter;
+import com.leoli.gateway.admin.model.GatewayInstanceEntity;
 import com.leoli.gateway.admin.model.RouteDefinition;
 import com.leoli.gateway.admin.model.RouteEntity;
 import com.leoli.gateway.admin.model.RouteResponse;
+import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
 import com.leoli.gateway.admin.repository.RouteRepository;
 import com.leoli.gateway.admin.validation.RouteValidator;
 import jakarta.annotation.PostConstruct;
@@ -15,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -46,6 +49,9 @@ public class RouteService {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private GatewayInstanceRepository gatewayInstanceRepository;
+
     @PostConstruct
     public void init() {
         loadRoutesFromDatabase();
@@ -74,18 +80,19 @@ public class RouteService {
                     continue; // Skip disabled routes
                 }
 
+                // Get namespace from instance
+                String nacosNamespace = getNacosNamespace(entity.getInstanceId());
                 String routeDataId = ROUTE_PREFIX + entity.getRouteId();
-                if (!configCenterService.configExists(routeDataId)) {
+                if (!configCenterService.configExists(routeDataId, nacosNamespace)) {
                     RouteDefinition route = routeConverter.toDefinition(entity);
-                    configCenterService.publishConfig(routeDataId, route);
+                    configCenterService.publishConfig(routeDataId, nacosNamespace, route);
                     recoveredCount++;
-                    log.info("Recovered missing route in Nacos: {}", routeDataId);
+                    log.info("Recovered missing route in Nacos: {} (namespace: {})", routeDataId, nacosNamespace);
                 }
             }
 
             if (recoveredCount > 0) {
                 log.info("Recovered {} missing routes in Nacos on startup", recoveredCount);
-                updateRoutesIndex();
             }
         } catch (Exception e) {
             log.warn("Failed to load routes from database: {}", e.getMessage());
@@ -93,10 +100,32 @@ public class RouteService {
     }
 
     /**
+     * Get Nacos namespace from instance ID.
+     * Returns null for default namespace if instance not found.
+     */
+    private String getNacosNamespace(String instanceId) {
+        if (instanceId == null || instanceId.isEmpty()) {
+            return null; // Use default namespace
+        }
+        Optional<GatewayInstanceEntity> instance = gatewayInstanceRepository.findByInstanceId(instanceId);
+        return instance.map(GatewayInstanceEntity::getNacosNamespace).orElse(null);
+    }
+
+    /**
      * Get all routes.
      */
     public List<RouteResponse> getAllRoutes() {
         List<RouteEntity> entities = routeRepository.findAll();
+        return entities.stream()
+                .map(this::toResponse)
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    /**
+     * Get all routes for a specific instance.
+     */
+    public List<RouteResponse> getAllRoutesByInstanceId(String instanceId) {
+        List<RouteEntity> entities = routeRepository.findByInstanceId(instanceId);
         return entities.stream()
                 .map(this::toResponse)
                 .collect(java.util.stream.Collectors.toList());
@@ -121,6 +150,13 @@ public class RouteService {
     }
 
     /**
+     * Get route entity by route_id (UUID) - for audit logging.
+     */
+    public RouteEntity getRouteEntityByRouteId(String routeId) {
+        return routeRepository.findById(routeId).orElse(null);
+    }
+
+    /**
      * Get route by business name.
      */
     public RouteDefinition getRouteByName(String routeName) {
@@ -134,6 +170,16 @@ public class RouteService {
      */
     @Transactional(rollbackFor = Exception.class)
     public RouteEntity createRoute(RouteDefinition route) {
+        return createRoute(route, null);
+    }
+
+    /**
+     * Create route for a specific instance with dual-write to database and Nacos.
+     * @param route Route definition
+     * @param instanceId Gateway instance ID (optional, uses default namespace if null)
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public RouteEntity createRoute(RouteDefinition route, String instanceId) {
         // Generate UUID if not provided
         if (route.getId() == null || route.getId().isEmpty()) {
             route.setId(UUID.randomUUID().toString());
@@ -147,26 +193,33 @@ public class RouteService {
             throw new IllegalArgumentException("Route already exists with id: " + route.getId());
         }
 
-        // Check route name uniqueness if provided
+        // Check route name uniqueness (within instance scope if instanceId provided)
         if (route.getRouteName() != null && !route.getRouteName().isEmpty()) {
-            if (routeRepository.existsByRouteName(route.getRouteName())) {
+            boolean nameExists;
+            if (instanceId != null && !instanceId.isEmpty()) {
+                nameExists = routeRepository.existsByRouteNameAndInstanceId(route.getRouteName(), instanceId);
+            } else {
+                nameExists = routeRepository.existsByRouteName(route.getRouteName());
+            }
+            if (nameExists) {
                 throw new IllegalArgumentException("Route name already exists: " + route.getRouteName());
             }
         }
 
+        // Get Nacos namespace from instance
+        String nacosNamespace = getNacosNamespace(instanceId);
+
         // Save to database
         RouteEntity entity = routeConverter.toEntity(route);
         entity.setEnabled(true);
+        entity.setInstanceId(instanceId);
         entity = routeRepository.save(entity);
-        log.info("Route saved to database: id={}, name={}", entity.getRouteId(), entity.getRouteName());
+        log.info("Route saved to database: id={}, name={}, instanceId={}", entity.getRouteId(), entity.getRouteName(), instanceId);
 
-        // Push to Nacos
+        // Push to Nacos (with namespace)
         String routeDataId = ROUTE_PREFIX + entity.getRouteId();
-        configCenterService.publishConfig(routeDataId, route);
-        log.info("Route pushed to Nacos: {}", routeDataId);
-
-        // Update index
-        updateRoutesIndex();
+        configCenterService.publishConfig(routeDataId, nacosNamespace, route);
+        log.info("Route pushed to Nacos: {} (namespace: {})", routeDataId, nacosNamespace);
 
         log.info("Route created successfully: {}", entity.getRouteId());
         return entity;
@@ -190,6 +243,9 @@ public class RouteService {
         // Validate
         RouteValidator.validateAndThrow(route);
 
+        // Get Nacos namespace from instance
+        String nacosNamespace = getNacosNamespace(entity.getInstanceId());
+
         // Update entity
         entity.setRouteName(route.getRouteName());
         entity.setDescription(route.getDescription());
@@ -203,11 +259,11 @@ public class RouteService {
         entity = routeRepository.save(entity);
         log.info("Route updated in database: {}", routeId);
 
-        // Push to Nacos if enabled
+        // Push to Nacos if enabled (with namespace)
         if (Boolean.TRUE.equals(entity.getEnabled())) {
             String routeDataId = ROUTE_PREFIX + entity.getRouteId();
-            configCenterService.publishConfig(routeDataId, route);
-            log.info("Route updated in Nacos: {}", routeDataId);
+            configCenterService.publishConfig(routeDataId, nacosNamespace, route);
+            log.info("Route updated in Nacos: {} (namespace: {})", routeDataId, nacosNamespace);
         }
 
         log.info("Route updated successfully: {}", routeId);
@@ -222,17 +278,17 @@ public class RouteService {
         RouteEntity entity = routeRepository.findById(routeId)
                 .orElseThrow(() -> new IllegalArgumentException("Route not found: " + routeId));
 
-        // Remove from Nacos
+        // Get Nacos namespace from instance
+        String nacosNamespace = getNacosNamespace(entity.getInstanceId());
+
+        // Remove from Nacos (with namespace)
         String routeDataId = ROUTE_PREFIX + entity.getRouteId();
-        configCenterService.removeConfig(routeDataId);
-        log.info("Route removed from Nacos: {}", routeDataId);
+        configCenterService.removeConfig(routeDataId, nacosNamespace);
+        log.info("Route removed from Nacos: {} (namespace: {})", routeDataId, nacosNamespace);
 
         // Delete from database
         routeRepository.delete(entity);
         log.info("Route deleted from database: {}", routeId);
-
-        // Update index
-        updateRoutesIndex();
 
         log.info("Route deleted successfully: {}", routeId);
     }
@@ -250,16 +306,18 @@ public class RouteService {
             return;
         }
 
+        // Get Nacos namespace from instance
+        String nacosNamespace = getNacosNamespace(entity.getInstanceId());
+
         entity.setEnabled(true);
         routeRepository.save(entity);
 
-        // Push to Nacos
+        // Push to Nacos (with namespace)
         RouteDefinition route = routeConverter.toDefinition(entity);
         String routeDataId = ROUTE_PREFIX + entity.getRouteId();
-        configCenterService.publishConfig(routeDataId, route);
+        configCenterService.publishConfig(routeDataId, nacosNamespace, route);
 
-        updateRoutesIndex();
-        log.info("Route enabled: {}", routeId);
+        log.info("Route enabled: {} (namespace: {})", routeId, nacosNamespace);
     }
 
     /**
@@ -275,27 +333,17 @@ public class RouteService {
             return;
         }
 
+        // Get Nacos namespace from instance
+        String nacosNamespace = getNacosNamespace(entity.getInstanceId());
+
         entity.setEnabled(false);
         routeRepository.save(entity);
 
-        // Remove from Nacos
+        // Remove from Nacos (with namespace)
         String routeDataId = ROUTE_PREFIX + entity.getRouteId();
-        configCenterService.removeConfig(routeDataId);
+        configCenterService.removeConfig(routeDataId, nacosNamespace);
 
-        updateRoutesIndex();
-        log.info("Route disabled: {}", routeId);
-    }
-
-    /**
-     * Update routes index in Nacos (only enabled routes).
-     */
-    private void updateRoutesIndex() {
-        List<String> enabledRouteIds = routeRepository.findByEnabledTrue().stream()
-                .map(RouteEntity::getRouteId)
-                .collect(java.util.stream.Collectors.toList());
-
-        configCenterService.publishConfig(ROUTES_INDEX, enabledRouteIds);
-        log.debug("Routes index updated: {} enabled routes", enabledRouteIds.size());
+        log.info("Route disabled: {} (namespace: {})", routeId, nacosNamespace);
     }
 
     /**

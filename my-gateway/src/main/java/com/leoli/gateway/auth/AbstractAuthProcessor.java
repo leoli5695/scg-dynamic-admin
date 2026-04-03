@@ -57,7 +57,7 @@ public abstract class AbstractAuthProcessor implements AuthProcessor {
      * Check if configuration is valid.
      */
     protected boolean isValidConfig(AuthConfig config) {
-        return config != null && config.getRouteId() != null && config.isEnabled();
+        return config != null && config.isEnabled();
     }
 
     /**

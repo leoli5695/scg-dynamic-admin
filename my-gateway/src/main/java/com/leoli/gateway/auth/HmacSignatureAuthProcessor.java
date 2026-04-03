@@ -1,5 +1,6 @@
 package com.leoli.gateway.auth;
 
+import com.leoli.gateway.enums.AuthType;
 import com.leoli.gateway.model.AuthConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
@@ -21,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * HMAC Signature Authentication Processor.
  * Validates requests using HMAC signature (similar to AWS Signature V4).
- * 
+ *
  * Features:
  * - Request signing with HMAC-SHA256
  * - Timestamp validation to prevent replay attacks
@@ -41,27 +42,26 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
     private static final String X_TIMESTAMP = "X-Timestamp";
     private static final String X_NONCE = "X-Nonce";
     private static final String X_CONTENT_MD5 = "X-Content-MD5";
-    
+
     // Default clock skew tolerance in minutes
     private static final int DEFAULT_CLOCK_SKEW_MINUTES = 5;
-    
+
     // In-memory nonce cache for replay attack prevention
     private final Map<String, Long> nonceCache = new ConcurrentHashMap<>();
     private static final long NONCE_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 
     @Override
-    public String getAuthType() {
-        return "HMAC";
+    public AuthType getAuthType() {
+        return AuthType.HMAC;
     }
 
     @Override
     public Mono<Void> process(ServerWebExchange exchange, AuthConfig config) {
         if (!isValidConfig(config)) {
-            log.debug("HMAC auth config is invalid for route: {}", config != null ? config.getRouteId() : "unknown");
-            return Mono.empty();
+            log.debug("HMAC auth config is invalid");
+            return Mono.error(new RuntimeException("Invalid HMAC auth configuration"));
         }
 
-        String routeId = config.getRouteId();
         HttpHeaders headers = exchange.getRequest().getHeaders();
 
         // Extract required headers
@@ -72,35 +72,35 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
 
         // Validate required headers
         if (accessKey == null || accessKey.isEmpty()) {
-            logFailure(routeId, "Missing X-Access-Key header");
-            return writeUnauthorizedResponse(exchange, "Missing access key");
+            logFailure("HMAC", "Missing X-Access-Key header");
+            return Mono.error(new RuntimeException("Missing access key"));
         }
         if (signature == null || signature.isEmpty()) {
-            logFailure(routeId, "Missing X-Signature header");
-            return writeUnauthorizedResponse(exchange, "Missing signature");
+            logFailure("HMAC", "Missing X-Signature header");
+            return Mono.error(new RuntimeException("Missing signature"));
         }
         if (timestamp == null || timestamp.isEmpty()) {
-            logFailure(routeId, "Missing X-Timestamp header");
-            return writeUnauthorizedResponse(exchange, "Missing timestamp");
+            logFailure("HMAC", "Missing X-Timestamp header");
+            return Mono.error(new RuntimeException("Missing timestamp"));
         }
 
         // Validate timestamp to prevent replay attacks
         if (!validateTimestamp(timestamp, config)) {
-            logFailure(routeId, "Invalid or expired timestamp");
-            return writeUnauthorizedResponse(exchange, "Request timestamp expired or invalid");
+            logFailure("HMAC", "Invalid or expired timestamp");
+            return Mono.error(new RuntimeException("Request timestamp expired or invalid"));
         }
 
         // Validate nonce for replay attack prevention
         if (nonce != null && !validateNonce(nonce)) {
-            logFailure(routeId, "Invalid or reused nonce");
-            return writeUnauthorizedResponse(exchange, "Invalid or reused nonce");
+            logFailure("HMAC", "Invalid or reused nonce");
+            return Mono.error(new RuntimeException("Invalid or reused nonce"));
         }
 
         // Get secret key for the access key
         String secretKey = getSecretKeyForAccessKey(accessKey, config);
         if (secretKey == null || secretKey.isEmpty()) {
-            logFailure(routeId, "Unknown access key: " + accessKey);
-            return writeUnauthorizedResponse(exchange, "Invalid access key");
+            logFailure("HMAC", "Unknown access key: " + accessKey);
+            return Mono.error(new RuntimeException("Invalid access key"));
         }
 
         // Build string to sign
@@ -111,15 +111,13 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
 
         // Compare signatures (constant-time comparison)
         if (!constantTimeEquals(signature, expectedSignature)) {
-            logFailure(routeId, "Signature mismatch. Expected: " + expectedSignature + ", Got: " + signature);
-            return writeUnauthorizedResponse(exchange, "Invalid signature");
+            logFailure("HMAC", "Signature mismatch. Expected: " + expectedSignature + ", Got: " + signature);
+            return Mono.error(new RuntimeException("Invalid signature"));
         }
 
         // Optionally validate Content-MD5 for request body integrity
         String contentMd5 = headers.getFirst(X_CONTENT_MD5);
         if (contentMd5 != null && !contentMd5.isEmpty()) {
-            // Note: In a real implementation, we would read the request body
-            // and calculate its MD5 hash here. For simplicity, we just log it.
             log.debug("Content-MD5 header present: {}", contentMd5);
         }
 
@@ -128,7 +126,7 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
         exchange.getAttributes().put("auth_type", "HMAC");
         exchange.getAttributes().put("auth_signature_valid", true);
 
-        logSuccess(routeId);
+        logSuccess("HMAC signature validated for access key: " + accessKey);
         return Mono.empty();
     }
 

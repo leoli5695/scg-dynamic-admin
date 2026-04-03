@@ -78,4 +78,44 @@ public interface StrategyRepository extends JpaRepository<StrategyEntity, Long> 
      * Find strategies for a route (both global and route-bound).
      */
     List<StrategyEntity> findByScopeOrRouteId(String scope, String routeId);
+
+    /**
+     * Find all strategies by instance ID.
+     */
+    List<StrategyEntity> findByInstanceId(String instanceId);
+
+    /**
+     * Find enabled strategies by instance ID.
+     */
+    List<StrategyEntity> findByInstanceIdAndEnabledTrue(String instanceId);
+
+    /**
+     * Find strategy by strategy ID and instance ID.
+     */
+    StrategyEntity findByStrategyIdAndInstanceId(String strategyId, String instanceId);
+
+    /**
+     * Find strategy by name and instance ID.
+     */
+    StrategyEntity findByStrategyNameAndInstanceId(String strategyName, String instanceId);
+
+    /**
+     * Find strategies by scope and instance ID.
+     */
+    List<StrategyEntity> findByScopeAndInstanceId(String scope, String instanceId);
+
+    /**
+     * Find enabled strategies by scope and instance ID.
+     */
+    List<StrategyEntity> findByScopeAndInstanceIdAndEnabledTrue(String scope, String instanceId);
+
+    /**
+     * Find strategies by route ID and instance ID.
+     */
+    List<StrategyEntity> findByRouteIdAndInstanceId(String routeId, String instanceId);
+
+    /**
+     * Check if strategy name exists within an instance.
+     */
+    boolean existsByStrategyNameAndInstanceId(String strategyName, String instanceId);
 }

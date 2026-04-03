@@ -166,16 +166,16 @@ const MetricChart: React.FC<{
             return (
               <div
                 style={{
-                  background: 'white',
+                  background: '#1e293b',
                   padding: '8px 12px',
-                  border: '1px solid #e8e8e8',
+                  border: '1px solid rgba(148, 163, 184, 0.3)',
                   borderRadius: 4,
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)',
                   whiteSpace: 'nowrap',
                   fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                 }}
               >
-                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, color: '#f1f5f9' }}>
                   {(point.data.x as Date).toLocaleTimeString()}
                 </div>
                 <div style={{ fontSize: 13, color: color.main }}>
@@ -190,7 +190,11 @@ const MetricChart: React.FC<{
   );
 };
 
-const MonitorPage: React.FC = () => {
+interface MonitorPageProps {
+  instanceId?: string;
+}
+
+const MonitorPage: React.FC<MonitorPageProps> = ({ instanceId }) => {
   const [loading, setLoading] = useState(false);
   const [metrics, setMetrics] = useState<MetricsData | null>(null);
   const [prometheusAvailable, setPrometheusAvailable] = useState(false);
@@ -204,7 +208,8 @@ const MonitorPage: React.FC = () => {
   const loadMetrics = async () => {
     try {
       setLoading(true); setError(null);
-      const res = await api.get('/api/monitor/metrics');
+      const params = instanceId ? `?instanceId=${instanceId}` : '';
+      const res = await api.get(`/api/monitor/metrics${params}`);
       if (res.data.code === 200) {
         setMetrics(res.data.data);
         setPrometheusAvailable(res.data.prometheusAvailable);
@@ -216,13 +221,14 @@ const MonitorPage: React.FC = () => {
   const loadHistory = async (hours: number) => {
     try {
       setHistoryLoading(true);
-      const res = await api.get(`/api/monitor/history?hours=${hours}`);
+      const instanceParam = instanceId ? `&instanceId=${instanceId}` : '';
+      const res = await api.get(`/api/monitor/history?hours=${hours}${instanceParam}`);
       if (res.data.code === 200) setHistoryData(res.data.data);
     } catch (e) { console.error('Failed to load history:', e); }
     finally { setHistoryLoading(false); }
   };
 
-  useEffect(() => { loadMetrics(); loadHistory(historyHours); const i = setInterval(loadMetrics, 10000); return () => clearInterval(i); }, []);
+  useEffect(() => { loadMetrics(); loadHistory(historyHours); const i = setInterval(loadMetrics, 10000); return () => clearInterval(i); }, [instanceId]);
   useEffect(() => { loadHistory(historyHours); }, [historyHours]);
 
   const formatBytes = (bytes: number): { value: number; unit: string; display: string } => {
@@ -318,7 +324,7 @@ const MonitorPage: React.FC = () => {
           </Card>
         </Col>
       </Row>
-      <Card title={<Space><LineChartOutlined />{t('monitor.history_trends') || 'History Trends'}</Space>} extra={<Select value={historyHours} onChange={setHistoryHours} style={{ width: 120 }} options={[
+      <Card title={<Space><LineChartOutlined />{t('monitor.history_trends') || 'History Trends'}</Space>} extra={<Select value={historyHours} onChange={setHistoryHours} style={{ width: 120 }} getPopupContainer={trigger => trigger.parentNode} dropdownStyle={{ zIndex: 1100 }} options={[
         { value: 1, label: t('monitor.last_1h') || 'Last 1 hour' }, { value: 6, label: t('monitor.last_6h') || 'Last 6 hours' },
         { value: 24, label: t('monitor.last_24h') || 'Last 24 hours' }, { value: 72, label: t('monitor.last_72h') || 'Last 72 hours' },
         { value: 168, label: t('monitor.last_7d') || 'Last 7 days' }

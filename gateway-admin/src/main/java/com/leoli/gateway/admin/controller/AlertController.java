@@ -38,12 +38,19 @@ public class AlertController {
 
     /**
      * Get current alert configuration.
+     * @param instanceId Optional instance ID for instance-specific config
      */
     @GetMapping("/config")
-    public ResponseEntity<Map<String, Object>> getConfig() {
+    public ResponseEntity<Map<String, Object>> getConfig(
+            @RequestParam(required = false) String instanceId) {
         Map<String, Object> result = new HashMap<>();
 
-        Optional<AlertConfig> configOpt = alertConfigService.getActiveConfig();
+        Optional<AlertConfig> configOpt;
+        if (instanceId != null && !instanceId.isEmpty()) {
+            configOpt = alertConfigService.getConfigByInstanceId(instanceId);
+        } else {
+            configOpt = alertConfigService.getActiveConfig();
+        }
 
         if (configOpt.isPresent()) {
             AlertConfig config = configOpt.get();
@@ -51,6 +58,7 @@ public class AlertController {
             // Parse and return structured config
             Map<String, Object> configMap = new HashMap<>();
             configMap.put("id", config.getId());
+            configMap.put("instanceId", config.getInstanceId());
             configMap.put("configName", config.getConfigName());
             configMap.put("emailRecipients", alertConfigService.parseEmailRecipients(config.getEmailRecipients()));
             configMap.put("emailLanguage", config.getEmailLanguage());
@@ -61,11 +69,17 @@ public class AlertController {
             result.put("message", "success");
             result.put("data", configMap);
         } else {
-            // No config exists, create default
-            AlertConfig defaultConfig = alertConfigService.createDefaultConfig();
+            // No config exists, create default for instance
+            AlertConfig defaultConfig;
+            if (instanceId != null && !instanceId.isEmpty()) {
+                defaultConfig = alertConfigService.createDefaultConfigForInstance(instanceId);
+            } else {
+                defaultConfig = alertConfigService.createDefaultConfig();
+            }
 
             Map<String, Object> configMap = new HashMap<>();
             configMap.put("id", defaultConfig.getId());
+            configMap.put("instanceId", defaultConfig.getInstanceId());
             configMap.put("configName", defaultConfig.getConfigName());
             configMap.put("emailRecipients", List.of());
             configMap.put("emailLanguage", defaultConfig.getEmailLanguage());
@@ -97,6 +111,11 @@ public class AlertController {
                     .orElseThrow(() -> new RuntimeException("Config not found"));
             } else {
                 config = new AlertConfig();
+            }
+
+            // Set instanceId if provided
+            if (request.containsKey("instanceId") && request.get("instanceId") != null) {
+                config.setInstanceId((String) request.get("instanceId"));
             }
 
             // Set basic fields
@@ -153,16 +172,24 @@ public class AlertController {
 
     /**
      * Get alert history with pagination.
+     * @param instanceId Optional instance ID to filter by
      */
     @GetMapping("/history")
     public ResponseEntity<Map<String, Object>> getHistory(
+            @RequestParam(required = false) String instanceId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 
         Map<String, Object> result = new HashMap<>();
 
-        Page<AlertHistory> historyPage = alertHistoryRepository
-            .findByOrderByCreatedAtDesc(PageRequest.of(page, size));
+        Page<AlertHistory> historyPage;
+        if (instanceId != null && !instanceId.isEmpty()) {
+            historyPage = alertHistoryRepository
+                .findByInstanceIdOrderByCreatedAtDesc(instanceId, PageRequest.of(page, size));
+        } else {
+            historyPage = alertHistoryRepository
+                .findByOrderByCreatedAtDesc(PageRequest.of(page, size));
+        }
 
         result.put("code", 200);
         result.put("message", "success");
@@ -178,20 +205,29 @@ public class AlertController {
     }
 
     /**
-     * Clear all alert history.
+     * Clear alert history.
+     * @param instanceId Optional instance ID to filter by (if provided, only clears history for that instance)
      */
     @DeleteMapping("/history")
-    public ResponseEntity<Map<String, Object>> clearHistory() {
+    public ResponseEntity<Map<String, Object>> clearHistory(
+            @RequestParam(required = false) String instanceId) {
         Map<String, Object> result = new HashMap<>();
 
         try {
-            long count = alertHistoryRepository.count();
-            alertHistoryRepository.deleteAll();
-            
+            long count;
+            if (instanceId != null && !instanceId.isEmpty()) {
+                count = alertHistoryRepository.countByInstanceId(instanceId);
+                alertHistoryRepository.deleteByInstanceId(instanceId);
+                log.info("Cleared alert history for instance {}, deleted {} records", instanceId, count);
+            } else {
+                count = alertHistoryRepository.count();
+                alertHistoryRepository.deleteAll();
+                log.info("Cleared all alert history, deleted {} records", count);
+            }
+
             result.put("code", 200);
             result.put("message", "Cleared " + count + " alert history records");
-            
-            log.info("Cleared all alert history, deleted {} records", count);
+
         } catch (Exception e) {
             log.error("Failed to clear alert history", e);
             result.put("code", 500);

@@ -44,6 +44,13 @@ public class SslCertificateService {
     }
 
     /**
+     * Get all certificates for a specific instance
+     */
+    public List<SslCertificate> getAllCertificates(String instanceId) {
+        return sslCertificateRepository.findByInstanceId(instanceId);
+    }
+
+    /**
      * Get certificate by ID
      */
     public Optional<SslCertificate> getCertificateById(Long id) {
@@ -58,10 +65,24 @@ public class SslCertificateService {
     }
 
     /**
+     * Get certificate by domain and instanceId
+     */
+    public Optional<SslCertificate> getCertificateByDomain(String instanceId, String domain) {
+        return sslCertificateRepository.findByInstanceIdAndDomain(instanceId, domain);
+    }
+
+    /**
      * Get all enabled certificates
      */
     public List<SslCertificate> getEnabledCertificates() {
         return sslCertificateRepository.findByEnabled(true);
+    }
+
+    /**
+     * Get all enabled certificates for a specific instance
+     */
+    public List<SslCertificate> getEnabledCertificates(String instanceId) {
+        return sslCertificateRepository.findByInstanceIdAndEnabledTrue(instanceId);
     }
 
     /**
@@ -79,6 +100,13 @@ public class SslCertificateService {
     }
 
     /**
+     * Get certificates by status and instanceId
+     */
+    public List<SslCertificate> getCertificatesByStatus(String instanceId, String status) {
+        return sslCertificateRepository.findByInstanceIdAndStatus(instanceId, status);
+    }
+
+    /**
      * Get expiring certificates
      */
     public List<SslCertificate> getExpiringCertificates(int days) {
@@ -88,10 +116,27 @@ public class SslCertificateService {
     }
 
     /**
-     * Upload PEM certificate
+     * Get expiring certificates for a specific instance
+     */
+    public List<SslCertificate> getExpiringCertificates(String instanceId, int days) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime endDate = now.plusDays(days);
+        return sslCertificateRepository.findExpiringSoonByInstanceId(instanceId, now, endDate);
+    }
+
+    /**
+     * Upload PEM certificate (legacy method)
      */
     @Transactional
     public SslCertificate uploadPemCertificate(String certName, String domain, String certContent, String keyContent) {
+        return uploadPemCertificate(null, certName, domain, certContent, keyContent);
+    }
+
+    /**
+     * Upload PEM certificate for a specific instance
+     */
+    @Transactional
+    public SslCertificate uploadPemCertificate(String instanceId, String certName, String domain, String certContent, String keyContent) {
         // Parse certificate to extract info
         X509Certificate cert = parsePemCertificate(certContent);
         if (cert == null) {
@@ -99,6 +144,7 @@ public class SslCertificateService {
         }
 
         SslCertificate sslCert = new SslCertificate();
+        sslCert.setInstanceId(instanceId);
         sslCert.setCertName(certName);
         sslCert.setDomain(domain);
         sslCert.setCertType("PEM");
@@ -109,19 +155,29 @@ public class SslCertificateService {
         sslCert = sslCertificateRepository.save(sslCert);
 
         // Publish to config center for hot reload
-        publishCertificateUpdate(sslCert);
+        publishCertificateUpdate(instanceId, sslCert);
 
-        log.info("Uploaded PEM certificate: {} for domain: {}", certName, domain);
+        log.info("Uploaded PEM certificate: {} for domain: {} (instance: {})", certName, domain, instanceId);
         return sslCert;
     }
 
     /**
-     * Upload JKS/P12 keystore
+     * Upload JKS/P12 keystore (legacy method)
      */
     @Transactional
     public SslCertificate uploadKeystore(String certName, String domain, String certType,
                                           String keystoreContent, String password) {
+        return uploadKeystore(null, certName, domain, certType, keystoreContent, password);
+    }
+
+    /**
+     * Upload JKS/P12 keystore for a specific instance
+     */
+    @Transactional
+    public SslCertificate uploadKeystore(String instanceId, String certName, String domain, String certType,
+                                          String keystoreContent, String password) {
         SslCertificate sslCert = new SslCertificate();
+        sslCert.setInstanceId(instanceId);
         sslCert.setCertName(certName);
         sslCert.setDomain(domain);
         sslCert.setCertType(certType.toUpperCase());
@@ -150,9 +206,9 @@ public class SslCertificateService {
         sslCert = sslCertificateRepository.save(sslCert);
 
         // Publish to config center for hot reload
-        publishCertificateUpdate(sslCert);
+        publishCertificateUpdate(instanceId, sslCert);
 
-        log.info("Uploaded {} keystore: {} for domain: {}", certType, certName, domain);
+        log.info("Uploaded {} keystore: {} for domain: {} (instance: {})", certType, certName, domain, instanceId);
         return sslCert;
     }
 
@@ -163,6 +219,8 @@ public class SslCertificateService {
     public SslCertificate updateCertificate(Long id, String certName, String certContent, String keyContent) {
         SslCertificate sslCert = sslCertificateRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Certificate not found: " + id));
+
+        String instanceId = sslCert.getInstanceId();
 
         if (certName != null) {
             sslCert.setCertName(certName);
@@ -183,9 +241,9 @@ public class SslCertificateService {
         sslCert = sslCertificateRepository.save(sslCert);
 
         // Publish update to config center
-        publishCertificateUpdate(sslCert);
+        publishCertificateUpdate(instanceId, sslCert);
 
-        log.info("Updated certificate: {}", id);
+        log.info("Updated certificate: {} (instance: {})", id, instanceId);
         return sslCert;
     }
 
@@ -197,13 +255,15 @@ public class SslCertificateService {
         SslCertificate sslCert = sslCertificateRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Certificate not found: " + id));
 
+        String instanceId = sslCert.getInstanceId();
+
         sslCert.setEnabled(enabled);
         sslCert = sslCertificateRepository.save(sslCert);
 
         // Publish update to config center
-        publishCertificateUpdate(sslCert);
+        publishCertificateUpdate(instanceId, sslCert);
 
-        log.info("Certificate {} {}", id, enabled ? "enabled" : "disabled");
+        log.info("Certificate {} {} (instance: {})", id, enabled ? "enabled" : "disabled", instanceId);
         return sslCert;
     }
 
@@ -215,12 +275,14 @@ public class SslCertificateService {
         SslCertificate sslCert = sslCertificateRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Certificate not found: " + id));
 
+        String instanceId = sslCert.getInstanceId();
+
         sslCertificateRepository.deleteById(id);
 
         // Publish removal to config center
-        publishCertificateRemoval(sslCert);
+        publishCertificateRemoval(instanceId, sslCert);
 
-        log.info("Deleted certificate: {}", id);
+        log.info("Deleted certificate: {} (instance: {})", id, instanceId);
     }
 
     /**
@@ -320,9 +382,16 @@ public class SslCertificateService {
     }
 
     /**
-     * Publish certificate update to config center
+     * Publish certificate update to config center (legacy method)
      */
     private void publishCertificateUpdate(SslCertificate cert) {
+        publishCertificateUpdate(cert.getInstanceId(), cert);
+    }
+
+    /**
+     * Publish certificate update to config center for a specific instance
+     */
+    private void publishCertificateUpdate(String instanceId, SslCertificate cert) {
         try {
             Map<String, Object> config = new HashMap<>();
             config.put("id", cert.getId());
@@ -335,22 +404,31 @@ public class SslCertificateService {
             config.put("enabled", cert.getEnabled());
 
             String dataId = "ssl-certificate-" + cert.getDomain();
-            configCenterService.publishConfig(dataId, config);
+            String namespace = instanceId;
+            configCenterService.publishConfig(dataId, namespace, config);
 
-            log.info("Published certificate update to config center: {}", cert.getDomain());
+            log.info("Published certificate update to config center: {} (instance: {})", cert.getDomain(), instanceId);
         } catch (Exception e) {
             log.error("Failed to publish certificate update", e);
         }
     }
 
     /**
-     * Publish certificate removal to config center
+     * Publish certificate removal to config center (legacy method)
      */
     private void publishCertificateRemoval(SslCertificate cert) {
+        publishCertificateRemoval(cert.getInstanceId(), cert);
+    }
+
+    /**
+     * Publish certificate removal to config center for a specific instance
+     */
+    private void publishCertificateRemoval(String instanceId, SslCertificate cert) {
         try {
             String dataId = "ssl-certificate-" + cert.getDomain();
-            configCenterService.removeConfig(dataId);
-            log.info("Published certificate removal to config center: {}", cert.getDomain());
+            String namespace = instanceId;
+            configCenterService.removeConfig(dataId, namespace);
+            log.info("Published certificate removal to config center: {} (instance: {})", cert.getDomain(), instanceId);
         } catch (Exception e) {
             log.error("Failed to publish certificate removal", e);
         }

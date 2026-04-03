@@ -1,5 +1,6 @@
 package com.leoli.gateway.auth;
 
+import com.leoli.gateway.enums.AuthType;
 import com.leoli.gateway.model.AuthConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,7 +31,7 @@ public class AuthProcessManager {
     @Autowired
     public AuthProcessManager(List<AuthProcessor> processors) {
         for (AuthProcessor processor : processors) {
-            processorMap.put(processor.getAuthType().toUpperCase(), processor);
+            processorMap.put(processor.getAuthType().getCode(), processor);
             log.info("Registered authentication processor: {}", processor.getAuthType());
         }
     }
@@ -48,14 +49,14 @@ public class AuthProcessManager {
             return Mono.empty();
         }
 
-        String authType = config.getAuthType();
-        if (Objects.isNull(authType) || authType.isEmpty()) {
-            log.warn("Authentication type not specified for route: {}", config.getRouteId());
+        AuthType authType = config.getAuthTypeEnum();
+        if (authType == AuthType.NONE) {
+            log.debug("No authentication required for route: {}", config.getRouteId());
             return Mono.empty();
         }
 
         // Find appropriate processor
-        AuthProcessor processor = processorMap.get(authType.toUpperCase());
+        AuthProcessor processor = processorMap.get(authType.getCode());
 
         if (Objects.isNull(processor)) {
             log.warn("No authentication processor found for type: {} on route: {}",
