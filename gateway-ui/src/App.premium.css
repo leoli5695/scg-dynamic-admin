@@ -271,7 +271,8 @@
 /* Modal */
 .ant-modal-content {
   background: #111827 !important;
-  border: 1px solid rgba(148, 163, 184, 0.25) !important;
+  border: 1px solid rgba(30, 41, 59, 0.5) !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7) !important;
 }
 
 .ant-modal-header {
@@ -3870,6 +3871,9 @@
 
 /* Modal Confirm */
 .ant-modal-confirm .ant-modal-content {
+  background: #111827 !important;
+  border: 1px solid rgba(30, 41, 59, 0.5) !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7) !important;
   border-radius: 16px !important;
   padding: 8px !important;
 }
@@ -3877,7 +3881,7 @@
 .ant-modal-confirm-title {
   font-weight: 600 !important;
   font-size: 16px !important;
-  color: #0F172A !important;
+  color: #f1f5f9 !important;
 }
 
 /* Message */
