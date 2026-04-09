@@ -560,7 +560,7 @@ public class GatewayInstanceService {
         // Health checks - Liveness probe (use management port for actuator)
         V1Probe livenessProbe = new V1Probe();
         livenessProbe.setHttpGet(new V1HTTPGetAction()
-                .path("/actuator/health")
+                .path("/actuator/health/liveness")
                 .port(new io.kubernetes.client.custom.IntOrString(managementPort)));
         livenessProbe.setInitialDelaySeconds(60);
         livenessProbe.setPeriodSeconds(10);
@@ -571,7 +571,7 @@ public class GatewayInstanceService {
         // Health checks - Readiness probe (use management port for actuator)
         V1Probe readinessProbe = new V1Probe();
         readinessProbe.setHttpGet(new V1HTTPGetAction()
-                .path("/actuator/health")
+                .path("/actuator/health/readiness")
                 .port(new io.kubernetes.client.custom.IntOrString(managementPort)));
         readinessProbe.setInitialDelaySeconds(30);
         readinessProbe.setPeriodSeconds(5);
