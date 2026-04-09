@@ -1171,5 +1171,368 @@ The gateway provides HTTPS termination with dynamic certificate management.
 
 ---
 
+## 16. Gateway Instance Management Architecture
+
+### 16.1 Overview
+
+The platform supports managing multiple gateway instances, each deployed to Kubernetes with isolated configuration.
+
+```
++------------------------------------------------------------------+
+|                    INSTANCE MANAGEMENT FLOW                       |
++------------------------------------------------------------------+
+
+   Admin UI (Create Instance)
+          |
+          v
+   +-------------------+
+   | Validate Request  |
+   | - Check K8s conn  |
+   | - Check Nacos     |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Create Nacos      |
+   | Namespace         |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Generate K8s YAML |
+   | from Template     |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Deploy to K8s     |
+   | via K8s API       |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Register Instance |
+   | in Database       |
+   +-------------------+
+```
+
+### 16.2 Instance Entity
+
+```
++------------------------------------------------------------------+
+|                    GatewayInstanceEntity                          |
++------------------------------------------------------------------+
+
+   +-------------------------------------------------------------+
+   |  instanceId: UUID          - Unique identifier              |
+   |  instanceName: String      - Display name                   |
+   |  clusterId: Long           - K8s cluster reference          |
+   |  namespace: String         - K8s namespace                  |
+   |  nacosNamespace: String    - Nacos namespace for isolation  |
+   |  specType: String          - small/medium/large/xlarge      |
+   |  cpuCores: Double          - CPU allocation                 |
+   |  memoryMB: Integer         - Memory allocation              |
+   |  replicas: Integer         - Pod replica count              |
+   |  statusCode: Integer       - 0=starting, 1=running, ...     |
+   |  lastHeartbeatTime: Date   - Last heartbeat timestamp       |
+   +-------------------------------------------------------------+
+```
+
+### 16.3 Namespace Isolation
+
+Each gateway instance has its own Nacos namespace for configuration isolation:
+
+```
++------------------------------------------------------------------+
+|                    NAMESPACE ISOLATION                            |
++------------------------------------------------------------------+
+
+   Instance: gateway-dev
+   Nacos Namespace: gateway-dev-xxx
+   +-------------------------------------------------------------+
+   |  config.gateway.route-{id}        - Route configs            |
+   |  config.gateway.service-{id}      - Service configs          |
+   |  config.gateway.strategy-{id}     - Strategy configs         |
+   |  config.gateway.metadata.*-index  - Index metadata           |
+   +-------------------------------------------------------------+
+
+   Instance: gateway-prod
+   Nacos Namespace: gateway-prod-xxx
+   +-------------------------------------------------------------+
+   |  config.gateway.route-{id}        - Route configs            |
+   |  config.gateway.service-{id}      - Service configs          |
+   |  config.gateway.strategy-{id}     - Strategy configs         |
+   |  config.gateway.metadata.*-index  - Index metadata           |
+   +-------------------------------------------------------------+
+```
+
+### 16.4 Heartbeat Mechanism
+
+```
++------------------------------------------------------------------+
+|                    HEARTBEAT FLOW                                 |
++------------------------------------------------------------------+
+
+   Gateway Instance (K8s Pod)
+          |
+          | POST /api/instances/{id}/heartbeat
+          | every 10 seconds
+          v
+   +-------------------+
+   | gateway-admin     |
+   | InstanceHealth    |
+   | Controller        |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Update Database   |
+   | - lastHeartbeat   |
+   | - cpuUsage        |
+   | - memoryUsage     |
+   | - requestsPerSec  |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Check Status      |
+   | - If heartbeat ok |
+   |   → RUNNING       |
+   | - If missed > 3   |
+   |   → ERROR         |
+   +-------------------+
+```
+
+### 16.5 Instance Status Codes
+
+| Code | Status | Description |
+|------|--------|-------------|
+| 0 | STARTING | Pod is starting up |
+| 1 | RUNNING | Healthy, receiving heartbeats |
+| 2 | ERROR | Missed heartbeats or crashed |
+| 3 | STOPPING | Pod is shutting down |
+| 4 | STOPPED | Pod is stopped |
+
+---
+
+## 17. Kubernetes Integration Architecture
+
+### 17.1 Deployment Flow
+
+```
++------------------------------------------------------------------+
+|                    K8S DEPLOYMENT FLOW                            |
++------------------------------------------------------------------+
+
+   User Request (Create Instance)
+          |
+          v
+   +-------------------+
+   | KubernetesService |
+   | - Validate params |
+   | - Check cluster   |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Generate YAML     |
+   | from Template     |
+   | (Deployment,      |
+   |  Service, Config) |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Apply to K8s      |
+   | via Fabric8 SDK   |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Watch Pod Status  |
+   | - Ready?          |
+   | - Error?          |
+   +-------------------+
+```
+
+### 17.2 Resource Specs
+
+```
++------------------------------------------------------------------+
+|                    INSTANCE SPEC TYPES                            |
++------------------------------------------------------------------+
+
+   small (Development)
+   +-------------------------------------------------------------+
+   |  CPU: 0.5 cores    |  Memory: 512MB   |  Replicas: 1       |
+   +-------------------------------------------------------------+
+
+   medium (Staging)
+   +-------------------------------------------------------------+
+   |  CPU: 1 core       |  Memory: 1GB     |  Replicas: 2       |
+   +-------------------------------------------------------------+
+
+   large (Production)
+   +-------------------------------------------------------------+
+   |  CPU: 2 cores      |  Memory: 2GB     |  Replicas: 3       |
+   +-------------------------------------------------------------+
+
+   xlarge (High-traffic)
+   +-------------------------------------------------------------+
+   |  CPU: 4 cores      |  Memory: 4GB     |  Replicas: 5       |
+   +-------------------------------------------------------------+
+```
+
+### 17.3 Environment Variables
+
+Each gateway pod receives these environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `NACOS_SERVER_ADDR` | Nacos server address |
+| `NACOS_NAMESPACE` | Isolated namespace ID |
+| `GATEWAY_ADMIN_URL` | Admin service URL for heartbeats |
+| `GATEWAY_ID` | Unique instance identifier |
+| `REDIS_HOST` | Redis server for rate limiting |
+| `REDIS_PORT` | Redis port |
+
+### 17.4 Health Checks
+
+```
++------------------------------------------------------------------+
+|                    K8S HEALTH CHECKS                              |
++------------------------------------------------------------------+
+
+   Liveness Probe:
+   +-------------------------------------------------------------+
+   |  Path: /actuator/health/liveness                            |
+   |  Port: 8081                                                 |
+   |  Initial: 60s | Period: 15s | Timeout: 10s                  |
+   +-------------------------------------------------------------+
+
+   Readiness Probe:
+   +-------------------------------------------------------------+
+   |  Path: /actuator/health/readiness                           |
+   |  Port: 8081                                                 |
+   |  Initial: 30s | Period: 10s | Timeout: 5s                   |
+   +-------------------------------------------------------------+
+```
+
+---
+
+## 18. Config Reconciliation Architecture
+
+### 18.1 Overview
+
+The reconcile task ensures consistency between database and Nacos configuration.
+
+```
++------------------------------------------------------------------+
+|                    RECONCILIATION TASK                            |
++------------------------------------------------------------------+
+
+   Scheduled (Every 5 minutes)
+          |
+          v
+   +-------------------+
+   | RouteReconcile    |
+   | Task              |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Compare DB vs     |
+   | Nacos Index       |
+   +--------+----------+
+            |
+      +-----+-----+
+      |           |
+    Match      Mismatch
+      |           |
+      v           v
+   Done      Update Nacos
+             (Repair)
+```
+
+### 18.2 Reconciliation Tasks
+
+| Task | Description |
+|------|-------------|
+| `RouteReconcileTask` | Ensures routes are synced to Nacos |
+| `ServiceReconcileTask` | Ensures services are synced to Nacos |
+| `AuthPolicyReconcileTask` | Ensures auth policies are synced |
+
+---
+
+## 19. Testing Architecture
+
+### 19.1 Test Coverage
+
+| Module | Tests | Coverage Areas |
+|--------|-------|----------------|
+| **my-gateway** | 281 | Filters, Auth, Rate Limiting, Strategies |
+| **gateway-admin** | 101 | API, Services, Repository, Integration |
+
+### 19.2 Test Categories
+
+```
++------------------------------------------------------------------+
+|                    TEST STRUCTURE                                 |
++------------------------------------------------------------------+
+
+   my-gateway/src/test/java/
+   +-------------------------------------------------------------+
+   |  auth/                    - Authentication processors        |
+   |  filter/                  - Global filters                  |
+   |  limiter/                 - Rate limiting                   |
+   |  manager/                 - Config managers                 |
+   +-------------------------------------------------------------+
+
+   gateway-admin/src/test/java/
+   +-------------------------------------------------------------+
+   |  service/                 - Service unit tests              |
+   |  RouteApiTest             - Route API integration tests     |
+   |  ServiceApiTest           - Service API integration tests   |
+   |  StrategyApiTest          - Strategy API integration tests  |
+   +-------------------------------------------------------------+
+```
+
+### 19.3 Test Namespace Isolation
+
+Tests use isolated Nacos namespace (`gateway-test`) to avoid polluting production configuration:
+
+```yaml
+# application-test.yml
+spring:
+  cloud:
+    nacos:
+      discovery:
+        namespace: gateway-test
+      config:
+        namespace: gateway-test
+```
+
+The namespace is auto-created if it doesn't exist.
+
+---
+
+## 20. Summary
+
+This API Gateway architecture demonstrates:
+
+- **Clean separation** of control plane (admin) and data plane (gateway)
+- **Extensible design** via SPI and Strategy patterns
+- **High availability** with fallback caching and graceful degradation
+- **Real-time configuration** with < 1 second propagation latency
+- **Enterprise features** including multi-auth, circuit breaking, and rate limiting
+- **Multi-service routing** with gray release support for canary deployments
+- **SSL termination** with dynamic certificate loading and expiry monitoring
+- **Kubernetes deployment** with one-click instance creation
+- **Namespace isolation** for multi-tenancy support
+- **Heartbeat monitoring** for real-time instance health tracking
+- **Comprehensive testing** with 382 tests ensuring reliability
+
+---
+
 For feature documentation, see [FEATURES.md](FEATURES.md).
 For quick start guide, see [QUICK_START.md](QUICK_START.md).

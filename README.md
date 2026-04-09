@@ -6,7 +6,8 @@
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2-brightgreen)](https://spring.io/projects/spring-boot)
 [![Spring Cloud Gateway](https://img.shields.io/badge/Spring%20Cloud%20Gateway-4.1-blue)](https://spring.io/projects/spring-cloud-gateway)
 [![React](https://img.shields.io/badge/React-19-blue)](https://react.dev/)
-[![License](https://img.shields.io/badge/License-Proprietary-red)](LICENSE)
+[![Tests](https://img.shields.io/badge/Tests-382%20Passing-success)]()
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 ---
 
@@ -21,6 +22,8 @@
 | **Monitoring** | Separate tools | Built-in dashboards + AI analysis |
 | **SSL Certificates** | Manual management | Auto-discovery + expiry alerts |
 | **Multi-Service Routing** | Not supported | Weighted routing with fine-grained rules |
+| **Kubernetes Deploy** | Manual YAML editing | One-click deployment from UI |
+| **Multi-Tenancy** | Shared configuration | Namespace isolation per instance |
 
 ---
 
@@ -57,6 +60,16 @@
 | **Alert System** | Configurable thresholds with email notifications |
 | **SSL Certificate Management** | Upload, monitor expiry, get alerts before certificates expire |
 
+### Kubernetes & Multi-Tenancy (New)
+
+| Feature | Description |
+|---------|-------------|
+| **Gateway Instance Management** | Deploy and manage multiple gateway instances from single admin console |
+| **Kubernetes Integration** | Deploy gateways to K8s clusters with one click, view pod status in UI |
+| **Namespace Isolation** | Each gateway instance has isolated Nacos namespace for configuration |
+| **Heartbeat Monitoring** | Real-time health status with heartbeat-based detection |
+| **Resource Specs** | Pre-defined specs (small/medium/large) or custom CPU/memory configurations |
+
 ---
 
 ## Architecture
@@ -70,7 +83,8 @@
 │  │   React UI ──▶ REST API ──▶ MySQL ──▶ Nacos (Config Push)         │   │
 │  │                                                                     │   │
 │  │   Features: Route Mgmt, Service Mgmt, SSL Certs, Alerts,           │   │
-│  │             Request Traces, AI Analysis                            │   │
+│  │             Request Traces, AI Analysis, K8s Deploy,               │   │
+│  │             Gateway Instance Management                            │   │
 │  └───────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -92,6 +106,65 @@
 - Zero-downtime configuration updates
 - Independent scaling of control and data planes
 - Hot-reload routes, services, and strategies
+- Multi-tenancy with namespace isolation
+
+---
+
+## Gateway Instance Management
+
+### Overview
+
+The platform supports deploying and managing multiple gateway instances, each with its own isolated configuration namespace.
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        gateway-admin (Control Plane)                     │
+│                                                                          │
+│   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                  │
+│   │  Instance 1  │  │  Instance 2  │  │  Instance 3  │                  │
+│   │  (dev)       │  │  (staging)   │  │  (prod)      │                  │
+│   └──────┬───────┘  └──────┬───────┘  └──────┬───────┘                  │
+│          │                 │                 │                           │
+│          ▼                 ▼                 ▼                           │
+│   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                  │
+│   │ Nacos NS:    │  │ Nacos NS:    │  │ Nacos NS:    │                  │
+│   │ gateway-dev  │  │ gateway-stg  │  │ gateway-prod │                  │
+│   └──────────────┘  └──────────────┘  └──────────────┘                  │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    │ Deploy to Kubernetes
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         Kubernetes Cluster                                │
+│                                                                          │
+│   Namespace: gateway-dev        Namespace: gateway-stg                  │
+│   ┌─────────────────────┐       ┌─────────────────────┐                 │
+│   │  ┌───┐ ┌───┐ ┌───┐  │       │  ┌───┐ ┌───┐        │                 │
+│   │  │Pod│ │Pod│ │Pod│  │       │  │Pod│ │Pod│        │                 │
+│   │  └───┘ └───┘ └───┘  │       │  └───┘ └───┘        │                 │
+│   │     my-gateway      │       │     my-gateway      │                 │
+│   └─────────────────────┘       └─────────────────────┘                 │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Instance Configuration
+
+| Spec Type | CPU | Memory | Replicas | Use Case |
+|-----------|-----|--------|----------|----------|
+| `small` | 0.5 core | 512MB | 1 | Development |
+| `medium` | 1 core | 1GB | 2 | Staging |
+| `large` | 2 cores | 2GB | 3 | Production |
+| `xlarge` | 4 cores | 4GB | 5 | High-traffic Production |
+| `custom` | Custom | Custom | Custom | Special requirements |
+
+### Heartbeat Monitoring
+
+Each gateway instance sends heartbeats to the admin service:
+- **Running**: Heartbeat received within 30 seconds
+- **Warning**: Missed 1-2 heartbeats (30-60 seconds)
+- **Error**: Missed 3+ heartbeats (> 60 seconds)
 
 ---
 
@@ -222,6 +295,7 @@ alerts:
 - MySQL 8.0+ (or use embedded H2)
 - Nacos 2.4.3+ (or Consul)
 - Redis (optional, for distributed rate limiting)
+- Kubernetes (optional, for instance deployment)
 
 ### 1. Start Infrastructure
 
@@ -281,6 +355,26 @@ Default credentials: `admin` / `admin123`
 | **Database** | MySQL / H2, Spring Data JPA |
 | **Monitoring** | Prometheus, Micrometer |
 | **Frontend** | React 19, TypeScript, Ant Design 6, Vite |
+| **Container** | Docker, Kubernetes |
+
+---
+
+## Testing
+
+The project has comprehensive test coverage:
+
+| Module | Tests | Status |
+|--------|-------|--------|
+| **my-gateway** | 281 | ✅ All Passing |
+| **gateway-admin** | 101 | ✅ All Passing |
+| **Total** | **382** | ✅ **All Passing** |
+
+Run tests:
+```bash
+# Run all tests
+cd gateway-admin && mvn test
+cd my-gateway && mvn test
+```
 
 ---
 
@@ -304,20 +398,32 @@ Default credentials: `admin` / `admin123`
 │       ├── auth/               # Authentication processors
 │       ├── ssl/                # SSL certificate management
 │       ├── center/             # Config center SPI
-│       └── discovery/          # Service discovery SPI
+│       ├── discovery/          # Service discovery SPI
+│       ├── health/             # Health check & heartbeat
+│       └── limiter/            # Rate limiting (Redis + Local)
 │
 ├── gateway-admin/              # Management console (Control Plane)
 │   └── src/main/java/
 │       ├── controller/         # REST API endpoints
 │       ├── service/            # Business logic
-│       └── repository/         # JPA repositories
+│       ├── repository/         # JPA repositories
+│       ├── center/             # Nacos/Consul config publishers
+│       ├── reconcile/          # Config reconciliation tasks
+│       └── cache/              # Instance namespace cache
 │
 ├── gateway-ui/                 # Web dashboard frontend
 │   └── src/
 │       ├── pages/              # React page components
+│       ├── components/         # Reusable UI components
 │       └── i18n.ts             # Internationalization (EN/CN)
 │
-└── demo-service/               # Sample backend service
+├── demo-service/               # Sample backend service
+│
+└── k8s/                        # Kubernetes deployment manifests
+    ├── nacos.yaml              # Nacos deployment
+    ├── redis.yaml              # Redis deployment
+    ├── my-gateway.yaml         # Gateway deployment
+    └── prometheus.yaml         # Prometheus monitoring
 ```
 
 ---

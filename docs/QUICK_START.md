@@ -290,6 +290,7 @@ curl http://localhost:80/actuator/health
 - [Set up Authentication](FEATURES.md#5-authentication)
 - [Enable SSL Termination](FEATURES.md#4-ssl-termination)
 - [Configure Monitoring & Alerts](FEATURES.md#11-monitoring--alerts)
+- [Deploy Gateway Instance to Kubernetes](FEATURES.md#15-gateway-instance-management)
 
 ---
 
@@ -362,6 +363,51 @@ When using embedded H2:
 - [ ] Configure alert thresholds
 - [ ] Enable request tracing
 - [ ] Set up Prometheus monitoring
+- [ ] Deploy gateway instances to Kubernetes
+- [ ] Configure Nacos namespace isolation per instance
+- [ ] Set up heartbeat monitoring for instances
+
+---
+
+## Deploy to Kubernetes
+
+### 1. Prepare Kubernetes Cluster
+
+```bash
+# Ensure kubectl is configured
+kubectl cluster-info
+
+# Create namespace
+kubectl create namespace gateway-prod
+```
+
+### 2. Deploy Nacos and Redis
+
+```bash
+# Use provided K8s manifests
+kubectl apply -f k8s/nacos.yaml
+kubectl apply -f k8s/redis.yaml
+```
+
+### 3. Register Cluster in Admin UI
+
+1. Navigate to **Kubernetes** page
+2. Click **Add Cluster**
+3. Enter cluster details (API server, token)
+4. Click **Save**
+
+### 4. Create Gateway Instance
+
+1. Navigate to **Instances** page
+2. Click **Create Instance**
+3. Configure:
+   - Instance Name: `Production Gateway`
+   - Cluster: Select your cluster
+   - Namespace: `gateway-prod`
+   - Spec Type: `large` (2 cores, 2GB, 3 replicas)
+4. Click **Create**
+
+The gateway will be deployed automatically and start sending heartbeats.
 
 ---
 

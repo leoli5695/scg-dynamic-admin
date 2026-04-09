@@ -20,7 +20,9 @@
 12. [Request Tracing](#12-request-tracing)
 13. [AI-Powered Analysis](#13-ai-powered-analysis)
 14. [Email Notifications](#14-email-notifications)
-15. [API Reference](#15-api-reference)
+15. [Gateway Instance Management](#15-gateway-instance-management)
+16. [Kubernetes Integration](#16-kubernetes-integration)
+17. [API Reference](#17-api-reference)
 
 ---
 
@@ -589,9 +591,184 @@ POST /api/email/test
 
 ---
 
-## 15. API Reference
+## 15. Gateway Instance Management
 
-### 15.1 Route API
+### 15.1 Overview
+
+Deploy and manage multiple gateway instances from a single admin console. Each instance has isolated configuration via Nacos namespace.
+
+### 15.2 Instance Creation
+
+```bash
+# Create a new gateway instance
+POST /api/instances
+{
+  "instanceName": "Production Gateway",
+  "clusterId": 1,
+  "namespace": "gateway-prod",
+  "specType": "large",
+  "replicas": 3
+}
+```
+
+### 15.3 Resource Specifications
+
+| Spec Type | CPU | Memory | Replicas | Use Case |
+|-----------|-----|--------|----------|----------|
+| `small` | 0.5 core | 512MB | 1 | Development |
+| `medium` | 1 core | 1GB | 2 | Staging |
+| `large` | 2 cores | 2GB | 3 | Production |
+| `xlarge` | 4 cores | 4GB | 5 | High-traffic Production |
+| `custom` | Custom | Custom | Custom | Special requirements |
+
+### 15.4 Instance Status
+
+| Status | Code | Description |
+|--------|------|-------------|
+| STARTING | 0 | Pod is starting up |
+| RUNNING | 1 | Healthy, receiving heartbeats |
+| ERROR | 2 | Missed heartbeats or crashed |
+| STOPPING | 3 | Pod is shutting down |
+| STOPPED | 4 | Pod is stopped |
+
+### 15.5 Heartbeat Monitoring
+
+Each gateway instance sends heartbeats every 10 seconds:
+
+```bash
+# Heartbeat endpoint
+POST /api/instances/{instanceId}/heartbeat
+{
+  "cpuUsagePercent": 45.5,
+  "memoryUsageMb": 512,
+  "requestsPerSecond": 1234.5,
+  "activeConnections": 100
+}
+```
+
+### 15.6 Namespace Isolation
+
+Each instance has its own Nacos namespace:
+
+```
+Instance: gateway-dev
+├── Nacos Namespace: gateway-dev-xxx
+│   ├── config.gateway.route-{id}
+│   ├── config.gateway.service-{id}
+│   ├── config.gateway.strategy-{id}
+│   └── config.gateway.metadata.*-index
+```
+
+### 15.7 API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/instances` | List all instances |
+| `GET` | `/api/instances/{id}` | Get instance details |
+| `POST` | `/api/instances` | Create instance |
+| `PUT` | `/api/instances/{id}` | Update instance |
+| `DELETE` | `/api/instances/{id}` | Delete instance |
+| `POST` | `/api/instances/{id}/scale` | Scale replicas |
+| `POST` | `/api/instances/{id}/restart` | Restart instance |
+| `POST` | `/api/instances/{id}/heartbeat` | Receive heartbeat |
+
+---
+
+## 16. Kubernetes Integration
+
+### 16.1 Overview
+
+Deploy gateway instances to Kubernetes clusters directly from the admin UI.
+
+### 16.2 Cluster Management
+
+```bash
+# Register a Kubernetes cluster
+POST /api/kubernetes/clusters
+{
+  "name": "Production Cluster",
+  "apiServer": "https://k8s-api.example.com",
+  "token": "xxx",
+  "namespace": "gateway-prod"
+}
+```
+
+### 16.3 Pod Management
+
+```bash
+# List pods for an instance
+GET /api/kubernetes/instances/{instanceId}/pods
+
+# Get pod logs
+GET /api/kubernetes/pods/{podName}/logs
+
+# Delete a pod (will restart)
+DELETE /api/kubernetes/pods/{podName}
+```
+
+### 16.4 Deployment Configuration
+
+```yaml
+# Generated K8s Deployment (from template)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-gateway
+  namespace: gateway-prod
+spec:
+  replicas: 3
+  template:
+    spec:
+      containers:
+      - name: my-gateway
+        image: my-gateway:latest
+        ports:
+        - containerPort: 80
+        env:
+        - name: NACOS_SERVER_ADDR
+          value: "nacos:8848"
+        - name: NACOS_NAMESPACE
+          value: "gateway-prod-xxx"
+        - name: GATEWAY_ADMIN_URL
+          value: "http://admin:9090"
+        - name: GATEWAY_ID
+          value: "gateway-prod-1"
+        resources:
+          requests:
+            cpu: "2"
+            memory: "2Gi"
+          limits:
+            cpu: "4"
+            memory: "4Gi"
+```
+
+### 16.5 Health Probes
+
+| Probe | Path | Purpose |
+|-------|------|---------|
+| Liveness | `/actuator/health/liveness` | Restart if unhealthy |
+| Readiness | `/actuator/health/readiness` | Ready for traffic |
+
+### 16.6 Metrics Integration
+
+Gateway instances expose Prometheus metrics:
+
+```
+# Actuator metrics endpoint
+GET http://gateway:8081/actuator/prometheus
+
+# Key metrics
+gateway_requests_total
+gateway_requests_duration_seconds
+gateway_active_connections
+jvm_memory_used_bytes
+```
+
+---
+
+## 17. API Reference
+
+### 17.1 Route API
 
 ```bash
 # List routes
@@ -616,7 +793,7 @@ POST /api/routes/{id}/enable
 POST /api/routes/{id}/disable
 ```
 
-### 15.2 Service API
+### 17.2 Service API
 
 ```bash
 # List services
@@ -630,7 +807,7 @@ POST /api/services
 }
 ```
 
-### 15.3 SSL Certificate API
+### 17.3 SSL Certificate API
 
 ```bash
 # List certificates
@@ -646,7 +823,7 @@ POST /api/ssl/upload-pkcs12
 DELETE /api/ssl/{id}
 ```
 
-### 15.4 Monitoring API
+### 17.4 Monitoring API
 
 ```bash
 # Get metrics
