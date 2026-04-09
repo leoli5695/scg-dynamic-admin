@@ -383,4 +383,292 @@ public class StrategyConfigValidator {
 
         return String.join(":", parts);
     }
+
+    // ============== New Strategy Validation Methods (v2.0) ==============
+
+    /**
+     * Validate multi-dimensional rate limiter configuration.
+     */
+    public ValidationResult validateMultiDimRateLimiter(Object configObj) {
+        List<String> errors = new ArrayList<>();
+
+        if (configObj == null) {
+            return ValidationResult.failure(List.of("Multi-dim rate limiter config is null"));
+        }
+
+        // The config is a Map, we'll validate the key fields
+        if (configObj instanceof java.util.Map) {
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, Object> config = (java.util.Map<String, Object>) configObj;
+
+            // Validate global quota
+            Object globalQuota = config.get("globalQuota");
+            if (globalQuota instanceof java.util.Map) {
+                validateQuotaConfig((java.util.Map<String, Object>) globalQuota, "globalQuota", errors);
+            }
+
+            // Validate tenant quota
+            Object tenantQuota = config.get("tenantQuota");
+            if (tenantQuota instanceof java.util.Map) {
+                validateQuotaConfig((java.util.Map<String, Object>) tenantQuota, "tenantQuota", errors);
+            }
+
+            // Validate user quota
+            Object userQuota = config.get("userQuota");
+            if (userQuota instanceof java.util.Map) {
+                validateQuotaConfig((java.util.Map<String, Object>) userQuota, "userQuota", errors);
+            }
+
+            // Validate IP quota
+            Object ipQuota = config.get("ipQuota");
+            if (ipQuota instanceof java.util.Map) {
+                validateQuotaConfig((java.util.Map<String, Object>) ipQuota, "ipQuota", errors);
+            }
+
+            // Validate rejectStrategy
+            Object rejectStrategy = config.get("rejectStrategy");
+            if (rejectStrategy != null) {
+                String strategy = rejectStrategy.toString();
+                if (!List.of("FIRST_HIT", "ALL_CHECKED").contains(strategy)) {
+                    errors.add("Invalid rejectStrategy: " + strategy + ", must be one of: FIRST_HIT, ALL_CHECKED");
+                }
+            }
+        }
+
+        return errors.isEmpty() ? ValidationResult.success() : ValidationResult.failure(errors);
+    }
+
+    private void validateQuotaConfig(java.util.Map<String, Object> config, String prefix, List<String> errors) {
+        Object qpsObj = config.get("qps");
+        if (qpsObj != null) {
+            try {
+                int qps = ((Number) qpsObj).intValue();
+                if (qps <= 0) {
+                    errors.add(prefix + ".qps must be positive, got: " + qps);
+                } else if (qps > 100000) {
+                    errors.add(prefix + ".qps exceeds maximum limit (100000), got: " + qps);
+                }
+            } catch (ClassCastException e) {
+                errors.add(prefix + ".qps must be a number");
+            }
+        }
+
+        Object burstCapacityObj = config.get("burstCapacity");
+        if (burstCapacityObj != null) {
+            try {
+                int burstCapacity = ((Number) burstCapacityObj).intValue();
+                if (burstCapacity < 0) {
+                    errors.add(prefix + ".burstCapacity cannot be negative, got: " + burstCapacity);
+                }
+            } catch (ClassCastException e) {
+                errors.add(prefix + ".burstCapacity must be a number");
+            }
+        }
+    }
+
+    /**
+     * Validate request transform configuration.
+     */
+    public ValidationResult validateRequestTransform(Object configObj) {
+        List<String> errors = new ArrayList<>();
+
+        if (configObj == null) {
+            return ValidationResult.failure(List.of("Request transform config is null"));
+        }
+
+        if (configObj instanceof java.util.Map) {
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, Object> config = (java.util.Map<String, Object>) configObj;
+
+            // Validate maxBodySize
+            Object maxBodySizeObj = config.get("maxBodySize");
+            if (maxBodySizeObj != null) {
+                try {
+                    int maxBodySize = ((Number) maxBodySizeObj).intValue();
+                    if (maxBodySize <= 0) {
+                        errors.add("maxBodySize must be positive, got: " + maxBodySize);
+                    } else if (maxBodySize > 100 * 1024 * 1024) { // 100MB
+                        errors.add("maxBodySize exceeds maximum (100MB), got: " + maxBodySize);
+                    }
+                } catch (ClassCastException e) {
+                    errors.add("maxBodySize must be a number");
+                }
+            }
+
+            // Validate protocol transform
+            Object protocolTransform = config.get("protocolTransform");
+            if (protocolTransform instanceof java.util.Map) {
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, Object> ptConfig = (java.util.Map<String, Object>) protocolTransform;
+                Object sourceFormat = ptConfig.get("sourceFormat");
+                Object targetFormat = ptConfig.get("targetFormat");
+                if (sourceFormat != null && !List.of("JSON", "XML", "FORM").contains(sourceFormat.toString())) {
+                    errors.add("Invalid protocolTransform.sourceFormat: " + sourceFormat);
+                }
+                if (targetFormat != null && !List.of("JSON", "XML").contains(targetFormat.toString())) {
+                    errors.add("Invalid protocolTransform.targetFormat: " + targetFormat);
+                }
+            }
+        }
+
+        return errors.isEmpty() ? ValidationResult.success() : ValidationResult.failure(errors);
+    }
+
+    /**
+     * Validate response transform configuration.
+     */
+    public ValidationResult validateResponseTransform(Object configObj) {
+        List<String> errors = new ArrayList<>();
+
+        if (configObj == null) {
+            return ValidationResult.failure(List.of("Response transform config is null"));
+        }
+
+        // Similar validation as request transform
+        return validateRequestTransform(configObj);
+    }
+
+    /**
+     * Validate request validation configuration.
+     */
+    public ValidationResult validateRequestValidation(Object configObj) {
+        List<String> errors = new ArrayList<>();
+
+        if (configObj == null) {
+            return ValidationResult.failure(List.of("Request validation config is null"));
+        }
+
+        if (configObj instanceof java.util.Map) {
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, Object> config = (java.util.Map<String, Object>) configObj;
+
+            // Validate validationMode
+            Object validationMode = config.get("validationMode");
+            if (validationMode != null) {
+                String mode = validationMode.toString();
+                if (!List.of("SCHEMA", "CUSTOM", "HYBRID").contains(mode)) {
+                    errors.add("Invalid validationMode: " + mode + ", must be one of: SCHEMA, CUSTOM, HYBRID");
+                }
+            }
+
+            // Validate error response status code
+            Object errorResponse = config.get("errorResponse");
+            if (errorResponse instanceof java.util.Map) {
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, Object> erConfig = (java.util.Map<String, Object>) errorResponse;
+                Object statusCodeObj = erConfig.get("statusCode");
+                if (statusCodeObj != null) {
+                    try {
+                        int statusCode = ((Number) statusCodeObj).intValue();
+                        if (statusCode < 400 || statusCode > 499) {
+                            errors.add("errorResponse.statusCode should be a 4xx status code, got: " + statusCode);
+                        }
+                    } catch (ClassCastException e) {
+                        errors.add("errorResponse.statusCode must be a number");
+                    }
+                }
+            }
+
+            // Validate inline schema if provided
+            Object schemaValidation = config.get("schemaValidation");
+            if (schemaValidation instanceof java.util.Map) {
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, Object> svConfig = (java.util.Map<String, Object>) schemaValidation;
+                Object inlineSchema = svConfig.get("inlineSchema");
+                if (inlineSchema != null) {
+                    try {
+                        // Try to parse as JSON
+                        new com.fasterxml.jackson.databind.ObjectMapper().readTree(inlineSchema.toString());
+                    } catch (Exception e) {
+                        errors.add("schemaValidation.inlineSchema is not valid JSON: " + e.getMessage());
+                    }
+                }
+            }
+        }
+
+        return errors.isEmpty() ? ValidationResult.success() : ValidationResult.failure(errors);
+    }
+
+    /**
+     * Validate mock response configuration.
+     */
+    public ValidationResult validateMockResponse(Object configObj) {
+        List<String> errors = new ArrayList<>();
+
+        if (configObj == null) {
+            return ValidationResult.failure(List.of("Mock response config is null"));
+        }
+
+        if (configObj instanceof java.util.Map) {
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, Object> config = (java.util.Map<String, Object>) configObj;
+
+            // Validate mockMode
+            Object mockMode = config.get("mockMode");
+            if (mockMode != null) {
+                String mode = mockMode.toString();
+                if (!List.of("STATIC", "DYNAMIC", "TEMPLATE").contains(mode)) {
+                    errors.add("Invalid mockMode: " + mode + ", must be one of: STATIC, DYNAMIC, TEMPLATE");
+                }
+            }
+
+            // Validate static mock
+            Object staticMock = config.get("staticMock");
+            if (staticMock instanceof java.util.Map) {
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, Object> smConfig = (java.util.Map<String, Object>) staticMock;
+                Object statusCodeObj = smConfig.get("statusCode");
+                if (statusCodeObj != null) {
+                    try {
+                        int statusCode = ((Number) statusCodeObj).intValue();
+                        if (statusCode < 100 || statusCode > 599) {
+                            errors.add("staticMock.statusCode must be a valid HTTP status code (100-599), got: " + statusCode);
+                        }
+                    } catch (ClassCastException e) {
+                        errors.add("staticMock.statusCode must be a number");
+                    }
+                }
+            }
+
+            // Validate delay config
+            Object delay = config.get("delay");
+            if (delay instanceof java.util.Map) {
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, Object> delayConfig = (java.util.Map<String, Object>) delay;
+                Object fixedDelayMsObj = delayConfig.get("fixedDelayMs");
+                if (fixedDelayMsObj != null) {
+                    try {
+                        int fixedDelayMs = ((Number) fixedDelayMsObj).intValue();
+                        if (fixedDelayMs < 0) {
+                            errors.add("delay.fixedDelayMs cannot be negative, got: " + fixedDelayMs);
+                        } else if (fixedDelayMs > 60000) {
+                            errors.add("delay.fixedDelayMs exceeds maximum (60000ms), got: " + fixedDelayMs);
+                        }
+                    } catch (ClassCastException e) {
+                        errors.add("delay.fixedDelayMs must be a number");
+                    }
+                }
+            }
+
+            // Validate error simulation
+            Object errorSimulation = config.get("errorSimulation");
+            if (errorSimulation instanceof java.util.Map) {
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, Object> esConfig = (java.util.Map<String, Object>) errorSimulation;
+                Object errorRateObj = esConfig.get("errorRate");
+                if (errorRateObj != null) {
+                    try {
+                        int errorRate = ((Number) errorRateObj).intValue();
+                        if (errorRate < 0 || errorRate > 100) {
+                            errors.add("errorSimulation.errorRate must be between 0 and 100, got: " + errorRate);
+                        }
+                    } catch (ClassCastException e) {
+                        errors.add("errorSimulation.errorRate must be a number");
+                    }
+                }
+            }
+        }
+
+        return errors.isEmpty() ? ValidationResult.success() : ValidationResult.failure(errors);
+    }
 }

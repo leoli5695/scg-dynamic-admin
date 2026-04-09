@@ -995,6 +995,12 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
     { value: 'CACHE', label: t('strategy.type.cache'), icon: <CloudOutlined /> },
     { value: 'SECURITY', label: t('strategy.type.security'), icon: <SecurityScanOutlined /> },
     { value: 'API_VERSION', label: t('strategy.type.api_version'), icon: <NumberOutlined /> },
+    // New strategy types (v2.0)
+    { value: 'MULTI_DIM_RATE_LIMITER', label: t('strategy.type.multi_dim_rate_limiter'), icon: <ThunderboltOutlined /> },
+    { value: 'REQUEST_TRANSFORM', label: t('strategy.type.request_transform'), icon: <SyncOutlined /> },
+    { value: 'RESPONSE_TRANSFORM', label: t('strategy.type.response_transform'), icon: <SyncOutlined /> },
+    { value: 'REQUEST_VALIDATION', label: t('strategy.type.request_validation'), icon: <SafetyOutlined /> },
+    { value: 'MOCK_RESPONSE', label: t('strategy.type.mock_response'), icon: <PlayCircleOutlined /> },
   ];
 
   return (

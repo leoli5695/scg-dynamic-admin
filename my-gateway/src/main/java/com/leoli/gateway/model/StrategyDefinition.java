@@ -41,6 +41,13 @@ public class StrategyDefinition {
     public static final String TYPE_SECURITY = "SECURITY";
     public static final String TYPE_API_VERSION = "API_VERSION";
 
+    // New strategy types for enhanced gateway capabilities
+    public static final String TYPE_MULTI_DIM_RATE_LIMITER = "MULTI_DIM_RATE_LIMITER";
+    public static final String TYPE_REQUEST_TRANSFORM = "REQUEST_TRANSFORM";
+    public static final String TYPE_RESPONSE_TRANSFORM = "RESPONSE_TRANSFORM";
+    public static final String TYPE_REQUEST_VALIDATION = "REQUEST_VALIDATION";
+    public static final String TYPE_MOCK_RESPONSE = "MOCK_RESPONSE";
+
     public static final String SCOPE_GLOBAL = "GLOBAL";
     public static final String SCOPE_ROUTE = "ROUTE";
 

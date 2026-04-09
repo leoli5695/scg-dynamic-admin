@@ -5,19 +5,23 @@ import com.leoli.gateway.model.StrategyDefinition;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 /**
  * Strategy configuration manager.
  * Supports per-strategy storage with global and route-bound strategies.
- *
+ * <p>
  * Design:
  * - Per-strategy cache: strategyId -> StrategyDefinition
  * - Supports global strategies (apply to all routes)
  * - Supports route-bound strategies (apply to specific route)
  * - Priority: route-bound > global
+ * - Cache fallback: snapshot backup for Nacos failure scenarios
+ * - Generic config getter: unified method with type conversion support
  *
  * @author leoli
  */
@@ -25,14 +29,20 @@ import java.util.stream.Collectors;
 @Component
 public class StrategyManager {
 
-    // Cache: strategyId -> StrategyDefinition
+    // Primary cache: strategyId -> StrategyDefinition
     private final Map<String, StrategyDefinition> strategyCache = new ConcurrentHashMap<>();
+
+    // Snapshot backup for fallback (deep copy of last known good state)
+    private volatile Map<String, StrategyDefinition> strategySnapshot = new ConcurrentHashMap<>();
 
     // Index: routeId -> list of strategyIds (for quick lookup)
     private final Map<String, Set<String>> routeStrategyIndex = new ConcurrentHashMap<>();
 
     // Global strategy IDs by type
     private final Map<String, Set<String>> globalStrategiesByType = new ConcurrentHashMap<>();
+
+    // Health status indicator
+    private volatile boolean configCenterHealthy = true;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -223,151 +233,54 @@ public class StrategyManager {
     }
 
     // ============================================================
-    // Config extraction helpers
+    // Unified Generic Config Getter (v2.1)
     // ============================================================
 
     /**
-     * Get rate limiter config for route.
+     * Get config for route by strategy type (generic method).
+     * Returns raw Map for backward compatibility.
+     * 
+     * @param routeId Route identifier
+     * @param strategyType Strategy type constant from StrategyDefinition
+     * @return Config as Map, or null if not found
      */
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> getRateLimiterConfig(String routeId) {
-        StrategyDefinition strategy = getStrategyForRoute(routeId, StrategyDefinition.TYPE_RATE_LIMITER);
+    public Map<String, Object> getConfig(String routeId, String strategyType) {
+        StrategyDefinition strategy = getStrategyForRoute(routeId, strategyType);
         if (strategy == null) {
-            return null;
+            // Try fallback to snapshot if config center is unhealthy
+            if (!configCenterHealthy) {
+                strategy = getStrategyFromSnapshot(routeId, strategyType);
+                if (strategy != null) {
+                    log.warn("Using snapshot fallback for strategy type: {}, routeId: {}", strategyType, routeId);
+                }
+            }
+            if (strategy == null) {
+                return null;
+            }
         }
         return strategy.getConfig();
     }
 
     /**
-     * Get IP filter config for route.
+     * Get config for route by strategy type, converted to strongly-typed object.
+     * 
+     * @param routeId Route identifier
+     * @param strategyType Strategy type constant from StrategyDefinition
+     * @param clazz Target class for type conversion
+     * @return Config converted to target type, or null if not found or conversion fails
      */
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> getIPFilterConfig(String routeId) {
-        StrategyDefinition strategy = getStrategyForRoute(routeId, StrategyDefinition.TYPE_IP_FILTER);
-        if (strategy == null) {
+    public <T> T getConfig(String routeId, String strategyType, Class<T> clazz) {
+        Map<String, Object> config = getConfig(routeId, strategyType);
+        if (config == null) {
             return null;
         }
-        return strategy.getConfig();
-    }
-
-    /**
-     * Get timeout config for route.
-     */
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> getTimeoutConfig(String routeId) {
-        StrategyDefinition strategy = getStrategyForRoute(routeId, StrategyDefinition.TYPE_TIMEOUT);
-        if (strategy == null) {
+        try {
+            return objectMapper.convertValue(config, clazz);
+        } catch (Exception e) {
+            log.error("Failed to convert config to type {} for strategy {}: {}", 
+                    clazz.getSimpleName(), strategyType, e.getMessage());
             return null;
         }
-        return strategy.getConfig();
-    }
-
-    /**
-     * Get circuit breaker config for route.
-     */
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> getCircuitBreakerConfig(String routeId) {
-        StrategyDefinition strategy = getStrategyForRoute(routeId, StrategyDefinition.TYPE_CIRCUIT_BREAKER);
-        if (strategy == null) {
-            return null;
-        }
-        return strategy.getConfig();
-    }
-
-    /**
-     * Get auth config for route.
-     */
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> getAuthConfig(String routeId) {
-        StrategyDefinition strategy = getStrategyForRoute(routeId, StrategyDefinition.TYPE_AUTH);
-        if (strategy == null) {
-            return null;
-        }
-        return strategy.getConfig();
-    }
-
-    /**
-     * Get retry config for route.
-     */
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> getRetryConfig(String routeId) {
-        StrategyDefinition strategy = getStrategyForRoute(routeId, StrategyDefinition.TYPE_RETRY);
-        if (strategy == null) {
-            return null;
-        }
-        return strategy.getConfig();
-    }
-
-    /**
-     * Get CORS config for route.
-     */
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> getCorsConfig(String routeId) {
-        StrategyDefinition strategy = getStrategyForRoute(routeId, StrategyDefinition.TYPE_CORS);
-        if (strategy == null) {
-            return null;
-        }
-        return strategy.getConfig();
-    }
-
-    /**
-     * Get access log config for route.
-     */
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> getAccessLogConfig(String routeId) {
-        StrategyDefinition strategy = getStrategyForRoute(routeId, StrategyDefinition.TYPE_ACCESS_LOG);
-        if (strategy == null) {
-            return null;
-        }
-        return strategy.getConfig();
-    }
-
-    /**
-     * Get header operation config for route.
-     */
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> getHeaderOpConfig(String routeId) {
-        StrategyDefinition strategy = getStrategyForRoute(routeId, StrategyDefinition.TYPE_HEADER_OP);
-        if (strategy == null) {
-            return null;
-        }
-        return strategy.getConfig();
-    }
-
-    /**
-     * Get cache config for route.
-     */
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> getCacheConfig(String routeId) {
-        StrategyDefinition strategy = getStrategyForRoute(routeId, StrategyDefinition.TYPE_CACHE);
-        if (strategy == null) {
-            return null;
-        }
-        return strategy.getConfig();
-    }
-
-    /**
-     * Get security config for route.
-     */
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> getSecurityConfig(String routeId) {
-        StrategyDefinition strategy = getStrategyForRoute(routeId, StrategyDefinition.TYPE_SECURITY);
-        if (strategy == null) {
-            return null;
-        }
-        return strategy.getConfig();
-    }
-
-    /**
-     * Get API version config for route.
-     */
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> getApiVersionConfig(String routeId) {
-        StrategyDefinition strategy = getStrategyForRoute(routeId, StrategyDefinition.TYPE_API_VERSION);
-        if (strategy == null) {
-            return null;
-        }
-        return strategy.getConfig();
     }
 
     /**
@@ -375,5 +288,245 @@ public class StrategyManager {
      */
     public boolean isStrategyEnabled(String routeId, String strategyType) {
         return getStrategyForRoute(routeId, strategyType) != null;
+    }
+
+    // ============================================================
+    // Cache Fallback & Health Management
+    // ============================================================
+
+    /**
+     * Create snapshot of current cache state.
+     * Called when config refresh succeeds, to preserve a known-good state.
+     */
+    public void createSnapshot() {
+        Map<String, StrategyDefinition> newSnapshot = new ConcurrentHashMap<>();
+        for (Map.Entry<String, StrategyDefinition> entry : strategyCache.entrySet()) {
+            // Deep copy each strategy definition
+            try {
+                StrategyDefinition copy = objectMapper.readValue(
+                    objectMapper.writeValueAsString(entry.getValue()), 
+                    StrategyDefinition.class
+                );
+                newSnapshot.put(entry.getKey(), copy);
+            } catch (Exception e) {
+                log.warn("Failed to snapshot strategy {}: {}", entry.getKey(), e.getMessage());
+                // Keep original reference as fallback
+                newSnapshot.put(entry.getKey(), entry.getValue());
+            }
+        }
+        this.strategySnapshot = newSnapshot;
+        log.info("Strategy snapshot created with {} entries", newSnapshot.size());
+    }
+
+    /**
+     * Get strategy from snapshot by route and type.
+     */
+    private StrategyDefinition getStrategyFromSnapshot(String routeId, String strategyType) {
+        // Check route-bound in snapshot
+        for (StrategyDefinition strategy : strategySnapshot.values()) {
+            if (strategy.isRouteBound() && routeId.equals(strategy.getRouteId()) 
+                && strategyType.equals(strategy.getStrategyType()) && strategy.isEnabled()) {
+                return strategy;
+            }
+        }
+        // Check global in snapshot
+        for (StrategyDefinition strategy : strategySnapshot.values()) {
+            if (strategy.isGlobal() && strategyType.equals(strategy.getStrategyType()) && strategy.isEnabled()) {
+                return strategy;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Mark config center as unhealthy.
+     * Gateway will use snapshot fallback until healthy again.
+     */
+    public void markConfigCenterUnhealthy() {
+        if (configCenterHealthy) {
+            configCenterHealthy = false;
+            log.warn("Config center marked as UNHEALTHY - using snapshot fallback");
+        }
+    }
+
+    /**
+     * Mark config center as healthy.
+     * Gateway will use fresh config from config center.
+     */
+    public void markConfigCenterHealthy() {
+        if (!configCenterHealthy) {
+            configCenterHealthy = true;
+            log.info("Config center marked as HEALTHY - using fresh config");
+            // Create new snapshot after recovery
+            createSnapshot();
+        }
+    }
+
+    /**
+     * Check if config center is healthy.
+     */
+    public boolean isConfigCenterHealthy() {
+        return configCenterHealthy;
+    }
+
+    /**
+     * Restore from snapshot if cache is empty.
+     * Useful when config center fails and primary cache was cleared.
+     */
+    public void restoreFromSnapshotIfNeeded() {
+        if (strategyCache.isEmpty() && !strategySnapshot.isEmpty()) {
+            log.warn("Primary cache empty, restoring from snapshot with {} entries", strategySnapshot.size());
+            for (Map.Entry<String, StrategyDefinition> entry : strategySnapshot.entrySet()) {
+                putStrategy(entry.getKey(), entry.getValue());
+            }
+            log.info("Cache restored from snapshot");
+        }
+    }
+
+    /**
+     * Get snapshot entry count (for monitoring).
+     */
+    public int getSnapshotCount() {
+        return strategySnapshot.size();
+    }
+
+    // ============================================================
+    // Convenience Methods (wrappers for backward compatibility)
+    // ============================================================
+
+    /**
+     * Get rate limiter config for route.
+     * @deprecated Use {@link #getConfig(String, String)} instead
+     */
+    public Map<String, Object> getRateLimiterConfig(String routeId) {
+        return getConfig(routeId, StrategyDefinition.TYPE_RATE_LIMITER);
+    }
+
+    /**
+     * Get IP filter config for route.
+     * @deprecated Use {@link #getConfig(String, String)} instead
+     */
+    public Map<String, Object> getIPFilterConfig(String routeId) {
+        return getConfig(routeId, StrategyDefinition.TYPE_IP_FILTER);
+    }
+
+    /**
+     * Get timeout config for route.
+     * @deprecated Use {@link #getConfig(String, String)} instead
+     */
+    public Map<String, Object> getTimeoutConfig(String routeId) {
+        return getConfig(routeId, StrategyDefinition.TYPE_TIMEOUT);
+    }
+
+    /**
+     * Get circuit breaker config for route.
+     * @deprecated Use {@link #getConfig(String, String)} instead
+     */
+    public Map<String, Object> getCircuitBreakerConfig(String routeId) {
+        return getConfig(routeId, StrategyDefinition.TYPE_CIRCUIT_BREAKER);
+    }
+
+    /**
+     * Get auth config for route.
+     * @deprecated Use {@link #getConfig(String, String)} instead
+     */
+    public Map<String, Object> getAuthConfig(String routeId) {
+        return getConfig(routeId, StrategyDefinition.TYPE_AUTH);
+    }
+
+    /**
+     * Get retry config for route.
+     * @deprecated Use {@link #getConfig(String, String)} instead
+     */
+    public Map<String, Object> getRetryConfig(String routeId) {
+        return getConfig(routeId, StrategyDefinition.TYPE_RETRY);
+    }
+
+    /**
+     * Get CORS config for route.
+     * @deprecated Use {@link #getConfig(String, String)} instead
+     */
+    public Map<String, Object> getCorsConfig(String routeId) {
+        return getConfig(routeId, StrategyDefinition.TYPE_CORS);
+    }
+
+    /**
+     * Get access log config for route.
+     * @deprecated Use {@link #getConfig(String, String)} instead
+     */
+    public Map<String, Object> getAccessLogConfig(String routeId) {
+        return getConfig(routeId, StrategyDefinition.TYPE_ACCESS_LOG);
+    }
+
+    /**
+     * Get header operation config for route.
+     * @deprecated Use {@link #getConfig(String, String)} instead
+     */
+    public Map<String, Object> getHeaderOpConfig(String routeId) {
+        return getConfig(routeId, StrategyDefinition.TYPE_HEADER_OP);
+    }
+
+    /**
+     * Get cache config for route.
+     * @deprecated Use {@link #getConfig(String, String)} instead
+     */
+    public Map<String, Object> getCacheConfig(String routeId) {
+        return getConfig(routeId, StrategyDefinition.TYPE_CACHE);
+    }
+
+    /**
+     * Get security config for route.
+     * @deprecated Use {@link #getConfig(String, String)} instead
+     */
+    public Map<String, Object> getSecurityConfig(String routeId) {
+        return getConfig(routeId, StrategyDefinition.TYPE_SECURITY);
+    }
+
+    /**
+     * Get API version config for route.
+     * @deprecated Use {@link #getConfig(String, String)} instead
+     */
+    public Map<String, Object> getApiVersionConfig(String routeId) {
+        return getConfig(routeId, StrategyDefinition.TYPE_API_VERSION);
+    }
+
+    /**
+     * Get multi-dimensional rate limiter config for route.
+     * @deprecated Use {@link #getConfig(String, String)} instead
+     */
+    public Map<String, Object> getMultiDimRateLimiterConfig(String routeId) {
+        return getConfig(routeId, StrategyDefinition.TYPE_MULTI_DIM_RATE_LIMITER);
+    }
+
+    /**
+     * Get request transform config for route.
+     * @deprecated Use {@link #getConfig(String, String)} instead
+     */
+    public Map<String, Object> getRequestTransformConfig(String routeId) {
+        return getConfig(routeId, StrategyDefinition.TYPE_REQUEST_TRANSFORM);
+    }
+
+    /**
+     * Get response transform config for route.
+     * @deprecated Use {@link #getConfig(String, String)} instead
+     */
+    public Map<String, Object> getResponseTransformConfig(String routeId) {
+        return getConfig(routeId, StrategyDefinition.TYPE_RESPONSE_TRANSFORM);
+    }
+
+    /**
+     * Get request validation config for route.
+     * @deprecated Use {@link #getConfig(String, String)} instead
+     */
+    public Map<String, Object> getRequestValidationConfig(String routeId) {
+        return getConfig(routeId, StrategyDefinition.TYPE_REQUEST_VALIDATION);
+    }
+
+    /**
+     * Get mock response config for route.
+     * @deprecated Use {@link #getConfig(String, String)} instead
+     */
+    public Map<String, Object> getMockResponseConfig(String routeId) {
+        return getConfig(routeId, StrategyDefinition.TYPE_MOCK_RESPONSE);
     }
 }

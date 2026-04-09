@@ -14,6 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Consul implementation of ConfigCenterService.
+ * Enhanced with local cache fallback for Consul failure scenarios.
  */
 @Slf4j
 public class ConsulConfigService extends AbstractConfigService {
@@ -21,25 +22,50 @@ public class ConsulConfigService extends AbstractConfigService {
     private final String prefix;
     private final ConsulClient consulClient;
 
+    // Local content cache: key -> content (for fallback)
+    private final Map<String, String> contentCache = new ConcurrentHashMap<>();
+
+    // Consul health status tracker
+    private volatile boolean healthy = true;
+    private volatile long lastSuccessTime = System.currentTimeMillis();
+    private static final long HEALTH_CHECK_THRESHOLD_MS = 30000; // 30 seconds
+
     public ConsulConfigService(ConsulClient consulClient, String prefix) {
         this.prefix = prefix;
         this.consulClient = consulClient;
-        log.info("ConsulConfigService initialized with prefix: {}", prefix);
+        log.info("ConsulConfigService initialized with prefix: {} and cache fallback support", prefix);
     }
 
     @Override
     public String getConfig(String dataId, String group) {
+        String key = buildConsulKey(dataId, group);
         try {
-            // Consul uses key-value format: prefix/group/dataId
-            String key = buildKey(dataId, group);
             Response<GetValue> response = consulClient.getKVValue(key);
             if (Objects.nonNull(response.getValue())) {
                 String encodedValue = response.getValue().getValue();
-                return new String(Base64.getDecoder().decode(encodedValue));
+                String content = new String(Base64.getDecoder().decode(encodedValue));
+                // Update cache on success
+                contentCache.put(key, content);
+                markHealthy();
+                return content;
+            }
+            // If Consul returns null, use cached version
+            String cachedContent = contentCache.get(key);
+            if (cachedContent != null) {
+                log.warn("Consul returned null for {}#{} - using cached content", dataId, group);
+                return cachedContent;
             }
             return null;
         } catch (Exception e) {
-            log.error("Failed to get config from Consul: {}#{}", dataId, group, e);
+            log.error("Failed to get config from Consul: {}#{} - Error: {}", dataId, group, e.getMessage());
+            markUnhealthy();
+            // Fallback to cached content
+            String cachedContent = contentCache.get(key);
+            if (cachedContent != null) {
+                log.warn("Using cached fallback for {}#{}", dataId, group);
+                return cachedContent;
+            }
+            log.error("No cached fallback available for {}#{} - returning null", dataId, group);
             return null;
         }
     }
@@ -64,7 +90,6 @@ public class ConsulConfigService extends AbstractConfigService {
     @Override
     public void addListener(String dataId, String group, ConfigListener listener) {
         super.addListener(dataId, group, listener);
-
         // Consul uses watch mechanism for configuration changes
         // In production, you would use Consul's watch API to monitor key changes
         log.debug("Consul listener added for: {}#{}", dataId, group);
@@ -84,7 +109,52 @@ public class ConsulConfigService extends AbstractConfigService {
     /**
      * Build Consul key from dataId and group.
      */
-    protected String buildKey(String dataId, String group) {
+    protected String buildConsulKey(String dataId, String group) {
         return prefix + "/" + group + "/" + dataId;
+    }
+
+    // ============================================================
+    // Health Management
+    // ============================================================
+
+    private void markHealthy() {
+        lastSuccessTime = System.currentTimeMillis();
+        if (!healthy) {
+            healthy = true;
+            log.info("Consul config center marked as HEALTHY");
+        }
+    }
+
+    private void markUnhealthy() {
+        healthy = false;
+        log.warn("Consul config center marked as UNHEALTHY - will use cached fallback");
+    }
+
+    /**
+     * Check if Consul connection is healthy.
+     */
+    public boolean isHealthy() {
+        // Auto-detect stale health status
+        if (healthy && System.currentTimeMillis() - lastSuccessTime > HEALTH_CHECK_THRESHOLD_MS) {
+            log.warn("Consul health status stale (no success in {}ms) - marking unhealthy", 
+                    HEALTH_CHECK_THRESHOLD_MS);
+            healthy = false;
+        }
+        return healthy;
+    }
+
+    /**
+     * Get cached content count (for monitoring).
+     */
+    public int getCacheCount() {
+        return contentCache.size();
+    }
+
+    /**
+     * Clear local cache (for testing/reset).
+     */
+    public void clearCache() {
+        contentCache.clear();
+        log.info("Consul local cache cleared");
     }
 }
