@@ -201,3 +201,38 @@ management:
   health:
     consul:
       enabled: false
+  # OpenTelemetry Tracing Configuration
+  tracing:
+    enabled: ${OTEL_TRACING_ENABLED:true}
+    sampling:
+      probability: ${OTEL_SAMPLING_PROBABILITY:1.0}  # 1.0 = 100% sampling (adjust for production)
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317/v1/traces}
+      headers:
+        # Optional: Add authentication headers if required
+        # Authorization: Bearer ${OTEL_AUTH_TOKEN:}
+    metrics:
+      export:
+        enabled: ${OTEL_METRICS_EXPORT_ENABLED:true}
+        step: ${OTEL_METRICS_EXPORT_STEP:1m}
+
+# SpringDoc OpenAPI Configuration
+springdoc:
+  api-docs:
+    enabled: ${SPRINGDOC_ENABLED:true}
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: ${SPRINGDOC_SWAGGER_UI_ENABLED:true}
+    path: /swagger-ui.html
+  show-actuator: true
+
+# OpenTelemetry SDK Configuration
+otel:
+  sdk:
+    disabled: ${OTEL_SDK_DISABLED:false}
+  service:
+    name: ${spring.application.name:my-gateway}
+  exporter:
+    otlp:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}

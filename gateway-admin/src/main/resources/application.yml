@@ -92,13 +92,52 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus,metrics
   endpoint:
     health:
       show-details: always
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
   health:
     consul:
       enabled: false  # Disable Consul health check (not running locally)
+  # OpenTelemetry Tracing Configuration
+  tracing:
+    enabled: ${OTEL_TRACING_ENABLED:true}
+    sampling:
+      probability: ${OTEL_SAMPLING_PROBABILITY:1.0}  # 1.0 = 100% sampling (adjust for production)
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317/v1/traces}
+    metrics:
+      export:
+        enabled: ${OTEL_METRICS_EXPORT_ENABLED:true}
+        step: ${OTEL_METRICS_EXPORT_STEP:1m}
+
+# SpringDoc OpenAPI Configuration
+springdoc:
+  api-docs:
+    enabled: ${SPRINGDOC_ENABLED:true}
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: ${SPRINGDOC_SWAGGER_UI_ENABLED:true}
+    path: /swagger-ui.html
+  show-actuator: true
+  packages-to-scan: com.leoli.gateway.admin.controller
+  default-produces-media-type: application/json
+
+# OpenTelemetry SDK Configuration
+otel:
+  sdk:
+    disabled: ${OTEL_SDK_DISABLED:false}
+  service:
+    name: ${spring.application.name:gateway-admin}
+  exporter:
+    otlp:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}
 
 logging:
   level:
