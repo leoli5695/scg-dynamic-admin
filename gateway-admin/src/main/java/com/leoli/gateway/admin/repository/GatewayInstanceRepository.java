@@ -2,6 +2,7 @@ package com.leoli.gateway.admin.repository;
 
 import com.leoli.gateway.admin.model.GatewayInstanceEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -64,4 +65,31 @@ public interface GatewayInstanceRepository extends JpaRepository<GatewayInstance
      * Find instances by status code in list.
      */
     List<GatewayInstanceEntity> findByStatusCodeIn(List<Integer> statusCodes);
+
+    /**
+     * Count instances by status.
+     */
+    long countByStatus(String status);
+
+    /**
+     * Count instances by enabled status.
+     */
+    long countByEnabledTrue();
+
+    /**
+     * Count instances by status code.
+     */
+    long countByStatusCode(Integer statusCode);
+
+    /**
+     * Find instance IDs by cluster ID (projection for efficient lookup).
+     */
+    @Query("SELECT g.instanceId FROM GatewayInstanceEntity g WHERE g.clusterId = :clusterId AND g.enabled = true")
+    List<String> findEnabledInstanceIdsByClusterId(Long clusterId);
+
+    /**
+     * Count running instances (statusCode = 1).
+     */
+    @Query("SELECT COUNT(g) FROM GatewayInstanceEntity g WHERE g.statusCode = 1")
+    long countRunningInstances();
 }

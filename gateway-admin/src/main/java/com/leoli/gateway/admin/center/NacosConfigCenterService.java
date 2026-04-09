@@ -96,13 +96,14 @@ public class NacosConfigCenterService implements ConfigCenterService {
      * This is useful for test environments where we want isolated namespaces.
      */
     private void ensureNamespaceExists(String namespaceId) {
+        java.net.HttpURLConnection conn = null;
         try {
             // Ensure serverAddr has http protocol
             String baseUrl = serverAddr.startsWith("http") ? serverAddr : "http://" + serverAddr;
 
             // Check if namespace exists via HTTP API
             String url = baseUrl + "/nacos/v1/console/namespaces?namespaceId=" + namespaceId;
-            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+            conn = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
             conn.setRequestMethod("GET");
             conn.setConnectTimeout(5000);
             conn.setReadTimeout(5000);
@@ -138,6 +139,10 @@ public class NacosConfigCenterService implements ConfigCenterService {
             } catch (Exception ex) {
                 log.warn("Failed to create namespace {}: {}", namespaceId, ex.getMessage());
             }
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
         }
     }
 
@@ -146,31 +151,52 @@ public class NacosConfigCenterService implements ConfigCenterService {
      */
     private void createNamespace(String namespaceId, String baseUrl) throws Exception {
         String url = baseUrl + "/nacos/v1/console/namespaces";
-        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
-        conn.setRequestMethod("POST");
-        conn.setDoOutput(true);
-        conn.setConnectTimeout(5000);
-        conn.setReadTimeout(5000);
-        conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+        java.net.HttpURLConnection conn = null;
+        try {
+            conn = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+            conn.setRequestMethod("POST");
+            conn.setDoOutput(true);
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(5000);
+            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
 
-        String params = "customNamespaceId=" + namespaceId +
-                       "&namespaceName=" + namespaceId +
-                       "&namespaceDesc=Auto-created namespace for gateway tests";
-        java.io.OutputStream os = conn.getOutputStream();
-        os.write(params.getBytes());
-        os.flush();
-        os.close();
+            String params = "customNamespaceId=" + namespaceId +
+                           "&namespaceName=" + namespaceId +
+                           "&namespaceDesc=Auto-created namespace for gateway tests";
+            java.io.OutputStream os = conn.getOutputStream();
+            os.write(params.getBytes());
+            os.flush();
+            os.close();
 
-        int responseCode = conn.getResponseCode();
-        if (responseCode == 200) {
-            log.info("Created Nacos namespace: {}", namespaceId);
-        } else {
-            log.warn("Namespace creation response: {}", responseCode);
+            int responseCode = conn.getResponseCode();
+            if (responseCode == 200) {
+                log.info("Created Nacos namespace: {}", namespaceId);
+            } else {
+                log.warn("Namespace creation response: {}", responseCode);
+            }
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
         }
     }
 
     @PreDestroy
     public void destroy() {
+        // Shutdown batch executor
+        if (batchExecutor != null && !batchExecutor.isShutdown()) {
+            batchExecutor.shutdown();
+            try {
+                if (!batchExecutor.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS)) {
+                    batchExecutor.shutdownNow();
+                }
+                log.info("Batch executor shut down successfully");
+            } catch (InterruptedException e) {
+                batchExecutor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
+
         // Shutdown ConfigService
         if (configService != null) {
             try {
@@ -791,5 +817,24 @@ public class NacosConfigCenterService implements ConfigCenterService {
                 dataIds.size(), effectiveNamespace.isEmpty() ? "public" : effectiveNamespace,
                 successCount, dataIds.size());
         return successCount;
+    }
+
+    // ==================== Health check methods ====================
+
+    @Override
+    public boolean isAvailable() {
+        try {
+            // Try to get server status
+            String status = configService.getServerStatus();
+            return status != null && !status.contains("DOWN");
+        } catch (Exception e) {
+            log.debug("Nacos availability check failed: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    @Override
+    public String getServerAddr() {
+        return serverAddr;
     }
 }

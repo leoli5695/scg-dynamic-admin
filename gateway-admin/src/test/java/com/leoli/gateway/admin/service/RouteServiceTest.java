@@ -3,12 +3,15 @@ package com.leoli.gateway.admin.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.center.ConfigCenterService;
 import com.leoli.gateway.admin.converter.RouteConverter;
+import com.leoli.gateway.admin.metrics.BusinessMetrics;
+import com.leoli.gateway.admin.metrics.TracingHelper;
 import com.leoli.gateway.admin.model.GatewayInstanceEntity;
 import com.leoli.gateway.admin.model.RouteDefinition;
 import com.leoli.gateway.admin.model.RouteEntity;
 import com.leoli.gateway.admin.model.RouteResponse;
 import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
 import com.leoli.gateway.admin.repository.RouteRepository;
+import io.micrometer.tracing.Span;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -54,6 +57,15 @@ class RouteServiceTest {
     @Mock
     private GatewayInstanceRepository gatewayInstanceRepository;
 
+    @Mock
+    private BusinessMetrics businessMetrics;
+
+    @Mock
+    private TracingHelper tracingHelper;
+
+    @Mock
+    private Span mockSpan;
+
     @InjectMocks
     private RouteService routeService;
 
@@ -64,7 +76,8 @@ class RouteServiceTest {
 
     @BeforeEach
     void setUp() {
-        // Common setup
+        // Mock tracing helper to return a mock span (lenient for tests that don't use it)
+        lenient().when(tracingHelper.startRouteSpan(anyString(), anyString())).thenReturn(mockSpan);
     }
 
     @Nested

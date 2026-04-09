@@ -2,6 +2,8 @@ package com.leoli.gateway.admin.repository;
 
 import com.leoli.gateway.admin.model.RouteEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -60,4 +62,20 @@ public interface RouteRepository extends JpaRepository<RouteEntity, String> {
      * Delete all routes by instance ID.
      */
     int deleteByInstanceId(String instanceId);
+
+    /**
+     * Count enabled routes.
+     */
+    long countByEnabledTrue();
+
+    /**
+     * Count routes by status (enabled/disabled).
+     */
+    long countByEnabled(boolean enabled);
+
+    /**
+     * Find route IDs by instance ID (projection for index rebuild).
+     */
+    @Query("SELECT r.routeId FROM RouteEntity r WHERE r.instanceId = :instanceId AND r.enabled = true")
+    List<String> findEnabledRouteIdsByInstanceId(String instanceId);
 }

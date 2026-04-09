@@ -2,6 +2,7 @@ package com.leoli.gateway.admin.repository;
 
 import com.leoli.gateway.admin.model.ServiceEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -51,4 +52,20 @@ public interface ServiceRepository extends JpaRepository<ServiceEntity, Long> {
      * Delete all services by instance ID.
      */
     int deleteByInstanceId(String instanceId);
+
+    /**
+     * Count enabled services.
+     */
+    long countByEnabledTrue();
+
+    /**
+     * Count services by status (enabled/disabled).
+     */
+    long countByEnabled(boolean enabled);
+
+    /**
+     * Find service IDs by instance ID (projection for efficient lookup).
+     */
+    @Query("SELECT s.serviceId FROM services s WHERE s.instanceId = :instanceId AND s.enabled = true")
+    List<String> findEnabledServiceIdsByInstanceId(String instanceId);
 }

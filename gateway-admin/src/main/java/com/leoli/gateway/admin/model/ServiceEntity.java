@@ -15,7 +15,10 @@ import java.time.LocalDateTime;
 @Data
 @Entity(name = "services")
 @Table(name = "services", indexes = {
-    @Index(name = "idx_service_instance_enabled", columnList = "instance_id, enabled")
+    @Index(name = "idx_service_id", columnList = "service_id"),
+    @Index(name = "idx_service_enabled", columnList = "enabled"),
+    @Index(name = "idx_service_instance_enabled", columnList = "instance_id, enabled"),
+    @Index(name = "idx_service_name_instance", columnList = "service_name, instance_id")
 })
 public class ServiceEntity {
 

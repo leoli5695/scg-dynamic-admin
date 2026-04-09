@@ -171,4 +171,20 @@ public interface ConfigCenterService {
      * @return number of successfully removed configs
      */
     int removeConfigsBatch(java.util.List<String> dataIds, String namespace);
+
+    // ==================== Health check methods ====================
+
+    /**
+     * Check if the config center server is available.
+     *
+     * @return true if the server is reachable, false otherwise
+     */
+    boolean isAvailable();
+
+    /**
+     * Get the server address of the config center.
+     *
+     * @return server address (e.g., "localhost:8848")
+     */
+    String getServerAddr();
 }

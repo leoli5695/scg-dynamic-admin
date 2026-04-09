@@ -16,10 +16,12 @@ import java.time.LocalDateTime;
 @Entity(name = "strategies")
 @Table(name = "strategies", indexes = {
     @Index(name = "idx_strategy_id", columnList = "strategy_id"),
+    @Index(name = "idx_strategy_name", columnList = "strategy_name"),
     @Index(name = "idx_strategy_instance_enabled", columnList = "instance_id, enabled"),
     @Index(name = "idx_strategy_type_scope_enabled", columnList = "strategy_type, scope, enabled"),
     @Index(name = "idx_strategy_scope_instance_enabled", columnList = "scope, instance_id, enabled"),
-    @Index(name = "idx_strategy_route_enabled", columnList = "route_id, enabled")
+    @Index(name = "idx_strategy_route_enabled", columnList = "route_id, enabled"),
+    @Index(name = "idx_strategy_name_instance", columnList = "strategy_name, instance_id")
 })
 public class StrategyEntity {
 

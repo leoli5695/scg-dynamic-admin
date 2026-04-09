@@ -2,6 +2,7 @@ package com.leoli.gateway.admin.repository;
 
 import com.leoli.gateway.admin.model.StrategyEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -123,4 +124,25 @@ public interface StrategyRepository extends JpaRepository<StrategyEntity, Long> 
      * Delete all strategies by instance ID.
      */
     int deleteByInstanceId(String instanceId);
+
+    /**
+     * Count enabled strategies.
+     */
+    long countByEnabledTrue();
+
+    /**
+     * Count strategies by status (enabled/disabled).
+     */
+    long countByEnabled(boolean enabled);
+
+    /**
+     * Find strategy IDs by route ID (projection for efficient lookup).
+     */
+    @Query("SELECT s.strategyId FROM strategies s WHERE s.routeId = :routeId AND s.enabled = true")
+    List<String> findEnabledStrategyIdsByRouteId(String routeId);
+
+    /**
+     * Count strategies by type and instance.
+     */
+    long countByStrategyTypeAndInstanceId(String strategyType, String instanceId);
 }

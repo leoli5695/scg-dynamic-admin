@@ -16,7 +16,15 @@ import java.time.LocalDateTime;
  */
 @Data
 @Entity
-@Table(name = "gateway_instances")
+@Table(name = "gateway_instances", indexes = {
+    @Index(name = "idx_instance_name", columnList = "instance_name"),
+    @Index(name = "idx_instance_enabled", columnList = "enabled"),
+    @Index(name = "idx_instance_cluster", columnList = "cluster_id"),
+    @Index(name = "idx_instance_namespace", columnList = "namespace"),
+    @Index(name = "idx_instance_nacos_namespace", columnList = "nacos_namespace"),
+    @Index(name = "idx_instance_status_code", columnList = "status_code"),
+    @Index(name = "idx_instance_status", columnList = "status")
+})
 public class GatewayInstanceEntity {
 
     @Id

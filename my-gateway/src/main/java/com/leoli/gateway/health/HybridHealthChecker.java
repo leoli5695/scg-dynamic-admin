@@ -106,7 +106,7 @@ public class HybridHealthChecker {
             // Instance already in cache - mark as needing re-check
             InstanceHealth existing = healthCache.getIfPresent(key);
             if (existing != null) {
-                log.info("Instance {}:{} already in cache, marking for re-check (current healthy={})",
+                log.debug("Instance {}:{} already in cache, marking for re-check (current healthy={})",
                         ip, port, existing.isHealthy());
                 // Mark as pending re-check so health check will run
                 existing.setUnhealthyReason("PENDING: Configuration changed, awaiting re-check");
@@ -171,7 +171,7 @@ public class HybridHealthChecker {
 
         boolean wasHealthy = health.isHealthy();
 
-        log.info("markHealthy called for {}:{}:{} - wasHealthy={}, setting healthy=true",
+        log.debug("markHealthy called for {}:{}:{} - wasHealthy={}, setting healthy=true",
                 serviceId, ip, port, wasHealthy);
 
         health.setHealthy(true);
@@ -192,10 +192,10 @@ public class HybridHealthChecker {
                 return; // Don't add to queue
             }
 
-            log.info("Adding {}:{}:{} to push queue with healthy=true", serviceId, ip, port);
+            log.debug("Adding {}:{}:{} to push queue with healthy=true", serviceId, ip, port);
             queueForBatchPush(serviceId, ip, port, true);
         } else {
-            log.info("Instance {}:{}:{} remains HEALTHY (no state change)", serviceId, ip, port);
+            log.debug("Instance {}:{}:{} remains HEALTHY (no state change)", serviceId, ip, port);
         }
     }
 
@@ -292,7 +292,7 @@ public class HybridHealthChecker {
 
         boolean wasHealthy = health.isHealthy();
 
-        log.info("markUnhealthy called for {}:{}:{} - wasHealthy={}, reason={}",
+        log.debug("markUnhealthy called for {}:{}:{} - wasHealthy={}, reason={}",
                 serviceId, ip, port, wasHealthy, reason);
 
         health.setHealthy(false);
@@ -304,7 +304,7 @@ public class HybridHealthChecker {
 
         // Queue for batch push ONLY when state changes (true -> false)
         if (wasHealthy) {
-            log.error("Instance {}:{}:{} became UNHEALTHY: {} (state changed: true->false)", serviceId, ip, port, reason);
+            log.warn("Instance {}:{}:{} became UNHEALTHY: {} (state changed: true->false)", serviceId, ip, port, reason);
 
             // Check for network flap (sudden mass failure)
             if (isPotentialNetworkFlap(false)) {
@@ -313,10 +313,10 @@ public class HybridHealthChecker {
                 return; // Don't add to queue
             }
 
-            log.info("Adding {}:{}:{} to push queue with healthy=false", serviceId, ip, port);
+            log.debug("Adding {}:{}:{} to push queue with healthy=false", serviceId, ip, port);
             queueForBatchPush(serviceId, ip, port, false);
         } else {
-            log.info("Instance {}:{}:{} remains UNHEALTHY: {} (no state change)", serviceId, ip, port, reason);
+            log.debug("Instance {}:{}:{} remains UNHEALTHY: {} (no state change)", serviceId, ip, port, reason);
         }
     }
 

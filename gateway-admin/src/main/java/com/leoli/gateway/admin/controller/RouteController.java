@@ -10,8 +10,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -26,7 +24,7 @@ import java.util.Map;
 @Slf4j
 @RestController
 @RequestMapping("/api/routes")
-public class RouteController {
+public class RouteController extends BaseController {
 
     @Autowired
     private RouteService routeService;
@@ -36,22 +34,6 @@ public class RouteController {
 
     @Autowired
     private ObjectMapper objectMapper;
-
-    private String getOperator() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        return auth != null && auth.isAuthenticated() ? auth.getName() : "anonymous";
-    }
-
-    private String getIpAddress(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("X-Real-IP");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getRemoteAddr();
-        }
-        return ip;
-    }
 
     /**
      * Get all routes.

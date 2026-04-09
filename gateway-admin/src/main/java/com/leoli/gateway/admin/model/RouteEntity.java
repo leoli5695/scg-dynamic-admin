@@ -20,7 +20,10 @@ import java.time.LocalDateTime;
 @Data
 @Entity
 @Table(name = "routes", indexes = {
-    @Index(name = "idx_route_instance_enabled", columnList = "instance_id, enabled")
+    @Index(name = "idx_route_name", columnList = "route_name"),
+    @Index(name = "idx_route_enabled", columnList = "enabled"),
+    @Index(name = "idx_route_instance_enabled", columnList = "instance_id, enabled"),
+    @Index(name = "idx_route_name_instance", columnList = "route_name, instance_id")
 })
 public class RouteEntity {
 

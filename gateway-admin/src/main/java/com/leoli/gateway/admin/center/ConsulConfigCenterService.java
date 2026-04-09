@@ -40,6 +40,8 @@ public class ConsulConfigCenterService implements ConfigCenterService {
 
     private ConsulClient consulClient;
     private final ObjectMapper objectMapper;
+    private String consulHost;
+    private int consulPort;
 
     public ConsulConfigCenterService() {
         this.objectMapper = new ObjectMapper();
@@ -48,13 +50,13 @@ public class ConsulConfigCenterService implements ConfigCenterService {
 
     @PostConstruct
     public void init() {
-        String host = properties.getConsul().getHost();
-        int port = properties.getConsul().getPort();
+        this.consulHost = properties.getConsul().getHost();
+        this.consulPort = properties.getConsul().getPort();
         String prefix = properties.getConsul().getPrefix();
 
-        this.consulClient = new ConsulClient(host, port);
+        this.consulClient = new ConsulClient(consulHost, consulPort);
         log.info("Consul Config Center initialized with host={}, port={}, prefix={}",
-                host, port, prefix);
+                consulHost, consulPort, prefix);
     }
 
     @PreDestroy
@@ -386,5 +388,24 @@ public class ConsulConfigCenterService implements ConfigCenterService {
         log.info("Batch removed {} configs from Consul ({} successful of {})",
                 dataIds.size(), successCount, dataIds.size());
         return successCount;
+    }
+
+    // ==================== Health check methods ====================
+
+    @Override
+    public boolean isAvailable() {
+        try {
+            // Try to get Consul leader status
+            var status = consulClient.getStatusLeader();
+            return status != null && !status.getValue().isEmpty();
+        } catch (Exception e) {
+            log.debug("Consul availability check failed: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    @Override
+    public String getServerAddr() {
+        return consulHost + ":" + consulPort;
     }
 }

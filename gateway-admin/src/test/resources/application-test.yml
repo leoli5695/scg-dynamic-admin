@@ -22,6 +22,8 @@ spring:
       host: 127.0.0.1
       port: 6379
       database: 1
+  cache:
+    type: simple
   cloud:
     nacos:
       discovery:
@@ -37,3 +39,9 @@ logging:
   level:
     com.leoli.gateway: DEBUG
     org.springframework.web: DEBUG
+
+# Disable Nacos gRPC for tests to avoid connection errors
+nacos:
+  naming:
+    push:
+      empty-protection: false
