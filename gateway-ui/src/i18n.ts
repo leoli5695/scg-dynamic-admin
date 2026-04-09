@@ -880,7 +880,7 @@ const resources = {
       // Messages
       'message.confirm_delete': 'Are you sure you want to delete this item?',
       'message.confirm_delete_service': 'Are you sure you want to delete service "{{name}}"?',
-      'message.confirm_delete_strategy': 'Are you sure you want to delete {{type}} strategy for route "{{routeId}}"?',
+      'message.confirm_delete_strategy': 'Are you sure you want to delete strategy "{{name}}"?',
       'message.confirm_delete_route': 'Are you sure you want to delete route "{{name}}"?\n\nRoute ID: {{routeId}}',
       'message.service_in_use': 'This service is currently referenced by the following routes:',
       'message.please_remove_routes_first': 'Please remove or update the associated routes before deleting this service.',
@@ -2059,7 +2059,7 @@ const resources = {
       // Messages
       'message.confirm_delete': '确定要删除此项吗？',
       'message.confirm_delete_service': '确定要删除服务 "{{name}}" 吗？',
-      'message.confirm_delete_strategy': '确定要删除路由 "{{routeId}}" 的 {{type}} 策略吗？',
+      'message.confirm_delete_strategy': '确定要删除策略 "{{name}}" 吗？',
       'message.confirm_delete_route': '确定要删除路由 "{{name}}" 吗？\n\n路由 ID: {{routeId}}',
       'message.service_in_use': '该服务当前被以下路由引用:',
       'message.please_remove_routes_first': '请先删除或更新关联的路由后再删除此服务。',

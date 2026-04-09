@@ -50,6 +50,8 @@ spring:
 gateway:
   center:
     type: nacos  # default config center type, can be 'nacos' or 'consul'
+  kubernetes:
+    enabled: ${K8S_ENABLED:false}  # Disable Kubernetes features for local development
   admin:
     url: ${GATEWAY_ADMIN_URL:http://localhost:9090}
     # K8s internal URL for gateway instances to connect to admin
@@ -111,11 +113,29 @@ management:
       probability: ${OTEL_SAMPLING_PROBABILITY:1.0}  # 1.0 = 100% sampling (adjust for production)
   otlp:
     tracing:
-      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317/v1/traces}
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
     metrics:
       export:
         enabled: ${OTEL_METRICS_EXPORT_ENABLED:true}
         step: ${OTEL_METRICS_EXPORT_STEP:1m}
+
+# OpenTelemetry Exporter Configuration
+otel:
+  sdk:
+    disabled: ${OTEL_SDK_DISABLED:false}
+  exporter:
+    otlp:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}
+      protocol: ${OTEL_EXPORTER_OTLP_PROTOCOL:http/protobuf}
+  service:
+    name: ${spring.application.name:gateway-admin}
+  logs:
+    exporter: ${OTEL_LOGS_EXPORTER:none}
+  metrics:
+    exporter: ${OTEL_METRICS_EXPORTER:otlp}
+  traces:
+    exporter: ${OTEL_TRACES_EXPORTER:otlp}
+    sampler: ${OTEL_TRACES_SAMPLER:parentbased_always_on}
 
 # SpringDoc OpenAPI Configuration
 springdoc:
@@ -129,16 +149,6 @@ springdoc:
   packages-to-scan: com.leoli.gateway.admin.controller
   default-produces-media-type: application/json
 
-# OpenTelemetry SDK Configuration
-otel:
-  sdk:
-    disabled: ${OTEL_SDK_DISABLED:false}
-  service:
-    name: ${spring.application.name:gateway-admin}
-  exporter:
-    otlp:
-      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}
-
 logging:
   level:
     com.alibaba.nacos: INFO
@@ -148,16 +158,16 @@ logging:
     org.springframework.boot.autoconfigure: WARN
     org.springframework.boot.autoconfigure.condition: WARN
 
-# SMTP Email Configuration (hardcoded for alerts)
+# SMTP Email Configuration (read from database email_config table, these defaults are for local dev only)
 mail:
   smtp:
-    host: smtp.163.com
-    port: 465
-    username: leoli1106@163.com
-    password: PXVXf33DrEAdkaDy
-    from-email: leoli1106@163.com
-    from-name: API Gateway
-    use-ssl: true
+    host: ${MAIL_SMTP_HOST:smtp.163.com}
+    port: ${MAIL_SMTP_PORT:465}
+    username: ${MAIL_SMTP_USERNAME:}
+    password: ${MAIL_SMTP_PASSWORD:}
+    from-email: ${MAIL_SMTP_FROM_EMAIL:}
+    from-name: ${MAIL_SMTP_FROM_NAME:API Gateway}
+    use-ssl: ${MAIL_SMTP_USE_SSL:true}
 
 # Nacos configuration
 # For gateway instances deployed in K8s, use k8s-server-addr (cluster internal address)

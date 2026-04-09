@@ -1,5 +1,6 @@
 package com.leoli.gateway.exception;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.web.reactive.error.ErrorWebExceptionHandler;
 import org.springframework.cloud.gateway.support.NotFoundException;
@@ -29,6 +30,8 @@ import java.util.regex.Pattern;
 @Order(-2) // High priority, execute before default handler
 public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
 
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
     @Override
     public Mono<Void> handle(ServerWebExchange exchange, Throwable ex) {
         ServerHttpResponse response = exchange.getResponse();
@@ -51,7 +54,13 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
 
         // Build error response body
         Map<String, Object> errorBody = buildErrorBody(exchange, ex, status);
-        String body = toJson(errorBody);
+        String body;
+        try {
+            body = objectMapper.writeValueAsString(errorBody);
+        } catch (Exception e) {
+            log.error("Failed to serialize error response", e);
+            body = "{\"status\":500,\"error\":\"Internal Server Error\"}";
+        }
 
         // Write response
         DataBufferFactory bufferFactory = response.bufferFactory();
@@ -237,42 +246,5 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
         }
         
         return message;
-    }
-
-    /**
-     * Simple JSON serialization (avoid adding Jackson dependency)
-     */
-    private String toJson(Map<String, Object> map) {
-        StringBuilder json = new StringBuilder("{");
-        boolean first = true;
-        
-        for (Map.Entry<String, Object> entry : map.entrySet()) {
-            if (!first) {
-                json.append(",");
-            }
-            first = false;
-            
-            json.append("\"").append(entry.getKey()).append("\":");
-            
-            if (entry.getValue() == null) {
-                json.append("null");
-            } else if (entry.getValue() instanceof Number) {
-                json.append(entry.getValue());
-            } else if (entry.getValue() instanceof Boolean) {
-                json.append(entry.getValue());
-            } else {
-                // Escape quotes in string values
-                String value = entry.getValue().toString()
-                    .replace("\\", "\\\\")
-                    .replace("\"", "\\\"")
-                    .replace("\n", "\\n")
-                    .replace("\r", "\\r")
-                    .replace("\t", "\\t");
-                json.append("\"").append(value).append("\"");
-            }
-        }
-        
-        json.append("}");
-        return json.toString();
     }
 }

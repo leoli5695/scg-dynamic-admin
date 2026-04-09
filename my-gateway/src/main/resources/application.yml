@@ -213,10 +213,10 @@ management:
       probability: ${OTEL_SAMPLING_PROBABILITY:1.0}  # 1.0 = 100% sampling (adjust for production)
   otlp:
     tracing:
-      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317/v1/traces}
-      headers:
-        # Optional: Add authentication headers if required
-        # Authorization: Bearer ${OTEL_AUTH_TOKEN:}
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+      # Optional: Add authentication headers if required
+      # headers:
+      #   Authorization: Bearer ${OTEL_AUTH_TOKEN:}
     metrics:
       export:
         enabled: ${OTEL_METRICS_EXPORT_ENABLED:true}
@@ -240,4 +240,9 @@ otel:
     name: ${spring.application.name:my-gateway}
   exporter:
     otlp:
-      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}
+      protocol: ${OTEL_EXPORTER_OTLP_PROTOCOL:http/protobuf}
+  traces:
+    exporter: ${OTEL_TRACES_EXPORTER:otlp}
+  metrics:
+    exporter: ${OTEL_METRICS_EXPORTER:otlp}

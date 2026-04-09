@@ -41,6 +41,7 @@ public class AlertCheckService {
     private final PrometheusService prometheusService;
     private final AlertContentGenerator alertContentGenerator;
     private final EmailSenderService emailSenderService;
+    private final AlertEmailBuilder alertEmailBuilder;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     // Default thresholds when config is missing
@@ -280,6 +281,17 @@ public class AlertCheckService {
 
             // Get recipients
             List<String> recipients = parseRecipients(config.getEmailRecipients());
+
+            // Skip sending if no recipients configured
+            if (recipients.isEmpty()) {
+                log.debug("No recipients configured for alert {}, skipping email notification", alertType);
+                // Still save alert history without email
+                saveAlertHistory(alertType, level, metricName, currentValue,
+                    exceededThreshold, buildAlertTitle(alertType, level, config.getEmailLanguage()),
+                    content, recipients, false, "No recipients configured");
+                return;
+            }
+
             String title = buildAlertTitle(alertType, level, config.getEmailLanguage());
 
             // Send email with detailed result

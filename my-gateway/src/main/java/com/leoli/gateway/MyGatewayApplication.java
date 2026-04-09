@@ -18,7 +18,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class MyGatewayApplication {
 
     public static void main(String[] args) {
-        System.setProperty("debug", "true");
         SpringApplication.run(MyGatewayApplication.class, args);
     }
 }
