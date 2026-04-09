@@ -33,6 +33,8 @@ public class ServiceApiTest extends BaseIntegrationTest {
         cleanAllData();
         System.out.println("[PASS] Data cleaned before tests");
     }
+
+    @Test
     @Order(1)
     void test01_CreateService_Success() throws Exception {
         ObjectNode service = objectMapper.createObjectNode();
@@ -87,22 +89,24 @@ public class ServiceApiTest extends BaseIntegrationTest {
     @Order(3)
     void test03_CreateService_VerifyNacos() throws Exception {
         String serviceConfigId = "config.gateway.service-" + createdServiceId;
-        assertTrue(nacosConfigExists(serviceConfigId), "Service config should exist in Nacos");
+        assertTrue(configCenterExists(serviceConfigId), "Service config should exist in ConfigCenter");
 
-        String config = getNacosConfig(serviceConfigId);
+        String config = getConfigFromCenter(serviceConfigId);
+        assertNotNull(config, "Config content should not be null");
         JsonNode configJson = objectMapper.readTree(config);
 
         assertEquals(createdServiceName, configJson.get("name").asText());
         assertEquals("round-robin", configJson.get("loadBalancer").asText());
         assertEquals(1, configJson.get("instances").size());
 
-        System.out.println("[PASS] Service config verified in Nacos");
+        System.out.println("[PASS] Service config verified in ConfigCenter");
     }
 
     @Test
     @Order(4)
     void test04_VerifyServicesIndex() throws Exception {
-        String indexConfig = getNacosConfig("config.gateway.metadata.services-index");
+        String indexConfig = getConfigFromCenter("config.gateway.metadata.services-index");
+        assertNotNull(indexConfig, "Services index should exist");
         JsonNode index = objectMapper.readTree(indexConfig);
 
         assertTrue(index.isArray(), "Services index should be an array");
@@ -115,7 +119,7 @@ public class ServiceApiTest extends BaseIntegrationTest {
         }
         assertTrue(found, "Service ID should be in services index");
 
-        System.out.println("[PASS] Services index verified in Nacos");
+        System.out.println("[PASS] Services index verified in ConfigCenter");
     }
 
     @Test
@@ -152,11 +156,12 @@ public class ServiceApiTest extends BaseIntegrationTest {
         JsonNode data = extractData(result);
         assertEquals(2, data.get("instances").size(), "Should have 2 instances");
 
-        // Verify in Nacos
+        // Verify in ConfigCenter
         String serviceConfigId = "config.gateway.service-" + createdServiceId;
-        String config = getNacosConfig(serviceConfigId);
+        String config = getConfigFromCenter(serviceConfigId);
+        assertNotNull(config, "Config should exist");
         JsonNode configJson = objectMapper.readTree(config);
-        assertEquals(2, configJson.get("instances").size(), "Nacos should have 2 instances");
+        assertEquals(2, configJson.get("instances").size(), "ConfigCenter should have 2 instances");
 
         System.out.println("[PASS] Instance added successfully");
     }
@@ -165,8 +170,12 @@ public class ServiceApiTest extends BaseIntegrationTest {
     @Order(7)
     void test07_DisableInstance() throws Exception {
         // Disable instance 127.0.0.1:9002
+        ObjectNode statusRequest = objectMapper.createObjectNode();
+        statusRequest.put("enabled", false);
+
         mockMvc.perform(put("/api/services/" + createdServiceName + "/instances/127.0.0.1:9002/status")
-                        .param("enabled", "false"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(statusRequest.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
 
@@ -185,13 +194,14 @@ public class ServiceApiTest extends BaseIntegrationTest {
         }
         assertTrue(foundDisabled, "Instance 9002 should exist");
 
-        // Verify in Nacos
+        // Verify in ConfigCenter
         String serviceConfigId = "config.gateway.service-" + createdServiceId;
-        String config = getNacosConfig(serviceConfigId);
+        String config = getConfigFromCenter(serviceConfigId);
+        assertNotNull(config, "Config should exist");
         JsonNode configJson = objectMapper.readTree(config);
         for (JsonNode inst : configJson.get("instances")) {
             if (inst.get("port").asInt() == 9002) {
-                assertFalse(inst.get("enabled").asBoolean(), "Nacos instance should be disabled");
+                assertFalse(inst.get("enabled").asBoolean(), "ConfigCenter instance should be disabled");
                 break;
             }
         }
@@ -202,8 +212,12 @@ public class ServiceApiTest extends BaseIntegrationTest {
     @Test
     @Order(8)
     void test08_EnableInstance() throws Exception {
+        ObjectNode statusRequest = objectMapper.createObjectNode();
+        statusRequest.put("enabled", true);
+
         mockMvc.perform(put("/api/services/" + createdServiceName + "/instances/127.0.0.1:9002/status")
-                        .param("enabled", "true"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(statusRequest.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
 
@@ -235,9 +249,10 @@ public class ServiceApiTest extends BaseIntegrationTest {
         assertEquals(1, data.get("instances").size(), "Should have 1 instance after removal");
         assertEquals(9001, data.get("instances").get(0).get("port").asInt(), "Remaining instance should be 9001");
 
-        // Verify in Nacos
+        // Verify in ConfigCenter
         String serviceConfigId = "config.gateway.service-" + createdServiceId;
-        String config = getNacosConfig(serviceConfigId);
+        String config = getConfigFromCenter(serviceConfigId);
+        assertNotNull(config, "Config should exist");
         JsonNode configJson = objectMapper.readTree(config);
         assertEquals(1, configJson.get("instances").size());
 
@@ -285,15 +300,17 @@ public class ServiceApiTest extends BaseIntegrationTest {
             assertNotEquals(createdServiceName, service.get("name").asText());
         }
 
-        // Verify deleted from Nacos
+        // Verify deleted from ConfigCenter
         String serviceConfigId = "config.gateway.service-" + createdServiceId;
-        assertFalse(nacosConfigExists(serviceConfigId), "Service config should be deleted from Nacos");
+        assertFalse(configCenterExists(serviceConfigId), "Service config should be deleted from ConfigCenter");
 
         // Verify removed from index
-        String indexConfig = getNacosConfig("config.gateway.metadata.services-index");
-        JsonNode index = objectMapper.readTree(indexConfig);
-        for (JsonNode id : index) {
-            assertNotEquals(createdServiceId, id.asText());
+        String indexConfig = getConfigFromCenter("config.gateway.metadata.services-index");
+        if (indexConfig != null) {
+            JsonNode index = objectMapper.readTree(indexConfig);
+            for (JsonNode id : index) {
+                assertNotEquals(createdServiceId, id.asText());
+            }
         }
 
         System.out.println("[PASS] Service deleted successfully");

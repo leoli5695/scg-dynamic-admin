@@ -86,4 +86,9 @@ public interface SslCertificateRepository extends JpaRepository<SslCertificate, 
      * Count certificates by instanceId and status
      */
     long countByInstanceIdAndStatus(String instanceId, String status);
+
+    /**
+     * Delete all certificates by instance ID.
+     */
+    int deleteByInstanceId(String instanceId);
 }

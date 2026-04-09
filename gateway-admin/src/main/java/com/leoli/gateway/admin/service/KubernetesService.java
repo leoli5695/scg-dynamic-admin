@@ -3,6 +3,7 @@ package com.leoli.gateway.admin.service;
 import com.leoli.gateway.admin.model.KubernetesCluster;
 import com.leoli.gateway.admin.repository.KubernetesClusterRepository;
 import io.kubernetes.client.custom.IntOrString;
+import io.kubernetes.client.custom.Quantity;
 import io.kubernetes.client.openapi.ApiClient;
 import io.kubernetes.client.openapi.ApiException;
 import io.kubernetes.client.openapi.Configuration;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.io.StringReader;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -126,9 +128,58 @@ public class KubernetesService {
                 }
             }
 
+            // Collect cluster statistics
+            cluster.setNodeCount(nodes.getItems().size());
+            
+            // Calculate total resources
+            double totalCpu = 0.0;
+            double totalMemoryGb = 0.0;
+            
+            for (V1Node node : nodes.getItems()) {
+                if (node.getStatus() != null && node.getStatus().getCapacity() != null) {
+                    // CPU
+                    Quantity cpuQuantity = node.getStatus().getCapacity().get("cpu");
+                    if (cpuQuantity != null) {
+                        totalCpu += parseQuantityToDouble(cpuQuantity);
+                    }
+
+                    // Memory
+                    Quantity memoryQuantity = node.getStatus().getCapacity().get("memory");
+                    if (memoryQuantity != null) {
+                        totalMemoryGb += parseQuantityToDouble(memoryQuantity) / (1024 * 1024 * 1024);
+                    }
+                }
+            }
+            
+            cluster.setTotalCpuCores(totalCpu);
+            cluster.setTotalMemoryGb(totalMemoryGb);
+            
+            // Get actual running pod count from API
+            try {
+                V1PodList pods = api.listPodForAllNamespaces().execute();
+                int runningPods = 0;
+                if (pods.getItems() != null) {
+                    for (V1Pod pod : pods.getItems()) {
+                        if (pod.getStatus() != null && "Running".equals(pod.getStatus().getPhase())) {
+                            runningPods++;
+                        }
+                    }
+                }
+                cluster.setPodCount(runningPods);
+                log.debug("Found {} running pods in cluster {}", runningPods, cluster.getClusterName());
+            } catch (Exception e) {
+                log.warn("Failed to list pods for cluster {}: {}", cluster.getClusterName(), e.getMessage());
+                cluster.setPodCount(0);
+            }
+            
+            // Get namespace count
+            V1NamespaceList namespaces = api.listNamespace().execute();
+            cluster.setNamespaceCount(namespaces.getItems().size());
+
             // Cache the client
             clientCache.put(cluster.getId(), client);
-            log.info("Cluster {} connected successfully, version: {}", cluster.getClusterName(), cluster.getClusterVersion());
+            log.info("Cluster {} connected successfully, version: {}, nodes: {}", 
+                cluster.getClusterName(), cluster.getClusterVersion(), cluster.getNodeCount());
 
         } catch (ApiException e) {
             log.error("API error verifying cluster {}: code={}, message={}, body={}",
@@ -259,6 +310,7 @@ public class KubernetesService {
     /**
      * Extract server URL from kubeconfig.
      */
+    @SuppressWarnings("unchecked")
     private String extractServerUrl(String kubeconfigContent) {
         try {
             StringReader reader = new StringReader(kubeconfigContent);
@@ -270,25 +322,38 @@ public class KubernetesService {
 
             // Find context
             List<?> contexts = kubeConfig.getContexts();
+            if (contexts == null) return null;
+            
             for (Object ctx : contexts) {
-                @SuppressWarnings("unchecked")
+                if (!(ctx instanceof Map)) continue;
                 Map<String, Object> context = (Map<String, Object>) ctx;
-                if (context.get("name").equals(currentContext)) {
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> contextDetail = (Map<String, Object>) context.get("context");
-                    String clusterName = (String) contextDetail.get("cluster");
+                Object nameObj = context.get("name");
+                if (nameObj == null || !nameObj.equals(currentContext)) continue;
+                
+                Object contextDetailObj = context.get("context");
+                if (!(contextDetailObj instanceof Map)) continue;
+                Map<String, Object> contextDetail = (Map<String, Object>) contextDetailObj;
+                
+                Object clusterNameObj = contextDetail.get("cluster");
+                if (!(clusterNameObj instanceof String)) continue;
+                String clusterName = (String) clusterNameObj;
 
-                    // Find cluster
-                    List<?> clusters = kubeConfig.getClusters();
-                    for (Object cls : clusters) {
-                        @SuppressWarnings("unchecked")
-                        Map<String, Object> cluster = (Map<String, Object>) cls;
-                        if (cluster.get("name").equals(clusterName)) {
-                            @SuppressWarnings("unchecked")
-                            Map<String, Object> clusterDetail = (Map<String, Object>) cluster.get("cluster");
-                            return (String) clusterDetail.get("server");
-                        }
-                    }
+                // Find cluster
+                List<?> clusters = kubeConfig.getClusters();
+                if (clusters == null) continue;
+                
+                for (Object cls : clusters) {
+                    if (!(cls instanceof Map)) continue;
+                    Map<String, Object> cluster = (Map<String, Object>) cls;
+                    Object clusterNameInList = cluster.get("name");
+                    if (clusterNameInList == null || !clusterNameInList.equals(clusterName)) continue;
+                    
+                    Object clusterDetailObj = cluster.get("cluster");
+                    if (!(clusterDetailObj instanceof Map)) continue;
+                    Map<String, Object> clusterDetail = (Map<String, Object>) clusterDetailObj;
+                    
+                    Object serverObj = clusterDetail.get("server");
+                    return serverObj != null ? serverObj.toString() : null;
                 }
             }
         } catch (Exception e) {
@@ -949,6 +1014,65 @@ public class KubernetesService {
         } catch (ApiException e) {
             log.error("Failed to get cluster images: {}", e.getMessage());
             throw new RuntimeException("Failed to get cluster images: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Parse a Kubernetes Quantity to double value.
+     * Uses Quantity.toString() to get the full string representation.
+     */
+    private double parseQuantityToDouble(Quantity quantity) {
+        if (quantity == null) {
+            return 0.0;
+        }
+
+        // Get the string representation (e.g., "1", "1000m", "2Gi", "512Mi")
+        String amount = quantity.toString();
+        if (amount == null || amount.isEmpty()) {
+            return 0.0;
+        }
+
+        try {
+            // Handle suffixes
+            if (amount.endsWith("Ki")) {
+                return Double.parseDouble(amount.substring(0, amount.length() - 2)) * 1024;
+            } else if (amount.endsWith("Mi")) {
+                return Double.parseDouble(amount.substring(0, amount.length() - 2)) * 1024 * 1024;
+            } else if (amount.endsWith("Gi")) {
+                return Double.parseDouble(amount.substring(0, amount.length() - 2)) * 1024 * 1024 * 1024;
+            } else if (amount.endsWith("Ti")) {
+                return Double.parseDouble(amount.substring(0, amount.length() - 2)) * 1024L * 1024L * 1024L * 1024L;
+            } else if (amount.endsWith("Pi")) {
+                return Double.parseDouble(amount.substring(0, amount.length() - 2)) * 1024L * 1024L * 1024L * 1024L * 1024L;
+            } else if (amount.endsWith("Ei")) {
+                return Double.parseDouble(amount.substring(0, amount.length() - 2)) * 1024L * 1024L * 1024L * 1024L * 1024L * 1024L;
+            } else if (amount.endsWith("k")) {
+                return Double.parseDouble(amount.substring(0, amount.length() - 1)) * 1000;
+            } else if (amount.endsWith("M")) {
+                return Double.parseDouble(amount.substring(0, amount.length() - 1)) * 1000 * 1000;
+            } else if (amount.endsWith("G")) {
+                return Double.parseDouble(amount.substring(0, amount.length() - 1)) * 1000 * 1000 * 1000;
+            } else if (amount.endsWith("T")) {
+                return Double.parseDouble(amount.substring(0, amount.length() - 1)) * 1000L * 1000L * 1000L * 1000L;
+            } else if (amount.endsWith("P")) {
+                return Double.parseDouble(amount.substring(0, amount.length() - 1)) * 1000L * 1000L * 1000L * 1000L * 1000L;
+            } else if (amount.endsWith("E")) {
+                return Double.parseDouble(amount.substring(0, amount.length() - 1)) * 1000L * 1000L * 1000L * 1000L * 1000L * 1000L;
+            } else if (amount.endsWith("m")) {
+                // millicores (CPU) or millibytes
+                return Double.parseDouble(amount.substring(0, amount.length() - 1)) / 1000.0;
+            } else if (amount.endsWith("u") || amount.endsWith("µ")) {
+                // micro
+                return Double.parseDouble(amount.substring(0, amount.length() - 1)) / 1000000.0;
+            } else if (amount.endsWith("n")) {
+                // nano
+                return Double.parseDouble(amount.substring(0, amount.length() - 1)) / 1000000000.0;
+            } else {
+                return Double.parseDouble(amount);
+            }
+        } catch (NumberFormatException e) {
+            log.warn("Failed to parse quantity: {}", amount);
+            return 0.0;
         }
     }
 }

@@ -2,8 +2,8 @@ package com.leoli.gateway.config;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
@@ -12,12 +12,13 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 
 /**
  * Redis configuration for distributed rate limiting.
+ * Redis is optional - only enabled when REDIS_ENABLED=true or REDIS_HOST is set.
  *
  * @author leoli
  */
 @Configuration
 @Slf4j
-@ConditionalOnProperty(prefix = "spring.redis", name = "host")
+@Conditional(RedisEnabledCondition.class)
 public class RedisConfig {
 
     @Value("${spring.redis.host:localhost}")

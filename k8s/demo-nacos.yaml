@@ -1,0 +1,129 @@
+---
+# Demo Service Nacos - Instance 1
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-nacos-1
+  namespace: test
+  labels:
+    app: demo-nacos-1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-nacos-1
+  template:
+    metadata:
+      labels:
+        app: demo-nacos-1
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      initContainers:
+      - name: wait-for-nacos
+        image: rancher/mirrored-library-busybox:1.37.0
+        imagePullPolicy: IfNotPresent
+        command: ['sh', '-c', 'until nc -z nacos 8848; do echo waiting for nacos; sleep 2; done;']
+      containers:
+      - name: demo-nacos-1
+        image: demo-service-nacos:1.0.0
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 9004
+          name: http
+          hostPort: 9004
+        env:
+        - name: SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR
+          value: "nacos:8848"
+        - name: SPRING_CLOUD_NACOS_DISCOVERY_IP
+          value: "127.0.0.1"
+        - name: SPRING_CLOUD_NACOS_DISCOVERY_PORT
+          value: "9004"
+        - name: SERVER_PORT
+          value: "9004"
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 9004
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 9004
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+
+---
+# Demo Service Nacos - Instance 2
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-nacos-2
+  namespace: test
+  labels:
+    app: demo-nacos-2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-nacos-2
+  template:
+    metadata:
+      labels:
+        app: demo-nacos-2
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      initContainers:
+      - name: wait-for-nacos
+        image: rancher/mirrored-library-busybox:1.37.0
+        imagePullPolicy: IfNotPresent
+        command: ['sh', '-c', 'until nc -z nacos 8848; do echo waiting for nacos; sleep 2; done;']
+      containers:
+      - name: demo-nacos-2
+        image: demo-service-nacos:1.0.0
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 9005
+          name: http
+          hostPort: 9005
+        env:
+        - name: SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR
+          value: "nacos:8848"
+        - name: SPRING_CLOUD_NACOS_DISCOVERY_IP
+          value: "127.0.0.1"
+        - name: SPRING_CLOUD_NACOS_DISCOVERY_PORT
+          value: "9005"
+        - name: SERVER_PORT
+          value: "9005"
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 9005
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 9005
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5

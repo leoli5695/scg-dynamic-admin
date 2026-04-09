@@ -1,12 +1,13 @@
 package com.leoli.gateway.admin.service;
 
+import com.leoli.gateway.admin.center.ConfigCenterService;
+import com.leoli.gateway.admin.cache.InstanceNamespaceCache;
 import com.leoli.gateway.admin.dto.InstanceCreateRequest;
 import com.leoli.gateway.admin.model.GatewayInstanceEntity;
 import com.leoli.gateway.admin.model.InstanceSpec;
 import com.leoli.gateway.admin.model.InstanceStatus;
 import com.leoli.gateway.admin.model.KubernetesCluster;
-import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
-import com.leoli.gateway.admin.repository.KubernetesClusterRepository;
+import com.leoli.gateway.admin.repository.*;
 import io.kubernetes.client.custom.Quantity;
 import io.kubernetes.client.openapi.ApiClient;
 import io.kubernetes.client.openapi.ApiException;
@@ -23,9 +24,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.io.StringReader;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.*;
+
+import org.springframework.web.client.RestTemplate;
 
 /**
  * Gateway Instance Service.
@@ -45,6 +50,46 @@ public class GatewayInstanceService {
     @Autowired
     private KubernetesClusterRepository clusterRepository;
 
+    @Autowired
+    private ConfigCenterService configCenterService;
+
+    @Autowired
+    private RestTemplate restTemplate;
+
+    // Repositories for cascade delete
+    @Autowired
+    private RouteRepository routeRepository;
+
+    @Autowired
+    private ServiceRepository serviceRepository;
+
+    @Autowired
+    private StrategyRepository strategyRepository;
+
+    @Autowired
+    private AuthPolicyRepository authPolicyRepository;
+
+    @Autowired
+    private SslCertificateRepository sslCertificateRepository;
+
+    @Autowired
+    private RouteAuthBindingRepository routeAuthBindingRepository;
+
+    @Autowired
+    private RequestTraceRepository requestTraceRepository;
+
+    @Autowired
+    private AlertHistoryRepository alertHistoryRepository;
+
+    @Autowired
+    private AlertConfigRepository alertConfigRepository;
+
+    @Autowired
+    private AuditLogRepository auditLogRepository;
+
+    @Autowired
+    private InstanceNamespaceCache namespaceCache;
+
     @Value("${gateway.image.default:my-gateway:latest}")
     private String defaultImage;
 
@@ -54,11 +99,39 @@ public class GatewayInstanceService {
     @Value("${nacos.server-addr:localhost:8848}")
     private String nacosServerAddr;
 
+    @Value("${nacos.k8s-server-addr:}")
+    private String nacosK8sServerAddr;
+
+    @Value("${nacos.k8s-namespace:test}")
+    private String nacosK8sNamespace;
+
+    @Value("${nacos.k8s-service-name:nacos}")
+    private String nacosK8sServiceName;
+
+    @Value("${nacos.k8s-port:8848}")
+    private Integer nacosK8sPort;
+
     @Value("${nacos.group:DEFAULT_GROUP}")
     private String nacosGroup;
 
+    // Redis configuration (optional, for distributed rate limiting)
+    @Value("${redis.k8s-server-addr:}")
+    private String redisK8sServerAddr;
+
+    @Value("${redis.k8s-namespace:test}")
+    private String redisK8sNamespace;
+
+    @Value("${redis.k8s-service-name:redis}")
+    private String redisK8sServiceName;
+
+    @Value("${redis.k8s-port:6379}")
+    private Integer redisK8sPort;
+
     @Value("${gateway.admin.url:http://localhost:9090}")
     private String gatewayAdminUrl;
+
+    @Value("${gateway.admin.k8sUrl:}")
+    private String gatewayAdminK8sUrl;
 
     @Value("${gateway.admin.host:localhost}")
     private String gatewayAdminHost;
@@ -66,22 +139,154 @@ public class GatewayInstanceService {
     @Value("${gateway.admin.port:9090}")
     private Integer gatewayAdminPort;
 
+    @Value("${gateway.instance.port:9090}")
+    private Integer gatewayInstancePort;
+
+    @Value("${gateway.instance.server-port:9090}")
+    private Integer defaultServerPort;
+
+    @Value("${gateway.instance.management-port:9091}")
+    private Integer defaultManagementPort;
+
     // Cache for ApiClients by cluster ID
     private final Map<Long, ApiClient> clientCache = new HashMap<>();
+
+    /**
+     * Get Nacos server address for K8s internal access.
+     * Priority: 1. Instance custom address  2. Global k8s-server-addr  3. Auto-built from namespace/service/port
+     * @param instance the gateway instance (can be null for default address)
+     */
+    private String getNacosK8sAddress(GatewayInstanceEntity instance) {
+        // 1. If instance has a custom Nacos address, use it (for cross-cluster scenarios)
+        if (instance != null && instance.getNacosServerAddr() != null && !instance.getNacosServerAddr().isEmpty()) {
+            return instance.getNacosServerAddr();
+        }
+        // 2. If global k8s-server-addr is explicitly set, use it
+        if (nacosK8sServerAddr != null && !nacosK8sServerAddr.isEmpty()) {
+            return nacosK8sServerAddr;
+        }
+        // 3. Build K8s internal DNS: {service-name}.{namespace}.svc.cluster.local:{port}
+        return String.format("%s.%s.svc.cluster.local:%d", 
+            nacosK8sServiceName, nacosK8sNamespace, nacosK8sPort);
+    }
+
+    /**
+     * Get Redis server address for K8s internal access.
+     * Redis is optional - returns null if not configured, gateway will use local rate limiting.
+     * Priority: 1. Instance custom address  2. Global k8s-server-addr
+     * Note: We don't auto-build Redis address because Redis may not exist in the cluster.
+     */
+    private String getRedisK8sAddress(GatewayInstanceEntity instance) {
+        // 1. If instance has a custom Redis address, use it (for cross-cluster scenarios)
+        if (instance != null && instance.getRedisServerAddr() != null && !instance.getRedisServerAddr().isEmpty()) {
+            return instance.getRedisServerAddr();
+        }
+        // 2. If global k8s-server-addr is explicitly set, use it
+        if (redisK8sServerAddr != null && !redisK8sServerAddr.isEmpty()) {
+            return redisK8sServerAddr;
+        }
+        // 3. Redis not configured - return null, gateway will use local rate limiting
+        return null;
+    }
+
+    /**
+     * Create Nacos namespace for gateway instance.
+     * Uses Nacos HTTP API to create the namespace.
+     */
+    private void createNacosNamespace(String namespaceId, String namespaceName, String description) {
+        try {
+            // Build Nacos API URL
+            String nacosApiUrl = nacosServerAddr;
+            if (nacosApiUrl == null || nacosApiUrl.isEmpty()) {
+                nacosApiUrl = "localhost:8848";
+            }
+
+            // Create namespace via Nacos HTTP API
+            // Note: Nacos requires 'customNamespaceId' parameter for custom namespaces
+            String url = String.format("http://%s/nacos/v1/console/namespaces?customNamespaceId=%s&namespaceName=%s&namespaceDesc=%s",
+                    nacosApiUrl,
+                    URLEncoder.encode(namespaceId, StandardCharsets.UTF_8),
+                    URLEncoder.encode(namespaceName, StandardCharsets.UTF_8),
+                    URLEncoder.encode(description != null ? description : "Gateway instance namespace", StandardCharsets.UTF_8));
+
+            log.info("Creating Nacos namespace: {} ({})", namespaceName, namespaceId);
+            String response = restTemplate.postForObject(url, null, String.class);
+            log.info("Nacos namespace creation response: {}", response);
+        } catch (Exception e) {
+            log.warn("Failed to create Nacos namespace {}: {}. Config will still be published to this namespace.",
+                    namespaceId, e.getMessage());
+            // Don't throw - Nacos will auto-create namespace when config is published
+        }
+    }
 
     /**
      * Get all instances.
      */
     public List<GatewayInstanceEntity> getAllInstances() {
-        return instanceRepository.findAll();
+        List<GatewayInstanceEntity> instances = instanceRepository.findAll();
+        // Refresh service info from K8s for each instance
+        for (GatewayInstanceEntity instance : instances) {
+            refreshServiceInfoFromK8s(instance);
+        }
+        return instances;
     }
 
     /**
      * Get instance by ID.
      */
     public GatewayInstanceEntity getInstanceById(Long id) {
-        return instanceRepository.findById(id)
+        GatewayInstanceEntity instance = instanceRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Instance not found: " + id));
+        // Refresh service info from K8s
+        refreshServiceInfoFromK8s(instance);
+        return instance;
+    }
+
+    /**
+     * Refresh service info (nodePort, nodeIp) from Kubernetes.
+     * Falls back to database values if K8s query fails.
+     */
+    private void refreshServiceInfoFromK8s(GatewayInstanceEntity instance) {
+        if (instance.getClusterId() == null || instance.getServiceName() == null) {
+            return;
+        }
+
+        try {
+            KubernetesCluster cluster = clusterRepository.findById(instance.getClusterId()).orElse(null);
+            if (cluster == null) {
+                return;
+            }
+
+            ApiClient client = getApiClient(cluster.getId(), cluster.getKubeconfig());
+            CoreV1Api coreApi = new CoreV1Api(client);
+
+            // Query Service from K8s
+            V1Service service = coreApi.readNamespacedService(
+                    instance.getServiceName(),
+                    instance.getNamespace()
+            ).execute();
+
+            if (service != null && service.getSpec() != null && service.getSpec().getPorts() != null) {
+                Integer nodePort = service.getSpec().getPorts().get(0).getNodePort();
+                if (nodePort != null) {
+                    instance.setNodePort(nodePort);
+                }
+            }
+
+            // Query Node IP from K8s
+            String nodeIp = getFirstNodeIp(coreApi);
+            if (nodeIp != null) {
+                instance.setNodeIp(nodeIp);
+            }
+
+            log.debug("Refreshed service info for instance {}: nodePort={}, nodeIp={}",
+                    instance.getInstanceId(), instance.getNodePort(), instance.getNodeIp());
+
+        } catch (Exception e) {
+            // K8s query failed, keep database values
+            log.debug("Failed to refresh service info from K8s for instance {}: {}",
+                    instance.getInstanceId(), e.getMessage());
+        }
     }
 
     /**
@@ -137,7 +342,9 @@ public class GatewayInstanceService {
 
         // Generate instance ID (12 characters, lowercase alphanumeric)
         String instanceId = generateShortId();
-        String nacosNamespace = instanceId;  // Use full instance ID as Nacos namespace
+        String shortId = instanceId.substring(0, 8);
+        String deploymentName = "gateway-" + shortId;
+        String nacosNamespace = deploymentName;  // Use same name as deployment (e.g., gateway-o0m1rhg5)
 
         // Get spec configuration
         InstanceSpec spec = InstanceSpec.fromType(request.getSpecType());
@@ -155,10 +362,12 @@ public class GatewayInstanceService {
             image = defaultImage;
         }
 
-        // Generate deployment and service names
-        String shortId = instanceId.substring(0, 8);
-        String deploymentName = "gateway-" + shortId;
-        String serviceName = "gateway-" + shortId + "-service";
+        // Generate service name
+        String serviceName = deploymentName + "-service";
+
+        // Get port configuration
+        int serverPort = request.getServerPort() != null ? request.getServerPort() : defaultServerPort;
+        int managementPort = request.getManagementPort() != null ? request.getManagementPort() : defaultManagementPort;
 
         // Create entity
         GatewayInstanceEntity entity = new GatewayInstanceEntity();
@@ -173,6 +382,10 @@ public class GatewayInstanceService {
         entity.setMemoryMB(memoryMB);
         entity.setReplicas(request.getReplicas());
         entity.setImage(image);
+        entity.setServerPort(serverPort);
+        entity.setManagementPort(managementPort);
+        entity.setNacosServerAddr(request.getNacosServerAddr());  // Custom Nacos address (optional)
+        entity.setRedisServerAddr(request.getRedisServerAddr());  // Custom Redis address (optional)
         entity.setStatus(InstanceStatus.STARTING.getDescription());
         entity.setStatusCode(InstanceStatus.STARTING.getCode());
         entity.setDeploymentName(deploymentName);
@@ -184,9 +397,14 @@ public class GatewayInstanceService {
         // Save to database first
         entity = instanceRepository.save(entity);
 
+        // Create Nacos namespace for this instance (use same name as deployment)
+        createNacosNamespace(nacosNamespace,
+                nacosNamespace,
+                "Gateway instance namespace for " + request.getInstanceName());
+
         // Deploy to Kubernetes
         try {
-            deployToKubernetes(entity, cluster, request.getCreateNamespace(), request.getImagePullPolicy());
+            deployToKubernetes(entity, cluster, request.getCreateNamespace(), request.getImagePullPolicy(), serverPort, managementPort);
             // Status will be updated to RUNNING when heartbeat is received
             entity.setStatus(InstanceStatus.STARTING.getDescription());
             entity.setStatusCode(InstanceStatus.STARTING.getCode());
@@ -198,13 +416,16 @@ public class GatewayInstanceService {
             entity.setStatusMessage("Deployment failed: " + e.getMessage());
         }
 
+        // Update namespace cache
+        namespaceCache.put(instanceId, nacosNamespace);
+
         return instanceRepository.save(entity);
     }
 
     /**
      * Deploy gateway to Kubernetes.
      */
-    private void deployToKubernetes(GatewayInstanceEntity instance, KubernetesCluster cluster, boolean createNamespace, String imagePullPolicy) {
+    private void deployToKubernetes(GatewayInstanceEntity instance, KubernetesCluster cluster, boolean createNamespace, String imagePullPolicy, int serverPort, int managementPort) {
         ApiClient client = getApiClient(cluster.getId(), cluster.getKubeconfig());
         CoreV1Api coreApi = new CoreV1Api(client);
         AppsV1Api appsApi = new AppsV1Api(client);
@@ -231,12 +452,12 @@ public class GatewayInstanceService {
             }
 
             // Create Deployment
-            V1Deployment deployment = createDeploymentManifest(instance, imagePullPolicy);
+            V1Deployment deployment = createDeploymentManifest(instance, imagePullPolicy, serverPort, managementPort);
             V1Deployment createdDeployment = appsApi.createNamespacedDeployment(namespace, deployment).execute();
-            log.info("Created deployment: {}", createdDeployment.getMetadata().getName());
+            log.info("Created deployment: {} with serverPort={}, managementPort={}", createdDeployment.getMetadata().getName(), serverPort, managementPort);
 
             // Create Service
-            V1Service service = createServiceManifest(instance);
+            V1Service service = createServiceManifest(instance, serverPort);
             V1Service createdService = coreApi.createNamespacedService(namespace, service).execute();
             log.info("Created service: {}", createdService.getMetadata().getName());
 
@@ -245,6 +466,11 @@ public class GatewayInstanceService {
                 Integer nodePort = createdService.getSpec().getPorts().get(0).getNodePort();
                 instance.setNodePort(nodePort);
             }
+
+            // Get Node IP for external access URL
+            String nodeIp = getFirstNodeIp(coreApi);
+            instance.setNodeIp(nodeIp);
+            log.info("Set nodeIp for instance {}: {}", instance.getInstanceId(), nodeIp);
 
         } catch (ApiException e) {
             log.error("Kubernetes API error: code={}, message={}, body={}", 
@@ -256,7 +482,7 @@ public class GatewayInstanceService {
     /**
      * Create Deployment manifest.
      */
-    private V1Deployment createDeploymentManifest(GatewayInstanceEntity instance, String pullPolicy) {
+    private V1Deployment createDeploymentManifest(GatewayInstanceEntity instance, String pullPolicy, int serverPort, int managementPort) {
         V1Deployment deployment = new V1Deployment();
 
         deployment.setMetadata(new V1ObjectMeta()
@@ -284,19 +510,34 @@ public class GatewayInstanceService {
         // Use provided pullPolicy, default to IfNotPresent if null
         container.setImagePullPolicy(pullPolicy != null ? pullPolicy : "IfNotPresent");
 
-        // Container ports
+        // Container ports - use serverPort for HTTP traffic
         List<V1ContainerPort> ports = new ArrayList<>();
-        ports.add(new V1ContainerPort().containerPort(8080).name("http"));
+        ports.add(new V1ContainerPort().containerPort(serverPort).name("http"));
+        // Also expose management port for actuator/health endpoints
+        ports.add(new V1ContainerPort().containerPort(managementPort).name("management"));
         container.setPorts(ports);
 
         // Environment variables
         List<V1EnvVar> envVars = new ArrayList<>();
         envVars.add(new V1EnvVar().name("GATEWAY_ID").value(instance.getInstanceId()));
         envVars.add(new V1EnvVar().name("GATEWAY_INSTANCE_ID").value(instance.getInstanceId()));
-        envVars.add(new V1EnvVar().name("NACOS_SERVER_ADDR").value(nacosServerAddr));
+        envVars.add(new V1EnvVar().name("NACOS_SERVER_ADDR").value(getNacosK8sAddress(instance)));
         envVars.add(new V1EnvVar().name("NACOS_NAMESPACE").value(instance.getNacosNamespace()));
         envVars.add(new V1EnvVar().name("NACOS_GROUP").value(nacosGroup));
-        envVars.add(new V1EnvVar().name("GATEWAY_ADMIN_URL").value(gatewayAdminUrl));
+        // Use K8s internal URL if configured, otherwise fall back to external URL
+        String adminUrl = (gatewayAdminK8sUrl != null && !gatewayAdminK8sUrl.isEmpty())
+                ? gatewayAdminK8sUrl
+                : gatewayAdminUrl;
+        envVars.add(new V1EnvVar().name("GATEWAY_ADMIN_URL").value(adminUrl));
+        // Redis is optional - if not configured, gateway uses local rate limiting
+        String redisAddr = getRedisK8sAddress(instance);
+        if (redisAddr != null && !redisAddr.isEmpty()) {
+            envVars.add(new V1EnvVar().name("REDIS_HOST").value(redisAddr.split(":")[0]));
+            envVars.add(new V1EnvVar().name("REDIS_PORT").value(redisAddr.contains(":") ? redisAddr.split(":")[1] : "6379"));
+        }
+        // Add port environment variables for gateway to use
+        envVars.add(new V1EnvVar().name("SERVER_PORT").value(String.valueOf(serverPort)));
+        envVars.add(new V1EnvVar().name("MANAGEMENT_SERVER_PORT").value(String.valueOf(managementPort)));
         container.setEnv(envVars);
 
         // Resource limits and requests
@@ -316,22 +557,22 @@ public class GatewayInstanceService {
             container.setResources(resources);
         }
 
-        // Health checks - Liveness probe
+        // Health checks - Liveness probe (use management port for actuator)
         V1Probe livenessProbe = new V1Probe();
         livenessProbe.setHttpGet(new V1HTTPGetAction()
                 .path("/actuator/health")
-                .port(new io.kubernetes.client.custom.IntOrString(8080)));
+                .port(new io.kubernetes.client.custom.IntOrString(managementPort)));
         livenessProbe.setInitialDelaySeconds(60);
         livenessProbe.setPeriodSeconds(10);
         livenessProbe.setTimeoutSeconds(5);
         livenessProbe.setFailureThreshold(3);
         container.setLivenessProbe(livenessProbe);
 
-        // Health checks - Readiness probe
+        // Health checks - Readiness probe (use management port for actuator)
         V1Probe readinessProbe = new V1Probe();
         readinessProbe.setHttpGet(new V1HTTPGetAction()
                 .path("/actuator/health")
-                .port(new io.kubernetes.client.custom.IntOrString(8080)));
+                .port(new io.kubernetes.client.custom.IntOrString(managementPort)));
         readinessProbe.setInitialDelaySeconds(30);
         readinessProbe.setPeriodSeconds(5);
         readinessProbe.setTimeoutSeconds(3);
@@ -350,7 +591,7 @@ public class GatewayInstanceService {
     /**
      * Create Service manifest.
      */
-    private V1Service createServiceManifest(GatewayInstanceEntity instance) {
+    private V1Service createServiceManifest(GatewayInstanceEntity instance, int serverPort) {
         V1Service service = new V1Service();
 
         service.setMetadata(new V1ObjectMeta()
@@ -366,8 +607,8 @@ public class GatewayInstanceService {
 
         List<V1ServicePort> ports = new ArrayList<>();
         V1ServicePort servicePort = new V1ServicePort();
-        servicePort.setPort(8080);
-        servicePort.setTargetPort(new io.kubernetes.client.custom.IntOrString(8080));
+        servicePort.setPort(serverPort);
+        servicePort.setTargetPort(new io.kubernetes.client.custom.IntOrString(serverPort));
         servicePort.setProtocol("TCP");
         servicePort.setName("http");
         ports.add(servicePort);
@@ -398,13 +639,28 @@ public class GatewayInstanceService {
     }
 
     /**
-     * Delete an instance.
+     * Delete an instance with all related data.
+     * This will delete:
+     * 1. All routes, services, strategies, auth policies, certificates from database
+     * 2. All configs from Nacos namespace
+     * 3. Kubernetes deployment and service
+     * 4. The instance itself
      */
     @Transactional
     public void deleteInstance(Long id) {
         GatewayInstanceEntity instance = getInstanceById(id);
+        String instanceId = instance.getInstanceId();
+        String nacosNamespace = instance.getNacosNamespace();
 
-        // Delete from Kubernetes
+        log.info("Deleting instance {} (instanceId={}, nacosNamespace={})", id, instanceId, nacosNamespace);
+
+        // 1. Delete all related data from database
+        deleteRelatedDataFromDatabase(instanceId);
+
+        // 2. Delete all configs from Nacos namespace
+        deleteConfigsFromNacos(nacosNamespace);
+
+        // 3. Delete from Kubernetes
         try {
             KubernetesCluster cluster = clusterRepository.findById(instance.getClusterId())
                     .orElse(null);
@@ -415,7 +671,165 @@ public class GatewayInstanceService {
             log.warn("Failed to delete instance {} from Kubernetes: {}", id, e.getMessage());
         }
 
+        // 4. Remove from namespace cache
+        namespaceCache.remove(instanceId);
+
+        // 5. Delete the instance itself
         instanceRepository.deleteById(id);
+        log.info("Instance {} deleted successfully", instanceId);
+    }
+
+    /**
+     * Delete all related data from database by instance ID.
+     */
+    private void deleteRelatedDataFromDatabase(String instanceId) {
+        log.info("Deleting related data from database for instance: {}", instanceId);
+
+        // Delete route auth bindings
+        int bindingCount = routeAuthBindingRepository.deleteByInstanceId(instanceId);
+        log.info("Deleted {} route auth bindings", bindingCount);
+
+        // Delete request traces
+        int traceCount = requestTraceRepository.deleteByInstanceId(instanceId);
+        log.info("Deleted {} request traces", traceCount);
+
+        // Delete alert history
+        alertHistoryRepository.deleteByInstanceId(instanceId);
+        log.info("Deleted alert history");
+
+        // Delete alert config
+        alertConfigRepository.deleteByInstanceId(instanceId);
+        log.info("Deleted alert config");
+
+        // Delete audit logs
+        auditLogRepository.deleteByInstanceId(instanceId);
+        log.info("Deleted audit logs");
+
+        // Delete SSL certificates
+        int certCount = sslCertificateRepository.deleteByInstanceId(instanceId);
+        log.info("Deleted {} SSL certificates", certCount);
+
+        // Delete auth policies
+        int policyCount = authPolicyRepository.deleteByInstanceId(instanceId);
+        log.info("Deleted {} auth policies", policyCount);
+
+        // Delete strategies
+        int strategyCount = strategyRepository.deleteByInstanceId(instanceId);
+        log.info("Deleted {} strategies", strategyCount);
+
+        // Delete routes
+        int routeCount = routeRepository.deleteByInstanceId(instanceId);
+        log.info("Deleted {} routes", routeCount);
+
+        // Delete services
+        int serviceCount = serviceRepository.deleteByInstanceId(instanceId);
+        log.info("Deleted {} services", serviceCount);
+    }
+
+    /**
+     * Delete all configs from Nacos namespace.
+     */
+    private void deleteConfigsFromNacos(String nacosNamespace) {
+        if (nacosNamespace == null || nacosNamespace.isEmpty()) {
+            log.info("No Nacos namespace to clean up");
+            return;
+        }
+
+        log.info("Deleting configs from Nacos namespace: {}", nacosNamespace);
+
+        try {
+            // Delete routes index
+            configCenterService.removeConfig("config.gateway.metadata.routes-index", nacosNamespace);
+            log.info("Deleted routes-index from Nacos");
+
+            // Delete services index
+            configCenterService.removeConfig("config.gateway.metadata.services-index", nacosNamespace);
+            log.info("Deleted services-index from Nacos");
+
+            // Delete strategies index
+            configCenterService.removeConfig("config.gateway.metadata.strategies-index", nacosNamespace);
+            log.info("Deleted strategies-index from Nacos");
+
+            // Note: Individual route/service/strategy configs are deleted by their respective services
+            // when we delete them from database above. But we also need to clean up any remaining configs.
+
+            // Get all configs in the namespace and delete them
+            // This is a safety net to ensure complete cleanup
+            deleteAllConfigsInNamespace(nacosNamespace);
+
+            log.info("All configs deleted from Nacos namespace: {}", nacosNamespace);
+        } catch (Exception e) {
+            log.error("Failed to delete configs from Nacos namespace: {}", nacosNamespace, e);
+        }
+    }
+
+    /**
+     * Delete all gateway-related configs in a Nacos namespace.
+     */
+    private void deleteAllConfigsInNamespace(String nacosNamespace) {
+        // Delete route configs
+        List<String> routeIds = routeRepository.findByInstanceId(
+            instanceRepository.findByInstanceId(nacosNamespace)
+                .map(GatewayInstanceEntity::getInstanceId)
+                .orElse(nacosNamespace)
+        ).stream().map(r -> r.getRouteId()).toList();
+
+        for (String routeId : routeIds) {
+            configCenterService.removeConfig("config.gateway.route-" + routeId, nacosNamespace);
+        }
+
+        // Delete service configs
+        List<String> serviceIds = serviceRepository.findByInstanceId(
+            instanceRepository.findByInstanceId(nacosNamespace)
+                .map(GatewayInstanceEntity::getInstanceId)
+                .orElse(nacosNamespace)
+        ).stream().map(s -> s.getServiceId()).toList();
+
+        for (String serviceId : serviceIds) {
+            configCenterService.removeConfig("config.gateway.service-" + serviceId, nacosNamespace);
+        }
+
+        // Delete strategy configs
+        List<String> strategyIds = strategyRepository.findByInstanceId(
+            instanceRepository.findByInstanceId(nacosNamespace)
+                .map(GatewayInstanceEntity::getInstanceId)
+                .orElse(nacosNamespace)
+        ).stream().map(s -> s.getStrategyId()).toList();
+
+        for (String strategyId : strategyIds) {
+            configCenterService.removeConfig("config.gateway.strategy-" + strategyId, nacosNamespace);
+        }
+
+        log.info("Deleted {} routes, {} services, {} strategies from Nacos",
+            routeIds.size(), serviceIds.size(), strategyIds.size());
+
+        // Delete the Nacos namespace itself
+        deleteNacosNamespace(nacosNamespace);
+    }
+
+    /**
+     * Delete Nacos namespace via HTTP API.
+     */
+    private void deleteNacosNamespace(String namespaceId) {
+        if (namespaceId == null || namespaceId.isEmpty()) {
+            return;
+        }
+
+        try {
+            String nacosApiUrl = nacosServerAddr;
+            if (nacosApiUrl == null || nacosApiUrl.isEmpty()) {
+                nacosApiUrl = "localhost:8848";
+            }
+
+            String url = String.format("http://%s/nacos/v1/console/namespaces?namespaceId=%s",
+                    nacosApiUrl, URLEncoder.encode(namespaceId, StandardCharsets.UTF_8));
+
+            log.info("Deleting Nacos namespace: {}", namespaceId);
+            restTemplate.delete(url);
+            log.info("Nacos namespace {} deleted successfully", namespaceId);
+        } catch (Exception e) {
+            log.warn("Failed to delete Nacos namespace {}: {}", namespaceId, e.getMessage());
+        }
     }
 
     /**
@@ -895,5 +1309,100 @@ public class GatewayInstanceService {
             sb.append(chars.charAt(RANDOM.nextInt(chars.length())));
         }
         return sb.toString();
+    }
+
+    /**
+     * Get the first available node IP from Kubernetes cluster.
+     * Priority: ExternalIP > InternalIP
+     * For local development environments (Rancher Desktop, Docker Desktop, etc.),
+     * returns "localhost" since NodePort is accessible via localhost.
+     */
+    private String getFirstNodeIp(CoreV1Api coreApi) {
+        try {
+            V1NodeList nodes = coreApi.listNode().execute();
+            if (nodes.getItems() == null || nodes.getItems().isEmpty()) {
+                log.warn("No nodes found in Kubernetes cluster");
+                return null;
+            }
+
+            for (V1Node node : nodes.getItems()) {
+                if (node.getStatus() != null && node.getStatus().getAddresses() != null) {
+                    // Priority: ExternalIP first, then InternalIP
+                    String externalIp = null;
+                    String internalIp = null;
+
+                    for (V1NodeAddress address : node.getStatus().getAddresses()) {
+                        log.debug("Node address - type: {}, address: {}", address.getType(), address.getAddress());
+                        if ("ExternalIP".equals(address.getType())) {
+                            externalIp = address.getAddress();
+                        } else if ("InternalIP".equals(address.getType())) {
+                            internalIp = address.getAddress();
+                        }
+                    }
+
+                    // Check if this is a local development environment
+                    boolean isLocalDev = isLocalDevelopmentEnvironment(node);
+
+                    // Return ExternalIP if available
+                    if (externalIp != null) {
+                        log.info("Found ExternalIP: {}", externalIp);
+                        return externalIp;
+                    }
+
+                    // For local development environments, return localhost
+                    // because NodePort is accessible via localhost (not InternalIP)
+                    if (isLocalDev) {
+                        log.info("Local development environment detected, using localhost for NodePort access");
+                        return "localhost";
+                    }
+
+                    // Otherwise return InternalIP
+                    if (internalIp != null) {
+                        log.info("Found InternalIP: {}", internalIp);
+                        return internalIp;
+                    }
+                }
+            }
+
+            log.warn("No node IP found in any node");
+            return null;
+        } catch (ApiException e) {
+            log.error("Failed to get node IP: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Check if the node is running in a local development environment.
+     * Local environments like Rancher Desktop, Docker Desktop, Minikube, etc.
+     * have NodePort accessible via localhost, not via InternalIP.
+     */
+    private boolean isLocalDevelopmentEnvironment(V1Node node) {
+        // Check OS Image for Rancher Desktop or Docker Desktop
+        if (node.getStatus() != null && node.getStatus().getNodeInfo() != null) {
+            String osImage = node.getStatus().getNodeInfo().getOsImage();
+            if (osImage != null) {
+                String osImageLower = osImage.toLowerCase();
+                if (osImageLower.contains("rancher desktop") ||
+                    osImageLower.contains("docker desktop") ||
+                    osImageLower.contains("docker desktop")) {
+                    return true;
+                }
+            }
+        }
+
+        // Check hostname for common local dev patterns
+        if (node.getMetadata() != null && node.getMetadata().getName() != null) {
+            String hostname = node.getMetadata().getName().toLowerCase();
+            if (hostname.equals("localhost") ||
+                hostname.equals("docker-desktop") ||
+                hostname.equals("minikube") ||
+                hostname.startsWith("kind-") ||
+                hostname.startsWith("k3d-")) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

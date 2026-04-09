@@ -2,6 +2,7 @@ package com.leoli.gateway.admin.reconcile;
 
 import com.leoli.gateway.admin.model.ServiceEntity;
 import com.leoli.gateway.admin.repository.ServiceRepository;
+import com.leoli.gateway.admin.cache.InstanceNamespaceCache;
 import com.leoli.gateway.admin.center.ConfigCenterService;
 import com.leoli.gateway.admin.model.ServiceDefinition;
 import com.leoli.gateway.admin.service.AlertService;
@@ -29,6 +30,9 @@ public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
     private ServiceRepository serviceRepository;
 
     @Autowired
+    private InstanceNamespaceCache namespaceCache;
+
+    @Autowired
     private ConfigCenterService configCenterService;
 
     @Autowired
@@ -36,23 +40,25 @@ public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
 
     @Autowired
     private AlertService alertService;
-    
+
     @Override
     public String getType() {
         return "SERVICE";
     }
-    
+
     @Override
     public List<ServiceEntity> loadFromDB() {
         // Only load ENABLED services - disabled services should not be synced to Nacos
         return serviceRepository.findByEnabledTrue();
     }
-    
+
     @Override
     public Set<String> loadFromNacos() {
+        // Note: This loads from default namespace (public), which is legacy behavior
+        // The actual reconciliation now uses per-instance namespace
         try {
             // Read as List<String> since index is stored as JSON array
-            List<String> serviceNames = configCenterService.getConfig(SERVICES_INDEX, 
+            List<String> serviceNames = configCenterService.getConfig(SERVICES_INDEX,
                 new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
             if (serviceNames == null || serviceNames.isEmpty()) {
                 return Set.of();
@@ -63,7 +69,7 @@ public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
             return Set.of();
         }
     }
-    
+
     /**
      * Load all service dataIds from Nacos for reconciliation.
      */
@@ -77,12 +83,12 @@ public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
             return Set.of();
         }
     }
-    
+
     @Override
     public String extractId(ServiceEntity entity) {
         return entity.getServiceId();  // Use service_id (UUID) as business identifier
     }
-    
+
     @Override
     public void repairMissingInNacos(ServiceEntity entity) throws Exception {
         // Skip disabled services - they should NOT be in Nacos
@@ -91,8 +97,16 @@ public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
             return;
         }
 
-        log.info("🔧 Repairing missing service in Nacos: {}", entity.getServiceId());
-        
+        // Skip services without valid instanceId - should NOT publish to public namespace
+        String nacosNamespace = getNacosNamespace(entity.getInstanceId());
+        if (nacosNamespace == null) {
+            log.warn("Skipping service {} without valid instanceId (instanceId={}), will not publish to public namespace",
+                     entity.getServiceId(), entity.getInstanceId());
+            return;
+        }
+
+        log.info("Repairing missing service in Nacos: {}", entity.getServiceId());
+
         // Parse full ServiceDefinition from entity's metadata JSON
         // This preserves instances, loadBalancer, and other configuration
         ServiceDefinition service = parseServiceFromEntity(entity);
@@ -100,18 +114,20 @@ public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
             log.error("Failed to parse service definition from entity metadata, skipping repair for: {}", entity.getServiceId());
             return;
         }
-        
-        // Push to Nacos using service_id
+
+        // Push to Nacos using service_id and instance namespace
         String serviceDataId = SERVICE_PREFIX + entity.getServiceId();
-        configCenterService.publishConfig(serviceDataId, service);
-        
-        log.info("✅ Repaired service: {} with {} instances", entity.getServiceId(), 
-                 service.getInstances() != null ? service.getInstances().size() : 0);
-        
+        configCenterService.publishConfig(serviceDataId, nacosNamespace, service);
+
+        log.info("Repaired service: {} with {} instances in namespace: {}",
+                 entity.getServiceId(),
+                 service.getInstances() != null ? service.getInstances().size() : 0,
+                 nacosNamespace);
+
         // Rebuild services index to ensure consistency
-        rebuildServicesIndex();
+        rebuildServicesIndex(entity.getInstanceId());
     }
-    
+
     /**
      * Parse ServiceDefinition from ServiceEntity's metadata JSON.
      * Falls back to minimal definition if parsing fails.
@@ -129,7 +145,7 @@ public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
                 log.warn("Failed to parse service from metadata JSON, falling back to minimal definition: {}", e.getMessage());
             }
         }
-        
+
         // Fallback: create minimal definition (should rarely happen)
         log.warn("Creating minimal service definition for: {} (no valid metadata)", entity.getServiceName());
         ServiceDefinition service = new ServiceDefinition();
@@ -137,34 +153,62 @@ public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
         service.setServiceId(entity.getServiceId());
         return service;
     }
-    
+
     @Override
     public void removeOrphanFromNacos(String serviceId) throws Exception {
-        log.info("🗑️  Removing orphaned service from Nacos: {}", serviceId);
-        
+        log.info("Removing orphaned service from Nacos: {}", serviceId);
+
+        // Find the service to get instanceId
+        ServiceEntity service = serviceRepository.findByServiceId(serviceId).orElse(null);
+        String nacosNamespace = service != null ? getNacosNamespace(service.getInstanceId()) : null;
+
+        // Skip if no valid namespace - do NOT remove from public namespace
+        if (nacosNamespace == null) {
+            log.warn("Skipping orphan service {} without valid instanceId, will not remove from public namespace", serviceId);
+            return;
+        }
+
         // Delete from Nacos using service_id
         String serviceDataId = SERVICE_PREFIX + serviceId;
-        configCenterService.removeConfig(serviceDataId);
-        
-        log.info("✅ Removed orphan service: {}", serviceId);
-        
+        configCenterService.removeConfig(serviceDataId, nacosNamespace);
+
+        log.info("Removed orphan service: {} from namespace: {}", serviceId, nacosNamespace);
+
         // Rebuild services index after removal to maintain consistency
-        rebuildServicesIndex();
+        if (service != null) {
+            rebuildServicesIndex(service.getInstanceId());
+        }
     }
-    
+
     /**
-     * Rebuild services index from database.
+     * Get nacosNamespace from instanceId (uses cache).
+     */
+    private String getNacosNamespace(String instanceId) {
+        return namespaceCache.getNamespace(instanceId);
+    }
+
+    /**
+     * Rebuild services index from database for a specific instance.
      * Only includes ENABLED services since disabled services have no config in Nacos.
      */
-    private void rebuildServicesIndex() throws Exception {
-        // Use serviceId (UUID), not serviceName - consistent with ServiceService.rebuildServicesIndex()
-        List<String> serviceIds = serviceRepository.findByEnabledTrue().stream()
-            .map(ServiceEntity::getServiceId)  // Use serviceId, not serviceName
+    private void rebuildServicesIndex(String instanceId) throws Exception {
+        if (instanceId == null || instanceId.isEmpty()) {
+            return;
+        }
+
+        String nacosNamespace = getNacosNamespace(instanceId);
+        if (nacosNamespace == null) {
+            return;
+        }
+
+        // Only include ENABLED services for this instance
+        List<String> serviceIds = serviceRepository.findByInstanceIdAndEnabledTrue(instanceId).stream()
+            .map(ServiceEntity::getServiceId)
             .collect(Collectors.toList());
 
-        // Publish as JSON array directly, not stringified JSON
-        configCenterService.publishConfig(SERVICES_INDEX, serviceIds);
-        log.debug("Services index rebuilt with {} enabled services", serviceIds.size());
+        // Publish as JSON array to instance namespace
+        configCenterService.publishConfig(SERVICES_INDEX, nacosNamespace, serviceIds);
+        log.debug("Services index rebuilt with {} enabled services in namespace {}", serviceIds.size(), nacosNamespace);
     }
 
     @Override

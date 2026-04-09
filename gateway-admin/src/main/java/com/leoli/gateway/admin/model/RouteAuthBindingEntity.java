@@ -18,7 +18,11 @@ import java.time.LocalDateTime;
 @Table(name = "route_auth_bindings", indexes = {
     @Index(name = "idx_binding_policy", columnList = "policy_id"),
     @Index(name = "idx_binding_route", columnList = "route_id"),
-    @Index(name = "idx_binding_enabled", columnList = "enabled")
+    @Index(name = "idx_binding_enabled", columnList = "enabled"),
+    @Index(name = "idx_binding_instance", columnList = "instance_id"),
+    @Index(name = "idx_binding_instance_route_enabled", columnList = "instance_id, route_id, enabled"),
+    @Index(name = "idx_binding_policy_enabled", columnList = "policy_id, enabled"),
+    @Index(name = "idx_binding_route_enabled_priority", columnList = "route_id, enabled, priority")
 })
 public class RouteAuthBindingEntity {
 

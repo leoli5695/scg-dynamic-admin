@@ -177,7 +177,8 @@ public class AlertCheckService {
 
     /**
      * Check thread count alerts.
-     * Calculates thread usage percentage based on peak threads.
+     * Compares live thread count against a configured maximum threshold.
+     * Note: The threshold is treated as a raw count, not a percentage.
      */
     @SuppressWarnings("unchecked")
     private void checkThreadAlerts(Map<String, Object> metrics, Map<String, Object> thresholds, AlertConfig config) {
@@ -191,23 +192,18 @@ public class AlertCheckService {
         }
 
         double liveThreads = getDoubleValue(threads, "liveThreads");
-        double peakThreads = getDoubleValue(threads, "peakThreads");
         double threadThreshold = getDoubleValue(threadConfig, "activeThreshold", DEFAULT_THREAD_THRESHOLD);
 
-        // Calculate thread usage percentage based on peak threads
-        // This is more meaningful than comparing raw thread count to a percentage threshold
-        if (peakThreads > 0) {
-            double threadUsagePercent = (liveThreads / peakThreads) * 100;
-            log.debug("Thread usage: {}% (live: {}, peak: {}, threshold: {}%)",
-                threadUsagePercent, liveThreads, peakThreads, threadThreshold);
-            checkMetricAgainstThreshold("THREAD_USAGE", "Thread Usage Percentage", threadUsagePercent, threadThreshold, config, "%");
-        } else {
-            // If peak threads is 0, treat threshold as raw count threshold
-            // This handles the case where we don't have peak data
-            log.debug("Peak threads is 0, using raw count comparison: live={}, threshold={}", liveThreads, threadThreshold);
-            // Only alert if threshold is likely a count (> 100), otherwise skip
-            if (threadThreshold > 100) {
-                checkMetricAgainstThreshold("THREAD_COUNT", "Live Thread Count", liveThreads, threadThreshold, config, "");
+        // Thread threshold should be treated as a raw count (e.g., 200 threads)
+        // Not as a percentage. Alert if live threads exceed the threshold count.
+        log.debug("Thread check: live={}, threshold={}", liveThreads, threadThreshold);
+
+        // Only alert if threshold is reasonable for a thread count (> 50)
+        // Default threshold of 90 means 90 threads, which is a reasonable limit
+        if (threadThreshold > 50) {
+            // Treat threshold as raw thread count
+            if (liveThreads > threadThreshold) {
+                checkMetricAgainstThreshold("THREAD_COUNT", "Live Thread Count", liveThreads, threadThreshold, config, "threads");
             }
         }
     }

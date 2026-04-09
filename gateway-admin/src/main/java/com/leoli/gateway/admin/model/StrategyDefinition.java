@@ -57,9 +57,9 @@ public class StrategyDefinition {
     private Map<String, Object> config = new HashMap<>();
 
     /**
-     * Description.
+     * Description (only for UI display, NOT pushed to Nacos)
      */
-    private String description;
+    private transient String description;
 
     // ============================================================
     // Strategy Types

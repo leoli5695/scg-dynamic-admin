@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from "react";
 import {
   Layout,
   Menu,
-  theme,
   Avatar,
   Dropdown,
   Space,
@@ -16,43 +15,14 @@ import enUS from "antd/locale/en_US";
 import customTheme from "./theme";
 import GatewayLogo from "./components/GatewayLogo";
 import {
-  // Core Gateway Icons
-  AppstoreOutlined,
-  DeploymentUnitOutlined,
-  SafetyOutlined,
-  KeyOutlined,
-  LockOutlined,
-  FileTextOutlined,
-  HistoryOutlined,
   ClusterOutlined,
-
-  // Instance Management Icons
   CloudServerOutlined,
-
-  // Monitoring & Analysis Icons
-  LineChartOutlined,
-  DashboardOutlined,
-  BellOutlined,
-  BarChartOutlined,
-
-  // User Interface Icons
   UserOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
 } from "@ant-design/icons";
-import { Routes, Route, useNavigate, useLocation, useParams } from "react-router-dom";
-import RoutesPage from "./pages/RoutesPage";
-import ServicesPage from "./pages/ServicesPage";
-import StrategiesPage from "./pages/StrategiesPage";
-import MonitorPage from "./pages/MonitorPage";
-import AlertPage from "./pages/AlertPage";
-import CertificatePage from "./pages/CertificatePage";
-import TracePage from "./pages/TracePage";
-import AnalyticsPage from "./pages/AnalyticsPage";
-import AuthPoliciesPage from "./pages/AuthPoliciesPage";
-import AccessLogConfigPage from "./pages/AccessLogConfigPage";
-import AuditLogsPage from "./pages/AuditLogsPage";
+import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import KubernetesPage from "./pages/KubernetesPage";
 import InstancesPage from "./pages/InstancesPage";
 import InstanceCreatePage from "./pages/InstanceCreatePage";
@@ -95,9 +65,6 @@ const App: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
-  const {
-    token: { colorBgContainer },
-  } = theme.useToken();
 
   // Menu items with i18n - new structure with Instance Management and Cluster Management
   const menuItems: MenuItem[] = useMemo(

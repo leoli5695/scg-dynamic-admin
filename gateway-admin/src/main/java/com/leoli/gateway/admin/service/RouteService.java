@@ -221,6 +221,9 @@ public class RouteService {
         configCenterService.publishConfig(routeDataId, nacosNamespace, route);
         log.info("Route pushed to Nacos: {} (namespace: {})", routeDataId, nacosNamespace);
 
+        // Rebuild routes index for this namespace
+        rebuildRoutesIndex(nacosNamespace);
+
         log.info("Route created successfully: {}", entity.getRouteId());
         return entity;
     }
@@ -290,6 +293,9 @@ public class RouteService {
         routeRepository.delete(entity);
         log.info("Route deleted from database: {}", routeId);
 
+        // Rebuild routes index for this namespace
+        rebuildRoutesIndex(nacosNamespace);
+
         log.info("Route deleted successfully: {}", routeId);
     }
 
@@ -317,6 +323,9 @@ public class RouteService {
         String routeDataId = ROUTE_PREFIX + entity.getRouteId();
         configCenterService.publishConfig(routeDataId, nacosNamespace, route);
 
+        // Rebuild routes index
+        rebuildRoutesIndex(nacosNamespace);
+
         log.info("Route enabled: {} (namespace: {})", routeId, nacosNamespace);
     }
 
@@ -343,6 +352,9 @@ public class RouteService {
         String routeDataId = ROUTE_PREFIX + entity.getRouteId();
         configCenterService.removeConfig(routeDataId, nacosNamespace);
 
+        // Rebuild routes index
+        rebuildRoutesIndex(nacosNamespace);
+
         log.info("Route disabled: {} (namespace: {})", routeId, nacosNamespace);
     }
 
@@ -366,5 +378,48 @@ public class RouteService {
         response.setEnabled(entity.getEnabled());
         response.setDescription(entity.getDescription());
         return response;
+    }
+
+    /**
+     * Rebuild routes index for a specific namespace.
+     * @param nacosNamespace the Nacos namespace to publish the index to (null for default)
+     */
+    private void rebuildRoutesIndex(String nacosNamespace) {
+        try {
+            // Query enabled routes for the specific namespace
+            List<String> routeIds;
+            if (nacosNamespace != null && !nacosNamespace.isEmpty()) {
+                routeIds = routeRepository.findByEnabledTrue().stream()
+                    .filter(entity -> nacosNamespace.equals(getNacosNamespace(entity.getInstanceId())))
+                    .map(RouteEntity::getRouteId)
+                    .collect(java.util.stream.Collectors.toList());
+            } else {
+                routeIds = routeRepository.findByEnabledTrue().stream()
+                    .map(RouteEntity::getRouteId)
+                    .collect(java.util.stream.Collectors.toList());
+            }
+
+            // Load current Nacos index
+            List<String> currentIndex = null;
+            try {
+                currentIndex = configCenterService.getConfig(ROUTES_INDEX, nacosNamespace,
+                    new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
+            } catch (Exception e) {
+                log.debug("Routes index does not exist or failed to read: {}", e.getMessage());
+            }
+
+            // Check if rebuild needed
+            boolean needsRebuild = currentIndex == null || !routeIds.equals(currentIndex);
+
+            if (needsRebuild) {
+                log.info("Rebuilding routes index for namespace {} with {} routes",
+                    nacosNamespace == null || nacosNamespace.isEmpty() ? "public" : nacosNamespace, routeIds.size());
+                configCenterService.publishConfig(ROUTES_INDEX, nacosNamespace, routeIds);
+                log.info("Routes index rebuilt for namespace {}", 
+                    nacosNamespace == null || nacosNamespace.isEmpty() ? "public" : nacosNamespace);
+            }
+        } catch (Exception e) {
+            log.error("Failed to rebuild routes index", e);
+        }
     }
 }

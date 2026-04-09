@@ -114,7 +114,7 @@ public class AuthPolicyController {
             @PathVariable String policyId,
             @RequestBody AuthPolicyDefinition policy) {
         try {
-            log.info("Updating auth policy: {}", policyId);
+            log.info("Updating auth policy: {}, apiKey: {}, apiKeyHeader: {}", policyId, policy.getApiKey(), policy.getApiKeyHeader());
             authPolicyService.updatePolicy(policyId, policy);
             return ok(authPolicyService.getPolicy(policyId), "Policy updated successfully");
         } catch (IllegalArgumentException e) {

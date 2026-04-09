@@ -59,10 +59,8 @@ public class AlertContentGenerator {
                                         double currentValue, double threshold,
                                         String language) {
         try {
-            // Get first valid AI config
-            Optional<AiConfig> configOpt = aiConfigRepository.findAll().stream()
-                .filter(c -> Boolean.TRUE.equals(c.getIsValid()) && c.getApiKey() != null)
-                .findFirst();
+            // Get first valid AI config (optimized query instead of findAll)
+            Optional<AiConfig> configOpt = aiConfigRepository.findFirstValidConfig();
 
             if (configOpt.isEmpty()) {
                 log.warn("No valid AI config found, using default content");

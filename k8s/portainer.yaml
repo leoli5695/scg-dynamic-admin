@@ -1,0 +1,125 @@
+---
+# Portainer ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: portainer-sa
+  namespace: test
+
+---
+# Portainer ClusterRole (集群管理员权限)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: portainer-cluster-admin
+rules:
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["*"]
+
+---
+# Portainer ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: portainer-cluster-admin-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: portainer-cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: portainer-sa
+  namespace: test
+
+---
+# Portainer PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: portainer-pvc
+  namespace: test
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: local-path
+
+---
+# Portainer Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portainer
+  namespace: test
+  labels:
+    app: portainer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: portainer
+  template:
+    metadata:
+      labels:
+        app: portainer
+    spec:
+      serviceAccountName: portainer-sa
+      containers:
+      - name: portainer
+        image: portainer/portainer-ce:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 9000
+          name: http
+        - containerPort: 9443
+          name: https
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        volumeMounts:
+        - name: portainer-data
+          mountPath: /data
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 9000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+      volumes:
+      - name: portainer-data
+        persistentVolumeClaim:
+          claimName: portainer-pvc
+
+---
+# Portainer Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: portainer
+  namespace: test
+spec:
+  type: NodePort
+  selector:
+    app: portainer
+  ports:
+  - name: http
+    port: 9000
+    targetPort: 9000
+    nodePort: 30900
+  - name: https
+    port: 9443
+    targetPort: 9443
+    nodePort: 30943

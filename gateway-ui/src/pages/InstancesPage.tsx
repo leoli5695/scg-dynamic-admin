@@ -12,6 +12,7 @@ import {
   Tooltip,
   Empty,
   Descriptions,
+  Typography,
 } from "antd";
 import {
   PlusOutlined,
@@ -24,6 +25,9 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import axios from "axios";
+import "./InstancesPage.css";
+
+const { Text } = Typography;
 
 interface GatewayInstance {
   id: number;
@@ -33,6 +37,8 @@ interface GatewayInstance {
   clusterName: string;
   namespace: string;
   nacosNamespace: string;
+  nacosServerAddr?: string;
+  redisServerAddr?: string;
   specType: string;
   cpuCores: number;
   memoryMB: number;
@@ -44,6 +50,8 @@ interface GatewayInstance {
   deploymentName: string;
   serviceName: string;
   nodePort: number;
+  nodeIp?: string;
+  serverPort?: number;
   enabled: boolean;
   description: string;
   createdAt: string;
@@ -144,11 +152,11 @@ const InstancesPage: React.FC = () => {
 
   const getStatusText = (statusCode: number, status: string) => {
     switch (statusCode) {
-      case 0: return t("instance.status_starting") || "Starting";
-      case 1: return t("instance.status_running") || "Running";
-      case 2: return t("instance.status_error") || "Error";
-      case 3: return t("instance.status_stopping") || "Stopping";
-      case 4: return t("instance.status_stopped") || "Stopped";
+      case 0: return t("instance.status_starting");
+      case 1: return t("instance.status_running");
+      case 2: return t("instance.status_error");
+      case 3: return t("instance.status_stopping");
+      case 4: return t("instance.status_stopped");
       default: return status;
     }
   };
@@ -157,59 +165,145 @@ const InstancesPage: React.FC = () => {
     if (instance.specType === "custom") {
       return `${instance.cpuCores}C ${instance.memoryMB}MB`;
     }
-    return instance.specType.toUpperCase();
+    const specKey = `instance.spec_${instance.specType}`;
+    return t(specKey);
   };
 
   return (
-    <div className="instances-page" style={{ padding: "24px" }}>
-      <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2 style={{ margin: 0, color: "#fff" }}>
-          <CloudServerOutlined style={{ marginRight: "8px" }} />
-          {t("menu.instances")}
-        </h2>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate("/instances/create")} disabled={clusters.length === 0}>
-          {t("instance.create_instance")}
-        </Button>
+    <div className="instances-page">
+      {/* Page Header */}
+      <div className="instances-page-header">
+        <div className="instances-page-header-left">
+          <div className="instances-page-title">
+            <CloudServerOutlined />
+            <span className="instances-page-title-text">{t("menu.instances")}</span>
+          </div>
+          <Text className="instances-page-subtitle">{t("instance.description") || t("common.manage_instances")}</Text>
+        </div>
+        <div className="instances-page-actions">
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => navigate("/instances/create")}
+            disabled={clusters.length === 0}
+            size="large"
+          >
+            {t("instance.create_instance")}
+          </Button>
+        </div>
       </div>
 
       <Spin spinning={loading}>
-        <Row gutter={[24, 24]}>
+        <Row gutter={[16, 16]} className="instances-grid">
           {instances.map((instance) => (
             <Col xs={24} sm={12} lg={8} xl={6} key={instance.id}>
-              <Card className="instance-card" style={{ background: "rgba(255,255,255,0.05)", borderColor: "rgba(255,255,255,0.1)" }} hoverable onClick={() => navigate(`/instances/${instance.instanceId}`)}>
-                <div style={{ marginBottom: "16px" }}>
-                  <Space>
-                    <CloudServerOutlined style={{ fontSize: "24px", color: "#165DFF" }} />
-                    <span style={{ fontSize: "18px", fontWeight: 600, color: "#fff" }}>{instance.instanceName}</span>
-                  </Space>
-                  <Tag color={getStatusColor(instance.statusCode)} style={{ marginLeft: "8px" }}>
-                    {getStatusText(instance.statusCode, instance.status)}
-                  </Tag>
+              <Card
+                className="instance-card"
+                hoverable
+                onClick={() => navigate(`/instances/${instance.instanceId}`)}
+                bodyStyle={{ padding: 20 }}
+              >
+                {/* Card Header */}
+                <div className="instance-card-header">
+                  <div className="instance-card-icon">
+                    <CloudServerOutlined />
+                  </div>
+                  <div className="instance-card-info">
+                    <div className="instance-card-name">
+                      <Text strong>{instance.instanceName}</Text>
+                      <Tag className="instance-status-tag" color={getStatusColor(instance.statusCode)}>
+                        {getStatusText(instance.statusCode, instance.status)}
+                      </Tag>
+                    </div>
+                    <div className="instance-card-meta">
+                      <span className="instance-cluster">{instance.clusterName}</span>
+                      <span className="instance-divider">·</span>
+                      <span className="instance-namespace">{instance.namespace}</span>
+                    </div>
+                  </div>
                 </div>
 
-                <Descriptions column={1} size="small">
-                  <Descriptions.Item label={t("instance.cluster")}>{instance.clusterName}</Descriptions.Item>
-                  <Descriptions.Item label={t("instance.namespace")}>{instance.namespace}</Descriptions.Item>
-                  <Descriptions.Item label={t("instance.spec")}>{getSpecText(instance)}</Descriptions.Item>
-                  <Descriptions.Item label={t("instance.replicas")}>{instance.replicas}</Descriptions.Item>
-                  {instance.nodePort && <Descriptions.Item label={t("instance.node_port")}>{instance.nodePort}</Descriptions.Item>}
-                  {instance.statusMessage && <Descriptions.Item label={t("instance.status_message") || "Status"}><span style={{ color: instance.statusCode === 2 ? "#ff4d4f" : "inherit" }}>{instance.statusMessage}</span></Descriptions.Item>}
-                </Descriptions>
+                {/* Card Body */}
+                <div className="instance-card-body">
+                  <div className="instance-spec">
+                    <Text className="instance-spec-label">{t("instance.resources") || '资源'}</Text>
+                    <Text className="instance-spec-value">
+                      {getSpecText(instance)} · {instance.replicas} Pods
+                    </Text>
+                  </div>
+                  
+                  {instance.statusMessage && (
+                    <div className="instance-status-message">
+                      <Tooltip title={instance.statusMessage} placement="topLeft">
+                        <Text className="instance-status-text">
+                          {instance.statusMessage}
+                        </Text>
+                      </Tooltip>
+                    </div>
+                  )}
+                </div>
 
-                <div style={{ marginTop: "16px", borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "16px" }} onClick={(e) => e.stopPropagation()}>
-                  <Space>
-                    {instance.statusCode === 1 && <Tooltip title={t("instance.stop")}><Button type="text" icon={<PauseCircleOutlined />} onClick={() => handleStopInstance(instance.id)} style={{ color: "#faad14" }} /></Tooltip>}
-                    {(instance.statusCode === 4 || instance.statusCode === 2) && <Tooltip title={t("instance.start")}><Button type="text" icon={<PlayCircleOutlined />} onClick={() => handleStartInstance(instance.id)} style={{ color: "#52c41a" }} /></Tooltip>}
-                    <Tooltip title={t("common.refresh")}><Button type="text" icon={<ReloadOutlined />} onClick={() => handleRefreshStatus(instance.id)} style={{ color: "#165DFF" }} /></Tooltip>
-                    <Popconfirm title={t("instance.delete_confirm")} onConfirm={() => handleDeleteInstance(instance.id)} okText={t("common.confirm")} cancelText={t("common.cancel")}><Tooltip title={t("common.delete")}><Button type="text" danger icon={<DeleteOutlined />} /></Tooltip></Popconfirm>
-                  </Space>
+                {/* Card Actions */}
+                <div className="instance-card-actions" onClick={(e) => e.stopPropagation()}>
+                  {instance.statusCode === 1 && (
+                    <Tooltip title={t("instance.stop")}>
+                      <Button
+                        className="instance-action-btn"
+                        type="text"
+                        icon={<PauseCircleOutlined />}
+                        onClick={() => handleStopInstance(instance.id)}
+                      />
+                    </Tooltip>
+                  )}
+                  {(instance.statusCode === 4 || instance.statusCode === 2) && (
+                    <Tooltip title={t("instance.start")}>
+                      <Button
+                        className="instance-action-btn instance-action-btn-start"
+                        type="text"
+                        icon={<PlayCircleOutlined />}
+                        onClick={() => handleStartInstance(instance.id)}
+                      />
+                    </Tooltip>
+                  )}
+                  <Tooltip title={t("common.refresh")}>
+                    <Button
+                      className="instance-action-btn"
+                      type="text"
+                      icon={<ReloadOutlined />}
+                      onClick={() => handleRefreshStatus(instance.id)}
+                    />
+                  </Tooltip>
+                  <Popconfirm
+                    title={t("instance.delete_confirm")}
+                    onConfirm={() => handleDeleteInstance(instance.id)}
+                    okText={t("common.confirm")}
+                    cancelText={t("common.cancel")}
+                  >
+                    <Tooltip title={t("common.delete")}>
+                      <Button
+                        className="instance-action-btn instance-action-btn-danger"
+                        type="text"
+                        danger
+                        icon={<DeleteOutlined />}
+                      />
+                    </Tooltip>
+                  </Popconfirm>
                 </div>
               </Card>
             </Col>
           ))}
         </Row>
 
-        {instances.length === 0 && !loading && clusters.length > 0 && <Empty description={<span style={{ color: "rgba(255,255,255,0.65)" }}>{t("instance.no_instances")}</span>} />}
+        {instances.length === 0 && !loading && clusters.length > 0 && (
+          <div className="instances-empty">
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={
+                <Text type="secondary">{t("instance.no_instances")}</Text>
+              }
+            />
+          </div>
+        )}
       </Spin>
     </div>
   );

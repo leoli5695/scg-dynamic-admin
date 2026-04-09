@@ -4,7 +4,7 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.leoli.gateway.limiter.RateLimitResult;
 import com.leoli.gateway.limiter.RedisHealthChecker;
-import com.leoli.gateway.limiter.RedisRateLimiter;
+import com.leoli.gateway.limiter.DistributedRateLimiter;
 import com.leoli.gateway.limiter.ShadowQuotaManager;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.StrategyDefinition;
@@ -56,11 +56,11 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
     @Autowired
     private StrategyManager strategyManager;
 
-    @Autowired
+    @Autowired(required = false)
     private RedisHealthChecker redisHealthChecker;
 
     @Autowired(required = false)
-    private RedisRateLimiter redisRateLimiter;
+    private DistributedRateLimiter distributedRateLimiter;
 
     @Autowired
     private ShadowQuotaManager shadowQuotaManager;
@@ -104,11 +104,12 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
         boolean shouldUseRedis = shouldUseRedisForRateLimiting();
 
         // 1. Check if Redis rate limiting should be used
-        if (shouldUseRedis && redisLimitEnabled && redisHealthChecker.isRedisAvailableForRateLimiting()) {
+        if (shouldUseRedis && redisLimitEnabled && redisHealthChecker != null
+                && redisHealthChecker.isRedisAvailableForRateLimiting() && distributedRateLimiter != null) {
             log.debug("Using Redis distributed rate limiting for key: {}", rateLimitKey);
 
             // 2. Try Redis rate limiting with proper fallback handling
-            RateLimitResult result = redisRateLimiter.tryAcquireWithFallback(
+            RateLimitResult result = distributedRateLimiter.tryAcquireWithFallback(
                     rateLimitKey, config.qps, config.windowSizeMs);
 
             if (result.isAllowed()) {

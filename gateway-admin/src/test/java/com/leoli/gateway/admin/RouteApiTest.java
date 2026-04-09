@@ -25,7 +25,8 @@ public class RouteApiTest extends BaseIntegrationTest {
     @Order(1)
     void test01_CreateRoute_Success() throws Exception {
         ObjectNode route = objectMapper.createObjectNode();
-        route.put("id", createdRouteName);
+        // routeName is the business name, id (UUID) will be auto-generated
+        route.put("routeName", createdRouteName);
         route.put("uri", "static://test-service-id");
         route.put("mode", "SINGLE");
         route.put("serviceId", "test-service-id");
@@ -164,7 +165,8 @@ public class RouteApiTest extends BaseIntegrationTest {
         String service2Id = createTestService("test-svc-2", 9002);
 
         ObjectNode route = objectMapper.createObjectNode();
-        route.put("id", "multi-service-route");
+        // routeName is the business name, id (UUID) will be auto-generated
+        route.put("routeName", "multi-service-route");
         route.put("uri", "static://" + service1Id);
         route.put("mode", "MULTI");
         route.put("order", 0);

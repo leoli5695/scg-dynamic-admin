@@ -113,7 +113,7 @@ public class RouteController {
             // Build RouteResponse with UUID
             RouteResponse response = new RouteResponse();
             response.setId(entity.getRouteId());  // UUID
-            response.setRouteName(route.getId());  // routeName
+            response.setRouteName(route.getRouteName());  // routeName
             response.setUri(route.getUri());
             response.setMode(route.getMode());
             response.setServiceId(route.getServiceId());

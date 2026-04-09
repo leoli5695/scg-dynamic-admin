@@ -44,8 +44,11 @@ public class InstanceDiscoveryService {
 
     /**
      * Get all instances needing active health check.
+     * Optimized: Use Set for O(1) contains() check instead of List's O(n).
      */
     public List<InstanceKey> findInstancesNeedingActiveCheck() {
+        // Use Set for O(1) contains() check
+        Set<InstanceKey> needingCheckSet = new java.util.HashSet<>();
         List<InstanceKey> needingCheck = new ArrayList<>();
 
         // Method 1: Get static instances from StaticDiscoveryService
@@ -70,11 +73,14 @@ public class InstanceDiscoveryService {
                         log.info("Found {} unhealthy instance(s) in cache for service: {}, will recheck",
                                 unhealthyInstances.size(), serviceId);
                         for (InstanceHealth health : unhealthyInstances) {
-                            needingCheck.add(new InstanceKey(
+                            InstanceKey key = new InstanceKey(
                                     health.getServiceId(),
                                     health.getIp(),
                                     health.getPort()
-                            ));
+                            );
+                            if (needingCheckSet.add(key)) {
+                                needingCheck.add(key);
+                            }
                         }
                     }
                     continue;
@@ -99,7 +105,10 @@ public class InstanceDiscoveryService {
                     }
 
                     // Add to check list
-                    needingCheck.add(new InstanceKey(serviceId, instance.getHost(), instance.getPort()));
+                    InstanceKey checkKey = new InstanceKey(serviceId, instance.getHost(), instance.getPort());
+                    if (needingCheckSet.add(checkKey)) {
+                        needingCheck.add(checkKey);
+                    }
                 }
             }
 
@@ -120,8 +129,8 @@ public class InstanceDiscoveryService {
                     health.getPort()
             );
 
-            // Skip if already in discovered list (avoid duplicates)
-            if (needingCheck.contains(key)) {
+            // Skip if already in discovered list (avoid duplicates) - O(1) with Set
+            if (!needingCheckSet.add(key)) {
                 continue;
             }
 

@@ -20,9 +20,9 @@ public class ServiceDefinition {
     private String name;
 
     /**
-     * Service description
+     * Service description (only for UI display, NOT pushed to Nacos)
      */
-    private String description;
+    private transient String description;
 
     /**
      * Service instance list

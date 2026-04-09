@@ -24,7 +24,7 @@ public class NacosMetadataSyncer {
     @Autowired(required = false)
     private NamingService namingService;
 
-    @Autowired
+    @Autowired(required = false)
     private NacosDiscoveryProperties nacosDiscoveryProperties;
 
     @Value("${gateway.health.nacos-sync-enabled:false}")

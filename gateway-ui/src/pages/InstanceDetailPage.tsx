@@ -14,6 +14,9 @@ import {
   Row,
   Col,
   Statistic,
+  Modal,
+  InputNumber,
+  Form,
 } from "antd";
 import {
   ArrowLeftOutlined,
@@ -31,6 +34,8 @@ import {
   BellOutlined,
   FileTextOutlined,
   HistoryOutlined,
+  PlusSquareOutlined,
+  LinkOutlined,
 } from "@ant-design/icons";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -67,6 +72,7 @@ interface GatewayInstance {
   deploymentName: string;
   serviceName: string;
   nodePort: number;
+  nodeIp: string;
   enabled: boolean;
   description: string;
   createdAt: string;
@@ -81,6 +87,9 @@ const InstanceDetailPage: React.FC = () => {
 
   const [instance, setInstance] = useState<GatewayInstance | null>(null);
   const [loading, setLoading] = useState(true);
+  const [scaleModalVisible, setScaleModalVisible] = useState(false);
+  const [scaleReplicas, setScaleReplicas] = useState(1);
+  const [scaleLoading, setScaleLoading] = useState(false);
 
   // Derive activeTab from URL path
   const getActiveTabFromPath = (): string => {
@@ -152,15 +161,44 @@ const InstanceDetailPage: React.FC = () => {
     }
   };
 
+  const handleScale = async () => {
+    if (!instance) return;
+    setScaleLoading(true);
+    try {
+      const response = await axios.put(`/api/instances/${instance.id}/replicas`, {
+        replicas: scaleReplicas,
+      });
+      if (response.data.code === 200) {
+        message.success(t("instance.scale_success"));
+        setScaleModalVisible(false);
+        fetchInstance();
+      } else {
+        message.error(response.data.message || t("instance.scale_failed"));
+      }
+    } catch (error) {
+      message.error(t("instance.scale_failed"));
+    } finally {
+      setScaleLoading(false);
+    }
+  };
+
+  const openScaleModal = () => {
+    if (instance) {
+      setScaleReplicas(instance.replicas || 1);
+      setScaleModalVisible(true);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "RUNNING":
+      case "Running":
         return "green";
-      case "CREATING":
+      case "Creating":
+      case "Starting":
         return "blue";
-      case "STOPPED":
+      case "Stopped":
         return "orange";
-      case "ERROR":
+      case "Error":
         return "red";
       default:
         return "default";
@@ -169,13 +207,15 @@ const InstanceDetailPage: React.FC = () => {
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case "RUNNING":
+      case "Running":
         return t("instance.status_running");
-      case "CREATING":
+      case "Creating":
         return t("instance.status_creating");
-      case "STOPPED":
+      case "Starting":
+        return t("instance.status_starting");
+      case "Stopped":
         return t("instance.status_stopped");
-      case "ERROR":
+      case "Error":
         return t("instance.status_error");
       default:
         return status;
@@ -186,7 +226,8 @@ const InstanceDetailPage: React.FC = () => {
     if (inst.specType === "custom") {
       return `${inst.cpuCores}C ${inst.memoryMB}MB`;
     }
-    return inst.specType.toUpperCase();
+    const specKey = `instance.spec_${inst.specType}`;
+    return t(specKey);
   };
 
   // Tab items for instance detail
@@ -369,8 +410,33 @@ const InstanceDetailPage: React.FC = () => {
                 <Descriptions.Item label={t("instance.deployment")}>
                   {instance.deploymentName}
                 </Descriptions.Item>
-                <Descriptions.Item label={t("instance.service")}>
-                  {instance.serviceName}
+                {instance.nodeIp && instance.nodePort && (
+                  <Descriptions.Item label={t("instance.access_url")}>
+                    <Tooltip title={t("instance.click_to_open")}>
+                      <a
+                        href={`http://${instance.nodeIp}:${instance.nodePort}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: "#165DFF" }}
+                      >
+                        <LinkOutlined style={{ marginRight: "4px" }} />
+                        http://{instance.nodeIp}:{instance.nodePort}
+                      </a>
+                    </Tooltip>
+                  </Descriptions.Item>
+                )}
+                <Descriptions.Item label={t("instance.nacos_console")}>
+                  <Tooltip title={t("instance.click_to_open_nacos")}>
+                    <a
+                      href={`http://127.0.0.1:30848/nacos/#/configurationManagement?dataId=&group=&namespace=${instance.nacosNamespace}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: "#165DFF" }}
+                    >
+                      <LinkOutlined style={{ marginRight: "4px" }} />
+                      http://127.0.0.1:30848/nacos
+                    </a>
+                  </Tooltip>
                 </Descriptions.Item>
                 <Descriptions.Item label={t("instance.created_at")}>
                   {new Date(instance.createdAt).toLocaleString()}
@@ -451,12 +517,17 @@ const InstanceDetailPage: React.FC = () => {
         </Space>
 
         <Space>
-          {instance.status === "RUNNING" && (
-            <Button icon={<PauseCircleOutlined />} onClick={handleStop}>
-              {t("instance.stop")}
-            </Button>
+          {instance.status === "Running" && (
+            <>
+              <Button icon={<PlusSquareOutlined />} onClick={openScaleModal}>
+                {t("instance.scale")}
+              </Button>
+              <Button icon={<PauseCircleOutlined />} onClick={handleStop}>
+                {t("instance.stop")}
+              </Button>
+            </>
           )}
-          {instance.status === "STOPPED" && (
+          {instance.status === "Stopped" && (
             <Button type="primary" icon={<PlayCircleOutlined />} onClick={handleStart}>
               {t("instance.start")}
             </Button>
@@ -483,6 +554,32 @@ const InstanceDetailPage: React.FC = () => {
       <div style={{ background: "rgba(0,0,0,0.2)", minHeight: "calc(100vh - 120px)" }}>
         {renderTabContent()}
       </div>
+
+      {/* Scale Modal */}
+      <Modal
+        title={t("instance.scale_title")}
+        open={scaleModalVisible}
+        onOk={handleScale}
+        onCancel={() => setScaleModalVisible(false)}
+        confirmLoading={scaleLoading}
+        okText={t("instance.scale_confirm")}
+        cancelText={t("common.cancel")}
+      >
+        <Form layout="vertical">
+          <Form.Item label={t("instance.current_replicas")}>
+            <Text>{instance?.replicas || 0}</Text>
+          </Form.Item>
+          <Form.Item label={t("instance.target_replicas")} required>
+            <InputNumber
+              min={1}
+              max={99}
+              value={scaleReplicas}
+              onChange={(value) => setScaleReplicas(value || 1)}
+              style={{ width: "100%" }}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 };

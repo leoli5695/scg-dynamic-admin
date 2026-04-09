@@ -2,6 +2,7 @@ package com.leoli.gateway.auth;
 
 import com.leoli.gateway.enums.AuthType;
 import com.leoli.gateway.model.AuthConfig;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -16,17 +17,15 @@ import java.util.Map;
 /**
  * OAuth2 Authentication Processor.
  * Validates access tokens with OAuth2 authorization server.
+ * Uses shared WebClient with optimized connection pool.
  *
  * @author leoli
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class OAuth2AuthProcessor extends AbstractAuthProcessor {
     private final WebClient webClient;
-
-    public OAuth2AuthProcessor() {
-        this.webClient = WebClient.builder().build();
-    }
 
     @Override
     public AuthType getAuthType() {

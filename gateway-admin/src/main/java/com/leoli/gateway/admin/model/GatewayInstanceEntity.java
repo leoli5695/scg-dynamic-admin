@@ -41,6 +41,12 @@ public class GatewayInstanceEntity {
     @Column(name = "nacos_namespace", length = 64)
     private String nacosNamespace;  // Nacos namespace ID for configuration isolation
 
+    @Column(name = "nacos_server_addr", length = 255)
+    private String nacosServerAddr;  // Custom Nacos server address (optional, for cross-cluster scenarios)
+
+    @Column(name = "redis_server_addr", length = 255)
+    private String redisServerAddr;  // Custom Redis server address (optional, for distributed rate limiting)
+
     @Column(name = "spec_type", length = 20)
     private String specType;  // small/medium/large/xlarge/custom
 
@@ -70,6 +76,48 @@ public class GatewayInstanceEntity {
     @Column(name = "status_message", length = 500)
     private String statusMessage;  // Status description or error message
 
+    /**
+     * Current CPU usage percentage (0-100).
+     */
+    @Column(name = "cpu_usage_percent")
+    private Double cpuUsagePercent;
+
+    /**
+     * Current memory usage in MB.
+     */
+    @Column(name = "memory_usage_mb")
+    private Double memoryUsageMb;
+
+    /**
+     * Current request rate (requests per second).
+     */
+    @Column(name = "requests_per_second")
+    private Double requestsPerSecond;
+
+    /**
+     * Current active connections count.
+     */
+    @Column(name = "active_connections")
+    private Integer activeConnections;
+
+    /**
+     * Total requests handled since deployment.
+     */
+    @Column(name = "total_requests")
+    private Long totalRequests;
+
+    /**
+     * Error rate percentage (0-100).
+     */
+    @Column(name = "error_rate_percent")
+    private Double errorRatePercent;
+
+    /**
+     * Average response time in milliseconds.
+     */
+    @Column(name = "avg_response_time_ms")
+    private Double avgResponseTimeMs;
+
     @Column(name = "deployment_name", length = 255)
     private String deploymentName;  // K8s Deployment name
 
@@ -78,6 +126,21 @@ public class GatewayInstanceEntity {
 
     @Column(name = "node_port")
     private Integer nodePort;  // K8s NodePort
+
+    @Column(name = "node_ip", length = 64)
+    private String nodeIp;  // K8s Node IP for external access
+
+    /**
+     * Gateway HTTP server port (server.port).
+     */
+    @Column(name = "server_port")
+    private Integer serverPort;
+
+    /**
+     * Gateway management/actuator port (management.server.port).
+     */
+    @Column(name = "management_port")
+    private Integer managementPort;
 
     @Column(columnDefinition = "BOOLEAN DEFAULT TRUE")
     private Boolean enabled;

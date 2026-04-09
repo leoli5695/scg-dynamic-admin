@@ -1,0 +1,89 @@
+---
+# my-gateway Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-gateway
+  namespace: test
+  labels:
+    app: my-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-gateway
+  template:
+    metadata:
+      labels:
+        app: my-gateway
+    spec:
+      containers:
+      - name: my-gateway
+        image: my-gateway:1.0.0
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 80
+          name: http
+        - containerPort: 8081
+          name: actuator
+        env:
+        - name: NACOS_SERVER_ADDR
+          value: "nacos:8848"
+        - name: NACOS_NAMESPACE
+          value: ""
+        - name: NACOS_DISCOVERY_IP
+          value: "127.0.0.1"
+        - name: GATEWAY_ADMIN_URL
+          value: "http://host.k3s.internal:9090"
+        - name: GATEWAY_ID
+          value: "gateway-k8s-1"
+        - name: GATEWAY_CENTER_TYPE
+          value: "nacos"
+        - name: REDIS_HOST
+          value: "host.k3s.internal"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: GATEWAY_SSL_ENABLED
+          value: "false"
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "2000m"
+            memory: "1Gi"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8081
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+
+---
+# my-gateway Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-gateway
+  namespace: test
+spec:
+  type: NodePort
+  selector:
+    app: my-gateway
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+    nodePort: 30080
+  - name: actuator
+    port: 8081
+    targetPort: 8081
+    nodePort: 30081

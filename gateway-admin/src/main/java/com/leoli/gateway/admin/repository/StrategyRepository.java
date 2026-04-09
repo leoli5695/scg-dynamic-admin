@@ -118,4 +118,9 @@ public interface StrategyRepository extends JpaRepository<StrategyEntity, Long> 
      * Check if strategy name exists within an instance.
      */
     boolean existsByStrategyNameAndInstanceId(String strategyName, String instanceId);
+
+    /**
+     * Delete all strategies by instance ID.
+     */
+    int deleteByInstanceId(String instanceId);
 }

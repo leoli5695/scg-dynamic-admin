@@ -1,0 +1,1564 @@
+/* ============================================================================
+   Kubernetes & Instance Management - Modern Redesign (Vercel-inspired)
+   Clean, Minimalist Design
+   ============================================================================ */
+
+/* ==================== Page Layout ==================== */
+.page-container {
+  min-height: 100vh;
+  background: #09090b !important;
+  padding: 24px 32px;
+}
+
+.kubernetes-page {
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+/* ==================== Page Header ==================== */
+.k8s-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+.k8s-page-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.k8s-page-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+}
+
+.k8s-page-title .anticon {
+  font-size: 24px;
+  color: #fafafa;
+}
+
+.k8s-page-subtitle {
+  font-size: 14px;
+  color: #71717a;
+  margin: 0;
+}
+
+.k8s-page-header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+/* ==================== Stats Cards ==================== */
+.k8s-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card-premium {
+  background: #18181b;
+  border: 1px solid #27272a;
+  border-radius: 10px;
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.15s ease;
+}
+
+.stat-card-premium:hover {
+  background: #1f1f23;
+  border-color: #3f3f46;
+}
+
+.stat-card-premium::before {
+  display: none;
+}
+
+.stat-card-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  font-size: 20px;
+  background: #27272a;
+  color: #a1a1aa;
+}
+
+.stat-card-icon.default {
+  background: #27272a;
+  color: #a1a1aa;
+}
+
+.stat-card-icon.success {
+  background: rgba(16, 185, 129, 0.1);
+  color: #34d399;
+}
+
+.stat-card-icon.warning {
+  background: rgba(245, 158, 11, 0.1);
+  color: #fbbf24;
+}
+
+.stat-card-label {
+  font-size: 13px;
+  color: #71717a;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.stat-card-value {
+  font-size: 32px;
+  font-weight: 600;
+  color: #fafafa;
+  line-height: 1;
+}
+
+.stat-card-subtitle {
+  font-size: 12px;
+  color: #52525b;
+  margin-top: 4px;
+}
+
+.stat-card-trend {
+  display: none;
+}
+
+/* ==================== Action Bar ==================== */
+.k8s-action-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding: 12px 0;
+  background: transparent;
+  border: none;
+}
+
+.k8s-action-bar-left,
+.k8s-action-bar-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ==================== Buttons ==================== */
+.btn-premium-primary {
+  background: #fafafa !important;
+  border: none !important;
+  color: #09090b !important;
+  font-weight: 500 !important;
+  padding: 8px 16px !important;
+  border-radius: 8px !important;
+  transition: all 0.15s ease !important;
+}
+
+.btn-premium-primary:hover {
+  background: #e4e4e7 !important;
+}
+
+.btn-premium-secondary {
+  background: transparent !important;
+  border: 1px solid #3f3f46 !important;
+  color: #d4d4d8 !important;
+  font-weight: 500 !important;
+  padding: 8px 16px !important;
+  border-radius: 8px !important;
+  transition: all 0.15s ease !important;
+}
+
+.btn-premium-secondary:hover {
+  background: #27272a !important;
+  border-color: #52525b !important;
+  color: #fafafa !important;
+}
+
+/* ==================== Cluster Grid ==================== */
+.cluster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+}
+
+/* ==================== Cluster Card ==================== */
+.cluster-card-premium {
+  background: #18181b;
+  border: 1px solid #27272a;
+  border-radius: 10px;
+  overflow: hidden;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.cluster-card-premium:hover {
+  background: #1f1f23;
+  border-color: #3f3f46;
+}
+
+.cluster-card-premium::before,
+.cluster-card-premium.connected::after {
+  display: none;
+}
+
+.cluster-card-premium.connected {
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+.cluster-card-header {
+  padding: 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.cluster-card-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #27272a;
+  border-radius: 8px;
+  color: #a1a1aa;
+  font-size: 24px;
+}
+
+.cluster-card-icon.connected {
+  background: rgba(16, 185, 129, 0.1);
+  color: #34d399;
+}
+
+.cluster-card-icon.error {
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+}
+
+.cluster-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.cluster-card-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #fafafa;
+  margin-bottom: 4px;
+}
+
+.cluster-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.cluster-card-version {
+  font-size: 12px;
+  color: #71717a;
+  background: #27272a;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.cluster-card-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.cluster-card-action-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid #3f3f46;
+  color: #71717a;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.cluster-card-action-btn:hover {
+  background: #27272a;
+  border-color: #52525b;
+  color: #fafafa;
+}
+
+.cluster-card-action-btn.primary {
+  color: #60a5fa;
+  border-color: rgba(96, 165, 250, 0.2);
+}
+
+.cluster-card-action-btn.primary:hover {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.cluster-card-action-btn.danger {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.2);
+}
+
+.cluster-card-action-btn.danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.cluster-card-body {
+  padding: 0 20px 20px;
+}
+
+.cluster-card-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: #27272a;
+  border: 1px solid #3f3f46;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.cluster-card-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #52525b;
+}
+
+.cluster-card-status-dot.connected {
+  background: #34d399;
+}
+
+.cluster-card-status-dot.error {
+  background: #f87171;
+}
+
+.cluster-card-status-dot.warning {
+  background: #fbbf24;
+}
+
+.cluster-card-status-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: #d4d4d8;
+}
+
+.cluster-card-status-label {
+  font-size: 12px;
+  color: #71717a;
+  margin-left: auto;
+}
+
+.cluster-card-details {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.cluster-card-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cluster-card-detail-label {
+  font-size: 11px;
+  color: #71717a;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+
+.cluster-card-detail-value {
+  font-size: 13px;
+  color: #d4d4d8;
+  font-weight: 500;
+  word-break: break-all;
+}
+
+/* ==================== Empty State ==================== */
+.k8s-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  text-align: center;
+}
+
+.k8s-empty-state-icon {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #27272a;
+  border-radius: 20px;
+  margin-bottom: 20px;
+  color: #71717a;
+  font-size: 40px;
+}
+
+.k8s-empty-state-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #fafafa;
+  margin-bottom: 8px;
+}
+
+.k8s-empty-state-description {
+  font-size: 14px;
+  color: #71717a;
+  margin-bottom: 24px;
+  max-width: 400px;
+}
+
+/* ==================== Drawer ==================== */
+.ant-drawer-content {
+  background: #18181b !important;
+}
+
+.ant-drawer-header {
+  background: transparent !important;
+  border-bottom: 1px solid #27272a !important;
+  padding: 18px 24px !important;
+}
+
+.ant-drawer-title {
+  color: #fafafa !important;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ant-drawer-body {
+  padding: 24px !important;
+  background: #18181b !important;
+}
+
+/* ==================== Table ==================== */
+.ant-table {
+  background: transparent !important;
+}
+
+.ant-table-thead > tr > th {
+  background: #18181b !important;
+  color: #a1a1aa !important;
+  font-weight: 500 !important;
+  font-size: 13px !important;
+  border-bottom: 1px solid #27272a !important;
+  padding: 12px 16px !important;
+}
+
+.ant-table-tbody > tr > td {
+  background: transparent !important;
+  color: #d4d4d8 !important;
+  border-bottom: 1px solid #27272a !important;
+  padding: 12px 16px !important;
+  font-size: 14px !important;
+}
+
+.ant-table-tbody > tr:hover > td {
+  background: #1f1f23 !important;
+}
+
+.ant-table-row-expand-icon {
+  background: transparent !important;
+  border-color: #3f3f46 !important;
+  color: #71717a !important;
+  border-radius: 6px !important;
+}
+
+.ant-table-row-expand-icon:hover {
+  color: #a1a1aa !important;
+  border-color: #52525b !important;
+}
+
+/* ==================== Tag ==================== */
+.ant-tag {
+  border-radius: 6px !important;
+  font-weight: 500 !important;
+  font-size: 12px !important;
+  padding: 2px 8px !important;
+  border-width: 1px !important;
+}
+
+.ant-tag-green {
+  background: rgba(16, 185, 129, 0.1) !important;
+  border-color: rgba(16, 185, 129, 0.2) !important;
+  color: #34d399 !important;
+}
+
+.ant-tag-blue {
+  background: rgba(59, 130, 246, 0.1) !important;
+  border-color: rgba(59, 130, 246, 0.2) !important;
+  color: #60a5fa !important;
+}
+
+.ant-tag-purple {
+  background: rgba(139, 92, 246, 0.1) !important;
+  border-color: rgba(139, 92, 246, 0.2) !important;
+  color: #a78bfa !important;
+}
+
+.ant-tag-red {
+  background: rgba(239, 68, 68, 0.1) !important;
+  border-color: rgba(239, 68, 68, 0.2) !important;
+  color: #f87171 !important;
+}
+
+.ant-tag-gray {
+  background: #27272a !important;
+  border-color: #3f3f46 !important;
+  color: #71717a !important;
+}
+
+/* ==================== Progress ==================== */
+.ant-progress-bg {
+  background: #fafafa !important;
+  border-radius: 2px !important;
+}
+
+.ant-progress-bg-status-success {
+  background: #34d399 !important;
+}
+
+/* ==================== Select ==================== */
+.namespace-select .ant-select-arrow {
+  color: #71717a !important;
+}
+
+.ant-select-dropdown {
+  background: #18181b !important;
+  border: 1px solid #27272a !important;
+}
+
+.ant-select-item {
+  color: #d4d4d8 !important;
+}
+
+.ant-select-item:hover {
+  background: #27272a !important;
+}
+
+.ant-select-item-option-selected {
+  background: #27272a !important;
+  color: #fafafa !important;
+}
+
+/* ==================== Responsive ==================== */
+@media (max-width: 1400px) {
+  .k8s-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .cluster-grid {
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .k8s-page-header {
+    flex-direction: column;
+    gap: 20px;
+    align-items: flex-start;
+  }
+  
+  .k8s-stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .cluster-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .k8s-action-bar {
+    flex-direction: column;
+    gap: 16px;
+    align-items: stretch;
+  }
+}
+
+/* ==================== Animations ==================== */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cluster-card-premium,
+.stat-card-premium {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+/* ==================== Compact Status Inline ==================== */
+.cluster-card-status-dot-inline {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-left: 10px;
+  vertical-align: middle;
+  background: #52525b;
+}
+
+.cluster-card-status-dot-inline.connected {
+  background: #34d399;
+}
+
+.cluster-card-status-dot-inline.error {
+  background: #f87171;
+}
+
+.cluster-card-status-dot-inline.warning {
+  background: #fbbf24;
+}
+
+.cluster-card-divider {
+  color: #3f3f46;
+  margin: 0 4px;
+}
+
+.cluster-card-stats {
+  font-size: 12px;
+  color: #71717a;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ==================== Loading ==================== */
+.k8s-loading-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+}
+
+.k8s-loading-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.k8s-loading-spinner .ant-spin {
+  color: #fafafa !important;
+}
+
+.k8s-loading-text {
+  font-size: 14px;
+  color: #71717a;
+}
+
+/* ==================== Remove Focus Outline ==================== */
+.kubernetes-page .ant-modal-container,
+.kubernetes-page .ant-modal,
+body .ant-modal-container,
+body .ant-modal {
+  outline: none !important;
+}
+
+/* ==================== Form Elements ==================== */
+.ant-form-item-label > label {
+  color: #a1a1aa !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+}
+
+.ant-input,
+.ant-input-number,
+.ant-input-affix-wrapper {
+  background: #0f0f11 !important;
+  border: 1px solid #3f3f46 !important;
+  color: #fafafa !important;
+}
+
+.ant-input:focus,
+.ant-input-number:focus,
+.ant-input-affix-wrapper:focus {
+  border-color: #52525b !important;
+  box-shadow: none !important;
+}
+
+.ant-input::placeholder {
+  color: #52525b !important;
+}
+
+.ant-input-number {
+  background: #0f0f11 !important;
+}
+
+.ant-input-number-handler-wrap {
+  background: #27272a !important;
+  border-left: 1px solid #3f3f46 !important;
+}
+
+.ant-input-number-handler-up,
+.ant-input-number-handler-down {
+  border-bottom: 1px solid #3f3f46 !important;
+  color: #a1a1aa !important;
+}
+
+.ant-input-number-handler-up:hover,
+.ant-input-number-handler-down:hover {
+  color: #fafafa !important;
+}
+
+/* ==================== Select Content in Forms ==================== */
+.ant-select-selector {
+  background: #0f0f11 !important;
+  border: 1px solid #3f3f46 !important;
+  color: #fafafa !important;
+}
+
+.ant-select-focused .ant-select-selector {
+  border-color: #52525b !important;
+  box-shadow: none !important;
+}
+
+.ant-select-selection-item {
+  color: #fafafa !important;
+}
+
+.ant-select-selection-placeholder {
+  color: #52525b !important;
+}
+
+.ant-select-arrow {
+  color: #71717a !important;
+}
+
+/* ==================== Tabs ==================== */
+.ant-tabs-tab {
+  color: #71717a !important;
+  font-weight: 500 !important;
+}
+
+.ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: #fafafa !important;
+}
+
+.ant-tabs-ink-bar {
+  background: #fafafa !important;
+}
+
+.ant-tabs-content-holder {
+  padding-top: 16px;
+}
+
+/* ==================== Card ==================== */
+.ant-card {
+  background: #18181b !important;
+  border: 1px solid #27272a !important;
+}
+
+.ant-card-head {
+  background: transparent !important;
+  border-bottom: 1px solid #27272a !important;
+  padding: 16px 20px !important;
+}
+
+.ant-card-head-title {
+  color: #fafafa !important;
+  font-weight: 600 !important;
+}
+
+.ant-card-body {
+  padding: 20px !important;
+}
+
+/* ==================== Descriptions ==================== */
+.ant-descriptions-item-label {
+  color: #71717a !important;
+}
+
+.ant-descriptions-item-content {
+  color: #d4d4d8 !important;
+}
+
+.ant-descriptions-view {
+  background: transparent !important;
+}
+
+/* ==================== Divider ==================== */
+.ant-divider {
+  border-color: #27272a !important;
+}
+
+/* ==================== Alert ==================== */
+.ant-alert {
+  background: #18181b !important;
+  border: 1px solid #27272a !important;
+  border-radius: 8px !important;
+}
+
+.ant-alert-info {
+  background: rgba(59, 130, 246, 0.05) !important;
+  border-color: rgba(59, 130, 246, 0.2) !important;
+  color: #60a5fa !important;
+}
+
+.ant-alert-success {
+  background: rgba(16, 185, 129, 0.05) !important;
+  border-color: rgba(16, 185, 129, 0.2) !important;
+  color: #34d399 !important;
+}
+
+.ant-alert-warning {
+  background: rgba(245, 158, 11, 0.05) !important;
+  border-color: rgba(245, 158, 11, 0.2) !important;
+  color: #fbbf24 !important;
+}
+
+.ant-alert-error {
+  background: rgba(239, 68, 68, 0.05) !important;
+  border-color: rgba(239, 68, 68, 0.2) !important;
+  color: #f87171 !important;
+}
+
+/* ==================== Tabs Enhancement ==================== */
+.ant-tabs-tab {
+  color: #71717a !important;
+  font-weight: 500 !important;
+  padding: 12px 16px !important;
+}
+
+.ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: #fafafa !important;
+}
+
+.ant-tabs-ink-bar {
+  background: #fafafa !important;
+  height: 2px !important;
+}
+
+.ant-tabs-content-holder {
+  padding-top: 20px;
+}
+
+/* ==================== Namespace Selector ==================== */
+.namespace-select {
+  width: 240px !important;
+}
+
+.namespace-select .ant-select-selector {
+  background: #0f0f11 !important;
+  border: 1px solid #3f3f46 !important;
+  border-radius: 8px !important;
+  height: 40px !important;
+}
+
+.namespace-select .ant-select-selector:hover {
+  border-color: #52525b !important;
+}
+
+.namespace-select.ant-select-focused .ant-select-selector {
+  border-color: #52525b !important;
+  box-shadow: none !important;
+}
+
+.namespace-select .ant-select-selection-item {
+  color: #fafafa !important;
+  line-height: 38px !important;
+}
+
+.namespace-select .ant-select-arrow {
+  color: #71717a !important;
+}
+
+/* ==================== K8s Info Card ==================== */
+.k8s-info-card {
+  background: #18181b !important;
+  border: 1px solid #27272a !important;
+  border-radius: 10px !important;
+}
+
+.k8s-info-card .ant-card-head {
+  background: transparent !important;
+  border-bottom: 1px solid #27272a !important;
+  padding: 14px 20px !important;
+  min-height: auto !important;
+}
+
+.k8s-info-card .ant-card-head-title {
+  color: #fafafa !important;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+}
+
+.k8s-info-card .ant-card-body {
+  padding: 20px !important;
+}
+
+/* ==================== Cluster Info Descriptions ==================== */
+.k8s-descriptions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.k8s-description-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.k8s-description-label {
+  font-size: 12px;
+  color: #71717a;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+
+.k8s-description-value {
+  font-size: 14px;
+  color: #d4d4d8;
+  font-weight: 500;
+}
+
+/* ==================== Deployment & Pods Table ==================== */
+.k8s-table-container {
+  background: #18181b;
+  border: 1px solid #27272a;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.k8s-table-container .ant-table {
+  background: transparent !important;
+  border: none !important;
+}
+
+.k8s-table-container .ant-table-thead > tr > th {
+  background: #18181b !important;
+  color: #a1a1aa !important;
+  font-weight: 500 !important;
+  font-size: 12px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  border-bottom: 1px solid #27272a !important;
+  padding: 12px 16px !important;
+}
+
+.k8s-table-container .ant-table-tbody > tr > td {
+  background: transparent !important;
+  color: #d4d4d8 !important;
+  border-bottom: 1px solid #27272a !important;
+  padding: 12px 16px !important;
+  font-size: 14px !important;
+}
+
+.k8s-table-container .ant-table-tbody > tr:last-child > td {
+  border-bottom: none !important;
+}
+
+.k8s-table-container .ant-table-tbody > tr:hover > td {
+  background: #1f1f23 !important;
+}
+
+.k8s-table-container .ant-table-row-expand-icon {
+  background: transparent !important;
+  border: 1px solid #3f3f46 !important;
+  color: #71717a !important;
+  border-radius: 6px !important;
+  width: 24px !important;
+  height: 24px !important;
+  line-height: 22px !important;
+}
+
+.k8s-table-container .ant-table-row-expand-icon:hover {
+  color: #a1a1aa !important;
+  border-color: #52525b !important;
+}
+
+/* ==================== Table Pagination ==================== */
+.ant-table-pagination {
+  margin: 16px 0 !important;
+}
+
+.ant-pagination-item {
+  background: #27272a !important;
+  border-color: #3f3f46 !important;
+  border-radius: 6px !important;
+}
+
+.ant-pagination-item a {
+  color: #a1a1aa !important;
+}
+
+.ant-pagination-item-active {
+  background: #fafafa !important;
+  border-color: #fafafa !important;
+}
+
+.ant-pagination-item-active a {
+  color: #09090b !important;
+}
+
+.ant-pagination-prev .ant-pagination-item-link,
+.ant-pagination-next .ant-pagination-item-link {
+  background: #27272a !important;
+  border-color: #3f3f46 !important;
+  border-radius: 6px !important;
+  color: #a1a1aa !important;
+}
+
+.ant-pagination-prev:hover .ant-pagination-item-link,
+.ant-pagination-next:hover .ant-pagination-item-link {
+  background: #3f3f46 !important;
+  color: #fafafa !important;
+}
+
+.ant-pagination-options .ant-select-selector {
+  background: #27272a !important;
+  border-color: #3f3f46 !important;
+  border-radius: 6px !important;
+}
+
+/* ==================== Pod Name Link ==================== */
+.pod-name-link {
+  color: #60a5fa !important;
+  cursor: pointer;
+  font-weight: 500 !important;
+}
+
+.pod-name-link:hover {
+  color: #93c5fd !important;
+  text-decoration: underline;
+}
+
+/* ==================== Progress Bar ==================== */
+.ant-progress {
+  margin-right: 8px;
+}
+
+.ant-progress-inner {
+  background: #27272a !important;
+  border-radius: 2px !important;
+}
+
+.ant-progress-bg {
+  background: #fafafa !important;
+  border-radius: 2px !important;
+}
+
+.ant-progress-bg-status-success {
+  background: #34d399 !important;
+}
+
+.ant-progress-text {
+  color: #a1a1aa !important;
+  font-size: 12px !important;
+}
+
+/* ==================== Container Tags ==================== */
+.pod-container-tag {
+  margin: 2px 4px 2px 0 !important;
+  border-radius: 4px !important;
+  font-size: 11px !important;
+  padding: 1px 6px !important;
+}
+
+/* ==================== Pod Detail Modal ==================== */
+.pod-detail-section {
+  margin-bottom: 20px;
+}
+
+.pod-detail-card {
+  background: #18181b !important;
+  border: 1px solid #27272a !important;
+  border-radius: 10px !important;
+}
+
+.pod-detail-card .ant-card-head {
+  background: transparent !important;
+  border-bottom: 1px solid #27272a !important;
+  padding: 14px 20px !important;
+  min-height: auto !important;
+}
+
+.pod-detail-card .ant-card-head-title {
+  color: #fafafa !important;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+}
+
+.pod-detail-card .ant-card-body {
+  padding: 16px 20px !important;
+}
+
+/* Pod Container Item */
+.pod-container-item {
+  padding: 16px;
+  background: #27272a;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.pod-container-item:last-child {
+  margin-bottom: 0;
+}
+
+.pod-container-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.pod-container-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fafafa;
+}
+
+/* Pod Events */
+.pod-event-item {
+  padding: 12px 0;
+  border-bottom: 1px solid #27272a;
+}
+
+.pod-event-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.pod-event-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.pod-event-message {
+  font-size: 12px;
+  color: #a1a1aa;
+  line-height: 1.5;
+}
+
+/* Pod Logs */
+.pod-logs-container {
+  background: #0f0f11;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+  padding: 16px;
+  max-height: 500px;
+  overflow: auto;
+}
+
+.pod-logs-text {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  color: #a1a1aa;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Pod YAML */
+.pod-yaml-container {
+  background: #0f0f11;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+  padding: 16px;
+  max-height: 500px;
+  overflow: auto;
+}
+
+.pod-yaml-text {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  color: #a1a1aa;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* ==================== Drawer Actions ==================== */
+.ant-drawer-extra {
+  display: flex;
+  gap: 8px;
+}
+
+.ant-drawer-extra .ant-btn {
+  border-radius: 8px !important;
+  font-weight: 500 !important;
+}
+
+/* ==================== Descriptions Enhancement ==================== */
+.ant-descriptions-item-label {
+  color: #71717a !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ant-descriptions-item-content {
+  color: #d4d4d8 !important;
+  font-size: 13px !important;
+}
+
+.ant-descriptions-row > th,
+.ant-descriptions-row > td {
+  padding: 12px 16px !important;
+  border-bottom: 1px solid #27272a !important;
+}
+
+.ant-descriptions-row:last-child > th,
+.ant-descriptions-row:last-child > td {
+  border-bottom: none !important;
+}
+
+/* ==================== Modal Pod Title ==================== */
+.modal-pod-title {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.modal-pod-title .anticon {
+  font-size: 20px;
+  color: #60a5fa;
+}
+
+.modal-pod-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fafafa;
+  letter-spacing: -0.02em;
+}
+
+.modal-pod-title .ant-tag {
+  padding: 2px 10px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* ==================== Pod Info Grid ==================== */
+.pod-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.pod-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+  background: #27272a;
+  border: 1px solid #3f3f46;
+  border-radius: 8px;
+  transition: all 0.15s ease;
+}
+
+.pod-info-item:hover {
+  background: #2a2a2e;
+  border-color: #52525b;
+}
+
+.pod-info-label {
+  font-size: 11px;
+  color: #71717a;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.pod-info-value {
+  font-size: 14px;
+  color: #e4e4e7;
+  font-weight: 500;
+  word-break: break-all;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* ==================== Pod Container Card ==================== */
+.pod-container-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pod-container-card {
+  background: #0f0f11;
+  border: 1px solid #27272a;
+  border-radius: 10px;
+  padding: 20px;
+  transition: all 0.15s ease;
+}
+
+.pod-container-card:hover {
+  background: #121216;
+  border-color: #3f3f46;
+}
+
+.pod-container-card:last-child {
+  margin-bottom: 0;
+}
+
+.pod-container-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #27272a;
+}
+
+.pod-container-name-text {
+  font-size: 15px;
+  font-weight: 600;
+  color: #fafafa;
+  letter-spacing: -0.01em;
+}
+
+.pod-container-details {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.pod-container-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pod-container-detail-label {
+  font-size: 10px;
+  color: #71717a;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.pod-container-detail-value {
+  font-size: 13px;
+  color: #d4d4d8;
+  font-weight: 500;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* ==================== Pod Events Section ==================== */
+.pod-events-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pod-event-card {
+  background: #27272a;
+  border: 1px solid #3f3f46;
+  border-radius: 8px;
+  padding: 16px;
+  transition: all 0.15s ease;
+}
+
+.pod-event-card:hover {
+  background: #2a2a2e;
+  border-color: #52525b;
+}
+
+.pod-event-card:last-child {
+  margin-bottom: 0;
+}
+
+.pod-event-header-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.pod-event-timestamp {
+  font-size: 11px;
+  color: #71717a;
+  margin-left: auto;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-weight: 500;
+}
+
+.pod-event-message-text {
+  font-size: 13px;
+  color: #d4d4d8;
+  line-height: 1.6;
+  word-break: break-word;
+  font-weight: 400;
+}
+
+/* ==================== Pod Code Container (Logs/YAML) ==================== */
+.pod-code-container {
+  background: #0f0f11;
+  border: 1px solid #27272a;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.pod-code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  background: #18181b;
+  border-bottom: 1px solid #27272a;
+}
+
+.pod-code-header span {
+  font-size: 12px;
+  font-weight: 600;
+  color: #a1a1aa;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.pod-code-body {
+  padding: 20px;
+  max-height: 600px;
+  overflow: auto;
+  background: #0a0a0d;
+}
+
+.pod-code-body::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.pod-code-body::-webkit-scrollbar-track {
+  background: #18181b;
+  border-radius: 4px;
+}
+
+.pod-code-body::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 4px;
+}
+
+.pod-code-body::-webkit-scrollbar-thumb:hover {
+  background: #52525b;
+}
+
+.pod-code-text {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 13px;
+  color: #d4d4d8;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
+  padding: 0;
+}
+
+/* ==================== Copy Button in YAML Tab ==================== */
+.copy-yaml-btn {
+  background: transparent !important;
+  border: 1px solid #3f3f46 !important;
+  color: #a1a1aa !important;
+  border-radius: 6px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  padding: 4px 12px !important;
+  height: 32px !important;
+  transition: all 0.15s ease !important;
+}
+
+.copy-yaml-btn:hover {
+  background: #27272a !important;
+  border-color: #52525b !important;
+  color: #fafafa !important;
+}
+
+/* ==================== Pod Detail Card ==================== */
+.pod-detail-card {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  margin-bottom: 24px;
+}
+
+.pod-detail-card .ant-card-head {
+  background: transparent !important;
+  border-bottom: 1px solid #27272a !important;
+  padding: 16px 0 !important;
+  min-height: auto !important;
+  margin-bottom: 16px;
+}
+
+.pod-detail-card .ant-card-head-title {
+  color: #fafafa !important;
+  font-weight: 700 !important;
+  font-size: 14px !important;
+  letter-spacing: -0.01em;
+}
+
+.pod-detail-card .ant-card-body {
+  padding: 0 !important;
+}
+
+/* ==================== Modal Content Enhancement ==================== */
+.pod-detail-container {
+  padding: 4px 0;
+}
+
+.pod-detail-container .ant-spin {
+  color: #fafafa !important;
+}
+
+/* ==================== Table Conditions ==================== */
+.pod-detail-card .ant-table {
+  background: transparent !important;
+}
+
+.pod-detail-card .ant-table-thead > tr > th {
+  background: #18181b !important;
+  color: #a1a1aa !important;
+  font-weight: 600 !important;
+  font-size: 11px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.08em !important;
+  border-bottom: 1px solid #27272a !important;
+  padding: 12px 16px !important;
+}
+
+.pod-detail-card .ant-table-tbody > tr > td {
+  background: transparent !important;
+  color: #d4d4d8 !important;
+  border-bottom: 1px solid #27272a !important;
+  padding: 12px 16px !important;
+  font-size: 13px !important;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.pod-detail-card .ant-table-tbody > tr:last-child > td {
+  border-bottom: none !important;
+}
+
+.pod-detail-card .ant-table-tbody > tr:hover > td {
+  background: #1f1f23 !important;
+}

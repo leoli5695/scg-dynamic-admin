@@ -17,7 +17,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -58,8 +60,8 @@ public class ServiceService {
   public void init() {
     // Load services from database to cache
     loadServicesFromDatabase();
-    // Rebuild services index in Nacos
-    rebuildServicesIndex();
+    // Rebuild services index for each instance's namespace (not public)
+    rebuildServicesIndexForAllInstances();
     log.info("ServiceService initialized with per-service incremental format");
   }
 
@@ -187,6 +189,9 @@ public class ServiceService {
 
     configCenterService.publishConfig(serviceDataId, nacosNamespace, nacosConfig);
     log.info("Service pushed to Nacos: {} (namespace: {})", serviceDataId, nacosNamespace);
+
+    // 4. Rebuild services index for this namespace
+    rebuildServicesIndex(nacosNamespace);
 
     log.info("Service created successfully: {} (Database + Cache + Nacos)", serviceName);
     return entity;
@@ -320,6 +325,9 @@ public class ServiceService {
     serviceRepository.delete(entity);
     log.info("Service deleted from database: {}", entity.getId());
 
+    // 4. Rebuild services index for this namespace
+    rebuildServicesIndex(nacosNamespace);
+
     log.info("Service deleted successfully: {} (Database + Cache + Nacos)", serviceName);
   }
 
@@ -439,18 +447,29 @@ public class ServiceService {
   /**
    * Rebuild services index from database.
    * Only includes ENABLED services since disabled services have no config in Nacos.
+   * @param nacosNamespace the Nacos namespace to publish the index to (null for default)
    */
-  private void rebuildServicesIndex() {
+  private void rebuildServicesIndex(String nacosNamespace) {
     try {
-      // Only query ENABLED services - disabled services have no config in Nacos
-      List<String> serviceIds = serviceRepository.findByEnabledTrue().stream()
-          .map(ServiceEntity::getServiceId)  // Use serviceId, not serviceName
-          .collect(Collectors.toList());
+      // Query services for the specific instance (or all if no instance filter)
+      List<String> serviceIds;
+      if (nacosNamespace != null && !nacosNamespace.isEmpty()) {
+        // Get services for this specific instance
+        serviceIds = serviceRepository.findByEnabledTrue().stream()
+            .filter(entity -> nacosNamespace.equals(getNacosNamespace(entity.getInstanceId())))
+            .map(ServiceEntity::getServiceId)
+            .collect(Collectors.toList());
+      } else {
+        // Get all services (default namespace / public)
+        serviceIds = serviceRepository.findByEnabledTrue().stream()
+            .map(ServiceEntity::getServiceId)
+            .collect(Collectors.toList());
+      }
       
       // Load current Nacos index to check if update is needed
       List<String> currentNacosIndex = null;
       try {
-        currentNacosIndex = configCenterService.getConfig(SERVICES_INDEX,
+        currentNacosIndex = configCenterService.getConfig(SERVICES_INDEX, nacosNamespace,
             new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
       } catch (Exception e) {
         log.debug("Nacos services-index does not exist or failed to read: {}", e.getMessage());
@@ -470,20 +489,64 @@ public class ServiceService {
         log.debug("DB and Nacos index are identical, skipping rebuild");
       } else {
         // Case 3: Different - trust DB as source of truth
-        // This includes the case where DB is empty (all services deleted)
         needsRebuild = true;
         reason = "DB and Nacos index differ (DB has " + serviceIds.size() + " services, Nacos has " + currentNacosIndex.size() + ")";
       }
       
       // Perform rebuild if needed
       if (needsRebuild) {
-        log.info("🔄 Rebuilding services index (reason: {})...", reason);
-        configCenterService.publishConfig(SERVICES_INDEX, serviceIds);
-        log.info("✅ Services index rebuilt with {} services", serviceIds.size());
+        log.info("🔄 Rebuilding services index for namespace {} (reason: {})...", 
+            nacosNamespace == null || nacosNamespace.isEmpty() ? "public" : nacosNamespace, reason);
+        configCenterService.publishConfig(SERVICES_INDEX, nacosNamespace, serviceIds);
+        log.info("✅ Services index rebuilt with {} services for namespace {}", 
+            serviceIds.size(), nacosNamespace == null || nacosNamespace.isEmpty() ? "public" : nacosNamespace);
       }
       
     } catch (Exception e) {
       log.error("Failed to rebuild services index", e);
+    }
+  }
+  
+  /**
+   * Rebuild services index for default namespace (backward compatible).
+   */
+  private void rebuildServicesIndex() {
+    rebuildServicesIndex(null);
+  }
+
+  /**
+   * Rebuild services index for all instances' namespaces.
+   * Called on startup to ensure each instance's namespace has correct index.
+   */
+  private void rebuildServicesIndexForAllInstances() {
+    // Get all unique instance IDs from services
+    List<ServiceEntity> allServices = serviceRepository.findByEnabledTrue();
+    Map<String, List<String>> servicesByNamespace = new HashMap<>();
+
+    for (ServiceEntity entity : allServices) {
+      String nacosNamespace = getNacosNamespace(entity.getInstanceId());
+      String nsKey = (nacosNamespace == null || nacosNamespace.isEmpty()) ? "public" : nacosNamespace;
+      servicesByNamespace.computeIfAbsent(nsKey, k -> new ArrayList<>())
+          .add(entity.getServiceId());
+    }
+
+    // Rebuild index for each namespace
+    for (Map.Entry<String, List<String>> entry : servicesByNamespace.entrySet()) {
+      String namespace = entry.getKey();
+      List<String> serviceIds = entry.getValue();
+
+      // Skip public namespace - we don't want to publish there anymore
+      if ("public".equals(namespace)) {
+        log.info("Skipping public namespace for services index (per-instance isolation)");
+        continue;
+      }
+
+      try {
+        configCenterService.publishConfig(SERVICES_INDEX, namespace, serviceIds);
+        log.info("Rebuilt services index for namespace {} with {} services", namespace, serviceIds.size());
+      } catch (Exception e) {
+        log.error("Failed to rebuild services index for namespace {}", namespace, e);
+      }
     }
   }
 

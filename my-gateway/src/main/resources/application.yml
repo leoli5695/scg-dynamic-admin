@@ -25,6 +25,9 @@ spring:
     
     # Nacos Discovery (config is pulled manually, not via Spring Cloud Nacos Config)
     nacos:
+      # Direct properties for NacosCenterAutoConfiguration (must be at this level, not under discovery)
+      serverAddr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+      namespace: ${NACOS_NAMESPACE:}
       discovery:
         server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
         namespace: ${NACOS_NAMESPACE:}
@@ -60,8 +63,10 @@ spring:
     # Access http://gateway:8081/actuator/health or http://gateway:8081/actuator/prometheus
 
   # Redis Configuration (for distributed rate limiting)
+  # Redis is optional - set REDIS_ENABLED=true or REDIS_HOST to enable
   redis:
-    host: ${REDIS_HOST:localhost}
+    enabled: ${REDIS_ENABLED:false}
+    host: ${REDIS_HOST:127.0.0.1}
     port: ${REDIS_PORT:6379}
     password: ${REDIS_PASSWORD:}
     database: ${REDIS_DATABASE:0}
@@ -180,7 +185,7 @@ logging:
     org.springframework.cloud.commons: WARN
 management:
   server:
-    port: 8081  # Separate port for actuator endpoints (bypasses gateway routing)
+    port: ${MANAGEMENT_SERVER_PORT:8081}  # Separate port for actuator endpoints (bypasses gateway routing)
   endpoints:
     web:
       exposure:

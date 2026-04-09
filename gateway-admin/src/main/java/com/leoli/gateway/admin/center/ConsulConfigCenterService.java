@@ -14,6 +14,13 @@ import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 
 /**
  * Consul implementation of ConfigCenterService.
@@ -238,6 +245,21 @@ public class ConsulConfigCenterService implements ConfigCenterService {
         return properties.getConsul().getPrefix();
     }
 
+    @Override
+    public boolean publishRawConfig(String dataId, String namespace, String content) {
+        String effectiveKey = buildKeyWithNamespace(dataId, namespace);
+        try {
+            boolean result = consulClient.setKVValue(effectiveKey, content).getValue();
+            if (result) {
+                log.info("Published raw config to Consul: key={}, contentLength={}", effectiveKey, content.length());
+            }
+            return result;
+        } catch (Exception ex) {
+            log.error("Failed to publish raw config to Consul: key={}, error={}", effectiveKey, ex.getMessage());
+            return false;
+        }
+    }
+
     /**
      * Build Consul KV key from dataId.
      * Example: dataId="gateway-plugins.json" -> key="config/gateway-plugins.json"
@@ -255,5 +277,114 @@ public class ConsulConfigCenterService implements ConfigCenterService {
             return buildKey(dataId);
         }
         return properties.getConsul().getPrefix() + "/" + namespace + "/" + dataId;
+    }
+
+    // ==================== Batch operations ====================
+
+    // Fixed thread pool for parallel batch operations
+    private final ExecutorService batchExecutor = Executors.newFixedThreadPool(10);
+
+    @Override
+    public int publishConfigsBatch(Map<String, Object> configs, String namespace) {
+        if (configs == null || configs.isEmpty()) {
+            return 0;
+        }
+
+        // Use parallel execution for batch publish
+        List<CompletableFuture<Boolean>> futures = configs.entrySet().stream()
+                .map(entry -> CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return publishConfig(entry.getKey(), namespace, entry.getValue());
+                    } catch (Exception e) {
+                        log.warn("Failed to publish batch config {}: {}", entry.getKey(), e.getMessage());
+                        return false;
+                    }
+                }, batchExecutor))
+                .collect(Collectors.toList());
+
+        // Wait for all to complete and count successes
+        int successCount = 0;
+        for (CompletableFuture<Boolean> future : futures) {
+            try {
+                if (future.get()) {
+                    successCount++;
+                }
+            } catch (Exception e) {
+                log.warn("Batch publish task failed: {}", e.getMessage());
+            }
+        }
+
+        log.info("Batch published {} configs to Consul ({} successful of {})",
+                configs.size(), successCount, configs.size());
+        return successCount;
+    }
+
+    @Override
+    public Map<String, Boolean> configExistsBatch(List<String> dataIds, String namespace) {
+        if (dataIds == null || dataIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        // Use parallel execution for batch check
+        List<CompletableFuture<Map.Entry<String, Boolean>>> futures = dataIds.stream()
+                .map(dataId -> CompletableFuture.supplyAsync(() -> {
+                    try {
+                        boolean exists = configExists(dataId, namespace);
+                        return Map.entry(dataId, exists);
+                    } catch (Exception e) {
+                        log.warn("Failed to check batch config {}: {}", dataId, e.getMessage());
+                        return Map.entry(dataId, false);
+                    }
+                }, batchExecutor))
+                .collect(Collectors.toList());
+
+        // Collect results
+        Map<String, Boolean> results = new java.util.concurrent.ConcurrentHashMap<>();
+        for (CompletableFuture<Map.Entry<String, Boolean>> future : futures) {
+            try {
+                Map.Entry<String, Boolean> entry = future.get();
+                results.put(entry.getKey(), entry.getValue());
+            } catch (Exception e) {
+                log.warn("Batch check task failed: {}", e.getMessage());
+            }
+        }
+
+        log.debug("Batch checked {} configs in Consul", dataIds.size());
+        return results;
+    }
+
+    @Override
+    public int removeConfigsBatch(List<String> dataIds, String namespace) {
+        if (dataIds == null || dataIds.isEmpty()) {
+            return 0;
+        }
+
+        // Use parallel execution for batch remove
+        List<CompletableFuture<Boolean>> futures = dataIds.stream()
+                .map(dataId -> CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return removeConfig(dataId, namespace);
+                    } catch (Exception e) {
+                        log.warn("Failed to remove batch config {}: {}", dataId, e.getMessage());
+                        return false;
+                    }
+                }, batchExecutor))
+                .collect(Collectors.toList());
+
+        // Wait for all to complete and count successes
+        int successCount = 0;
+        for (CompletableFuture<Boolean> future : futures) {
+            try {
+                if (future.get()) {
+                    successCount++;
+                }
+            } catch (Exception e) {
+                log.warn("Batch remove task failed: {}", e.getMessage());
+            }
+        }
+
+        log.info("Batch removed {} configs from Consul ({} successful of {})",
+                dataIds.size(), successCount, dataIds.size());
+        return successCount;
     }
 }

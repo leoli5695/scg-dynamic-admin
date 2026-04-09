@@ -7,7 +7,9 @@ import com.leoli.gateway.admin.enums.AuthType;
 import com.leoli.gateway.admin.model.AuthPolicyDefinition;
 import com.leoli.gateway.admin.model.AuthPolicyEntity;
 import com.leoli.gateway.admin.model.RouteAuthBindingEntity;
+import com.leoli.gateway.admin.model.GatewayInstanceEntity;
 import com.leoli.gateway.admin.repository.AuthPolicyRepository;
+import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
 import com.leoli.gateway.admin.repository.RouteAuthBindingRepository;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -48,12 +50,27 @@ public class AuthPolicyService {
     private RouteAuthBindingRepository routeAuthBindingRepository;
 
     @Autowired
+    private GatewayInstanceRepository gatewayInstanceRepository;
+
+    @Autowired
     private ObjectMapper objectMapper;
 
     @PostConstruct
     public void init() {
         loadPoliciesFromDatabase();
         log.info("AuthPolicyService initialized");
+    }
+
+    /**
+     * Get Nacos namespace from instance ID.
+     * Returns null for default namespace if instance not found.
+     */
+    private String getNacosNamespace(String instanceId) {
+        if (instanceId == null || instanceId.isEmpty()) {
+            return null; // Use default namespace
+        }
+        Optional<GatewayInstanceEntity> instance = gatewayInstanceRepository.findByInstanceId(instanceId);
+        return instance.map(GatewayInstanceEntity::getNacosNamespace).orElse(null);
     }
 
     /**
@@ -101,7 +118,7 @@ public class AuthPolicyService {
      * Sync policies for a specific instance to Nacos.
      */
     private void syncPoliciesForInstance(String instanceId, List<AuthPolicyEntity> entities) {
-        String namespace = instanceId;
+        String namespace = getNacosNamespace(instanceId);
 
         // Recover enabled policies in Nacos
         for (AuthPolicyEntity entity : entities) {
@@ -259,9 +276,9 @@ public class AuthPolicyService {
         // Publish to Nacos if enabled
         if (policy.isEnabled()) {
             String policyDataId = AUTH_POLICY_PREFIX + policyId;
-            String namespace = instanceId;
+            String namespace = getNacosNamespace(instanceId);
             configCenterService.publishConfig(policyDataId, namespace, policy);
-            log.info("Auth policy published to Nacos: {} (instance: {})", policyDataId, instanceId);
+            log.info("Auth policy published to Nacos: {} (namespace: {})", policyDataId, namespace);
 
             // Publish empty routes list
             publishPolicyRoutesToNacos(instanceId, policyId, new ArrayList<>());
@@ -311,22 +328,33 @@ public class AuthPolicyService {
         try {
             String configJson = objectMapper.writeValueAsString(policy);
             entity.setConfig(configJson);
+            log.info("Policy input apiKey: {}, config JSON stored: {}", policy.getApiKey(), configJson);
         } catch (JsonProcessingException e) {
             log.warn("Failed to serialize policy config", e);
         }
 
         entity = authPolicyRepository.save(entity);
         log.info("Auth policy updated in database: {}", policy.getPolicyName());
+        log.info("entity.getConfig() = {}", entity.getConfig());
 
-        // Update Nacos
+        // Update Nacos with correct namespace - use complete config from entity
         String policyDataId = AUTH_POLICY_PREFIX + policyId;
-        if (policy.isEnabled()) {
-            configCenterService.publishConfig(policyDataId, policy);
-            log.info("Auth policy updated in Nacos: {}", policyDataId);
-        } else {
-            configCenterService.removeConfig(policyDataId);
-            log.info("Disabled policy removed from Nacos: {}", policyDataId);
+        String namespace = getNacosNamespace(entity.getInstanceId());
+        AuthPolicyDefinition completePolicy = toDefinition(entity); // Get complete config from database
+        log.info("Complete policy for Nacos - apiKey: {}, apiKeyHeader: {}", completePolicy.getApiKey(), completePolicy.getApiKeyHeader());
+
+        // Use entity.getConfig() directly to ensure consistency
+        if (completePolicy.isEnabled() && entity.getConfig() != null) {
+            // Publish the stored config JSON directly to avoid re-serialization issues
+            boolean result = publishRawConfig(policyDataId, namespace, entity.getConfig());
+            log.info("Auth policy published to Nacos: {} (namespace: {}, result: {})", policyDataId, namespace, result);
+        } else if (!completePolicy.isEnabled()) {
+            configCenterService.removeConfig(policyDataId, namespace);
+            log.info("Disabled policy removed from Nacos: {} (namespace: {})", policyDataId, namespace);
         }
+
+        // Update policies index
+        publishPoliciesIndex(entity.getInstanceId());
 
         return entity;
     }
@@ -362,7 +390,7 @@ public class AuthPolicyService {
         log.info("Auth policy deleted from database: {}", policyId);
 
         // Update policies index
-        publishPoliciesIndex();
+        publishPoliciesIndex(entity.getInstanceId());
     }
 
     /**
@@ -380,6 +408,7 @@ public class AuthPolicyService {
             return;
         }
 
+        String instanceId = entity.getInstanceId();
         entity.setEnabled(true);
         authPolicyRepository.save(entity);
 
@@ -387,14 +416,15 @@ public class AuthPolicyService {
         AuthPolicyDefinition policy = toDefinition(entity);
         policy.setEnabled(true);
         String policyDataId = AUTH_POLICY_PREFIX + policyId;
-        configCenterService.publishConfig(policyDataId, policy);
-        log.info("Auth policy enabled: {}", policyId);
+        String namespace = getNacosNamespace(instanceId);
+        configCenterService.publishConfig(policyDataId, namespace, policy);
+        log.info("Auth policy enabled: {} (namespace: {})", policyId, namespace);
 
         // Update routes list
-        updatePolicyRoutesInNacos(policyId);
+        updatePolicyRoutesInNacos(instanceId, policyId);
 
         // Update policies index
-        publishPoliciesIndex();
+        publishPoliciesIndex(instanceId);
     }
 
     /**
@@ -415,18 +445,21 @@ public class AuthPolicyService {
         entity.setEnabled(false);
         authPolicyRepository.save(entity);
 
+        String instanceId = entity.getInstanceId();
+        String namespace = getNacosNamespace(instanceId);
+
         // Remove from Nacos
         String policyDataId = AUTH_POLICY_PREFIX + policyId;
-        configCenterService.removeConfig(policyDataId);
-        log.info("Auth policy disabled and removed from Nacos: {}", policyId);
+        configCenterService.removeConfig(policyDataId, namespace);
+        log.info("Auth policy disabled and removed from Nacos: {} (namespace: {})", policyId, namespace);
 
         // Remove routes list from Nacos
         String routesDataId = AUTH_ROUTES_PREFIX + policyId;
-        configCenterService.removeConfig(routesDataId);
-        log.info("Auth routes removed from Nacos: {}", routesDataId);
+        configCenterService.removeConfig(routesDataId, namespace);
+        log.info("Auth routes removed from Nacos: {} (namespace: {})", routesDataId, namespace);
 
         // Update policies index
-        publishPoliciesIndex();
+        publishPoliciesIndex(instanceId);
     }
 
     // ==================== Route Binding Management ====================
@@ -472,10 +505,12 @@ public class AuthPolicyService {
      */
     @Transactional(rollbackFor = Exception.class)
     public RouteAuthBindingEntity bindPolicyToRoute(String policyId, String routeId, Integer priority) {
-        // Verify policy exists
-        if (authPolicyRepository.findByPolicyId(policyId).isEmpty()) {
+        // Verify policy exists and get instanceId
+        Optional<AuthPolicyEntity> policyOpt = authPolicyRepository.findByPolicyId(policyId);
+        if (policyOpt.isEmpty()) {
             throw new IllegalArgumentException("Policy not found: " + policyId);
         }
+        String instanceId = policyOpt.get().getInstanceId();
 
         // Check if binding already exists
         Optional<RouteAuthBindingEntity> existing = routeAuthBindingRepository.findByPolicyIdAndRouteId(policyId, routeId);
@@ -486,8 +521,9 @@ public class AuthPolicyService {
             if (priority != null) {
                 binding.setPriority(priority);
             }
+            binding.setInstanceId(instanceId);
             binding = routeAuthBindingRepository.save(binding);
-            updatePolicyRoutesInNacos(policyId);
+            updatePolicyRoutesInNacos(instanceId, policyId);
             return binding;
         }
 
@@ -498,12 +534,13 @@ public class AuthPolicyService {
         binding.setRouteId(routeId);
         binding.setPriority(priority != null ? priority : 100);
         binding.setEnabled(true);
+        binding.setInstanceId(instanceId);
 
         binding = routeAuthBindingRepository.save(binding);
         log.info("Created binding: policy {} -> route {} (priority {})", policyId, routeId, priority);
 
         // Update routes list for this policy in Nacos
-        updatePolicyRoutesInNacos(policyId);
+        updatePolicyRoutesInNacos(instanceId, policyId);
 
         return binding;
     }
@@ -516,8 +553,12 @@ public class AuthPolicyService {
         routeAuthBindingRepository.deleteByPolicyIdAndRouteId(policyId, routeId);
         log.info("Deleted binding: policy {} -> route {}", policyId, routeId);
 
+        // Get instanceId from policy
+        Optional<AuthPolicyEntity> policyOpt = authPolicyRepository.findByPolicyId(policyId);
+        String instanceId = policyOpt.map(AuthPolicyEntity::getInstanceId).orElse(null);
+
         // Update routes list for this policy in Nacos
-        updatePolicyRoutesInNacos(policyId);
+        updatePolicyRoutesInNacos(instanceId, policyId);
     }
 
     /**
@@ -532,12 +573,13 @@ public class AuthPolicyService {
 
         RouteAuthBindingEntity binding = optBinding.get();
         String policyId = binding.getPolicyId();
+        String instanceId = binding.getInstanceId();
 
         routeAuthBindingRepository.deleteByBindingId(bindingId);
         log.info("Deleted binding: {}", bindingId);
 
         // Update routes list for this policy in Nacos
-        updatePolicyRoutesInNacos(policyId);
+        updatePolicyRoutesInNacos(instanceId, policyId);
     }
 
     /**
@@ -554,7 +596,7 @@ public class AuthPolicyService {
         binding.setEnabled(true);
         routeAuthBindingRepository.save(binding);
 
-        updatePolicyRoutesInNacos(binding.getPolicyId());
+        updatePolicyRoutesInNacos(binding.getInstanceId(), binding.getPolicyId());
         log.info("Binding enabled: {}", bindingId);
     }
 
@@ -572,7 +614,7 @@ public class AuthPolicyService {
         binding.setEnabled(false);
         routeAuthBindingRepository.save(binding);
 
-        updatePolicyRoutesInNacos(binding.getPolicyId());
+        updatePolicyRoutesInNacos(binding.getInstanceId(), binding.getPolicyId());
         log.info("Binding disabled: {}", bindingId);
     }
 
@@ -612,17 +654,6 @@ public class AuthPolicyService {
     }
 
     /**
-     * Update routes list for a policy in Nacos (legacy method).
-     */
-    private void updatePolicyRoutesInNacos(String policyId) {
-        List<RouteAuthBindingEntity> bindings = routeAuthBindingRepository.findByPolicyIdAndEnabledTrue(policyId);
-        List<String> routeIds = bindings.stream()
-                .map(RouteAuthBindingEntity::getRouteId)
-                .collect(Collectors.toList());
-        publishPolicyRoutesToNacos(policyId, routeIds);
-    }
-
-    /**
      * Update routes list for a policy in Nacos for a specific instance.
      */
     private void updatePolicyRoutesInNacos(String instanceId, String policyId) {
@@ -634,45 +665,18 @@ public class AuthPolicyService {
     }
 
     /**
-     * Publish routes list for a policy to Nacos (legacy method).
-     */
-    private void publishPolicyRoutesToNacos(String policyId, List<String> routeIds) {
-        String dataId = AUTH_ROUTES_PREFIX + policyId;
-        if (routeIds == null || routeIds.isEmpty()) {
-            configCenterService.removeConfig(dataId);
-            log.debug("Removed empty routes list from Nacos: {}", dataId);
-        } else {
-            configCenterService.publishConfig(dataId, routeIds);
-            log.debug("Published routes list to Nacos: {} -> {} routes", dataId, routeIds.size());
-        }
-    }
-
-    /**
      * Publish routes list for a policy to Nacos for a specific instance.
      */
     private void publishPolicyRoutesToNacos(String instanceId, String policyId, List<String> routeIds) {
         String dataId = AUTH_ROUTES_PREFIX + policyId;
-        String namespace = instanceId;
+        String namespace = getNacosNamespace(instanceId);
         if (routeIds == null || routeIds.isEmpty()) {
             configCenterService.removeConfig(dataId, namespace);
-            log.debug("Removed empty routes list from Nacos: {} (instance: {})", dataId, instanceId);
+            log.debug("Removed empty routes list from Nacos: {} (namespace: {})", dataId, namespace);
         } else {
             configCenterService.publishConfig(dataId, namespace, routeIds);
-            log.debug("Published routes list to Nacos: {} -> {} routes (instance: {})", dataId, routeIds.size(), instanceId);
+            log.debug("Published routes list to Nacos: {} -> {} routes (namespace: {})", dataId, routeIds.size(), namespace);
         }
-    }
-
-    /**
-     * Publish policies index to Nacos (legacy method - global).
-     * This allows gateway to discover all enabled policies.
-     */
-    private void publishPoliciesIndex() {
-        List<AuthPolicyEntity> enabledPolicies = authPolicyRepository.findByEnabledTrue();
-        List<String> policyIds = enabledPolicies.stream()
-                .map(AuthPolicyEntity::getPolicyId)
-                .collect(Collectors.toList());
-        configCenterService.publishConfig(AUTH_POLICIES_INDEX, policyIds);
-        log.info("Published auth policies index: {} policies", policyIds.size());
     }
 
     /**
@@ -689,9 +693,9 @@ public class AuthPolicyService {
         List<String> policyIds = enabledPolicies.stream()
                 .map(AuthPolicyEntity::getPolicyId)
                 .collect(Collectors.toList());
-        String namespace = instanceId;
+        String namespace = getNacosNamespace(instanceId);
         configCenterService.publishConfig(AUTH_POLICIES_INDEX, namespace, policyIds);
-        log.info("Published auth policies index for instance {}: {} policies", instanceId, policyIds.size());
+        log.info("Published auth policies index for namespace {}: {} policies", namespace, policyIds.size());
     }
 
     private AuthPolicyEntity toEntity(AuthPolicyDefinition policy) {
@@ -717,6 +721,8 @@ public class AuthPolicyService {
             return null;
         }
 
+        log.info("toDefinition: entity.config length = {}, content = {}", entity.getConfig() != null ? entity.getConfig().length() : 0, entity.getConfig());
+
         // Try to parse from config JSON first
         if (entity.getConfig() != null && !entity.getConfig().isEmpty()) {
             try {
@@ -727,6 +733,7 @@ public class AuthPolicyService {
                 policy.setAuthTypeEnum(entity.getAuthType());
                 policy.setEnabled(entity.getEnabled());
                 policy.setDescription(entity.getDescription());
+                log.info("toDefinition result: apiKey={}, apiKeyHeader={}", policy.getApiKey(), policy.getApiKeyHeader());
                 return policy;
             } catch (JsonProcessingException e) {
                 log.warn("Failed to parse policy config JSON, using entity fields: {}", e.getMessage());
@@ -742,5 +749,15 @@ public class AuthPolicyService {
         policy.setDescription(entity.getDescription());
 
         return policy;
+    }
+
+    /**
+     * Publish raw config JSON string to Nacos.
+     * This avoids re-serialization issues with ObjectMapper and @JsonInclude annotation.
+     */
+    private boolean publishRawConfig(String dataId, String namespace, String content) {
+        log.info("Publishing raw config to Nacos: dataId={}, namespace={}, content has apiKey: {}",
+                 dataId, namespace, content.contains("apiKey"));
+        return configCenterService.publishRawConfig(dataId, namespace, content);
     }
 }

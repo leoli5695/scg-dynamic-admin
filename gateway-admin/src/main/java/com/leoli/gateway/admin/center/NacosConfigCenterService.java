@@ -22,6 +22,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 
 /**
  * Nacos implementation of ConfigCenterService.
@@ -76,6 +80,8 @@ public class NacosConfigCenterService implements ConfigCenterService {
         // Nacos public namespace must use empty string, not "public"
         if (namespace != null && !namespace.isEmpty() && !"public".equals(namespace)) {
             properties.put("namespace", namespace);
+            // Auto-create namespace if it doesn't exist
+            ensureNamespaceExists(namespace);
         }
         properties.put("group", group);
 
@@ -83,6 +89,84 @@ public class NacosConfigCenterService implements ConfigCenterService {
         this.namingService = new NacosNamingService(properties);
         log.info("Nacos Config Center initialized with serverAddr={}, namespace={}, group={}",
                 serverAddr, namespace.isEmpty() ? "public" : namespace, group);
+    }
+
+    /**
+     * Ensure namespace exists in Nacos (auto-create if missing).
+     * This is useful for test environments where we want isolated namespaces.
+     */
+    private void ensureNamespaceExists(String namespaceId) {
+        try {
+            // Ensure serverAddr has http protocol
+            String baseUrl = serverAddr.startsWith("http") ? serverAddr : "http://" + serverAddr;
+
+            // Check if namespace exists via HTTP API
+            String url = baseUrl + "/nacos/v1/console/namespaces?namespaceId=" + namespaceId;
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(5000);
+
+            int responseCode = conn.getResponseCode();
+            if (responseCode == 200) {
+                java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(conn.getInputStream()));
+                StringBuilder response = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    response.append(line);
+                }
+                reader.close();
+
+                // If namespace not found, create it
+                if (response.toString().contains("namespaceId not exist") ||
+                    response.toString().equals("{}") ||
+                    !response.toString().contains(namespaceId)) {
+                    createNamespace(namespaceId, baseUrl);
+                } else {
+                    log.debug("Namespace {} already exists", namespaceId);
+                }
+            } else {
+                // Try to create anyway
+                createNamespace(namespaceId, baseUrl);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to check namespace existence, will try to create: {}", e.getMessage());
+            try {
+                String baseUrl = serverAddr.startsWith("http") ? serverAddr : "http://" + serverAddr;
+                createNamespace(namespaceId, baseUrl);
+            } catch (Exception ex) {
+                log.warn("Failed to create namespace {}: {}", namespaceId, ex.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Create a namespace in Nacos via HTTP API.
+     */
+    private void createNamespace(String namespaceId, String baseUrl) throws Exception {
+        String url = baseUrl + "/nacos/v1/console/namespaces";
+        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+        conn.setRequestMethod("POST");
+        conn.setDoOutput(true);
+        conn.setConnectTimeout(5000);
+        conn.setReadTimeout(5000);
+        conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+
+        String params = "customNamespaceId=" + namespaceId +
+                       "&namespaceName=" + namespaceId +
+                       "&namespaceDesc=Auto-created namespace for gateway tests";
+        java.io.OutputStream os = conn.getOutputStream();
+        os.write(params.getBytes());
+        os.flush();
+        os.close();
+
+        int responseCode = conn.getResponseCode();
+        if (responseCode == 200) {
+            log.info("Created Nacos namespace: {}", namespaceId);
+        } else {
+            log.warn("Namespace creation response: {}", responseCode);
+        }
     }
 
     @PreDestroy
@@ -148,7 +232,21 @@ public class NacosConfigCenterService implements ConfigCenterService {
     @Override
     @SuppressWarnings("unchecked")
     public <T> T getConfig(String dataId, Class<T> type) {
-        // Try Nacos first if available
+        // Check local cache first (it has the most recent published value)
+        String cachedContent = localCache.get(dataId);
+        if (cachedContent != null) {
+            try {
+                // If requesting String type, return raw content directly
+                if (type == String.class) {
+                    return (T) cachedContent;
+                }
+                return objectMapper.readValue(cachedContent, type);
+            } catch (Exception ex) {
+                log.error("Failed to parse cached config for dataId={}: {}", dataId, ex.getMessage());
+            }
+        }
+
+        // Try Nacos if local cache is empty
         if (shouldTryNacos()) {
             try {
                 String content = getConfigWithRetry(dataId);
@@ -156,25 +254,19 @@ public class NacosConfigCenterService implements ConfigCenterService {
                     // Update local cache
                     localCache.put(dataId, content);
                     markNacosAvailable();
-                    
+
+                    // If requesting String type, return raw content directly
+                    if (type == String.class) {
+                        return (T) content;
+                    }
+
                     T config = objectMapper.readValue(content, type);
                     log.debug("Loaded configuration from Nacos: dataId={}, type={}", dataId, type.getSimpleName());
                     return config;
                 }
             } catch (Exception ex) {
                 markNacosUnavailable("getConfig", ex);
-                // Fall through to local cache
-            }
-        }
-
-        // Fallback to local cache
-        String cachedContent = localCache.get(dataId);
-        if (cachedContent != null) {
-            try {
-                log.warn("Using local cache for dataId={} (Nacos unavailable)", dataId);
-                return objectMapper.readValue(cachedContent, type);
-            } catch (Exception ex) {
-                log.error("Failed to parse cached config for dataId={}: {}", dataId, ex.getMessage());
+                // Fall through to return null
             }
         }
 
@@ -185,7 +277,17 @@ public class NacosConfigCenterService implements ConfigCenterService {
     @Override
     @SuppressWarnings("unchecked")
     public <T> T getConfig(String dataId, com.fasterxml.jackson.core.type.TypeReference<T> typeReference) {
-        // Try Nacos first if available
+        // Check local cache first (it has the most recent published value)
+        String cachedContent = localCache.get(dataId);
+        if (cachedContent != null) {
+            try {
+                return objectMapper.readValue(cachedContent, typeReference);
+            } catch (Exception ex) {
+                log.error("Failed to parse cached config for dataId={}: {}", dataId, ex.getMessage());
+            }
+        }
+
+        // Try Nacos if local cache is empty
         if (shouldTryNacos()) {
             try {
                 String content = getConfigWithRetry(dataId);
@@ -200,18 +302,7 @@ public class NacosConfigCenterService implements ConfigCenterService {
                 }
             } catch (Exception ex) {
                 markNacosUnavailable("getConfig", ex);
-                // Fall through to local cache
-            }
-        }
-
-        // Fallback to local cache
-        String cachedContent = localCache.get(dataId);
-        if (cachedContent != null) {
-            try {
-                log.warn("Using local cache for dataId={} (Nacos unavailable)", dataId);
-                return objectMapper.readValue(cachedContent, typeReference);
-            } catch (Exception ex) {
-                log.error("Failed to parse cached config for dataId={}: {}", dataId, ex.getMessage());
+                // Fall through to return null
             }
         }
 
@@ -426,15 +517,18 @@ public class NacosConfigCenterService implements ConfigCenterService {
         String effectiveNamespace = (targetNamespace == null || targetNamespace.isEmpty())
                 ? namespace : targetNamespace;
 
-        // For default namespace, use existing method
-        if (effectiveNamespace == null || effectiveNamespace.isEmpty() || effectiveNamespace.equals(namespace)) {
-            return publishConfig(dataId, config);
-        }
-
-        // For other namespaces, get specific ConfigService
         try {
-            ConfigService nsConfigService = getConfigServiceForNamespace(targetNamespace);
             String content = objectMapper.writeValueAsString(config);
+            // Update local cache first (for immediate availability)
+            localCache.put(dataId, content);
+
+            // For default namespace, use existing method
+            if (effectiveNamespace == null || effectiveNamespace.isEmpty() || effectiveNamespace.equals(namespace)) {
+                return publishConfig(dataId, config);
+            }
+
+            // For other namespaces, get specific ConfigService
+            ConfigService nsConfigService = getConfigServiceForNamespace(targetNamespace);
             boolean result = nsConfigService.publishConfig(dataId, group, content, ConfigType.JSON.getType());
             if (result) {
                 log.info("Published config to Nacos namespace {}: dataId={}", effectiveNamespace, dataId);
@@ -450,6 +544,9 @@ public class NacosConfigCenterService implements ConfigCenterService {
     public boolean removeConfig(String dataId, String targetNamespace) {
         String effectiveNamespace = (targetNamespace == null || targetNamespace.isEmpty())
                 ? namespace : targetNamespace;
+
+        // Remove from local cache first (regardless of namespace)
+        localCache.remove(dataId);
 
         // For default namespace, use existing method
         if (effectiveNamespace == null || effectiveNamespace.isEmpty() || effectiveNamespace.equals(namespace)) {
@@ -501,6 +598,40 @@ public class NacosConfigCenterService implements ConfigCenterService {
         return group != null ? group : "DEFAULT_GROUP";
     }
 
+    @Override
+    public boolean publishRawConfig(String dataId, String targetNamespace, String content) {
+        String effectiveNamespace = (targetNamespace == null || targetNamespace.isEmpty())
+                ? namespace : targetNamespace;
+
+        // For default namespace, use main configService
+        if (effectiveNamespace == null || effectiveNamespace.isEmpty() || effectiveNamespace.equals(namespace)) {
+            try {
+                boolean result = configService.publishConfig(dataId, group, content, ConfigType.JSON.getType());
+                if (result) {
+                    localCache.put(dataId, content);
+                    log.info("Published raw config to Nacos: dataId={}", dataId);
+                }
+                return result;
+            } catch (NacosException e) {
+                log.error("Failed to publish raw config: {}", e.getMessage());
+                return false;
+            }
+        }
+
+        // For other namespaces, get specific ConfigService
+        try {
+            ConfigService nsConfigService = getConfigServiceForNamespace(targetNamespace);
+            boolean result = nsConfigService.publishConfig(dataId, group, content, ConfigType.JSON.getType());
+            if (result) {
+                log.info("Published raw config to Nacos namespace {}: dataId={}", effectiveNamespace, dataId);
+            }
+            return result;
+        } catch (Exception e) {
+            log.error("Failed to publish raw config to namespace {}: {}", effectiveNamespace, e.getMessage());
+            return false;
+        }
+    }
+
     /**
      * Check if Nacos is currently available.
      */
@@ -539,5 +670,126 @@ public class NacosConfigCenterService implements ConfigCenterService {
             log.error("Error getting instances for service {} from Nacos discovery", serviceName, e);
             return Collections.emptyList();
         }
+    }
+
+    // ==================== Batch operations ====================
+
+    // Fixed thread pool for parallel batch operations
+    private final ExecutorService batchExecutor = Executors.newFixedThreadPool(10);
+
+    @Override
+    public int publishConfigsBatch(Map<String, Object> configs, String targetNamespace) {
+        if (configs == null || configs.isEmpty()) {
+            return 0;
+        }
+
+        String effectiveNamespace = (targetNamespace == null || targetNamespace.isEmpty())
+                ? namespace : targetNamespace;
+
+        // Use parallel execution for batch publish
+        List<CompletableFuture<Boolean>> futures = configs.entrySet().stream()
+                .map(entry -> CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return publishConfig(entry.getKey(), targetNamespace, entry.getValue());
+                    } catch (Exception e) {
+                        log.warn("Failed to publish batch config {}: {}", entry.getKey(), e.getMessage());
+                        return false;
+                    }
+                }, batchExecutor))
+                .collect(Collectors.toList());
+
+        // Wait for all to complete and count successes
+        int successCount = 0;
+        for (CompletableFuture<Boolean> future : futures) {
+            try {
+                if (future.get()) {
+                    successCount++;
+                }
+            } catch (Exception e) {
+                log.warn("Batch publish task failed: {}", e.getMessage());
+            }
+        }
+
+        log.info("Batch published {} configs to namespace {} ({} successful of {})",
+                configs.size(), effectiveNamespace.isEmpty() ? "public" : effectiveNamespace,
+                successCount, configs.size());
+        return successCount;
+    }
+
+    @Override
+    public Map<String, Boolean> configExistsBatch(List<String> dataIds, String targetNamespace) {
+        if (dataIds == null || dataIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        String effectiveNamespace = (targetNamespace == null || targetNamespace.isEmpty())
+                ? namespace : targetNamespace;
+
+        // Use parallel execution for batch check
+        List<CompletableFuture<Map.Entry<String, Boolean>>> futures = dataIds.stream()
+                .map(dataId -> CompletableFuture.supplyAsync(() -> {
+                    try {
+                        boolean exists = configExists(dataId, targetNamespace);
+                        return Map.entry(dataId, exists);
+                    } catch (Exception e) {
+                        log.warn("Failed to check batch config {}: {}", dataId, e.getMessage());
+                        return Map.entry(dataId, false);
+                    }
+                }, batchExecutor))
+                .collect(Collectors.toList());
+
+        // Collect results
+        Map<String, Boolean> results = new ConcurrentHashMap<>();
+        for (CompletableFuture<Map.Entry<String, Boolean>> future : futures) {
+            try {
+                Map.Entry<String, Boolean> entry = future.get();
+                results.put(entry.getKey(), entry.getValue());
+            } catch (Exception e) {
+                log.warn("Batch check task failed: {}", e.getMessage());
+            }
+        }
+
+        log.debug("Batch checked {} configs in namespace {}", dataIds.size(),
+                effectiveNamespace.isEmpty() ? "public" : effectiveNamespace);
+        return results;
+    }
+
+    @Override
+    public int removeConfigsBatch(List<String> dataIds, String targetNamespace) {
+        if (dataIds == null || dataIds.isEmpty()) {
+            return 0;
+        }
+
+        String effectiveNamespace = (targetNamespace == null || targetNamespace.isEmpty())
+                ? namespace : targetNamespace;
+
+        // Use parallel execution for batch remove
+        List<CompletableFuture<Boolean>> futures = dataIds.stream()
+                .map(dataId -> CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return removeConfig(dataId, targetNamespace);
+                    } catch (Exception e) {
+                        log.warn("Failed to remove batch config {}: {}", dataId, e.getMessage());
+                        return false;
+                    }
+                }, batchExecutor))
+                .collect(Collectors.toList());
+
+        // Wait for all to complete and count successes
+        int successCount = 0;
+        for (CompletableFuture<Boolean> future : futures) {
+            try {
+                if (future.get()) {
+                    successCount++;
+                }
+            } catch (Exception e) {
+                log.warn("Batch remove task failed: {}", e.getMessage());
+            }
+        }
+
+        log.info("Batch removed {} configs from namespace {} ({} successful of {})",
+                dataIds.size(), effectiveNamespace.isEmpty() ? "public" : effectiveNamespace,
+                successCount, dataIds.size());
+        return successCount;
     }
 }

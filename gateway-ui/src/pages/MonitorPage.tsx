@@ -41,10 +41,10 @@ const chartColors: Record<string, { main: string; gradient: string[] }> = {
 
 const MetricChart: React.FC<{
   title: string; data: HistoryPoint[]; colorKey: string; unit: string;
-  yAxisLabel?: string; valueTransform?: (v: number) => number; loading: boolean;
-}> = ({ title, data, colorKey, unit, yAxisLabel = '', valueTransform, loading }) => {
+  yAxisLabel?: string; valueTransform?: (v: number) => number;
+}> = ({ title, data, colorKey, unit, yAxisLabel = '', valueTransform }) => {
   const color = chartColors[colorKey] || chartColors.blue;
-  
+
   // Transform data for Nivo
   const chartData = [{
     id: title,
@@ -53,16 +53,6 @@ const MetricChart: React.FC<{
       y: valueTransform ? valueTransform(p.value) : p.value,
     })),
   }];
-
-  if (loading) {
-    return (
-      <Card styles={{ body: { padding: '16px' } }}>
-        <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Spin />
-        </div>
-      </Card>
-    );
-  }
 
   if (!data || data.length === 0) {
     return (
@@ -200,7 +190,7 @@ const MonitorPage: React.FC<MonitorPageProps> = ({ instanceId }) => {
   const [prometheusAvailable, setPrometheusAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [historyData, setHistoryData] = useState<HistoryData | null>(null);
-  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false); // Only for initial load
   const [historyHours, setHistoryHours] = useState(1);
   const [aiModalVisible, setAiModalVisible] = useState(false);
   const { t, i18n } = useTranslation();
@@ -218,9 +208,9 @@ const MonitorPage: React.FC<MonitorPageProps> = ({ instanceId }) => {
     finally { setLoading(false); }
   };
 
-  const loadHistory = async (hours: number) => {
+  const loadHistory = async (hours: number, showLoading: boolean = false) => {
     try {
-      setHistoryLoading(true);
+      if (showLoading) setHistoryLoading(true);
       const instanceParam = instanceId ? `&instanceId=${instanceId}` : '';
       const res = await api.get(`/api/monitor/history?hours=${hours}${instanceParam}`);
       if (res.data.code === 200) setHistoryData(res.data.data);
@@ -228,8 +218,18 @@ const MonitorPage: React.FC<MonitorPageProps> = ({ instanceId }) => {
     finally { setHistoryLoading(false); }
   };
 
-  useEffect(() => { loadMetrics(); loadHistory(historyHours); const i = setInterval(loadMetrics, 10000); return () => clearInterval(i); }, [instanceId]);
-  useEffect(() => { loadHistory(historyHours); }, [historyHours]);
+  // Initial load and metrics refresh every 10s
+  useEffect(() => {
+    loadMetrics();
+    loadHistory(historyHours, true);
+    const metricsInterval = setInterval(loadMetrics, 10000);
+    // Auto-refresh history every 30s (silent refresh, no loading indicator)
+    const historyInterval = setInterval(() => loadHistory(historyHours, false), 30000);
+    return () => {
+      clearInterval(metricsInterval);
+      clearInterval(historyInterval);
+    };
+  }, [instanceId, historyHours]);
 
   const formatBytes = (bytes: number): { value: number; unit: string; display: string } => {
     if (!bytes) return { value: 0, unit: 'B', display: '0 B' };
@@ -340,12 +340,12 @@ const MonitorPage: React.FC<MonitorPageProps> = ({ instanceId }) => {
           />
         ) : (
           <Row gutter={[16, 16]}>
-            <Col xs={24} lg={12}><MetricChart title={t('monitor.heap_memory_history') || 'Heap Memory History'} data={historyData?.heapMemory || []} colorKey="blue" unit=" MB" yAxisLabel="MB" valueTransform={(v) => v / (1024 * 1024)} loading={historyLoading} /></Col>
-            <Col xs={24} lg={12}><MetricChart title={t('monitor.cpu_usage_history') || 'CPU Usage History'} data={historyData?.cpuUsage || []} colorKey="green" unit="%" yAxisLabel="%" valueTransform={(v) => v * 100} loading={historyLoading} /></Col>
-            <Col xs={24} lg={12}><MetricChart title={t('monitor.request_rate_history') || 'Request Rate History'} data={historyData?.requestRate || []} colorKey="purple" unit="/s" yAxisLabel="/s" loading={historyLoading} /></Col>
-            <Col xs={24} lg={12}><MetricChart title={t('monitor.response_time_history') || 'Response Time History'} data={historyData?.responseTime || []} colorKey="orange" unit="ms" yAxisLabel="ms" valueTransform={(v) => v * 1000} loading={historyLoading} /></Col>
-            <Col xs={24} lg={12}><MetricChart title={t('monitor.gc_time_history') || 'GC Time History'} data={historyData?.gcTime || []} colorKey="magenta" unit="ms/s" yAxisLabel="ms/s" valueTransform={(v) => v * 1000} loading={historyLoading} /></Col>
-            <Col xs={24} lg={12}><MetricChart title={t('monitor.thread_count_history') || 'Thread Count History'} data={historyData?.threadCount || []} colorKey="cyan" unit="" yAxisLabel="" loading={historyLoading} /></Col>
+            <Col xs={24} lg={12}><MetricChart title={t('monitor.heap_memory_history') || 'Heap Memory History'} data={historyData?.heapMemory || []} colorKey="blue" unit=" MB" yAxisLabel="MB" valueTransform={(v) => v / (1024 * 1024)} /></Col>
+            <Col xs={24} lg={12}><MetricChart title={t('monitor.cpu_usage_history') || 'CPU Usage History'} data={historyData?.cpuUsage || []} colorKey="green" unit="%" yAxisLabel="%" valueTransform={(v) => v * 100} /></Col>
+            <Col xs={24} lg={12}><MetricChart title={t('monitor.request_rate_history') || 'Request Rate History'} data={historyData?.requestRate || []} colorKey="purple" unit="/s" yAxisLabel="/s" /></Col>
+            <Col xs={24} lg={12}><MetricChart title={t('monitor.response_time_history') || 'Response Time History'} data={historyData?.responseTime || []} colorKey="orange" unit="ms" yAxisLabel="ms" valueTransform={(v) => v * 1000} /></Col>
+            <Col xs={24} lg={12}><MetricChart title={t('monitor.gc_time_history') || 'GC Time History'} data={historyData?.gcTime || []} colorKey="magenta" unit="ms/s" yAxisLabel="ms/s" valueTransform={(v) => v * 1000} /></Col>
+            <Col xs={24} lg={12}><MetricChart title={t('monitor.thread_count_history') || 'Thread Count History'} data={historyData?.threadCount || []} colorKey="cyan" unit="" yAxisLabel="" /></Col>
           </Row>
         )}
       </Card>

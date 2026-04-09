@@ -73,3 +73,5 @@ gateway-admin/run.log
 gateway-admin/admin-startup.log
 gateway-admin/admin-new.log
 gateway-admin/admin-err-new.log
+*.tar
+*.tar.gz

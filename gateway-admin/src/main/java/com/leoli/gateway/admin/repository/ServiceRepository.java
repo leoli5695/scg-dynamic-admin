@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Service repository interface.
@@ -18,6 +19,11 @@ public interface ServiceRepository extends JpaRepository<ServiceEntity, Long> {
      * Find service by business service name.
      */
     ServiceEntity findByServiceName(String serviceName);
+
+    /**
+     * Find service by service ID.
+     */
+    Optional<ServiceEntity> findByServiceId(String serviceId);
 
     List<ServiceEntity> findByEnabledTrue();
 
@@ -40,4 +46,9 @@ public interface ServiceRepository extends JpaRepository<ServiceEntity, Long> {
      * Check if service name exists within an instance.
      */
     boolean existsByServiceNameAndInstanceId(String serviceName, String instanceId);
+
+    /**
+     * Delete all services by instance ID.
+     */
+    int deleteByInstanceId(String instanceId);
 }

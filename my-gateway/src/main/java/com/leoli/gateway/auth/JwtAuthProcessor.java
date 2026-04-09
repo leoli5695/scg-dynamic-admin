@@ -1,11 +1,13 @@
 package com.leoli.gateway.auth;
 
+import com.leoli.gateway.cache.JwtValidationCache;
 import com.leoli.gateway.enums.AuthType;
 import com.leoli.gateway.model.AuthConfig;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import io.jsonwebtoken.security.SignatureException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
@@ -37,6 +39,9 @@ import java.util.Set;
 @Component
 public class JwtAuthProcessor extends AbstractAuthProcessor {
 
+    @Autowired
+    private JwtValidationCache jwtCache;
+
     @Override
     public AuthType getAuthType() {
         return AuthType.JWT;
@@ -61,19 +66,27 @@ public class JwtAuthProcessor extends AbstractAuthProcessor {
             }
         }
 
-        // Validate JWT token
+        final String finalToken = token;
+        final String policyId = config.getPolicyId();
+
+        // Try cache first
+        Claims cachedClaims = jwtCache.get(finalToken, policyId);
+        if (cachedClaims != null) {
+            // Cache hit - use cached claims
+            addClaimsToExchange(exchange, cachedClaims);
+            log.debug("JWT validated from cache for subject: {}", cachedClaims.getSubject());
+            return Mono.empty();
+        }
+
+        // Cache miss - validate JWT token
         try {
-            Claims claims = validateToken(token, config);
+            Claims claims = validateToken(finalToken, config);
+
+            // Cache the validation result
+            jwtCache.put(finalToken, policyId, claims);
 
             // Add claims to exchange attributes for downstream use
-            exchange.getAttributes().put("jwt_claims", claims);
-            exchange.getAttributes().put("jwt_subject", claims.getSubject());
-            if (claims.get("roles") != null) {
-                exchange.getAttributes().put("jwt_roles", claims.get("roles"));
-            }
-            if (claims.get("permissions") != null) {
-                exchange.getAttributes().put("jwt_permissions", claims.get("permissions"));
-            }
+            addClaimsToExchange(exchange, claims);
 
             logSuccess("JWT validated for subject: " + claims.getSubject());
             return Mono.empty(); // Continue the filter chain
@@ -96,6 +109,20 @@ public class JwtAuthProcessor extends AbstractAuthProcessor {
         } catch (Exception ex) {
             logFailure("JWT", "JWT validation error: " + ex.getMessage());
             return Mono.error(new RuntimeException("JWT validation failed: " + ex.getMessage()));
+        }
+    }
+
+    /**
+     * Add claims to exchange attributes for downstream use.
+     */
+    private void addClaimsToExchange(ServerWebExchange exchange, Claims claims) {
+        exchange.getAttributes().put("jwt_claims", claims);
+        exchange.getAttributes().put("jwt_subject", claims.getSubject());
+        if (claims.get("roles") != null) {
+            exchange.getAttributes().put("jwt_roles", claims.get("roles"));
+        }
+        if (claims.get("permissions") != null) {
+            exchange.getAttributes().put("jwt_permissions", claims.get("permissions"));
         }
     }
 
@@ -187,13 +214,12 @@ public class JwtAuthProcessor extends AbstractAuthProcessor {
      * Validate custom claims if configured.
      */
     private void validateCustomClaims(Claims claims, AuthConfig config) {
-        // Check token expiration explicitly for additional logging
-        Date expiration = claims.getExpiration();
-        if (expiration != null && expiration.before(new Date())) {
-            throw new ExpiredJwtException(null, claims, "Token expired at: " + expiration);
-        }
+        // Note: Clock skew tolerance is handled by the parser builder.
+        // We don't need to check expiration again here as it's already validated
+        // with clock skew during parseSignedClaims().
 
         // Log token info for debugging
+        Date expiration = claims.getExpiration();
         log.debug("JWT validated - Subject: {}, Issuer: {}, Expires: {}", 
                 claims.getSubject(), claims.getIssuer(), expiration);
     }

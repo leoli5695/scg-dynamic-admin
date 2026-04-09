@@ -1,7 +1,9 @@
 package com.leoli.gateway.limiter;
 
+import com.leoli.gateway.config.RedisEnabledCondition;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -13,6 +15,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Slf4j
+@Conditional(RedisEnabledCondition.class)
 public class RedisHealthChecker {
 
     @Autowired(required = false)

@@ -10,6 +10,8 @@ import {
   message,
   Spin,
   Tag,
+  Tooltip,
+  Alert,
 } from "antd";
 import {
   ClusterOutlined,
@@ -37,6 +39,13 @@ interface InstanceSpec {
   description: string;
 }
 
+interface LocalImage {
+  name: string;
+  namespace?: string;
+  image?: string;
+  tag?: string;
+}
+
 const InstanceCreatePage: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -46,11 +55,29 @@ const InstanceCreatePage: React.FC = () => {
   const [clusters, setClusters] = useState<KubernetesCluster[]>([]);
   const [specs, setSpecs] = useState<InstanceSpec[]>([]);
 
+  // Watch form fields
   const selectedSpecType = Form.useWatch("specType", form);
+  const selectedClusterId = Form.useWatch("clusterId", form);
+  const selectedImagePullPolicy = Form.useWatch("imagePullPolicy", form);
+
+  // Local image state
+  const [localImages, setLocalImages] = useState<LocalImage[]>([]);
+  const [loadingImages, setLoadingImages] = useState(false);
+  const [selectedImageNamespace, setSelectedImageNamespace] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Load local images when cluster is selected and pull policy is "Never"
+  useEffect(() => {
+    if (selectedClusterId && selectedImagePullPolicy === "Never") {
+      loadLocalImages(selectedClusterId);
+    } else {
+      setLocalImages([]);
+      setSelectedImageNamespace(undefined);
+    }
+  }, [selectedClusterId, selectedImagePullPolicy]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -68,6 +95,61 @@ const InstanceCreatePage: React.FC = () => {
       setLoading(false);
     }
   };
+
+  const loadLocalImages = async (clusterId: number) => {
+    setLoadingImages(true);
+    try {
+      const res = await axios.get(`/api/kubernetes/clusters/${clusterId}/images`);
+      if (res.data.code === 200) {
+        const rawImages = res.data.data || [];
+        // Parse image names into structured format
+        const parsed = rawImages.map((img: any) => {
+          const fullName = img.name;
+          // Parse image name: [registry/][namespace/]image[:tag]
+          const parts = fullName.split('/');
+          let namespace = '';
+          let imageWithTag = fullName;
+          
+          if (parts.length >= 2 && !parts[0].includes(':')) {
+            // Has namespace
+            namespace = parts[0];
+            imageWithTag = parts.slice(1).join('/');
+          }
+          
+          const [image, tag] = imageWithTag.split(':');
+          
+          return {
+            name: fullName,
+            namespace: namespace || 'default',
+            image: image,
+            tag: tag || 'latest'
+          };
+        });
+        
+        setLocalImages(parsed);
+        
+        // Auto-select k8s.io namespace if available
+        const k8sImages = parsed.filter((img: { namespace: string }) => img.namespace === 'k8s.io');
+        if (k8sImages.length > 0) {
+          setSelectedImageNamespace('k8s.io');
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load local images:", error);
+      message.warning("Failed to load local images from cluster");
+      setLocalImages([]);
+    } finally {
+      setLoadingImages(false);
+    }
+  };
+
+  // Filter images by namespace
+  const filteredImages = selectedImageNamespace 
+    ? localImages.filter((img: LocalImage) => img.namespace === selectedImageNamespace)
+    : localImages;
+
+  // Get unique namespaces
+  const namespaces = Array.from(new Set(localImages.map((img: LocalImage) => img.namespace || 'default')));
 
   const handleSubmit = async (values: any) => {
     setSubmitting(true);
@@ -91,7 +173,7 @@ const InstanceCreatePage: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: "24px", maxWidth: "800px", margin: "0 auto" }}>
+    <div className="instance-create-page" style={{ padding: "24px", maxWidth: "800px", margin: "0 auto" }}>
       <Card
         title={
           <Space>
@@ -169,6 +251,29 @@ const InstanceCreatePage: React.FC = () => {
               </Select>
             </Form.Item>
 
+            {/* Nacos & Redis Configuration */}
+            <Alert
+              message={t("instance.config_hint")}
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+            />
+            <Form.Item
+              name="nacosServerAddr"
+              label={t("instance.nacos_server_addr")}
+              tooltip={t("instance.nacos_server_addr_tooltip")}
+            >
+              <Input placeholder={t("instance.nacos_server_addr_placeholder")} />
+            </Form.Item>
+
+            <Form.Item
+              name="redisServerAddr"
+              label={t("instance.redis_server_addr")}
+              tooltip={t("instance.redis_server_addr_tooltip")}
+            >
+              <Input placeholder={t("instance.redis_server_addr_placeholder")} />
+            </Form.Item>
+
             <Form.Item
               name="specType"
               label={t("instance.spec_type")}
@@ -177,7 +282,9 @@ const InstanceCreatePage: React.FC = () => {
               <Select>
                 {specs.map((spec) => (
                   <Option key={spec.type} value={spec.type}>
-                    {spec.description}
+                    {spec.type === "custom"
+                      ? t("instance.spec_custom")
+                      : t(`instance.spec_${spec.type}`)}
                   </Option>
                 ))}
               </Select>
@@ -220,6 +327,7 @@ const InstanceCreatePage: React.FC = () => {
               name="replicas"
               label={t("instance.replicas")}
               rules={[{ required: true }]}
+              style={{ marginBottom: 24 }}
             >
               <InputNumber min={1} max={10} style={{ width: "200px" }} />
             </Form.Item>
@@ -228,8 +336,9 @@ const InstanceCreatePage: React.FC = () => {
               name="imagePullPolicy"
               label={t("instance.image_pull_policy")}
               tooltip={t("instance.image_pull_policy_tooltip")}
+              style={{ marginBottom: 24 }}
             >
-              <Select style={{ width: "300px" }}>
+              <Select style={{ width: "100%" }}>
                 <Option value="IfNotPresent">{t("instance.pull_if_not_present")}</Option>
                 <Option value="Always">{t("instance.pull_always")}</Option>
                 <Option value="Never">{t("instance.pull_never")}</Option>
@@ -239,9 +348,79 @@ const InstanceCreatePage: React.FC = () => {
             <Form.Item
               name="image"
               label={t("instance.image")}
-              tooltip={t("instance.image_tooltip")}
+              tooltip={
+                selectedImagePullPolicy === "Never" 
+                  ? "Select from local images available on cluster nodes (k8s.io namespace shown by default)"
+                  : t("instance.image_tooltip")
+              }
+              style={{ marginBottom: 24 }}
             >
-              <Input placeholder="e.g., my-gateway:latest" style={{ width: "300px" }} />
+              {selectedImagePullPolicy === "Never" ? (
+                loadingImages ? (
+                  <Spin tip="Loading images from cluster..." />
+                ) : localImages.length > 0 ? (
+                  <Space direction="vertical" style={{ width: "100%" }} size="small">
+                    {/* Namespace Filter */}
+                    <Select
+                      value={selectedImageNamespace || 'all'}
+                      onChange={setSelectedImageNamespace}
+                      style={{ width: "100%" }}
+                      placeholder="Filter by namespace"
+                    >
+                      <Option value="all">All Namespaces ({localImages.length})</Option>
+                      {namespaces.map(ns => {
+                        const count = localImages.filter((img: LocalImage) => img.namespace === ns).length;
+                        return (
+                          <Option key={ns} value={ns}>
+                            {ns} ({count})
+                          </Option>
+                        );
+                      })}
+                    </Select>
+                    
+                    {/* Image Selector */}
+                    <Select
+                      showSearch
+                      placeholder={selectedImageNamespace ? t('instance.select_image_from_namespace', { ns: selectedImageNamespace }) : t('instance.select_local_image')}
+                      optionFilterProp="children"
+                      loading={loadingImages}
+                      allowClear
+                      style={{ width: "100%" }}
+                      optionLabelProp="title"
+                    >
+                      {filteredImages.map((img, idx) => (
+                        <Option key={idx} value={img.name} title={img.name}>
+                          <Space style={{ minWidth: 0, flex: 1 }}>
+                            <Tag color="blue">{img.namespace}</Tag>
+                            <span style={{ 
+                              fontSize: '13px', 
+                              color: '#f1f5f9',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              maxWidth: '300px',
+                              flex: '1 1 auto'
+                            }} title={img.name}>
+                              {img.image}
+                            </span>
+                            <Tag color="green">{img.tag}</Tag>
+                          </Space>
+                        </Option>
+                      ))}
+                    </Select>
+                  </Space>
+                ) : (
+                  <Input 
+                    placeholder="No local images found in cluster. Enter image name manually." 
+                    style={{ width: "100%" }} 
+                  />
+                )
+              ) : (
+                <Input 
+                  placeholder="e.g., my-gateway:latest" 
+                  style={{ width: "100%" }} 
+                />
+              )}
             </Form.Item>
 
             <Form.Item name="description" label={t("instance.description")}>

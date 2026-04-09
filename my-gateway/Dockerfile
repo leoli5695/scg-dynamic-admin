@@ -8,7 +8,10 @@ WORKDIR /app
 RUN microdnf install -y curl tzdata && microdnf clean all
 
 # Create non-root user for security
-RUN groupadd -r gateway && useradd -r -g gateway gateway
+RUN groupadd -r gateway && useradd -r -g gateway -d /home/gateway gateway
+
+# Create home directory for gateway user (needed by Nacos client cache)
+RUN mkdir -p /home/gateway && chown -R gateway:gateway /home/gateway
 
 # Copy pre-built jar (build locally first)
 COPY target/my-gateway-1.0.0.jar app.jar

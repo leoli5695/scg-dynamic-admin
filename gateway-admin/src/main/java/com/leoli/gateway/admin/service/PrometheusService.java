@@ -2,7 +2,10 @@ package com.leoli.gateway.admin.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leoli.gateway.admin.model.GatewayInstanceEntity;
+import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -23,6 +26,9 @@ public class PrometheusService {
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+
+    @Autowired
+    private GatewayInstanceRepository instanceRepository;
 
     public PrometheusService(RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
@@ -250,66 +256,48 @@ public class PrometheusService {
     }
 
     /**
-     * Get Gateway instances from Prometheus.
+     * Get Gateway instances from database (source of truth).
      * @param instanceId Optional instance ID to filter for a specific instance
      */
     private List<Map<String, Object>> getGatewayInstances(String instanceId) {
         List<Map<String, Object>> instances = new ArrayList<>();
 
         try {
-            // Query for gateway instances (using application tag)
-            String instanceFilter = buildInstanceFilter(instanceId);
-            String query = "up{application=\"my-gateway\"" + instanceFilter + "}";
-            String result = queryPrometheus(query);
-
-            JsonNode root = objectMapper.readTree(result);
-            JsonNode data = root.path("data").path("result");
-
-            // Check if we have actual metrics data from Prometheus
-            boolean hasPrometheusMetrics = hasActualMetricsData(instanceId);
-
-            // Also check if gateway is directly accessible (more reliable)
-            boolean gatewayAccessible = checkGatewayDirectly();
-
-            if (data.isArray()) {
-                for (JsonNode item : data) {
-                    Map<String, Object> instance = new HashMap<>();
-                    JsonNode metric = item.path("metric");
-                    JsonNode value = item.path("value");
-
-                    instance.put("instance", metric.path("instance").asText("unknown"));
-                    instance.put("job", metric.path("job").asText("unknown"));
-
-                    // Priority: direct check > Prometheus metrics > up metric
-                    String status;
-                    if (gatewayAccessible) {
-                        status = "UP";
-                    } else if (hasPrometheusMetrics) {
-                        status = "UP";
-                    } else if (value.isArray() && value.size() > 1) {
-                        status = "1".equals(value.get(1).asText()) ? "UP" : "DOWN";
-                    } else {
-                        status = "DOWN";
-                    }
-                    instance.put("status", status);
-                    instances.add(instance);
-                }
+            // Get instances from database (source of truth)
+            List<GatewayInstanceEntity> dbInstances;
+            if (instanceId != null && !instanceId.isEmpty()) {
+                dbInstances = instanceRepository.findByInstanceId(instanceId)
+                    .map(List::of)
+                    .orElse(List.of());
+            } else {
+                dbInstances = instanceRepository.findByEnabledTrue();
             }
 
-            // If no instances found from Prometheus, but gateway is accessible
-            if (instances.isEmpty() && gatewayAccessible) {
-                Map<String, Object> placeholder = new HashMap<>();
-                placeholder.put("instance", instanceId != null ? instanceId : "gateway-1");
-                placeholder.put("job", "gateway");
-                placeholder.put("status", "UP");
-                instances.add(placeholder);
-            } else if (instances.isEmpty()) {
-                // No data at all
-                Map<String, Object> placeholder = new HashMap<>();
-                placeholder.put("instance", instanceId != null ? instanceId : "localhost:80");
-                placeholder.put("job", "gateway");
-                placeholder.put("status", "PENDING");
-                instances.add(placeholder);
+            // Build instance list from database
+            for (GatewayInstanceEntity entity : dbInstances) {
+                Map<String, Object> instance = new HashMap<>();
+                instance.put("instance", entity.getInstanceId());
+                instance.put("instanceName", entity.getInstanceName());
+                instance.put("deploymentName", entity.getDeploymentName());
+                instance.put("job", "gateway");
+
+                // Determine status based on entity status
+                String status;
+                if ("Running".equalsIgnoreCase(entity.getStatus())) {
+                    status = "UP";
+                } else if ("Stopped".equalsIgnoreCase(entity.getStatus())) {
+                    status = "DOWN";
+                } else if ("Error".equalsIgnoreCase(entity.getStatus())) {
+                    status = "ERROR";
+                } else {
+                    status = "PENDING";
+                }
+                instance.put("status", status);
+                instances.add(instance);
+            }
+
+            if (instances.isEmpty()) {
+                log.debug("No gateway instances found in database");
             }
 
         } catch (Exception e) {

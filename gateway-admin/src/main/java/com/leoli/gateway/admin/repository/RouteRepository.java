@@ -22,6 +22,11 @@ public interface RouteRepository extends JpaRepository<RouteEntity, String> {
     Optional<RouteEntity> findByRouteName(String routeName);
 
     /**
+     * Find route by route ID.
+     */
+    Optional<RouteEntity> findByRouteId(String routeId);
+
+    /**
      * Find all enabled routes.
      */
     List<RouteEntity> findByEnabledTrue();
@@ -50,4 +55,9 @@ public interface RouteRepository extends JpaRepository<RouteEntity, String> {
      * Check if route name exists within an instance.
      */
     boolean existsByRouteNameAndInstanceId(String routeName, String instanceId);
+
+    /**
+     * Delete all routes by instance ID.
+     */
+    int deleteByInstanceId(String instanceId);
 }

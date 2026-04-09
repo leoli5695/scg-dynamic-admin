@@ -19,7 +19,9 @@ import java.time.LocalDateTime;
  */
 @Data
 @Entity
-@Table(name = "routes")
+@Table(name = "routes", indexes = {
+    @Index(name = "idx_route_instance_enabled", columnList = "instance_id, enabled")
+})
 public class RouteEntity {
 
     /**

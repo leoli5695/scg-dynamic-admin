@@ -3,37 +3,27 @@ import {
   Card, Button, Space, Modal, message, Spin, Tag, Form, Input, Select,
   Empty, Dropdown, Tooltip, Badge, Divider, Typography, Alert, Drawer,
   Row, Col, Statistic, Tabs, Table, Progress, InputNumber, Collapse, Popconfirm,
-  Descriptions
+  Descriptions, Input as AntInput
 } from 'antd';
 import {
   PlusOutlined, DeleteOutlined, EditOutlined, MoreOutlined,
   ClusterOutlined, CloudServerOutlined, ApiOutlined, LinkOutlined,
   ReloadOutlined, CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined,
   CopyOutlined, EyeOutlined, PlayCircleOutlined, StopOutlined, ExpandOutlined,
-  FileTextOutlined, SettingOutlined, GlobalOutlined, CodeOutlined
+  FileTextOutlined, SettingOutlined, GlobalOutlined, CodeOutlined,
+  DashboardOutlined, SafetyCertificateOutlined, RocketOutlined
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import type { ColumnType } from 'antd/es/table';
 import api from '../utils/api';
 import { useTranslation } from 'react-i18next';
+import { ClusterCardPremium } from '../components/ClusterCardPremium';
+import type { KubernetesCluster } from '../components/ClusterCardPremium';
+import { StatsCardPreminum } from '../components/ClusterStatsCard';
+import './KubernetesPage.professional.css';
 
 const { Text, Title, Paragraph } = Typography;
 const { TextArea } = Input;
-
-interface KubernetesCluster {
-  id: number;
-  clusterName: string;
-  serverUrl: string;
-  kubeconfig: string;
-  contextName: string;
-  clusterVersion: string;
-  connectionStatus: string;
-  lastCheckedAt: string;
-  description: string;
-  enabled: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
 
 interface NodeInfo {
   name: string;
@@ -130,69 +120,7 @@ const getStatusIcon = (status: string) => {
   }
 };
 
-// Separate component for cluster card to prevent re-renders
-interface ClusterCardProps {
-  cluster: KubernetesCluster;
-  onDetail: (cluster: KubernetesCluster) => void;
-  onRefresh: (cluster: KubernetesCluster) => void;
-  onDelete: (cluster: KubernetesCluster) => void;
-  t: (key: string) => string;
-}
 
-const ClusterCard = memo(({ cluster, onDetail, onRefresh, onDelete, t }: ClusterCardProps) => {
-  const handleDetail = useCallback(() => onDetail(cluster), [onDetail, cluster]);
-  const handleRefresh = useCallback(() => onRefresh(cluster), [onRefresh, cluster]);
-  const handleDelete = useCallback(() => onDelete(cluster), [onDelete, cluster]);
-
-  return (
-    <Card className="cluster-card" hoverable onClick={handleDetail}>
-      <div className="cluster-header">
-        <div className="cluster-icon"><ClusterOutlined /></div>
-        <div className="cluster-info">
-          <Text strong className="cluster-name">{cluster.clusterName}</Text>
-          <div className="cluster-id-row">
-            <Text className="cluster-version">{cluster.clusterVersion || 'N/A'}</Text>
-          </div>
-        </div>
-        <Space onClick={e => e.stopPropagation()}>
-          <Tooltip title={t('common.detail')}>
-            <Button type="text" size="small" icon={<EyeOutlined />} className="action-btn" onClick={handleDetail} />
-          </Tooltip>
-          <Tooltip title={t('k8s.refresh_connection')}>
-            <Button type="text" size="small" icon={<ReloadOutlined />} className="action-btn" onClick={handleRefresh} />
-          </Tooltip>
-          <Popconfirm
-            title={`${t('common.delete')}: ${cluster.clusterName}`}
-            onConfirm={handleDelete}
-            okText={t('common.confirm')}
-            cancelText={t('common.cancel')}
-          >
-            <Tooltip title={t('common.delete')}>
-              <Button type="text" size="small" danger icon={<DeleteOutlined />} className="action-btn" onClick={e => e.stopPropagation()} />
-            </Tooltip>
-          </Popconfirm>
-        </Space>
-      </div>
-      <Divider style={{ margin: '12px 0', borderColor: 'rgba(148, 163, 184, 0.15)' }} />
-      <div className="cluster-status">
-        <Space>
-          {getStatusIcon(cluster.connectionStatus)}
-          <Tag color={getStatusColor(cluster.connectionStatus)}>{cluster.connectionStatus}</Tag>
-          <Tag color={cluster.enabled ? 'green' : 'red'}>{cluster.enabled ? t('common.enabled') : t('common.disabled')}</Tag>
-        </Space>
-      </div>
-      <div className="cluster-meta">
-        <ApiOutlined />
-        <Text ellipsis>{cluster.serverUrl || 'N/A'}</Text>
-      </div>
-      {cluster.description && (
-        <div className="cluster-description">
-          <Text type="secondary" ellipsis>{cluster.description}</Text>
-        </div>
-      )}
-    </Card>
-  );
-});
 
 const KubernetesPage: React.FC = () => {
   const { t } = useTranslation();
@@ -414,20 +342,23 @@ const KubernetesPage: React.FC = () => {
 
   // Scale deployment
   const handleScaleDeployment = useCallback(async (deployment: DeploymentInfo, newReplicas: number) => {
+    const hide = message.loading({ content: t('k8s.scaling') || 'Scaling...', duration: 0 });
     try {
       const res = await api.put(
         `/api/kubernetes/clusters/${selectedCluster?.id}/deployments/${deployment.namespace}/${deployment.name}/scale`,
         { replicas: newReplicas }
       );
 
+      hide();
       if (res.data.code === 200) {
         message.success(t('k8s.scale_success'));
-        loadClusterResources(selectedCluster?.id!, deployment.namespace);
+        await loadClusterResources(selectedCluster?.id!, deployment.namespace);
       } else {
         message.error(res.data.message || t('k8s.scale_failed'));
       }
-    } catch (error) {
-      message.error(t('k8s.scale_failed'));
+    } catch (error: any) {
+      hide();
+      message.error(error.response?.data?.message || t('k8s.scale_failed'));
     }
   }, [selectedCluster, loadClusterResources, t]);
 
@@ -437,6 +368,8 @@ const KubernetesPage: React.FC = () => {
       title: t('k8s.delete_deployment_confirm_title'),
       content: t('k8s.delete_deployment_confirm_content', { name: deployment.name }),
       okType: 'danger',
+      okText: t('common.delete'),
+      cancelText: t('common.cancel'),
       onOk: async () => {
         try {
           const res = await api.delete(
@@ -444,13 +377,18 @@ const KubernetesPage: React.FC = () => {
           );
           if (res.data.code === 200) {
             message.success(t('k8s.delete_deployment_success'));
-            loadClusterResources(selectedCluster?.id!, deployment.namespace);
+            await loadClusterResources(selectedCluster?.id!, deployment.namespace);
           } else {
             message.error(res.data.message || t('k8s.delete_deployment_failed'));
           }
-        } catch (error) {
-          message.error(t('k8s.delete_deployment_failed'));
+          return true;
+        } catch (error: any) {
+          message.error(error.response?.data?.message || t('k8s.delete_deployment_failed'));
+          return false;
         }
+      },
+      onCancel: () => {
+        return true;
       }
     });
   }, [selectedCluster, loadClusterResources, t]);
@@ -521,7 +459,7 @@ const KubernetesPage: React.FC = () => {
       title: t('k8s.deployment_name'),
       dataIndex: 'name',
       key: 'name',
-      render: (name: string) => <Text strong>{name}</Text>
+      render: (name: string) => <Text strong style={{ color: '#fafafa' }}>{name}</Text>
     },
     {
       title: t('k8s.namespace'),
@@ -543,7 +481,7 @@ const KubernetesPage: React.FC = () => {
               status={ready === replicas ? 'success' : 'active'}
               style={{ width: 60 }}
             />
-            <Text>{ready}/{replicas}</Text>
+            <Text style={{ color: '#a1a1aa' }}>{ready}/{replicas}</Text>
           </Space>
         );
       }
@@ -551,28 +489,37 @@ const KubernetesPage: React.FC = () => {
     {
       title: t('common.actions'),
       key: 'actions',
-      width: 150,
+      width: 120,
       render: (_, record) => (
-        <Space>
+        <Space style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
           <Tooltip title={t('k8s.scale')}>
             <Button
               type="text"
               size="small"
               icon={<ExpandOutlined />}
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation();
                 Modal.confirm({
-                  title: t('k8s.scale_title'),
+                  title: <span style={{ color: '#fafafa', fontWeight: 600 }}>{t('k8s.scale_title')}</span>,
                   content: (
-                    <InputNumber
-                      min={1}
-                      max={10}
-                      defaultValue={record.replicas}
-                      id="scale-input"
-                    />
+                    <div style={{ padding: '20px 0' }}>
+                      <InputNumber
+                        min={1}
+                        max={10}
+                        defaultValue={record.replicas}
+                        style={{ width: '100%' }}
+                        autoFocus
+                      />
+                    </div>
                   ),
-                  onOk: () => {
-                    const input = document.getElementById('scale-input') as any;
-                    handleScaleDeployment(record, input?.value || record.replicas);
+                  okText: t('common.confirm'),
+                  cancelText: t('common.cancel'),
+                  onOk: async () => {
+                    await new Promise(resolve => setTimeout(resolve, 10));
+                    const input = document.querySelector('.ant-modal .ant-input-number input') as any;
+                    const newValue = input ? input.value || record.replicas : record.replicas;
+                    await handleScaleDeployment(record, Number(newValue));
+                    return true;
                   }
                 });
               }}
@@ -584,7 +531,10 @@ const KubernetesPage: React.FC = () => {
               size="small"
               danger
               icon={<DeleteOutlined />}
-              onClick={() => handleDeleteDeployment(record)}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDeleteDeployment(record);
+              }}
             />
           </Tooltip>
         </Space>
@@ -598,7 +548,9 @@ const KubernetesPage: React.FC = () => {
       title: t('k8s.pod_name'),
       dataIndex: 'name',
       key: 'name',
-      render: (name: string) => <Text strong style={{ cursor: 'pointer', color: '#60a5fa' }}>{name}</Text>
+      render: (name: string) => (
+        <span className="pod-name-link">{name}</span>
+      )
     },
     {
       title: t('k8s.namespace'),
@@ -625,10 +577,10 @@ const KubernetesPage: React.FC = () => {
       dataIndex: 'containers',
       key: 'containers',
       render: (containers: Array<{ name: string; ready: boolean; restartCount: number }>) => (
-        <Space direction="vertical" size="small">
+        <Space direction="vertical" size="small" style={{ margin: 0 }}>
           {containers?.map(c => (
-            <Tag key={c.name} color={c.ready ? 'green' : 'red'}>
-              {c.name} ({c.restartCount} restarts)
+            <Tag key={c.name} className="pod-container-tag" color={c.ready ? 'green' : 'red'}>
+              {c.name} ({c.restartCount})
             </Tag>
           ))}
         </Space>
@@ -656,11 +608,15 @@ const KubernetesPage: React.FC = () => {
     const total = clusters.length;
     const connected = clusters.filter(c => c.connectionStatus === 'CONNECTED').length;
     const enabled = clusters.filter(c => c.enabled).length;
-    return { total, connected, enabled };
+    const totalNodes = clusters.reduce((sum, c) => sum + (c.nodeCount || 0), 0);
+    const totalPods = clusters.reduce((sum, c) => sum + (c.podCount || 0), 0);
+    const totalCpu = clusters.reduce((sum, c) => sum + (c.totalCpuCores || 0), 0);
+    const totalMemory = clusters.reduce((sum, c) => sum + (c.totalMemoryGb || 0), 0);
+    return { total, connected, enabled, totalNodes, totalPods, totalCpu, totalMemory };
   }, [clusters]);
 
   return (
-    <div className="page-container">
+    <div className="page-container kubernetes-page">
       {/* Premium Page Header */}
       <div className="k8s-page-header">
         <div className="k8s-page-header-left">
@@ -683,48 +639,36 @@ const KubernetesPage: React.FC = () => {
       </div>
 
       {/* Stats Cards */}
-      <Row gutter={16} className="k8s-stats-row">
-        <Col span={6}>
-          <Card className="k8s-stat-card">
-            <Statistic
-              title={t('k8s.stats_total')}
-              value={stats.total}
-              prefix={<ClusterOutlined style={{ color: '#60a5fa' }} />}
-              valueStyle={{ color: '#f1f5f9' }}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card className="k8s-stat-card success">
-            <Statistic
-              title={t('k8s.stats_connected')}
-              value={stats.connected}
-              prefix={<CheckCircleOutlined style={{ color: '#34d399' }} />}
-              valueStyle={{ color: '#34d399' }}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card className="k8s-stat-card">
-            <Statistic
-              title={t('k8s.stats_enabled')}
-              value={stats.enabled}
-              prefix={<CloudServerOutlined style={{ color: '#60a5fa' }} />}
-              valueStyle={{ color: '#f1f5f9' }}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card className="k8s-stat-card">
-            <Statistic
-              title={t('k8s.deployments')}
-              value={deployments.length}
-              prefix={<PlayCircleOutlined style={{ color: '#a78bfa' }} />}
-              valueStyle={{ color: '#f1f5f9' }}
-            />
-          </Card>
-        </Col>
-      </Row>
+      <div className="k8s-stats-grid">
+        <StatsCardPreminum
+          title={t('k8s.stats_total')}
+          value={stats.total}
+          icon={<ClusterOutlined />}
+          iconType="default"
+          subtitle={t('k8s.clusters')}
+        />
+        <StatsCardPreminum
+          title={t('k8s.stats_connected')}
+          value={stats.connected}
+          icon={<CheckCircleOutlined />}
+          iconType="success"
+          subtitle={t('k8s.active_clusters')}
+        />
+        <StatsCardPreminum
+          title={t('k8s.stats_nodes')}
+          value={stats.totalNodes}
+          icon={<CloudServerOutlined />}
+          iconType="default"
+          subtitle={t('k8s.total_nodes')}
+        />
+        <StatsCardPreminum
+          title={t('k8s.stats_pods')}
+          value={stats.totalPods}
+          icon={<DashboardOutlined />}
+          iconType="default"
+          subtitle={t('k8s.running_pods')}
+        />
+      </div>
 
       {/* Action Buttons */}
       <div className="k8s-action-bar">
@@ -755,13 +699,12 @@ const KubernetesPage: React.FC = () => {
         ) : (
           <div className="cluster-grid">
             {clusters.map(cluster => (
-              <ClusterCard
+              <ClusterCardPremium
                 key={cluster.id}
                 cluster={cluster}
                 onDetail={openDetailDrawer}
                 onRefresh={handleRefreshConnection}
                 onDelete={handleDeleteCluster}
-                t={t}
               />
             ))}
           </div>
@@ -939,29 +882,33 @@ const KubernetesPage: React.FC = () => {
                 key: 'deployments',
                 label: t('k8s.deployments'),
                 children: (
-                  <div>
+                  <div className="k8s-deployments-container">
                     <div style={{ marginBottom: 16 }}>
                       <Select
                         value={selectedNamespace}
-                        onChange={(ns) => {
+                        onChange={async (ns) => {
                           setSelectedNamespace(ns);
-                          loadClusterResources(selectedCluster.id, ns);
+                          if (selectedCluster) {
+                            await loadClusterResources(selectedCluster.id, ns);
+                          }
                         }}
                         options={[
                           { label: t('k8s.all_namespaces') || 'All Namespaces', value: '' },
                           ...namespaces.map(ns => ({ label: ns, value: ns }))
                         ]}
-                        style={{ width: 200 }}
                         className="namespace-select"
+                        getPopupContainer={trigger => trigger.parentNode}
                       />
                     </div>
-                    <Table
-                      dataSource={deployments}
-                      columns={deploymentColumns}
-                      rowKey="name"
-                      size="small"
-                      pagination={{ pageSize: 10 }}
-                    />
+                    <div className="k8s-table-container">
+                      <Table
+                        dataSource={deployments}
+                        columns={deploymentColumns}
+                        rowKey="name"
+                        size="small"
+                        pagination={{ pageSize: 10 }}
+                      />
+                    </div>
                   </div>
                 )
               },
@@ -969,29 +916,33 @@ const KubernetesPage: React.FC = () => {
                 key: 'pods',
                 label: t('k8s.pods'),
                 children: (
-                  <div>
+                  <div className="k8s-pods-container">
                     <div style={{ marginBottom: 16 }}>
                       <Select
                         value={selectedNamespace}
-                        onChange={(ns) => {
+                        onChange={async (ns) => {
                           setSelectedNamespace(ns);
-                          loadClusterResources(selectedCluster.id, ns);
+                          if (selectedCluster) {
+                            await loadClusterResources(selectedCluster.id, ns);
+                          }
                         }}
                         options={[
                           { label: t('k8s.all_namespaces') || 'All Namespaces', value: '' },
                           ...namespaces.map(ns => ({ label: ns, value: ns }))
                         ]}
-                        style={{ width: 200 }}
                         className="namespace-select"
+                        getPopupContainer={trigger => trigger.parentNode}
                       />
                     </div>
-                    <Table
-                      dataSource={pods}
-                      columns={podColumns}
-                      rowKey="name"
-                      size="small"
-                      pagination={{ pageSize: 10 }}
-                    />
+                    <div className="k8s-table-container">
+                      <Table
+                        dataSource={pods}
+                        columns={podColumns}
+                        rowKey="name"
+                        size="small"
+                        pagination={{ pageSize: 10 }}
+                      />
+                    </div>
                   </div>
                 )
               }
@@ -1062,20 +1013,27 @@ const KubernetesPage: React.FC = () => {
       {/* Pod Detail Modal */}
       <Modal
         title={
-          <Space>
+          <div className="modal-pod-title">
             <CloudServerOutlined />
-            {selectedPod?.name}
+            <span className="modal-pod-name">{selectedPod?.name}</span>
             {selectedPod && (
               <Tag color={selectedPod.phase === 'Running' ? 'green' : selectedPod.phase === 'Pending' ? 'blue' : 'red'}>
                 {selectedPod.phase}
               </Tag>
             )}
-          </Space>
+          </div>
         }
         open={podDetailModalVisible}
-        onCancel={() => setPodDetailModalVisible(false)}
+        onCancel={() => {
+          setPodDetailModalVisible(false);
+          setPodDetail(null);
+          setPodYaml('');
+          setPodLogs('');
+          setPodDetailLoading(false);
+        }}
         footer={null}
         width={900}
+        destroyOnClose
       >
         <Spin spinning={podDetailLoading}>
           <Tabs
@@ -1086,64 +1044,102 @@ const KubernetesPage: React.FC = () => {
                 key: 'info',
                 label: t('k8s.pod_info'),
                 children: podDetail && (
-                  <div>
-                    <Card size="small" title={t('k8s.basic_info')} style={{ marginBottom: 16 }}>
-                      <Descriptions column={2} size="small">
-                        <Descriptions.Item label={t('k8s.namespace')}>{podDetail.namespace}</Descriptions.Item>
-                        <Descriptions.Item label="Pod IP">{podDetail.podIP}</Descriptions.Item>
-                        <Descriptions.Item label={t('k8s.host_ip')}>{podDetail.hostIP}</Descriptions.Item>
-                        <Descriptions.Item label={t('k8s.node')}>{podDetail.nodeName}</Descriptions.Item>
-                        <Descriptions.Item label={t('k8s.start_time')}>{podDetail.startTime}</Descriptions.Item>
-                        <Descriptions.Item label={t('k8s.service_account')}>{podDetail.serviceAccountName}</Descriptions.Item>
-                        <Descriptions.Item label={t('k8s.restart_policy')}>{podDetail.restartPolicy}</Descriptions.Item>
-                      </Descriptions>
-                    </Card>
-
-                    <Card size="small" title={t('k8s.containers')} style={{ marginBottom: 16 }}>
-                      {podDetail.containers?.map((container, idx) => (
-                        <div key={idx} style={{ marginBottom: 16, padding: 12, background: 'rgba(255,255,255,0.05)', borderRadius: 8 }}>
-                          <Space style={{ marginBottom: 8 }}>
-                            <Text strong>{container.name}</Text>
-                            <Tag color="blue">{container.image}</Tag>
-                          </Space>
-                          <Descriptions column={2} size="small">
-                            <Descriptions.Item label={t('k8s.image_pull_policy')}>{container.imagePullPolicy}</Descriptions.Item>
-                            <Descriptions.Item label={t('k8s.ready')}>
-                              {podDetail.containerStatuses?.find(s => s.name === container.name)?.ready ? (
-                                <Tag color="green">{t('k8s.ready_true')}</Tag>
-                              ) : (
-                                <Tag color="red">{t('k8s.ready_false')}</Tag>
-                              )}
-                            </Descriptions.Item>
-                            <Descriptions.Item label={t('k8s.restarts')}>
-                              {podDetail.containerStatuses?.find(s => s.name === container.name)?.restartCount || 0}
-                            </Descriptions.Item>
-                            {container.ports && container.ports.length > 0 && (
-                              <Descriptions.Item label={t('k8s.ports')}>
-                                {container.ports.map((p, i) => (
-                                  <Tag key={i}>{p.containerPort}/{p.protocol}</Tag>
-                                ))}
-                              </Descriptions.Item>
-                            )}
-                          </Descriptions>
-                          {container.env && container.env.length > 0 && (
-                            <div style={{ marginTop: 8 }}>
-                              <Text type="secondary">{t('k8s.env_vars')}:</Text>
-                              <div style={{ marginTop: 4, maxHeight: 100, overflow: 'auto' }}>
-                                {container.env.map((e, i) => (
-                                  <div key={i} style={{ fontSize: 12 }}>
-                                    <Text code>{e.name}</Text>: {e.value || `(${t('k8s.from_secret')})`}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
+                  <div className="pod-detail-container">
+                    {/* Basic Info */}
+                    <Card size="small" className="pod-detail-card" title={t('k8s.basic_info')}>
+                      <div className="pod-info-grid">
+                        <div className="pod-info-item">
+                          <span className="pod-info-label">{t('k8s.namespace')}</span>
+                          <span className="pod-info-value">{podDetail.namespace}</span>
                         </div>
-                      ))}
+                        <div className="pod-info-item">
+                          <span className="pod-info-label">Pod IP</span>
+                          <span className="pod-info-value">{podDetail.podIP}</span>
+                        </div>
+                        <div className="pod-info-item">
+                          <span className="pod-info-label">{t('k8s.host_ip')}</span>
+                          <span className="pod-info-value">{podDetail.hostIP}</span>
+                        </div>
+                        <div className="pod-info-item">
+                          <span className="pod-info-label">{t('k8s.node')}</span>
+                          <span className="pod-info-value">{podDetail.nodeName}</span>
+                        </div>
+                        <div className="pod-info-item">
+                          <span className="pod-info-label">{t('k8s.start_time')}</span>
+                          <span className="pod-info-value">{podDetail.startTime}</span>
+                        </div>
+                        <div className="pod-info-item">
+                          <span className="pod-info-label">{t('k8s.service_account')}</span>
+                          <span className="pod-info-value">{podDetail.serviceAccountName}</span>
+                        </div>
+                        <div className="pod-info-item">
+                          <span className="pod-info-label">{t('k8s.restart_policy')}</span>
+                          <span className="pod-info-value">{podDetail.restartPolicy}</span>
+                        </div>
+                      </div>
                     </Card>
 
+                    {/* Containers */}
+                    <Card size="small" className="pod-detail-card" title={t('k8s.containers')}>
+                      <div className="pod-container-section">
+                        {podDetail.containers?.map((container, idx) => (
+                          <div key={idx} className="pod-container-card">
+                            <div className="pod-container-title">
+                              <span className="pod-container-name-text">{container.name}</span>
+                              <Tag color="blue" style={{ fontSize: 11 }}>{container.image}</Tag>
+                            </div>
+                            <div className="pod-container-details">
+                              <div className="pod-container-detail-item">
+                                <span className="pod-container-detail-label">{t('k8s.image_pull_policy')}</span>
+                                <span className="pod-container-detail-value">{container.imagePullPolicy}</span>
+                              </div>
+                              <div className="pod-container-detail-item">
+                                <span className="pod-container-detail-label">{t('k8s.ready')}</span>
+                                <span className="pod-container-detail-value">
+                                  {podDetail.containerStatuses?.find(s => s.name === container.name)?.ready ? (
+                                    <Tag color="green" style={{ fontSize: 11 }}>{t('k8s.ready_true')}</Tag>
+                                  ) : (
+                                    <Tag color="red" style={{ fontSize: 11 }}>{t('k8s.ready_false')}</Tag>
+                                  )}
+                                </span>
+                              </div>
+                              <div className="pod-container-detail-item">
+                                <span className="pod-container-detail-label">{t('k8s.restarts')}</span>
+                                <span className="pod-container-detail-value">
+                                  {podDetail.containerStatuses?.find(s => s.name === container.name)?.restartCount || 0}
+                                </span>
+                              </div>
+                              {container.ports && container.ports.length > 0 && (
+                                <div className="pod-container-detail-item">
+                                  <span className="pod-container-detail-label">{t('k8s.ports')}</span>
+                                  <span className="pod-container-detail-value">
+                                    {container.ports.map((p, i) => (
+                                      <Tag key={i} style={{ fontSize: 11, marginRight: 4 }}>{p.containerPort}/{p.protocol}</Tag>
+                                    ))}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                            {container.env && container.env.length > 0 && (
+                              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #3f3f46' }}>
+                                <span className="pod-container-detail-label">{t('k8s.env_vars')}</span>
+                                <div style={{ marginTop: 8, maxHeight: 100, overflow: 'auto' }}>
+                                  {container.env.map((e, i) => (
+                                    <div key={i} style={{ fontSize: 12, marginBottom: 4 }}>
+                                      <code style={{ color: '#60a5fa' }}>{e.name}</code>: <span style={{ color: '#a1a1aa' }}>{e.value || `(${t('k8s.from_secret')})`}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
+
+                    {/* Conditions */}
                     {podDetail.conditions && podDetail.conditions.length > 0 && (
-                      <Card size="small" title={t('k8s.conditions')}>
+                      <Card size="small" className="pod-detail-card" title={t('k8s.conditions')} style={{ marginTop: 16 }}>
                         <Table
                           dataSource={podDetail.conditions}
                           rowKey="type"
@@ -1159,16 +1155,17 @@ const KubernetesPage: React.FC = () => {
                       </Card>
                     )}
 
+                    {/* Events */}
                     {podDetail.events && podDetail.events.length > 0 && (
-                      <Card size="small" title={t('k8s.events')} style={{ marginTop: 16 }}>
-                        <div style={{ maxHeight: 200, overflow: 'auto' }}>
+                      <Card size="small" className="pod-detail-card" title={t('k8s.events')} style={{ marginTop: 16 }}>
+                        <div className="pod-events-section">
                           {podDetail.events.map((event, idx) => (
-                            <div key={idx} style={{ padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                              <Space>
-                                <Tag color={event.type === 'Normal' ? 'blue' : 'orange'}>{event.reason}</Tag>
-                                <Text type="secondary" style={{ fontSize: 12 }}>{event.lastTimestamp}</Text>
-                              </Space>
-                              <div style={{ marginTop: 4, fontSize: 12 }}>{event.message}</div>
+                            <div key={idx} className="pod-event-card">
+                              <div className="pod-event-header-row">
+                                <Tag color={event.type === 'Normal' ? 'blue' : 'orange'} style={{ fontSize: 11 }}>{event.reason}</Tag>
+                                <span className="pod-event-timestamp">{event.lastTimestamp}</span>
+                              </div>
+                              <div className="pod-event-message-text">{event.message}</div>
                             </div>
                           ))}
                         </div>
@@ -1181,18 +1178,16 @@ const KubernetesPage: React.FC = () => {
                 key: 'yaml',
                 label: 'YAML',
                 children: (
-                  <div>
-                    <div style={{ marginBottom: 8 }}>
-                      <Button icon={<CopyOutlined />} onClick={copyYamlToClipboard}>
+                  <div className="pod-code-container">
+                    <div className="pod-code-header">
+                      <span style={{ color: '#a1a1aa', fontSize: 13 }}>YAML Definition</span>
+                      <Button className="copy-yaml-btn" icon={<CopyOutlined />} onClick={copyYamlToClipboard}>
                         {t('common.copy')}
                       </Button>
                     </div>
-                    <Input.TextArea
-                      value={podYaml}
-                      rows={20}
-                      readOnly
-                      style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}
-                    />
+                    <div className="pod-code-body">
+                      <pre className="pod-code-text">{podYaml}</pre>
+                    </div>
                   </div>
                 )
               },
@@ -1200,12 +1195,14 @@ const KubernetesPage: React.FC = () => {
                 key: 'logs',
                 label: t('k8s.logs'),
                 children: (
-                  <Input.TextArea
-                    value={podLogs}
-                    rows={20}
-                    readOnly
-                    style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, background: '#1a1a2e', color: '#e2e8f0' }}
-                  />
+                  <div className="pod-code-container">
+                    <div className="pod-code-header">
+                      <span style={{ color: '#a1a1aa', fontSize: 13 }}>Container Logs</span>
+                    </div>
+                    <div className="pod-code-body">
+                      <pre className="pod-code-text">{podLogs}</pre>
+                    </div>
+                  </div>
                 )
               }
             ]}

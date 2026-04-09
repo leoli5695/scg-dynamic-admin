@@ -24,10 +24,19 @@ public class TraceIdGlobalFilter implements GlobalFilter, Ordered {
 
     private static final String TRACE_ID_HEADER = "X-Trace-Id";
 
+    /**
+     * Attribute key for storing trace ID in exchange attributes.
+     * Other filters can use this to get the trace ID without parsing headers.
+     */
+    public static final String TRACE_ID_ATTR = "traceId";
+
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         // Get or generate trace ID
         String traceId = getOrGenerateTraceId(exchange);
+
+        // Store in exchange attributes for other filters to use
+        exchange.getAttributes().put(TRACE_ID_ATTR, traceId);
 
         // Add trace ID to MDC for logging
         MDC.put("traceId", traceId);

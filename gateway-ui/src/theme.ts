@@ -49,12 +49,15 @@ const theme: ThemeConfig = {
       colorBorder: 'rgba(148, 163, 184, 0.12)',
     },
     Select: {
-      colorBgContainer: '#111827',
-      colorBorder: 'rgba(148, 163, 184, 0.12)',
+      colorBgContainer: '#1e293b',
+      colorBorder: 'rgba(148, 163, 184, 0.35)',
+      colorText: '#f1f5f9',
+      colorBgContainerHover: '#243044',
     },
     Modal: {
       colorBgContainer: '#111827',
       colorBgElevated: '#1f2937',
+      lineWidthFocus: 0,
     },
     Drawer: {
       colorBgContainer: '#111827',

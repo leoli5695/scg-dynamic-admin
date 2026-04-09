@@ -18,10 +18,32 @@ import java.util.*;
 @Service
 @RequiredArgsConstructor
 public class AiAnalysisService {
-    
+
     private final AiConfigRepository aiConfigRepository;
     private final PrometheusService prometheusService;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    // 提供商显示名称
+    private static final Map<String, String> PROVIDER_NAMES = Map.of(
+        "OPENAI", "OpenAI",
+        "GEMINI", "Google Gemini",
+        "CLAUDE", "Anthropic Claude",
+        "QWEN", "通义千问",
+        "DEEPSEEK", "DeepSeek",
+        "KIMI", "Kimi Moonshot",
+        "GLM", "智谱GLM"
+    );
+
+    // 提供商区域
+    private static final Map<String, String> PROVIDER_REGIONS = Map.of(
+        "OPENAI", "OVERSEAS",
+        "GEMINI", "OVERSEAS",
+        "CLAUDE", "OVERSEAS",
+        "QWEN", "DOMESTIC",
+        "DEEPSEEK", "DOMESTIC",
+        "KIMI", "DOMESTIC",
+        "GLM", "DOMESTIC"
+    );
     
     // RestTemplate with 5 minute timeout for AI API calls
     private final RestTemplate restTemplate = createRestTemplate();
@@ -59,7 +81,32 @@ public class AiAnalysisService {
      * 获取所有提供商配置
      */
     public List<AiConfig> getAllProviders() {
-        return aiConfigRepository.findAll();
+        List<AiConfig> providers = aiConfigRepository.findAll();
+        // 如果数据库为空，初始化默认提供商
+        if (providers.isEmpty()) {
+            initializeProviders();
+            providers = aiConfigRepository.findAll();
+        }
+        return providers;
+    }
+
+    /**
+     * 初始化AI提供商配置
+     */
+    public void initializeProviders() {
+        log.info("Initializing AI providers...");
+        for (String provider : DEFAULT_BASE_URLS.keySet()) {
+            if (aiConfigRepository.findByProvider(provider).isEmpty()) {
+                AiConfig config = new AiConfig();
+                config.setProvider(provider);
+                config.setProviderName(PROVIDER_NAMES.getOrDefault(provider, provider));
+                config.setRegion(PROVIDER_REGIONS.getOrDefault(provider, "OVERSEAS"));
+                config.setIsValid(false);
+                aiConfigRepository.save(config);
+                log.info("Created AI provider: {}", provider);
+            }
+        }
+        log.info("AI providers initialization completed");
     }
     
     /**

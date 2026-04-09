@@ -1,0 +1,98 @@
+---
+# Consul PVC (数据持久化)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: consul-pvc
+  namespace: test
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: local-path
+
+---
+# Consul Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: consul
+  namespace: test
+  labels:
+    app: consul
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: consul
+  template:
+    metadata:
+      labels:
+        app: consul
+    spec:
+      containers:
+      - name: consul
+        image: hashicorp/consul:latest
+        ports:
+        - containerPort: 8500
+          name: http
+        - containerPort: 8600
+          name: dns
+        args:
+        - agent
+        - -server
+        - -bootstrap-expect=1
+        - -ui
+        - -client=0.0.0.0
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "256Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+        volumeMounts:
+        - name: consul-data
+          mountPath: /consul/data
+        livenessProbe:
+          httpGet:
+            path: /v1/status/leader
+            port: 8500
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /v1/status/leader
+            port: 8500
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+      volumes:
+      - name: consul-data
+        persistentVolumeClaim:
+          claimName: consul-pvc
+
+---
+# Consul Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: consul
+  namespace: test
+spec:
+  type: NodePort
+  selector:
+    app: consul
+  ports:
+  - name: http
+    port: 8500
+    targetPort: 8500
+    nodePort: 30500
+  - name: dns
+    port: 8600
+    targetPort: 8600
+    protocol: UDP
+    nodePort: 30501

@@ -14,7 +14,13 @@ import java.time.LocalDateTime;
  */
 @Data
 @Entity(name = "strategies")
-@Table(name = "strategies")
+@Table(name = "strategies", indexes = {
+    @Index(name = "idx_strategy_id", columnList = "strategy_id"),
+    @Index(name = "idx_strategy_instance_enabled", columnList = "instance_id, enabled"),
+    @Index(name = "idx_strategy_type_scope_enabled", columnList = "strategy_type, scope, enabled"),
+    @Index(name = "idx_strategy_scope_instance_enabled", columnList = "scope, instance_id, enabled"),
+    @Index(name = "idx_strategy_route_enabled", columnList = "route_id, enabled")
+})
 public class StrategyEntity {
 
     @Id
@@ -71,7 +77,7 @@ public class StrategyEntity {
     private String metadata;
     
     @Column(columnDefinition = "BOOLEAN DEFAULT TRUE")
-    private Boolean enabled;
+    private Boolean enabled = true;
     
     @Column(length = 500)
     private String description;

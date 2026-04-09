@@ -52,6 +52,36 @@ public class KubernetesCluster {
     private String clusterVersion;
 
     /**
+     * Number of nodes in the cluster.
+     */
+    @Column(name = "node_count")
+    private Integer nodeCount;
+
+    /**
+     * Number of running pods across all namespaces.
+     */
+    @Column(name = "pod_count")
+    private Integer podCount;
+
+    /**
+     * Number of active namespaces.
+     */
+    @Column(name = "namespace_count")
+    private Integer namespaceCount;
+
+    /**
+     * Total CPU capacity in cores.
+     */
+    @Column(name = "total_cpu_cores")
+    private Double totalCpuCores;
+
+    /**
+     * Total memory capacity in GB.
+     */
+    @Column(name = "total_memory_gb")
+    private Double totalMemoryGb;
+
+    /**
      * Connection status.
      */
     @Column(name = "connection_status", length = 50)

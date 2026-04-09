@@ -55,9 +55,9 @@ public class AuthPolicyDefinition {
     private boolean enabled = true;
 
     /**
-     * Description.
+     * Description (only for UI display, NOT pushed to Nacos)
      */
-    private String description;
+    private transient String description;
 
     // ==================== JWT Configuration ====================
 

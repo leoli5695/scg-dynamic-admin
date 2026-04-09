@@ -2,6 +2,7 @@ package com.leoli.gateway.admin;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leoli.gateway.admin.center.ConfigCenterService;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -31,9 +32,8 @@ public abstract class BaseIntegrationTest {
     @Autowired
     protected ObjectMapper objectMapper;
 
-    // Nacos API base URL
-    protected static final String NACOS_BASE_URL = "http://127.0.0.1:8848/nacos/v1/cs/configs";
-    protected static final String NACOS_GROUP = "DEFAULT_GROUP";
+    @Autowired
+    protected ConfigCenterService configCenterService;
 
     /**
      * Extract data from API response
@@ -63,22 +63,27 @@ public abstract class BaseIntegrationTest {
     }
 
     /**
-     * Get config from Nacos
+     * Get config from ConfigCenter (Nacos/Consul).
+     * Uses ConfigCenterService instead of direct HTTP call.
      */
-    protected String getNacosConfig(String dataId) throws Exception {
-        MvcResult result = mockMvc.perform(get(NACOS_BASE_URL)
-                        .param("dataId", dataId)
-                        .param("group", NACOS_GROUP))
-                .andReturn();
-        return result.getResponse().getContentAsString();
+    protected String getConfigFromCenter(String dataId) {
+        try {
+            return configCenterService.getConfig(dataId, String.class);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**
-     * Verify config exists in Nacos
+     * Verify config exists in ConfigCenter (Nacos/Consul).
+     * Uses ConfigCenterService instead of direct HTTP call.
      */
-    protected boolean nacosConfigExists(String dataId) throws Exception {
-        String content = getNacosConfig(dataId);
-        return content != null && !content.contains("config data not exist");
+    protected boolean configCenterExists(String dataId) {
+        try {
+            return configCenterService.configExists(dataId);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**

@@ -15,7 +15,10 @@ import java.time.LocalDateTime;
 @Table(name = "request_trace", indexes = {
     @Index(name = "idx_trace_time", columnList = "trace_time"),
     @Index(name = "idx_route_id", columnList = "route_id"),
-    @Index(name = "idx_status_code", columnList = "status_code")
+    @Index(name = "idx_status_code", columnList = "status_code"),
+    @Index(name = "idx_trace_instance", columnList = "instance_id"),
+    @Index(name = "idx_trace_instance_route", columnList = "instance_id, route_id"),
+    @Index(name = "idx_trace_instance_time", columnList = "instance_id, trace_time")
 })
 public class RequestTrace {
 

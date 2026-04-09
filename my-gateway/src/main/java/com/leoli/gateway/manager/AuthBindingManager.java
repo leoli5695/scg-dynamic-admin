@@ -2,6 +2,7 @@ package com.leoli.gateway.manager;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leoli.gateway.cache.JwtValidationCache;
 import com.leoli.gateway.center.spi.ConfigCenterService;
 import com.leoli.gateway.enums.AuthType;
 import com.leoli.gateway.model.AuthConfig;
@@ -48,8 +49,17 @@ public class AuthBindingManager {
     // Reverse index: routeId -> Set<policyId> (for route-triggered auth)
     private final Map<String, Set<String>> routePoliciesCache = new ConcurrentHashMap<>();
 
+    // Credential indices for O(1) lookup
+    private final Map<String, String> apiKeyIndex = new ConcurrentHashMap<>();        // apiKey -> policyId
+    private final Map<String, String> basicAuthIndex = new ConcurrentHashMap<>();     // username -> policyId
+    private final Map<String, String> accessKeyIndex = new ConcurrentHashMap<>();     // accessKey -> policyId
+    private final Map<String, String> clientIdIndex = new ConcurrentHashMap<>();      // clientId -> policyId
+
     @Autowired
     private ConfigCenterService configCenterService;
+
+    @Autowired
+    private JwtValidationCache jwtValidationCache;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -69,6 +79,13 @@ public class AuthBindingManager {
         if (policyId == null || config == null) {
             return;
         }
+
+        // Remove old credential indices if updating
+        AuthConfig oldConfig = policyCache.get(policyId);
+        if (oldConfig != null) {
+            removeCredentialIndices(oldConfig);
+        }
+
         policyCache.put(policyId, config);
 
         // Index by auth type
@@ -81,7 +98,92 @@ public class AuthBindingManager {
             }
         }
 
+        // Build credential indices for O(1) lookup
+        buildCredentialIndices(policyId, config);
+
         log.debug("Auth policy cached: {} (type={})", policyId, config.getAuthType());
+    }
+
+    /**
+     * Build credential indices for a policy.
+     */
+    private void buildCredentialIndices(String policyId, AuthConfig config) {
+        if (config == null) return;
+
+        String authType = config.getAuthType();
+        if (authType == null) return;
+
+        switch (authType) {
+            case "API_KEY":
+                if (config.getApiKey() != null) {
+                    apiKeyIndex.put(config.getApiKey(), policyId);
+                    log.debug("API Key index added: {} -> {}", config.getApiKey(), policyId);
+                }
+                break;
+            case "BASIC":
+                if (config.getBasicUsername() != null) {
+                    basicAuthIndex.put(config.getBasicUsername(), policyId);
+                    log.debug("Basic Auth index added: {} -> {}", config.getBasicUsername(), policyId);
+                }
+                break;
+            case "HMAC":
+                if (config.getAccessKey() != null) {
+                    accessKeyIndex.put(config.getAccessKey(), policyId);
+                    log.debug("Access Key index added: {} -> {}", config.getAccessKey(), policyId);
+                }
+                // Also index accessKeySecrets keys
+                if (config.getAccessKeySecrets() != null) {
+                    for (String key : config.getAccessKeySecrets().keySet()) {
+                        accessKeyIndex.put(key, policyId);
+                        log.debug("Access Key (secrets) index added: {} -> {}", key, policyId);
+                    }
+                }
+                break;
+            case "OAUTH2":
+                if (config.getClientId() != null) {
+                    clientIdIndex.put(config.getClientId(), policyId);
+                    log.debug("Client ID index added: {} -> {}", config.getClientId(), policyId);
+                }
+                break;
+        }
+    }
+
+    /**
+     * Remove credential indices for a policy.
+     */
+    private void removeCredentialIndices(AuthConfig config) {
+        if (config == null) return;
+
+        String authType = config.getAuthType();
+        if (authType == null) return;
+
+        switch (authType) {
+            case "API_KEY":
+                if (config.getApiKey() != null) {
+                    apiKeyIndex.remove(config.getApiKey());
+                }
+                break;
+            case "BASIC":
+                if (config.getBasicUsername() != null) {
+                    basicAuthIndex.remove(config.getBasicUsername());
+                }
+                break;
+            case "HMAC":
+                if (config.getAccessKey() != null) {
+                    accessKeyIndex.remove(config.getAccessKey());
+                }
+                if (config.getAccessKeySecrets() != null) {
+                    for (String key : config.getAccessKeySecrets().keySet()) {
+                        accessKeyIndex.remove(key);
+                    }
+                }
+                break;
+            case "OAUTH2":
+                if (config.getClientId() != null) {
+                    clientIdIndex.remove(config.getClientId());
+                }
+                break;
+        }
     }
 
     /**
@@ -89,6 +191,14 @@ public class AuthBindingManager {
      */
     public void removePolicy(String policyId) {
         AuthConfig config = policyCache.remove(policyId);
+
+        // Remove credential indices
+        if (config != null) {
+            removeCredentialIndices(config);
+        }
+
+        // Invalidate JWT cache for this policy
+        jwtValidationCache.invalidatePolicy(policyId);
 
         // Remove from route policies reverse index
         Set<String> routes = policyRoutesCache.get(policyId);
@@ -228,87 +338,112 @@ public class AuthBindingManager {
     }
 
     // ============================================================
-    // Authentication Logic - Find Policy by Credentials
+    // Authentication Logic - Find Policy by Credentials (O(1) lookup)
     // ============================================================
 
     /**
      * Find matching policy by Basic Auth credentials.
+     * Uses credential index for O(1) lookup.
      */
     public String findPolicyByBasicAuth(String username, String password) {
-        List<String> basicPolicies = getPoliciesByType(AuthType.BASIC);
-        for (String policyId : basicPolicies) {
-            AuthConfig config = policyCache.get(policyId);
-            if (config != null && config.isEnabled()) {
-                if (username != null && username.equals(config.getBasicUsername()) &&
-                    password != null && password.equals(config.getBasicPassword())) {
-                    return policyId;
-                }
-            }
+        if (username == null || password == null) {
+            return null;
         }
+
+        // O(1) lookup via index
+        String policyId = basicAuthIndex.get(username);
+        if (policyId == null) {
+            return null;
+        }
+
+        // Verify password matches
+        AuthConfig config = policyCache.get(policyId);
+        if (config != null && config.isEnabled() && password.equals(config.getBasicPassword())) {
+            return policyId;
+        }
+
         return null;
     }
 
     /**
      * Find matching policy by API Key.
+     * Uses credential index for O(1) lookup.
      */
     public String findPolicyByApiKey(String apiKey) {
-        List<String> apiKeyPolicies = getPoliciesByType(AuthType.API_KEY);
-        for (String policyId : apiKeyPolicies) {
+        if (apiKey == null) {
+            return null;
+        }
+
+        // O(1) lookup via index
+        String policyId = apiKeyIndex.get(apiKey);
+        if (policyId != null) {
             AuthConfig config = policyCache.get(policyId);
             if (config != null && config.isEnabled()) {
-                String validKey = config.getApiKey();
-                String prefix = config.getApiKeyPrefix();
+                return policyId;
+            }
+        }
 
-                // Check with prefix
+        // Handle API Key with prefix
+        for (Map.Entry<String, String> entry : apiKeyIndex.entrySet()) {
+            String storedKey = entry.getKey();
+            String pid = entry.getValue();
+            AuthConfig config = policyCache.get(pid);
+
+            if (config != null && config.isEnabled()) {
+                String prefix = config.getApiKeyPrefix();
                 if (prefix != null && !prefix.isEmpty()) {
-                    if (apiKey != null && apiKey.startsWith(prefix)) {
+                    if (apiKey.startsWith(prefix)) {
                         String keyWithoutPrefix = apiKey.substring(prefix.length());
-                        if (keyWithoutPrefix.equals(validKey)) {
-                            return policyId;
+                        if (keyWithoutPrefix.equals(storedKey)) {
+                            return pid;
                         }
                     }
-                } else if (apiKey != null && apiKey.equals(validKey)) {
-                    return policyId;
                 }
             }
         }
+
         return null;
     }
 
     /**
      * Find matching policy by HMAC Access Key.
+     * Uses credential index for O(1) lookup.
      */
     public String findPolicyByAccessKey(String accessKey) {
-        List<String> hmacPolicies = getPoliciesByType(AuthType.HMAC);
-        for (String policyId : hmacPolicies) {
+        if (accessKey == null) {
+            return null;
+        }
+
+        // O(1) lookup via index
+        String policyId = accessKeyIndex.get(accessKey);
+        if (policyId != null) {
             AuthConfig config = policyCache.get(policyId);
             if (config != null && config.isEnabled()) {
-                if (accessKey != null && accessKey.equals(config.getAccessKey())) {
-                    return policyId;
-                }
-                // Also check in accessKeySecrets map
-                Map<String, String> secrets = config.getAccessKeySecrets();
-                if (secrets != null && secrets.containsKey(accessKey)) {
-                    return policyId;
-                }
+                return policyId;
             }
         }
+
         return null;
     }
 
     /**
      * Find matching policy by OAuth2 Client ID.
+     * Uses credential index for O(1) lookup.
      */
     public String findPolicyByClientId(String clientId) {
-        List<String> oauth2Policies = getPoliciesByType(AuthType.OAUTH2);
-        for (String policyId : oauth2Policies) {
+        if (clientId == null) {
+            return null;
+        }
+
+        // O(1) lookup via index
+        String policyId = clientIdIndex.get(clientId);
+        if (policyId != null) {
             AuthConfig config = policyCache.get(policyId);
             if (config != null && config.isEnabled()) {
-                if (clientId != null && clientId.equals(config.getClientId())) {
-                    return policyId;
-                }
+                return policyId;
             }
         }
+
         return null;
     }
 
@@ -346,6 +481,10 @@ public class AuthBindingManager {
             if (configJson != null && !configJson.isEmpty()) {
                 AuthConfig config = objectMapper.readValue(configJson, AuthConfig.class);
                 if (config != null) {
+                    // Ensure policyId is set
+                    if (config.getPolicyId() == null || config.getPolicyId().isEmpty()) {
+                        config.setPolicyId(policyId);
+                    }
                     putPolicy(policyId, config);
                     log.info("Loaded auth policy from Nacos: {}", policyId);
                 }
@@ -392,6 +531,11 @@ public class AuthBindingManager {
         policyRoutesCache.clear();
         policiesByType.clear();
         routePoliciesCache.clear();
+        // Clear credential indices
+        apiKeyIndex.clear();
+        basicAuthIndex.clear();
+        accessKeyIndex.clear();
+        clientIdIndex.clear();
         log.info("Auth binding cache cleared");
     }
 
@@ -404,6 +548,11 @@ public class AuthBindingManager {
         stats.put("policyRoutesCount", policyRoutesCache.size());
         stats.put("routePoliciesCount", routePoliciesCache.size());
         stats.put("policiesByType", new HashMap<>(policiesByType));
+        // Credential index stats
+        stats.put("apiKeyIndexSize", apiKeyIndex.size());
+        stats.put("basicAuthIndexSize", basicAuthIndex.size());
+        stats.put("accessKeyIndexSize", accessKeyIndex.size());
+        stats.put("clientIdIndexSize", clientIdIndex.size());
         return stats;
     }
 }

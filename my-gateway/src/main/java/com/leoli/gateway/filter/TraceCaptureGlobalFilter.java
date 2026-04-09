@@ -29,6 +29,9 @@ import java.util.*;
  * Global filter for capturing error and slow requests for tracing and replay.
  * Records requests with 4xx/5xx status codes or high latency.
  *
+ * Note: This filter reuses the trace ID set by TraceIdGlobalFilter (order=-300).
+ * It reads the trace ID from exchange attributes instead of generating its own.
+ *
  * @author leoli
  */
 @Slf4j
@@ -36,7 +39,6 @@ import java.util.*;
 public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
 
     private static final String START_TIME_ATTR = "traceStartTime";
-    private static final String TRACE_ID_ATTR = "traceId";
     private static final String REQUEST_BODY_ATTR = "traceRequestBody";
 
     @Value("${gateway.admin-url:http://localhost:9090}")
@@ -55,7 +57,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
     private int maxBodySize;
 
     @Autowired
-    private WebClient.Builder webClientBuilder;
+    private WebClient webClient;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -65,13 +67,17 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
         final long startTime = System.currentTimeMillis();
         exchange.getAttributes().put(START_TIME_ATTR, startTime);
 
-        // Get or generate trace ID
-        String tid = exchange.getRequest().getHeaders().getFirst("X-Trace-Id");
-        if (tid == null || tid.isEmpty()) {
-            tid = UUID.randomUUID().toString();
+        // Get trace ID from TraceIdGlobalFilter (already set in exchange attributes)
+        String traceId = exchange.getAttribute(TraceIdGlobalFilter.TRACE_ID_ATTR);
+        if (traceId == null || traceId.isEmpty()) {
+            // Fallback: get from request header (should not happen if TraceIdGlobalFilter ran)
+            traceId = exchange.getRequest().getHeaders().getFirst("X-Trace-Id");
+            if (traceId == null || traceId.isEmpty()) {
+                traceId = UUID.randomUUID().toString();
+                log.debug("Generated fallback trace ID: {}", traceId);
+            }
         }
-        final String traceId = tid;
-        exchange.getAttributes().put(TRACE_ID_ATTR, traceId);
+        final String finalTraceId = traceId;
 
         ServerHttpRequest request = exchange.getRequest();
 
@@ -79,12 +85,12 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
         boolean shouldCaptureBody = shouldCaptureBody(request);
 
         if (shouldCaptureBody) {
-            return cacheRequestBodyAndContinue(exchange, chain, startTime, traceId);
+            return cacheRequestBodyAndContinue(exchange, chain, startTime, finalTraceId);
         }
 
         // Continue without caching body
         return chain.filter(exchange).then(Mono.fromRunnable(() -> {
-            afterRequest(exchange, startTime, traceId, null);
+            afterRequest(exchange, startTime, finalTraceId, null);
         }));
     }
 
@@ -211,7 +217,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
      */
     private void sendTraceToAdmin(Map<String, Object> trace) {
         try {
-            webClientBuilder.build()
+            webClient
                     .post()
                     .uri(adminUrl + "/api/traces/internal")
                     .contentType(MediaType.APPLICATION_JSON)
@@ -282,7 +288,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        // Run after response is received
+        // Run after response is received, but ensure TraceIdGlobalFilter (-300) has run first
         return 100;
     }
 }

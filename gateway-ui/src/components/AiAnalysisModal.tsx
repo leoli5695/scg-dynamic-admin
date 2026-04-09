@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  Modal, Tabs, Card, Select, Input, Button, Spin, message, Tag, Space, Divider,
+  Modal, Tabs, Card, Input, Button, Spin, message, Tag, Space, Divider,
   DatePicker, Radio
 } from 'antd';
 import {
@@ -107,11 +107,15 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
         message.success(t('ai.validate_success') || 'API Key验证成功');
       } else {
         setValidated(false);
-        message.error(t('ai.validate_failed') || 'API Key验证失败');
+        const errorMsg = res.data.message || t('ai.validate_failed') || 'API Key验证失败';
+        message.error(errorMsg);
+        console.error('Validation failed:', res.data);
       }
-    } catch (e) {
+    } catch (e: any) {
       setValidated(false);
-      message.error(t('ai.validate_failed') || 'API Key验证失败');
+      const errorMsg = e.response?.data?.message || e.message || t('ai.validate_failed') || 'API Key验证失败';
+      message.error(errorMsg);
+      console.error('Validation error:', e);
     } finally {
       setValidating(false);
     }
@@ -248,18 +252,24 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
           {selectedProvider && (
             <div style={{ marginTop: 16 }}>
               <Divider>{t('ai.config') || '配置'}</Divider>
-              
+
               <div style={{ marginBottom: 12 }}>
-                <label style={{ display: 'block', marginBottom: 4 }}>
+                <label style={{ display: 'block', marginBottom: 8 }}>
                   {t('ai.select_model') || '选择模型'}
                 </label>
-                <Select
-                  style={{ width: '100%' }}
+                <Radio.Group
                   value={selectedModel}
-                  onChange={setSelectedModel}
-                  placeholder={t('ai.select_model_placeholder') || '请选择模型'}
-                  options={models.map(m => ({ value: m, label: m }))}
-                />
+                  onChange={e => setSelectedModel(e.target.value)}
+                  style={{ width: '100%' }}
+                >
+                  <Space direction="vertical" style={{ width: '100%' }}>
+                    {models.map(m => (
+                      <Radio key={m} value={m} style={{ color: '#e2e8f0' }}>
+                        {m}
+                      </Radio>
+                    ))}
+                  </Space>
+                </Radio.Group>
               </div>
 
               <div style={{ marginBottom: 12 }}>
@@ -270,6 +280,8 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
                   value={apiKey}
                   onChange={e => { setApiKey(e.target.value); setValidated(false); }}
                   placeholder={t('ai.api_key_placeholder') || '请输入API Key'}
+                  autoComplete="new-password"
+                  data-lpignore="true"
                   suffix={
                     validated ? (
                       <CheckCircleOutlined style={{ color: '#52c41a' }} />
@@ -295,6 +307,8 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
                   value={baseUrl}
                   onChange={e => setBaseUrl(e.target.value)}
                   placeholder={t('ai.base_url_placeholder') || '留空使用默认地址'}
+                  autoComplete="off"
+                  data-lpignore="true"
                 />
               </div>
 
@@ -357,7 +371,9 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
                 onClick={handleSaveAndAnalyze}
                 block
               >
-                {t('ai.start_analysis') || '开始分析'}
+                {!validated ? (t('ai.please_validate_first') || '请先验证API Key') :
+                 !selectedModel ? (t('ai.please_select_model') || '请选择模型') :
+                 (t('ai.start_analysis') || '开始分析')}
               </Button>
             </div>
           )}
@@ -389,135 +405,241 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
       )}
 
       <style>{`
+        /* 防止 LastPass 等密码管理器注入的元素干扰表单 */
+        [data-lastpass-icon-root] {
+          display: none !important;
+          visibility: hidden !important;
+          pointer-events: none !important;
+        }
+        [data-lastpass-icon-root] * {
+          display: none !important;
+        }
+
         .ai-analysis-result {
           display: flex;
           flex-direction: column;
         }
-        
+
+        /* 结果容器 - 添加更好的背景和边框 */
         .ai-result-container {
-          background: var(--bg-section, #0f172a);
-          border: 1px solid var(--border-color, #1e293b);
+          background: linear-gradient(135deg, #0f172a 0%, #1a2338 100%);
+          border: 1px solid rgba(59, 130, 246, 0.2);
           border-radius: 12px;
-          padding: 20px;
+          padding: 24px;
           max-height: 500px;
           overflow: auto;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
         }
-        
+
         .ai-result-content {
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-          line-height: 1.7;
+          line-height: 1.8;
         }
-        
+
+        /* 主标题 - 添加醒目的卡片样式 */
         .ai-result-content h1 {
-          font-size: 18px;
-          font-weight: 600;
-          color: var(--text-primary, #e2e8f0);
-          border-bottom: 2px solid var(--border-color, #1e293b);
-          padding-bottom: 10px;
-          margin-top: 24px;
-          margin-bottom: 16px;
+          font-size: 20px;
+          font-weight: 700;
+          color: #f1f5f9;
+          background: linear-gradient(90deg, rgba(59, 130, 246, 0.15) 0%, transparent 100%);
+          border-left: 4px solid #3b82f6;
+          padding: 12px 16px;
+          margin: 0 0 20px 0;
+          border-radius: 0 8px 8px 0;
         }
-        
+
+        /* 二级标题 - 添加明显的分隔背景 */
         .ai-result-content h2 {
-          font-size: 16px;
+          font-size: 17px;
           font-weight: 600;
-          color: var(--text-primary, #e2e8f0);
-          margin-top: 20px;
-          margin-bottom: 12px;
+          color: #e2e8f0;
+          background: rgba(16, 185, 129, 0.1);
+          border-left: 3px solid #10b981;
+          padding: 10px 14px;
+          margin: 24px 0 16px 0;
+          border-radius: 0 6px 6px 0;
         }
-        
+
+        /* 三级标题 */
         .ai-result-content h3 {
-          font-size: 14px;
+          font-size: 15px;
           font-weight: 500;
-          color: var(--text-secondary, #94a3b8);
-          margin-top: 16px;
-          margin-bottom: 10px;
+          color: #94a3b8;
+          border-bottom: 1px dashed rgba(148, 163, 184, 0.3);
+          padding-bottom: 6px;
+          margin: 16px 0 12px 0;
         }
-        
+
+        /* 段落 */
         .ai-result-content p {
-          color: var(--text-primary, #e2e8f0);
-          margin-bottom: 12px;
+          color: #cbd5e1;
+          margin-bottom: 16px;
+          line-height: 1.8;
+          padding: 0 4px;
+        }
+
+        /* 无序列表 - 添加彩色圆点和卡片效果 */
+        .ai-result-content ul {
+          list-style: none;
+          padding-left: 0;
+          margin-bottom: 20px;
+        }
+
+        .ai-result-content ul li {
+          position: relative;
+          padding: 10px 12px 10px 24px;
+          margin-bottom: 8px;
+          background: rgba(30, 41, 59, 0.5);
+          border-radius: 6px;
+          border: 1px solid rgba(71, 85, 105, 0.3);
+          color: #e2e8f0;
+          line-height: 1.7;
+          transition: background 0.2s ease;
+        }
+
+        .ai-result-content ul li:hover {
+          background: rgba(30, 41, 59, 0.8);
+        }
+
+        .ai-result-content ul li::before {
+          content: '';
+          position: absolute;
+          left: 8px;
+          top: 14px;
+          width: 8px;
+          height: 8px;
+          background: #3b82f6;
+          border-radius: 50%;
+          box-shadow: 0 0 6px rgba(59, 130, 246, 0.5);
+        }
+
+        /* 有序列表 - 添加编号和卡片效果 */
+        .ai-result-content ol {
+          list-style: none;
+          padding-left: 0;
+          margin-bottom: 20px;
+          counter-reset: item;
+        }
+
+        .ai-result-content ol li {
+          position: relative;
+          counter-increment: item;
+          padding: 10px 12px 10px 36px;
+          margin-bottom: 8px;
+          background: rgba(30, 41, 59, 0.5);
+          border-radius: 6px;
+          border: 1px solid rgba(71, 85, 105, 0.3);
+          color: #e2e8f0;
           line-height: 1.7;
         }
-        
-        .ai-result-content ul,
-        .ai-result-content ol {
-          padding-left: 24px;
-          margin-bottom: 12px;
-          color: var(--text-primary, #e2e8f0);
+
+        .ai-result-content ol li::before {
+          content: counter(item);
+          position: absolute;
+          left: 10px;
+          top: 10px;
+          width: 20px;
+          height: 20px;
+          background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+          border-radius: 50%;
+          color: white;
+          font-size: 11px;
+          font-weight: 600;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+          line-height: 20px;
         }
-        
-        .ai-result-content li {
-          margin-bottom: 8px;
-          line-height: 1.6;
-        }
-        
+
+        /* 代码块 */
         .ai-result-content code {
-          background: var(--bg-code, #020617);
-          padding: 3px 8px;
+          background: #020617;
+          padding: 4px 10px;
           border-radius: 6px;
           font-family: 'JetBrains Mono', 'SF Mono', 'Monaco', 'Consolas', monospace;
-          font-size: 12px;
-          color: var(--text-primary, #e2e8f0);
-          border: 1px solid var(--border-color, #1e293b);
+          font-size: 13px;
+          color: #a5f3fc;
+          border: 1px solid rgba(71, 85, 105, 0.4);
         }
-        
+
         .ai-result-content pre {
-          background: var(--bg-code, #020617);
-          padding: 12px;
+          background: #020617;
+          padding: 16px;
           border-radius: 8px;
           overflow: auto;
-          margin: 12px 0;
-          border: 1px solid var(--border-color, #1e293b);
+          margin: 16px 0;
+          border: 1px solid rgba(59, 130, 246, 0.2);
+          box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3);
         }
-        
+
         .ai-result-content pre code {
           background: transparent;
           padding: 0;
           border: none;
+          color: #e2e8f0;
         }
-        
+
+        /* 引用块 */
         .ai-result-content blockquote {
-          border-left: 3px solid var(--border-color, #1e293b);
-          padding-left: 12px;
-          margin: 12px 0;
-          color: var(--text-secondary, #94a3b8);
-          background: rgba(255, 255, 255, 0.02);
-          padding: 10px 12px;
-          border-radius: 4px;
+          border-left: 3px solid #f59e0b;
+          padding: 12px 16px;
+          margin: 16px 0;
+          color: #94a3b8;
+          background: rgba(245, 158, 11, 0.08);
+          border-radius: 0 6px 6px 0;
+          font-style: italic;
         }
-        
+
+        /* 强调文字 */
         .ai-result-content strong {
           font-weight: 600;
-          color: var(--text-primary, #e2e8f0);
+          color: #f1f5f9;
+          background: rgba(59, 130, 246, 0.1);
+          padding: 2px 6px;
+          border-radius: 4px;
         }
-        
+
+        /* 表格 */
         .ai-result-content table {
           width: 100%;
           border-collapse: collapse;
-          margin: 12px 0;
-          background: var(--bg-card, #1a2338);
+          margin: 16px 0;
+          background: #1a2338;
           border-radius: 8px;
           overflow: hidden;
+          border: 1px solid rgba(71, 85, 105, 0.3);
         }
-        
+
         .ai-result-content th {
-          background: var(--bg-section, #0f172a);
-          padding: 10px 12px;
+          background: linear-gradient(90deg, #0f172a, #1e293b);
+          padding: 12px 16px;
           text-align: left;
           font-weight: 600;
-          color: var(--text-primary, #e2e8f0);
-          border-bottom: 1px solid var(--border-color, #1e293b);
+          color: #f1f5f9;
+          border-bottom: 2px solid #3b82f6;
         }
-        
+
         .ai-result-content td {
-          padding: 10px 12px;
-          color: var(--text-primary, #e2e8f0);
-          border-bottom: 1px solid var(--border-divider, #1e293b);
+          padding: 12px 16px;
+          color: #cbd5e1;
+          border-bottom: 1px solid rgba(71, 85, 105, 0.2);
         }
-        
+
         .ai-result-content tr:last-child td {
           border-bottom: none;
+        }
+
+        .ai-result-content tr:hover td {
+          background: rgba(30, 41, 59, 0.5);
+        }
+
+        /* 分隔线 */
+        .ai-result-content hr {
+          border: none;
+          height: 1px;
+          background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.3), transparent);
+          margin: 24px 0;
         }
       `}</style>
     </Modal>

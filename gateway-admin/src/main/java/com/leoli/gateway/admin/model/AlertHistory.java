@@ -15,7 +15,8 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "alert_history", indexes = {
     @Index(name = "idx_alert_type", columnList = "alert_type"),
-    @Index(name = "idx_alert_created_at", columnList = "created_at")
+    @Index(name = "idx_alert_created_at", columnList = "created_at"),
+    @Index(name = "idx_alert_instance_created", columnList = "instance_id, created_at")
 })
 public class AlertHistory {
 

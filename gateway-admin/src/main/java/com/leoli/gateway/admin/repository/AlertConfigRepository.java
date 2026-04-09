@@ -28,4 +28,9 @@ public interface AlertConfigRepository extends JpaRepository<AlertConfig, Long> 
      * Find all alert configs by instanceId
      */
     List<AlertConfig> findByInstanceIdIn(List<String> instanceIds);
+
+    /**
+     * Delete alert config by instance ID.
+     */
+    int deleteByInstanceId(String instanceId);
 }

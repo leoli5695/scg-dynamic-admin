@@ -50,8 +50,8 @@ public class InstanceHealthService {
 
     /**
      * Sync instance health status from Gateway (BATCH PROCESSING).
+     * Removed @Transactional to avoid rollback issues with alert sending.
      */
-    @Transactional
     public void syncHealthStatus(List<InstanceHealthDTO> healthList, String gatewayId) {
         log.info("Syncing {} health statuses from gateway {}", healthList.size(), gatewayId);
 
@@ -75,9 +75,13 @@ public class InstanceHealthService {
             // 2. Update local cache
             healthStore.put(key, health);
 
-            // 3. Sync to database (batch update)
+            // 3. Sync to database (batch update) - handled in separate transaction
             if (dbSyncEnabled && healthRepository != null) {
-                syncToDatabase(health);
+                try {
+                    syncToDatabase(health);
+                } catch (Exception e) {
+                    log.error("Failed to sync health to database: {}", e.getMessage());
+                }
             }
 
             // 4. Count statistics
@@ -87,8 +91,12 @@ public class InstanceHealthService {
                 unhealthyCount++;
                 // 5. Send alert only if state changed OR cooldown expired
                 if (stateChanged || shouldSendAlert(key)) {
-                    alertService.sendInstanceUnhealthyAlert(health);
-                    lastAlertTimeMap.put(key, System.currentTimeMillis());
+                    try {
+                        alertService.sendInstanceUnhealthyAlert(health);
+                        lastAlertTimeMap.put(key, System.currentTimeMillis());
+                    } catch (Exception e) {
+                        log.error("Failed to send alert: {}", e.getMessage());
+                    }
                 }
             }
         }

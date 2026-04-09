@@ -22,6 +22,11 @@ import java.util.Map;
 public class AuthConfig {
 
     /**
+     * Policy ID (unique identifier for the auth policy).
+     */
+    private String policyId;
+
+    /**
      * Route ID.
      */
     private String routeId;

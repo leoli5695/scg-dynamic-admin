@@ -140,4 +140,9 @@ public interface AuditLogRepository extends JpaRepository<AuditLogEntity, Long> 
      * Count audit logs by instanceId.
      */
     long countByInstanceId(String instanceId);
+
+    /**
+     * Delete all audit logs by instance ID.
+     */
+    int deleteByInstanceId(String instanceId);
 }

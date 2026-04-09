@@ -49,65 +49,78 @@
   font-size: 18px !important;
 }
 
-.ant-select-selector {
-  border-color: #fbbf24 !important;
-  border-width: 2px !important;
-  background: rgba(15, 23, 42, 0.98) !important;
+/* Ant Design v6 uses .ant-select-content instead of .ant-select-selector */
+.ant-select-content {
+  border-color: rgba(200, 210, 220, 0.6) !important;
+  border-width: 1.5px !important;
+  background: rgba(60, 80, 100, 0.95) !important;
+  backdrop-filter: blur(8px) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
 }
 
-.ant-select:hover .ant-select-selector {
-  border-color: #fcd34d !important;
-  box-shadow: 0 0 8px rgba(251, 191, 36, 0.4) !important;
+.ant-select-content .ant-select-selection-item {
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) !important;
 }
 
-.ant-select-focused .ant-select-selector {
-  border-color: #fcd34d !important;
-  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.4) !important;
+.ant-select:hover .ant-select-content {
+  border-color: rgba(148, 163, 184, 0.5) !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1) !important;
+}
+
+.ant-select-focused .ant-select-content {
+  border-color: rgba(59, 130, 246, 0.6) !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2) !important;
 }
 
 .ant-select-selection-item {
-  color: #ffffff !important;
-  font-weight: 700 !important;
-  font-size: 15px !important;
+  color: #f1f5f9 !important;
+  font-weight: 600 !important;
+  font-size: 14px !important;
 }
 
 .ant-select-selection-item-content {
-  color: #ffffff !important;
-  font-weight: 700 !important;
-  font-size: 15px !important;
+  color: #f1f5f9 !important;
+  font-weight: 600 !important;
+  font-size: 14px !important;
 }
 
 .ant-select-selection-placeholder {
-  color: #fbbf24 !important;
+  color: #94a3b8 !important;
   font-weight: 500 !important;
 }
 
 /* Select dropdown menu */
 .ant-select-dropdown {
-  background: #1e293b !important;
-  border: 2px solid #fbbf24 !important;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6) !important;
+  background: rgba(30, 41, 59, 0.95) !important;
+  border: 1px solid rgba(148, 163, 184, 0.25) !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5) !important;
+  backdrop-filter: blur(8px) !important;
 }
 
 .ant-select-item {
   color: #f1f5f9 !important;
   font-size: 14px !important;
+  padding: 10px 16px !important;
 }
 
-.ant-select-item-option-active {
-  background: rgba(251, 191, 36, 0.2) !important;
-  color: #ffffff !important;
+.ant-select-item:hover {
+  background: rgba(59, 130, 246, 0.15) !important;
 }
 
 .ant-select-item-option-selected {
-  background: rgba(251, 191, 36, 0.35) !important;
-  color: #ffffff !important;
+  background: rgba(251, 191, 36, 0.25) !important;
+  color: #fbbf24 !important;
   font-weight: 700 !important;
+  border-left: 3px solid #fbbf24 !important;
+  padding-left: 13px !important;
 }
 
 .ant-select-item-option-selected .ant-select-item-option-content {
   color: #fbbf24 !important;
   font-weight: 700 !important;
+  text-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
 }
 
 .ant-select-item-option-state {
@@ -268,29 +281,235 @@
   color: #f1f5f9 !important;
 }
 
-/* Modal */
-.ant-modal-content {
-  background: #111827 !important;
-  border: 1px solid rgba(30, 41, 59, 0.5) !important;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7) !important;
+/* ============================================================================
+   MODAL - Modern Minimalist Redesign (Vercel/Linear Style)
+   ============================================================================ */
+
+/* Remove all default outlines and borders */
+.ant-modal,
+.ant-modal *,
+.ant-modal-container,
+.ant-modal-container *,
+.ant-modal-root,
+.ant-modal-root * {
+  outline: none !important;
+  outline-color: transparent !important;
+  outline-width: 0 !important;
+  box-shadow: none !important;
 }
 
+.ant-modal {
+  border: none !important;
+}
+
+.ant-modal-container {
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+/* Modal backdrop - subtle dark */
+.ant-modal-mask {
+  background: rgba(0, 0, 0, 0.5) !important;
+  backdrop-filter: blur(4px) !important;
+}
+
+/* Modal content - clean card */
+.ant-modal-content {
+  background: #18181b !important;
+  border: 1px solid #27272a !important;
+  border-radius: 10px !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5) !important;
+  backdrop-filter: none !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Modal header - clean and simple */
 .ant-modal-header {
-  background: #1a2338 !important;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.2) !important;
-  color: #f1f5f9 !important;
+  background: transparent !important;
+  border-bottom: 1px solid #27272a !important;
+  border-radius: 0 !important;
+  padding: 18px 24px !important;
+  margin: 0 !important;
 }
 
 .ant-modal-title {
-  color: #f1f5f9 !important;
+  color: #fafafa !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.01em;
 }
 
+/* Modal body */
+.ant-modal-body {
+  background: transparent !important;
+  padding: 20px 24px !important;
+}
+
+/* Modal footer */
+.ant-modal-footer {
+  background: transparent !important;
+  border-top: 1px solid #27272a !important;
+  border-radius: 0 !important;
+  padding: 16px 24px !important;
+  margin: 0 !important;
+}
+
+/* Close button */
 .ant-modal-close {
-  color: #94a3b8 !important;
+  color: #71717a !important;
+  width: 32px !important;
+  height: 32px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 6px !important;
+  transition: all 0.15s ease !important;
 }
 
 .ant-modal-close:hover {
-  color: #f1f5f9 !important;
+  color: #a1a1aa !important;
+  background: #27272a !important;
+}
+
+/* Buttons in footer */
+.ant-modal-footer .ant-btn {
+  border-radius: 6px !important;
+  font-weight: 500 !important;
+  font-size: 14px !important;
+  padding: 6px 16px !important;
+  height: 36px !important;
+  transition: all 0.15s ease !important;
+  border: 1px solid transparent !important;
+}
+
+/* Primary button - white with dark text */
+.ant-modal-footer .ant-btn-primary {
+  background: #fafafa !important;
+  border-color: #fafafa !important;
+  color: #09090b !important;
+  box-shadow: none !important;
+}
+
+.ant-modal-footer .ant-btn-primary:hover {
+  background: #e4e4e7 !important;
+  border-color: #e4e4e7 !important;
+  color: #09090b !important;
+}
+
+.ant-modal-footer .ant-btn-primary:active {
+  background: #d4d4d8 !important;
+  border-color: #d4d4d8 !important;
+}
+
+/* Default button - subtle border */
+.ant-modal-footer .ant-btn-default {
+  background: transparent !important;
+  border-color: #3f3f46 !important;
+  color: #d4d4d8 !important;
+}
+
+.ant-modal-footer .ant-btn-default:hover {
+  background: #27272a !important;
+  border-color: #52525b !important;
+  color: #fafafa !important;
+}
+
+.ant-modal-footer .ant-btn-default:active {
+  background: #1f1f23 !important;
+  border-color: #3f3f46 !important;
+}
+
+/* Confirm Modal styling */
+.ant-modal-confirm-body {
+  padding: 0 !important;
+}
+
+.ant-modal-confirm-title {
+  color: #fafafa !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  margin-bottom: 12px !important;
+}
+
+.ant-modal-confirm-content {
+  color: #a1a1aa !important;
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+}
+
+/* Input fields in modal - clean style */
+.ant-modal .ant-input,
+.ant-modal .ant-input-affix-wrapper {
+  background: #09090b !important;
+  border: 1px solid #3f3f46 !important;
+  border-radius: 6px !important;
+  color: #fafafa !important;
+  padding: 8px 12px !important;
+  height: 36px !important;
+  transition: all 0.15s ease !important;
+}
+
+.ant-modal .ant-input:focus,
+.ant-modal .ant-input-affix-wrapper:focus,
+.ant-modal .ant-input-focused,
+.ant-modal .ant-input-affix-wrapper-focused {
+  border-color: #71717a !important;
+  box-shadow: 0 0 0 2px rgba(113, 113, 122, 0.1) !important;
+  background: #0f0f11 !important;
+}
+
+.ant-modal .ant-input:hover,
+.ant-modal .ant-input-affix-wrapper:hover {
+  border-color: #52525b !important;
+}
+
+.ant-modal .ant-input::placeholder,
+.ant-modal .ant-input-affix-wrapper .ant-input::placeholder {
+  color: #52525b !important;
+}
+
+/* Select fields in modal */
+.ant-modal .ant-select {
+  color: #fafafa !important;
+}
+
+.ant-modal .ant-select-selector,
+.ant-modal .ant-select-content {
+  background: #09090b !important;
+  border: 1px solid #3f3f46 !important;
+  border-radius: 6px !important;
+  color: #fafafa !important;
+  height: 36px !important;
+  transition: all 0.15s ease !important;
+}
+
+.ant-modal .ant-select-open .ant-select-content,
+.ant-modal .ant-select-focused .ant-select-content {
+  border-color: #71717a !important;
+  box-shadow: 0 0 0 2px rgba(113, 113, 122, 0.1) !important;
+  background: #0f0f11 !important;
+}
+
+.ant-modal .ant-select:hover .ant-select-content {
+  border-color: #52525b !important;
+}
+
+/* Divider lines in modal */
+.ant-modal .ant-divider {
+  border-color: #27272a !important;
+  margin: 16px 0 !important;
+}
+
+/* Form item labels */
+.ant-modal .ant-form-item-label > label {
+  color: #a1a1aa !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+}
+
+.ant-modal .ant-form-item-label > label:hover {
+  color: #d4d4d8 !important;
 }
 
 /* Tabs */
@@ -3830,7 +4049,18 @@
 
 /* Divider */
 .ant-divider {
-  border-color: #E2E8F0 !important;
+  border: none !important;
+  border-top: 1px solid transparent !important;
+  background: linear-gradient(90deg, 
+    transparent 0%, 
+    rgba(148, 163, 184, 0.2) 20%,
+    rgba(148, 163, 184, 0.2) 80%,
+    transparent 100%) !important;
+  margin: 16px 0 !important;
+}
+
+.ant-divider-horizontal {
+  border-top: 1px solid transparent !important;
 }
 
 /* Alert */
@@ -5153,9 +5383,19 @@
 /* 实例卡片 */
 .instance-card {
   padding: 20px !important;
-  background: #111827 !important;
+  background: rgba(17, 24, 39, 0.8) !important;
   border: 1px solid rgba(148, 163, 184, 0.15) !important;
   border-radius: 12px !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+.instance-card:hover {
+  transform: translateY(-4px) !important;
+  border-color: rgba(59, 130, 246, 0.5) !important;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4),
+              0 0 0 1px rgba(59, 130, 246, 0.1) !important;
+  background: rgba(17, 24, 39, 0.95) !important;
 }
 
 /* 图表容器 */
@@ -6676,12 +6916,14 @@ html {
 
 /* Premium description list */
 .ant-descriptions-item-label {
-  color: var(--text-secondary) !important;
+  color: #cbd5e1 !important;
+  font-weight: 500 !important;
   background: rgba(102, 126, 234, 0.05) !important;
 }
 
 .ant-descriptions-item-content {
-  color: var(--text-primary) !important;
+  color: #f1f5f9 !important;
+  font-weight: 400 !important;
 }
 
 /* Premium code block styling */
@@ -9744,6 +9986,83 @@ kbd {
   color: #94a3b8;
   font-size: 15px;
   margin-bottom: 20px;
+}
+
+/* ==================== Instance Cards - Premium Enhancement ==================== */
+/* 统一操作按钮尺寸 */
+.instance-card .ant-btn-text {
+  width: 32px !important;
+  height: 32px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 6px !important;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+.instance-card .ant-btn-text:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  transform: scale(1.15) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* 停止按钮 - 黄色 */
+.instance-card .ant-btn-text[style*="color: rgb(250, 173, 20)"],
+.instance-card .ant-btn-text[style*="color: #faad14"] {
+  color: #fbbf24 !important;
+}
+
+.instance-card .ant-btn-text[style*="color: rgb(250, 173, 20)"]:hover,
+.instance-card .ant-btn-text[style*="color: #faad14"]:hover {
+  background: rgba(251, 191, 36, 0.15) !important;
+  color: #fcd34d !important;
+}
+
+/* 启动按钮 - 绿色 */
+.instance-card .ant-btn-text[style*="color: rgb(82, 196, 26)"],
+.instance-card .ant-btn-text[style*="color: #52c41a"] {
+  color: #22c55e !important;
+}
+
+.instance-card .ant-btn-text[style*="color: rgb(82, 196, 26)"]:hover,
+.instance-card .ant-btn-text[style*="color: #52c41a"]:hover {
+  background: rgba(34, 197, 94, 0.15) !important;
+  color: #4ade80 !important;
+}
+
+/* 刷新按钮 - 蓝色 */
+.instance-card .ant-btn-text[style*="color: rgb(22, 93, 255)"],
+.instance-card .ant-btn-text[style*="color: #165DFF"] {
+  color: #3b82f6 !important;
+}
+
+.instance-card .ant-btn-text[style*="color: rgb(22, 93, 255)"]:hover,
+.instance-card .ant-btn-text[style*="color: #165DFF"]:hover {
+  background: rgba(59, 130, 246, 0.15) !important;
+  color: #60a5fa !important;
+}
+
+/* 删除按钮 - 红色 (danger) */
+.instance-card .ant-btn-dangerous.ant-btn-text {
+  color: #ef4444 !important;
+}
+
+.instance-card .ant-btn-dangerous.ant-btn-text:hover {
+  background: rgba(239, 68, 68, 0.15) !important;
+  color: #f87171 !important;
+}
+
+/* 状态标签增强 */
+.instance-card .ant-tag {
+  border: 1px solid currentColor !important;
+  background: rgba(0, 0, 0, 0.2) !important;
+  font-weight: 600 !important;
+  backdrop-filter: blur(4px) !important;
+}
+
+/* 卡片图标增强 */
+.instance-card .anticon[style*="font-size: 24px"] {
+  filter: drop-shadow(0 2px 8px rgba(59, 130, 246, 0.4)) !important;
 }
 
 

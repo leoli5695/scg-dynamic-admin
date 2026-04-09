@@ -6,9 +6,9 @@ spring:
     name: gateway-admin
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://127.0.0.1:3306/gateway_admin?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: root
-    password: 123456
+    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/gateway_admin?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:123456}
   jpa:
     hibernate:
       ddl-auto: update  # Auto-create tables if not exist
@@ -19,9 +19,9 @@ spring:
         dialect: org.hibernate.dialect.MySQLDialect
   data:
     redis:
-      host: 127.0.0.1
-      port: 6379
-      password:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
       database: 0
       timeout: 5000ms
       lettuce:
@@ -32,13 +32,14 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: 127.0.0.1:8848
-        namespace: public
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:public}
         group: DEFAULT_GROUP
-        ip: 127.0.0.1  # Force registration with localhost IP
+        ip: ${NACOS_DISCOVERY_IP:127.0.0.1}  # Force registration with localhost IP
+        enabled: ${NACOS_DISCOVERY_ENABLED:false}  # Disable discovery registration for local dev with NodePort
     consul:
-      host: 127.0.0.1
-      port: 8500
+      host: ${CONSUL_HOST:consul}
+      port: ${CONSUL_PORT:8500}
       discovery:
         enabled: false  # Disable service discovery for admin console
       config:
@@ -51,18 +52,22 @@ gateway:
     type: nacos  # default config center type, can be 'nacos' or 'consul'
   admin:
     url: ${GATEWAY_ADMIN_URL:http://localhost:9090}
+    # K8s internal URL for gateway instances to connect to admin
+    # For Rancher Desktop WSL/K3s, use host.rancher-desktop.internal which resolves to the host machine
+    k8sUrl: ${GATEWAY_ADMIN_K8S_URL:http://host.rancher-desktop.internal:9090}
     jwt:
       secret: ${GATEWAY_ADMIN_JWT_SECRET:mySecretKeyForJWTTokenGenerationWhichMustBeLongEnoughAndSecure}
       expiration: 86400000  # 24 hours in milliseconds
-      enabled: true  # ✅ Enable JWT for production
+      enabled: true  # Enable JWT for production
   # Prometheus configuration for Gateway monitoring
   prometheus:
-    url: ${PROMETHEUS_URL:http://localhost:9091}
+    url: ${PROMETHEUS_URL:http://127.0.0.1:30090}
   consul:
-    host: 127.0.0.1
-    port: 8500
+    host: ${CONSUL_HOST:consul}
+    port: ${CONSUL_PORT:8500}
     prefix: config
   nacos:
+    server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
     data-ids:
       # Note: Services use incremental format now (not configured here)
       plugins: gateway-plugins.json    # Full plugin strategies config
@@ -114,3 +119,26 @@ mail:
     from-email: leoli1106@163.com
     from-name: API Gateway
     use-ssl: true
+
+# Nacos configuration
+# For gateway instances deployed in K8s, use k8s-server-addr (cluster internal address)
+# Format: {service-name}.{namespace}.svc.cluster.local:{port}
+nacos:
+  server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+  # K8s internal address for gateway instances (auto-generated if k8s-namespace and k8s-service-name are set)
+  k8s-server-addr: ${NACOS_K8S_SERVER_ADDR:}
+  k8s-namespace: ${NACOS_K8S_NAMESPACE:test}
+  k8s-service-name: ${NACOS_K8S_SERVICE_NAME:nacos}
+  k8s-port: ${NACOS_K8S_PORT:8848}
+  group: DEFAULT_GROUP
+
+# Redis configuration (optional, for distributed rate limiting)
+# If not configured, gateway will use local rate limiting
+redis:
+  host: ${REDIS_HOST:127.0.0.1}
+  port: ${REDIS_PORT:6379}
+  # K8s internal address for gateway instances
+  k8s-server-addr: ${REDIS_K8S_SERVER_ADDR:}
+  k8s-namespace: ${REDIS_K8S_NAMESPACE:test}
+  k8s-service-name: ${REDIS_K8S_SERVICE_NAME:redis}
+  k8s-port: ${REDIS_K8S_PORT:6379}

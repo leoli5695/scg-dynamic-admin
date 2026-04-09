@@ -268,10 +268,11 @@ public class ShadowQuotaManager {
      * @param configQps  Configured QPS for the route
      */
     public void registerRoute(String routeId, int configQps) {
-        shadowQuotas.computeIfAbsent(routeId, k -> new AtomicLong(configQps / minNodeCount));
+        int nodeCount = Math.max(1, minNodeCount); // Prevent division by zero
+        shadowQuotas.computeIfAbsent(routeId, k -> new AtomicLong(configQps / nodeCount));
         globalQpsSnapshots.computeIfAbsent(routeId, k -> new AtomicLong(configQps));
         log.debug("Registered route {} for shadow quota tracking, initial quota: {}",
-                routeId, configQps / minNodeCount);
+                routeId, configQps / nodeCount);
     }
 
     /**

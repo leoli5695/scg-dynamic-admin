@@ -17,7 +17,10 @@ import java.time.LocalDateTime;
  */
 @Data
 @Entity
-@Table(name = "auth_policies")
+@Table(name = "auth_policies", indexes = {
+    @Index(name = "idx_auth_policy_instance_enabled", columnList = "instance_id, enabled"),
+    @Index(name = "idx_auth_policy_instance_type", columnList = "instance_id, auth_type")
+})
 public class AuthPolicyEntity {
 
     @Id

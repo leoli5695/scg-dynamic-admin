@@ -1,7 +1,9 @@
 package com.leoli.gateway.limiter;
 
+import com.leoli.gateway.config.RedisEnabledCondition;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
@@ -18,7 +20,8 @@ import java.util.Collections;
  */
 @Component
 @Slf4j
-public class RedisRateLimiter {
+@Conditional(RedisEnabledCondition.class)
+public class DistributedRateLimiter {
 
     @Autowired(required = false)
     private StringRedisTemplate redisTemplate;

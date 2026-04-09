@@ -23,7 +23,10 @@ public class StrategyDefinition {
     private int priority = 100;
     private boolean enabled = true;
     private Map<String, Object> config = new HashMap<>();
-    private String description;
+    /**
+     * Description (only for UI display, NOT pushed to Nacos)
+     */
+    private transient String description;
 
     public static final String TYPE_RATE_LIMITER = "RATE_LIMITER";
     public static final String TYPE_IP_FILTER = "IP_FILTER";
