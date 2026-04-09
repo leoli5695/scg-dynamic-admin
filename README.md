@@ -6,7 +6,7 @@
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2-brightgreen)](https://spring.io/projects/spring-boot)
 [![Spring Cloud Gateway](https://img.shields.io/badge/Spring%20Cloud%20Gateway-4.1-blue)](https://spring.io/projects/spring-cloud-gateway)
 [![React](https://img.shields.io/badge/React-19-blue)](https://react.dev/)
-[![Tests](https://img.shields.io/badge/Tests-441%20Passing-success)]()
+[![Tests](https://img.shields.io/badge/Tests-500%20Passing-success)]()
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 ---
@@ -49,6 +49,16 @@
 | **Rate Limiting** | Redis + local hybrid with graceful degradation when Redis fails |
 | **Circuit Breaker** | Resilience4j integration - protect downstream from cascading failures |
 | **Security Hardening** | Built-in XSS, SQL injection, CSRF protection |
+
+### Advanced Traffic Management (New)
+
+| Feature | Description |
+|---------|-------------|
+| **Multi-Dimensional Rate Limiting** | Hierarchical rate limits: Global → Tenant → User → IP with Redis + local fallback |
+| **Request Body Transformation** | Protocol conversion (JSON↔XML), field mapping, data masking for sensitive fields |
+| **Response Body Transformation** | Transform backend responses before returning to clients |
+| **Request Validation** | JSON Schema validation, required field checks, type constraints |
+| **Mock Response** | Static/dynamic/template responses for frontend-backend collaboration, with delay/error simulation |
 
 ### Observability & Operations
 
@@ -97,7 +107,8 @@
 │  │                                                                     │   │
 │  │   Request ──▶ Filter Chain ──▶ Backend Services                   │   │
 │  │                                                                     │   │
-│  │   Filters: Security ▶ IP Filter ▶ Auth ▶ Rate Limit ▶ CB ▶ LB    │   │
+│  │   Filters: Security ▶ IP Filter ▶ Auth ▶ Rate Limit ▶ Multi-Dim RL ▶    │   │
+│  │            Req Transform ▶ Validation ▶ Mock ▶ CB ▶ Resp Transform ▶ LB│   │
 │  └───────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -365,9 +376,9 @@ The project has comprehensive test coverage:
 
 | Module | Tests | Status |
 |--------|-------|--------|
-| **my-gateway** | 281 | ✅ All Passing |
+| **my-gateway** | 332 | ✅ All Passing |
 | **gateway-admin** | 160 | ✅ All Passing |
-| **Total** | **441** | ✅ **All Passing** |
+| **Total** | **492** | ✅ **All Passing** |
 
 Run tests:
 ```bash
@@ -394,7 +405,7 @@ cd my-gateway && mvn test
 .
 ├── my-gateway/                 # Core gateway runtime (Data Plane)
 │   └── src/main/java/
-│       ├── filter/             # Global filters (18+ filters)
+│       ├── filter/             # Global filters (23+ filters)
 │       ├── auth/               # Authentication processors
 │       ├── ssl/                # SSL certificate management
 │       ├── center/             # Config center SPI
