@@ -317,19 +317,6 @@ public class RouteController extends BaseController {
     }
 
     /**
-     * Batch create/update routes - NOT IMPLEMENTED in current version.
-     * Use individual create/update operations instead.
-     */
-    @PostMapping("/batch")
-    public ResponseEntity<Map<String, Object>> batchUpdateRoutes(@RequestBody List<RouteDefinition> routes) {
-        log.warn("Batch update operation is not implemented. Please use individual create/update endpoints.");
-        Map<String, Object> result = new HashMap<>();
-        result.put("code", 501);
-        result.put("message", "Batch update is not implemented. Please create/update routes individually.");
-        return ResponseEntity.status(501).body(result);
-    }
-
-    /**
      * Reload routes from Nacos - NO LONGER NEEDED.
      * Routes are automatically loaded by RouteRefresher on startup.
      */
@@ -340,29 +327,5 @@ public class RouteController extends BaseController {
         result.put("code", 200);
         result.put("message", "Routes are automatically managed. No manual reload required.");
         return ResponseEntity.ok(result);
-    }
-
-    /**
-     * Get route statistics - NOT IMPLEMENTED in current version.
-     */
-    @GetMapping("/stats")
-    public ResponseEntity<Map<String, Object>> getRouteStats() {
-        log.warn("Route statistics endpoint is not implemented.");
-        Map<String, Object> result = new HashMap<>();
-        result.put("code", 501);
-        result.put("message", "Route statistics is not implemented yet.");
-        return ResponseEntity.status(501).body(result);
-    }
-
-    /**
-     * Get routes by service name - NOT IMPLEMENTED in current version.
-     */
-    @GetMapping("/service/{serviceName}")
-    public ResponseEntity<Map<String, Object>> getRoutesByService(@PathVariable String serviceName) {
-        log.warn("Get routes by service endpoint is not implemented.");
-        Map<String, Object> result = new HashMap<>();
-        result.put("code", 501);
-        result.put("message", "Get routes by service is not implemented yet.");
-        return ResponseEntity.status(501).body(result);
     }
 }

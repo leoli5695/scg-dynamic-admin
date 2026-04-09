@@ -201,6 +201,11 @@ management:
   health:
     consul:
       enabled: false
+    # Enable Kubernetes liveness/readiness probes
+    liveness:
+      enabled: true
+    readiness:
+      enabled: true
   # OpenTelemetry Tracing Configuration
   tracing:
     enabled: ${OTEL_TRACING_ENABLED:true}

@@ -404,18 +404,6 @@ public class ServiceController extends BaseController {
     }
 
     /**
-     * Get service statistics.
-     * TODO: Implement in future version
-     */
-    @GetMapping("/stats")
-    public ResponseEntity<Map<String, Object>> getServiceStats() {
-        Map<String, Object> result = new HashMap<>();
-        result.put("code", 501);
-        result.put("message", "Not implemented yet: getServiceStats");
-        return ResponseEntity.status(501).body(result);
-    }
-
-    /**
      * Get registered service names from Nacos service discovery.
      */
     @GetMapping("/nacos-discovery")

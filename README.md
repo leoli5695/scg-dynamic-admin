@@ -6,7 +6,7 @@
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2-brightgreen)](https://spring.io/projects/spring-boot)
 [![Spring Cloud Gateway](https://img.shields.io/badge/Spring%20Cloud%20Gateway-4.1-blue)](https://spring.io/projects/spring-cloud-gateway)
 [![React](https://img.shields.io/badge/React-19-blue)](https://react.dev/)
-[![Tests](https://img.shields.io/badge/Tests-382%20Passing-success)]()
+[![Tests](https://img.shields.io/badge/Tests-441%20Passing-success)]()
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 ---
@@ -366,8 +366,8 @@ The project has comprehensive test coverage:
 | Module | Tests | Status |
 |--------|-------|--------|
 | **my-gateway** | 281 | ✅ All Passing |
-| **gateway-admin** | 101 | ✅ All Passing |
-| **Total** | **382** | ✅ **All Passing** |
+| **gateway-admin** | 160 | ✅ All Passing |
+| **Total** | **441** | ✅ **All Passing** |
 
 Run tests:
 ```bash
