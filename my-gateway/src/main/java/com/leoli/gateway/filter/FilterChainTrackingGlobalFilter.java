@@ -4,6 +4,7 @@ import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.monitor.FilterChainTracker;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
@@ -13,11 +14,15 @@ import reactor.core.publisher.Mono;
 
 /**
  * Filter Chain Tracking Global Filter.
- * Wraps all other filters to track their execution time and status.
- * 
- * This filter uses a special ordering strategy:
- * - It has the lowest possible order (HIGHEST_PRECEDENCE) to run before all other filters
- * - It tracks the execution of each filter in the chain
+ * Tracks the overall execution time of the entire filter chain.
+ *
+ * Note: Individual filter tracking is handled by TrackedGlobalFilter wrapper
+ * via GlobalFilterTrackingPostProcessor. This filter only tracks the complete
+ * chain duration for comparison purposes.
+ *
+ * This filter uses HIGHEST_PRECEDENCE order to:
+ * 1. Run before all other filters to capture start time
+ * 2. Measure total chain execution time
  *
  * @author leoli
  */
@@ -25,8 +30,16 @@ import reactor.core.publisher.Mono;
 @Component
 public class FilterChainTrackingGlobalFilter implements GlobalFilter, Ordered {
 
+    /**
+     * Attribute key for storing chain start time.
+     */
+    public static final String CHAIN_START_TIME_ATTR = "chainStartTimeNanos";
+
     @Autowired(required = false)
     private FilterChainTracker tracker;
+
+    @Value("${gateway.filter-chain.slow-threshold-ms:1000}")
+    private long slowThresholdMs;
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
@@ -34,30 +47,43 @@ public class FilterChainTrackingGlobalFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        // Get trace ID from exchange attributes (set by TraceIdGlobalFilter)
-        String traceId = exchange.getAttribute(TraceIdGlobalFilter.TRACE_ID_ATTR);
-        if (traceId == null || traceId.isEmpty()) {
-            traceId = "unknown-" + System.nanoTime();
-        }
+        // Set slow threshold from config
+        tracker.setSlowThresholdMs(slowThresholdMs);
 
-        // Track this filter chain execution
-        String filterName = "FilterChain";
-        int order = getOrder();
-        
-        FilterChainTracker.FilterExecution execution = tracker.startFilter(traceId, filterName, order);
-        
+        // Record chain start time
+        long startTime = System.nanoTime();
+        exchange.getAttributes().put(CHAIN_START_TIME_ATTR, startTime);
+
+        // Get trace ID from exchange attributes (set by TraceIdGlobalFilter)
+        String traceIdAttr = exchange.getAttribute(TraceIdGlobalFilter.TRACE_ID_ATTR);
+        final String traceId = (traceIdAttr == null || traceIdAttr.isEmpty())
+                ? "unknown-" + System.nanoTime()
+                : traceIdAttr;
+        final long threshold = slowThresholdMs;
+
         return chain.filter(exchange)
-                .doOnSuccess(v -> {
-                    tracker.endFilter(execution, true, null);
-                })
-                .doOnError(error -> {
-                    tracker.endFilter(execution, false, error);
+                .doFinally(signalType -> {
+                    // Calculate total chain duration
+                    long endTime = System.nanoTime();
+                    Long storedStartTime = exchange.getAttribute(CHAIN_START_TIME_ATTR);
+                    if (storedStartTime != null) {
+                        long durationMs = (endTime - storedStartTime) / 1_000_000;
+
+                        // Log for quick monitoring
+                        if (durationMs > threshold) {
+                            log.warn("[SLOW_CHAIN] TraceId: {} took {} ms (threshold: {} ms), signal: {}",
+                                    traceId, durationMs, threshold, signalType);
+                        } else {
+                            log.debug("[CHAIN_COMPLETE] TraceId: {} took {} ms, signal: {}",
+                                    traceId, durationMs, signalType);
+                        }
+                    }
                 });
     }
 
     @Override
     public int getOrder() {
-        // Run before all other filters to track the complete chain
+        // Run before all other filters to capture complete chain time
         return Ordered.HIGHEST_PRECEDENCE;
     }
 }
