@@ -122,6 +122,97 @@
 
 ---
 
+## Resilience & High Availability
+
+### Nacos Failure Fallback (Snapshot Cache)
+
+When Nacos config center becomes unavailable, the gateway gracefully degrades using snapshot cache:
+
+```
+┌───────────────────────────────────────────────────────────────────────┐
+│                        StrategyManager                                  │
+│                                                                         │
+│   ┌─────────────────┐         ┌─────────────────┐                      │
+│   │  Primary Cache  │         │ Snapshot Backup │                      │
+│   │ (ConcurrentHashMap)│◄────│ (Deep Copy)     │                      │
+│   │                 │  sync   │                 │                      │
+│   └─────────────────┘         └─────────────────┘                      │
+│           │                           │                                 │
+│           ▼                           ▼                                 │
+│   Nacos Healthy ──► Use Primary    Nacos Down ──► Use Snapshot        │
+│                                                                         │
+│   Features:                                                             │
+│   - markConfigCenterUnhealthy() ──► Switch to snapshot mode            │
+│   - createSnapshot() ──► Persist known-good state after refresh        │
+│   - restoreFromSnapshotIfNeeded() ──► Recover when cache corrupted     │
+└───────────────────────────────────────────────────────────────────────┘
+```
+
+**Flow:**
+1. Normal operation: Fresh config from Nacos, snapshot created after each refresh
+2. Nacos failure: Mark unhealthy, use snapshot for routing decisions
+3. Nacos recovery: Mark healthy, create new snapshot, resume normal operation
+
+### Redis Rate Limiter Fallback (Shadow Quota)
+
+Redis failure triggers graceful degradation to local rate limiting with shadow quota:
+
+```
+┌───────────────────────────────────────────────────────────────────────┐
+│                     HybridRateLimiterFilter                            │
+│                                                                         │
+│   Redis Available?                                                      │
+│        │                                                                │
+│        ├── Yes ──► Redis Distributed Rate Limiting                      │
+│        │              (DistributedRateLimiter)                          │
+│        │                                                                │
+│        └── No ──► Local Rate Limiting + Shadow Quota                    │
+│                     (RateLimiterWindow)                                │
+│                                                                         │
+│   ShadowQuotaManager:                                                   │
+│   - Tracks route QPS during Redis outage                               │
+│   - Provides reduced quota (e.g., 80% of configured)                   │
+│   - Gradual recovery when Redis comes back                             │
+│   - Probabilistic routing during recovery phase                        │
+└───────────────────────────────────────────────────────────────────────┘
+```
+
+### Non-Blocking Lock Optimization (CAS + tryLock)
+
+Local rate limiter uses hybrid locking strategy to avoid blocking EventLoop threads:
+
+```java
+// Fast path: CAS for low contention (optimistic)
+if (currentCount.compareAndSet(count, count + 1)) {
+    return true;  // Success without blocking
+}
+
+// Slow path: tryLock for high contention (never blocks!)
+if (lock.tryLock()) {
+    try {
+        // Double-check under lock
+        if (count < maxRequests) {
+            currentCount.incrementAndGet();
+            return true;
+        }
+        return false;
+    } finally {
+        lock.unlock();
+    }
+}
+
+// tryLock failed - immediately reject without blocking
+return false;  // Prevents EventLoop thread starvation
+```
+
+**Benefits:**
+- No thread blocking in reactive context
+- High throughput under normal load (CAS)
+- Safe degradation under extreme contention (tryLock)
+- Prevents EventLoop starvation
+
+---
+
 ## Gateway Instance Management
 
 ### Overview
