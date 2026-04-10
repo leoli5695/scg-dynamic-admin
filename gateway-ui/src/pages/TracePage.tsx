@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react';
 import {
   Card, Row, Col, Table, Tag, Space, Button,
   message, Typography, Badge, Tooltip, Popconfirm, Descriptions, Tabs,
-  Statistic, Drawer
+  Statistic, Drawer, Progress, Alert
 } from 'antd';
 import {
   ApiOutlined, ReloadOutlined, PlayCircleOutlined,
   ClockCircleOutlined, CloseCircleOutlined,
-  DeleteOutlined, EyeOutlined
+  DeleteOutlined, EyeOutlined, FilterOutlined,
+  CheckCircleOutlined, WarningOutlined
 } from '@ant-design/icons';
 import api from '../utils/api';
 import { useTranslation } from 'react-i18next';
@@ -39,6 +40,27 @@ interface RequestTrace {
   lastReplayResult: string;
   traceTime: string;
   createdAt: string;
+  filterChain?: FilterChainSummary;
+}
+
+interface FilterChainExecution {
+  filterName: string;
+  filterOrder: number;
+  durationMs: number;
+  durationMicros: number;
+  success: boolean;
+  errorMessage: string;
+  timePercentage: number;
+}
+
+interface FilterChainSummary {
+  hasFilterData: boolean;
+  filterCount: number;
+  totalFilterDurationMs: number;
+  successCount: number;
+  failureCount: number;
+  slowestFilter: string;
+  executions: FilterChainExecution[];
 }
 
 interface TraceStats {
@@ -59,6 +81,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay })
   const [stats, setStats] = useState<TraceStats | null>(null);
   const [selectedTrace, setSelectedTrace] = useState<RequestTrace | null>(null);
   const [detailDrawerVisible, setDetailDrawerVisible] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('errors');
   const { t } = useTranslation();
 
@@ -153,6 +176,88 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay })
     return 'success';
   };
 
+  const loadTraceDetail = async (trace: RequestTrace) => {
+    try {
+      setDetailLoading(true);
+      const res = await api.get(`/api/traces/${trace.id}`);
+      const detailData = res.data;
+      setSelectedTrace({
+        ...trace,
+        filterChain: detailData.filterChain
+      });
+    } catch (e) {
+      console.error('Failed to load trace detail:', e);
+      setSelectedTrace(trace);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const handleViewDetail = (record: RequestTrace) => {
+    setDetailDrawerVisible(true);
+    loadTraceDetail(record);
+  };
+
+  const getFilterPercentageColor = (percentage: number) => {
+    if (percentage >= 50) return '#cf1322';
+    if (percentage >= 30) return '#faad14';
+    return '#52c41a';
+  };
+
+  const filterColumns = [
+    {
+      title: t('trace.filter_order'),
+      dataIndex: 'filterOrder',
+      key: 'filterOrder',
+      width: 60,
+      render: (order: number) => <Badge count={order} style={{ backgroundColor: '#1890ff' }} />
+    },
+    {
+      title: t('trace.filter_name'),
+      dataIndex: 'filterName',
+      key: 'filterName',
+      width: 200,
+      ellipsis: true,
+    },
+    {
+      title: t('trace.filter_duration'),
+      dataIndex: 'durationMs',
+      key: 'durationMs',
+      width: 100,
+      render: (ms: number) => <Text type={ms > 100 ? 'danger' : undefined}>{ms}ms</Text>
+    },
+    {
+      title: t('trace.filter_percentage'),
+      dataIndex: 'timePercentage',
+      key: 'timePercentage',
+      width: 150,
+      render: (percentage: number) => (
+        <Progress
+          percent={percentage}
+          size="small"
+          strokeColor={getFilterPercentageColor(percentage)}
+          format={(p) => `${p?.toFixed(1)}%`}
+        />
+      )
+    },
+    {
+      title: t('trace.filter_status'),
+      dataIndex: 'success',
+      key: 'success',
+      width: 80,
+      render: (success: boolean) => success
+        ? <CheckCircleOutlined style={{ color: '#52c41a' }} />
+        : <WarningOutlined style={{ color: '#faad14' }} />
+    },
+    {
+      title: t('trace.filter_error'),
+      dataIndex: 'errorMessage',
+      key: 'errorMessage',
+      ellipsis: true,
+      render: (error: string) => error ? <Text type="danger">{error}</Text> : '-'
+    }
+  ];
+
   const columns = [
     {
       title: t('trace.trace_id'),
@@ -226,7 +331,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay })
       width: 150,
       render: (_: any, record: RequestTrace) => (
         <Space>
-          <Button size="small" icon={<EyeOutlined />} onClick={() => { setSelectedTrace(record); setDetailDrawerVisible(true); }}>
+          <Button size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record)}>
             {t('common.detail')}
           </Button>
         </Space>
@@ -311,13 +416,14 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay })
       <Drawer
         title={t('trace.detail_title')}
         placement="right"
-        width={700}
+        width={800}
         onClose={() => setDetailDrawerVisible(false)}
         open={detailDrawerVisible}
         style={{ zIndex: 999 }}
       >
         {selectedTrace && (
           <div>
+            {detailLoading && <div style={{ textAlign: 'center', padding: 20 }}>Loading...</div>}
             <Descriptions bordered column={2} size="small">
               <Descriptions.Item label={t('trace.trace_id')} span={2}>
                 <Text copyable>{selectedTrace.traceId}</Text>
@@ -346,6 +452,66 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay })
               <Descriptions.Item label={t('trace.time')}>{new Date(selectedTrace.traceTime).toLocaleString()}</Descriptions.Item>
               <Descriptions.Item label={t('trace.replay_count')}>{selectedTrace.replayCount}</Descriptions.Item>
             </Descriptions>
+
+            {/* Filter Chain Execution Section */}
+            {selectedTrace.filterChain?.hasFilterData && (
+              <div style={{ marginTop: 24 }}>
+                <Title level={5}>
+                  <FilterOutlined style={{ marginRight: 8 }} />
+                  {t('trace.filter_chain_execution')}
+                </Title>
+                <Row gutter={16} style={{ marginBottom: 16 }}>
+                  <Col span={4}>
+                    <Statistic title={t('trace.filter_count')} value={selectedTrace.filterChain.filterCount} />
+                  </Col>
+                  <Col span={4}>
+                    <Statistic
+                      title={t('trace.filter_total_duration')}
+                      value={selectedTrace.filterChain.totalFilterDurationMs}
+                      suffix="ms"
+                    />
+                  </Col>
+                  <Col span={4}>
+                    <Statistic
+                      title={t('trace.filter_success')}
+                      value={selectedTrace.filterChain.successCount}
+                      valueStyle={{ color: '#52c41a' }}
+                    />
+                  </Col>
+                  <Col span={4}>
+                    <Statistic
+                      title={t('trace.filter_failure')}
+                      value={selectedTrace.filterChain.failureCount}
+                      valueStyle={{ color: selectedTrace.filterChain.failureCount > 0 ? '#cf1322' : '#52c41a' }}
+                    />
+                  </Col>
+                  <Col span={8}>
+                    <Statistic
+                      title={t('trace.filter_slowest')}
+                      value={selectedTrace.filterChain.slowestFilter || '-'}
+                      valueStyle={{ fontSize: 14 }}
+                    />
+                  </Col>
+                </Row>
+
+                {selectedTrace.filterChain.failureCount > 0 && (
+                  <Alert
+                    type="warning"
+                    message={t('trace.filter_warning')}
+                    style={{ marginBottom: 16 }}
+                  />
+                )}
+
+                <Table
+                  size="small"
+                  dataSource={selectedTrace.filterChain.executions}
+                  columns={filterColumns}
+                  rowKey="filterOrder"
+                  pagination={false}
+                  scroll={{ x: 500 }}
+                />
+              </div>
+            )}
 
             <Title level={5} style={{ marginTop: 16 }}>{t('trace.request_headers')}</Title>
             <Paragraph>
