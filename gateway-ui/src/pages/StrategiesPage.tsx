@@ -14,6 +14,8 @@ import {
 import type { MenuProps } from 'antd';
 import api from '../utils/api';
 import { useTranslation } from 'react-i18next';
+import { useStrategyTypes, StrategyType } from '../hooks/useStrategyTypes';
+import DynamicConfigFields, { AuthSubSchemaFields } from '../components/DynamicConfigFields';
 import './StrategiesPage.premium.css';
 
 const { Text, Title } = Typography;
@@ -127,82 +129,63 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
   const enabledStrategies = strategies.filter(s => s.enabled).length;
   const globalStrategies = strategies.filter(s => s.scope === 'GLOBAL').length;
 
+  // Use dynamic strategy types from API
+  const { strategyTypes, loading: typesLoading, getStrategyType } = useStrategyTypes();
+
   const getStrategyTypeLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      'RATE_LIMITER': t('strategy.type.rate_limiter'),
-      'IP_FILTER': t('strategy.type.ip_filter'),
-      'TIMEOUT': t('strategy.type.timeout'),
-      'CIRCUIT_BREAKER': t('strategy.type.circuit_breaker'),
-      'AUTH': t('strategy.type.auth'),
-      'RETRY': t('strategy.type.retry'),
-      'CORS': t('strategy.type.cors'),
-      'ACCESS_LOG': t('strategy.type.access_log'),
-      'HEADER_OP': t('strategy.type.header_op'),
-      'CACHE': t('strategy.type.cache'),
-      'SECURITY': t('strategy.type.security'),
-      'API_VERSION': t('strategy.type.api_version'),
-    };
-    return labels[type] || type;
+    const strategyType = getStrategyType(type);
+    if (strategyType) {
+      // Use Chinese name for Chinese locale, English name for English locale
+      const locale = localStorage.getItem('i18nextLng') || 'zh';
+      return locale === 'en' ? strategyType.typeNameEn : strategyType.typeName;
+    }
+    return type;
   };
 
   const getStrategyTypeIcon = (type: string) => {
-    const icons: Record<string, React.ReactNode> = {
-      'RATE_LIMITER': <ThunderboltOutlined />,
-      'IP_FILTER': <SafetyOutlined />,
-      'TIMEOUT': <ClockCircleOutlined />,
-      'CIRCUIT_BREAKER': <StopOutlined />,
-      'AUTH': <KeyOutlined />,
-      'RETRY': <SyncOutlined />,
-      'CORS': <GlobalOutlined />,
-      'ACCESS_LOG': <FileTextOutlined />,
-      'HEADER_OP': <SettingOutlined />,
-      'CACHE': <CloudOutlined />,
-      'SECURITY': <SecurityScanOutlined />,
-      'API_VERSION': <NumberOutlined />,
-    };
-    return icons[type] || <ThunderboltOutlined />;
+    const strategyType = getStrategyType(type);
+    if (strategyType?.icon) {
+      // Map icon names to actual icon components
+      const iconMap: Record<string, React.ReactNode> = {
+        'ThunderboltOutlined': <ThunderboltOutlined />,
+        'SafetyOutlined': <SafetyOutlined />,
+        'ClockCircleOutlined': <ClockCircleOutlined />,
+        'StopOutlined': <StopOutlined />,
+        'KeyOutlined': <KeyOutlined />,
+        'SyncOutlined': <SyncOutlined />,
+        'GlobalOutlined': <GlobalOutlined />,
+        'FileTextOutlined': <FileTextOutlined />,
+        'SettingOutlined': <SettingOutlined />,
+        'CloudOutlined': <CloudOutlined />,
+        'SecurityScanOutlined': <SecurityScanOutlined />,
+        'NumberOutlined': <NumberOutlined />,
+        'PlayCircleOutlined': <PlayCircleOutlined />,
+      };
+      return iconMap[strategyType.icon] || <ThunderboltOutlined />;
+    }
+    return <ThunderboltOutlined />;
   };
 
   const getStrategyTypeColor = (type: string) => {
-    // Unified to 4 semantic colors
-    const semanticColors: Record<string, string> = {
-      // Blue - Rate Limiter
-      'RATE_LIMITER': 'rate-limiter',
-      // Orange - Timeout/Retry
-      'TIMEOUT': 'timeout-retry',
-      'RETRY': 'timeout-retry',
-      // Red - Circuit Breaker
-      'CIRCUIT_BREAKER': 'circuit-breaker',
-      // Green - Enabled/Global (for scope badge)
-      'IP_FILTER': 'enabled-global',
-      'AUTH': 'enabled-global',
-      'CORS': 'enabled-global',
-      'ACCESS_LOG': 'enabled-global',
-      'HEADER_OP': 'enabled-global',
-      'CACHE': 'enabled-global',
-      'SECURITY': 'enabled-global',
-      'API_VERSION': 'enabled-global',
-    };
-    return semanticColors[type] || 'rate-limiter';
+    const strategyType = getStrategyType(type);
+    if (strategyType?.category) {
+      // Map categories to semantic colors
+      const categoryColors: Record<string, string> = {
+        'traffic': 'rate-limiter',
+        'resilience': 'timeout-retry',
+        'security': 'enabled-global',
+        'transform': 'enabled-global',
+        'observability': 'enabled-global',
+        'misc': 'enabled-global',
+      };
+      return categoryColors[strategyType.category] || 'rate-limiter';
+    }
+    return 'rate-limiter';
   };
 
   const getStrategyTypeColorValue = (type: string) => {
-    // Return actual color value for icon background
-    const colors: Record<string, string> = {
-      'RATE_LIMITER': '#3b82f6',
-      'TIMEOUT': '#f59e0b',
-      'RETRY': '#f59e0b',
-      'CIRCUIT_BREAKER': '#ef4444',
-      'IP_FILTER': '#10b981',
-      'AUTH': '#10b981',
-      'CORS': '#10b981',
-      'ACCESS_LOG': '#10b981',
-      'HEADER_OP': '#10b981',
-      'CACHE': '#10b981',
-      'SECURITY': '#10b981',
-      'API_VERSION': '#10b981',
-    };
-    return colors[type] || '#3b82f6';
+    const strategyType = getStrategyType(type);
+    return strategyType?.color || '#3b82f6';
   };
 
   const buildConfig = (values: any, strategyType: string) => {
@@ -468,540 +451,99 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
     setEditModalVisible(true);
   }, [editForm]);
 
+  // State for strategy type selection modal
+  const [typeSelectModalVisible, setTypeSelectModalVisible] = useState(false);
+  const [selectedStrategyType, setSelectedStrategyType] = useState<StrategyType | null>(null);
+
+  // Render config fields dynamically based on schema
   const renderConfigFields = (strategyType: string, form: any) => {
-    switch (strategyType) {
-      case 'RATE_LIMITER':
-        return (
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="qps" label={t('strategy.config.qps')} initialValue={100}>
-                <InputNumber min={1} max={100000} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="burstCapacity" label={t('strategy.config.burst_capacity')} initialValue={200}>
-                <InputNumber min={0} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="timeUnit" label={t('strategy.config.time_unit')} initialValue="second">
-                <Select>
-                  <Select.Option value="second">{t('strategy.config.second')}</Select.Option>
-                  <Select.Option value="minute">{t('strategy.config.minute')}</Select.Option>
-                  <Select.Option value="hour">{t('strategy.config.hour')}</Select.Option>
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="keyResolver" label={t('strategy.config.key_resolver')} initialValue="ip">
-                <Select>
-                  <Select.Option value="ip">{t('strategy.config.key_resolver_ip')}</Select.Option>
-                  <Select.Option value="user">{t('strategy.config.key_resolver_user')}</Select.Option>
-                  <Select.Option value="header">{t('strategy.config.key_resolver_header')}</Select.Option>
-                  <Select.Option value="global">{t('strategy.config.key_resolver_global')}</Select.Option>
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
-        );
-      case 'IP_FILTER':
-        return (
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="mode" label={t('strategy.config.filter_mode')} initialValue="blacklist">
-                <Select>
-                  <Select.Option value="blacklist">{t('strategy.config.blacklist')}</Select.Option>
-                  <Select.Option value="whitelist">{t('strategy.config.whitelist')}</Select.Option>
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col span={24}>
-              <Form.Item name="ipList" label={t('strategy.config.ip_list')}>
-                <Input.TextArea rows={2} placeholder="192.168.1.1, 10.0.0.0/24" />
-              </Form.Item>
-            </Col>
-          </Row>
-        );
-      case 'TIMEOUT':
-        return (
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="connectTimeout" label={t('strategy.config.connect_timeout')} initialValue={5000}>
-                <InputNumber addonAfter="ms" style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="responseTimeout" label={t('strategy.config.response_timeout')} initialValue={30000}>
-                <InputNumber addonAfter="ms" style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-          </Row>
-        );
-      case 'CIRCUIT_BREAKER':
-        return (
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="failureRateThreshold" label={t('strategy.config.failure_rate')} initialValue={50}>
-                <InputNumber min={0} max={100} addonAfter="%" style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="waitDurationInOpenState" label={t('strategy.config.wait_duration')} initialValue={30000}>
-                <InputNumber addonAfter="ms" style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="slidingWindowSize" label={t('strategy.config.sliding_window')} initialValue={10}>
-                <InputNumber min={1} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-          </Row>
-        );
-      case 'AUTH':
-        return (
-          <>
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item name="authType" label={t('strategy.config.auth_type')} initialValue="JWT">
-                  <Select>
-                    <Select.Option value="JWT"><KeyOutlined /> {t('strategy.auth_type.jwt')}</Select.Option>
-                    <Select.Option value="API_KEY"><ApiOutlined /> {t('strategy.auth_type.api_key')}</Select.Option>
-                    <Select.Option value="OAUTH2"><GlobalOutlined /> {t('strategy.auth_type.oauth2')}</Select.Option>
-                    <Select.Option value="BASIC"><LockOutlined /> {t('strategy.auth_type.basic')}</Select.Option>
-                    <Select.Option value="HMAC"><SafetyOutlined /> {t('strategy.auth_type.hmac')}</Select.Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-            </Row>
+    const strategyTypeData = getStrategyType(strategyType);
+    const schema = strategyTypeData?.configSchema;
 
-            {/* Dynamic fields based on auth type */}
-            <Form.Item noStyle shouldUpdate>
-              {({ getFieldValue }) => {
-                const authType = getFieldValue('authType');
-
-                switch (authType) {
-                  case 'JWT':
-                    return (
-                      <>
-                        <Row gutter={16}>
-                          <Col span={12}>
-                            <Form.Item name="secretKey" label={t('strategy.config.secret_key')}>
-                              <Input.Password placeholder="your-secret-key" />
-                            </Form.Item>
-                          </Col>
-                          <Col span={12}>
-                            <Form.Item name="jwtAlgorithm" label={t('strategy.config.jwt_algorithm')} initialValue="HS256">
-                              <Select>
-                                <Select.Option value="HS256">HS256</Select.Option>
-                                <Select.Option value="HS512">HS512</Select.Option>
-                                <Select.Option value="RS256">RS256</Select.Option>
-                              </Select>
-                            </Form.Item>
-                          </Col>
-                        </Row>
-                        <Row gutter={16}>
-                          <Col span={12}>
-                            <Form.Item name="jwtIssuer" label={t('strategy.config.jwt_issuer')}>
-                              <Input placeholder="my-app" />
-                            </Form.Item>
-                          </Col>
-                          <Col span={12}>
-                            <Form.Item name="jwtAudience" label={t('strategy.config.jwt_audience')}>
-                              <Input placeholder="my-api" />
-                            </Form.Item>
-                          </Col>
-                        </Row>
-                        <Row gutter={16}>
-                          <Col span={12}>
-                            <Form.Item name="jwtClockSkewSeconds" label={t('strategy.config.jwt_clock_skew')} initialValue={60}>
-                              <InputNumber addonAfter="s" min={0} style={{ width: '100%' }} />
-                            </Form.Item>
-                          </Col>
-                        </Row>
-                      </>
-                    );
-
-                  case 'API_KEY':
-                    return (
-                      <>
-                        <Row gutter={16}>
-                          <Col span={12}>
-                            <Form.Item name="apiKey" label={t('strategy.config.api_key')}>
-                              <Input.Password placeholder="your-api-key" />
-                            </Form.Item>
-                          </Col>
-                          <Col span={12}>
-                            <Form.Item name="apiKeyHeader" label={t('strategy.config.api_key_header')} initialValue="X-API-Key">
-                              <Input placeholder="X-API-Key" />
-                            </Form.Item>
-                          </Col>
-                        </Row>
-                        <Row gutter={16}>
-                          <Col span={12}>
-                            <Form.Item name="apiKeyPrefix" label={t('strategy.config.api_key_prefix')}>
-                              <Input placeholder="sk_live_" />
-                            </Form.Item>
-                          </Col>
-                          <Col span={12}>
-                            <Form.Item name="apiKeyQueryParam" label={t('strategy.config.api_key_query_param')}>
-                              <Input placeholder="api_key" />
-                            </Form.Item>
-                          </Col>
-                        </Row>
-                      </>
-                    );
-
-                  case 'OAUTH2':
-                    return (
-                      <>
-                        <Row gutter={16}>
-                          <Col span={12}>
-                            <Form.Item name="clientId" label={t('strategy.config.client_id')}>
-                              <Input placeholder="client-id" />
-                            </Form.Item>
-                          </Col>
-                          <Col span={12}>
-                            <Form.Item name="clientSecret" label={t('strategy.config.client_secret')}>
-                              <Input.Password placeholder="client-secret" />
-                            </Form.Item>
-                          </Col>
-                        </Row>
-                        <Row gutter={16}>
-                          <Col span={24}>
-                            <Form.Item name="tokenEndpoint" label={t('strategy.config.token_endpoint')}>
-                              <Input placeholder="https://auth.example.com/oauth/introspect" />
-                            </Form.Item>
-                          </Col>
-                        </Row>
-                        <Row gutter={16}>
-                          <Col span={24}>
-                            <Form.Item name="requiredScopes" label={t('strategy.config.required_scopes')}>
-                              <Input placeholder="read, write" />
-                            </Form.Item>
-                          </Col>
-                        </Row>
-                      </>
-                    );
-
-                  case 'BASIC':
-                    return (
-                      <>
-                        <Row gutter={16}>
-                          <Col span={12}>
-                            <Form.Item name="basicUsername" label={t('strategy.config.basic_username')}>
-                              <Input prefix={<UserOutlined />} placeholder="admin" />
-                            </Form.Item>
-                          </Col>
-                          <Col span={12}>
-                            <Form.Item name="basicPassword" label={t('strategy.config.basic_password')}>
-                              <Input.Password placeholder="password" />
-                            </Form.Item>
-                          </Col>
-                        </Row>
-                        <Row gutter={16}>
-                          <Col span={12}>
-                            <Form.Item name="realm" label={t('strategy.config.realm')}>
-                              <Input placeholder="API Gateway" />
-                            </Form.Item>
-                          </Col>
-                          <Col span={12}>
-                            <Form.Item name="passwordHashAlgorithm" label={t('strategy.config.password_hash')} initialValue="PLAIN">
-                              <Select>
-                                <Select.Option value="PLAIN">{t('strategy.hash.plain')}</Select.Option>
-                                <Select.Option value="MD5">{t('strategy.hash.md5')}</Select.Option>
-                                <Select.Option value="SHA256">{t('strategy.hash.sha256')}</Select.Option>
-                                <Select.Option value="BCRYPT">{t('strategy.hash.bcrypt')}</Select.Option>
-                              </Select>
-                            </Form.Item>
-                          </Col>
-                        </Row>
-                        <Row gutter={16}>
-                          <Col span={24}>
-                            <Form.Item name="basicUsersJson" label={t('strategy.config.basic_users_json')} extra={t('strategy.config.basic_users_json_help')}>
-                              <Input.TextArea rows={3} placeholder='{"user1": "pass1", "user2": "pass2"}' />
-                            </Form.Item>
-                          </Col>
-                        </Row>
-                      </>
-                    );
-
-                  case 'HMAC':
-                    return (
-                      <>
-                        <Row gutter={16}>
-                          <Col span={12}>
-                            <Form.Item name="accessKey" label={t('strategy.config.access_key')}>
-                              <Input placeholder="AK123456789" />
-                            </Form.Item>
-                          </Col>
-                          <Col span={12}>
-                            <Form.Item name="secretKey" label={t('strategy.config.secret_key')}>
-                              <Input.Password placeholder="your-secret-key" />
-                            </Form.Item>
-                          </Col>
-                        </Row>
-                        <Row gutter={16}>
-                          <Col span={12}>
-                            <Form.Item name="signatureAlgorithm" label={t('strategy.config.signature_algorithm')} initialValue="HMAC-SHA256">
-                              <Select>
-                                <Select.Option value="HMAC-SHA256">HMAC-SHA256</Select.Option>
-                                <Select.Option value="HMAC-SHA512">HMAC-SHA512</Select.Option>
-                                <Select.Option value="HMAC-SHA1">HMAC-SHA1</Select.Option>
-                              </Select>
-                            </Form.Item>
-                          </Col>
-                          <Col span={12}>
-                            <Form.Item name="clockSkewMinutes" label={t('strategy.config.clock_skew_minutes')} initialValue={5}>
-                              <InputNumber addonAfter="min" min={1} style={{ width: '100%' }} />
-                            </Form.Item>
-                          </Col>
-                        </Row>
-                        <Row gutter={16}>
-                          <Col span={8}>
-                            <Form.Item name="requireNonce" label={t('strategy.config.require_nonce')} valuePropName="checked" initialValue={true}>
-                              <Switch />
-                            </Form.Item>
-                          </Col>
-                          <Col span={8}>
-                            <Form.Item name="validateContentMd5" label={t('strategy.config.validate_content_md5')} valuePropName="checked" initialValue={false}>
-                              <Switch />
-                            </Form.Item>
-                          </Col>
-                        </Row>
-                        <Row gutter={16}>
-                          <Col span={24}>
-                            <Form.Item name="accessKeySecretsJson" label={t('strategy.config.access_key_secrets_json')} extra={t('strategy.config.access_key_secrets_json_help')}>
-                              <Input.TextArea rows={3} placeholder='{"AK1": "secret1", "AK2": "secret2"}' />
-                            </Form.Item>
-                          </Col>
-                        </Row>
-                      </>
-                    );
-
-                  default:
-                    return null;
-                }
-              }}
-            </Form.Item>
-          </>
-        );
-      case 'RETRY':
-        return (
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item name="maxAttempts" label={t('strategy.config.max_attempts')} initialValue={3}>
-                <InputNumber min={1} max={10} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="retryIntervalMs" label={t('strategy.config.retry_interval')} initialValue={1000}>
-                <InputNumber addonAfter="ms" style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="retryOnStatusCodes" label={t('strategy.config.retry_status_codes')} initialValue="500, 502, 503, 504">
-                <Input placeholder="500,502" />
-              </Form.Item>
-            </Col>
-          </Row>
-        );
-      case 'CORS':
-        return (
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="allowedOrigins" label={t('strategy.config.allowed_origins')} initialValue="*">
-                <Input placeholder="http://localhost:3000" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="allowedMethods" label={t('strategy.config.allowed_methods')} initialValue="GET, POST, PUT, DELETE">
-                <Input placeholder="GET, POST" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="allowedHeaders" label={t('strategy.config.allowed_headers')} initialValue="*">
-                <Input placeholder="Content-Type" />
-              </Form.Item>
-            </Col>
-            <Col span={6}>
-              <Form.Item name="allowCredentials" label={t('strategy.config.allow_credentials')} valuePropName="checked" initialValue={false}>
-                <Switch />
-              </Form.Item>
-            </Col>
-            <Col span={6}>
-              <Form.Item name="maxAge" label={t('strategy.config.max_age')} initialValue={3600}>
-                <InputNumber addonAfter="s" style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-          </Row>
-        );
-      case 'ACCESS_LOG':
-        return (
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item name="logLevel" label={t('strategy.config.log_level')} initialValue="NORMAL">
-                <Select>
-                  <Select.Option value="MINIMAL">{t('strategy.log_level.minimal')}</Select.Option>
-                  <Select.Option value="NORMAL">{t('strategy.log_level.normal')}</Select.Option>
-                  <Select.Option value="VERBOSE">{t('strategy.log_level.verbose')}</Select.Option>
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="samplingRate" label={t('strategy.config.sampling_rate')} initialValue={100}>
-                <InputNumber min={1} max={100} addonAfter="%" style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="logRequestHeaders" label={t('strategy.config.log_request_headers')} valuePropName="checked" initialValue={true}>
-                <Switch />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="logResponseHeaders" label={t('strategy.config.log_response_headers')} valuePropName="checked" initialValue={true}>
-                <Switch />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="logRequestBody" label={t('strategy.config.log_request_body')} valuePropName="checked" initialValue={false}>
-                <Switch />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="logResponseBody" label={t('strategy.config.log_response_body')} valuePropName="checked" initialValue={false}>
-                <Switch />
-              </Form.Item>
-            </Col>
-          </Row>
-        );
-      case 'HEADER_OP':
-        return (
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="enableTraceId" label={t('strategy.config.enable_trace_id')} valuePropName="checked" initialValue={true}>
-                <Switch />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="traceIdHeader" label={t('strategy.config.trace_id_header')} initialValue="X-Trace-Id">
-                <Input />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="addRequestHeaders" label={t('strategy.config.add_request_headers')}>
-                <Input.TextArea rows={2} placeholder='{"X-Custom": "value"}' />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="addResponseHeaders" label={t('strategy.config.add_response_headers')}>
-                <Input.TextArea rows={2} placeholder='{"X-Response": "value"}' />
-              </Form.Item>
-            </Col>
-          </Row>
-        );
-      case 'CACHE':
-        return (
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item name="ttlSeconds" label={t('strategy.config.ttl_seconds')} initialValue={60}>
-                <InputNumber min={1} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="maxSize" label={t('strategy.config.max_size')} initialValue={10000}>
-                <InputNumber min={1} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="cacheMethods" label={t('strategy.config.cache_methods')} initialValue="GET, HEAD">
-                <Input placeholder="GET, HEAD" />
-              </Form.Item>
-            </Col>
-          </Row>
-        );
-      case 'SECURITY':
-        return (
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="mode" label={t('strategy.config.security_mode')} initialValue="BLOCK">
-                <Select>
-                  <Select.Option value="DETECT">{t('strategy.config.detect_mode')}</Select.Option>
-                  <Select.Option value="BLOCK">{t('strategy.config.block_mode')}</Select.Option>
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col span={6}>
-              <Form.Item name="enableSqlInjectionProtection" label={t('strategy.config.sql_injection')} valuePropName="checked" initialValue={true}>
-                <Switch />
-              </Form.Item>
-            </Col>
-            <Col span={6}>
-              <Form.Item name="enableXssProtection" label={t('strategy.config.xss_protection')} valuePropName="checked" initialValue={true}>
-                <Switch />
-              </Form.Item>
-            </Col>
-            <Col span={6}>
-              <Form.Item name="checkParameters" label={t('strategy.config.check_params')} valuePropName="checked" initialValue={true}>
-                <Switch />
-              </Form.Item>
-            </Col>
-            <Col span={6}>
-              <Form.Item name="checkBody" label={t('strategy.config.check_body')} valuePropName="checked" initialValue={true}>
-                <Switch />
-              </Form.Item>
-            </Col>
-          </Row>
-        );
-      case 'API_VERSION':
-        return (
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="versionMode" label={t('strategy.config.version_mode')} initialValue="PATH">
-                <Select>
-                  <Select.Option value="PATH">{t('strategy.version_mode.path')}</Select.Option>
-                  <Select.Option value="HEADER">{t('strategy.version_mode.header')}</Select.Option>
-                  <Select.Option value="QUERY">{t('strategy.version_mode.query')}</Select.Option>
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="defaultVersion" label={t('strategy.config.default_version')} initialValue="v1">
-                <Input placeholder="v1" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="versionHeader" label={t('strategy.config.version_header')} initialValue="X-API-Version">
-                <Input />
-              </Form.Item>
-            </Col>
-          </Row>
-        );
-      default:
-        return null;
+    if (!schema) {
+      // Fallback to empty for unknown types
+      return null;
     }
+
+    // Special handling for AUTH with subSchemas
+    if (strategyType === 'AUTH' && schema.subSchemas) {
+      return (
+        <>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="authType" label={t('strategy.config.auth_type')} initialValue="JWT">
+                <Select onChange={() => form.resetFields(['secretKey', 'jwtAlgorithm', 'jwtIssuer', 'jwtAudience', 'jwtClockSkewSeconds', 'apiKey', 'apiKeyHeader', 'apiKeyPrefix', 'apiKeyQueryParam', 'clientId', 'clientSecret', 'tokenEndpoint', 'requiredScopes', 'basicUsername', 'basicPassword', 'realm', 'passwordHashAlgorithm', 'basicUsersJson', 'accessKey', 'signatureAlgorithm', 'clockSkewMinutes', 'requireNonce', 'validateContentMd5', 'accessKeySecretsJson'])}>
+                  <Select.Option value="JWT"><KeyOutlined /> JWT</Select.Option>
+                  <Select.Option value="API_KEY"><ApiOutlined /> API Key</Select.Option>
+                  <Select.Option value="OAUTH2"><GlobalOutlined /> OAuth2</Select.Option>
+                  <Select.Option value="BASIC"><LockOutlined /> Basic</Select.Option>
+                  <Select.Option value="HMAC"><SafetyOutlined /> HMAC</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item noStyle shouldUpdate>
+            {({ getFieldValue }) => {
+              const authType = getFieldValue('authType') || 'JWT';
+              const subSchema = schema.subSchemas?.[authType];
+              if (!subSchema) return null;
+              return <AuthSubSchemaFields schema={{ ...subSchema }} form={form} t={t} />;
+            }}
+          </Form.Item>
+        </>
+      );
+    }
+
+    // Default dynamic rendering for other types
+    return <DynamicConfigFields schema={schema} form={form} t={t} />;
   };
 
-  // Strategy type options for select dropdown
-  const strategyTypeOptions = [
-    { value: 'RATE_LIMITER', label: t('strategy.type.rate_limiter'), icon: <ThunderboltOutlined /> },
-    { value: 'IP_FILTER', label: t('strategy.type.ip_filter'), icon: <SafetyOutlined /> },
-    { value: 'TIMEOUT', label: t('strategy.type.timeout'), icon: <ClockCircleOutlined /> },
-    { value: 'CIRCUIT_BREAKER', label: t('strategy.type.circuit_breaker'), icon: <StopOutlined /> },
-    { value: 'AUTH', label: t('strategy.type.auth'), icon: <KeyOutlined /> },
-    { value: 'RETRY', label: t('strategy.type.retry'), icon: <SyncOutlined /> },
-    { value: 'CORS', label: t('strategy.type.cors'), icon: <GlobalOutlined /> },
-    { value: 'ACCESS_LOG', label: t('strategy.type.access_log'), icon: <FileTextOutlined /> },
-    { value: 'HEADER_OP', label: t('strategy.type.header_op'), icon: <SettingOutlined /> },
-    { value: 'CACHE', label: t('strategy.type.cache'), icon: <CloudOutlined /> },
-    { value: 'SECURITY', label: t('strategy.type.security'), icon: <SecurityScanOutlined /> },
-    { value: 'API_VERSION', label: t('strategy.type.api_version'), icon: <NumberOutlined /> },
-    // New strategy types (v2.0)
-    { value: 'MULTI_DIM_RATE_LIMITER', label: t('strategy.type.multi_dim_rate_limiter'), icon: <ThunderboltOutlined /> },
-    { value: 'REQUEST_TRANSFORM', label: t('strategy.type.request_transform'), icon: <SyncOutlined /> },
-    { value: 'RESPONSE_TRANSFORM', label: t('strategy.type.response_transform'), icon: <SyncOutlined /> },
-    { value: 'REQUEST_VALIDATION', label: t('strategy.type.request_validation'), icon: <SafetyOutlined /> },
-    { value: 'MOCK_RESPONSE', label: t('strategy.type.mock_response'), icon: <PlayCircleOutlined /> },
-  ];
+  // Handle strategy type selection
+  const handleSelectStrategyType = (type: StrategyType) => {
+    setSelectedStrategyType(type);
+    setTypeSelectModalVisible(false);
+    setCreateModalVisible(true);
+    createForm.resetFields();
+    createForm.setFieldsValue({ strategyType: type.typeCode });
+  };
+
+  // Handle back to type selection
+  const handleBackToTypeSelect = () => {
+    setCreateModalVisible(false);
+    setSelectedStrategyType(null);
+    setTypeSelectModalVisible(true);
+  };
+
+  // Group strategy types by category
+  const strategyTypesByCategory = useMemo(() => {
+    const grouped: Record<string, StrategyType[]> = {};
+    strategyTypes.forEach(st => {
+      if (!grouped[st.category]) {
+        grouped[st.category] = [];
+      }
+      grouped[st.category].push(st);
+    });
+    return grouped;
+  }, [strategyTypes]);
+
+  // Category labels
+  const categoryLabels: Record<string, string> = {
+    'traffic': '流量控制',
+    'security': '安全防护',
+    'resilience': '弹性容错',
+    'transform': '数据转换',
+    'observability': '可观测性',
+    'misc': '其他',
+  };
+
+  // Strategy type options from dynamic API data
+  const strategyTypeOptions = useMemo(() => {
+    return strategyTypes.map(st => ({
+      value: st.typeCode,
+      label: st.typeName,
+      icon: getStrategyTypeIcon(st.typeCode),
+    }));
+  }, [strategyTypes]);
 
   return (
     <div className="strategies-page">
@@ -1078,7 +620,7 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
             <Select.Option value="GLOBAL">{t('strategy.scope_global')}</Select.Option>
             <Select.Option value="ROUTE">{t('strategy.scope_route')}</Select.Option>
           </Select>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalVisible(true)} className="create-btn">
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setTypeSelectModalVisible(true)} className="create-btn">
             {t('strategy.create')}
           </Button>
         </div>
@@ -1092,7 +634,7 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
               image={<ThunderboltOutlined className="empty-icon" />}
               description={<span className="empty-text">{t('strategy.empty')}</span>}
             >
-              <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalVisible(true)}>
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => setTypeSelectModalVisible(true)}>
                 {t('strategy.create_first')}
               </Button>
             </Empty>
@@ -1176,8 +718,8 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
         )}
       </Spin>
 
-      {/* Create Modal */}
-      <Modal 
+      {/* Strategy Type Selection Modal */}
+      <Modal
         title={
           <div className="modal-header-modern">
             <div className="modal-title-wrapper">
@@ -1185,14 +727,102 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
                 <PlusOutlined />
               </div>
               <div className="modal-title-text">
-                <div className="modal-title">{t('strategy.create')}</div>
-                <div className="modal-subtitle">{t('strategy.create_description')}</div>
+                <div className="modal-title">{t('strategy.select_type')}</div>
+                <div className="modal-subtitle">{t('strategy.select_type_description')}</div>
+              </div>
+            </div>
+          </div>
+        }
+        open={typeSelectModalVisible}
+        onCancel={() => setTypeSelectModalVisible(false)}
+        footer={null}
+        width={800}
+        className="strategy-type-select-modal"
+      >
+        <Spin spinning={typesLoading}>
+          {Object.entries(strategyTypesByCategory).map(([category, types]) => (
+            <div key={category} style={{ marginBottom: 24 }}>
+              <Divider style={{ margin: '0 0 16px 0' }}>
+                <Tag color="blue">{categoryLabels[category] || category}</Tag>
+              </Divider>
+              <Row gutter={[16, 16]}>
+                {types.map((type) => (
+                  <Col span={6} key={type.typeCode}>
+                    <Card
+                      hoverable
+                      className="strategy-type-card"
+                      onClick={() => handleSelectStrategyType(type)}
+                      style={{
+                        textAlign: 'center',
+                        borderRadius: 12,
+                        border: '1px solid #f0f0f0',
+                        transition: 'all 0.3s',
+                      }}
+                      styles={{ body: { padding: '20px 12px' } }}
+                    >
+                      <div
+                        style={{
+                          width: 48,
+                          height: 48,
+                          borderRadius: '50%',
+                          background: `${type.color}20`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          margin: '0 auto 12px',
+                          fontSize: 24,
+                          color: type.color,
+                        }}
+                      >
+                        {getStrategyTypeIcon(type.typeCode)}
+                      </div>
+                      <Text strong style={{ display: 'block', marginBottom: 4 }}>
+                        {type.typeName}
+                      </Text>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        {type.typeNameEn}
+                      </Text>
+                      {type.description && (
+                        <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 8 }}>
+                          {type.description.length > 30 ? `${type.description.substring(0, 30)}...` : type.description}
+                        </Text>
+                      )}
+                    </Card>
+                  </Col>
+                ))}
+              </Row>
+            </div>
+          ))}
+        </Spin>
+      </Modal>
+
+      {/* Create Modal */}
+      <Modal
+        title={
+          <div className="modal-header-modern">
+            <div className="modal-title-wrapper">
+              <Button
+                type="text"
+                icon={<EditOutlined />}
+                onClick={handleBackToTypeSelect}
+                style={{ marginRight: 8 }}
+              >
+                {t('common.back')}
+              </Button>
+              <div className="modal-icon-wrapper">
+                <PlusOutlined />
+              </div>
+              <div className="modal-title-text">
+                <div className="modal-title">
+                  {selectedStrategyType ? `${t('strategy.create')} - ${selectedStrategyType.typeName}` : t('strategy.create')}
+                </div>
+                <div className="modal-subtitle">{selectedStrategyType?.description || t('strategy.create_description')}</div>
               </div>
             </div>
           </div>
         }
         open={createModalVisible}
-        onCancel={() => { setCreateModalVisible(false); createForm.resetFields(); }}
+        onCancel={() => { setCreateModalVisible(false); createForm.resetFields(); setSelectedStrategyType(null); }}
         footer={null}
         width={720}
         className="strategy-modal strategy-create-modal"
@@ -1207,9 +837,9 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
             <div className="section-content">
               <Row gutter={16}>
                 <Col span={12}>
-                  <Form.Item 
-                    name="strategyName" 
-                    label={t('strategy.name')} 
+                  <Form.Item
+                    name="strategyName"
+                    label={t('strategy.name')}
                     rules={[{ required: true }]}
                     extra={t('strategy.name_helper')}
                   >
@@ -1217,27 +847,22 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item 
-                    name="strategyType" 
-                    label={t('strategy.type')} 
-                    rules={[{ required: true }]}
-                    extra={t('strategy.type_helper')}
-                  >
-                    <Select placeholder={t('strategy.type_placeholder')} size="large">
-                      {strategyTypeOptions.map(opt => (
-                        <Select.Option key={opt.value} value={opt.value}>
-                          <Space>{opt.icon}{opt.label}</Space>
-                        </Select.Option>
-                      ))}
-                    </Select>
+                  <Form.Item name="strategyType" label={t('strategy.type')} hidden>
+                    <Input />
                   </Form.Item>
+                  <div style={{ padding: '8px 0' }}>
+                    <Text type="secondary">{t('strategy.type')}: </Text>
+                    <Tag color={selectedStrategyType?.color} style={{ fontSize: 14, padding: '4px 12px' }}>
+                      {selectedStrategyType?.typeName}
+                    </Tag>
+                  </div>
                 </Col>
               </Row>
               <Row gutter={16}>
                 <Col span={12}>
-                  <Form.Item 
-                    name="scope" 
-                    label={t('strategy.scope')} 
+                  <Form.Item
+                    name="scope"
+                    label={t('strategy.scope')}
                     initialValue="GLOBAL"
                     extra={t('strategy.scope_helper')}
                   >
@@ -1253,9 +878,9 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
                       const scope = getFieldValue('scope');
                       if (scope === 'ROUTE') {
                         return (
-                          <Form.Item 
-                            name="routeId" 
-                            label={t('strategy.route_id')} 
+                          <Form.Item
+                            name="routeId"
+                            label={t('strategy.route_id')}
                             rules={[{ required: true }]}
                             extra={t('strategy.route_id_helper')}
                           >
@@ -1300,9 +925,9 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
             <div className="section-content">
               <Row gutter={16}>
                 <Col span={8}>
-                  <Form.Item 
-                    name="priority" 
-                    label={t('strategy.priority')} 
+                  <Form.Item
+                    name="priority"
+                    label={t('strategy.priority')}
                     initialValue={100}
                     extra={t('strategy.priority_helper')}
                   >
@@ -1310,18 +935,18 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
                   </Form.Item>
                 </Col>
                 <Col span={8}>
-                  <Form.Item 
-                    name="enabled" 
-                    label={t('strategy.enabled')} 
-                    valuePropName="checked" 
+                  <Form.Item
+                    name="enabled"
+                    label={t('strategy.enabled')}
+                    valuePropName="checked"
                     initialValue={true}
                   >
                     <Switch checkedChildren={t('common.enabled')} unCheckedChildren={t('common.disabled')} />
                   </Form.Item>
                 </Col>
               </Row>
-              <Form.Item 
-                name="description" 
+              <Form.Item
+                name="description"
                 label={t('strategy.description_label')}
                 extra={t('strategy.description_helper')}
               >
@@ -1332,7 +957,7 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
 
           {/* Modal Footer */}
           <div className="modal-footer-modern">
-            <Button onClick={() => setCreateModalVisible(false)} size="large">{t('common.cancel')}</Button>
+            <Button onClick={() => { setCreateModalVisible(false); createForm.resetFields(); setSelectedStrategyType(null); }} size="large">{t('common.cancel')}</Button>
             <Button type="primary" htmlType="submit" size="large" icon={<PlusOutlined />}>{t('common.create')}</Button>
           </div>
         </Form>

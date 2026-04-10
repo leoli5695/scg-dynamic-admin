@@ -52,7 +52,7 @@ const theme: ThemeConfig = {
       colorBgContainer: '#1e293b',
       colorBorder: 'rgba(148, 163, 184, 0.35)',
       colorText: '#f1f5f9',
-      colorBgContainerHover: '#243044',
+      optionSelectedBg: '#243044',
     },
     Modal: {
       colorBgContainer: '#111827',
