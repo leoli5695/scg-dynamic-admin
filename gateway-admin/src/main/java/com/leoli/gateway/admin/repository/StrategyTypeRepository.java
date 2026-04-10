@@ -18,19 +18,19 @@ public interface StrategyTypeRepository extends JpaRepository<StrategyTypeEntity
     /**
      * Find all enabled strategy types ordered by sort_order.
      */
-    @Query("SELECT s FROM strategy_types s WHERE s.enabled = true ORDER BY s.sortOrder ASC")
+    @Query("SELECT s FROM StrategyTypeEntity s WHERE s.enabled = true ORDER BY s.sortOrder ASC")
     List<StrategyTypeEntity> findAllEnabledOrderBySortOrder();
 
     /**
      * Find strategy types by category.
      */
-    @Query("SELECT s FROM strategy_types s WHERE s.category = :category AND s.enabled = true ORDER BY s.sortOrder ASC")
+    @Query("SELECT s FROM StrategyTypeEntity s WHERE s.category = :category AND s.enabled = true ORDER BY s.sortOrder ASC")
     List<StrategyTypeEntity> findByCategoryAndEnabledTrueOrderBySortOrder(String category);
 
     /**
      * Find all strategy types ordered by sort_order.
      */
-    @Query("SELECT s FROM strategy_types s ORDER BY s.sortOrder ASC")
+    @Query("SELECT s FROM StrategyTypeEntity s ORDER BY s.sortOrder ASC")
     List<StrategyTypeEntity> findAllOrderBySortOrder();
 
     /**
@@ -46,6 +46,6 @@ public interface StrategyTypeRepository extends JpaRepository<StrategyTypeEntity
     /**
      * Find all categories.
      */
-    @Query("SELECT DISTINCT s.category FROM strategy_types s WHERE s.enabled = true ORDER BY s.category")
+    @Query("SELECT DISTINCT s.category FROM StrategyTypeEntity s WHERE s.enabled = true ORDER BY s.category")
     List<String> findAllCategories();
 }
