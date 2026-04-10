@@ -14,6 +14,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import java.net.InetAddress;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -39,6 +40,20 @@ public class HeartbeatReporter {
 
     @Value("${GATEWAY_INSTANCE_ID:}")
     private String instanceId;
+
+    @Value("${server.port:8080}")
+    private int serverPort;
+
+    @Value("${management.server.port:#{null}}")
+    private Integer managementPort;
+
+    /**
+     * Manually configured access URL (optional).
+     * If set, this will be used as the reported access URL.
+     * Otherwise, auto-detected IP:port will be used.
+     */
+    @Value("${gateway.access-url:}")
+    private String manualAccessUrl;
 
     @Autowired
     private HeartbeatProperties properties;
@@ -98,6 +113,18 @@ public class HeartbeatReporter {
         requestBody.put("instanceId", instanceId);
         requestBody.put("timestamp", System.currentTimeMillis());
         requestBody.put("metrics", collectMetrics());
+        
+        // Report access URL
+        String accessUrl = getAccessUrl();
+        if (accessUrl != null) {
+            requestBody.put("accessUrl", accessUrl);
+        }
+        
+        // Report ports
+        requestBody.put("serverPort", serverPort);
+        if (managementPort != null) {
+            requestBody.put("managementPort", managementPort);
+        }
 
         int retries = 0;
         while (retries < properties.getMaxRetries()) {
@@ -132,6 +159,26 @@ public class HeartbeatReporter {
         }
         
         log.error("Failed to send heartbeat after {} retries", properties.getMaxRetries());
+    }
+
+    /**
+     * Get the access URL for this gateway.
+     * Priority: manual configuration > auto-detected.
+     */
+    private String getAccessUrl() {
+        // 1. Manual configuration
+        if (manualAccessUrl != null && !manualAccessUrl.isEmpty()) {
+            return manualAccessUrl;
+        }
+        
+        // 2. Auto-detect
+        try {
+            String hostAddress = InetAddress.getLocalHost().getHostAddress();
+            return "http://" + hostAddress + ":" + serverPort;
+        } catch (Exception e) {
+            log.debug("Failed to auto-detect access URL: {}", e.getMessage());
+            return "http://127.0.0.1:" + serverPort;
+        }
     }
 
     /**

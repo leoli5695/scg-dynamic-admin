@@ -75,11 +75,37 @@ interface GatewayInstance {
   nodePort: number;
   nodeIp: string;
   serverPort?: number;
+  manualAccessUrl?: string;
+  discoveredAccessUrl?: string;
+  reportedAccessUrl?: string;
   enabled: boolean;
   description: string;
   createdAt: string;
   updatedAt: string;
 }
+
+// Helper function to get effective access URL with priority
+const getEffectiveAccessUrl = (inst: GatewayInstance): string | null => {
+  // 1. Manual configured (highest priority, for SLB/custom domain)
+  if (inst.manualAccessUrl) return inst.manualAccessUrl;
+  // 2. K8s discovered (LoadBalancer IP or NodePort)
+  if (inst.discoveredAccessUrl) return inst.discoveredAccessUrl;
+  // 3. Heartbeat reported (local dev, ECS direct)
+  if (inst.reportedAccessUrl) return inst.reportedAccessUrl;
+  // 4. Default: nodeIp:serverPort
+  if (inst.nodeIp && inst.serverPort) {
+    return `http://${inst.nodeIp}:${inst.serverPort}`;
+  }
+  if (inst.nodeIp && inst.nodePort) {
+    return `http://${inst.nodeIp}:${inst.nodePort}`;
+  }
+  return null;
+};
+
+// Helper function to get effective Nacos server address
+const getEffectiveNacosServerAddr = (inst: GatewayInstance): string => {
+  return inst.nacosServerAddr || '127.0.0.1:8848';
+};
 
 const InstanceDetailPage: React.FC = () => {
   const { instanceId } = useParams<{ instanceId: string }>();
@@ -412,31 +438,53 @@ const InstanceDetailPage: React.FC = () => {
                 <Descriptions.Item label={t("instance.deployment")}>
                   {instance.deploymentName}
                 </Descriptions.Item>
-                {instance.nodeIp && instance.nodePort && (
-                  <Descriptions.Item label={t("instance.access_url")}>
-                    <Tooltip title={t("instance.click_to_open")}>
-                      <a
-                        href={`http://${instance.nodeIp}:${instance.serverPort || instance.nodePort}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: "#165DFF" }}
-                      >
-                        <LinkOutlined style={{ marginRight: "4px" }} />
-                        http://{instance.nodeIp}:{instance.serverPort || instance.nodePort}
-                      </a>
-                    </Tooltip>
-                  </Descriptions.Item>
-                )}
+                <Descriptions.Item label={t("instance.access_url")}>
+                  {(() => {
+                    const accessUrl = getEffectiveAccessUrl(instance);
+                    if (!accessUrl) {
+                      return <Text type="secondary">-</Text>;
+                    }
+                    
+                    // Determine the source of the URL
+                    let source = t("instance.access_url_default") || "默认";
+                    if (instance.manualAccessUrl) {
+                      source = t("instance.access_url_manual") || "手动配置";
+                    } else if (instance.discoveredAccessUrl) {
+                      source = t("instance.access_url_discovered") || "K8s发现";
+                    } else if (instance.reportedAccessUrl) {
+                      source = t("instance.access_url_reported") || "心跳上报";
+                    }
+                    
+                    return (
+                      <Space direction="vertical" size={0}>
+                        <Tooltip title={t("instance.click_to_open")}>
+                          <a
+                            href={accessUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ color: "#165DFF" }}
+                          >
+                            <LinkOutlined style={{ marginRight: "4px" }} />
+                            {accessUrl}
+                          </a>
+                        </Tooltip>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          ({source})
+                        </Text>
+                      </Space>
+                    );
+                  })()}
+                </Descriptions.Item>
                 <Descriptions.Item label={t("instance.nacos_console")}>
                   <Tooltip title={t("instance.click_to_open_nacos")}>
                     <a
-                      href={`http://${instance.nacosServerAddr || '127.0.0.1:8848'}/nacos/#/configurationManagement?dataId=&group=&namespace=${instance.nacosNamespace}`}
+                      href={`http://${getEffectiveNacosServerAddr(instance)}/nacos/#/configurationManagement?dataId=&group=&namespace=${instance.nacosNamespace}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{ color: "#165DFF" }}
                     >
                       <LinkOutlined style={{ marginRight: "4px" }} />
-                      http://{instance.nacosServerAddr || '127.0.0.1:8848'}/nacos
+                      http://{getEffectiveNacosServerAddr(instance)}/nacos
                     </a>
                   </Tooltip>
                 </Descriptions.Item>

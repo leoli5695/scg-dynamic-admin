@@ -1051,9 +1051,16 @@ public class GatewayInstanceService {
     /**
      * Handle heartbeat from gateway instance.
      * This is called by the InstanceHealthController.
+     * 
+     * @param instanceId The instance ID
+     * @param metrics Optional metrics from the gateway
+     * @param accessUrl The access URL reported by gateway (for local dev, ECS direct)
+     * @param serverPort The server port reported by gateway
+     * @param managementPort The management port reported by gateway
      */
     @Transactional
-    public void handleHeartbeat(String instanceId, Map<String, Object> metrics) {
+    public void handleHeartbeat(String instanceId, Map<String, Object> metrics, 
+            String accessUrl, Integer serverPort, Integer managementPort) {
         GatewayInstanceEntity instance = instanceRepository.findByInstanceId(instanceId)
                 .orElse(null);
         
@@ -1065,6 +1072,20 @@ public class GatewayInstanceService {
         // Update heartbeat time (all states)
         instance.setLastHeartbeatTime(LocalDateTime.now());
         instance.setMissedHeartbeats(0);
+        
+        // Update reported access URL if provided
+        if (accessUrl != null && !accessUrl.isEmpty()) {
+            instance.setReportedAccessUrl(accessUrl);
+            log.debug("Instance {} reported access URL: {}", instanceId, accessUrl);
+        }
+        
+        // Update ports if provided
+        if (serverPort != null) {
+            instance.setServerPort(serverPort);
+        }
+        if (managementPort != null) {
+            instance.setManagementPort(managementPort);
+        }
         
         // Only update status from STARTING or ERROR to RUNNING
         Integer currentStatus = instance.getStatusCode();

@@ -33,7 +33,7 @@ public class InstanceHealthController {
      * - RUNNING(1) + heartbeat -> no status change, only update heartbeat time
      * 
      * @param instanceId The gateway instance ID
-     * @param request Heartbeat request containing optional metrics
+     * @param request Heartbeat request containing optional metrics and access URL
      * @return Simple acknowledgment
      */
     @PostMapping("/heartbeat")
@@ -44,11 +44,18 @@ public class InstanceHealthController {
         log.debug("Received heartbeat from instance: {}", instanceId);
         
         Map<String, Object> metrics = null;
+        String accessUrl = null;
+        Integer serverPort = null;
+        Integer managementPort = null;
+        
         if (request != null) {
             metrics = request.getMetrics();
+            accessUrl = request.getAccessUrl();
+            serverPort = request.getServerPort();
+            managementPort = request.getManagementPort();
         }
         
-        instanceService.handleHeartbeat(instanceId, metrics);
+        instanceService.handleHeartbeat(instanceId, metrics, accessUrl, serverPort, managementPort);
         
         Map<String, Object> response = new HashMap<>();
         response.put("code", 200);
@@ -66,7 +73,7 @@ public class InstanceHealthController {
             @RequestParam String instanceId) {
         
         log.debug("Received GET heartbeat from instance: {}", instanceId);
-        instanceService.handleHeartbeat(instanceId, null);
+        instanceService.handleHeartbeat(instanceId, null, null, null, null);
         
         Map<String, Object> response = new HashMap<>();
         response.put("code", 200);
@@ -86,7 +93,7 @@ public class InstanceHealthController {
         
         log.info("Instance {} has started", instanceId);
         
-        instanceService.handleHeartbeat(instanceId, null);
+        instanceService.handleHeartbeat(instanceId, null, null, null, null);
         
         Map<String, Object> response = new HashMap<>();
         response.put("code", 200);
@@ -103,5 +110,8 @@ public class InstanceHealthController {
         private String instanceId;
         private Long timestamp;
         private Map<String, Object> metrics;
+        private String accessUrl;
+        private Integer serverPort;
+        private Integer managementPort;
     }
 }

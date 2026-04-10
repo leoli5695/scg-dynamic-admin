@@ -136,7 +136,7 @@ public class GatewayInstanceEntity {
     private Integer nodePort;  // K8s NodePort
 
     @Column(name = "node_ip", length = 64)
-    private String nodeIp;  // K8s Node IP for external access
+    private String nodeIp;  // K8s Node IP or ECS IP
 
     /**
      * Gateway HTTP server port (server.port).
@@ -149,6 +149,27 @@ public class GatewayInstanceEntity {
      */
     @Column(name = "management_port")
     private Integer managementPort;
+
+    /**
+     * Manually configured access URL (highest priority).
+     * Use for SLB, custom domain, or any custom access address.
+     */
+    @Column(name = "manual_access_url", length = 255)
+    private String manualAccessUrl;
+
+    /**
+     * Discovered access URL from K8s Service.
+     * Auto-discovered from LoadBalancer IP or NodePort.
+     */
+    @Column(name = "discovered_access_url", length = 255)
+    private String discoveredAccessUrl;
+
+    /**
+     * Reported access URL from gateway heartbeat.
+     * Gateway reports its own access URL during heartbeat.
+     */
+    @Column(name = "reported_access_url", length = 255)
+    private String reportedAccessUrl;
 
     @Column(columnDefinition = "BOOLEAN DEFAULT TRUE")
     private Boolean enabled;
@@ -163,4 +184,44 @@ public class GatewayInstanceEntity {
     @UpdateTimestamp
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    /**
+     * Get the effective access URL with priority.
+     * Priority: manualAccessUrl > discoveredAccessUrl > reportedAccessUrl > nodeIp:serverPort
+     *
+     * @return the effective access URL for this gateway instance
+     */
+    public String getEffectiveAccessUrl() {
+        // 1. Manual configured (highest priority, for SLB/custom domain)
+        if (manualAccessUrl != null && !manualAccessUrl.isEmpty()) {
+            return manualAccessUrl;
+        }
+        // 2. K8s discovered (LoadBalancer IP or NodePort)
+        if (discoveredAccessUrl != null && !discoveredAccessUrl.isEmpty()) {
+            return discoveredAccessUrl;
+        }
+        // 3. Heartbeat reported (local dev, ECS direct)
+        if (reportedAccessUrl != null && !reportedAccessUrl.isEmpty()) {
+            return reportedAccessUrl;
+        }
+        // 4. Default: nodeIp:serverPort
+        if (nodeIp != null && !nodeIp.isEmpty() && serverPort != null) {
+            return "http://" + nodeIp + ":" + serverPort;
+        }
+        if (nodeIp != null && !nodeIp.isEmpty() && nodePort != null) {
+            return "http://" + nodeIp + ":" + nodePort;
+        }
+        return null;
+    }
+
+    /**
+     * Get the effective Nacos server address.
+     * Priority: nacosServerAddr > default (127.0.0.1:8848)
+     */
+    public String getEffectiveNacosServerAddr() {
+        if (nacosServerAddr != null && !nacosServerAddr.isEmpty()) {
+            return nacosServerAddr;
+        }
+        return "127.0.0.1:8848";
+    }
 }
