@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.resource.NoResourceFoundException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
@@ -102,6 +103,14 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
             return;
         }
 
+        // NoResourceFoundException - 404 route not found, log at debug level
+        if (ex instanceof NoResourceFoundException) {
+            if (log.isDebugEnabled()) {
+                log.debug("Route not found: {}", ex.getMessage());
+            }
+            return;
+        }
+
         // Non-gateway exceptions - log at warn level with stack trace
         log.warn("Gateway exception: {}", ex.getMessage(), ex);
     }
@@ -125,7 +134,12 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
             return determineStatusFromNotFoundException((NotFoundException) ex);
         }
 
-        // 4. Default to 500
+        // 4. NoResourceFoundException - no route matched (404)
+        if (ex instanceof NoResourceFoundException) {
+            return HttpStatus.NOT_FOUND;
+        }
+
+        // 5. Default to 500
         return HttpStatus.INTERNAL_SERVER_ERROR;
     }
 
@@ -247,6 +261,12 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
     }
 
     private String extractMessage(Throwable ex) {
+        // NoResourceFoundException - no route matched in gateway
+        // Return a meaningful message instead of "No static resource ."
+        if (ex instanceof NoResourceFoundException) {
+            return "Not found a route";
+        }
+
         String message = ex.getMessage();
         if (message == null || message.isEmpty()) {
             return "";
