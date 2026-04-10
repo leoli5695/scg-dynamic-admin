@@ -14,6 +14,7 @@ import org.springframework.web.client.RestTemplate;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * Request Replay Debugger Service.
@@ -38,6 +39,7 @@ public class RequestReplayService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final GatewayInstanceService instanceService;
+    private final JsonDiffService jsonDiffService;
 
     // In-progress replay sessions
     private final ConcurrentHashMap<String, ReplaySession> activeSessions = new ConcurrentHashMap<>();
@@ -47,6 +49,7 @@ public class RequestReplayService {
 
     /**
      * Prepare a trace for replay - returns editable version.
+     * For WebSocket/SSE traces, returns metadata with replayType but replayable=false.
      */
     public ReplayableRequest prepareReplay(Long traceId) {
         Optional<RequestTrace> traceOpt = traceRepository.findById(traceId);
@@ -55,9 +58,6 @@ public class RequestReplayService {
         }
 
         RequestTrace trace = traceOpt.get();
-        if (!Boolean.TRUE.equals(trace.getReplayable())) {
-            return null;
-        }
 
         ReplayableRequest request = new ReplayableRequest();
         request.setTraceId(traceId);
@@ -69,6 +69,27 @@ public class RequestReplayService {
         request.setRequestBody(trace.getRequestBody());
         request.setRouteId(trace.getRouteId());
         request.setClientIp(trace.getClientIp());
+
+        // Set replay type and replayable flag
+        String replayType = trace.getReplayType() != null ? trace.getReplayType() : "HTTP";
+        request.setReplayType(replayType);
+        request.setReplayable(trace.getReplayable());
+
+        // For WebSocket/SSE, still return metadata but mark as not replayable
+        if ("WEBSOCKET".equals(replayType) || "SSE".equals(replayType)) {
+            // Return limited info for streaming requests
+            request.setHeaders(new LinkedHashMap<>());
+            request.setOriginalHeaders(new LinkedHashMap<>());
+            request.setOriginalStatusCode(trace.getStatusCode());
+            request.setOriginalResponseBody(null); // No body for streaming
+            request.setOriginalLatencyMs(trace.getLatencyMs());
+            return request;
+        }
+
+        // For HTTP requests, check if replayable
+        if (!Boolean.TRUE.equals(trace.getReplayable())) {
+            return null;
+        }
 
         // Parse headers
         if (trace.getRequestHeaders() != null) {
@@ -94,12 +115,41 @@ public class RequestReplayService {
 
     /**
      * Execute a replay with optional modifications.
+     * For WebSocket/SSE traces, returns a special result indicating not replayable.
      */
     @Transactional
     public ReplayResult executeReplay(Long traceId, String instanceId, ReplayOptions options) {
         ReplayableRequest prepared = prepareReplay(traceId);
         if (prepared == null) {
             return ReplayResult.error("Trace not found or not replayable");
+        }
+
+        // Check if this is a WebSocket or SSE trace
+        String replayType = prepared.getReplayType();
+        if ("WEBSOCKET".equals(replayType)) {
+            ReplayResult result = new ReplayResult();
+            result.setSuccess(false);
+            result.setTraceId(traceId);
+            result.setTraceUuid(prepared.getTraceUuid());
+            result.setMethod(prepared.getMethod());
+            result.setError("WebSocket requests cannot be replayed - they use persistent streaming connections");
+            result.setErrorType("UNSUPPORTED_TYPE");
+            return result;
+        }
+        if ("SSE".equals(replayType)) {
+            ReplayResult result = new ReplayResult();
+            result.setSuccess(false);
+            result.setTraceId(traceId);
+            result.setTraceUuid(prepared.getTraceUuid());
+            result.setMethod(prepared.getMethod());
+            result.setError("SSE (Server-Sent Events) requests cannot be fully replayed - they use streaming responses");
+            result.setErrorType("UNSUPPORTED_TYPE");
+            return result;
+        }
+
+        // Check if replayable flag is false
+        if (!Boolean.TRUE.equals(prepared.getReplayable())) {
+            return ReplayResult.error("This trace is marked as not replayable");
         }
 
         // Apply modifications
@@ -122,8 +172,8 @@ public class RequestReplayService {
         }
 
         // Get gateway URL
-        String gatewayUrl = options != null && options.getCustomTargetUrl() != null 
-                ? options.getCustomTargetUrl() 
+        String gatewayUrl = options != null && options.getCustomTargetUrl() != null
+                ? options.getCustomTargetUrl()
                 : instanceService.getAccessUrl(instanceId);
 
         if (gatewayUrl == null) {
@@ -247,11 +297,11 @@ public class RequestReplayService {
     }
 
     /**
-     * Batch replay multiple traces.
+     * Batch replay multiple traces with concurrency control.
      */
     public String startBatchReplay(List<Long> traceIds, String instanceId, ReplayOptions options) {
         String sessionId = UUID.randomUUID().toString();
-        
+
         ReplaySession session = new ReplaySession();
         session.setSessionId(sessionId);
         session.setTotalTraces(traceIds.size());
@@ -260,28 +310,69 @@ public class RequestReplayService {
         session.setStatus("RUNNING");
         session.setStartTime(System.currentTimeMillis());
         session.setResults(new ArrayList<>());
-        
+
         activeSessions.put(sessionId, session);
 
-        // Execute asynchronously
+        // Get concurrency settings (use defaults if options is null)
+        int maxConcurrent = options != null && options.getMaxConcurrent() != null
+                ? options.getMaxConcurrent() : 5;
+        int requestIntervalMs = options != null && options.getRequestIntervalMs() != null
+                ? options.getRequestIntervalMs() : 100;
+
+        // Execute asynchronously with concurrency control
         CompletableFuture.runAsync(() -> {
+            // Use semaphore to limit concurrent requests
+            java.util.concurrent.Semaphore semaphore = new java.util.concurrent.Semaphore(maxConcurrent);
+
             for (Long traceId : traceIds) {
+                // Check if session was cancelled
+                if ("CANCELLED".equals(session.getStatus())) {
+                    log.info("Batch replay cancelled, stopping execution");
+                    break;
+                }
+
                 try {
+                    // Acquire semaphore permit (wait if limit reached)
+                    semaphore.acquire();
+
+                    // Apply request interval to avoid overwhelming target
+                    if (requestIntervalMs > 0) {
+                        java.util.concurrent.locks.LockSupport.parkNanos(
+                                requestIntervalMs * 1_000_000L);
+                    }
+
+                    // Execute replay
                     ReplayResult result = executeReplay(traceId, instanceId, options);
                     session.getResults().add(result);
-                    
+
                     if (result.isSuccess()) {
                         session.setCompletedTraces(session.getCompletedTraces() + 1);
                     } else {
                         session.setFailedTraces(session.getFailedTraces() + 1);
                     }
+
+                    // Update progress
+                    int total = session.getTotalTraces();
+                    int completed = session.getCompletedTraces() + session.getFailedTraces();
+                    session.setProgress((int) ((completed * 100.0) / total));
+
+                } catch (InterruptedException e) {
+                    log.warn("Batch replay interrupted for trace: {}", traceId);
+                    session.setFailedTraces(session.getFailedTraces() + 1);
+                    Thread.currentThread().interrupt();
                 } catch (Exception e) {
                     log.error("Batch replay failed for trace: {}", traceId, e);
                     session.setFailedTraces(session.getFailedTraces() + 1);
+                } finally {
+                    // Release semaphore permit
+                    semaphore.release();
                 }
             }
-            
-            session.setStatus("COMPLETED");
+
+            // Mark session as completed
+            if (!"CANCELLED".equals(session.getStatus())) {
+                session.setStatus("COMPLETED");
+            }
             session.setEndTime(System.currentTimeMillis());
         });
 
@@ -363,46 +454,24 @@ public class RequestReplayService {
     /**
      * Compute body diff.
      */
+    /**
+     * Compute body diff using JsonDiffService for deep comparison.
+     */
     private List<BodyDiff> computeBodyDiff(String original, String replayed) {
-        List<BodyDiff> diffs = new ArrayList<>();
-        
-        try {
-            // Try JSON diff
-            if (original != null && original.startsWith("{") && replayed != null && replayed.startsWith("{")) {
-                Map<String, Object> originalMap = objectMapper.readValue(original, Map.class);
-                Map<String, Object> replayedMap = objectMapper.readValue(replayed, Map.class);
-                
-                Set<String> allKeys = new TreeSet<>();
-                allKeys.addAll(originalMap.keySet());
-                allKeys.addAll(replayedMap.keySet());
-                
-                for (String key : allKeys) {
-                    Object origVal = originalMap.get(key);
-                    Object repVal = replayedMap.get(key);
-                    
-                    if (!Objects.equals(origVal, repVal)) {
-                        BodyDiff diff = new BodyDiff();
-                        diff.setField(key);
-                        diff.setOriginalValue(origVal != null ? String.valueOf(origVal) : null);
-                        diff.setReplayedValue(repVal != null ? String.valueOf(repVal) : null);
-                        diff.setType(origVal == null ? "ADDED" : repVal == null ? "REMOVED" : "CHANGED");
-                        diffs.add(diff);
-                    }
-                }
-            }
-        } catch (Exception e) {
-            // Fall back to simple comparison
-            if (!Objects.equals(original, replayed)) {
-                BodyDiff diff = new BodyDiff();
-                diff.setField("body");
-                diff.setOriginalValue(original);
-                diff.setReplayedValue(replayed);
-                diff.setType("CHANGED");
-                diffs.add(diff);
-            }
-        }
-        
-        return diffs;
+        // Use JsonDiffService for deep JSON comparison
+        List<JsonDiffService.JsonDiff> jsonDiffs = jsonDiffService.compare(original, replayed);
+
+        // Convert to BodyDiff format for backward compatibility
+        return jsonDiffs.stream()
+                .map(jd -> {
+                    BodyDiff diff = new BodyDiff();
+                    diff.setField(jd.getPath());
+                    diff.setOriginalValue(jd.getOriginalValue());
+                    diff.setReplayedValue(jd.getReplayedValue());
+                    diff.setType(jd.getType());
+                    return diff;
+                })
+                .collect(Collectors.toList());
     }
 
     /**
@@ -460,6 +529,8 @@ public class RequestReplayService {
         private Integer originalStatusCode;
         private String originalResponseBody;
         private Long originalLatencyMs;
+        private String replayType; // HTTP, WEBSOCKET, SSE
+        private Boolean replayable;
 
         // Getters and setters
         public Long getTraceId() { return traceId; }
@@ -490,6 +561,10 @@ public class RequestReplayService {
         public void setOriginalResponseBody(String originalResponseBody) { this.originalResponseBody = originalResponseBody; }
         public Long getOriginalLatencyMs() { return originalLatencyMs; }
         public void setOriginalLatencyMs(Long originalLatencyMs) { this.originalLatencyMs = originalLatencyMs; }
+        public String getReplayType() { return replayType; }
+        public void setReplayType(String replayType) { this.replayType = replayType; }
+        public Boolean getReplayable() { return replayable; }
+        public void setReplayable(Boolean replayable) { this.replayable = replayable; }
     }
 
     public static class ReplayOptions {
@@ -500,6 +575,10 @@ public class RequestReplayService {
         private String modifiedBody;
         private String customTargetUrl;
         private boolean compareWithOriginal = true;
+
+        // Concurrency control for batch replay
+        private Integer maxConcurrent = 5;       // Maximum concurrent requests
+        private Integer requestIntervalMs = 100; // Interval between requests (ms)
 
         // Getters and setters
         public String getModifiedPath() { return modifiedPath; }
@@ -516,6 +595,10 @@ public class RequestReplayService {
         public void setCustomTargetUrl(String customTargetUrl) { this.customTargetUrl = customTargetUrl; }
         public boolean isCompareWithOriginal() { return compareWithOriginal; }
         public void setCompareWithOriginal(boolean compareWithOriginal) { this.compareWithOriginal = compareWithOriginal; }
+        public Integer getMaxConcurrent() { return maxConcurrent; }
+        public void setMaxConcurrent(Integer maxConcurrent) { this.maxConcurrent = maxConcurrent; }
+        public Integer getRequestIntervalMs() { return requestIntervalMs; }
+        public void setRequestIntervalMs(Integer requestIntervalMs) { this.requestIntervalMs = requestIntervalMs; }
     }
 
     public static class ReplayResult {
@@ -668,6 +751,7 @@ public class RequestReplayService {
         private long startTime;
         private Long endTime;
         private List<ReplayResult> results;
+        private int progress; // Percentage (0-100)
 
         public Map<String, Object> toMap() {
             Map<String, Object> map = new LinkedHashMap<>();
@@ -676,6 +760,7 @@ public class RequestReplayService {
             map.put("completedTraces", completedTraces);
             map.put("failedTraces", failedTraces);
             map.put("status", status);
+            map.put("progress", progress);
             map.put("startTime", startTime);
             if (endTime != null) map.put("endTime", endTime);
             if (results != null) {
@@ -701,5 +786,7 @@ public class RequestReplayService {
         public void setEndTime(Long endTime) { this.endTime = endTime; }
         public List<ReplayResult> getResults() { return results; }
         public void setResults(List<ReplayResult> results) { this.results = results; }
+        public int getProgress() { return progress; }
+        public void setProgress(int progress) { this.progress = progress; }
     }
 }

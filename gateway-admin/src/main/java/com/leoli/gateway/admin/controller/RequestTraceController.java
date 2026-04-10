@@ -67,8 +67,20 @@ public class RequestTraceController {
     }
 
     /**
-     * Get trace by trace ID
+     * Get traces by instance ID with pagination
      */
+    @GetMapping("/instance/{instanceId}")
+    public ResponseEntity<Page<RequestTrace>> getTracesByInstanceId(
+            @PathVariable String instanceId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "traceTime") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir) {
+        return ResponseEntity.ok(requestTraceService.getAllTraces(instanceId, page, size, sortBy, sortDir));
+    }
+
+    /**
+     * Get trace by trace ID
     @GetMapping("/trace-id/{traceId}")
     public ResponseEntity<RequestTrace> getTraceByTraceId(@PathVariable String traceId) {
         return requestTraceService.getTraceByTraceId(traceId)
@@ -233,7 +245,18 @@ public class RequestTraceController {
             trace.setErrorMessage((String) traceData.get("errorMessage"));
             trace.setErrorType((String) traceData.get("errorType"));
             trace.setTraceType((String) traceData.get("traceType"));
-            trace.setReplayable(true);
+
+            // Handle replayType and replayable from Gateway
+            String replayType = (String) traceData.get("replayType");
+            if (replayType != null) {
+                trace.setReplayType(replayType);
+            }
+            Object replayableObj = traceData.get("replayable");
+            if (replayableObj != null) {
+                trace.setReplayable(Boolean.TRUE.equals(replayableObj));
+            } else {
+                trace.setReplayable(true);
+            }
 
             // Parse numeric fields
             if (traceData.get("statusCode") != null) {

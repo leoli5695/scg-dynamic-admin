@@ -27,6 +27,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Global filter for capturing error and slow requests for tracing and replay.
@@ -58,6 +59,16 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
 
     @Value("${gateway.trace.max-body-size:65536}")
     private int maxBodySize;
+
+    // Sampling rate configuration
+    @Value("${gateway.trace.capture-all:false}")
+    private boolean captureAll;
+
+    @Value("${gateway.trace.sampling-rate:10}")
+    private int samplingRate;
+
+    @Value("${gateway.trace.sampling-rate-for-errors:100}")
+    private int samplingRateForErrors;
 
     @Autowired
     private WebClient webClient;
@@ -137,6 +148,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
 
     /**
      * Called after request completes to check if we should capture the trace.
+     * Supports sampling rates for errors and normal requests.
      */
     private void afterRequest(ServerWebExchange exchange, long startTime, String traceId, String requestBody) {
         long duration = System.currentTimeMillis() - startTime;
@@ -147,12 +159,39 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
         boolean isError = statusCode >= 400;
         boolean isSlow = duration > slowThresholdMs;
 
-        if (!captureErrors && !captureSlow) {
+        // Detect WebSocket/SSE requests
+        boolean isWebSocket = isWebSocketUpgrade(exchange.getRequest());
+        boolean isSse = isSseRequest(exchange.getRequest());
+
+        // Determine replay type based on request characteristics
+        String replayType = isWebSocket ? "WEBSOCKET" : isSse ? "SSE" : "HTTP";
+        boolean replayable = !isWebSocket && !isSse; // WebSocket/SSE cannot be fully replayed
+
+        // Sampling logic
+        int random = ThreadLocalRandom.current().nextInt(100);
+
+        // Error requests: use samplingRateForErrors (default 100%)
+        if (captureErrors && isError) {
+            if (samplingRateForErrors >= 100 || random < samplingRateForErrors) {
+                captureTrace(exchange, startTime, traceId, requestBody, duration, statusCode,
+                        true, false, replayType, replayable, "ERROR");
+            }
             return;
         }
 
-        if ((captureErrors && isError) || (captureSlow && isSlow)) {
-            captureTrace(exchange, startTime, traceId, requestBody, duration, statusCode, isError, isSlow);
+        // Slow requests: capture all if captureSlow is enabled
+        if (captureSlow && isSlow) {
+            captureTrace(exchange, startTime, traceId, requestBody, duration, statusCode,
+                    false, true, replayType, replayable, "SLOW");
+            return;
+        }
+
+        // Normal requests: use captureAll and samplingRate
+        if (captureAll) {
+            if (samplingRate >= 100 || random < samplingRate) {
+                captureTrace(exchange, startTime, traceId, requestBody, duration, statusCode,
+                        false, false, replayType, replayable, "ALL");
+            }
         }
     }
 
@@ -161,7 +200,8 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
      */
     private void captureTrace(ServerWebExchange exchange, long startTime, String traceId,
                               String requestBody, long duration, int statusCode,
-                              boolean isError, boolean isSlow) {
+                              boolean isError, boolean isSlow, String replayType,
+                              boolean replayable, String traceType) {
         try {
             ServerHttpRequest request = exchange.getRequest();
 
@@ -176,8 +216,9 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
             trace.put("latencyMs", duration);
             trace.put("clientIp", getClientIp(request));
             trace.put("userAgent", request.getHeaders().getFirst(HttpHeaders.USER_AGENT));
-            trace.put("traceType", isError ? "ERROR" : "SLOW");
-            trace.put("replayable", true);
+            trace.put("traceType", traceType);
+            trace.put("replayType", replayType);
+            trace.put("replayable", replayable);
             trace.put("traceTime", new java.util.Date(startTime).toInstant().toString());
 
             // Capture headers (filter sensitive ones)
@@ -287,6 +328,24 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
 
         return request.getRemoteAddress() != null ?
                 request.getRemoteAddress().getAddress().getHostAddress() : "unknown";
+    }
+
+    /**
+     * Check if request is a WebSocket upgrade request.
+     * WebSocket uses persistent connection and cannot be fully replayed.
+     */
+    private boolean isWebSocketUpgrade(ServerHttpRequest request) {
+        String upgrade = request.getHeaders().getFirst("Upgrade");
+        return "websocket".equalsIgnoreCase(upgrade);
+    }
+
+    /**
+     * Check if request is an SSE (Server-Sent Events) request.
+     * SSE uses streaming response and cannot be fully replayed.
+     */
+    private boolean isSseRequest(ServerHttpRequest request) {
+        String accept = request.getHeaders().getFirst("Accept");
+        return accept != null && accept.contains("text/event-stream");
     }
 
     @Override

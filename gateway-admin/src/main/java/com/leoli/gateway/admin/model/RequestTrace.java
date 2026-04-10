@@ -148,6 +148,13 @@ public class RequestTrace {
     private Boolean replayable = true;
 
     /**
+     * Replay type: HTTP, WEBSOCKET, SSE, UNSUPPORTED
+     * Used to determine how (or if) the request can be replayed
+     */
+    @Column(name = "replay_type", length = 20)
+    private String replayType = "HTTP";
+
+    /**
      * Replay count
      */
     @Column(name = "replay_count")

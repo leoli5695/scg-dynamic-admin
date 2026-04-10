@@ -144,6 +144,8 @@ public class RequestReplayController {
         map.put("originalStatusCode", request.getOriginalStatusCode());
         map.put("originalResponseBody", request.getOriginalResponseBody());
         map.put("originalLatencyMs", request.getOriginalLatencyMs());
+        map.put("replayType", request.getReplayType());
+        map.put("replayable", request.getReplayable());
         return map;
     }
 }
