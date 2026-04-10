@@ -231,19 +231,24 @@ Ensures data consistency between database and config center:
    |   |  Order    Filter                    Function                      |  |
    |   |  -----    ---------------------     -------------------------    |  |
    |   |  -500     SecurityGlobalFilter      Security hardening            |  |
+   |   |  -490     IPFilterGlobalFilter      IP Blacklist/Whitelist        |  |
    |   |  -400     AccessLogGlobalFilter     Access logging                |  |
-   |   |  -300     TraceIdGlobalFilter       Generate Trace ID + MDC       |  |
    |   |  -300     CorsGlobalFilter          CORS handling                 |  |
-   |   |  -280     IPFilterGlobalFilter      IP Blacklist/Whitelist        |  |
+   |   |  -300     TraceIdGlobalFilter       Generate Trace ID + MDC       |  |
+   |   |  -255     RequestTransformFilter    Request body transformation   |  |
+   |   |  -254     RequestValidationFilter   Request schema validation     |  |
    |   |  -250     AuthenticationGlobalFilter JWT/API Key/OAuth2 Auth      |  |
+   |   |  -249     MockResponseFilter        Mock response for testing     |  |
    |   |  -200     TimeoutGlobalFilter       Connection/Response Timeout   |  |
-   |   |  -200     RetryGlobalFilter         Retry on failure              |  |
    |   |  -150     ApiVersionGlobalFilter    API version routing           |  |
    |   |  -100     CircuitBreakerGlobalFilter Resilience4j Circuit Breaker |  |
-   |   |  -50     HeaderOpGlobalFilter      Header manipulation           |  |
+   |   |   -50     HeaderOpGlobalFilter      Header manipulation           |  |
+   |   |   -45     ResponseTransformFilter   Response body transformation  |  |
    |   |    50     CacheGlobalFilter         Response caching              |  |
-   |   | 10001    MultiServiceLoadBalancerFilter Multi-service routing      |  |
-   |   | 10150    DiscoveryLoadBalancerFilter Service Discovery + LB       |  |
+   |   |   100     TraceCaptureGlobalFilter  Trace capture for debugging   |  |
+   |   |  9999     RetryGlobalFilter         Retry on failure              |  |
+   |   | 10001     MultiServiceLoadBalancerFilter Multi-service routing     |  |
+   |   | 10150     DiscoveryLoadBalancerFilter Service Discovery + LB       |  |
    |   |                                                                    |  |
    |   +-------------------------------------------------------------------+  |
    |                                   |                                      |
@@ -267,26 +272,32 @@ Ensures data consistency between database and config center:
 Request enters gateway
   |
   +-- order -500  Security        --> Security hardening first
-  +-- order -400  AccessLog       --> Log all requests for audit
+  +-- order -490  IP Filter       --> IP whitelist/blacklist check -> 403 if blocked
+  |                                WHY BEFORE ACCESS LOG? --> Fast rejection saves logging overhead
+  |                                WHY BEFORE AUTH? --> Fast rejection saves CPU
+  +-- order -400  Access Log      --> Log all requests for audit
+  +-- order -300  CORS            --> Handle preflight requests
   +-- order -300  TraceId         --> Generate/propagate X-Trace-Id, MDC logging
   |                                WHY EARLY? --> See everything for debugging
-  +-- order -300  CORS            --> Handle preflight requests
-  +-- order -280  IP Filter       --> Whitelist/blacklist check -> 403 if blocked
-  |                                WHY BEFORE AUTH? --> Fast rejection saves CPU
+  +-- order -255  Request Transform --> Modify request body (JSON↔XML, field mapping)
+  +-- order -254  Request Validation --> Validate request schema/fields
   +-- order -250  Authentication  --> JWT/API Key/OAuth2 validation -> 401 if failed
+  +-- order -249  Mock Response   --> Return mock data if configured (testing/development)
   +-- order -200  Timeout         --> Inject timeout params into route metadata
-  +-- order -200  Retry           --> Configure retry behavior
   +-- order -150  API Version     --> Version-based routing
   +-- order -100  Circuit Breaker --> Check circuit status -> 503 if open
-  +-- order  -50  Header Op       --> Add/modify headers
+  +-- order  -50  Header Op       --> Add/modify/remove headers
+  +-- order  -45  Response Transform --> Modify response body before returning
   +-- order   50  Cache           --> Response caching
+  +-- order  100  Trace Capture   --> Capture error/slow requests for debugging
+  +-- order 9999  Retry           --> Retry on failure (before routing)
   +-- order 10001 Multi-Service  --> Multi-service routing + gray release
   +-- order 10150 Load Balancer  --> Service discovery + load balancing
-  |                                WHY LAST? --> Final defense before routing
+  |                                WHY LAST? --> Final routing decision
   +-- order 10150+ Routing        --> Forward to backend
 ```
 
-**Performance Impact:** IP Filter before Authentication provides **+37% TPS improvement**
+**Performance Impact:** IP Filter (-490) before Access Log (-400) and Authentication (-250) provides **+37% TPS improvement**
 
 ---
 
@@ -460,51 +471,134 @@ A multi-level cache with fallback would be **over-engineering** for this use cas
 my-gateway/
 |-- src/main/java/com/leoli/gateway/
 |   |
-|   |-- filter/                    # Global Filters
-|   |   |-- AuthenticationGlobalFilter.java
-|   |   |-- CircuitBreakerGlobalFilter.java
-|   |   |-- HybridRateLimiterFilter.java
-|   |   |-- IPFilterGlobalFilter.java
-|   |   |-- TimeoutGlobalFilter.java
-|   |   |-- TraceIdGlobalFilter.java
-|   |   +-- ...
+|   |-- filter/                    # Global Filters (organized by category)
+|   |   |-- security/              # Security filters
+|   |   |   |-- SecurityGlobalFilter.java      # XSS/SQL injection protection
+|   |   |   |-- IPFilterGlobalFilter.java      # IP whitelist/blacklist
+|   |   |   |-- AuthenticationGlobalFilter.java # JWT/API Key/OAuth2 auth
+|   |   |   +-- CorsGlobalFilter.java          # CORS handling
+|   |   |
+|   |   |-- loadbalancer/          # Load balancing filters
+|   |   |   |-- DiscoveryLoadBalancerFilter.java    # Service discovery LB (lb://)
+|   |   |   |-- MultiServiceLoadBalancerFilter.java # Multi-service routing
+|   |   |   |-- InstanceFilter.java                # Instance filtering
+|   |   |   |-- InstanceSelector.java              # Instance selection
+|   |   |   +-- InstanceRetryExecutor.java         # Retry execution
+|   |   |
+|   |   |-- ratelimit/             # Rate limiting filters
+|   |   |   |-- HybridRateLimiterFilter.java      # Redis + local hybrid
+|   |   |   +-- MultiDimRateLimiterFilter.java    # Multi-dimensional limits
+|   |   |
+|   |   |-- resilience/            # Resilience filters
+|   |   |   |-- CircuitBreakerGlobalFilter.java   # Resilience4j circuit breaker
+|   |   |   |-- TimeoutGlobalFilter.java          # Request timeout
+|   |   |   +-- RetryGlobalFilter.java            # Retry on failure
+|   |   |
+|   |   |-- transform/             # Request/Response transformation
+|   |   |   |-- RequestTransformFilter.java       # Request body transformation
+|   |   |   |-- RequestValidationFilter.java      # Request schema validation
+|   |   |   |-- ResponseTransformFilter.java      # Response body transformation
+|   |   |   +-- MockResponseFilter.java           # Mock response for testing
+|   |   |
+|   |   +-- (root level)           # Other filters
+|   |       |-- AccessLogGlobalFilter.java       # Access logging
+|   |       |-- CacheGlobalFilter.java           # Response caching
+|   |       |-- TraceIdGlobalFilter.java         # Trace ID generation
+|   |       |-- TraceCaptureGlobalFilter.java    # Trace capture for debugging
+|   |       |-- HeaderOpGlobalFilter.java        # Header operations
+|   |       |-- ApiVersionGlobalFilter.java      # API version routing
+|   |       +-- ActuatorEndpointFilter.java      # Actuator endpoint protection
 |   |
 |   |-- auth/                      # Auth Processors (Strategy Pattern)
 |   |   |-- AuthProcessor.java              # Interface
+|   |   |-- AbstractAuthProcessor.java      # Base implementation
 |   |   |-- AuthProcessManager.java         # Manager
-|   |   |-- JwtAuthProcessor.java
-|   |   |-- ApiKeyAuthProcessor.java
-|   |   |-- BasicAuthProcessor.java
-|   |   |-- HmacSignatureAuthProcessor.java
-|   |   +-- OAuth2AuthProcessor.java
+|   |   |-- JwtAuthProcessor.java           # JWT validation
+|   |   |-- JwtValidationCache.java         # JWT cache for performance
+|   |   |-- ApiKeyAuthProcessor.java        # API Key validation
+|   |   |-- BasicAuthProcessor.java         # Basic auth
+|   |   |-- HmacSignatureAuthProcessor.java # HMAC signature
+|   |   +-- OAuth2AuthProcessor.java        # OAuth2 integration
 |   |
 |   |-- center/                    # Config Center SPI
-|   |   |-- spi/ConfigCenterService.java
-|   |   |-- nacos/NacosConfigService.java
-|   |   +-- consul/ConsulConfigService.java
+|   |   |-- spi/ConfigCenterService.java    # Interface
+|   |   |-- spi/AbstractConfigService.java  # Base implementation
+|   |   |-- nacos/NacosConfigService.java   # Nacos implementation
+|   |   +-- consul/ConsulConfigService.java # Consul implementation
 |   |
 |   |-- discovery/                 # Service Discovery SPI
-|   |   |-- spi/DiscoveryService.java
-|   |   |-- nacos/NacosDiscoveryService.java
-|   |   |-- consul/ConsulDiscoveryService.java
-|   |   +-- staticdiscovery/StaticDiscoveryService.java
+|   |   |-- spi/DiscoveryService.java       # Interface
+|   |   |-- spi/AbstractDiscoveryService.java # Base implementation
+|   |   |-- nacos/NacosDiscoveryService.java  # Nacos discovery
+|   |   |-- consul/ConsulDiscoveryService.java # Consul discovery
+|   |   +-- staticdiscovery/StaticDiscoveryService.java # Static instances
 |   |
 |   |-- manager/                   # Configuration Managers
-|   |   |-- RouteManager.java
-|   |   |-- ServiceManager.java
-|   |   +-- StrategyManager.java
+|   |   |-- RouteManager.java              # Route configuration
+|   |   |-- ServiceManager.java            # Service configuration
+|   |   +-- StrategyManager.java           # Strategy configuration
 |   |
-|   |-- refresher/                 # Config Refreshers
-|   |   |-- RouteRefresher.java
-|   |   |-- ServiceRefresher.java
-|   |   +-- StrategyRefresher.java
+|   |-- refresher/                 # Config Refreshers (Nacos listeners)
+|   |   |-- RouteRefresher.java            # Route config refresh
+|   |   |-- ServiceRefresher.java          # Service config refresh
+|   |   |-- StrategyRefresher.java         # Strategy config refresh
+|   |   +-- AuthPolicyRefresher.java       # Auth policy refresh
 |   |
 |   |-- route/                     # Route Locator
-|   |   +-- DynamicRouteDefinitionLocator.java
+|   |   +-- DynamicRouteDefinitionLocator.java # Dynamic route resolution
 |   |
-|   +-- limiter/                   # Rate Limiting
-|       |-- RedisRateLimiter.java
-|       +-- LocalRateLimiter.java
+|   |-- limiter/                   # Rate Limiting Components
+|   |   |-- DistributedRateLimiter.java    # Redis distributed limiter
+|   |   |-- RedisHealthChecker.java        # Redis health monitoring
+|   |   |-- ShadowQuotaManager.java        # Shadow quota for failover
+|   |   +-- RateLimitResult.java           # Rate limit result model
+|   |
+|   |-- ssl/                       # SSL Certificate Management
+|   |   |-- SslCertificateLoader.java      # Certificate loading
+|   |   |-- SslServerConfig.java           # SSL server configuration
+|   |   +-- DynamicSslContextManager.java  # Dynamic SSL context
+|   |
+|   |-- exception/                 # Custom Exceptions
+|   |   |-- GatewayException.java          # Base exception
+|   |   |-- AuthenticationException.java   # Auth errors
+|   |   |-- RateLimitException.java        # Rate limit errors
+|   |   |-- CircuitBreakerException.java   # Circuit breaker errors
+|   |   |-- ValidationException.java       # Validation errors
+|   |   |-- UpstreamException.java         # Upstream service errors
+|   |   |-- RouteException.java            # Route errors
+|   |   |-- ErrorCode.java                 # Error code definitions
+|   |   +-- ScgGlobalExceptionHandler.java # Global exception handler
+|   |
+|   |-- constants/                 # Constants
+|   |   |-- FilterOrderConstants.java      # Filter execution order
+|   |   +-- GatewayConfigConstants.java    # Config constants
+|   |
+|   |-- model/                     # Configuration Models
+|   |   |-- AuthConfig.java                # Auth configuration
+|   |   |-- CircuitBreakerConfig.java      # Circuit breaker config
+|   |   |-- IPFilterConfig.java            # IP filter config
+|   |   |-- RateLimiterConfig.java         # Rate limiter config
+|   |   |-- TimeoutConfig.java             # Timeout config
+|   |   |-- MultiServiceConfig.java        # Multi-service routing config
+|   |   |-- RequestTransformConfig.java    # Request transform config
+|   |   |-- RequestValidationConfig.java   # Request validation config
+|   |   |-- ResponseTransformConfig.java   # Response transform config
+|   |   |-- MockResponseConfig.java        # Mock response config
+|   |   +-- StrategyDefinition.java        # Strategy definition
+|   |
+|   |-- health/                    # Health Check & Heartbeat
+|   |   |-- HeartbeatReporter.java         # Heartbeat to admin
+|   |   |-- ActiveHealthChecker.java       # Active health check
+|   |   |-- HybridHealthChecker.java       # Hybrid health monitoring
+|   |   |-- InstanceDiscoveryService.java  # Instance discovery
+|   |   +-- HealthStatusSyncTask.java      # Health status sync
+|   |
+|   +-- config/                    # Spring Configuration
+|       |-- GatewayConfig.java             # Gateway config
+|       |-- CorsConfig.java                # CORS config
+|       |-- RedisConfig.java               # Redis config
+|       |-- WebClientConfig.java           # WebClient config
+|       +-- HeartbeatProperties.java       # Heartbeat properties
 ```
 
 ### 6.2 gateway-admin (Management Console)
@@ -513,32 +607,161 @@ my-gateway/
 gateway-admin/
 |-- src/main/java/com/leoli/gateway/admin/
 |   |
-|   |-- controller/                # REST API
-|   |   |-- RouteController.java
-|   |   |-- ServiceController.java
-|   |   |-- StrategyController.java
-|   |   +-- AuthController.java
+|   |-- controller/                # REST API Endpoints
+|   |   |-- BaseController.java             # Base controller utilities
+|   |   |-- RouteController.java            # Route management API
+|   |   |-- ServiceController.java          # Service management API
+|   |   |-- StrategyController.java         # Strategy config API
+|   |   |-- AuthController.java             # Authentication API
+|   |   |-- AuthPolicyController.java       # Auth policy management
+|   |   |-- GatewayInstanceController.java  # Instance management API
+|   |   |-- KubernetesController.java       # Kubernetes deployment API
+|   |   |-- SslCertificateController.java   # SSL certificate API
+|   |   |-- MonitorController.java          # Monitoring metrics API
+|   |   |-- AnalyticsController.java        # Analytics API
+|   |   |-- AlertController.java            # Alert management API
+|   |   |-- EmailConfigController.java      # Email config API
+|   |   |-- AccessLogConfigController.java  # Access log config API
+|   |   |-- RequestTraceController.java     # Request trace API
+|   |   |-- AuditLogController.java         # Audit log API
+|   |   |-- AiConfigController.java         # AI analysis config API
+|   |   |-- HealthSyncController.java       # Health sync API
+|   |   |-- InstanceHealthController.java   # Instance health API
+|   |   +-- HealthCheckController.java      # Health check API
 |   |
 |   |-- service/                   # Business Logic
-|   |   |-- RouteService.java              # DB + Nacos dual-write
-|   |   |-- ServiceService.java
-|   |   +-- StrategyService.java
+|   |   |-- RouteService.java               # Route CRUD + dual-write
+|   |   |-- ServiceService.java             # Service CRUD + dual-write
+|   |   |-- StrategyService.java            # Strategy CRUD + dual-write
+|   |   |-- AuthPolicyService.java          # Auth policy management
+|   |   |-- ConfigCenterPublisher.java      # Nacos/Consul publisher
+|   |   |-- GatewayInstanceService.java     # Instance lifecycle
+|   |   |-- KubernetesService.java          # K8s operations
+|   |   |-- KubernetesResourceService.java  # K8s resource management
+|   |   |-- DeploymentService.java          # K8s deployment
+|   |   |-- KubeConfigService.java          # Kube config management
+|   |   |-- ClusterConnectionService.java   # Cluster connection
+|   |   |-- SslCertificateService.java      # SSL certificate ops
+|   |   |-- AiAnalysisService.java          # AI metrics analysis
+|   |   |-- AlertContentGenerator.java      # AI alert content
+|   |   |-- AlertService.java               # Alert management
+|   |   |-- AlertConfigService.java         # Alert config
+|   |   |-- AlertCheckService.java          # Alert threshold check
+|   |   |-- AlertEmailBuilder.java          # Alert email builder
+|   |   |-- EmailSenderService.java         # Email sending
+|   |   |-- EmailConfigService.java         # Email config
+|   |   |-- RequestTraceService.java        # Request trace ops
+|   |   |-- AuditLogService.java            # Audit log ops
+|   |   |-- AnalyticsService.java           # Analytics service
+|   |   |-- PrometheusService.java          # Prometheus metrics
+|   |   |-- AccessLogConfigService.java     # Access log config
+|   |   |-- InstanceHealthService.java      # Instance health
+|   |   |-- DatabaseHealthService.java      # DB health check
+|   |   |-- NacosMetadataSyncer.java        # Nacos metadata sync
+|   |   |-- AuthService.java                # Auth service
+|   |   +-- StrategyConfigValidator.java    # Strategy validation
 |   |
-|   |-- repository/                # Data Access
-|   |   |-- RouteRepository.java
-|   |   |-- ServiceRepository.java
-|   |   +-- StrategyRepository.java
+|   |-- repository/                # Data Access (JPA)
+|   |   |-- RouteRepository.java            # Route entity
+|   |   |-- ServiceRepository.java          # Service entity
+|   |   |-- StrategyRepository.java         # Strategy entity
+|   |   |-- AuthPolicyRepository.java       # Auth policy entity
+|   |   |-- RouteAuthBindingRepository.java # Route-auth binding
+|   |   |-- GatewayInstanceRepository.java  # Instance entity
+|   |   |-- KubernetesClusterRepository.java # K8s cluster entity
+|   |   |-- SslCertificateRepository.java   # SSL certificate entity
+|   |   |-- RequestTraceRepository.java     # Request trace entity
+|   |   |-- AuditLogRepository.java         # Audit log entity
+|   |   |-- AlertHistoryRepository.java     # Alert history entity
+|   |   |-- AlertConfigRepository.java      # Alert config entity
+|   |   |-- AiConfigRepository.java         # AI config entity
+|   |   |-- EmailConfigRepository.java      # Email config entity
+|   |   |-- UserRepository.java             # User entity
+|   |   +-- ServiceInstanceHealthRepository.java # Instance health
 |   |
-|   |-- model/                     # Entities
-|   |   |-- RouteEntity.java
-|   |   |-- ServiceEntity.java
-|   |   +-- StrategyEntity.java
+|   |-- model/                     # Entities & DTOs
+|   |   |-- RouteDefinition.java            # Route definition
+|   |   |-- ServiceDefinition.java          # Service definition
+|   |   |-- StrategyConfig.java             # Strategy config
+|   |   |-- AuthPolicyDefinition.java       # Auth policy definition
+|   |   |-- AuthPolicyEntity.java           # Auth policy entity
+|   |   |-- RouteAuthBindingEntity.java     # Route-auth binding
+|   |   |-- GatewayInstanceEntity.java      # Instance entity
+|   |   |-- KubernetesCluster.java          # K8s cluster entity
+|   |   |-- SslCertificate.java             # SSL certificate entity
+|   |   |-- RequestTrace.java               # Request trace entity
+|   |   |-- AuditLogEntity.java             # Audit log entity
+|   |   |-- AlertHistory.java               # Alert history entity
+|   |   |-- AlertConfig.java                # Alert config entity
+|   |   |-- AiConfig.java                   # AI config entity
+|   |   |-- EmailConfig.java                # Email config entity
+|   |   |-- AccessLogGlobalConfig.java      # Access log config
+|   |   |-- GrayRules.java                  # Gray release rules
+|   |   |-- RouteServiceBinding.java        # Route-service binding
+|   |   |-- InstanceSpec.java               # Instance spec (small/medium/large)
+|   |   |-- InstanceStatus.java             # Instance status enum
+|   |   +-- User.java                       # User entity
 |   |
-|   |-- center/                    # Config Publisher
-|   |   +-- ConfigCenterPublisher.java
+|   |-- reconcile/                 # Config Reconciliation Tasks
+|   |   |-- ReconcileTask.java              # Base reconcile task
+|   |   |-- RouteReconcileTask.java         # Route reconcile
+|   |   |-- ServiceReconcileTask.java       # Service reconcile
+|   |   |-- AuthPolicyReconcileTask.java    # Auth policy reconcile
+|   |   +-- ReconcileResult.java            # Reconcile result
 |   |
-|   +-- aspect/                    # AOP
-|       +-- AuditLogAspect.java
+|   |-- cache/                     # Runtime Caches
+|   |   +-- InstanceNamespaceCache.java     # Instance namespace mapping
+|   |
+|   |-- alert/                     # Alert Notification
+|   |   |-- AlertNotifier.java              # Alert interface
+|   |   |-- AlertLevel.java                 # Alert level enum
+|   |   |-- EmailAlertNotifier.java         # Email notifier
+|   |   +-- DingTalkAlertNotifier.java      # DingTalk notifier
+|   |
+|   |-- config/                    # Spring Configuration
+|   |   |-- SecurityConfig.java             # Spring Security config
+|   |   |-- JwtTokenProvider.java           # JWT token provider
+|   |   |-- PublicEndpointFilter.java       # Public endpoint filter
+|   |   |-- RestTemplateConfig.java         # RestTemplate config
+|   |   +-- ApplicationInitializer.java     # App initialization
+|   |
+|   |-- filter/                    # Security Filters
+|   |   +-- JwtAuthenticationFilter.java    # JWT authentication filter
+|   |
+|   |-- validation/                # Input Validation
+|   |   +-- RouteValidator.java             # Route validation
+|   |
+|   |-- converter/                 # Entity/DTO Converters
+|   |   |-- RouteConverter.java             # Route converter
+|   |   |-- ServiceConverter.java           # Service converter
+|   |   +-- AuthTypeConverter.java          # Auth type converter
+|   |
+|   |-- dto/                       # Data Transfer Objects
+|   |   |-- InstanceHealthDTO.java          # Instance health DTO
+|   |   |-- InstanceCreateRequest.java      # Instance create request
+|   |   |-- ClientStats.java                # Client statistics
+|   |   |-- MethodStats.java                # Method statistics
+|   |   |-- RouteStats.java                 # Route statistics
+|   |   +-- ServiceStats.java               # Service statistics
+|   |
+|   |-- enums/                     # Enums
+|   |   +-- AuthType.java                   # Auth type enum
+|   |
+|   |-- properties/                # Configuration Properties
+|   |   +-- GatewayAdminProperties.java     # Admin properties
+|   |
+|   |-- scheduler/                 # Scheduled Tasks
+|   |   +-- AuditLogCleanupScheduler.java   # Audit log cleanup
+|   |
+|   |-- schedule/                  # Schedulers
+|   |   +-- ReconcileScheduler.java         # Reconcile scheduler
+|   |
+|   |-- task/                      # Background Tasks
+|   |   +-- InstanceHealthCheckTask.java    # Instance health check
+|   |
+|   +-- util/                      # Utilities
+|       |-- JwtUtil.java                    # JWT utilities
+|       +-- ServiceIdExtractor.java         # Service ID extractor
 ```
 
 ---
@@ -1516,7 +1739,257 @@ The namespace is auto-created if it doesn't exist.
 
 ---
 
-## 20. Summary
+## 20. Performance Optimizations
+
+The gateway implements several performance optimizations to ensure high throughput and low latency.
+
+### 20.1 JWT Validation Cache
+
+Avoids repeated signature verification for the same token:
+
+```
++------------------------------------------------------------------+
+|                    JWT VALIDATION CACHE                           |
++------------------------------------------------------------------+
+
+   Incoming Request with JWT
+            │
+            ▼
+   +-----------------+
+   | Cache Lookup    │ ── Hit ──▶ Return cached Claims (O(1))
+   +--------+--------+
+            │ Miss
+            ▼
+   +-----------------+
+   | Verify Signature│
+   | Parse Claims    │
+   +--------+--------+
+            │
+            ▼
+   +-----------------+
+   | Cache Result    │
+   | (with TTL)      │
+   +-----------------+
+
+   Cache Features:
+   - Max size: 10,000 entries
+   - Auto-expiration based on JWT exp claim
+   - Scheduled cleanup every 60 seconds
+   - Memory-efficient eviction (oldest 20% when full)
+```
+
+**Configuration:**
+```yaml
+# JWT cache is enabled by default
+# Automatic cleanup runs every 60 seconds
+# Max cache size: 10,000 entries
+```
+
+**Performance Impact:** ~90% reduction in JWT verification overhead for repeated tokens.
+
+### 20.2 Shadow Quota for Redis Failover
+
+Graceful degradation when Redis becomes unavailable:
+
+```
++------------------------------------------------------------------+
+|                    SHADOW QUOTA FAILOVER                          |
++------------------------------------------------------------------+
+
+   Normal Operation (Redis Healthy):
+   +-------------------------------------------------------------+
+   |  1. Record global QPS snapshot every second                |
+   |  2. Monitor cluster node count via service discovery       |
+   |  3. Calculate: localQuota = globalQPS / nodeCount          |
+   |  4. Store as "shadow quota" for failover                   |
+   +-------------------------------------------------------------+
+
+   Redis Failure Detected:
+   +-------------------------------------------------------------+
+   |  1. Switch to local rate limiting mode                      |
+   |  2. Inherit pre-calculated shadow quota (no reset!)         |
+   |  3. Continue limiting at approximately same rate            |
+   |  4. Backend receives stable traffic (no spike!)             |
+   +-------------------------------------------------------------+
+
+   Redis Recovery:
+   +-------------------------------------------------------------+
+   |  1. Gradual traffic shifting (10% per second)              |
+   |  2. Prevent thundering herd to Redis                        |
+   |  3. Full recovery in 10 seconds                             |
+   +-------------------------------------------------------------+
+
+   Example:
+   - Global limit: 10,000 QPS, Nodes: 5
+   - Shadow quota: 10,000 / 5 = 2,000 QPS per node
+   - Redis fails → Each node continues at ~2,000 QPS
+   - Backend traffic: stable at ~10,000 QPS
+```
+
+**Configuration:**
+```yaml
+gateway:
+  rate-limiter:
+    shadow-quota:
+      enabled: true
+      min-node-count: 1
+```
+
+### 20.3 WebClient Connection Pool
+
+Optimized HTTP connection pooling for outbound calls:
+
+```
++------------------------------------------------------------------+
+|                    WEBCLIENT CONNECTION POOL                      |
++------------------------------------------------------------------+
+
+   Configuration:
+   +-------------------------------------------------------------+
+   |  maxConnections: 100          (total pool size)             |
+   |  maxConnectionsPerHost: 20    (per-target limit)            |
+   |  pendingAcquireTimeout: 30s   (wait for available conn)     |
+   |  pendingAcquireMaxCount: 500  (max waiting requests)        |
+   |  idleTimeout: 60s             (evict idle connections)      |
+   |  maxLifeTime: 5min            (force refresh connections)   |
+   |  connectTimeout: 5s           (TCP connection timeout)      |
+   |  responseTimeout: 30s         (full response timeout)       |
+   +-------------------------------------------------------------+
+
+   Features:
+   - Shared connection pool for OAuth2, heartbeat, trace replay
+   - Automatic connection refresh prevents stale connections
+   - Compression enabled (gzip)
+```
+
+### 20.4 Hybrid Health Checker
+
+Combines passive and active health checks with local caching:
+
+```
++------------------------------------------------------------------+
+|                    HYBRID HEALTH CHECKER                          |
++------------------------------------------------------------------+
+
+   Passive Check (Zero Overhead):
+   +-------------------------------------------------------------+
+   |  recordSuccess(serviceId, ip, port)                         |
+   |  - Called after each successful request                     |
+   |  - Updates local health cache                               |
+   |  - No additional network calls                               |
+   +-------------------------------------------------------------+
+
+   Active Check (On-demand):
+   +-------------------------------------------------------------+
+   |  checkHealth(serviceId, ip, port)                           |
+   |  - Triggered when passive check indicates unhealthy         |
+   |  - HTTP call to /actuator/health endpoint                   |
+   |  - Failure threshold: 3 consecutive failures                |
+   +-------------------------------------------------------------+
+
+   Local Cache (Caffeine):
+   +-------------------------------------------------------------+
+   |  Maximum size: 10,000 instances                             |
+   |  Expiration: 5 minutes                                      |
+   |  Stats recording enabled                                    |
+   +-------------------------------------------------------------+
+
+   Network Flap Protection:
+   +-------------------------------------------------------------+
+   |  - Ignore mass status changes (>10 at once)                 |
+   |  - Prevents cascading false negatives                       |
+   +-------------------------------------------------------------+
+```
+
+**Configuration:**
+```yaml
+gateway:
+  health:
+    batch-size: 50
+    failure-threshold: 3
+    recovery-time: 30000
+    idle-threshold: 300000
+    network-flap-threshold: 10
+```
+
+### 20.5 Non-Blocking Lock Optimization (CAS + tryLock)
+
+Local rate limiter uses hybrid locking to avoid blocking EventLoop threads:
+
+```
++------------------------------------------------------------------+
+|                    NON-BLOCKING LOCK STRATEGY                     |
++------------------------------------------------------------------+
+
+   Fast Path (Low Contention - Optimistic):
+   +-------------------------------------------------------------+
+   |  if (currentCount.compareAndSet(count, count + 1)) {       |
+   |      return true;  // Success without blocking              |
+   |  }                                                          |
+   +-------------------------------------------------------------+
+
+   Slow Path (High Contention - Never Blocks!):
+   +-------------------------------------------------------------+
+   |  if (lock.tryLock()) {                                      |
+   |      try {                                                  |
+   |          // Double-check under lock                         |
+   |          if (count < maxRequests) {                         |
+   |              currentCount.incrementAndGet();                |
+   |              return true;                                   |
+   |          }                                                  |
+   |          return false;                                      |
+   |      } finally {                                            |
+   |          lock.unlock();                                     |
+   |      }                                                      |
+   |  }                                                          |
+   |  return false;  // Immediately reject - no blocking!        |
+   +-------------------------------------------------------------+
+
+   Benefits:
+   - No thread blocking in reactive context
+   - High throughput under normal load (CAS)
+   - Safe degradation under extreme contention (tryLock)
+   - Prevents EventLoop thread starvation
+```
+
+### 20.6 Access Log File Rotation (CAS Atomic Update)
+
+Atomic file path updates for daily log rotation:
+
+```java
+// Use CAS to atomically update file path if date changed
+if (!logFileState.compareAndSet(currentState, newState)) {
+    // CAS update - if another thread already updated, use their path
+    currentState = logFileState.get();
+}
+```
+
+### 20.7 Instance Discovery Optimization
+
+O(1) contains check instead of O(n):
+
+```java
+// Optimized: Use Set for O(1) contains() check instead of List's O(n)
+private Set<String> discoverGatewayInstances() {
+    // Returns Set for fast lookup
+}
+```
+
+### 20.8 Performance Summary
+
+| Optimization | Technique | Benefit |
+|--------------|-----------|---------|
+| **JWT Cache** | ConcurrentHashMap + TTL | ~90% reduction in verification overhead |
+| **Shadow Quota** | Pre-calculated failover | Stable traffic during Redis outage |
+| **Connection Pool** | Netty connection pool | Reduced connection overhead |
+| **Hybrid Health Check** | Caffeine cache + passive checks | Zero overhead for healthy instances |
+| **Non-blocking Lock** | CAS + tryLock | No EventLoop thread blocking |
+| **Log Rotation** | CAS atomic update | Thread-safe file switching |
+| **Instance Discovery** | Set instead of List | O(1) vs O(n) lookup |
+
+---
+
+## 21. Summary
 
 This API Gateway architecture demonstrates:
 
@@ -1530,6 +2003,7 @@ This API Gateway architecture demonstrates:
 - **Kubernetes deployment** with one-click instance creation
 - **Namespace isolation** for multi-tenancy support
 - **Heartbeat monitoring** for real-time instance health tracking
+- **Performance optimizations** including JWT cache, shadow quota, non-blocking locks
 - **Comprehensive testing** with 382 tests ensuring reliability
 
 ---

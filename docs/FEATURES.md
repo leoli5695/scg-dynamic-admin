@@ -15,14 +15,18 @@
 7. [Circuit Breaker](#7-circuit-breaker)
 8. [IP Filtering](#8-ip-filtering)
 9. [Timeout Control](#9-timeout-control)
-10. [Response Caching](#10-response-caching)
-11. [Monitoring & Alerts](#11-monitoring--alerts)
-12. [Request Tracing](#12-request-tracing)
-13. [AI-Powered Analysis](#13-ai-powered-analysis)
-14. [Email Notifications](#14-email-notifications)
-15. [Gateway Instance Management](#15-gateway-instance-management)
-16. [Kubernetes Integration](#16-kubernetes-integration)
-17. [API Reference](#17-api-reference)
+10. [Request Body Transformation](#10-request-body-transformation)
+11. [Request Validation](#11-request-validation)
+12. [Mock Response](#12-mock-response)
+13. [Response Body Transformation](#13-response-body-transformation)
+14. [Response Caching](#14-response-caching)
+15. [Monitoring & Alerts](#15-monitoring--alerts)
+16. [Request Tracing](#16-request-tracing)
+17. [AI-Powered Analysis](#17-ai-powered-analysis)
+18. [Email Notifications](#18-email-notifications)
+19. [Gateway Instance Management](#19-gateway-instance-management)
+20. [Kubernetes Integration](#20-kubernetes-integration)
+21. [API Reference](#21-api-reference)
 
 ---
 
@@ -447,13 +451,250 @@ Per-route connection and response timeout control.
 
 ---
 
-## 10. Response Caching
+## 10. Request Body Transformation
 
 ### 10.1 Overview
 
+Transform request body before forwarding to backend services. Supports protocol conversion, field mapping, and data masking.
+
+### 10.2 Supported Operations
+
+| Operation | Description |
+|-----------|-------------|
+| **Protocol Conversion** | JSON ↔ XML conversion |
+| **Field Mapping** | Rename, add, remove fields |
+| **Data Masking** | Mask sensitive fields (passwords, tokens) |
+| **Field Injection** | Add static or dynamic values |
+
+### 10.3 Configuration
+
+```json
+{
+  "routeId": "legacy-api",
+  "enabled": true,
+  "transformRules": [
+    {
+      "type": "FIELD_MAP",
+      "sourcePath": "$.user_name",
+      "targetPath": "$.username"
+    },
+    {
+      "type": "FIELD_MASK",
+      "path": "$.password",
+      "maskChar": "***"
+    },
+    {
+      "type": "FIELD_INJECT",
+      "path": "$.request_time",
+      "value": "${timestamp}"
+    }
+  ]
+}
+```
+
+### 10.4 Use Cases
+
+| Use Case | Configuration |
+|----------|---------------|
+| **Legacy API Integration** | Transform modern JSON to legacy format |
+| **Data Sanitization** | Remove/mask sensitive fields before logging |
+| **Protocol Bridge** | Convert XML to JSON for modern clients |
+
+---
+
+## 11. Request Validation
+
+### 11.1 Overview
+
+Validate incoming requests against predefined schemas before processing. Supports JSON Schema validation, required field checks, and type constraints.
+
+### 11.2 Validation Types
+
+| Type | Description |
+|------|-------------|
+| **JSON Schema** | Validate against JSON Schema specification |
+| **Required Fields** | Check mandatory fields exist |
+| **Type Constraints** | Validate field types (string, number, etc.) |
+| **Format Validation** | Validate email, date, regex patterns |
+| **Range Validation** | Min/max values for numbers |
+
+### 11.3 Configuration
+
+```json
+{
+  "routeId": "user-api",
+  "enabled": true,
+  "validationRules": [
+    {
+      "path": "$.email",
+      "type": "FORMAT",
+      "format": "email",
+      "errorMessage": "Invalid email format"
+    },
+    {
+      "path": "$.age",
+      "type": "RANGE",
+      "min": 0,
+      "max": 150,
+      "errorMessage": "Age must be between 0 and 150"
+    }
+  ],
+  "requiredFields": ["username", "email", "password"]
+}
+```
+
+### 11.4 Error Response
+
+```json
+{
+  "status": 400,
+  "error": "Validation Failed",
+  "details": [
+    {"field": "email", "message": "Invalid email format"},
+    {"field": "age", "message": "Age must be between 0 and 150"}
+  ]
+}
+```
+
+---
+
+## 12. Mock Response
+
+### 12.1 Overview
+
+Return mock responses for testing and development without backend services. Supports static responses, dynamic templates, and error simulation.
+
+### 12.2 Mock Types
+
+| Type | Description | Use Case |
+|------|-------------|----------|
+| **Static** | Fixed response body | Simple mocking |
+| **Dynamic** | Template-based with variables | Realistic test data |
+| **Error Simulation** | Return specific error codes | Error handling tests |
+| **Delayed** | Add artificial delay | Latency testing |
+
+### 12.3 Configuration
+
+```json
+{
+  "routeId": "test-api",
+  "enabled": true,
+  "mockType": "DYNAMIC",
+  "statusCode": 200,
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Mock": "true"
+  },
+  "bodyTemplate": {
+    "id": "${random.uuid}",
+    "name": "${random.name}",
+    "email": "${random.email}",
+    "createdAt": "${timestamp}",
+    "status": "active"
+  },
+  "delayMs": 100,
+  "errorSimulation": {
+    "enabled": false,
+    "errorCode": 500,
+    "errorRate": 0.1
+  }
+}
+```
+
+### 12.4 Template Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `${random.uuid}` | Random UUID | `a1b2c3d4-e5f6-...` |
+| `${random.name}` | Random name | `John Doe` |
+| `${random.email}` | Random email | `john@example.com` |
+| `${timestamp}` | Current timestamp | `2024-01-15T10:30:00Z` |
+| `${request.header.X-Id}` | Request header value | From request |
+
+---
+
+## 13. Response Body Transformation
+
+### 13.1 Overview
+
+Transform backend responses before returning to clients. Useful for API versioning, data filtering, and format conversion.
+
+### 13.2 Supported Operations
+
+| Operation | Description |
+|-----------|-------------|
+| **Field Filtering** | Remove sensitive or unnecessary fields |
+| **Field Mapping** | Rename or restructure response fields |
+| **Format Conversion** | XML → JSON, etc. |
+| **Response Wrapping** | Wrap response in standard envelope |
+
+### 13.3 Configuration
+
+```json
+{
+  "routeId": "external-api",
+  "enabled": true,
+  "transformRules": [
+    {
+      "type": "FIELD_REMOVE",
+      "path": "$.internal_id"
+    },
+    {
+      "type": "FIELD_REMOVE",
+      "path": "$.debug_info"
+    },
+    {
+      "type": "FIELD_MAP",
+      "sourcePath": "$.user_data",
+      "targetPath": "$.user"
+    }
+  ],
+  "responseWrapper": {
+    "enabled": true,
+    "wrapperField": "data",
+    "includeMetadata": true
+  }
+}
+```
+
+### 13.4 Example Transformation
+
+**Before (Backend Response):**
+```json
+{
+  "internal_id": 12345,
+  "debug_info": {"query_time": 50},
+  "user_data": {
+    "name": "John",
+    "email": "john@example.com"
+  }
+}
+```
+
+**After (Client Response):**
+```json
+{
+  "data": {
+    "user": {
+      "name": "John",
+      "email": "john@example.com"
+    }
+  },
+  "metadata": {
+    "transformed": true
+  }
+}
+```
+
+---
+
+## 14. Response Caching
+
+### 14.1 Overview
+
 Caffeine-based in-memory caching for GET/HEAD requests.
 
-### 10.2 Configuration
+### 14.2 Configuration
 
 ```json
 {
@@ -464,7 +705,7 @@ Caffeine-based in-memory caching for GET/HEAD requests.
 }
 ```
 
-### 10.3 Cache Headers
+### 14.3 Cache Headers
 
 | Header | Description |
 |--------|-------------|
@@ -473,9 +714,9 @@ Caffeine-based in-memory caching for GET/HEAD requests.
 
 ---
 
-## 11. Monitoring & Alerts
+## 15. Monitoring & Alerts
 
-### 11.1 Metrics
+### 15.1 Metrics
 
 | Category | Metrics |
 |----------|---------|
@@ -484,7 +725,7 @@ Caffeine-based in-memory caching for GET/HEAD requests.
 | **Threads** | Live, daemon, peak |
 | **HTTP** | Requests/sec, response time, error rate |
 
-### 11.2 Alert Thresholds
+### 15.2 Alert Thresholds
 
 ```json
 {
@@ -502,20 +743,20 @@ Caffeine-based in-memory caching for GET/HEAD requests.
 }
 ```
 
-### 11.3 Notification Channels
+### 15.3 Notification Channels
 
 - Email (SMTP with HTML templates)
 - AI-generated alert content with recommendations
 
 ---
 
-## 12. Request Tracing
+## 16. Request Tracing
 
-### 12.1 Overview
+### 16.1 Overview
 
 Capture error and slow requests for debugging.
 
-### 12.2 Trace Types
+### 16.2 Trace Types
 
 | Type | Description |
 |------|-------------|
@@ -523,7 +764,7 @@ Capture error and slow requests for debugging.
 | `SLOW` | Requests exceeding threshold |
 | `ALL` | All requests (sampling) |
 
-### 12.3 API Endpoints
+### 16.3 API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -532,7 +773,7 @@ Capture error and slow requests for debugging.
 | `GET` | `/api/traces/{id}` | Get trace details |
 | `POST` | `/api/traces/{id}/replay` | Replay request |
 
-### 12.4 Replay Feature
+### 16.4 Replay Feature
 
 ```bash
 POST /api/traces/{id}/replay
@@ -545,9 +786,9 @@ Re-executes the captured request for debugging.
 
 ---
 
-## 13. AI-Powered Analysis
+## 17. AI-Powered Analysis
 
-### 13.1 Supported Providers
+### 17.1 Supported Providers
 
 | Provider | Models | Configuration |
 |----------|--------|---------------|
@@ -557,7 +798,7 @@ Re-executes the captured request for debugging.
 | DeepSeek | deepseek-chat | API key |
 | Ollama | llama2, mistral | Local URL |
 
-### 13.2 Features
+### 17.2 Features
 
 - **Metrics Analysis**: Upload current metrics, get AI insights
 - **Alert Content Generation**: AI-written alerts with recommendations
@@ -565,9 +806,9 @@ Re-executes the captured request for debugging.
 
 ---
 
-## 14. Email Notifications
+## 18. Email Notifications
 
-### 14.1 Configuration
+### 18.1 Configuration
 
 ```json
 {
@@ -580,7 +821,7 @@ Re-executes the captured request for debugging.
 }
 ```
 
-### 14.2 Test Email
+### 18.2 Test Email
 
 ```bash
 POST /api/email/test
@@ -591,13 +832,13 @@ POST /api/email/test
 
 ---
 
-## 15. Gateway Instance Management
+## 19. Gateway Instance Management
 
-### 15.1 Overview
+### 19.1 Overview
 
 Deploy and manage multiple gateway instances from a single admin console. Each instance has isolated configuration via Nacos namespace.
 
-### 15.2 Instance Creation
+### 19.2 Instance Creation
 
 ```bash
 # Create a new gateway instance
@@ -611,7 +852,7 @@ POST /api/instances
 }
 ```
 
-### 15.3 Resource Specifications
+### 19.3 Resource Specifications
 
 | Spec Type | CPU | Memory | Replicas | Use Case |
 |-----------|-----|--------|----------|----------|
@@ -621,7 +862,7 @@ POST /api/instances
 | `xlarge` | 4 cores | 4GB | 5 | High-traffic Production |
 | `custom` | Custom | Custom | Custom | Special requirements |
 
-### 15.4 Instance Status
+### 19.4 Instance Status
 
 | Status | Code | Description |
 |--------|------|-------------|
@@ -631,7 +872,7 @@ POST /api/instances
 | STOPPING | 3 | Pod is shutting down |
 | STOPPED | 4 | Pod is stopped |
 
-### 15.5 Heartbeat Monitoring
+### 19.5 Heartbeat Monitoring
 
 Each gateway instance sends heartbeats every 10 seconds:
 
@@ -646,7 +887,7 @@ POST /api/instances/{instanceId}/heartbeat
 }
 ```
 
-### 15.6 Namespace Isolation
+### 19.6 Namespace Isolation
 
 Each instance has its own Nacos namespace:
 
@@ -659,7 +900,7 @@ Instance: gateway-dev
 │   └── config.gateway.metadata.*-index
 ```
 
-### 15.7 API Endpoints
+### 19.7 API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -674,13 +915,13 @@ Instance: gateway-dev
 
 ---
 
-## 16. Kubernetes Integration
+## 20. Kubernetes Integration
 
-### 16.1 Overview
+### 20.1 Overview
 
 Deploy gateway instances to Kubernetes clusters directly from the admin UI.
 
-### 16.2 Cluster Management
+### 20.2 Cluster Management
 
 ```bash
 # Register a Kubernetes cluster
@@ -693,7 +934,7 @@ POST /api/kubernetes/clusters
 }
 ```
 
-### 16.3 Pod Management
+### 20.3 Pod Management
 
 ```bash
 # List pods for an instance
@@ -706,7 +947,7 @@ GET /api/kubernetes/pods/{podName}/logs
 DELETE /api/kubernetes/pods/{podName}
 ```
 
-### 16.4 Deployment Configuration
+### 20.4 Deployment Configuration
 
 ```yaml
 # Generated K8s Deployment (from template)
@@ -742,14 +983,14 @@ spec:
             memory: "4Gi"
 ```
 
-### 16.5 Health Probes
+### 20.5 Health Probes
 
 | Probe | Path | Purpose |
 |-------|------|---------|
 | Liveness | `/actuator/health/liveness` | Restart if unhealthy |
 | Readiness | `/actuator/health/readiness` | Ready for traffic |
 
-### 16.6 Metrics Integration
+### 20.6 Metrics Integration
 
 Gateway instances expose Prometheus metrics:
 
@@ -766,9 +1007,9 @@ jvm_memory_used_bytes
 
 ---
 
-## 17. API Reference
+## 21. API Reference
 
-### 17.1 Route API
+### 21.1 Route API
 
 ```bash
 # List routes
@@ -793,7 +1034,7 @@ POST /api/routes/{id}/enable
 POST /api/routes/{id}/disable
 ```
 
-### 17.2 Service API
+### 21.2 Service API
 
 ```bash
 # List services
@@ -807,7 +1048,7 @@ POST /api/services
 }
 ```
 
-### 17.3 SSL Certificate API
+### 21.3 SSL Certificate API
 
 ```bash
 # List certificates
@@ -823,7 +1064,7 @@ POST /api/ssl/upload-pkcs12
 DELETE /api/ssl/{id}
 ```
 
-### 17.4 Monitoring API
+### 21.4 Monitoring API
 
 ```bash
 # Get metrics
@@ -845,23 +1086,37 @@ Request Flow:
 ┌─────────────────────────────────────────────────────────────┐
 │ Security (-500)        → Security hardening first           │
 ├─────────────────────────────────────────────────────────────┤
+│ IP Filter (-490)       → Fast rejection (before logging)    │
+├─────────────────────────────────────────────────────────────┤
 │ AccessLog (-400)       → Log all requests                   │
+├─────────────────────────────────────────────────────────────┤
+│ CORS (-300)            → Handle preflight requests          │
 ├─────────────────────────────────────────────────────────────┤
 │ TraceId (-300)         → Full visibility                    │
 ├─────────────────────────────────────────────────────────────┤
-│ IP Filter (-280)       → Fast rejection                     │
+│ Request Transform (-255) → Modify request body              │
+├─────────────────────────────────────────────────────────────┤
+│ Request Validation (-254) → Validate request schema         │
 ├─────────────────────────────────────────────────────────────┤
 │ Authentication (-250)  → User identity                      │
 ├─────────────────────────────────────────────────────────────┤
+│ Mock Response (-249)   → Return mock data for testing       │
+├─────────────────────────────────────────────────────────────┤
 │ Timeout (-200)         → Protect downstream                 │
 ├─────────────────────────────────────────────────────────────┤
-│ Retry (-200)           → Retry on failure                   │
+│ API Version (-150)     → Version-based routing              │
 ├─────────────────────────────────────────────────────────────┤
 │ Circuit Breaker (-100) → Prevent cascade failure            │
 ├─────────────────────────────────────────────────────────────┤
 │ Header Op (-50)        → Add/modify headers                 │
 ├─────────────────────────────────────────────────────────────┤
+│ Response Transform (-45) → Modify response body             │
+├─────────────────────────────────────────────────────────────┤
 │ Cache (50)             → Response caching                   │
+├─────────────────────────────────────────────────────────────┤
+│ Trace Capture (100)    → Capture error/slow requests        │
+├─────────────────────────────────────────────────────────────┤
+│ Retry (9999)           → Retry on failure                   │
 ├─────────────────────────────────────────────────────────────┤
 │ Multi-Service LB (10001) → Multi-service routing            │
 ├─────────────────────────────────────────────────────────────┤
@@ -870,9 +1125,11 @@ Request Flow:
 ```
 
 **Design Philosophy:**
-1. Observability first (TraceId sees everything)
-2. Coarse before fine (IP filter before auth)
-3. Protection before function (Timeout/CB before routing)
+1. Security first → Block malicious requests early
+2. Fast rejection → IP filter before logging and auth
+3. Observability → TraceId sees everything for debugging
+4. Protection → Timeout/Circuit Breaker before routing
+5. Retry before routing → Retry at 9999, before LB filters
 
 ---
 

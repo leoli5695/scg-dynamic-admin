@@ -80,6 +80,16 @@
 | **Heartbeat Monitoring** | Real-time health status with heartbeat-based detection |
 | **Resource Specs** | Pre-defined specs (small/medium/large) or custom CPU/memory configurations |
 
+### Performance Optimizations
+
+| Feature | Description |
+|---------|-------------|
+| **JWT Validation Cache** | O(1) cached claims lookup, ~90% reduction in verification overhead |
+| **Shadow Quota Failover** | Smooth traffic degradation when Redis fails (no traffic spike) |
+| **Non-Blocking Locks** | CAS + tryLock strategy prevents EventLoop thread blocking |
+| **Connection Pool** | Optimized Netty connection pool with lifecycle management |
+| **Hybrid Health Check** | Passive checks with Caffeine cache, zero overhead for healthy instances |
+
 ---
 
 ## Architecture
@@ -108,8 +118,9 @@
 │  │   Request ──▶ Filter Chain ──▶ Backend Services                   │   │
 │  │                                                                     │   │
 │  │   Filters: Security ▶ IP Filter ▶ Access Log ▶ CORS ▶ TraceID      │   │
-│  │            ▶ Auth ▶ Rate Limit ▶ Req Transform ▶ Validation        │   │
-│  │            ▶ Mock ▶ CB ▶ Resp Transform ▶ LB                       │   │
+│  │            ▶ Req Transform ▶ Validation ▶ Auth ▶ Mock              │   │
+│  │            ▶ Timeout ▶ API Ver ▶ CB ▶ HeaderOp ▶ Resp Transform    │   │
+│  │            ▶ Cache ▶ Retry ▶ Multi-Service LB ▶ Discovery LB       │   │
 │  └───────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────┘
 ```

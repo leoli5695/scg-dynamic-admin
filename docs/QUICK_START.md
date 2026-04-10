@@ -289,8 +289,8 @@ curl http://localhost:80/actuator/health
 - [Configure Multi-Service Routing](FEATURES.md#2-multi-service-routing--gray-release)
 - [Set up Authentication](FEATURES.md#5-authentication)
 - [Enable SSL Termination](FEATURES.md#4-ssl-termination)
-- [Configure Monitoring & Alerts](FEATURES.md#11-monitoring--alerts)
-- [Deploy Gateway Instance to Kubernetes](FEATURES.md#15-gateway-instance-management)
+- [Configure Monitoring & Alerts](FEATURES.md#15-monitoring--alerts)
+- [Deploy Gateway Instance to Kubernetes](FEATURES.md#19-gateway-instance-management)
 
 ---
 
