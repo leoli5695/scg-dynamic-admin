@@ -1,17 +1,14 @@
 package com.leoli.gateway.admin.service;
 
 import com.leoli.gateway.admin.model.RouteDefinition;
-import com.leoli.gateway.admin.model.ServiceDefinition;
-import com.leoli.gateway.admin.repository.RequestTraceRepository;
-import com.leoli.gateway.admin.service.RouteService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -30,8 +27,27 @@ import java.util.stream.Collectors;
 public class TrafficTopologyService {
 
     private final JdbcTemplate jdbcTemplate;
-    private final RequestTraceRepository traceRepository;
     private final RouteService routeService;
+
+    // Simple cache: key -> (result, expireTime)
+    private final Map<String, CacheEntry<?>> cache = new ConcurrentHashMap<>();
+    private static final long CACHE_TTL_MS = 30_000; // 30 seconds
+
+    @SuppressWarnings("unchecked")
+    private <T> T getFromCache(String key) {
+        CacheEntry<?> entry = cache.get(key);
+        if (entry != null && System.currentTimeMillis() < entry.expireAt) {
+            return (T) entry.value;
+        }
+        cache.remove(key);
+        return null;
+    }
+
+    private <T> void putToCache(String key, T value) {
+        cache.put(key, new CacheEntry<>(value, System.currentTimeMillis() + CACHE_TTL_MS));
+    }
+
+    private record CacheEntry<T>(T value, long expireAt) {}
 
     /**
      * Build complete traffic topology for an instance.
@@ -44,6 +60,10 @@ public class TrafficTopologyService {
      * Build traffic topology for an instance within specified time range.
      */
     public TopologyGraph buildTopology(String instanceId, int minutesAgo) {
+        String cacheKey = "topology:" + instanceId + ":" + minutesAgo;
+        TopologyGraph cached = getFromCache(cacheKey);
+        if (cached != null) return cached;
+
         TopologyGraph graph = new TopologyGraph();
         graph.setInstanceId(instanceId);
         graph.setGeneratedAt(System.currentTimeMillis());
@@ -69,22 +89,23 @@ public class TrafficTopologyService {
         // Calculate traffic metrics
         calculateTrafficMetrics(instanceId, minutesAgo, graph);
 
+        putToCache(cacheKey, graph);
         return graph;
     }
 
     /**
      * Build route-level topology.
      */
-    private void buildRouteTopology(String instanceId, int minutesAgo, 
+    private void buildRouteTopology(String instanceId, int minutesAgo,
                                      TopologyGraph graph, TopologyNode gatewayNode) {
         try {
-            // Get routes for this instance
-            List<Map<String, Object>> routes = getRoutesForInstance(instanceId);
-            
-            for (Map<String, Object> route : routes) {
-                String routeId = (String) route.get("route_id");
-                String routeName = (String) route.get("route_name");
-                String uri = (String) route.get("uri");
+            // Get routes for this instance using RouteService
+            var routes = routeService.getAllRoutesByInstanceId(instanceId);
+
+            for (var route : routes) {
+                String routeId = route.getId();
+                String routeName = route.getRouteName();
+                String uri = route.getUri();
 
                 // Create route node
                 TopologyNode routeNode = new TopologyNode();
@@ -102,32 +123,54 @@ public class TrafficTopologyService {
                 gatewayToRoute.setType("gateway-route");
                 graph.addEdge(gatewayToRoute);
 
-                // Extract upstream service from URI
-                String upstreamService = extractServiceFromUri(uri);
-                if (upstreamService != null) {
-                    // Create service node if not exists
-                    String serviceNodeId = "service-" + upstreamService;
-                    if (!graph.hasNode(serviceNodeId)) {
-                        TopologyNode serviceNode = new TopologyNode();
-                        serviceNode.setId(serviceNodeId);
-                        serviceNode.setType("service");
-                        serviceNode.setName(upstreamService);
-                        serviceNode.setServiceId(upstreamService);
-                        graph.addNode(serviceNode);
+                // Extract upstream service from URI or service bindings
+                if (route.getMode() == RouteDefinition.RoutingMode.MULTI && route.getServices() != null) {
+                    // Multi-service mode: add all services
+                    for (var binding : route.getServices()) {
+                        if (binding.isEnabled()) {
+                            addServiceNode(graph, routeNode, binding.getServiceId(), routeId);
+                        }
                     }
-
-                    // Create edge from route to service
-                    TopologyEdge routeToService = new TopologyEdge();
-                    routeToService.setSource(routeNode.getId());
-                    routeToService.setTarget(serviceNodeId);
-                    routeToService.setType("route-service");
-                    routeToService.setRouteId(routeId);
-                    graph.addEdge(routeToService);
+                } else {
+                    // Single-service mode
+                    String serviceId = route.getServiceId();
+                    if (serviceId != null && !serviceId.isEmpty()) {
+                        addServiceNode(graph, routeNode, serviceId, routeId);
+                    } else {
+                        // Fallback: extract from URI
+                        String upstreamService = extractServiceFromUri(uri);
+                        if (upstreamService != null) {
+                            addServiceNode(graph, routeNode, upstreamService, routeId);
+                        }
+                    }
                 }
             }
         } catch (Exception e) {
             log.error("Failed to build route topology for instance: {}", instanceId, e);
         }
+    }
+
+    /**
+     * Add a service node to the graph.
+     */
+    private void addServiceNode(TopologyGraph graph, TopologyNode routeNode, String serviceName, String routeId) {
+        String serviceNodeId = "service-" + serviceName;
+        if (!graph.hasNode(serviceNodeId)) {
+            TopologyNode serviceNode = new TopologyNode();
+            serviceNode.setId(serviceNodeId);
+            serviceNode.setType("service");
+            serviceNode.setName(serviceName);
+            serviceNode.setServiceId(serviceName);
+            graph.addNode(serviceNode);
+        }
+
+        // Create edge from route to service
+        TopologyEdge routeToService = new TopologyEdge();
+        routeToService.setSource(routeNode.getId());
+        routeToService.setTarget(serviceNodeId);
+        routeToService.setType("route-service");
+        routeToService.setRouteId(routeId);
+        graph.addEdge(routeToService);
     }
 
     /**
@@ -150,9 +193,9 @@ public class TrafficTopologyService {
 
             for (Map<String, Object> stat : clientStats) {
                 String clientIp = (String) stat.get("client_ip");
-                long requestCount = ((Number) stat.get("request_count")).longValue();
-                long errorCount = ((Number) stat.get("error_count")).longValue();
-                double avgLatency = ((Number) stat.get("avg_latency")).doubleValue();
+                long requestCount = getLong(stat, "request_count");
+                long errorCount = getLong(stat, "error_count");
+                double avgLatency = getDouble(stat, "avg_latency");
 
                 // Create client node
                 TopologyNode clientNode = new TopologyNode();
@@ -202,11 +245,11 @@ public class TrafficTopologyService {
 
             for (Map<String, Object> stat : serviceStats) {
                 String routeId = (String) stat.get("route_id");
-                long requestCount = ((Number) stat.get("request_count")).longValue();
-                long serverErrors = ((Number) stat.get("server_errors")).longValue();
-                long clientErrors = ((Number) stat.get("client_errors")).longValue();
-                double avgLatency = ((Number) stat.get("avg_latency")).doubleValue();
-                long maxLatency = ((Number) stat.get("max_latency")).longValue();
+                long requestCount = getLong(stat, "request_count");
+                long serverErrors = getLong(stat, "server_errors");
+                long clientErrors = getLong(stat, "client_errors");
+                double avgLatency = getDouble(stat, "avg_latency");
+                long maxLatency = getLong(stat, "max_latency");
 
                 // Update route node metrics
                 TopologyNode routeNode = graph.getNode("route-" + routeId);
@@ -235,7 +278,7 @@ public class TrafficTopologyService {
                 TopologyEdge edge = graph.getEdge(gatewayNode.getId(), "route-" + routeId);
                 if (edge != null) {
                     edge.setMetric("requestCount", requestCount);
-                    edge.setMetric("errorRate", serverErrors * 100.0 / requestCount);
+                    edge.setMetric("errorRate", requestCount > 0 ? serverErrors * 100.0 / requestCount : 0);
                     edge.setMetric("avgLatency", avgLatency);
                 }
             }
@@ -264,30 +307,17 @@ public class TrafficTopologyService {
             Map<String, Object> stats = jdbcTemplate.queryForMap(sql, instanceId, since);
 
             TrafficMetrics metrics = new TrafficMetrics();
-            metrics.setTotalRequests(((Number) stats.get("total_requests")).longValue());
-            metrics.setServerErrors(((Number) stats.get("server_errors")).longValue());
-            metrics.setTotalErrors(((Number) stats.get("total_errors")).longValue());
-            metrics.setAvgLatency(((Number) stats.get("avg_latency")).doubleValue());
-            metrics.setUniqueClients(((Number) stats.get("unique_clients")).longValue());
-            metrics.setUniqueRoutes(((Number) stats.get("unique_routes")).longValue());
+            metrics.setTotalRequests(getLong(stats, "total_requests"));
+            metrics.setServerErrors(getLong(stats, "server_errors"));
+            metrics.setTotalErrors(getLong(stats, "total_errors"));
+            metrics.setAvgLatency(getDouble(stats, "avg_latency"));
+            metrics.setUniqueClients(getLong(stats, "unique_clients"));
+            metrics.setUniqueRoutes(getLong(stats, "unique_routes"));
             metrics.setTimeRangeMinutes(minutesAgo);
 
             graph.setMetrics(metrics);
         } catch (Exception e) {
             log.error("Failed to calculate traffic metrics for instance: {}", instanceId, e);
-        }
-    }
-
-    /**
-     * Get routes for an instance.
-     */
-    private List<Map<String, Object>> getRoutesForInstance(String instanceId) {
-        try {
-            String sql = "SELECT route_id, route_name, uri FROM gateway_route WHERE instance_id = ?";
-            return jdbcTemplate.queryForList(sql, instanceId);
-        } catch (Exception e) {
-            log.error("Failed to get routes for instance: {}", instanceId, e);
-            return new ArrayList<>();
         }
     }
 
@@ -322,18 +352,17 @@ public class TrafficTopologyService {
                     "COUNT(*) as total_requests, " +
                     "SUM(CASE WHEN status_code >= 500 THEN 1 ELSE 0 END) as server_errors, " +
                     "SUM(CASE WHEN status_code >= 400 AND status_code < 500 THEN 1 ELSE 0 END) as client_errors, " +
-                    "AVG(latency_ms) as avg_latency, " +
-                    "P99_LATENCY(latency_ms) as p99_latency " +
+                    "AVG(latency_ms) as avg_latency " +
                     "FROM gateway_request_trace " +
                     "WHERE instance_id = ? AND trace_time >= ?";
 
             Map<String, Object> stats = jdbcTemplate.queryForMap(sql, instanceId, since);
 
             TrafficSummary summary = new TrafficSummary();
-            summary.setTotalRequests(((Number) stats.get("total_requests")).longValue());
-            summary.setServerErrors(((Number) stats.get("server_errors")).longValue());
-            summary.setClientErrors(((Number) stats.get("client_errors")).longValue());
-            summary.setAvgLatency(((Number) stats.get("avg_latency")).doubleValue());
+            summary.setTotalRequests(getLong(stats, "total_requests"));
+            summary.setServerErrors(getLong(stats, "server_errors"));
+            summary.setClientErrors(getLong(stats, "client_errors"));
+            summary.setAvgLatency(getDouble(stats, "avg_latency"));
             summary.setTimeRangeMinutes(minutesAgo);
 
             // Calculate requests per second
@@ -566,5 +595,33 @@ public class TrafficTopologyService {
         public void setRequestsPerSecond(double requestsPerSecond) { this.requestsPerSecond = requestsPerSecond; }
         public int getTimeRangeMinutes() { return timeRangeMinutes; }
         public void setTimeRangeMinutes(int timeRangeMinutes) { this.timeRangeMinutes = timeRangeMinutes; }
+    }
+
+    // ============== Helper Methods ==============
+
+    private long getLong(Map<String, Object> map, String key) {
+        Object value = map.get(key);
+        if (value == null) return 0;
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+        try {
+            return Long.parseLong(value.toString());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private double getDouble(Map<String, Object> map, String key) {
+        Object value = map.get(key);
+        if (value == null) return 0;
+        if (value instanceof Number) {
+            return ((Number) value).doubleValue();
+        }
+        try {
+            return Double.parseDouble(value.toString());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 }
