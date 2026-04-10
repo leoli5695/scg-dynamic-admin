@@ -75,7 +75,8 @@ public class StrategyRefresher {
                 return;
             }
 
-            List<String> strategyIds = objectMapper.readValue(indexContent, new TypeReference<List<String>>() {});
+            List<String> strategyIds = objectMapper.readValue(indexContent, new TypeReference<List<String>>() {
+            });
             log.info("Found {} strategies in index", strategyIds.size());
 
             // Load each strategy
@@ -193,7 +194,8 @@ public class StrategyRefresher {
                 return;
             }
 
-            List<String> newStrategyIds = objectMapper.readValue(content, new TypeReference<List<String>>() {});
+            List<String> newStrategyIds = objectMapper.readValue(content, new TypeReference<List<String>>() {
+            });
             log.info("Index contains {} strategies", newStrategyIds.size());
 
             // Find strategies to remove (in cache but not in new index)

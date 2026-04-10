@@ -10,7 +10,7 @@ import java.util.Optional;
 @Repository
 public interface AlertConfigRepository extends JpaRepository<AlertConfig, Long> {
 
-    Optional<AlertConfig> findByEnabledTrue();
+    List<AlertConfig> findByEnabledTrue();
 
     List<AlertConfig> findByEnabled(Boolean enabled);
 

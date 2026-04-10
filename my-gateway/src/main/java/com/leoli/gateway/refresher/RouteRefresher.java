@@ -1,11 +1,11 @@
 package com.leoli.gateway.refresher;
 
-import com.leoli.gateway.manager.RouteManager;
-import com.leoli.gateway.model.MultiServiceConfig;
-import com.leoli.gateway.route.DynamicRouteDefinitionLocator;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.center.spi.ConfigCenterService;
+import com.leoli.gateway.manager.RouteManager;
+import com.leoli.gateway.model.MultiServiceConfig;
+import com.leoli.gateway.route.DynamicRouteDefinitionLocator;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
@@ -14,12 +14,7 @@ import org.springframework.cloud.gateway.route.RouteDefinition;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -217,8 +212,8 @@ public class RouteRefresher {
             try {
                 RouteDefinition route = parseRoute(routeConfig);
                 routeManager.putRoute(routeId, route);
-                log.info("✅ Loaded route: {} -> {} (route.id={}, predicates={})", 
-                    routeId, route.getUri(), route.getId(), route.getPredicates());
+                log.info("✅ Loaded route: {} -> {} (route.id={}, predicates={})",
+                        routeId, route.getUri(), route.getId(), route.getPredicates());
             } catch (Exception e) {
                 log.error("Failed to parse route: {}", routeId, e);
             }
@@ -291,21 +286,21 @@ public class RouteRefresher {
     private RouteDefinition parseRoute(String json) throws Exception {
         // First parse as map to extract all fields
         Map<String, Object> routeMap = objectMapper.readValue(json, Map.class);
-        
+
         // Parse as standard RouteDefinition
         RouteDefinition route = objectMapper.readValue(json, RouteDefinition.class);
-        
+
         // Extract multi-service config and store in metadata
         if (routeMap.containsKey("services") || routeMap.containsKey("mode")) {
             try {
                 MultiServiceConfig multiConfig = new MultiServiceConfig();
-                
+
                 // Parse mode
                 if (routeMap.containsKey("mode")) {
                     String modeStr = (String) routeMap.get("mode");
                     multiConfig.setMode(MultiServiceConfig.RoutingMode.valueOf(modeStr));
                 }
-                
+
                 // Parse serviceId (for single mode)
                 if (routeMap.containsKey("serviceId")) {
                     multiConfig.setServiceId((String) routeMap.get("serviceId"));
@@ -326,7 +321,7 @@ public class RouteRefresher {
                 if (routeMap.containsKey("services")) {
                     List<Map<String, Object>> servicesList = (List<Map<String, Object>>) routeMap.get("services");
                     List<MultiServiceConfig.ServiceBinding> bindings = new ArrayList<>();
-                    
+
                     for (Map<String, Object> svc : servicesList) {
                         MultiServiceConfig.ServiceBinding binding = new MultiServiceConfig.ServiceBinding();
                         binding.setServiceId((String) svc.get("serviceId"));
@@ -347,7 +342,7 @@ public class RouteRefresher {
                     }
                     multiConfig.setServices(bindings);
                 }
-                
+
                 // Parse gray rules if present and not null
                 if (routeMap.containsKey("grayRules") && routeMap.get("grayRules") != null) {
                     Map<String, Object> grayRulesMap = (Map<String, Object>) routeMap.get("grayRules");
@@ -371,22 +366,22 @@ public class RouteRefresher {
                     }
                     multiConfig.setGrayRules(grayConfig);
                 }
-                
+
                 // Store in metadata
                 if (route.getMetadata() == null) {
                     route.setMetadata(new HashMap<>());
                 }
                 route.getMetadata().put(MultiServiceConfig.METADATA_KEY, multiConfig);
-                
-                log.debug("Parsed multi-service config for route {}: mode={}, services={}", 
-                        route.getId(), multiConfig.getMode(), 
+
+                log.debug("Parsed multi-service config for route {}: mode={}, services={}",
+                        route.getId(), multiConfig.getMode(),
                         multiConfig.getServices() != null ? multiConfig.getServices().size() : 0);
-                
+
             } catch (Exception e) {
                 log.warn("Failed to parse multi-service config for route: {}", route.getId(), e);
             }
         }
-        
+
         return route;
     }
 
@@ -415,7 +410,7 @@ public class RouteRefresher {
         }
         return com.leoli.gateway.model.ServiceBindingType.STATIC;
     }
-    
+
     /**
      * Periodic fallback sync: check for missing routes every 1 minute.
      * This is a safety net in case index listener missed updates.
@@ -428,25 +423,25 @@ public class RouteRefresher {
             if (indexContent == null || indexContent.isBlank()) {
                 return; // Nothing to sync
             }
-            
+
             List<String> nacosRouteIds = parseRouteIds(indexContent);
             if (nacosRouteIds.isEmpty()) {
                 return;
             }
-            
+
             // Get currently listening route IDs
             Set<String> localRouteIds = new HashSet<>(listeningRouteIds);
-            
+
             // Find missing routes (in Nacos but not in local cache)
             int syncedCount = 0;
             for (String routeId : nacosRouteIds) {
                 if (!localRouteIds.contains(routeId)) {
                     log.warn("🔍 Found missing route during periodic sync: {}", routeId);
-                    
+
                     // Try to load the missing route
                     String routeDataId = ROUTE_PREFIX + routeId;
                     String routeConfig = configService.getConfig(routeDataId, GROUP);
-                    
+
                     if (routeConfig != null && !routeConfig.isBlank()) {
                         RouteDefinition route = parseRoute(routeConfig);
                         // Load route into RouteManager
@@ -458,12 +453,12 @@ public class RouteRefresher {
                     }
                 }
             }
-            
+
             if (syncedCount > 0) {
                 log.info("📊 Periodic sync completed: recovered {} missing routes", syncedCount);
                 refreshSCGRoutes();
             }
-            
+
         } catch (Exception e) {
             log.debug("Periodic sync check completed (no action needed)");
         }

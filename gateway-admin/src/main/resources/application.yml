@@ -158,16 +158,6 @@ logging:
     org.springframework.boot.autoconfigure: WARN
     org.springframework.boot.autoconfigure.condition: WARN
 
-# SMTP Email Configuration (read from database email_config table, these defaults are for local dev only)
-mail:
-  smtp:
-    host: ${MAIL_SMTP_HOST:smtp.163.com}
-    port: ${MAIL_SMTP_PORT:465}
-    username: ${MAIL_SMTP_USERNAME:}
-    password: ${MAIL_SMTP_PASSWORD:}
-    from-email: ${MAIL_SMTP_FROM_EMAIL:}
-    from-name: ${MAIL_SMTP_FROM_NAME:API Gateway}
-    use-ssl: ${MAIL_SMTP_USE_SSL:true}
 
 # Nacos configuration
 # For gateway instances deployed in K8s, use k8s-server-addr (cluster internal address)

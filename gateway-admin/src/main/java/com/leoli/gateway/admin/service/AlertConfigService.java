@@ -38,7 +38,8 @@ public class AlertConfigService {
      * Get the current active alert configuration.
      */
     public Optional<AlertConfig> getActiveConfig() {
-        return alertConfigRepository.findByEnabledTrue();
+        List<AlertConfig> configs = alertConfigRepository.findByEnabledTrue();
+        return configs.isEmpty() ? Optional.empty() : Optional.of(configs.get(0));
     }
 
     /**

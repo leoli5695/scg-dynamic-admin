@@ -48,9 +48,9 @@ public class ServiceRefresher {
 
     @Autowired
     public ServiceRefresher(ConfigCenterService configService,
-                           ServiceManager serviceManager,
-                           HybridHealthChecker hybridHealthChecker,
-                           ActiveHealthChecker activeHealthChecker) {
+                            ServiceManager serviceManager,
+                            HybridHealthChecker hybridHealthChecker,
+                            ActiveHealthChecker activeHealthChecker) {
         this.configService = configService;
         this.serviceManager = serviceManager;
         this.hybridHealthChecker = hybridHealthChecker;

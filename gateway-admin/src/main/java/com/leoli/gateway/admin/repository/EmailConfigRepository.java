@@ -11,9 +11,9 @@ import java.util.Optional;
 public interface EmailConfigRepository extends JpaRepository<EmailConfig, Long> {
 
     /**
-     * Find enabled email config
+     * Find all enabled email configs
      */
-    Optional<EmailConfig> findByEnabledTrue();
+    List<EmailConfig> findByEnabledTrue();
 
     /**
      * Find all enabled configs

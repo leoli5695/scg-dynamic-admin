@@ -3,7 +3,6 @@ package com.leoli.gateway.admin.service;
 import com.leoli.gateway.admin.model.EmailConfig;
 import com.leoli.gateway.admin.model.EmailSendResult;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -20,35 +19,13 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Service for sending emails.
- * Supports both application.yml config and database config.
- * Database config takes precedence if available.
+ * Reads SMTP configuration from email_config table in database.
  *
  * @author leoli
  */
 @Slf4j
 @Service
 public class EmailSenderService {
-
-    @Value("${mail.smtp.host:}")
-    private String defaultSmtpHost;
-
-    @Value("${mail.smtp.port:465}")
-    private int defaultSmtpPort;
-
-    @Value("${mail.smtp.username:}")
-    private String defaultSmtpUsername;
-
-    @Value("${mail.smtp.password:}")
-    private String defaultSmtpPassword;
-
-    @Value("${mail.smtp.from-email:}")
-    private String defaultFromEmail;
-
-    @Value("${mail.smtp.from-name:API Gateway}")
-    private String defaultFromName;
-
-    @Value("${mail.smtp.use-ssl:true}")
-    private boolean defaultUseSsl;
 
     private final EmailConfigService emailConfigService;
     
@@ -61,13 +38,12 @@ public class EmailSenderService {
 
     @PostConstruct
     public void init() {
-        // Try to load from database first
         reloadConfig();
         log.info("EmailSenderService initialized");
     }
 
     /**
-     * Reload email configuration from database or application.yml
+     * Reload email configuration from database
      */
     public void reloadConfig() {
         EmailConfig config = emailConfigService.getActiveConfig().orElse(null);
@@ -76,27 +52,8 @@ public class EmailSenderService {
             currentConfigRef.set(config);
             mailSenderRef.set(createMailSenderFromConfig(config));
             log.info("Loaded email config from database: {}:{}", config.getSmtpHost(), config.getSmtpPort());
-        } else if (isDefaultConfigured()) {
-            // Fallback to application.yml config
-            EmailConfig defaultConfig = createDefaultConfig();
-            currentConfigRef.set(defaultConfig);
-            mailSenderRef.set(createMailSenderFromConfig(defaultConfig));
-            log.info("Using email config from application.yml: {}:{}", defaultSmtpHost, defaultSmtpPort);
-            
-            // Save default config to database if not exists
-            if (emailConfigService.getAllConfigs().isEmpty()) {
-                try {
-                    emailConfigService.createDefaultConfig(
-                        defaultSmtpHost, defaultSmtpPort, defaultSmtpUsername,
-                        defaultSmtpPassword, defaultFromEmail, defaultFromName, defaultUseSsl
-                    );
-                    log.info("Saved default email config to database");
-                } catch (Exception e) {
-                    log.warn("Failed to save default email config to database: {}", e.getMessage());
-                }
-            }
         } else {
-            log.warn("EmailSenderService initialized without SMTP configuration");
+            log.warn("EmailSenderService initialized without SMTP configuration. Please configure SMTP via Admin UI.");
         }
     }
 
@@ -105,10 +62,7 @@ public class EmailSenderService {
      */
     public boolean isConfigured() {
         EmailConfig config = currentConfigRef.get();
-        if (config != null && isValidConfig(config)) {
-            return true;
-        }
-        return isDefaultConfigured();
+        return config != null && isValidConfig(config);
     }
 
     /**
@@ -131,17 +85,6 @@ public class EmailSenderService {
             info.put("enabled", config.getEnabled());
             info.put("testStatus", config.getTestStatus());
             info.put("lastTestTime", config.getLastTestTime());
-        } else if (isDefaultConfigured()) {
-            info.put("configured", true);
-            info.put("id", null);
-            info.put("configName", "From application.yml");
-            info.put("host", defaultSmtpHost);
-            info.put("port", defaultSmtpPort);
-            info.put("username", defaultSmtpUsername);
-            info.put("fromEmail", defaultFromEmail);
-            info.put("fromName", defaultFromName);
-            info.put("useSsl", defaultUseSsl);
-            info.put("enabled", true);
         } else {
             info.put("configured", false);
         }
@@ -272,35 +215,11 @@ public class EmailSenderService {
     }
 
     /**
-     * Check if default config from application.yml is valid
-     */
-    private boolean isDefaultConfigured() {
-        return defaultSmtpHost != null && !defaultSmtpHost.isEmpty()
-            && defaultSmtpUsername != null && !defaultSmtpUsername.isEmpty()
-            && defaultSmtpPassword != null && !defaultSmtpPassword.isEmpty();
-    }
-
-    /**
      * Check if EmailConfig is valid
      */
     private boolean isValidConfig(EmailConfig config) {
         return config.getSmtpHost() != null && !config.getSmtpHost().isEmpty()
             && config.getSmtpUsername() != null && !config.getSmtpUsername().isEmpty()
             && config.getSmtpPassword() != null && !config.getSmtpPassword().isEmpty();
-    }
-
-    /**
-     * Create EmailConfig from application.yml values
-     */
-    private EmailConfig createDefaultConfig() {
-        EmailConfig config = new EmailConfig();
-        config.setSmtpHost(defaultSmtpHost);
-        config.setSmtpPort(defaultSmtpPort);
-        config.setSmtpUsername(defaultSmtpUsername);
-        config.setSmtpPassword(defaultSmtpPassword);
-        config.setFromEmail(defaultFromEmail);
-        config.setFromName(defaultFromName);
-        config.setUseSsl(defaultUseSsl);
-        return config;
     }
 }

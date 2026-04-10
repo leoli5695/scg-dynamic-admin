@@ -21,7 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Authentication Policy configuration refresher.
  * Listens to policies index and individual policy changes in Nacos.
- *
+ * <p>
  * Nacos Config Keys:
  * - config.gateway.metadata.auth-policies-index -> ["policyId1", "policyId2", ...]
  * - config.gateway.auth-policy-{policyId} -> AuthConfig JSON
@@ -55,7 +55,7 @@ public class AuthPolicyRefresher {
 
     @Autowired
     public AuthPolicyRefresher(AuthBindingManager authBindingManager,
-                                ConfigCenterService configService) {
+                               ConfigCenterService configService) {
         this.authBindingManager = authBindingManager;
         this.configService = configService;
         log.info("AuthPolicyRefresher initialized");
@@ -109,7 +109,8 @@ public class AuthPolicyRefresher {
                 return;
             }
 
-            List<String> policyIds = objectMapper.readValue(indexContent, new TypeReference<List<String>>() {});
+            List<String> policyIds = objectMapper.readValue(indexContent, new TypeReference<List<String>>() {
+            });
             log.info("📋 Found {} policies in index", policyIds.size());
 
             // Sync listeners
@@ -162,7 +163,8 @@ public class AuthPolicyRefresher {
             String routesDataId = AUTH_ROUTES_PREFIX + policyId;
             String routesContent = configService.getConfig(routesDataId, GROUP);
             if (routesContent != null && !routesContent.isEmpty()) {
-                List<String> routeIds = objectMapper.readValue(routesContent, new TypeReference<List<String>>() {});
+                List<String> routeIds = objectMapper.readValue(routesContent, new TypeReference<List<String>>() {
+                });
                 authBindingManager.setPolicyRoutes(policyId, routeIds);
                 log.info("✅ Loaded routes for policy {}: {} routes", policyId, routeIds.size());
             }
@@ -202,7 +204,8 @@ public class AuthPolicyRefresher {
             log.info("🔥 Auth routes changed for policy: {}", policyId);
             try {
                 if (content != null && !content.isEmpty()) {
-                    List<String> routeIds = objectMapper.readValue(content, new TypeReference<List<String>>() {});
+                    List<String> routeIds = objectMapper.readValue(content, new TypeReference<List<String>>() {
+                    });
                     authBindingManager.setPolicyRoutes(policyId, routeIds);
                     log.info("✅ Updated routes for policy {}: {} routes", policyId, routeIds.size());
                 } else {
@@ -266,7 +269,8 @@ public class AuthPolicyRefresher {
                 return;
             }
 
-            List<String> nacosPolicyIds = objectMapper.readValue(indexContent, new TypeReference<List<String>>() {});
+            List<String> nacosPolicyIds = objectMapper.readValue(indexContent, new TypeReference<List<String>>() {
+            });
             if (nacosPolicyIds.isEmpty()) {
                 return;
             }

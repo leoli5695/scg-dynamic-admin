@@ -38,10 +38,11 @@ public class EmailConfigService {
     }
 
     /**
-     * Get the active email configuration.
+     * Get the active email configuration (first enabled config).
      */
     public Optional<EmailConfig> getActiveConfig() {
-        return emailConfigRepository.findByEnabledTrue();
+        List<EmailConfig> configs = emailConfigRepository.findByEnabledTrue();
+        return configs.isEmpty() ? Optional.empty() : Optional.of(configs.get(0));
     }
 
     /**
@@ -68,31 +69,6 @@ public class EmailConfigService {
     @Transactional(rollbackFor = Exception.class)
     public void deleteConfig(Long id) {
         emailConfigRepository.deleteById(id);
-    }
-
-    /**
-     * Create default email configuration from application.yml values.
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public EmailConfig createDefaultConfig(String host, int port, String username, 
-            String password, String fromEmail, String fromName, boolean useSsl) {
-        // Check if any config exists
-        if (emailConfigRepository.count() > 0) {
-            return getActiveConfig().orElse(null);
-        }
-
-        EmailConfig config = new EmailConfig();
-        config.setConfigName("Default SMTP Config");
-        config.setSmtpHost(host);
-        config.setSmtpPort(port);
-        config.setSmtpUsername(username);
-        config.setSmtpPassword(password);
-        config.setFromEmail(fromEmail);
-        config.setFromName(fromName);
-        config.setUseSsl(useSsl);
-        config.setEnabled(true);
-
-        return emailConfigRepository.save(config);
     }
 
     /**
