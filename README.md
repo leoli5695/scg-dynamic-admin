@@ -107,8 +107,9 @@
 │  │                                                                     │   │
 │  │   Request ──▶ Filter Chain ──▶ Backend Services                   │   │
 │  │                                                                     │   │
-│  │   Filters: Security ▶ IP Filter ▶ Auth ▶ Rate Limit ▶ Multi-Dim RL ▶    │   │
-│  │            Req Transform ▶ Validation ▶ Mock ▶ CB ▶ Resp Transform ▶ LB│   │
+│  │   Filters: Security ▶ IP Filter ▶ Access Log ▶ CORS ▶ TraceID      │   │
+│  │            ▶ Auth ▶ Rate Limit ▶ Req Transform ▶ Validation        │   │
+│  │            ▶ Mock ▶ CB ▶ Resp Transform ▶ LB                       │   │
 │  └───────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -405,8 +406,19 @@ cd my-gateway && mvn test
 .
 ├── my-gateway/                 # Core gateway runtime (Data Plane)
 │   └── src/main/java/
-│       ├── filter/             # Global filters (23+ filters)
-│       ├── auth/               # Authentication processors
+│       ├── filter/             # Global filters (organized by category)
+│       │   ├── security/       # SecurityGlobalFilter, IPFilterGlobalFilter,
+│       │   │                   # AuthenticationGlobalFilter, CorsGlobalFilter
+│       │   ├── loadbalancer/   # DiscoveryLoadBalancerFilter, MultiServiceLoadBalancerFilter,
+│       │   │                   # InstanceFilter, InstanceSelector, InstanceRetryExecutor
+│       │   ├── ratelimit/      # HybridRateLimiterFilter, MultiDimRateLimiterFilter
+│       │   ├── resilience/     # CircuitBreakerGlobalFilter, TimeoutGlobalFilter, RetryGlobalFilter
+│       │   ├── transform/      # RequestTransformFilter, RequestValidationFilter,
+│       │   │                   # ResponseTransformFilter, MockResponseFilter
+│       │   └── *.java          # AccessLogGlobalFilter, CacheGlobalFilter, TraceIdGlobalFilter, etc.
+│       ├── auth/               # Authentication processors + JwtValidationCache
+│       ├── constants/          # FilterOrderConstants, GatewayConfigConstants
+│       ├── exception/          # Custom exceptions (AuthenticationException, RateLimitException, etc.)
 │       ├── ssl/                # SSL certificate management
 │       ├── center/             # Config center SPI
 │       ├── discovery/          # Service discovery SPI
