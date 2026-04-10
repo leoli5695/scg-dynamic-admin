@@ -2,9 +2,8 @@ package com.leoli.gateway.filter;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.leoli.gateway.constants.FilterOrderConstants;
-import com.leoli.gateway.constants.GatewayConfigConstants;
 import com.leoli.gateway.center.spi.ConfigCenterService;
+import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.manager.AuthBindingManager;
 import com.leoli.gateway.manager.RouteManager;
 import com.leoli.gateway.model.AuthConfig;
@@ -49,7 +48,9 @@ import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static com.leoli.gateway.constants.GatewayConfigConstants.*;
+import static com.leoli.gateway.constants.BinaryContentConstants.*;
+import static com.leoli.gateway.constants.GatewayConfigConstants.ACCESS_LOG_CONFIG;
+import static com.leoli.gateway.constants.GatewayConfigConstants.GROUP;
 
 /**
  * Access log global filter with file output support.
@@ -72,6 +73,8 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
     private static final String START_TIME_ATTR = "accessLogStartTime";
     private static final String REQUEST_ID_ATTR = "requestId";
     private static final String RESPONSE_BODY_ATTR = "accessLogResponseBody";
+    private static final String IS_FILE_UPLOAD_ATTR = "accessLogIsFileUpload";
+    private static final String IS_FILE_DOWNLOAD_ATTR = "accessLogIsFileDownload";
 
     @Autowired
     private ConfigCenterService configCenterService;
@@ -179,6 +182,12 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
         // Determine if we need to cache request/response body
         boolean needRequestBody = config.isLogRequestBody() && shouldCacheBody(request);
         boolean needResponseBody = config.isLogResponseBody();
+        boolean isFileUpload = isFileUpload(request);
+
+        // Mark file upload status for logging
+        if (isFileUpload) {
+            exchange.getAttributes().put(IS_FILE_UPLOAD_ATTR, true);
+        }
 
         // Skip response body caching for WebSocket upgrade requests
         // WebSocket uses a streaming connection after upgrade, response body is not applicable
@@ -219,6 +228,13 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
                 // Skip SSE (Server-Sent Events) responses - SSE requires streaming response
                 if (isSseResponse(getHeaders().getContentType())) {
                     log.debug("Skipping response body logging for SSE response, routeId: {}", routeId);
+                    return super.writeWith(body);
+                }
+
+                // Check if response is file download and mark it
+                if (isFileDownload(getDelegate())) {
+                    log.debug("Skipping response body logging for file download, routeId: {}", routeId);
+                    exchange.getAttributes().put(IS_FILE_DOWNLOAD_ATTR, true);
                     return super.writeWith(body);
                 }
 
@@ -340,6 +356,12 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
                 logEntry.put("requestBody", requestBody);
             }
 
+            // Mark file upload if detected (body not cached but logging enabled)
+            Boolean isFileUpload = exchange.getAttribute(IS_FILE_UPLOAD_ATTR);
+            if (isFileUpload != null && isFileUpload && config.isLogRequestBody()) {
+                logEntry.put("requestBody", "[BINARY_FILE_UPLOAD]");
+            }
+
             // Response headers
             if (config.isLogResponseHeaders()) {
                 logEntry.put("responseHeaders", filterHeaders(exchange.getResponse().getHeaders()));
@@ -348,6 +370,12 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
             // Response body
             if (responseBody != null && !responseBody.isEmpty() && config.isLogResponseBody()) {
                 logEntry.put("responseBody", responseBody);
+            }
+
+            // Mark file download if detected (body not cached but logging enabled)
+            Boolean isFileDownload = exchange.getAttribute(IS_FILE_DOWNLOAD_ATTR);
+            if (isFileDownload != null && isFileDownload && config.isLogResponseBody()) {
+                logEntry.put("responseBody", "[BINARY_FILE_DOWNLOAD]");
             }
 
             // Write to file and/or console
@@ -377,7 +405,8 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
         Mono.fromRunnable(() -> writeToFileAsync(line, logDirectory, fileNamePattern))
                 .subscribeOn(Schedulers.boundedElastic())
                 .subscribe(
-                        v -> {}, // onSuccess - do nothing
+                        v -> {
+                        }, // onSuccess - do nothing
                         error -> log.error("Failed to write log to file: {}", error.getMessage())
                 );
     }
@@ -526,6 +555,10 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
         if (HttpMethod.GET.name().equals(method) || HttpMethod.HEAD.name().equals(method)) {
             return false;
         }
+        // Skip file uploads - binary content should not be cached as text
+        if (isFileUpload(request)) {
+            return false;
+        }
         MediaType contentType = request.getHeaders().getContentType();
         if (contentType == null) return false;
         return contentType.includes(MediaType.APPLICATION_JSON) ||
@@ -568,6 +601,165 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
         return "text/event-stream".equalsIgnoreCase(mimeType);
     }
 
+    /**
+     * Check if request is a file upload.
+     * Detects multipart/form-data, binary content types, Content-Disposition with filename,
+     * or URL path with binary file extension.
+     */
+    private boolean isFileUpload(ServerHttpRequest request) {
+        MediaType contentType = request.getHeaders().getContentType();
+
+        // 1. multipart/form-data is typically used for file uploads
+        if (contentType != null && contentType.includes(MediaType.MULTIPART_FORM_DATA)) {
+            return true;
+        }
+
+        // 2. Check Content-Disposition header for file attachment
+        String contentDisposition = request.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION);
+        if (contentDisposition != null) {
+            String lower = contentDisposition.toLowerCase();
+            if (lower.contains("filename") || lower.contains("attachment")) {
+                return true;
+            }
+        }
+
+        // 3. Check for binary content types (PUT/POST with binary data)
+        if (contentType != null) {
+            String mimeType = contentType.getType() + "/" + contentType.getSubtype();
+            if (BINARY_CONTENT_TYPES.contains(mimeType.toLowerCase()) ||
+                    isCustomBinaryContentType(mimeType)) {
+                return true;
+            }
+            // Check type prefixes (image/*, video/*, audio/*, font/*, model/*)
+            if (BINARY_TYPE_PREFIXES.contains(contentType.getType().toLowerCase())) {
+                return true;
+            }
+            // application/* with subtype containing binary indicators
+            String subtype = contentType.getSubtype().toLowerCase();
+            if (contentType.getType().equalsIgnoreCase("application") &&
+                    containsBinaryKeyword(subtype)) {
+                return true;
+            }
+        }
+
+        // 4. Check URL path for binary file extension (e.g., PUT /files/report.pdf)
+        String path = request.getURI().getPath();
+        if (path != null && hasBinaryExtension(path)) {
+            // Only treat as file upload for PUT/POST methods
+            String method = request.getMethod().name();
+            if (HttpMethod.PUT.name().equals(method) || HttpMethod.POST.name().equals(method)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if response is a file download.
+     * Detects Content-Disposition: attachment, binary content types,
+     * or URL path with binary file extension.
+     */
+    private boolean isFileDownload(ServerHttpResponse response) {
+        // 1. Check Content-Disposition header for attachment
+        String contentDisposition = response.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION);
+        if (contentDisposition != null) {
+            String lower = contentDisposition.toLowerCase();
+            if (lower.contains("attachment") || lower.contains("filename")) {
+                return true;
+            }
+        }
+
+        // 2. Check for binary content types
+        MediaType contentType = response.getHeaders().getContentType();
+        if (contentType != null) {
+            String mimeType = contentType.getType() + "/" + contentType.getSubtype();
+            if (BINARY_CONTENT_TYPES.contains(mimeType.toLowerCase()) ||
+                    isCustomBinaryContentType(mimeType)) {
+                return true;
+            }
+            // Check type prefixes (image/*, video/*, audio/*, font/*, model/*)
+            if (BINARY_TYPE_PREFIXES.contains(contentType.getType().toLowerCase())) {
+                return true;
+            }
+            // application/* with subtype containing binary indicators
+            String subtype = contentType.getSubtype().toLowerCase();
+            if (contentType.getType().equalsIgnoreCase("application") &&
+                    containsBinaryKeyword(subtype)) {
+                return true;
+            }
+        }
+
+        // 3. Check transfer encoding for chunked large file transfers
+        String transferEncoding = response.getHeaders().getFirst(HttpHeaders.TRANSFER_ENCODING);
+        if (transferEncoding != null && transferEncoding.toLowerCase().contains("chunked")) {
+            // Chunked transfer often indicates streaming/large file
+            // If also has binary content type hint, treat as download
+            if (contentType != null && contentType.getType().equalsIgnoreCase("application")) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if URL path ends with a binary file extension.
+     */
+    private boolean hasBinaryExtension(String path) {
+        if (path == null || path.isEmpty()) {
+            return false;
+        }
+        String lowerPath = path.toLowerCase();
+        // Check default binary extensions
+        for (String ext : BINARY_EXTENSIONS) {
+            if (lowerPath.endsWith(ext)) {
+                return true;
+            }
+        }
+        // Check custom binary extensions from config
+        List<String> customExtensions = config.getCustomBinaryExtensions();
+        if (customExtensions != null) {
+            for (String ext : customExtensions) {
+                if (lowerPath.endsWith(ext.toLowerCase())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if Content-Type matches custom binary types from config.
+     */
+    private boolean isCustomBinaryContentType(String mimeType) {
+        List<String> customTypes = config.getCustomBinaryContentTypes();
+        if (customTypes == null || customTypes.isEmpty()) {
+            return false;
+        }
+        String lowerMimeType = mimeType.toLowerCase();
+        for (String customType : customTypes) {
+            if (lowerMimeType.equals(customType.toLowerCase()) ||
+                    lowerMimeType.contains(customType.toLowerCase())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if subtype contains any binary keyword.
+     * Used for fuzzy matching of unknown binary content types.
+     */
+    private boolean containsBinaryKeyword(String subtype) {
+        for (String keyword : BINARY_SUBTYPE_KEYWORDS) {
+            if (subtype.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Override
     public int getOrder() {
         return FilterOrderConstants.ACCESS_LOG;
@@ -593,6 +785,14 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
         private boolean includeAuthInfo = true;
         private int maxFileSizeMb = 100;
         private int maxBackupFiles = 30;
+
+        // Custom binary content types to skip body logging
+        // e.g., ["application/x-custom-binary", "application/my-archive"]
+        private List<String> customBinaryContentTypes = new ArrayList<>();
+
+        // Custom binary file extensions to skip body logging
+        // e.g., [".xyz", ".custom"]
+        private List<String> customBinaryExtensions = new ArrayList<>();
 
         public String getLogDirectory() {
             switch (deployMode) {
