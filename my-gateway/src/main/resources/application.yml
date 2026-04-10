@@ -198,6 +198,7 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+      gateway_instance_id: ${GATEWAY_INSTANCE_ID:unknown}
   health:
     consul:
       enabled: false

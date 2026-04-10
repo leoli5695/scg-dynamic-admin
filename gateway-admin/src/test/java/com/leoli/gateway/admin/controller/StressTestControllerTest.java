@@ -169,23 +169,23 @@ class StressTestControllerTest {
     @Test
     @DisplayName("GET /api/stress-test/{testId}/analyze - should return AI analysis")
     void analyzeTestResults_shouldReturnAnalysis() throws Exception {
-        when(stressTestService.analyzeTestResults(1L, "QWEN", "zh"))
+        when(stressTestService.analyzeTestResults(1L, "BAILIAN", "zh"))
                 .thenReturn("Test analysis result");
 
         mockMvc.perform(get("/api/stress-test/1/analyze")
-                        .param("provider", "QWEN")
+                        .param("provider", "BAILIAN")
                         .param("language", "zh"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.analysis").value("Test analysis result"));
 
-        verify(stressTestService).analyzeTestResults(1L, "QWEN", "zh");
+        verify(stressTestService).analyzeTestResults(1L, "BAILIAN", "zh");
     }
 
     @Test
     @DisplayName("GET /api/stress-test/{testId}/analyze - should return error when test not completed")
     void analyzeTestResults_shouldReturnError_whenTestNotCompleted() throws Exception {
-        when(stressTestService.analyzeTestResults(1L, "QWEN", "zh"))
+        when(stressTestService.analyzeTestResults(1L, "BAILIAN", "zh"))
                 .thenThrow(new RuntimeException("Test must be completed before analysis"));
 
         mockMvc.perform(get("/api/stress-test/1/analyze"))

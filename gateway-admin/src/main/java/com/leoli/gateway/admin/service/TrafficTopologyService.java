@@ -382,14 +382,12 @@ public class TrafficTopologyService {
         private String instanceId;
         private long generatedAt;
         private int timeRangeMinutes;
-        private List<TopologyNode> nodes = new ArrayList<>();
+        private Map<String, TopologyNode> nodeMap = new LinkedHashMap<>();
         private List<TopologyEdge> edges = new ArrayList<>();
         private TrafficMetrics metrics;
 
         public void addNode(TopologyNode node) {
-            if (!hasNode(node.getId())) {
-                nodes.add(node);
-            }
+            nodeMap.putIfAbsent(node.getId(), node);
         }
 
         public void addEdge(TopologyEdge edge) {
@@ -397,11 +395,11 @@ public class TrafficTopologyService {
         }
 
         public boolean hasNode(String id) {
-            return nodes.stream().anyMatch(n -> n.getId().equals(id));
+            return nodeMap.containsKey(id);
         }
 
         public TopologyNode getNode(String id) {
-            return nodes.stream().filter(n -> n.getId().equals(id)).findFirst().orElse(null);
+            return nodeMap.get(id);
         }
 
         public TopologyEdge getEdge(String source, String target) {
@@ -415,7 +413,7 @@ public class TrafficTopologyService {
             map.put("instanceId", instanceId);
             map.put("generatedAt", generatedAt);
             map.put("timeRangeMinutes", timeRangeMinutes);
-            map.put("nodes", nodes.stream().map(TopologyNode::toMap).collect(Collectors.toList()));
+            map.put("nodes", nodeMap.values().stream().map(TopologyNode::toMap).collect(Collectors.toList()));
             map.put("edges", edges.stream().map(TopologyEdge::toMap).collect(Collectors.toList()));
             if (metrics != null) map.put("metrics", metrics.toMap());
             return map;
@@ -428,8 +426,7 @@ public class TrafficTopologyService {
         public void setGeneratedAt(long generatedAt) { this.generatedAt = generatedAt; }
         public int getTimeRangeMinutes() { return timeRangeMinutes; }
         public void setTimeRangeMinutes(int timeRangeMinutes) { this.timeRangeMinutes = timeRangeMinutes; }
-        public List<TopologyNode> getNodes() { return nodes; }
-        public void setNodes(List<TopologyNode> nodes) { this.nodes = nodes; }
+        public List<TopologyNode> getNodes() { return new ArrayList<>(nodeMap.values()); }
         public List<TopologyEdge> getEdges() { return edges; }
         public void setEdges(List<TopologyEdge> edges) { this.edges = edges; }
         public TrafficMetrics getMetrics() { return metrics; }
@@ -537,12 +534,11 @@ public class TrafficTopologyService {
             map.put("totalRequests", totalRequests);
             map.put("serverErrors", serverErrors);
             map.put("totalErrors", totalErrors);
-            map.put("avgLatency", String.format("%.2fms", avgLatency));
+            map.put("avgLatency", avgLatency);
             map.put("uniqueClients", uniqueClients);
             map.put("uniqueRoutes", uniqueRoutes);
-            map.put("errorRate", totalRequests > 0 ? 
-                    String.format("%.2f%%", totalErrors * 100.0 / totalRequests) : "0%");
-            map.put("requestsPerSecond", String.format("%.2f", totalRequests / (timeRangeMinutes * 60.0)));
+            map.put("errorRate", totalRequests > 0 ? totalErrors * 100.0 / totalRequests : 0.0);
+            map.put("requestsPerSecond", timeRangeMinutes > 0 ? totalRequests / (timeRangeMinutes * 60.0) : 0.0);
             return map;
         }
 
@@ -576,8 +572,8 @@ public class TrafficTopologyService {
             map.put("totalRequests", totalRequests);
             map.put("serverErrors", serverErrors);
             map.put("clientErrors", clientErrors);
-            map.put("avgLatency", String.format("%.2fms", avgLatency));
-            map.put("requestsPerSecond", String.format("%.2f", requestsPerSecond));
+            map.put("avgLatency", avgLatency);
+            map.put("requestsPerSecond", requestsPerSecond);
             map.put("timeRangeMinutes", timeRangeMinutes);
             return map;
         }

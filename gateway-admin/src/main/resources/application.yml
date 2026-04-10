@@ -63,7 +63,7 @@ gateway:
       enabled: true  # Enable JWT for production
   # Prometheus configuration for Gateway monitoring
   prometheus:
-    url: ${PROMETHEUS_URL:http://127.0.0.1:30090}
+    url: ${PROMETHEUS_URL:http://127.0.0.1:9091}
   consul:
     host: ${CONSUL_HOST:consul}
     port: ${CONSUL_PORT:8500}

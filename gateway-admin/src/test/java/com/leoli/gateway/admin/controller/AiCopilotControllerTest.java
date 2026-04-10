@@ -44,9 +44,7 @@ class AiCopilotControllerTest {
         chatRequest.setContext("gateway");
         chatRequest.setInstanceId("test-instance");
 
-        chatResponse = new AiCopilotService.ChatResponse();
-        chatResponse.setSuccess(true);
-        chatResponse.setResponse("To configure rate limiting, you need to...");
+        chatResponse = new AiCopilotService.ChatResponse(true, "To configure rate limiting, you need to...", null);
     }
 
     @Test
@@ -110,9 +108,8 @@ class AiCopilotControllerTest {
     @Test
     @DisplayName("POST /api/copilot/generate-route - should generate route configuration")
     void generateRoute_shouldGenerateRoute() throws Exception {
-        AiCopilotService.RouteGenerationResult result = new AiCopilotService.RouteGenerationResult();
-        result.setSuccess(true);
-        result.setConfig("spring:\n  cloud:\n    gateway:\n      routes:\n        - id: test-route");
+        AiCopilotService.RouteGenerationResult result = new AiCopilotService.RouteGenerationResult(true,
+                "spring:\n  cloud:\n    gateway:\n      routes:\n        - id: test-route", null);
 
         when(aiCopilotService.generateRoute(eq("Route all /api/users to user-service"), anyString()))
                 .thenReturn(result);
@@ -134,10 +131,8 @@ class AiCopilotControllerTest {
     @Test
     @DisplayName("POST /api/copilot/analyze-error - should analyze error")
     void analyzeError_shouldAnalyzeError() throws Exception {
-        AiCopilotService.DebugAnalysis analysis = new AiCopilotService.DebugAnalysis();
-        analysis.setSuccess(true);
-        analysis.setRootCause("Connection refused to upstream service");
-        analysis.setSolution("Check if the upstream service is running");
+        AiCopilotService.DebugAnalysis analysis = new AiCopilotService.DebugAnalysis(true,
+                "Root Cause: Connection refused to upstream service\nSolution: Check if the upstream service is running", null);
 
         when(aiCopilotService.analyzeError(eq("Connection refused: localhost:8080"), anyString()))
                 .thenReturn(analysis);
@@ -151,7 +146,7 @@ class AiCopilotControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.rootCause").value("Connection refused to upstream service"));
+                .andExpect(jsonPath("$.analysis").exists());
 
         verify(aiCopilotService).analyzeError(eq("Connection refused: localhost:8080"), anyString());
     }
@@ -159,9 +154,8 @@ class AiCopilotControllerTest {
     @Test
     @DisplayName("GET /api/copilot/optimizations/{instanceId} - should return optimization suggestions")
     void suggestOptimizations_shouldReturnSuggestions() throws Exception {
-        AiCopilotService.OptimizationResult result = new AiCopilotService.OptimizationResult();
-        result.setSuccess(true);
-        result.setSuggestions("1. Enable connection pooling\n2. Add caching for frequent requests");
+        AiCopilotService.OptimizationResult result = new AiCopilotService.OptimizationResult(true,
+                "1. Enable connection pooling\n2. Add caching for frequent requests", null);
 
         when(aiCopilotService.suggestOptimizations("test-instance"))
                 .thenReturn(result);
@@ -193,9 +187,8 @@ class AiCopilotControllerTest {
     @Test
     @DisplayName("POST /api/copilot/generate-route - should handle generation failure")
     void generateRoute_shouldHandleFailure() throws Exception {
-        AiCopilotService.RouteGenerationResult result = new AiCopilotService.RouteGenerationResult();
-        result.setSuccess(false);
-        result.setError("Unable to understand the route description");
+        AiCopilotService.RouteGenerationResult result = new AiCopilotService.RouteGenerationResult(false,
+                null, "Unable to understand the route description");
 
         when(aiCopilotService.generateRoute(anyString(), anyString()))
                 .thenReturn(result);

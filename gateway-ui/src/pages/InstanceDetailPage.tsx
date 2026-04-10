@@ -36,6 +36,13 @@ import {
   HistoryOutlined,
   PlusSquareOutlined,
   LinkOutlined,
+  MedicineBoxOutlined,
+  ApartmentOutlined,
+  FilterOutlined,
+  BugOutlined,
+  RobotOutlined,
+
+  ThunderboltOutlined,
 } from "@ant-design/icons";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -52,6 +59,13 @@ import MonitorPage from "./MonitorPage";
 import AlertPage from "./AlertPage";
 import AccessLogConfigPage from "./AccessLogConfigPage";
 import AuditLogsPage from "./AuditLogsPage";
+import DiagnosticPage from "./DiagnosticPage";
+import TrafficTopologyPage from "./TrafficTopologyPage";
+import FilterChainPage from "./FilterChainPage";
+
+import RequestReplayPage from "./RequestReplayPage";
+import AiCopilotPage from "./AiCopilotPage";
+import StressTestPage from "./StressTestPage";
 
 const { Title, Text } = Typography;
 
@@ -359,6 +373,60 @@ const InstanceDetailPage: React.FC = () => {
         </span>
       ),
     },
+    {
+      key: "diagnostic",
+      label: (
+        <span>
+          <MedicineBoxOutlined />
+          {t("menu.diagnostic")}
+        </span>
+      ),
+    },
+    {
+      key: "topology",
+      label: (
+        <span>
+          <ApartmentOutlined />
+          {t("menu.topology")}
+        </span>
+      ),
+    },
+    {
+      key: "filter_chain",
+      label: (
+        <span>
+          <FilterOutlined />
+          {t("menu.filter_chain")}
+        </span>
+      ),
+    },
+    {
+      key: "request_replay",
+      label: (
+        <span>
+          <BugOutlined />
+          {t("menu.request_replay")}
+        </span>
+      ),
+    },
+    {
+      key: "copilot",
+      label: (
+        <span>
+          <RobotOutlined />
+          {t("menu.copilot")}
+        </span>
+      ),
+    },
+    {
+      key: "stress_test",
+      label: (
+        <span>
+          <ThunderboltOutlined />
+          {t("menu.stress_test")}
+        </span>
+      ),
+    },
   ];
 
   const renderTabContent = () => {
@@ -513,7 +581,7 @@ const InstanceDetailPage: React.FC = () => {
       case "certificates":
         return <CertificatePage instanceId={instance.instanceId} />;
       case "trace":
-        return <TracePage instanceId={instance.instanceId} />;
+        return <TracePage instanceId={instance.instanceId} onNavigateToReplay={() => handleTabChange('request_replay')} />;
       case "monitor":
         return <MonitorPage instanceId={instance.instanceId} />;
       case "alerts":
@@ -522,6 +590,18 @@ const InstanceDetailPage: React.FC = () => {
         return <AccessLogConfigPage instanceId={instance.instanceId} />;
       case "audit_logs":
         return <AuditLogsPage instanceId={instance.instanceId} />;
+      case "diagnostic":
+        return <DiagnosticPage instanceId={instance.instanceId} />;
+      case "topology":
+        return <TrafficTopologyPage instanceId={instance.instanceId} />;
+      case "filter_chain":
+        return <FilterChainPage instanceId={instance.instanceId} />;
+      case "request_replay":
+        return <RequestReplayPage instanceId={instance.instanceId} />;
+      case "copilot":
+        return <AiCopilotPage instanceId={instance.instanceId} />;
+      case "stress_test":
+        return <StressTestPage instanceId={instance.instanceId} />;
       default:
         return null;
     }

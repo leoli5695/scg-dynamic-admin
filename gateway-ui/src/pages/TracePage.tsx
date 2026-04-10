@@ -1,19 +1,18 @@
 import { useState, useEffect } from 'react';
 import {
-  Card, Row, Col, Table, Tag, Space, Button, Modal, Form, Input, Select,
-  message, Spin, Typography, Badge, Tooltip, Popconfirm, Descriptions, Tabs,
-  Timeline, Statistic, Drawer, Alert
+  Card, Row, Col, Table, Tag, Space, Button,
+  message, Typography, Badge, Tooltip, Popconfirm, Descriptions, Tabs,
+  Statistic, Drawer
 } from 'antd';
 import {
-  ApiOutlined, SearchOutlined, ReloadOutlined, PlayCircleOutlined,
-  BugOutlined, ClockCircleOutlined, CheckCircleOutlined, CloseCircleOutlined,
+  ApiOutlined, ReloadOutlined, PlayCircleOutlined,
+  ClockCircleOutlined, CloseCircleOutlined,
   DeleteOutlined, EyeOutlined
 } from '@ant-design/icons';
 import api from '../utils/api';
 import { useTranslation } from 'react-i18next';
 
 const { Title, Text, Paragraph } = Typography;
-const { TextArea } = Input;
 
 interface RequestTrace {
   id: number;
@@ -51,19 +50,16 @@ interface TraceStats {
 
 interface TracePageProps {
   instanceId?: string;
+  onNavigateToReplay?: () => void;
 }
 
-const TracePage: React.FC<TracePageProps> = ({ instanceId }) => {
+const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay }) => {
   const [loading, setLoading] = useState(false);
   const [traces, setTraces] = useState<RequestTrace[]>([]);
   const [stats, setStats] = useState<TraceStats | null>(null);
   const [selectedTrace, setSelectedTrace] = useState<RequestTrace | null>(null);
   const [detailDrawerVisible, setDetailDrawerVisible] = useState(false);
-  const [replayModalVisible, setReplayModalVisible] = useState(false);
-  const [replayResult, setReplayResult] = useState<any>(null);
-  const [replayLoading, setReplayLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('errors');
-  const [gatewayUrl, setGatewayUrl] = useState('http://localhost:80');
   const { t } = useTranslation();
 
   const loadTraces = async () => {
@@ -110,25 +106,6 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId }) => {
       loadTraces();
     } else if (key === 'slow') {
       loadSlowTraces();
-    }
-  };
-
-  const handleReplay = async (traceId: number) => {
-    try {
-      setReplayLoading(true);
-      const res = await api.post(`/api/traces/${traceId}/replay?gatewayUrl=${encodeURIComponent(gatewayUrl)}`);
-      setReplayResult(res.data);
-      if (res.data.success) {
-        message.success(t('trace.replay_success'));
-      } else {
-        message.error(res.data.error || t('trace.replay_error'));
-      }
-      loadTraces(); // Refresh to update replay count
-    } catch (e: any) {
-      console.error('Failed to replay trace:', e);
-      message.error(e.response?.data?.error || t('trace.replay_error'));
-    } finally {
-      setReplayLoading(false);
     }
   };
 
@@ -246,17 +223,12 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId }) => {
     {
       title: t('common.actions'),
       key: 'actions',
-      width: 200,
+      width: 150,
       render: (_: any, record: RequestTrace) => (
         <Space>
           <Button size="small" icon={<EyeOutlined />} onClick={() => { setSelectedTrace(record); setDetailDrawerVisible(true); }}>
             {t('common.detail')}
           </Button>
-          {record.replayable && (
-            <Button size="small" type="primary" icon={<PlayCircleOutlined />} onClick={() => { setSelectedTrace(record); setReplayModalVisible(true); }}>
-              {t('trace.replay')}
-            </Button>
-          )}
         </Space>
       )
     }
@@ -264,10 +236,17 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId }) => {
 
   return (
     <div style={{ padding: 24 }}>
-      <Title level={3}>
-        <ApiOutlined style={{ marginRight: 8 }} />
-        {t('trace.title')}
-      </Title>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <Title level={3} style={{ margin: 0 }}>
+          <ApiOutlined style={{ marginRight: 8 }} />
+          {t('trace.title')}
+        </Title>
+        {onNavigateToReplay && (
+          <Button type="primary" icon={<PlayCircleOutlined />} onClick={onNavigateToReplay}>
+            {t('trace.go_to_replay')}
+          </Button>
+        )}
+      </div>
 
       {/* Statistics Cards */}
       <Row gutter={16} style={{ marginBottom: 24 }}>
@@ -384,76 +363,6 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId }) => {
           </div>
         )}
       </Drawer>
-
-      {/* Replay Modal */}
-      <Modal
-        title={t('trace.replay_title')}
-        open={replayModalVisible}
-        onCancel={() => { setReplayModalVisible(false); setReplayResult(null); }}
-        onOk={() => selectedTrace && handleReplay(selectedTrace.id)}
-        confirmLoading={replayLoading}
-        width={600}
-      >
-        <Form layout="vertical">
-          <Form.Item label={t('trace.gateway_url')}>
-            <Input value={gatewayUrl} onChange={(e) => setGatewayUrl(e.target.value)} placeholder="http://localhost:8080" />
-          </Form.Item>
-          {selectedTrace && (
-            <Descriptions bordered size="small" column={1}>
-              <Descriptions.Item label={t('trace.method')}>
-                <Tag color={getMethodColor(selectedTrace.method)}>{selectedTrace.method}</Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label={t('trace.path')}>{selectedTrace.path}</Descriptions.Item>
-              <Descriptions.Item label={t('trace.query_string')}>{selectedTrace.queryString || '-'}</Descriptions.Item>
-            </Descriptions>
-          )}
-        </Form>
-
-        {replayResult && (
-          <div style={{ marginTop: 16 }}>
-            <Title level={5}>{t('trace.replay_result')}</Title>
-            {replayResult.success ? (
-              <Descriptions bordered size="small" column={1}>
-                <Descriptions.Item label={t('trace.status')}>{replayResult.statusCode}</Descriptions.Item>
-                <Descriptions.Item label={t('trace.latency')}>{replayResult.latency}ms</Descriptions.Item>
-                <Descriptions.Item label={t('trace.request_url')}>{replayResult.requestUrl}</Descriptions.Item>
-              </Descriptions>
-            ) : (
-              <div>
-                {replayResult.errorType === 'CONNECTION_ERROR' ? (
-                  <Alert
-                    message="连接失败"
-                    description={<pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{replayResult.error}</pre>}
-                    type="error"
-                    showIcon
-                  />
-                ) : replayResult.errorType === 'CLIENT_ERROR' ? (
-                  <Alert
-                    message={`客户端错误 (HTTP ${replayResult.statusCode})`}
-                    description={<pre style={{ whiteSpace: 'pre-wrap', margin: 0, maxHeight: 200, overflow: 'auto' }}>{replayResult.error}</pre>}
-                    type="warning"
-                    showIcon
-                  />
-                ) : replayResult.errorType === 'SERVER_ERROR' ? (
-                  <Alert
-                    message={`服务器错误 (HTTP ${replayResult.statusCode})`}
-                    description={<pre style={{ whiteSpace: 'pre-wrap', margin: 0, maxHeight: 200, overflow: 'auto' }}>{replayResult.error}</pre>}
-                    type="error"
-                    showIcon
-                  />
-                ) : (
-                  <Alert
-                    message="重放失败"
-                    description={replayResult.error}
-                    type="error"
-                    showIcon
-                  />
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </Modal>
     </div>
   );
 };

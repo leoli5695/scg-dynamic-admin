@@ -39,7 +39,7 @@ public class AlertContentGenerator {
 
     private static final Map<String, String> DEFAULT_BASE_URLS = Map.of(
         "OPENAI", "https://api.openai.com/v1",
-        "QWEN", "https://dashscope.aliyuncs.com/api/v1",
+        "BAILIAN", "https://dashscope.aliyuncs.com/compatible-mode/v1",
         "DEEPSEEK", "https://api.deepseek.com/v1",
         "KIMI", "https://api.moonshot.cn/v1",
         "GLM", "https://open.bigmodel.cn/api/paas/v4"
@@ -196,11 +196,19 @@ public class AlertContentGenerator {
      */
     private String callAiApi(AiConfig config, String prompt) {
         String provider = config.getProvider();
+
+        // QWEN 是旧的提供商标识，现在统一使用 BAILIAN（百炼平台）
+        // 将 QWEN 作为 BAILIAN 的别名处理
+        if ("QWEN".equals(provider)) {
+            provider = "BAILIAN";
+            log.info("Migrating old QWEN provider to BAILIAN for alert generation");
+        }
+
         String baseUrl = config.getBaseUrl() != null ? config.getBaseUrl() : DEFAULT_BASE_URLS.getOrDefault(provider, "");
 
         try {
             return switch (provider) {
-                case "QWEN" -> callQwenApi(baseUrl, config.getApiKey(), config.getModel(), prompt);
+                case "BAILIAN" -> callBailianApi(baseUrl, config.getApiKey(), config.getModel(), prompt);
                 case "OPENAI", "DEEPSEEK", "KIMI" -> callOpenAICompatibleApi(baseUrl, config.getApiKey(), config.getModel(), prompt);
                 case "GLM" -> callGlmApi(baseUrl, config.getApiKey(), config.getModel(), prompt);
                 default -> throw new RuntimeException("Unsupported provider: " + provider);
@@ -232,23 +240,26 @@ public class AlertContentGenerator {
         return extractOpenAIResponse(response.getBody());
     }
 
-    private String callQwenApi(String baseUrl, String apiKey, String model, String prompt) {
-        String url = baseUrl + "/services/aigc/text-generation/generation";
+    private String callBailianApi(String baseUrl, String apiKey, String model, String prompt) {
+        // 百炼平台使用 OpenAI 兼容模式
+        String url = baseUrl + "/chat/completions";
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("Authorization", "Bearer " + apiKey);
+        headers.setBearerAuth(apiKey);
 
-        Map<String, Object> body = new HashMap<>();
-        body.put("model", model);
-        body.put("input", Map.of("messages", List.of(
-            Map.of("role", "user", "content", prompt)
-        )));
+        Map<String, Object> body = Map.of(
+            "model", model,
+            "messages", List.of(
+                Map.of("role", "user", "content", prompt)
+            ),
+            "max_tokens", 500
+        );
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
         ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
 
-        return extractQwenResponse(response.getBody());
+        return extractOpenAIResponse(response.getBody());
     }
 
     private String callGlmApi(String baseUrl, String apiKey, String model, String prompt) {
@@ -323,54 +334,7 @@ public class AlertContentGenerator {
         }
     }
 
-    private String extractQwenResponse(String body) {
-        try {
-            log.debug("Qwen response: {}", body);
-            JsonNode root = objectMapper.readTree(body);
-
-            // Check for error response
-            if (root.has("code") && !"Success".equals(root.path("code").asText())) {
-                String errorMsg = root.path("message").asText();
-                log.error("Qwen API returned error: {}", errorMsg);
-                return "AI分析失败: " + errorMsg;
-            }
-
-            JsonNode output = root.path("output");
-            
-            // 标准 Qwen 格式: output.choices[0].message.content
-            JsonNode choices = output.path("choices");
-            if (!choices.isMissingNode() && choices.isArray() && !choices.isEmpty()) {
-                JsonNode message = choices.get(0).path("message");
-                if (!message.isMissingNode()) {
-                    String content = message.path("content").asText();
-                    if (content != null && !content.isEmpty()) {
-                        return content;
-                    }
-                }
-                // 某些版本可能直接返回 text
-                JsonNode textNode = choices.get(0).path("text");
-                if (!textNode.isMissingNode()) {
-                    return textNode.asText();
-                }
-            }
-            
-            // 兼容旧格式: output.text
-            if (output.has("text")) {
-                return output.path("text").asText();
-            }
-            
-            // 尝试其他可能的格式
-            if (root.has("result")) {
-                return root.path("result").asText();
-            }
-            
-            log.error("No valid content in Qwen response: {}", body);
-            return "AI分析完成，但响应格式异常";
-        } catch (Exception e) {
-            log.error("Failed to parse Qwen response: {}", body, e);
-            return "AI分析完成，但解析响应失败: " + e.getMessage();
-        }
-    }
+    
 
     private double getDoubleValue(Map<String, Object> map, String key) {
         Object value = map.get(key);

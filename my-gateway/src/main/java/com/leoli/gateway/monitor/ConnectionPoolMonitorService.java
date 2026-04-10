@@ -1,10 +1,10 @@
 package com.leoli.gateway.monitor;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import reactor.netty.resources.ConnectionProvider;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -12,14 +12,10 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Connection Pool Monitor Service.
- * Monitors WebClient connection pool metrics and provides health indicators.
+ * Monitors WebClient connection pool metrics via Micrometer and provides health indicators.
  * 
- * Monitored Metrics:
- * - Total connections (active + idle)
- * - Active connections count
- * - Idle connections count  
- * - Pending acquisition count
- * - Connection acquisition latency
+ * Note: Reactor Netty automatically registers connection pool metrics to Micrometer.
+ * This service aggregates them for health monitoring.
  *
  * @author leoli
  */
@@ -27,7 +23,7 @@ import java.util.concurrent.atomic.AtomicLong;
 @Service
 public class ConnectionPoolMonitorService {
 
-    private final ConnectionProvider connectionProvider;
+    private final MeterRegistry meterRegistry;
 
     // Metrics history for trend analysis (last 60 samples = 1 minute at 1s interval)
     private final ConcurrentHashMap<String, List<PoolMetrics>> metricsHistory = new ConcurrentHashMap<>();
@@ -44,9 +40,9 @@ public class ConnectionPoolMonitorService {
     private final AtomicLong criticalAlerts = new AtomicLong(0);
 
     @Autowired
-    public ConnectionPoolMonitorService(ConnectionProvider connectionProvider) {
-        this.connectionProvider = connectionProvider;
-        log.info("ConnectionPoolMonitorService initialized");
+    public ConnectionPoolMonitorService(MeterRegistry meterRegistry) {
+        this.meterRegistry = meterRegistry;
+        log.info("ConnectionPoolMonitorService initialized with MeterRegistry");
     }
 
     /**
@@ -67,27 +63,46 @@ public class ConnectionPoolMonitorService {
     }
 
     /**
-     * Collect current connection pool metrics.
+     * Collect current connection pool metrics from Micrometer.
      */
     private PoolMetrics collectCurrentMetrics() {
         try {
-            // Access ConnectionProvider metrics via reflection (Reactor Netty internal API)
-            // The metrics are available through ConnectionProvider.Metrics
-            ConnectionProvider.Metrics poolMetrics = connectionProvider.metrics();
+            // Read connection pool metrics from Micrometer
+            // Reactor Netty registers these as "reactor.netty.connection.provider.*"
             
-            if (poolMetrics != null) {
+            int totalConnections = getGaugeValue("reactor.netty.connection.provider.total.connections");
+            int activeConnections = getGaugeValue("reactor.netty.connection.provider.active.connections");
+            int idleConnections = getGaugeValue("reactor.netty.connection.provider.idle.connections");
+            int pendingAcquireSize = getGaugeValue("reactor.netty.connection.provider.pending.acquired.connections");
+            
+            // Only return metrics if we have valid data
+            if (totalConnections > 0 || activeConnections > 0) {
                 return new PoolMetrics(
                         System.currentTimeMillis(),
-                        poolMetrics.totalConnections(),
-                        poolMetrics.activeConnections(),
-                        poolMetrics.idleConnections(),
-                        poolMetrics.pendingAcquireSize()
+                        totalConnections,
+                        activeConnections,
+                        idleConnections,
+                        pendingAcquireSize
                 );
             }
         } catch (Exception e) {
-            log.warn("Unable to access pool metrics: {}", e.getMessage());
+            log.debug("Unable to access pool metrics: {}", e.getMessage());
         }
         return null;
+    }
+    
+    /**
+     * Get gauge value from Micrometer, returns 0 if not found.
+     */
+    private int getGaugeValue(String name) {
+        try {
+            return meterRegistry.find(name).gauges().stream()
+                    .findFirst()
+                    .map(g -> (int) g.value())
+                    .orElse(0);
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     /**
@@ -190,11 +205,6 @@ public class ConnectionPoolMonitorService {
         int maxPending = history.stream()
                 .mapToInt(m -> m.pendingAcquireSize)
                 .max()
-                .orElse(0);
-
-        double avgActive = history.stream()
-                .mapToInt(m -> m.activeConnections)
-                .average()
                 .orElse(0);
 
         PoolMetrics latest = history.get(history.size() - 1);

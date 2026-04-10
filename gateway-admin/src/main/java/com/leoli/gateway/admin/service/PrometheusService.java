@@ -95,12 +95,15 @@ public class PrometheusService {
 
     /**
      * Build instance filter for Prometheus query.
-     * If instanceId is provided, adds instance label filter.
+     * If instanceId is provided, adds gateway_instance_id label filter.
+     * Note: We use gateway_instance_id (not instance) because Prometheus's
+     * instance label is the target address (e.g., host.docker.internal:8081),
+     * while gateway_instance_id is the actual gateway instance identifier.
      */
     private String buildInstanceFilter(String instanceId) {
         if (instanceId != null && !instanceId.isEmpty()) {
-            // Use instanceId as the instance label value
-            return ",instance=\"" + instanceId + "\"";
+            // Use gateway_instance_id label which contains the actual instance ID
+            return ",gateway_instance_id=\"" + instanceId + "\"";
         }
         return "";
     }
@@ -336,7 +339,10 @@ public class PrometheusService {
         try {
             // Check if we can get JVM memory data - this proves we're getting real metrics
             String instanceFilter = buildInstanceFilter(instanceId);
-            String query = "sum(jvm_memory_used_bytes{application=\"my-gateway\"" + instanceFilter + "})";
+            // Use gateway_instance_id label if filtering by specific instance
+            String query = instanceId != null && !instanceId.isEmpty()
+                ? "sum(jvm_memory_used_bytes{application=\"my-gateway\",gateway_instance_id=\"" + instanceId + "\"})"
+                : "sum(jvm_memory_used_bytes{application=\"my-gateway\"})";
             String result = queryPrometheus(query);
             double value = extractValue(result, -1);
             return value > 0;

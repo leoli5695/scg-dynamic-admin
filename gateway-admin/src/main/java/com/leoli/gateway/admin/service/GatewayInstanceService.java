@@ -298,6 +298,18 @@ public class GatewayInstanceService {
     }
 
     /**
+     * Get access URL for an instance.
+     */
+    public String getAccessUrl(String instanceId) {
+        GatewayInstanceEntity instance = instanceRepository.findByInstanceId(instanceId)
+                .orElse(null);
+        if (instance == null) {
+            return null;
+        }
+        return instance.getEffectiveAccessUrl();
+    }
+
+    /**
      * Get all enabled instances.
      */
     public List<GatewayInstanceEntity> getEnabledInstances() {

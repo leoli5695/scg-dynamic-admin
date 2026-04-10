@@ -17,7 +17,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Service for managing audit logs and configuration rollback.
@@ -408,5 +410,234 @@ public class AuditLogService {
     public long getCleanableCount(String instanceId, int retentionDays) {
         LocalDateTime beforeTime = LocalDateTime.now().minusDays(retentionDays);
         return auditLogRepository.countByInstanceIdAndCreatedAtBefore(instanceId, beforeTime);
+    }
+
+    // ===================== Timeline =====================
+
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
+    /**
+     * Get configuration change timeline for an instance.
+     */
+    public TimelineResult getTimeline(String instanceId, int days, String targetType, int limit) {
+        LocalDateTime since = LocalDateTime.now().minusDays(days);
+
+        List<AuditLogEntity> logs = auditLogRepository.findByInstanceIdAndCreatedAtAfter(
+                instanceId, since,
+                PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "createdAt"))
+        );
+
+        return buildTimeline(logs);
+    }
+
+    private TimelineResult buildTimeline(List<AuditLogEntity> logs) {
+        TimelineResult result = new TimelineResult();
+        result.totalChanges = logs.size();
+
+        Map<String, List<AuditLogEntity>> byDate = logs.stream()
+                .collect(Collectors.groupingBy(l -> l.getCreatedAt().format(DATE_FORMATTER)));
+
+        List<TimelineDay> dayList = new ArrayList<>();
+        for (Map.Entry<String, List<AuditLogEntity>> entry : byDate.entrySet()) {
+            TimelineDay day = new TimelineDay();
+            day.date = entry.getKey();
+            day.label = getDateLabel(entry.getKey());
+            day.changeCount = entry.getValue().size();
+
+            List<TimelineEvent> events = new ArrayList<>();
+            for (AuditLogEntity auditLog : entry.getValue()) {
+                events.add(buildTimelineEvent(auditLog));
+            }
+            events.sort((a, b) -> b.timestamp.compareTo(a.timestamp));
+            day.events = events;
+            dayList.add(day);
+        }
+
+        dayList.sort((a, b) -> b.date.compareTo(a.date));
+        result.days = dayList;
+
+        result.changesByType = logs.stream()
+                .collect(Collectors.groupingBy(AuditLogEntity::getTargetType, Collectors.counting()));
+        result.changesByOperation = logs.stream()
+                .collect(Collectors.groupingBy(AuditLogEntity::getOperationType, Collectors.counting()));
+        result.changesByOperator = logs.stream()
+                .collect(Collectors.groupingBy(AuditLogEntity::getOperator, Collectors.counting()));
+
+        return result;
+    }
+
+    private TimelineEvent buildTimelineEvent(AuditLogEntity auditLog) {
+        TimelineEvent event = new TimelineEvent();
+        event.id = auditLog.getId();
+        event.timestamp = auditLog.getCreatedAt().format(TIME_FORMATTER);
+        event.operator = auditLog.getOperator();
+        event.operation = auditLog.getOperationType();
+        event.targetType = auditLog.getTargetType();
+        event.targetId = auditLog.getTargetId();
+        event.targetName = auditLog.getTargetName();
+        event.ipAddress = auditLog.getIpAddress();
+
+        String target = auditLog.getTargetType() != null ? auditLog.getTargetType().toLowerCase() : "item";
+        event.operationLabel = switch (auditLog.getOperationType().toUpperCase()) {
+            case "CREATE" -> "Created " + target;
+            case "UPDATE" -> "Updated " + target;
+            case "DELETE" -> "Deleted " + target;
+            case "ENABLE" -> "Enabled " + target;
+            case "DISABLE" -> "Disabled " + target;
+            default -> auditLog.getOperationType() + " " + target;
+        };
+
+        if (auditLog.getOldValue() != null || auditLog.getNewValue() != null) {
+            event.hasDiff = true;
+            event.diff = buildTimelineDiff(auditLog.getOldValue(), auditLog.getNewValue());
+        }
+
+        switch (auditLog.getOperationType().toUpperCase()) {
+            case "CREATE" -> { event.icon = "plus"; event.color = "#52c41a"; }
+            case "UPDATE" -> { event.icon = "edit"; event.color = "#1890ff"; }
+            case "DELETE" -> { event.icon = "delete"; event.color = "#ff4d4f"; }
+            case "ENABLE" -> { event.icon = "check"; event.color = "#52c41a"; }
+            case "DISABLE" -> { event.icon = "close"; event.color = "#faad14"; }
+            default -> { event.icon = "info"; event.color = "#8c8c8c"; }
+        }
+
+        return event;
+    }
+
+    private List<TimelineDiffEntry> buildTimelineDiff(String oldValue, String newValue) {
+        List<TimelineDiffEntry> diffs = new ArrayList<>();
+        try {
+            JsonNode oldNode = oldValue != null ? objectMapper.readTree(oldValue) : objectMapper.createObjectNode();
+            JsonNode newNode = newValue != null ? objectMapper.readTree(newValue) : objectMapper.createObjectNode();
+
+            Set<String> allKeys = new TreeSet<>();
+            if (oldNode.isObject()) oldNode.fieldNames().forEachRemaining(allKeys::add);
+            if (newNode.isObject()) newNode.fieldNames().forEachRemaining(allKeys::add);
+
+            for (String key : allKeys) {
+                String oldStr = oldNode.has(key) ? oldNode.get(key).asText() : "";
+                String newStr = newNode.has(key) ? newNode.get(key).asText() : "";
+                if (!oldStr.equals(newStr)) {
+                    TimelineDiffEntry entry = new TimelineDiffEntry();
+                    entry.field = key;
+                    entry.oldValue = oldStr.isEmpty() ? null : oldStr;
+                    entry.newValue = newStr.isEmpty() ? null : newStr;
+                    entry.type = oldStr.isEmpty() ? "added" : newStr.isEmpty() ? "removed" : "changed";
+                    diffs.add(entry);
+                }
+            }
+        } catch (Exception e) {
+            if (!Objects.equals(oldValue, newValue)) {
+                TimelineDiffEntry entry = new TimelineDiffEntry();
+                entry.field = "value";
+                entry.oldValue = oldValue;
+                entry.newValue = newValue;
+                entry.type = "changed";
+                diffs.add(entry);
+            }
+        }
+        return diffs;
+    }
+
+    private String getDateLabel(String dateStr) {
+        try {
+            LocalDateTime date = LocalDateTime.parse(dateStr + "T00:00:00");
+            LocalDateTime today = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0);
+            LocalDateTime yesterday = today.minusDays(1);
+            if (date.isAfter(today) || date.equals(today)) return "Today";
+            if (date.isAfter(yesterday) || date.equals(yesterday)) return "Yesterday";
+            return dateStr;
+        } catch (Exception e) {
+            return dateStr;
+        }
+    }
+
+    // ===================== Timeline Data Classes =====================
+
+    public static class TimelineResult {
+        public int totalChanges;
+        public List<TimelineDay> days;
+        public Map<String, Long> changesByType;
+        public Map<String, Long> changesByOperation;
+        public Map<String, Long> changesByOperator;
+
+        public Map<String, Object> toMap() {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("totalChanges", totalChanges);
+            map.put("days", days.stream().map(TimelineDay::toMap).collect(Collectors.toList()));
+            map.put("changesByType", changesByType);
+            map.put("changesByOperation", changesByOperation);
+            map.put("changesByOperator", changesByOperator);
+            return map;
+        }
+    }
+
+    public static class TimelineDay {
+        public String date;
+        public String label;
+        public int changeCount;
+        public List<TimelineEvent> events;
+
+        public Map<String, Object> toMap() {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("date", date);
+            map.put("label", label);
+            map.put("changeCount", changeCount);
+            map.put("events", events.stream().map(TimelineEvent::toMap).collect(Collectors.toList()));
+            return map;
+        }
+    }
+
+    public static class TimelineEvent {
+        public Long id;
+        public String timestamp;
+        public String operator;
+        public String operation;
+        public String operationLabel;
+        public String targetType;
+        public String targetId;
+        public String targetName;
+        public String ipAddress;
+        public boolean hasDiff;
+        public List<TimelineDiffEntry> diff;
+        public String icon;
+        public String color;
+
+        public Map<String, Object> toMap() {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("id", id);
+            map.put("timestamp", timestamp);
+            map.put("operator", operator);
+            map.put("operation", operation);
+            map.put("operationLabel", operationLabel);
+            map.put("targetType", targetType);
+            map.put("targetId", targetId);
+            map.put("targetName", targetName);
+            map.put("ipAddress", ipAddress);
+            map.put("hasDiff", hasDiff);
+            if (hasDiff && diff != null) {
+                map.put("diff", diff.stream().map(TimelineDiffEntry::toMap).collect(Collectors.toList()));
+            }
+            map.put("icon", icon);
+            map.put("color", color);
+            return map;
+        }
+    }
+
+    public static class TimelineDiffEntry {
+        public String field;
+        public String oldValue;
+        public String newValue;
+        public String type;
+
+        public Map<String, Object> toMap() {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("field", field);
+            map.put("oldValue", oldValue);
+            map.put("newValue", newValue);
+            map.put("type", type);
+            return map;
+        }
     }
 }

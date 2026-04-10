@@ -90,4 +90,9 @@ public interface AuthPolicyRepository extends JpaRepository<AuthPolicyEntity, Lo
      * Delete all policies by instance ID.
      */
     int deleteByInstanceId(String instanceId);
+
+    /**
+     * Count policies by enabled status.
+     */
+    long countByEnabled(Boolean enabled);
 }

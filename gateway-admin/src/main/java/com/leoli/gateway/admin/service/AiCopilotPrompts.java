@@ -212,14 +212,27 @@ public class AiCopilotPrompts {
         prompts.put("service", """
                 ## 服务配置详解（基于 ServiceService/ServiceDefinition）
                             
+                ### 服务类型（ServiceType）
+                本系统支持两种服务类型，决定了路由转发和负载均衡的方式：
+                | 类型 | URI 协议 | 说明 | 实例来源 |
+                |------|----------|------|----------|
+                | STATIC | `static://` | 静态固定节点 | 手动在服务配置中维护 IP:端口列表，网关本地执行负载均衡 |
+                | NACOS | `lb://` | Nacos 服务发现 | 从 Nacos 注册中心自动拉取健康实例列表，由 Spring Cloud LoadBalancer 执行负载均衡 |
+                | CONSUL | `lb://` | Consul 服务发现 | 从 Consul 注册中心自动拉取健康实例列表 |
+                | DISCOVERY | `lb://` | 通用服务发现（等同于 NACOS） | 同 NACOS |
+                
+                **关键区别**：
+                - **STATIC 模式**：适用于无注册中心或需要精确控制后端节点的场景。实例列表由管理员手动配置，网关根据 `loadBalancer` 策略在本地选择目标实例。URI 格式为 `static://{serviceId}`。
+                - **NACOS/CONSUL 模式**：适用于微服务架构，后端实例自动注册/注销。网关通过服务名从注册中心获取可用实例列表，使用 Spring Cloud LoadBalancer 选择目标。URI 格式为 `lb://{serviceName}`。
+                
                 ### 服务实体字段
                 ```json
                 {
-                  "serviceId": "服务唯一标识",
+                  "serviceId": "服务唯一标识（UUID）",
                   "serviceName": "服务名称，如 user-service",
                   "instanceId": "网关实例ID",
                   "loadBalancer": "weighted | round-robin | random | consistent-hash",
-                  "instances": "后端实例列表",
+                  "instances": "后端实例列表（STATIC 模式下手动维护）",
                   "enabled": "是否启用"
                 }
                 ```
@@ -248,7 +261,22 @@ public class AiCopilotPrompts {
                 | round-robin | 简单轮询 | 实例性能相近 |
                 | random | 随机选择 | 简单场景 |
                 | consistent-hash | 一致性哈希 | 会话粘滞、缓存命中优化 |
+                
+                注意：对于 STATIC 模式，负载均衡由网关本地执行；对于 NACOS/CONSUL 模式，负载均衡由 Spring Cloud LoadBalancer 执行。
                             
+                ### 路由绑定服务（RouteServiceBinding）
+                路由通过 `serviceId` 或 `services` 数组绑定服务，每个绑定可指定服务类型：
+                ```json
+                {
+                  "type": "STATIC | NACOS | CONSUL",
+                  "serviceId": "服务ID（STATIC 为 UUID，NACOS/CONSUL 为服务名）",
+                  "serviceName": "服务显示名",
+                  "weight": 100,
+                  "version": "v1",
+                  "enabled": true
+                }
+                ```
+                
                 ### 本地缓存机制
                 ServiceService 使用 `ConcurrentHashMap<String, ServiceDefinition>` 本地缓存服务定义，
                 提高查询性能，避免频繁访问数据库。
@@ -260,11 +288,11 @@ public class AiCopilotPrompts {
                             
                 ### Nacos 配置存储
                 - Key: `config.gateway.service-{serviceId}`
-                - 累引: `config.gateway.metadata.services-index`
+                - 索引: `config.gateway.metadata.services-index`
                             
                 ### 配置示例
                             
-                **基础服务配置**:
+                **STATIC 模式 - 手动管理实例**:
                 ```json
                 {
                   "serviceName": "user-service",
@@ -276,8 +304,33 @@ public class AiCopilotPrompts {
                   "enabled": true
                 }
                 ```
-                            
-                **一致性哈希服务**:
+                对应路由绑定（URI 自动生成为 `static://{serviceId}`）：
+                ```json
+                {
+                  "routeName": "user-api",
+                  "mode": "SINGLE",
+                  "serviceId": "user-service-uuid",
+                  "predicates": [{"name":"Path","args":{"pattern":"/api/users/**"}}],
+                  "filters": [{"name":"StripPrefix","args":{"parts":"1"}}],
+                  "enabled": true
+                }
+                ```
+                
+                **NACOS 模式 - 服务发现**:
+                路由绑定（URI 自动生成为 `lb://{serviceName}`）：
+                ```json
+                {
+                  "routeName": "order-api",
+                  "mode": "MULTI",
+                  "services": [
+                    {"type":"NACOS","serviceId":"order-service","serviceName":"order-service","weight":100,"enabled":true}
+                  ],
+                  "predicates": [{"name":"Path","args":{"pattern":"/api/orders/**"}}],
+                  "enabled": true
+                }
+                ```
+                
+                **一致性哈希服务（STATIC 模式）**:
                 ```json
                 {
                   "serviceName": "session-service",

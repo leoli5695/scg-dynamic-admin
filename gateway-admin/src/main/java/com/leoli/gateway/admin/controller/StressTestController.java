@@ -105,7 +105,7 @@ public class StressTestController {
     @GetMapping("/{testId}/analyze")
     public ResponseEntity<Map<String, Object>> analyzeTestResults(
             @PathVariable Long testId,
-            @RequestParam(required = false, defaultValue = "QWEN") String provider,
+            @RequestParam(required = false, defaultValue = "BAILIAN") String provider,
             @RequestParam(required = false, defaultValue = "zh") String language) {
 
         log.info("Analyzing stress test results: {}", testId);

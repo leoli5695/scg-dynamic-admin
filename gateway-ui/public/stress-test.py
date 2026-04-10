@@ -114,7 +114,7 @@ class StressTest:
         print("现在可以查看 Prometheus 指标和 AI 分析结果!")
         print()
         print("API调用示例:")
-        print(f'  curl -X POST "http://localhost:9090/api/ai/analyze/timerange" -H "Content-Type: application/json" -d \'{{"provider":"QWEN","language":"zh"}}\'')
+        print(f'  curl -X POST "http://localhost:9090/api/ai/analyze/timerange" -H "Content-Type: application/json" -d \'{{"provider":"BAILIAN","language":"zh"}}\'')
         print()
 
 

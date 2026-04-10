@@ -265,4 +265,23 @@ public class AuditLogController {
 
         return ResponseEntity.ok(result);
     }
+
+    /**
+     * Get configuration change timeline for an instance.
+     */
+    @GetMapping("/timeline/{instanceId}")
+    public ResponseEntity<Map<String, Object>> getTimeline(
+            @PathVariable String instanceId,
+            @RequestParam(defaultValue = "7") int days,
+            @RequestParam(required = false) String targetType,
+            @RequestParam(defaultValue = "100") int limit) {
+
+        try {
+            AuditLogService.TimelineResult timeline = auditLogService.getTimeline(instanceId, days, targetType, limit);
+            return ResponseEntity.ok(timeline.toMap());
+        } catch (Exception e) {
+            log.error("Failed to get timeline for instance {}", instanceId, e);
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
 }

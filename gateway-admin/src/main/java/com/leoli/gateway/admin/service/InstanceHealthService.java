@@ -185,6 +185,13 @@ public class InstanceHealthService {
     }
 
     /**
+     * Get all instance health statuses.
+     */
+    public List<InstanceHealthDTO> getAllInstanceHealth() {
+        return new ArrayList<>(healthStore.values());
+    }
+
+    /**
      * Get health status overview.
      */
     public Map<String, Object> getHealthOverview() {

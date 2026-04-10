@@ -36,6 +36,7 @@ public class TrafficTopologyController {
     public ResponseEntity<Map<String, Object>> getTopology(
             @PathVariable String instanceId,
             @RequestParam(defaultValue = "60") int minutes) {
+        minutes = Math.max(1, Math.min(minutes, 1440));
         log.info("Building traffic topology for instance: {}, minutes: {}", instanceId, minutes);
         
         try {
@@ -55,6 +56,7 @@ public class TrafficTopologyController {
     public ResponseEntity<Map<String, Object>> getTrafficSummary(
             @PathVariable String instanceId,
             @RequestParam(defaultValue = "60") int minutes) {
+        minutes = Math.max(1, Math.min(minutes, 1440));
         log.info("Getting traffic summary for instance: {}, minutes: {}", instanceId, minutes);
         
         try {

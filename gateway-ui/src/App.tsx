@@ -148,6 +148,11 @@ const App: React.FC = () => {
     <ConfigProvider
       theme={customTheme}
       locale={i18n.language?.startsWith("zh") ? zhCN : enUS}
+      getPopupContainer={(triggerNode) =>
+        triggerNode?.parentNode instanceof HTMLElement
+          ? triggerNode.parentNode
+          : document.body
+      }
     >
       <Layout style={{ minHeight: "100vh" }}>
         {/* Left Sidebar - Fixed position */}
@@ -251,6 +256,12 @@ const App: React.FC = () => {
                 <Route path="alerts" element={null} />
                 <Route path="access_log" element={null} />
                 <Route path="audit_logs" element={null} />
+                <Route path="diagnostic" element={null} />
+                <Route path="topology" element={null} />
+                <Route path="filter_chain" element={null} />
+                <Route path="request_replay" element={null} />
+                <Route path="copilot" element={null} />
+                <Route path="stress_test" element={null} />
               </Route>
               <Route path="/kubernetes" element={<KubernetesPage />} />
             </Routes>

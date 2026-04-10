@@ -145,4 +145,9 @@ public interface AuditLogRepository extends JpaRepository<AuditLogEntity, Long> 
      * Delete all audit logs by instance ID.
      */
     int deleteByInstanceId(String instanceId);
+
+    /**
+     * Find audit logs by instanceId created after a specified time.
+     */
+    List<AuditLogEntity> findByInstanceIdAndCreatedAtAfter(String instanceId, LocalDateTime createdAt, Pageable pageable);
 }

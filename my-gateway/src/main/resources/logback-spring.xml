@@ -6,12 +6,28 @@
     <!-- 应用名称 -->
     <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="my-gateway"/>
 
-    <!-- 控制台输出 -->
+    <!-- 控制台输出（同步 Appender） -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight(%5level) %magenta(${PID:-}) --- [%15.15t] %cyan(%logger{39}): %msg%n</pattern>
             <charset>UTF-8</charset>
         </encoder>
+    </appender>
+
+    <!-- 异步 Appender - 高性能日志输出 -->
+    <!--
+        性能优化说明：
+        - queueSize: 队列大小，默认256，增大可减少阻塞
+        - discardingThreshold: 丢弃阈值，0表示不丢弃任何日志
+        - neverBlock: true表示队列满时不阻塞，直接丢弃（适合高吞吐场景）
+        - includeCallerData: false表示不记录调用者信息（文件名、行号），提升性能
+    -->
+    <appender name="ASYNC" class="ch.qos.logback.classic.AsyncAppender">
+        <queueSize>512</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <neverBlock>true</neverBlock>
+        <includeCallerData>false</includeCallerData>
+        <appender-ref ref="CONSOLE"/>
     </appender>
 
     <!-- 抑制 Spring Boot 自动配置日志 -->
@@ -40,8 +56,8 @@
     <!-- Spring Cloud Gateway 日志 -->
     <logger name="org.springframework.cloud.gateway" level="INFO"/>
 
-    <!-- Root 日志 -->
+    <!-- Root 日志 - 使用异步 Appender -->
     <root level="INFO">
-        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="ASYNC"/>
     </root>
 </configuration>

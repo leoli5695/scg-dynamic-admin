@@ -4,9 +4,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.model.AiConfig;
 import com.leoli.gateway.admin.repository.AiConfigRepository;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.*;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -23,70 +27,77 @@ public class AiAnalysisService {
     private final PrometheusService prometheusService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    @PostConstruct
+    public void init() {
+        // 应用启动时执行迁移和初始化
+        migrateQwenToBailian();
+        initializeProviders();
+    }
+
     // 提供商显示名称
     private static final Map<String, String> PROVIDER_NAMES = Map.of(
-        "OPENAI", "OpenAI",
-        "GEMINI", "Google Gemini",
-        "CLAUDE", "Anthropic Claude",
-        "QWEN", "通义千问",
-        "DEEPSEEK", "DeepSeek",
-        "KIMI", "Kimi Moonshot",
-        "GLM", "智谱GLM"
+            "OPENAI", "OpenAI",
+            "GEMINI", "Google Gemini",
+            "CLAUDE", "Anthropic Claude",
+            "BAILIAN", "阿里云百炼"
     );
 
     // 提供商区域
     private static final Map<String, String> PROVIDER_REGIONS = Map.of(
-        "OPENAI", "OVERSEAS",
-        "GEMINI", "OVERSEAS",
-        "CLAUDE", "OVERSEAS",
-        "QWEN", "DOMESTIC",
-        "DEEPSEEK", "DOMESTIC",
-        "KIMI", "DOMESTIC",
-        "GLM", "DOMESTIC"
+            "OPENAI", "OVERSEAS",
+            "GEMINI", "OVERSEAS",
+            "CLAUDE", "OVERSEAS",
+            "BAILIAN", "DOMESTIC"
     );
-    
+
     // RestTemplate with 5 minute timeout for AI API calls
     private final RestTemplate restTemplate = createRestTemplate();
-    
+
     private static RestTemplate createRestTemplate() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(30000); // 30 seconds
         factory.setReadTimeout(300000);   // 5 minutes
         return new RestTemplate(factory);
     }
-    
+
     // 各提供商的API地址
     private static final Map<String, String> DEFAULT_BASE_URLS = Map.of(
-        "OPENAI", "https://api.openai.com/v1",
-        "GEMINI", "https://generativelanguage.googleapis.com/v1beta",
-        "CLAUDE", "https://api.anthropic.com/v1",
-        "QWEN", "https://dashscope.aliyuncs.com/api/v1",
-        "DEEPSEEK", "https://api.deepseek.com/v1",
-        "KIMI", "https://api.moonshot.cn/v1",
-        "GLM", "https://open.bigmodel.cn/api/paas/v4"
+            "OPENAI", "https://api.openai.com/v1",
+            "GEMINI", "https://generativelanguage.googleapis.com/v1beta",
+            "CLAUDE", "https://api.anthropic.com/v1",
+            "BAILIAN", "https://dashscope.aliyuncs.com/compatible-mode/v1"
     );
-    
-    // 各提供商支持的模型
+
+    // 各提供商支持的模型 - 只保留最新版本
     private static final Map<String, List<String>> PROVIDER_MODELS = Map.of(
-        "OPENAI", List.of("gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"),
-        "GEMINI", List.of("gemini-pro", "gemini-1.5-pro", "gemini-1.5-flash"),
-        "CLAUDE", List.of("claude-3-opus", "claude-3-sonnet", "claude-3-haiku"),
-        "QWEN", List.of("qwen-turbo", "qwen-plus", "qwen-max", "qwen-max-longcontext"),
-        "DEEPSEEK", List.of("deepseek-chat", "deepseek-coder"),
-        "KIMI", List.of("moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"),
-        "GLM", List.of("glm-4", "glm-3-turbo")
+            "OPENAI", List.of("gpt-4o", "gpt-4-turbo", "gpt-4"),
+            "GEMINI", List.of("gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"),
+            "CLAUDE", List.of("claude-3.5-sonnet", "claude-3-opus", "claude-3-haiku"),
+            // 百炼平台 - 只保留最新版本模型
+            "BAILIAN", List.of(
+                    // Qwen 系列 (最新)
+                    "qwen-max", "qwen-plus", "qwen-turbo",
+                    // DeepSeek 系列 (最新)
+                    "deepseek-v3", "deepseek-r1",
+                    // Kimi 系列 (最新)
+                    "kimi-k2", "moonshot-v1-128k",
+                    // GLM 系列 (最新)
+                    "glm-5", "glm-4.7", "glm-4.5"
+            )
     );
-    
+
     /**
      * 获取所有提供商配置
      */
     public List<AiConfig> getAllProviders() {
         List<AiConfig> providers = aiConfigRepository.findAll();
+
         // 如果数据库为空，初始化默认提供商
         if (providers.isEmpty()) {
             initializeProviders();
             providers = aiConfigRepository.findAll();
         }
+
         return providers;
     }
 
@@ -95,6 +106,7 @@ public class AiAnalysisService {
      */
     public void initializeProviders() {
         log.info("Initializing AI providers...");
+
         for (String provider : DEFAULT_BASE_URLS.keySet()) {
             if (aiConfigRepository.findByProvider(provider).isEmpty()) {
                 AiConfig config = new AiConfig();
@@ -108,39 +120,79 @@ public class AiAnalysisService {
         }
         log.info("AI providers initialization completed");
     }
-    
+
+    /**
+     * 迁移旧的 QWEN 配置到 BAILIAN
+     * 百炼平台包含通义千问等多种模型，统一使用 BAILIAN 作为提供商标识
+     */
+    private void migrateQwenToBailian() {
+        Optional<AiConfig> oldQwen = aiConfigRepository.findByProvider("QWEN");
+        if (oldQwen.isPresent()) {
+            AiConfig qwenConfig = oldQwen.get();
+            log.info("Found old QWEN config, migrating to BAILIAN...");
+
+            // 检查是否已存在 BAILIAN 配置
+            Optional<AiConfig> existingBailian = aiConfigRepository.findByProvider("BAILIAN");
+            if (existingBailian.isPresent()) {
+                // 如果 BAILIAN 已存在且未配置，更新其配置
+                AiConfig bailianConfig = existingBailian.get();
+                if (bailianConfig.getApiKey() == null && qwenConfig.getApiKey() != null) {
+                    bailianConfig.setApiKey(qwenConfig.getApiKey());
+                    bailianConfig.setModel(qwenConfig.getModel());
+                    bailianConfig.setBaseUrl(qwenConfig.getBaseUrl() != null ?
+                            qwenConfig.getBaseUrl().replace("/api/v1", "/compatible-mode/v1") :
+                            DEFAULT_BASE_URLS.get("BAILIAN"));
+                    bailianConfig.setIsValid(qwenConfig.getIsValid());
+                    bailianConfig.setLastValidatedAt(qwenConfig.getLastValidatedAt());
+                    aiConfigRepository.save(bailianConfig);
+                    log.info("Migrated QWEN config to existing BAILIAN config");
+                }
+            } else {
+                // 如果 BAILIAN 不存在，直接修改 QWEN 为 BAILIAN
+                qwenConfig.setProvider("BAILIAN");
+                qwenConfig.setProviderName("阿里云百炼");
+                qwenConfig.setRegion("DOMESTIC");
+                // 更新 baseUrl 为兼容模式地址
+                if (qwenConfig.getBaseUrl() != null) {
+                    qwenConfig.setBaseUrl(qwenConfig.getBaseUrl().replace("/api/v1", "/compatible-mode/v1"));
+                }
+                aiConfigRepository.save(qwenConfig);
+                log.info("Renamed QWEN provider to BAILIAN");
+            }
+
+            // 删除可能残留的 QWEN 记录（如果创建了新的 BAILIAN）
+            aiConfigRepository.deleteByProvider("QWEN");
+            log.info("QWEN to BAILIAN migration completed");
+        }
+    }
+
     /**
      * 获取指定区域的提供商
      */
     public List<AiConfig> getProvidersByRegion(String region) {
         return aiConfigRepository.findByRegion(region);
     }
-    
+
     /**
      * 获取提供商支持的模型列表
      */
     public List<String> getSupportedModels(String provider) {
         return PROVIDER_MODELS.getOrDefault(provider, List.of());
     }
-    
+
     /**
      * 验证API Key
      */
     public boolean validateApiKey(String provider, String apiKey, String baseUrl) {
         try {
             String url = baseUrl != null ? baseUrl : DEFAULT_BASE_URLS.get(provider);
-            
+
             switch (provider) {
-                case "QWEN":
-                    return validateQwenKey(url, apiKey);
+                case "BAILIAN":
+                    // 百炼平台使用 qwen-turbo 模型验证
+                    return validateBailianKey(url, apiKey);
                 case "OPENAI":
                     return validateOpenAIKey(url, apiKey);
-                case "DEEPSEEK":
-                    return validateDeepSeekKey(url, apiKey);
-                case "KIMI":
-                    return validateKimiKey(url, apiKey);
-                case "GLM":
-                    return validateGlmeKey(url, apiKey);
                 case "GEMINI":
                     return validateGeminiKey(url, apiKey);
                 case "CLAUDE":
@@ -153,55 +205,81 @@ public class AiAnalysisService {
             return false;
         }
     }
-    
+
+    /**
+     * 验证百炼平台 API Key
+     */
+    private boolean validateBailianKey(String baseUrl, String apiKey) {
+        try {
+            String url = baseUrl + "/chat/completions";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(apiKey);
+
+            // 使用百炼平台支持的模型
+            Map<String, Object> body = Map.of(
+                    "model", "qwen-turbo",
+                    "messages", List.of(Map.of("role", "user", "content", "hi")),
+                    "max_tokens", 5
+            );
+
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+            ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
+            return response.getStatusCode().is2xxSuccessful();
+        } catch (Exception e) {
+            log.error("Bailian API key validation failed: {}", e.getMessage());
+            return false;
+        }
+    }
+
     /**
      * 保存配置
      */
     public AiConfig saveConfig(String provider, String model, String apiKey, String baseUrl) {
         AiConfig config = aiConfigRepository.findByProvider(provider)
-            .orElseThrow(() -> new RuntimeException("Provider not found: " + provider));
-        
+                .orElseThrow(() -> new RuntimeException("Provider not found: " + provider));
+
         config.setModel(model);
         config.setApiKey(apiKey);
         config.setBaseUrl(baseUrl);
         config.setIsValid(true);
         config.setLastValidatedAt(LocalDateTime.now());
-        
+
         return aiConfigRepository.save(config);
     }
-    
+
     /**
      * 执行AI分析
      */
     public String analyze(String provider, String language) {
         // 获取配置
         AiConfig config = aiConfigRepository.findByProvider(provider)
-            .orElseThrow(() -> new RuntimeException("Provider not found: " + provider));
-        
+                .orElseThrow(() -> new RuntimeException("Provider not found: " + provider));
+
         if (config.getApiKey() == null || config.getModel() == null) {
             throw new RuntimeException("API Key or Model not configured for provider: " + provider);
         }
-        
+
         // 收集监控数据
         String metricsData = collectMetricsData();
-        
+
         // 构建prompt
         String prompt = buildPrompt(metricsData, language);
-        
+
         // 调用大模型API
         return callModelApi(config, prompt);
     }
-    
+
     /**
      * 收集监控数据
      */
     private String collectMetricsData() {
         StringBuilder sb = new StringBuilder();
-        
+
         try {
             Map<String, Object> metrics = prometheusService.getGatewayMetrics();
             log.info("Collected metrics keys: {}", metrics.keySet());
-            
+
             // JVM内存
             Map<String, Object> jvmMemory = (Map<String, Object>) metrics.get("jvmMemory");
             if (jvmMemory != null) {
@@ -211,7 +289,7 @@ public class AiAnalysisService {
                 sb.append("堆内存使用率: ").append(String.format("%.1f%%", getDoubleValue(jvmMemory, "heapUsagePercent"))).append("\n");
                 sb.append("非堆内存: ").append(formatBytes(getDoubleValue(jvmMemory, "nonHeapUsed"))).append("\n");
             }
-            
+
             // GC
             Map<String, Object> gc = (Map<String, Object>) metrics.get("gc");
             log.info("GC data: {}", gc);
@@ -221,7 +299,7 @@ public class AiAnalysisService {
                 sb.append("GC总耗时: ").append(String.format("%.3f", getDoubleValue(gc, "gcTimeSeconds"))).append(" 秒\n");
                 sb.append("GC开销: ").append(String.format("%.2f%%", getDoubleValue(gc, "gcOverheadPercent"))).append("\n");
             }
-            
+
             // CPU
             Map<String, Object> cpu = (Map<String, Object>) metrics.get("cpu");
             if (cpu != null) {
@@ -230,7 +308,7 @@ public class AiAnalysisService {
                 sb.append("系统CPU: ").append(String.format("%.1f%%", getDoubleValue(cpu, "systemUsage"))).append("\n");
                 sb.append("可用处理器: ").append(cpu.getOrDefault("availableProcessors", "N/A")).append("\n");
             }
-            
+
             // HTTP请求
             Map<String, Object> http = (Map<String, Object>) metrics.get("httpRequests");
             if (http != null) {
@@ -239,7 +317,7 @@ public class AiAnalysisService {
                 sb.append("平均响应时间: ").append(String.format("%.2f", getDoubleValue(http, "avgResponseTimeMs"))).append(" ms\n");
                 sb.append("错误率: ").append(String.format("%.2f%%", getDoubleValue(http, "errorRate"))).append("\n");
             }
-            
+
             // 线程
             Map<String, Object> threads = (Map<String, Object>) metrics.get("threads");
             log.info("Threads data: {}", threads);
@@ -249,15 +327,15 @@ public class AiAnalysisService {
                 sb.append("守护线程: ").append(getIntValue(threads, "daemonThreads")).append("\n");
                 sb.append("峰值线程: ").append(getIntValue(threads, "peakThreads")).append("\n");
             }
-            
+
         } catch (Exception e) {
             log.error("Failed to collect metrics data", e);
             sb.append("数据收集失败: ").append(e.getMessage());
         }
-        
+
         return sb.toString();
     }
-    
+
     private double getDoubleValue(Map<String, Object> map, String key) {
         Object value = map.get(key);
         if (value instanceof Number) {
@@ -265,7 +343,7 @@ public class AiAnalysisService {
         }
         return 0.0;
     }
-    
+
     private int getIntValue(Map<String, Object> map, String key) {
         Object value = map.get(key);
         if (value instanceof Number) {
@@ -273,7 +351,7 @@ public class AiAnalysisService {
         }
         return 0;
     }
-    
+
     private String formatBytes(double bytes) {
         if (bytes <= 0) return "0 B";
         String[] units = {"B", "KB", "MB", "GB"};
@@ -282,64 +360,89 @@ public class AiAnalysisService {
         double value = bytes / Math.pow(1024, unitIndex);
         return String.format("%.2f %s", value, units[unitIndex]);
     }
-    
+
     /**
      * 构建分析提示词
      */
     private String buildPrompt(String metricsData, String language) {
         boolean isEnglish = !"zh".equals(language);
-        
+
         if (isEnglish) {
             return String.format("""
-                You are a professional Java application operations expert. Please analyze the following Gateway Prometheus monitoring data and provide system health assessment and optimization suggestions.
-                
-                Please respond in English only.
-                
-                %s
-                
-                Please output an analysis report containing:
-                1. Overall health status (Healthy/Warning/Critical)
-                2. Metrics analysis (Memory, GC, CPU, Requests, Threads)
-                3. Issues found (if any)
-                4. Optimization suggestions (if any issues)
-                5. Predicted risks (based on current data)
-                
-                Please output in Markdown format, be professional, detailed, and data-supported.
-                """, metricsData);
+                    You are a professional Java application operations expert. Please analyze the following Gateway Prometheus monitoring data and provide system health assessment and optimization suggestions.
+                                    
+                    Please respond in English only.
+                                    
+                    %s
+                                    
+                    Please output an analysis report containing:
+                    1. Overall health status (Healthy/Warning/Critical)
+                    2. Metrics analysis (Memory, GC, CPU, Requests, Threads)
+                    3. Issues found (if any)
+                    4. Optimization suggestions (if any issues)
+                    5. Predicted risks (based on current data)
+                                    
+                    Please output in Markdown format, be professional, detailed, and data-supported.
+                    """, metricsData);
         } else {
             return String.format("""
-                你是一个专业的Java应用运维专家。请分析以下Gateway网关的Prometheus监控数据，给出系统健康状态评估和优化建议。
-                
-                请用中文回答。
-                
-                %s
-                
-                请输出分析报告，包含：
-                1. 整体健康状态（健康/警告/危险）
-                2. 各指标分析（内存、GC、CPU、请求、线程）
-                3. 发现的问题（如有）
-                4. 优化建议（如有问题）
-                5. 预测风险（基于当前数据预测可能的风险）
-                
-                请用Markdown格式输出，要专业、详细、有数据支撑。
-                """, metricsData);
+                    你是一个专业的Java应用运维专家。请分析以下Gateway网关的Prometheus监控数据，给出系统健康状态评估和优化建议。
+                                    
+                    请用中文回答。
+                                    
+                    %s
+                                    
+                    请输出分析报告，包含：
+                    1. 整体健康状态（健康/警告/危险）
+                    2. 各指标分析（内存、GC、CPU、请求、线程）
+                    3. 发现的问题（如有）
+                    4. 优化建议（如有问题）
+                    5. 预测风险（基于当前数据预测可能的风险）
+                                    
+                    请用Markdown格式输出，要专业、详细、有数据支撑。
+                    """, metricsData);
         }
     }
-    
+
+    /**
+     * 调用大模型API（公开方法，供其他服务调用）
+     *
+     * @param provider AI提供商
+     * @param model    模型名称
+     * @param prompt   提示词
+     * @return AI响应内容
+     */
+    public String callAiApi(String provider, String model, String prompt) {
+        AiConfig config = aiConfigRepository.findByProvider(provider)
+                .orElseThrow(() -> new RuntimeException("Provider not found: " + provider));
+
+        if (config.getApiKey() == null) {
+            throw new RuntimeException("API Key not configured for provider: " + provider);
+        }
+
+        // 使用传入的model或配置中的model
+        if (model != null && !model.isEmpty()) {
+            config.setModel(model);
+        }
+
+        if (config.getModel() == null) {
+            throw new RuntimeException("Model not configured for provider: " + provider);
+        }
+
+        return callModelApi(config, prompt);
+    }
+
     /**
      * 调用大模型API
      */
     private String callModelApi(AiConfig config, String prompt) {
         String provider = config.getProvider();
         String baseUrl = config.getBaseUrl() != null ? config.getBaseUrl() : DEFAULT_BASE_URLS.get(provider);
-        
+
         try {
             return switch (provider) {
-                case "QWEN" -> callQwenApi(baseUrl, config.getApiKey(), config.getModel(), prompt);
+                case "BAILIAN" -> callOpenAIApi(baseUrl, config.getApiKey(), config.getModel(), prompt);
                 case "OPENAI" -> callOpenAIApi(baseUrl, config.getApiKey(), config.getModel(), prompt);
-                case "DEEPSEEK" -> callDeepSeekApi(baseUrl, config.getApiKey(), config.getModel(), prompt);
-                case "KIMI" -> callKimiApi(baseUrl, config.getApiKey(), config.getModel(), prompt);
-                case "GLM" -> callGlmApi(baseUrl, config.getApiKey(), config.getModel(), prompt);
                 case "GEMINI" -> callGeminiApi(baseUrl, config.getApiKey(), config.getModel(), prompt);
                 case "CLAUDE" -> callClaudeApi(baseUrl, config.getApiKey(), config.getModel(), prompt);
                 default -> throw new RuntimeException("Unsupported provider: " + provider);
@@ -349,122 +452,72 @@ public class AiAnalysisService {
             throw new RuntimeException("AI分析失败: " + e.getMessage());
         }
     }
-    
+
     // ========== 各模型API调用实现 ==========
-    
-    private String callQwenApi(String baseUrl, String apiKey, String model, String prompt) {
-        String url = baseUrl + "/services/aigc/text-generation/generation";
-        
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("Authorization", "Bearer " + apiKey);
-        
-        Map<String, Object> body = new HashMap<>();
-        body.put("model", model);
-        body.put("input", Map.of("messages", List.of(
-            Map.of("role", "system", "content", "你是一个专业的Java应用运维专家。"),
-            Map.of("role", "user", "content", prompt)
-        )));
-        
-        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-        ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
-        
-        return extractQwenResponse(response.getBody());
-    }
-    
+
     private String callOpenAIApi(String baseUrl, String apiKey, String model, String prompt) {
         String url = baseUrl + "/chat/completions";
-        
+
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setBearerAuth(apiKey);
-        
+
         Map<String, Object> body = Map.of(
-            "model", model,
-            "messages", List.of(
-                Map.of("role", "system", "content", "你是一个专业的Java应用运维专家。"),
-                Map.of("role", "user", "content", prompt)
-            )
+                "model", model,
+                "messages", List.of(
+                        Map.of("role", "system", "content", "你是一个专业的Java应用运维专家。"),
+                        Map.of("role", "user", "content", prompt)
+                )
         );
-        
+
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
         ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
-        
+
         return extractOpenAIResponse(response.getBody());
     }
-    
-    private String callDeepSeekApi(String baseUrl, String apiKey, String model, String prompt) {
-        // DeepSeek API兼容OpenAI格式
-        return callOpenAIApi(baseUrl, apiKey, model, prompt);
-    }
-    
-    private String callKimiApi(String baseUrl, String apiKey, String model, String prompt) {
-        // Kimi API兼容OpenAI格式
-        return callOpenAIApi(baseUrl, apiKey, model, prompt);
-    }
-    
-    private String callGlmApi(String baseUrl, String apiKey, String model, String prompt) {
-        String url = baseUrl + "/chat/completions";
-        
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(apiKey);
-        
-        Map<String, Object> body = Map.of(
-            "model", model,
-            "messages", List.of(
-                Map.of("role", "user", "content", prompt)
-            )
-        );
-        
-        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-        ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
-        
-        return extractOpenAIResponse(response.getBody());
-    }
-    
+
     private String callGeminiApi(String baseUrl, String apiKey, String model, String prompt) {
         String url = baseUrl + "/models/" + model + ":generateContent?key=" + apiKey;
-        
+
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        
+
         Map<String, Object> body = Map.of(
-            "contents", List.of(
-                Map.of("parts", List.of(Map.of("text", prompt)))
-            )
+                "contents", List.of(
+                        Map.of("parts", List.of(Map.of("text", prompt)))
+                )
         );
-        
+
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
         ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
-        
+
         return extractGeminiResponse(response.getBody());
     }
-    
+
     private String callClaudeApi(String baseUrl, String apiKey, String model, String prompt) {
         String url = baseUrl + "/messages";
-        
+
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("x-api-key", apiKey);
         headers.set("anthropic-version", "2023-06-01");
-        
+
         Map<String, Object> body = Map.of(
-            "model", model,
-            "max_tokens", 4096,
-            "messages", List.of(
-                Map.of("role", "user", "content", prompt)
-            )
+                "model", model,
+                "max_tokens", 4096,
+                "messages", List.of(
+                        Map.of("role", "user", "content", prompt)
+                )
         );
-        
+
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
         ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
-        
+
         return extractClaudeResponse(response.getBody());
     }
-    
+
     // ========== 响应解析 ==========
-    
+
     private String extractQwenResponse(String body) {
         try {
             JsonNode root = objectMapper.readTree(body);
@@ -484,7 +537,7 @@ public class AiAnalysisService {
             return "解析响应失败: " + e.getMessage();
         }
     }
-    
+
     private String extractOpenAIResponse(String body) {
         try {
             JsonNode root = objectMapper.readTree(body);
@@ -494,7 +547,7 @@ public class AiAnalysisService {
             return "解析响应失败";
         }
     }
-    
+
     private String extractGeminiResponse(String body) {
         try {
             JsonNode root = objectMapper.readTree(body);
@@ -504,7 +557,7 @@ public class AiAnalysisService {
             return "解析响应失败";
         }
     }
-    
+
     private String extractClaudeResponse(String body) {
         try {
             JsonNode root = objectMapper.readTree(body);
@@ -514,21 +567,21 @@ public class AiAnalysisService {
             return "解析响应失败";
         }
     }
-    
+
     // ========== API Key验证 ==========
-    
+
     private boolean validateQwenKey(String baseUrl, String apiKey) {
         try {
             String url = baseUrl + "/services/aigc/text-generation/generation";
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("Authorization", "Bearer " + apiKey);
-            
+
             Map<String, Object> body = Map.of(
-                "model", "qwen-turbo",
-                "input", Map.of("messages", List.of(Map.of("role", "user", "content", "hi")))
+                    "model", "qwen-turbo",
+                    "input", Map.of("messages", List.of(Map.of("role", "user", "content", "hi")))
             );
-            
+
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
             ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
             return response.getStatusCode().is2xxSuccessful();
@@ -536,20 +589,20 @@ public class AiAnalysisService {
             return false;
         }
     }
-    
+
     private boolean validateOpenAIKey(String baseUrl, String apiKey) {
         try {
             String url = baseUrl + "/chat/completions";
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.setBearerAuth(apiKey);
-            
+
             Map<String, Object> body = Map.of(
-                "model", "gpt-3.5-turbo",
-                "messages", List.of(Map.of("role", "user", "content", "hi")),
-                "max_tokens", 5
+                    "model", "gpt-3.5-turbo",
+                    "messages", List.of(Map.of("role", "user", "content", "hi")),
+                    "max_tokens", 5
             );
-            
+
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
             ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
             return response.getStatusCode().is2xxSuccessful();
@@ -557,27 +610,27 @@ public class AiAnalysisService {
             return false;
         }
     }
-    
+
     private boolean validateDeepSeekKey(String baseUrl, String apiKey) {
         return validateOpenAIKey(baseUrl, apiKey);
     }
-    
+
     private boolean validateKimiKey(String baseUrl, String apiKey) {
         return validateOpenAIKey(baseUrl, apiKey);
     }
-    
+
     private boolean validateGlmeKey(String baseUrl, String apiKey) {
         try {
             String url = baseUrl + "/chat/completions";
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.setBearerAuth(apiKey);
-            
+
             Map<String, Object> body = Map.of(
-                "model", "glm-3-turbo",
-                "messages", List.of(Map.of("role", "user", "content", "hi"))
+                    "model", "glm-3-turbo",
+                    "messages", List.of(Map.of("role", "user", "content", "hi"))
             );
-            
+
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
             ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
             return response.getStatusCode().is2xxSuccessful();
@@ -585,17 +638,17 @@ public class AiAnalysisService {
             return false;
         }
     }
-    
+
     private boolean validateGeminiKey(String baseUrl, String apiKey) {
         try {
             String url = baseUrl + "/models/gemini-pro:generateContent?key=" + apiKey;
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            
+
             Map<String, Object> body = Map.of(
-                "contents", List.of(Map.of("parts", List.of(Map.of("text", "hi"))))
+                    "contents", List.of(Map.of("parts", List.of(Map.of("text", "hi"))))
             );
-            
+
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
             ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
             return response.getStatusCode().is2xxSuccessful();
@@ -603,7 +656,7 @@ public class AiAnalysisService {
             return false;
         }
     }
-    
+
     private boolean validateClaudeKey(String baseUrl, String apiKey) {
         try {
             String url = baseUrl + "/messages";
@@ -611,13 +664,13 @@ public class AiAnalysisService {
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("x-api-key", apiKey);
             headers.set("anthropic-version", "2023-06-01");
-            
+
             Map<String, Object> body = Map.of(
-                "model", "claude-3-haiku",
-                "max_tokens", 10,
-                "messages", List.of(Map.of("role", "user", "content", "hi"))
+                    "model", "claude-3-haiku",
+                    "max_tokens", 10,
+                    "messages", List.of(Map.of("role", "user", "content", "hi"))
             );
-            
+
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
             ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
             return response.getStatusCode().is2xxSuccessful();
@@ -625,56 +678,57 @@ public class AiAnalysisService {
             return false;
         }
     }
-    
+
     /**
      * 分析指定时间段的指标数据（用于压测分析）
-     * @param provider AI提供商
+     *
+     * @param provider  AI提供商
      * @param startTime 开始时间（时间戳，秒）
-     * @param endTime 结束时间（时间戳，秒）
-     * @param language 语言
+     * @param endTime   结束时间（时间戳，秒）
+     * @param language  语言
      * @return AI分析结果
      */
     public String analyzeTimeRange(String provider, long startTime, long endTime, String language) {
         AiConfig config = aiConfigRepository.findByProvider(provider)
-            .orElseThrow(() -> new RuntimeException("Provider not found: " + provider));
-        
+                .orElseThrow(() -> new RuntimeException("Provider not found: " + provider));
+
         if (config.getApiKey() == null || config.getModel() == null) {
             throw new RuntimeException("API Key or Model not configured for provider: " + provider);
         }
-        
+
         // 收集时间段内的监控数据
         String metricsData = collectTimeRangeMetricsData(startTime, endTime);
-        
+
         // 构建分析prompt
         String prompt = buildTimeRangeAnalysisPrompt(metricsData, startTime, endTime, language);
-        
+
         // 调用AI分析
         return callModelApi(config, prompt);
     }
-    
+
     /**
      * 收集时间段内的指标数据
      */
     private String collectTimeRangeMetricsData(long startTime, long endTime) {
         StringBuilder sb = new StringBuilder();
-        
+
         try {
             // 格式化时间
             String startTimeStr = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date(startTime * 1000));
             String endTimeStr = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date(endTime * 1000));
             long durationMinutes = (endTime - startTime) / 60;
-            
+
             sb.append("【分析时间段】\n");
             sb.append("开始时间: ").append(startTimeStr).append("\n");
             sb.append("结束时间: ").append(endTimeStr).append("\n");
             sb.append("持续时间: ").append(durationMinutes).append(" 分钟\n\n");
-            
+
             // 查询时间范围内的指标
             String step = durationMinutes <= 5 ? "15s" : durationMinutes <= 30 ? "1m" : "5m";
-            
+
             // CPU使用率峰值和平均值
             List<Map<String, Object>> cpuData = prometheusService.queryRange(
-                "system_cpu_usage{application=\"my-gateway\"}", startTime, endTime, step);
+                    "system_cpu_usage{application=\"my-gateway\"}", startTime, endTime, step);
             if (cpuData != null && !cpuData.isEmpty()) {
                 sb.append("【CPU使用率分析】\n");
                 double maxCpu = 0, sumCpu = 0;
@@ -691,10 +745,10 @@ public class AiAnalysisService {
                 sb.append("CPU峰值: ").append(String.format("%.1f%%", maxCpu)).append("\n");
                 sb.append("CPU平均: ").append(countCpu > 0 ? String.format("%.1f%%", sumCpu / countCpu) : "N/A").append("\n\n");
             }
-            
+
             // JVM堆内存使用
             List<Map<String, Object>> heapData = prometheusService.queryRange(
-                "sum(jvm_memory_used_bytes{application=\"my-gateway\",area=\"heap\"})", startTime, endTime, step);
+                    "sum(jvm_memory_used_bytes{application=\"my-gateway\",area=\"heap\"})", startTime, endTime, step);
             if (heapData != null && !heapData.isEmpty()) {
                 sb.append("【JVM堆内存分析】\n");
                 double maxHeap = 0, sumHeap = 0;
@@ -711,10 +765,10 @@ public class AiAnalysisService {
                 sb.append("堆内存峰值: ").append(formatBytes(maxHeap)).append("\n");
                 sb.append("堆内存平均: ").append(countHeap > 0 ? formatBytes(sumHeap / countHeap) : "N/A").append("\n\n");
             }
-            
+
             // HTTP请求速率
             List<Map<String, Object>> reqData = prometheusService.queryRange(
-                "sum(rate(http_server_requests_seconds_count{application=\"my-gateway\"}[1m]))", startTime, endTime, step);
+                    "sum(rate(http_server_requests_seconds_count{application=\"my-gateway\"}[1m]))", startTime, endTime, step);
             if (reqData != null && !reqData.isEmpty()) {
                 sb.append("【HTTP请求分析】\n");
                 double maxReq = 0, sumReq = 0;
@@ -734,8 +788,8 @@ public class AiAnalysisService {
 
             // 响应时间
             List<Map<String, Object>> respData = prometheusService.queryRange(
-                "sum(rate(http_server_requests_seconds_sum{application=\"my-gateway\"}[1m])) / sum(rate(http_server_requests_seconds_count{application=\"my-gateway\"}[1m]))",
-                startTime, endTime, step);
+                    "sum(rate(http_server_requests_seconds_sum{application=\"my-gateway\"}[1m])) / sum(rate(http_server_requests_seconds_count{application=\"my-gateway\"}[1m]))",
+                    startTime, endTime, step);
             if (respData != null && !respData.isEmpty()) {
                 sb.append("【响应时间分析】\n");
                 double maxResp = 0, sumResp = 0;
@@ -755,7 +809,7 @@ public class AiAnalysisService {
 
             // GC统计
             List<Map<String, Object>> gcTimeData = prometheusService.queryRange(
-                "sum(increase(jvm_gc_pause_seconds_sum{application=\"my-gateway\"}[5m]))", startTime, endTime, step);
+                    "sum(increase(jvm_gc_pause_seconds_sum{application=\"my-gateway\"}[5m]))", startTime, endTime, step);
             if (gcTimeData != null && !gcTimeData.isEmpty()) {
                 sb.append("【GC统计】\n");
                 double totalGcTime = 0;
@@ -771,7 +825,7 @@ public class AiAnalysisService {
 
             // 线程数
             List<Map<String, Object>> threadData = prometheusService.queryRange(
-                "jvm_threads_live_threads{application=\"my-gateway\"}", startTime, endTime, step);
+                    "jvm_threads_live_threads{application=\"my-gateway\"}", startTime, endTime, step);
             if (threadData != null && !threadData.isEmpty()) {
                 sb.append("【线程分析】\n");
                 int maxThreads = 0, sumThreads = 0, countThreads = 0;
@@ -785,59 +839,569 @@ public class AiAnalysisService {
                     }
                 }
                 sb.append("线程数峰值: ").append(maxThreads).append("\n");
-                sb.append("线程数平均: ").append(countThreads > 0 ? String.format("%.1f", (double)sumThreads / countThreads) : "N/A").append("\n");
+                sb.append("线程数平均: ").append(countThreads > 0 ? String.format("%.1f", (double) sumThreads / countThreads) : "N/A").append("\n");
             }
-            
+
         } catch (Exception e) {
             log.error("Failed to collect time range metrics data", e);
             sb.append("数据收集失败: ").append(e.getMessage());
         }
-        
+
         return sb.toString();
     }
-    
+
     /**
      * 构建时间段分析prompt
      */
     private String buildTimeRangeAnalysisPrompt(String metricsData, long startTime, long endTime, String language) {
         String langName = "zh".equals(language) ? "中文" : "English";
         long durationMinutes = (endTime - startTime) / 60;
-        
+
         return String.format("""
-            你是一个专业的Java应用运维专家和性能分析师。请分析以下Gateway网关在指定时间段内的监控数据。
-            
-            这段时间可能进行了压力测试或遇到了性能问题，请仔细分析各项指标的峰值、平均值和变化趋势。
-            
-            请用%s回答。
-            
-            %s
-            
-            请输出详细的分析报告，包含：
-            
-            ## 1. 时间段概览
-            - 分析时间段的基本情况
-            
-            ## 2. 性能分析
-            - 各指标（CPU、内存、请求、响应时间）的峰值和平均值分析
-            - 是否存在性能瓶颈
-            - 指标之间的关联性（如CPU和请求量的关系）
-            
-            ## 3. 问题诊断
-            - 发现的异常或问题
-            - 可能的根本原因分析
-            - 对比正常情况，指出异常点
-            
-            ## 4. 性能评估
-            - 系统在此时间段的整体表现评分（1-10分）
-            - 吞吐量评估
-            - 资源利用率评估
-            
-            ## 5. 优化建议
-            - 针对发现的问题提出具体的优化建议
-            - 配置调整建议
-            - 容量规划建议
-            
-            请用Markdown格式输出，要专业、详细、有数据支撑。
-            """, langName, metricsData);
+                你是一个专业的Java应用运维专家和性能分析师。请分析以下Gateway网关在指定时间段内的监控数据。
+                            
+                这段时间可能进行了压力测试或遇到了性能问题，请仔细分析各项指标的峰值、平均值和变化趋势。
+                            
+                请用%s回答。
+                            
+                %s
+                            
+                请输出详细的分析报告，包含：
+                            
+                ## 1. 时间段概览
+                - 分析时间段的基本情况
+                            
+                ## 2. 性能分析
+                - 各指标（CPU、内存、请求、响应时间）的峰值和平均值分析
+                - 是否存在性能瓶颈
+                - 指标之间的关联性（如CPU和请求量的关系）
+                            
+                ## 3. 问题诊断
+                - 发现的异常或问题
+                - 可能的根本原因分析
+                - 对比正常情况，指出异常点
+                            
+                ## 4. 性能评估
+                - 系统在此时间段的整体表现评分（1-10分）
+                - 吞吐量评估
+                - 资源利用率评估
+                            
+                ## 5. 优化建议
+                - 针对发现的问题提出具体的优化建议
+                - 配置调整建议
+                - 容量规划建议
+                            
+                请用Markdown格式输出，要专业、详细、有数据支撑。
+                """, langName, metricsData);
+    }
+
+    /**
+     * 分析压力测试结果，结合压测数据和 Prometheus 监控数据。
+     *
+     * @param provider        AI提供商
+     * @param stressTestData  压测结果摘要（由 StressTestService.buildAnalysisData 构建）
+     * @param startTime       测试开始时间（时间戳，秒）
+     * @param endTime         测试结束时间（时间戳，秒）
+     * @param language        语言
+     * @return AI分析结果
+     */
+    public String analyzeStressTest(String provider, String stressTestData, long startTime, long endTime, String language) {
+        AiConfig config = aiConfigRepository.findByProvider(provider)
+                .orElseThrow(() -> new RuntimeException("Provider not found: " + provider));
+
+        if (config.getApiKey() == null || config.getModel() == null) {
+            throw new RuntimeException("API Key or Model not configured for provider: " + provider);
+        }
+
+        // 收集 Prometheus 监控数据
+        String metricsData = collectTimeRangeMetricsData(startTime, endTime);
+
+        // 构建压测专用分析 prompt
+        String prompt = buildStressTestAnalysisPrompt(stressTestData, metricsData, language);
+
+        return callModelApi(config, prompt);
+    }
+
+    /**
+     * 构建压力测试分析 prompt
+     */
+    private String buildStressTestAnalysisPrompt(String stressTestData, String metricsData, String language) {
+        String langName = "zh".equals(language) ? "中文" : "English";
+
+        return String.format("""
+                你是一个专业的性能测试工程师和Java应用运维专家。请根据以下压力测试结果和服务器监控数据，给出全面的性能分析报告。
+                
+                请用%s回答。
+                
+                %s
+                
+                %s
+                
+                请输出详细的分析报告，包含：
+                
+                ## 1. 测试概览
+                - 测试配置和基本结果摘要
+                - 成功率和错误率评估
+                
+                ## 2. 响应时间分析
+                - 平均响应时间、P50/P90/P95/P99 分布分析
+                - 响应时间是否在合理范围内
+                - 是否存在长尾延迟问题
+                
+                ## 3. 吞吐量分析
+                - 实际 QPS 与并发用户数的关系
+                - 吞吐量是否达到预期
+                - 是否存在吞吐量瓶颈
+                
+                ## 4. 服务器资源分析
+                - CPU、内存、GC、线程等资源在压测期间的表现
+                - 资源使用率是否合理
+                - 是否存在资源瓶颈（CPU饱和、内存泄漏、GC频繁等）
+                
+                ## 5. 问题诊断
+                - 发现的性能问题和异常
+                - 可能的根本原因分析
+                - 错误请求的可能原因
+                
+                ## 6. 性能评估
+                - 系统整体性能评分（1-10分）
+                - 当前配置下的承载能力评估
+                - 与行业基准的对比
+                
+                ## 7. 优化建议
+                - 针对发现的性能瓶颈提出具体优化建议
+                - JVM调优建议
+                - 网关配置优化建议
+                - 扩容或架构调整建议
+                
+                请用Markdown格式输出，分析要专业、详细、有数据支撑。如果某些监控数据缺失，请基于已有数据进行分析并标注。
+                """, langName, stressTestData, metricsData.isEmpty() ? "【服务器监控数据】\n暂无 Prometheus 监控数据" : metricsData);
+    }
+
+    // ===================== Function Calling / Tool Calling 支持 =====================
+
+    /**
+     * 带工具调用的完整对话方法.
+     *
+     * @param provider AI 提供商
+     * @param model    模型名称
+     * @param messages 消息数组（包含历史）
+     * @param tools    工具定义列表
+     * @return AI 响应（可能包含 tool_calls）
+     */
+    public AiResponse chatWithTools(String provider, String model,
+                                    List<Map<String, Object>> messages,
+                                    List<Map<String, Object>> tools) {
+        AiConfig config = aiConfigRepository.findByProvider(provider)
+                .orElseThrow(() -> new RuntimeException("Provider not found: " + provider));
+
+        if (config.getApiKey() == null) {
+            throw new RuntimeException("API Key not configured for provider: " + provider);
+        }
+
+        String effectiveModel = (model != null && !model.isEmpty()) ? model : config.getModel();
+        if (effectiveModel == null) {
+            throw new RuntimeException("Model not configured for provider: " + provider);
+        }
+
+        String baseUrl = config.getBaseUrl() != null ? config.getBaseUrl() : DEFAULT_BASE_URLS.get(provider);
+
+        try {
+            return switch (provider) {
+                case "BAILIAN" -> callOpenAIWithTools(baseUrl, config.getApiKey(), effectiveModel, messages, tools);
+                case "OPENAI" -> callOpenAIWithTools(baseUrl, config.getApiKey(), effectiveModel, messages, tools);
+                case "CLAUDE" -> callClaudeWithTools(baseUrl, config.getApiKey(), effectiveModel, messages, tools);
+                case "GEMINI" -> callGeminiWithTools(baseUrl, config.getApiKey(), effectiveModel, messages, tools);
+                default -> throw new RuntimeException("Unsupported provider: " + provider);
+            };
+        } catch (Exception e) {
+            log.error("Failed to call model API with tools for provider: {}", provider, e);
+            throw new RuntimeException("AI调用失败: " + e.getMessage());
+        }
+    }
+
+    // ========== OpenAI/Bailian 工具调用 ==========
+
+    private AiResponse callOpenAIWithTools(String baseUrl, String apiKey, String model,
+                                           List<Map<String, Object>> messages,
+                                           List<Map<String, Object>> tools) {
+        String url = baseUrl + "/chat/completions";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(apiKey);
+
+        // 构建请求体
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("model", model);
+        body.put("messages", messages);
+        if (tools != null && !tools.isEmpty()) {
+            body.put("tools", tools);
+            body.put("tool_choice", "auto");  // 让 AI 自动决定是否调用工具
+        }
+
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+        ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
+
+        return extractOpenAIResponseWithTools(response.getBody());
+    }
+
+    private AiResponse extractOpenAIResponseWithTools(String body) {
+        try {
+            JsonNode root = objectMapper.readTree(body);
+            JsonNode message = root.path("choices").get(0).path("message");
+
+            String content = message.path("content").isNull() ? null : message.path("content").asText();
+            String finishReason = root.path("choices").get(0).path("finish_reason").asText();
+
+            // 提取 tool_calls
+            List<ToolCall> toolCalls = null;
+            if (message.has("tool_calls") && !message.path("tool_calls").isNull()) {
+                toolCalls = new ArrayList<>();
+                JsonNode toolCallsNode = message.path("tool_calls");
+                for (JsonNode tc : toolCallsNode) {
+                    String id = tc.path("id").asText();
+                    String name = tc.path("function").path("name").asText();
+                    String argsStr = tc.path("function").path("arguments").asText();
+
+                    // 解析 arguments JSON
+                    Map<String, Object> arguments = new LinkedHashMap<>();
+                    try {
+                        arguments = objectMapper.readValue(argsStr, Map.class);
+                    } catch (Exception e) {
+                        log.warn("Failed to parse tool arguments: {}", argsStr);
+                        arguments.put("_raw", argsStr);
+                    }
+
+                    toolCalls.add(new ToolCall(id, name, arguments));
+                }
+            }
+
+            return new AiResponse(content, toolCalls, finishReason);
+
+        } catch (Exception e) {
+            log.error("Failed to parse OpenAI response with tools", e);
+            return new AiResponse("解析响应失败: " + e.getMessage(), null, "error");
+        }
+    }
+
+    // ========== Claude 工具调用 ==========
+
+    private AiResponse callClaudeWithTools(String baseUrl, String apiKey, String model,
+                                           List<Map<String, Object>> messages,
+                                           List<Map<String, Object>> tools) {
+        String url = baseUrl + "/messages";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("x-api-key", apiKey);
+        headers.set("anthropic-version", "2023-06-01");
+
+        // Claude 格式转换
+        // Claude 的 messages 不包含 system，需要单独处理
+        List<Map<String, Object>> claudeMessages = new ArrayList<>();
+        String systemPrompt = null;
+
+        for (Map<String, Object> msg : messages) {
+            String role = (String) msg.get("role");
+            if ("system".equals(role)) {
+                systemPrompt = (String) msg.get("content");
+            } else {
+                claudeMessages.add(msg);
+            }
+        }
+
+        // Claude 工具格式转换（使用 input_schema）
+        List<Map<String, Object>> claudeTools = null;
+        if (tools != null && !tools.isEmpty()) {
+            claudeTools = new ArrayList<>();
+            for (Map<String, Object> tool : tools) {
+                Map<String, Object> f = (Map<String, Object>) tool.get("function");
+                Map<String, Object> claudeTool = new LinkedHashMap<>();
+                claudeTool.put("name", f.get("name"));
+                claudeTool.put("description", f.get("description"));
+                claudeTool.put("input_schema", f.get("parameters"));
+                claudeTools.add(claudeTool);
+            }
+        }
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("model", model);
+        body.put("max_tokens", 4096);
+        if (systemPrompt != null) {
+            body.put("system", systemPrompt);
+        }
+        body.put("messages", claudeMessages);
+        if (claudeTools != null) {
+            body.put("tools", claudeTools);
+        }
+
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+        ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
+
+        return extractClaudeResponseWithTools(response.getBody());
+    }
+
+    private AiResponse extractClaudeResponseWithTools(String body) {
+        try {
+            JsonNode root = objectMapper.readTree(body);
+            JsonNode contentArray = root.path("content");
+
+            String textContent = null;
+            List<ToolCall> toolCalls = null;
+            String stopReason = root.path("stop_reason").asText();
+
+            for (JsonNode block : contentArray) {
+                String type = block.path("type").asText();
+
+                if ("text".equals(type)) {
+                    textContent = block.path("text").asText();
+                } else if ("tool_use".equals(type)) {
+                    if (toolCalls == null) {
+                        toolCalls = new ArrayList<>();
+                    }
+                    String id = block.path("id").asText();
+                    String name = block.path("name").asText();
+                    Map<String, Object> input = new LinkedHashMap<>();
+                    JsonNode inputNode = block.path("input");
+                    if (inputNode.isObject()) {
+                        input = objectMapper.convertValue(inputNode, Map.class);
+                    }
+
+                    toolCalls.add(new ToolCall(id, name, input));
+                }
+            }
+
+            String finishReason = "tool_use".equals(stopReason) ? "tool_calls" : stopReason;
+            return new AiResponse(textContent, toolCalls, finishReason);
+
+        } catch (Exception e) {
+            log.error("Failed to parse Claude response with tools", e);
+            return new AiResponse("解析响应失败: " + e.getMessage(), null, "error");
+        }
+    }
+
+    // ========== Gemini 工具调用 ==========
+
+    private AiResponse callGeminiWithTools(String baseUrl, String apiKey, String model,
+                                           List<Map<String, Object>> messages,
+                                           List<Map<String, Object>> tools) {
+        String url = baseUrl + "/models/" + model + ":generateContent?key=" + apiKey;
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        // Gemini 格式转换
+        // Gemini 使用 contents + systemInstruction + functionDeclarations
+        List<Map<String, Object>> contents = new ArrayList<>();
+        Map<String, Object> systemInstruction = null;
+
+        for (Map<String, Object> msg : messages) {
+            String role = (String) msg.get("role");
+            Object content = msg.get("content");
+
+            if ("system".equals(role)) {
+                systemInstruction = Map.of("parts", List.of(Map.of("text", content)));
+            } else if ("tool".equals(role)) {
+                // Gemini 的工具结果格式不同
+                // role: "function", parts: [{functionResponse: {name, response}}]
+                String toolCallId = (String) msg.get("tool_call_id");
+                // Gemini 不使用 tool_call_id，需要从内容中提取工具名
+                continue;  // 工具结果由 AiCopilotService 单独处理
+            } else {
+                // user 或 assistant
+                String geminiRole = "assistant".equals(role) ? "model" : "user";
+                contents.add(Map.of(
+                        "role", geminiRole,
+                        "parts", List.of(Map.of("text", content))
+                ));
+            }
+        }
+
+        // Gemini 工具格式（functionDeclarations）
+        List<Map<String, Object>> functionDeclarations = null;
+        if (tools != null && !tools.isEmpty()) {
+            functionDeclarations = new ArrayList<>();
+            for (Map<String, Object> tool : tools) {
+                Map<String, Object> f = (Map<String, Object>) tool.get("function");
+                functionDeclarations.add(Map.of(
+                        "name", f.get("name"),
+                        "description", f.get("description"),
+                        "parameters", f.get("parameters")
+                ));
+            }
+        }
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        if (systemInstruction != null) {
+            body.put("systemInstruction", systemInstruction);
+        }
+        body.put("contents", contents);
+        if (functionDeclarations != null) {
+            body.put("functionDeclarations", functionDeclarations);
+        }
+
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+        ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
+
+        return extractGeminiResponseWithTools(response.getBody());
+    }
+
+    private AiResponse extractGeminiResponseWithTools(String body) {
+        try {
+            JsonNode root = objectMapper.readTree(body);
+            JsonNode candidate = root.path("candidates").get(0);
+            JsonNode contentParts = candidate.path("content").path("parts");
+
+            String textContent = null;
+            List<ToolCall> toolCalls = null;
+
+            for (JsonNode part : contentParts) {
+                if (part.has("text")) {
+                    textContent = part.path("text").asText();
+                } else if (part.has("functionCall")) {
+                    if (toolCalls == null) {
+                        toolCalls = new ArrayList<>();
+                    }
+                    JsonNode fc = part.path("functionCall");
+                    String name = fc.path("name").asText();
+                    Map<String, Object> args = new LinkedHashMap<>();
+                    JsonNode argsNode = fc.path("args");
+                    if (argsNode.isObject()) {
+                        args = objectMapper.convertValue(argsNode, Map.class);
+                    }
+
+                    // Gemini 没有 tool_call_id，生成一个
+                    String id = "gemini_" + UUID.randomUUID().toString().substring(0, 8);
+                    toolCalls.add(new ToolCall(id, name, args));
+                }
+            }
+
+            String finishReason = toolCalls != null ? "tool_calls" : "stop";
+            return new AiResponse(textContent, toolCalls, finishReason);
+
+        } catch (Exception e) {
+            log.error("Failed to parse Gemini response with tools", e);
+            return new AiResponse("解析响应失败: " + e.getMessage(), null, "error");
+        }
+    }
+
+    // ========== 工具调用结果格式化 ==========
+
+    /**
+     * 构建 OpenAI 格式的工具结果消息
+     */
+    public Map<String, Object> buildOpenAIToolResultMessage(String toolCallId, String result) {
+        return Map.of(
+                "role", "tool",
+                "tool_call_id", toolCallId,
+                "content", result
+        );
+    }
+
+    /**
+     * 构建 Claude 格式的工具结果消息
+     */
+    public Map<String, Object> buildClaudeToolResultMessage(String toolUseId, String result) {
+        return Map.of(
+                "role", "user",
+                "content", List.of(Map.of(
+                        "type", "tool_result",
+                        "tool_use_id", toolUseId,
+                        "content", result
+                ))
+        );
+    }
+
+    /**
+     * 构建 Gemini 格式的工具结果消息
+     */
+    public Map<String, Object> buildGeminiToolResultMessage(String toolName, String result) {
+        try {
+            Map<String, Object> response = objectMapper.readValue(result, Map.class);
+            return Map.of(
+                    "role", "function",
+                    "parts", List.of(Map.of(
+                            "functionResponse", Map.of(
+                                    "name", toolName,
+                                    "response", response
+                            )
+                    ))
+            );
+        } catch (Exception e) {
+            return Map.of(
+                    "role", "function",
+                    "parts", List.of(Map.of(
+                            "functionResponse", Map.of(
+                                    "name", toolName,
+                                    "response", Map.of("result", result)
+                            )
+                    ))
+            );
+        }
+    }
+
+    // ===================== AI 响应数据类 =====================
+
+    /**
+     * AI 响应结果（支持工具调用）
+     */
+    public static class AiResponse {
+        private final String content;
+        private final List<ToolCall> toolCalls;
+        private final String finishReason;
+
+        public AiResponse(String content, List<ToolCall> toolCalls, String finishReason) {
+            this.content = content;
+            this.toolCalls = toolCalls;
+            this.finishReason = finishReason;
+        }
+
+        public String getContent() {
+            return content;
+        }
+
+        public List<ToolCall> getToolCalls() {
+            return toolCalls;
+        }
+
+        public String getFinishReason() {
+            return finishReason;
+        }
+
+        public boolean hasToolCalls() {
+            return toolCalls != null && !toolCalls.isEmpty();
+        }
+
+        public boolean isFinished() {
+            return "stop".equals(finishReason) || "end_turn".equals(finishReason);
+        }
+    }
+
+    /**
+     * 工具调用
+     */
+    public static class ToolCall {
+        private final String id;
+        private final String name;
+        private final Map<String, Object> arguments;
+
+        public ToolCall(String id, String name, Map<String, Object> arguments) {
+            this.id = id;
+            this.name = name;
+            this.arguments = arguments;
+        }
+
+        public String getId() {
+            return id;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public Map<String, Object> getArguments() {
+            return arguments;
+        }
     }
 }

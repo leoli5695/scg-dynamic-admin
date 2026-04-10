@@ -10,12 +10,14 @@ import java.util.Optional;
 
 @Repository
 public interface AiConfigRepository extends JpaRepository<AiConfig, Long> {
-    
+
     Optional<AiConfig> findByProvider(String provider);
-    
+
     List<AiConfig> findByRegion(String region);
-    
+
     List<AiConfig> findByIsValidTrue();
+
+    void deleteByProvider(String provider);
 
     /**
      * Find first valid AI config with non-null API key.
