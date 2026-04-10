@@ -2,6 +2,7 @@ package com.leoli.gateway.admin.service;
 
 import com.leoli.gateway.admin.center.ConfigCenterService;
 import com.leoli.gateway.admin.repository.RouteAuthBindingRepository;
+import com.leoli.gateway.admin.repository.RouteRepository;
 import com.leoli.gateway.admin.repository.AuthPolicyRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +25,7 @@ import java.util.concurrent.TimeUnit;
  * - Performance metrics analysis
  * - Gateway instance health checks
  * - Route and service binding validation
+ * - Filter chain performance analysis
  *
  * @author leoli
  */
@@ -50,6 +52,9 @@ public class DiagnosticService {
     private RouteAuthBindingRepository routeAuthBindingRepository;
 
     @Autowired
+    private RouteRepository routeRepository;
+
+    @Autowired
     private AuthPolicyRepository authPolicyRepository;
 
     @Autowired
@@ -57,6 +62,9 @@ public class DiagnosticService {
 
     @Autowired
     private InstanceHealthService instanceHealthService;
+
+    @Autowired
+    private GatewayInstanceService gatewayInstanceService;
 
     /**
      * Run comprehensive diagnostics.
@@ -70,30 +78,33 @@ public class DiagnosticService {
         report.setStartTime(startTime);
 
         // Run all diagnostic checks in parallel for efficiency
-        CompletableFuture<Void> dbCheck = CompletableFuture.runAsync(() -> 
+        CompletableFuture<Void> dbCheck = CompletableFuture.runAsync(() ->
                 report.setDatabase(diagnoseDatabase()));
 
-        CompletableFuture<Void> redisCheck = CompletableFuture.runAsync(() -> 
+        CompletableFuture<Void> redisCheck = CompletableFuture.runAsync(() ->
                 report.setRedis(diagnoseRedis()));
 
-        CompletableFuture<Void> nacosCheck = CompletableFuture.runAsync(() -> 
+        CompletableFuture<Void> nacosCheck = CompletableFuture.runAsync(() ->
                 report.setConfigCenter(diagnoseConfigCenter()));
 
-        CompletableFuture<Void> routesCheck = CompletableFuture.runAsync(() -> 
+        CompletableFuture<Void> routesCheck = CompletableFuture.runAsync(() ->
                 report.setRoutes(diagnoseRoutes()));
 
-        CompletableFuture<Void> authCheck = CompletableFuture.runAsync(() -> 
+        CompletableFuture<Void> authCheck = CompletableFuture.runAsync(() ->
                 report.setAuth(diagnoseAuth()));
 
-        CompletableFuture<Void> instancesCheck = CompletableFuture.runAsync(() -> 
+        CompletableFuture<Void> instancesCheck = CompletableFuture.runAsync(() ->
                 report.setGatewayInstances(diagnoseGatewayInstances()));
 
-        CompletableFuture<Void> performanceCheck = CompletableFuture.runAsync(() -> 
+        CompletableFuture<Void> performanceCheck = CompletableFuture.runAsync(() ->
                 report.setPerformance(diagnosePerformance()));
 
+        CompletableFuture<Void> filterChainCheck = CompletableFuture.runAsync(() ->
+                report.setFilterChain(diagnoseFilterChain()));
+
         // Wait for all checks to complete
-        CompletableFuture.allOf(dbCheck, redisCheck, nacosCheck, routesCheck, 
-                authCheck, instancesCheck, performanceCheck)
+        CompletableFuture.allOf(dbCheck, redisCheck, nacosCheck, routesCheck,
+                authCheck, instancesCheck, performanceCheck, filterChainCheck)
                 .orTimeout(30, TimeUnit.SECONDS)
                 .join();
 
@@ -105,7 +116,7 @@ public class DiagnosticService {
         // Generate recommendations
         report.setRecommendations(generateRecommendations(report));
 
-        log.info("Diagnostic completed in {}ms, overall score: {}", 
+        log.info("Diagnostic completed in {}ms, overall score: {}",
                 report.getDuration(), report.getOverallScore());
 
         return report;
@@ -149,11 +160,11 @@ public class DiagnosticService {
             connection.close();
 
             diagnostic.addMetric("connectionLatency", connectTime + "ms");
-            diagnostic.setStatus(connectTime < 100 ? "HEALTHY" : 
+            diagnostic.setStatus(connectTime < 100 ? "HEALTHY" :
                     connectTime < 500 ? "WARNING" : "CRITICAL");
 
             // Pool status
-            DatabaseHealthService.ConnectionPoolInfo poolInfo = 
+            DatabaseHealthService.ConnectionPoolInfo poolInfo =
                     databaseHealthService.getConnectionPoolInfo();
             if (poolInfo != null) {
                 diagnostic.addMetric("poolActive", poolInfo.activeConnections());
@@ -161,7 +172,7 @@ public class DiagnosticService {
                 diagnostic.addMetric("poolTotal", poolInfo.totalConnections());
                 diagnostic.addMetric("poolWaiting", poolInfo.threadsAwaitingConnection());
 
-                int utilization = poolInfo.totalConnections() > 0 ? 
+                int utilization = poolInfo.totalConnections() > 0 ?
                         (poolInfo.activeConnections() * 100 / poolInfo.totalConnections()) : 0;
                 diagnostic.addMetric("poolUtilization", utilization + "%");
             }
@@ -205,8 +216,8 @@ public class DiagnosticService {
 
             diagnostic.addMetric("configured", true);
             diagnostic.addMetric("pingLatency", pingTime + "ms");
-            diagnostic.setStatus("PONG".equalsIgnoreCase(pong) ? 
-                    (pingTime < 50 ? "HEALTHY" : pingTime < 200 ? "WARNING" : "CRITICAL") : 
+            diagnostic.setStatus("PONG".equalsIgnoreCase(pong) ?
+                    (pingTime < 50 ? "HEALTHY" : pingTime < 200 ? "WARNING" : "CRITICAL") :
                     "CRITICAL");
 
             // Try to get Redis info
@@ -248,13 +259,13 @@ public class DiagnosticService {
             diagnostic.addMetric("serverAddr", configCenterService.getServerAddr());
 
             if (available) {
-                diagnostic.setStatus(checkTime < 100 ? "HEALTHY" : 
+                diagnostic.setStatus(checkTime < 100 ? "HEALTHY" :
                         checkTime < 500 ? "WARNING" : "CRITICAL");
 
                 // Test config read
                 try {
                     String testConfig = configCenterService.getConfig(
-                            "gateway-routes-index", "DEFAULT_GROUP");
+                            "gateway-routes-index", String.class);
                     diagnostic.addMetric("configReadTest", testConfig != null ? "PASS" : "NO_CONFIG");
                 } catch (Exception e) {
                     diagnostic.addMetric("configReadTest", "FAIL: " + e.getMessage());
@@ -280,20 +291,20 @@ public class DiagnosticService {
         diagnostic.setComponentType("Routes");
 
         try {
-            // Check route count
-            long routeCount = routeAuthBindingRepository.count();
+            // Check route count using RouteRepository
+            long routeCount = routeRepository.count();
             diagnostic.addMetric("totalRoutes", routeCount);
 
             // Check for routes without auth bindings
-            List<Object> routesWithoutAuth = jdbcTemplate.queryForList(
-                    "SELECT route_id FROM gateway_route WHERE route_id NOT IN " +
-                    "(SELECT route_id FROM gateway_route_auth_binding)");
+            List<Map<String, Object>> routesWithoutAuth = jdbcTemplate.queryForList(
+                    "SELECT route_id FROM routes WHERE route_id NOT IN " +
+                    "(SELECT route_id FROM route_auth_bindings)");
             diagnostic.addMetric("routesWithoutAuthBinding", routesWithoutAuth.size());
 
             // Check for orphaned bindings
-            List<Object> orphanedBindings = jdbcTemplate.queryForList(
-                    "SELECT route_id FROM gateway_route_auth_binding WHERE route_id NOT IN " +
-                    "(SELECT route_id FROM gateway_route)");
+            List<Map<String, Object>> orphanedBindings = jdbcTemplate.queryForList(
+                    "SELECT route_id FROM route_auth_bindings WHERE route_id NOT IN " +
+                    "(SELECT route_id FROM routes)");
             diagnostic.addMetric("orphanedAuthBindings", orphanedBindings.size());
 
             // Determine status
@@ -369,11 +380,11 @@ public class DiagnosticService {
             List<String> unhealthyInstances = new ArrayList<>();
 
             for (var instance : instances) {
-                if ("UP".equals(instance.getHealthStatus())) {
+                if (instance.isHealthy()) {
                     healthyCount++;
                 } else {
                     unhealthyCount++;
-                    unhealthyInstances.add(instance.getInstanceId());
+                    unhealthyInstances.add(instance.getServiceId() + ":" + instance.getIp() + ":" + instance.getPort());
                 }
             }
 
@@ -416,17 +427,17 @@ public class DiagnosticService {
             diagnostic.addMetric("jvmMaxMemoryMB", maxMemory / (1024 * 1024));
             diagnostic.addMetric("jvmUsedMemoryMB", usedMemory / (1024 * 1024));
             diagnostic.addMetric("jvmFreeMemoryMB", freeMemory / (1024 * 1024));
-            diagnostic.addMetric("jvmMemoryUtilization", 
+            diagnostic.addMetric("jvmMemoryUtilization",
                     String.format("%.1f%%", (double) usedMemory / maxMemory * 100));
 
             // Thread count
             diagnostic.addMetric("threadCount", Thread.activeCount());
 
             // Database pool metrics
-            DatabaseHealthService.ConnectionPoolInfo poolInfo = 
+            DatabaseHealthService.ConnectionPoolInfo poolInfo =
                     databaseHealthService.getConnectionPoolInfo();
             if (poolInfo != null) {
-                int poolUtil = poolInfo.totalConnections() > 0 ? 
+                int poolUtil = poolInfo.totalConnections() > 0 ?
                         poolInfo.activeConnections() * 100 / poolInfo.totalConnections() : 0;
                 diagnostic.addMetric("dbPoolUtilization", poolUtil + "%");
             }
@@ -445,6 +456,149 @@ public class DiagnosticService {
         } catch (Exception e) {
             diagnostic.setStatus("UNKNOWN");
             diagnostic.addError("Performance diagnosis failed: " + e.getMessage());
+        }
+
+        return diagnostic;
+    }
+
+    /**
+     * Diagnose Filter Chain performance across all gateway instances.
+     * Collects filter execution statistics and identifies performance bottlenecks.
+     */
+    private ComponentDiagnostic diagnoseFilterChain() {
+        ComponentDiagnostic diagnostic = new ComponentDiagnostic("filterChain");
+        diagnostic.setComponentType("FilterChain");
+
+        try {
+            // Get all running gateway instances
+            var instances = gatewayInstanceService.getAllInstances();
+            if (instances == null || instances.isEmpty()) {
+                diagnostic.setStatus("WARNING");
+                diagnostic.addWarning("No gateway instances available for filter chain diagnosis");
+                diagnostic.addMetric("instancesChecked", 0);
+                return diagnostic;
+            }
+
+            int instancesChecked = 0;
+            int instancesWithIssues = 0;
+            long totalSlowRequests = 0;
+            String slowestFilterOverall = null;
+            long slowestFilterP95Ms = 0;
+            List<Map<String, Object>> filterStatsAggregated = new ArrayList<>();
+            List<String> problemFilters = new ArrayList<>();
+
+            for (var instance : instances) {
+                // Only check running instances (statusCode == 1)
+                Integer statusCode = (Integer) ((Map<?, ?>) instance).get("statusCode");
+                if (statusCode == null || statusCode != 1) {
+                    continue;
+                }
+
+                String instanceId = (String) ((Map<?, ?>) instance).get("instanceId");
+                String accessUrl = gatewayInstanceService.getAccessUrl(instanceId);
+                if (accessUrl == null) {
+                    continue;
+                }
+
+                try {
+                    // Call gateway's internal filter chain stats API
+                    String url = accessUrl + "/internal/filter-chain/stats";
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> stats = restTemplate.getForObject(url, Map.class);
+
+                    if (stats != null) {
+                        instancesChecked++;
+
+                        // Collect slow request count
+                        Long slowCount = extractLong(stats.get("slowRequestCount"));
+                        if (slowCount != null) {
+                            totalSlowRequests += slowCount;
+                        }
+
+                        // Analyze filter statistics
+                        @SuppressWarnings("unchecked")
+                        List<Map<String, Object>> filters = (List<Map<String, Object>>) stats.get("filters");
+                        if (filters != null) {
+                            for (Map<String, Object> filter : filters) {
+                                String filterName = (String) filter.get("filterName");
+                                String avgMsStr = (String) filter.get("avgDurationMs");
+                                String p95MsStr = (String) filter.get("p95Ms");
+                                String successRateStr = (String) filter.get("successRate");
+                                Long totalCount = extractLong(filter.get("totalCount"));
+
+                                if (filterName != null && avgMsStr != null) {
+                                    double avgMs = parseDoubleStr(avgMsStr);
+                                    double p95Ms = parseDoubleStr(p95MsStr);
+
+                                    // Identify slow filters (avg > 50ms or P95 > 200ms)
+                                    if (avgMs > 50 || p95Ms > 200) {
+                                        problemFilters.add(filterName + "(avg:" + avgMs + "ms, P95:" + p95Ms + "ms)");
+                                        instancesWithIssues++;
+                                    }
+
+                                    // Track slowest filter overall
+                                    if (p95Ms > slowestFilterP95Ms) {
+                                        slowestFilterP95Ms = (long) p95Ms;
+                                        slowestFilterOverall = filterName;
+                                    }
+
+                                    // Aggregate filter stats
+                                    Map<String, Object> aggregated = new HashMap<>();
+                                    aggregated.put("filterName", filterName);
+                                    aggregated.put("avgMs", avgMs);
+                                    aggregated.put("p95Ms", p95Ms);
+                                    aggregated.put("successRate", successRateStr);
+                                    aggregated.put("totalCount", totalCount);
+                                    filterStatsAggregated.add(aggregated);
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    log.debug("Failed to get filter chain stats from instance {}: {}", instanceId, e.getMessage());
+                }
+            }
+
+            // Set diagnostic metrics
+            diagnostic.addMetric("instancesChecked", instancesChecked);
+            diagnostic.addMetric("totalSlowRequests", totalSlowRequests);
+            diagnostic.addMetric("problemFiltersCount", problemFilters.size());
+            diagnostic.addMetric("slowestFilter", slowestFilterOverall != null ? slowestFilterOverall : "N/A");
+            diagnostic.addMetric("slowestFilterP95Ms", slowestFilterP95Ms);
+
+            // Set status based on findings
+            if (instancesChecked == 0) {
+                diagnostic.setStatus("WARNING");
+                diagnostic.addWarning("Could not retrieve filter chain stats from any instance");
+            } else if (problemFilters.size() > 3 || slowestFilterP95Ms > 500) {
+                diagnostic.setStatus("CRITICAL");
+                diagnostic.addWarning("Multiple filters with high latency detected: " + problemFilters);
+            } else if (problemFilters.size() > 0 || slowestFilterP95Ms > 200) {
+                diagnostic.setStatus("WARNING");
+                if (!problemFilters.isEmpty()) {
+                    diagnostic.addWarning("Slow filters detected: " + problemFilters);
+                }
+                if (slowestFilterP95Ms > 200) {
+                    diagnostic.addWarning("Slowest filter P95 latency: " + slowestFilterP95Ms + "ms");
+                }
+            } else {
+                diagnostic.setStatus("HEALTHY");
+            }
+
+            // Add top 5 slowest filters to metrics
+            if (!filterStatsAggregated.isEmpty()) {
+                filterStatsAggregated.sort((a, b) -> Double.compare(
+                        (Double) b.getOrDefault("avgMs", 0.0),
+                        (Double) a.getOrDefault("avgMs", 0.0)));
+                List<Map<String, Object>> topSlowest = filterStatsAggregated.stream()
+                        .limit(5)
+                        .toList();
+                diagnostic.addMetric("topSlowestFilters", topSlowest);
+            }
+
+        } catch (Exception e) {
+            diagnostic.setStatus("UNKNOWN");
+            diagnostic.addError("Filter chain diagnosis failed: " + e.getMessage());
         }
 
         return diagnostic;
@@ -485,6 +639,12 @@ public class DiagnosticService {
         if (report.getGatewayInstances() != null) {
             if ("CRITICAL".equals(report.getGatewayInstances().getStatus())) score -= 15;
             else if ("WARNING".equals(report.getGatewayInstances().getStatus())) score -= 5;
+        }
+
+        // Filter chain performance affects system health
+        if (report.getFilterChain() != null) {
+            if ("CRITICAL".equals(report.getFilterChain().getStatus())) score -= 10;
+            else if ("WARNING".equals(report.getFilterChain().getStatus())) score -= 3;
         }
 
         return Math.max(0, score);
@@ -538,6 +698,37 @@ public class DiagnosticService {
             }
         }
 
+        // Filter chain recommendations
+        if (report.getFilterChain() != null) {
+            String slowestFilter = (String) report.getFilterChain().getMetrics().get("slowestFilter");
+            Long slowestP95 = extractLong(report.getFilterChain().getMetrics().get("slowestFilterP95Ms"));
+            Long slowRequests = extractLong(report.getFilterChain().getMetrics().get("totalSlowRequests"));
+            Integer problemCount = extractInteger(report.getFilterChain().getMetrics().get("problemFiltersCount"));
+
+            if (slowestFilter != null && !"N/A".equals(slowestFilter) && slowestP95 != null && slowestP95 > 200) {
+                recommendations.add("Filter '" + slowestFilter + "' has high P95 latency (" + slowestP95 + "ms) - consider optimizing or caching");
+            }
+
+            if (slowRequests != null && slowRequests > 100) {
+                recommendations.add("High number of slow requests (" + slowRequests + ") detected - investigate filter chain performance");
+            }
+
+            if (problemCount != null && problemCount > 0) {
+                recommendations.add(problemCount + " filters have performance issues - review filter execution metrics for optimization");
+            }
+
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> topSlowest = (List<Map<String, Object>>) report.getFilterChain().getMetrics().get("topSlowestFilters");
+            if (topSlowest != null && !topSlowest.isEmpty()) {
+                Map<String, Object> first = topSlowest.get(0);
+                Double avgMs = (Double) first.get("avgMs");
+                if (avgMs != null && avgMs > 100) {
+                    String name = (String) first.get("filterName");
+                    recommendations.add("Top slowest filter '" + name + "' averages " + String.format("%.1f", avgMs) + "ms - investigate implementation");
+                }
+            }
+        }
+
         // Overall recommendations
         if (report.getOverallScore() < 50) {
             recommendations.add("System health score is critical - immediate attention required");
@@ -570,6 +761,39 @@ public class DiagnosticService {
         }
     }
 
+    private Long extractLong(Object obj) {
+        if (obj == null) return null;
+        if (obj instanceof Number) {
+            return ((Number) obj).longValue();
+        }
+        try {
+            return Long.parseLong(obj.toString());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private Integer extractInteger(Object obj) {
+        if (obj == null) return null;
+        if (obj instanceof Number) {
+            return ((Number) obj).intValue();
+        }
+        try {
+            return Integer.parseInt(obj.toString());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private double parseDoubleStr(String str) {
+        if (str == null) return 0;
+        try {
+            return Double.parseDouble(str);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
     // ============== Diagnostic Report Classes ==============
 
     public static class DiagnosticReport {
@@ -584,6 +808,7 @@ public class DiagnosticService {
         private ComponentDiagnostic auth;
         private ComponentDiagnostic gatewayInstances;
         private ComponentDiagnostic performance;
+        private ComponentDiagnostic filterChain;
         private List<String> recommendations;
 
         public Map<String, Object> toMap() {
@@ -592,7 +817,7 @@ public class DiagnosticService {
             map.put("endTime", endTime);
             map.put("duration", duration + "ms");
             map.put("overallScore", overallScore);
-            map.put("status", overallScore >= 80 ? "HEALTHY" : 
+            map.put("status", overallScore >= 80 ? "HEALTHY" :
                     overallScore >= 50 ? "WARNING" : "CRITICAL");
 
             if (database != null) map.put("database", database.toMap());
@@ -602,6 +827,7 @@ public class DiagnosticService {
             if (auth != null) map.put("auth", auth.toMap());
             if (gatewayInstances != null) map.put("gatewayInstances", gatewayInstances.toMap());
             if (performance != null) map.put("performance", performance.toMap());
+            if (filterChain != null) map.put("filterChain", filterChain.toMap());
 
             if (recommendations != null) map.put("recommendations", recommendations);
 
@@ -631,6 +857,8 @@ public class DiagnosticService {
         public void setGatewayInstances(ComponentDiagnostic gatewayInstances) { this.gatewayInstances = gatewayInstances; }
         public ComponentDiagnostic getPerformance() { return performance; }
         public void setPerformance(ComponentDiagnostic performance) { this.performance = performance; }
+        public ComponentDiagnostic getFilterChain() { return filterChain; }
+        public void setFilterChain(ComponentDiagnostic filterChain) { this.filterChain = filterChain; }
         public List<String> getRecommendations() { return recommendations; }
         public void setRecommendations(List<String> recommendations) { this.recommendations = recommendations; }
     }
