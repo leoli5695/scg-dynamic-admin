@@ -2,6 +2,7 @@ package com.leoli.gateway.filter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.constants.FilterOrderConstants;
+import com.leoli.gateway.monitor.FilterChainTracker;
 import com.leoli.gateway.util.RouteUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,7 +25,9 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
@@ -35,6 +38,10 @@ import java.util.concurrent.ThreadLocalRandom;
  * <p>
  * Note: This filter reuses the trace ID set by TraceIdGlobalFilter (order=-300).
  * It reads the trace ID from exchange attributes instead of generating its own.
+ * <p>
+ * Integration with Filter Chain Tracking:
+ * - Captures per-filter execution details for performance analysis
+ * - Adds filter timing breakdown to trace data for debugging slow requests
  *
  * @author leoli
  */
@@ -70,8 +77,14 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
     @Value("${gateway.trace.sampling-rate-for-errors:100}")
     private int samplingRateForErrors;
 
+    @Value("${gateway.trace.include-filter-chain:true}")
+    private boolean includeFilterChain;
+
     @Autowired
     private WebClient webClient;
+
+    @Autowired(required = false)
+    private FilterChainTracker filterChainTracker;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -197,6 +210,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
 
     /**
      * Capture and send trace to admin service.
+     * Includes filter chain execution details if available.
      */
     private void captureTrace(ServerWebExchange exchange, long startTime, String traceId,
                               String requestBody, long duration, int statusCode,
@@ -248,12 +262,76 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
                 trace.put("errorType", error.getClass().getSimpleName());
             }
 
+            // Add filter chain execution details if available and enabled
+            if (includeFilterChain && filterChainTracker != null) {
+                addFilterChainDetails(trace, traceId, duration);
+            }
+
             // Send to admin service asynchronously
             sendTraceToAdmin(trace);
 
         } catch (Exception e) {
             log.error("Failed to capture trace", e);
         }
+    }
+
+    /**
+     * Add filter chain execution details to trace.
+     * Provides per-filter timing breakdown for performance analysis.
+     */
+    private void addFilterChainDetails(Map<String, Object> trace, String traceId, long totalDurationMs) {
+        FilterChainTracker.FilterChainRecord record = filterChainTracker.getRecordForTrace(traceId);
+        if (record == null) {
+            log.debug("No filter chain record found for traceId: {}", traceId);
+            return;
+        }
+
+        // Add filter chain summary
+        trace.put("filterChainDurationMs", record.getTotalDurationMs());
+        trace.put("filterCount", record.getExecutions().size());
+        trace.put("filterSuccessCount", record.getSuccessCount());
+        trace.put("filterFailureCount", record.getFailureCount());
+
+        // Add per-filter execution details with time breakdown
+        List<Map<String, Object>> filterExecutions = new ArrayList<>();
+        record.getExecutions().stream()
+                .sorted((a, b) -> Long.compare(a.getStartTime(), b.getStartTime()))
+                .forEach(exec -> {
+                    Map<String, Object> execMap = new HashMap<>();
+                    execMap.put("filterName", exec.getFilterName());
+                    execMap.put("order", exec.getOrder());
+                    execMap.put("durationMs", exec.getDurationMs());
+                    execMap.put("durationMicros", exec.getDurationMicros());
+                    execMap.put("success", exec.isSuccess());
+
+                    // Calculate percentage of total time
+                    if (totalDurationMs > 0) {
+                        double percentage = (exec.getDurationMs() * 100.0) / totalDurationMs;
+                        execMap.put("timePercentage", String.format("%.1f%%", percentage));
+                    }
+
+                    if (exec.getError() != null) {
+                        execMap.put("error", exec.getError().getMessage());
+                    }
+
+                    filterExecutions.add(execMap);
+                });
+        trace.put("filterExecutions", filterExecutions);
+
+        // Identify the slowest filter
+        if (!filterExecutions.isEmpty()) {
+            Map<String, Object> slowestFilter = filterExecutions.stream()
+                    .max((a, b) -> Long.compare(
+                            (Long) a.getOrDefault("durationMs", 0L),
+                            (Long) b.getOrDefault("durationMs", 0L)))
+                    .orElse(null);
+            if (slowestFilter != null) {
+                trace.put("slowestFilter", slowestFilter.get("filterName"));
+                trace.put("slowestFilterDurationMs", slowestFilter.get("durationMs"));
+            }
+        }
+
+        log.debug("Added filter chain details for traceId: {} with {} filters", traceId, filterExecutions.size());
     }
 
     /**
