@@ -63,6 +63,7 @@ interface GatewayInstance {
   clusterName: string;
   namespace: string;
   nacosNamespace: string;
+  nacosServerAddr?: string;
   specType: string;
   cpuCores: number;
   memoryMB: number;
@@ -73,6 +74,7 @@ interface GatewayInstance {
   serviceName: string;
   nodePort: number;
   nodeIp: string;
+  serverPort?: number;
   enabled: boolean;
   description: string;
   createdAt: string;
@@ -414,13 +416,13 @@ const InstanceDetailPage: React.FC = () => {
                   <Descriptions.Item label={t("instance.access_url")}>
                     <Tooltip title={t("instance.click_to_open")}>
                       <a
-                        href={`http://${instance.nodeIp}:${instance.nodePort}`}
+                        href={`http://${instance.nodeIp}:${instance.serverPort || instance.nodePort}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{ color: "#165DFF" }}
                       >
                         <LinkOutlined style={{ marginRight: "4px" }} />
-                        http://{instance.nodeIp}:{instance.nodePort}
+                        http://{instance.nodeIp}:{instance.serverPort || instance.nodePort}
                       </a>
                     </Tooltip>
                   </Descriptions.Item>
@@ -428,13 +430,13 @@ const InstanceDetailPage: React.FC = () => {
                 <Descriptions.Item label={t("instance.nacos_console")}>
                   <Tooltip title={t("instance.click_to_open_nacos")}>
                     <a
-                      href={`http://127.0.0.1:30848/nacos/#/configurationManagement?dataId=&group=&namespace=${instance.nacosNamespace}`}
+                      href={`http://${instance.nacosServerAddr || '127.0.0.1:8848'}/nacos/#/configurationManagement?dataId=&group=&namespace=${instance.nacosNamespace}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{ color: "#165DFF" }}
                     >
                       <LinkOutlined style={{ marginRight: "4px" }} />
-                      http://127.0.0.1:30848/nacos
+                      http://{instance.nacosServerAddr || '127.0.0.1:8848'}/nacos
                     </a>
                   </Tooltip>
                 </Descriptions.Item>
