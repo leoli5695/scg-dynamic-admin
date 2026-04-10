@@ -1,5 +1,6 @@
-package com.leoli.gateway.filter;
+package com.leoli.gateway.filter.ratelimit;
 
+import com.leoli.gateway.constants.FilterOrderConstants;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.leoli.gateway.limiter.RateLimitResult;
@@ -367,7 +368,7 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
     @Override
     public int getOrder() {
         // Execute after TracingFilter and AuthFilter
-        return Ordered.HIGHEST_PRECEDENCE + 20;
+        return FilterOrderConstants.HYBRID_RATE_LIMITER;
     }
 
     /**
@@ -386,7 +387,9 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * Thread-safe sliding time window rate limiter with burst support
+     * Thread-safe sliding time window rate limiter with burst support.
+     * Uses CAS for low contention, tryLock fallback for high contention.
+     * This hybrid approach avoids blocking EventLoop threads in reactive context.
      */
     @Data
     public static class RateLimiterWindow {
@@ -394,8 +397,9 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
         private final int burstCapacity;        // maximum burst capacity
         private final long windowSizeMs;
         private final AtomicInteger currentCount = new AtomicInteger(0);
-        private final AtomicInteger burstTokens = new AtomicInteger(0);  // current burst tokens available
+        private final AtomicInteger burstTokens = new AtomicInteger(0);
         private final AtomicLong windowStartTime = new AtomicLong(System.currentTimeMillis());
+        // Fallback lock for high contention scenarios (tryLock only, never blocks)
         private final ReentrantLock lock = new ReentrantLock();
 
         public RateLimiterWindow(int maxRequests, long windowSizeMs) {
@@ -410,40 +414,82 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
         }
 
         public boolean tryAcquire() {
-            lock.lock();
-            try {
-                long now = System.currentTimeMillis();
-                long windowStart = windowStartTime.get();
+            long now = System.currentTimeMillis();
+            long windowStart = windowStartTime.get();
 
-                // Reset window if expired
-                if (now - windowStart >= windowSizeMs) {
+            // Try to reset window if expired (CAS ensures only one thread performs reset)
+            if (now - windowStart >= windowSizeMs) {
+                if (windowStartTime.compareAndSet(windowStart, now)) {
+                    // This thread won the CAS - responsible for resetting counters
                     currentCount.set(0);
-                    // Refill burst tokens proportionally to steady rate
-                    int newBurstTokens = Math.min(burstCapacity, maxRequests + burstTokens.get());
+                    int prevBurst = burstTokens.get();
+                    int newBurstTokens = Math.min(burstCapacity, maxRequests + prevBurst);
                     burstTokens.set(newBurstTokens);
-                    windowStartTime.set(now);
                 }
-
-                int count = currentCount.get();
-                int tokens = burstTokens.get();
-
-                // First try to use burst capacity if available and over steady rate
-                if (count >= maxRequests && tokens > 0) {
-                    burstTokens.decrementAndGet();
-                    currentCount.incrementAndGet();
-                    return true;
-                }
-
-                // Use steady state rate
-                if (count < maxRequests) {
-                    currentCount.incrementAndGet();
-                    return true;
-                }
-
-                return false;
-            } finally {
-                lock.unlock();
+                // Continue with acquire logic after potential reset
             }
+
+            // Fast path: try CAS for low contention (optimistic)
+            int count = currentCount.get();
+            if (count < maxRequests) {
+                if (currentCount.compareAndSet(count, count + 1)) {
+                    return true;
+                }
+                // CAS failed due to contention - fall through to slow path
+            } else {
+                // Steady rate exhausted, try burst tokens with CAS
+                int tokens = burstTokens.get();
+                if (tokens > 0) {
+                    if (burstTokens.compareAndSet(tokens, tokens - 1)) {
+                        currentCount.incrementAndGet();
+                        return true;
+                    }
+                    // CAS failed - fall through to slow path
+                } else {
+                    // No burst tokens available
+                    return false;
+                }
+            }
+
+            // Slow path: tryLock for high contention (never blocks!)
+            if (lock.tryLock()) {
+                try {
+                    // Double-check under lock
+                    count = currentCount.get();
+
+                    // Re-check window reset under lock
+                    now = System.currentTimeMillis();
+                    windowStart = windowStartTime.get();
+                    if (now - windowStart >= windowSizeMs) {
+                        currentCount.set(0);
+                        int prevBurst = burstTokens.get();
+                        int newBurstTokens = Math.min(burstCapacity, maxRequests + prevBurst);
+                        burstTokens.set(newBurstTokens);
+                        windowStartTime.set(now);
+                        count = 0;
+                    }
+
+                    if (count < maxRequests) {
+                        currentCount.incrementAndGet();
+                        return true;
+                    }
+
+                    int tokens = burstTokens.get();
+                    if (tokens > 0) {
+                        burstTokens.decrementAndGet();
+                        currentCount.incrementAndGet();
+                        return true;
+                    }
+
+                    return false;
+                } finally {
+                    lock.unlock();
+                }
+            }
+
+            // tryLock failed - immediately reject without blocking
+            // This prevents EventLoop thread starvation under extreme load
+            return false;
         }
 
         public int getRemaining() {

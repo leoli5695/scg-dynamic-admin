@@ -1,5 +1,7 @@
 package com.leoli.gateway.filter;
 
+import com.leoli.gateway.constants.FilterOrderConstants;
+import com.leoli.gateway.filter.loadbalancer.MultiServiceLoadBalancerFilter;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.StrategyDefinition;
 import com.leoli.gateway.util.RouteUtils;
@@ -218,6 +220,6 @@ public class ApiVersionGlobalFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        return -150; // Execute before MultiServiceLoadBalancerFilter
+        return FilterOrderConstants.API_VERSION;
     }
 }

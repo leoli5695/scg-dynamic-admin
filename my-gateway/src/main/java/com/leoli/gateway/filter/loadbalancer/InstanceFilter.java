@@ -1,4 +1,4 @@
-package com.leoli.gateway.filter;
+package com.leoli.gateway.filter.loadbalancer;
 
 import com.leoli.gateway.health.HybridHealthChecker;
 import com.leoli.gateway.health.InstanceHealth;

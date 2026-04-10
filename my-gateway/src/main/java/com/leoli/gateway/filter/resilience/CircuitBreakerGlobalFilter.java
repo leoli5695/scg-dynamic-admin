@@ -1,5 +1,6 @@
-package com.leoli.gateway.filter;
+package com.leoli.gateway.filter.resilience;
 
+import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.StrategyDefinition;
 import com.leoli.gateway.util.RouteUtils;
@@ -20,7 +21,7 @@ import reactor.core.publisher.Mono;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Circuit breaker global filter using Resilience4j.
@@ -37,11 +38,8 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
 
     private final CircuitBreakerRegistry circuitBreakerRegistry = CircuitBreakerRegistry.ofDefaults();
 
-    // Cache for circuit breaker config versions to detect config changes
-    private final Map<String, String> circuitBreakerConfigHash = new ConcurrentHashMap<>();
-
-    // Lock for thread-safe circuit breaker creation
-    private final ReentrantLock createLock = new ReentrantLock();
+    // Atomic references for config hash per route (for CAS-based config change detection)
+    private final Map<String, AtomicReference<String>> routeHashRefs = new ConcurrentHashMap<>();
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
@@ -81,12 +79,15 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
 
     /**
      * Get or create a circuit breaker with the given configuration.
-     * Thread-safe: uses lock to prevent race condition during creation/recreation.
+     * Thread-safe: uses AtomicReference + CAS for lock-free operation.
      */
     private CircuitBreaker getOrCreateCircuitBreaker(String routeId, Map<String, Object> config) {
-        // Generate config hash to detect changes
         String configHash = generateConfigHash(config);
-        String existingHash = circuitBreakerConfigHash.get(routeId);
+
+        // Get or create atomic reference for this route's hash
+        AtomicReference<String> hashRef = routeHashRefs.computeIfAbsent(routeId, k -> new AtomicReference<>(null));
+
+        String existingHash = hashRef.get();
 
         // Fast path: check if we can use existing circuit breaker
         if (existingHash != null && existingHash.equals(configHash)) {
@@ -96,31 +97,31 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
             }
         }
 
-        // Slow path: need to create or recreate circuit breaker
-        createLock.lock();
-        try {
-            // Double-check after acquiring lock
-            existingHash = circuitBreakerConfigHash.get(routeId);
+        // Slow path: CAS loop to atomically update hash and create/recreate circuit breaker
+        while (true) {
+            existingHash = hashRef.get();
+
+            // Another thread may have already updated to the same hash
             if (existingHash != null && existingHash.equals(configHash)) {
                 CircuitBreaker existing = findCircuitBreaker(routeId);
                 if (existing != null) {
                     return existing;
                 }
+                // Hash matches but breaker missing - continue to create
             }
 
-            // Config changed or first time - remove old if exists
-            if (findCircuitBreaker(routeId) != null) {
+            // Need to remove old if hash changed
+            if (findCircuitBreaker(routeId) != null && (existingHash == null || !existingHash.equals(configHash))) {
                 log.info("Circuit breaker config changed for route {}, recreating", routeId);
                 circuitBreakerRegistry.remove(routeId);
             }
 
-            // Update config hash
-            circuitBreakerConfigHash.put(routeId, configHash);
-
-            // Create new circuit breaker
-            return createCircuitBreaker(routeId, config);
-        } finally {
-            createLock.unlock();
+            // Try to atomically update hash
+            if (hashRef.compareAndSet(existingHash, configHash)) {
+                // We won the CAS - create the circuit breaker
+                return createCircuitBreaker(routeId, config);
+            }
+            // CAS failed - another thread updated, retry
         }
     }
 
@@ -165,7 +166,7 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
      */
     public void removeCircuitBreaker(String routeId) {
         circuitBreakerRegistry.remove(routeId);
-        circuitBreakerConfigHash.remove(routeId);
+        routeHashRefs.remove(routeId);
         log.info("Circuit breaker removed for route {}", routeId);
     }
 
@@ -218,6 +219,6 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        return -100;
+        return FilterOrderConstants.CIRCUIT_BREAKER;
     }
 }

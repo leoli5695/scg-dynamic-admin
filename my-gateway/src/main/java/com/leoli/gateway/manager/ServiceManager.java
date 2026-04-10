@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Service configuration manager.
  * Simple cache for service instances, updated by ServiceRefresher via Nacos listeners.
- *
+ * <p>
  * Design:
  * - Single cache layer (instanceCache) - simple and easy to debug
  * - Listener-driven updates - no TTL needed, but can be added if required
@@ -135,6 +135,7 @@ public class ServiceManager {
 
     /**
      * Get load balancer strategy for a service.
+     *
      * @param serviceId Service ID
      * @return Load balancer strategy (default: weighted)
      */

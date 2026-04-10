@@ -1,5 +1,6 @@
-package com.leoli.gateway.filter;
+package com.leoli.gateway.filter.security;
 
+import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.auth.AuthProcessManager;
 import com.leoli.gateway.manager.AuthBindingManager;
 import com.leoli.gateway.manager.StrategyManager;
@@ -451,6 +452,6 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        return -250;
+        return FilterOrderConstants.AUTHENTICATION;
     }
 }

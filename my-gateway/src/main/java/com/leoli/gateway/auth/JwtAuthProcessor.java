@@ -1,6 +1,5 @@
 package com.leoli.gateway.auth;
 
-import com.leoli.gateway.cache.JwtValidationCache;
 import com.leoli.gateway.enums.AuthType;
 import com.leoli.gateway.model.AuthConfig;
 import io.jsonwebtoken.*;
@@ -19,12 +18,11 @@ import java.security.PublicKey;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
 import java.util.Date;
-import java.util.Set;
 
 /**
  * JWT Authentication Processor.
  * Validates JWT tokens with comprehensive security features.
- *
+ * <p>
  * Features:
  * - HS256/HS512 symmetric key validation
  * - RS256 asymmetric key validation
@@ -131,9 +129,9 @@ public class JwtAuthProcessor extends AbstractAuthProcessor {
      */
     private Claims validateToken(String token, AuthConfig config) throws Exception {
         String algorithm = config.getJwtAlgorithm() != null ? config.getJwtAlgorithm().toUpperCase() : "HS256";
-        
+
         JwtParserBuilder parserBuilder = Jwts.parser();
-        
+
         switch (algorithm) {
             case "HS256":
             case "HS512":
@@ -220,7 +218,7 @@ public class JwtAuthProcessor extends AbstractAuthProcessor {
 
         // Log token info for debugging
         Date expiration = claims.getExpiration();
-        log.debug("JWT validated - Subject: {}, Issuer: {}, Expires: {}", 
+        log.debug("JWT validated - Subject: {}, Issuer: {}, Expires: {}",
                 claims.getSubject(), claims.getIssuer(), expiration);
     }
 }

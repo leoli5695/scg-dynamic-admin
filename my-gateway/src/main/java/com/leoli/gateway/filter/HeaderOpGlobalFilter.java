@@ -1,7 +1,7 @@
 package com.leoli.gateway.filter;
 
+import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.manager.StrategyManager;
-import com.leoli.gateway.model.StrategyDefinition;
 import com.leoli.gateway.util.RouteUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -90,7 +90,7 @@ public class HeaderOpGlobalFilter implements GlobalFilter, Ordered {
         ServerHttpResponse response = newExchange.getResponse();
         response.beforeCommit(() -> {
             HttpHeaders headers = response.getHeaders();
-            
+
             // Add response headers
             if (addRespHeaders != null) {
                 for (Map.Entry<String, String> entry : addRespHeaders.entrySet()) {
@@ -112,7 +112,7 @@ public class HeaderOpGlobalFilter implements GlobalFilter, Ordered {
             if (finalEnableTraceId && traceId != null) {
                 headers.set(traceIdHeaderName, traceId);
             }
-            
+
             return Mono.empty();
         });
 
@@ -203,6 +203,6 @@ public class HeaderOpGlobalFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        return -50; // Execute before most filters
+        return FilterOrderConstants.HEADER_OP;
     }
 }

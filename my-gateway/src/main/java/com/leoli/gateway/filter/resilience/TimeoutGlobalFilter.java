@@ -1,5 +1,6 @@
-package com.leoli.gateway.filter;
+package com.leoli.gateway.filter.resilience;
 
+import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.util.RouteUtils;
 import org.slf4j.Logger;
@@ -73,6 +74,6 @@ public class TimeoutGlobalFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        return -200;
+        return FilterOrderConstants.TIMEOUT;
     }
 }

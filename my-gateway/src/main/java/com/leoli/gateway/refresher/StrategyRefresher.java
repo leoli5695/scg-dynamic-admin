@@ -17,6 +17,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static com.leoli.gateway.constants.GatewayConfigConstants.*;
+
 /**
  * Strategy configuration refresher.
  * Listens to per-strategy data IDs: config.gateway.strategy-{strategyId}
@@ -26,10 +28,6 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 @Component
 public class StrategyRefresher {
-
-    private static final String GROUP = "DEFAULT_GROUP";
-    private static final String STRATEGY_PREFIX = "config.gateway.strategy-";
-    private static final String STRATEGIES_INDEX = "config.gateway.metadata.strategies-index";
 
     private final StrategyManager strategyManager;
     private final ConfigCenterService configService;

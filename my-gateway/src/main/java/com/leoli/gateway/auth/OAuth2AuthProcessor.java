@@ -25,13 +25,23 @@ import java.util.Map;
 @Component
 @RequiredArgsConstructor
 public class OAuth2AuthProcessor extends AbstractAuthProcessor {
+
+    /**
+     * WebClient for making HTTP requests to OAuth2 authorization server.
+     */
     private final WebClient webClient;
 
+    /**
+     * Returns the type of authentication processed by this processor.
+     */
     @Override
     public AuthType getAuthType() {
         return AuthType.OAUTH2;
     }
 
+    /**
+     * Process OAuth2 authentication for the given exchange and configuration.
+     */
     @Override
     public Mono<Void> process(ServerWebExchange exchange, AuthConfig config) {
         if (!isValidConfig(config)) {
@@ -46,9 +56,9 @@ public class OAuth2AuthProcessor extends AbstractAuthProcessor {
             logFailure("OAuth2", "Missing or empty access token");
             return Mono.error(new RuntimeException("Missing or invalid Authorization header"));
         }
-        
+
         log.debug("Validating OAuth2 token...");
-        
+
         // Validate token with OAuth2 server
         return validateTokenWithServer(accessToken, config)
                 .doOnNext(result -> {

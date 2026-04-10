@@ -18,7 +18,7 @@ import java.util.Map;
 /**
  * CORS configuration for Spring WebFlux.
  * This configuration handles CORS preflight requests before they reach the Gateway filters.
- * 
+ *
  * @author leoli
  */
 @Slf4j
@@ -52,14 +52,14 @@ public class CorsConfig {
         @Override
         public CorsConfiguration getCorsConfiguration(ServerWebExchange exchange) {
             String path = exchange.getRequest().getPath().value();
-            
+
             // Find CORS config from strategies
             CorsConfiguration config = findCorsConfigForPath(path);
-            
+
             if (config != null) {
                 log.debug("Found CORS config for path: {}", path);
             }
-            
+
             return config;
         }
 

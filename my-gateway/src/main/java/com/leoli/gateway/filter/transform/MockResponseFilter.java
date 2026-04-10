@@ -1,5 +1,6 @@
-package com.leoli.gateway.filter;
+package com.leoli.gateway.filter.transform;
 
+import com.leoli.gateway.constants.FilterOrderConstants;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.jknack.handlebars.Handlebars;
@@ -423,7 +424,7 @@ public class MockResponseFilter implements GlobalFilter, Ordered {
     @Override
     public int getOrder() {
         // Right after authentication (-250)
-        return -249;
+        return FilterOrderConstants.MOCK_RESPONSE;
     }
 
     // ============== Inner Classes ==============

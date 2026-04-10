@@ -1,4 +1,4 @@
-package com.leoli.gateway.cache;
+package com.leoli.gateway.auth;
 
 import io.jsonwebtoken.Claims;
 import lombok.extern.slf4j.Slf4j;
@@ -12,7 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Cache for JWT validation results.
  * Avoids repeated signature verification and claims parsing for the same token.
- *
+ * <p>
  * Features:
  * - O(1) lookup for cached validation results
  * - Automatic expiration based on JWT exp claim
@@ -82,7 +82,7 @@ public class JwtValidationCache {
     /**
      * Get cached claims if available and not expired.
      *
-     * @param token JWT token string
+     * @param token    JWT token string
      * @param policyId Policy ID for cache key scoping
      * @return Claims if cached and valid, null otherwise
      */
@@ -112,9 +112,9 @@ public class JwtValidationCache {
     /**
      * Cache JWT validation result.
      *
-     * @param token JWT token string
+     * @param token    JWT token string
      * @param policyId Policy ID for cache key scoping
-     * @param claims Validated claims
+     * @param claims   Validated claims
      */
     public void put(String token, String policyId, Claims claims) {
         if (token == null || policyId == null || claims == null) {
@@ -160,8 +160,8 @@ public class JwtValidationCache {
      */
     public Map<String, Object> getStats() {
         return Map.of(
-            "cacheSize", cache.size(),
-            "maxCacheSize", MAX_CACHE_SIZE
+                "cacheSize", cache.size(),
+                "maxCacheSize", MAX_CACHE_SIZE
         );
     }
 
@@ -201,9 +201,9 @@ public class JwtValidationCache {
     private void evictOldestEntries() {
         int toRemove = MAX_CACHE_SIZE / 5;
         cache.entrySet().stream()
-            .sorted((e1, e2) -> Long.compare(e1.getValue().expiresAtMillis, e2.getValue().expiresAtMillis))
-            .limit(toRemove)
-            .forEach(entry -> cache.remove(entry.getKey()));
+                .sorted((e1, e2) -> Long.compare(e1.getValue().expiresAtMillis, e2.getValue().expiresAtMillis))
+                .limit(toRemove)
+                .forEach(entry -> cache.remove(entry.getKey()));
         log.debug("JWT cache evicted {} oldest entries", toRemove);
     }
 }

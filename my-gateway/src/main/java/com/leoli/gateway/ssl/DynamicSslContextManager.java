@@ -5,6 +5,7 @@ import com.leoli.gateway.center.spi.ConfigCenterService;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.net.ssl.KeyManagerFactory;
@@ -42,6 +43,10 @@ public class DynamicSslContextManager {
 
     // Encryption key for decrypting passwords (should match admin service)
     private static final String ENCRYPTION_KEY = "GatewaySSLKey123";
+
+    // Default keystore password for PEM certificates (can be overridden via config)
+    @Value("${gateway.ssl.pem-keystore-password:changeit}")
+    private String pemKeystorePassword;
 
     public DynamicSslContextManager(ConfigCenterService configCenterService) {
         this.configCenterService = configCenterService;
@@ -154,11 +159,12 @@ public class DynamicSslContextManager {
             // Create temporary keystore
             KeyStore keyStore = KeyStore.getInstance("JKS");
             keyStore.load(null, null);
-            keyStore.setKeyEntry("gateway", privateKey, "tempPassword".toCharArray(), new Certificate[]{cert});
+            char[] password = pemKeystorePassword.toCharArray();
+            keyStore.setKeyEntry("gateway", privateKey, password, new Certificate[]{cert});
 
             // Create key manager factory
             KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-            kmf.init(keyStore, "tempPassword".toCharArray());
+            kmf.init(keyStore, password);
 
             // Create trust manager factory
             TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());

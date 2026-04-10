@@ -1,5 +1,6 @@
 package com.leoli.gateway.filter;
 
+import com.leoli.gateway.filter.resilience.CircuitBreakerGlobalFilter;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.StrategyDefinition;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;

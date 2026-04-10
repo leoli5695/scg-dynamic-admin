@@ -1,4 +1,6 @@
-package com.leoli.gateway.filter;
+package com.leoli.gateway.filter.security;
+
+import com.leoli.gateway.constants.FilterOrderConstants;
 
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.StrategyDefinition;
@@ -299,6 +301,6 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        return -500; // Execute first for security
+        return FilterOrderConstants.SECURITY_GLOBAL;
     }
 }

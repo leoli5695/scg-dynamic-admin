@@ -4,11 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.model.StrategyDefinition;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.util.CollectionUtils;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -239,14 +237,14 @@ public class StrategyManager {
     /**
      * Get config for route by strategy type (generic method).
      * Returns raw Map for backward compatibility.
-     * 
-     * @param routeId Route identifier
+     *
+     * @param routeId      Route identifier
      * @param strategyType Strategy type constant from StrategyDefinition
      * @return Config as Map, or null if not found
      */
     public Map<String, Object> getConfig(String routeId, String strategyType) {
         StrategyDefinition strategy = getStrategyForRoute(routeId, strategyType);
-        if (strategy == null) {
+        if (Objects.isNull(strategy)) {
             // Try fallback to snapshot if config center is unhealthy
             if (!configCenterHealthy) {
                 strategy = getStrategyFromSnapshot(routeId, strategyType);
@@ -254,30 +252,28 @@ public class StrategyManager {
                     log.warn("Using snapshot fallback for strategy type: {}, routeId: {}", strategyType, routeId);
                 }
             }
-            if (strategy == null) {
-                return null;
-            }
+            if (Objects.isNull(strategy)) return null;
         }
         return strategy.getConfig();
     }
 
     /**
      * Get config for route by strategy type, converted to strongly-typed object.
-     * 
-     * @param routeId Route identifier
+     *
+     * @param routeId      Route identifier
      * @param strategyType Strategy type constant from StrategyDefinition
-     * @param clazz Target class for type conversion
+     * @param clazz        Target class for type conversion
      * @return Config converted to target type, or null if not found or conversion fails
      */
     public <T> T getConfig(String routeId, String strategyType, Class<T> clazz) {
         Map<String, Object> config = getConfig(routeId, strategyType);
-        if (config == null) {
+        if (Objects.isNull(config)) {
             return null;
         }
         try {
             return objectMapper.convertValue(config, clazz);
         } catch (Exception e) {
-            log.error("Failed to convert config to type {} for strategy {}: {}", 
+            log.error("Failed to convert config to type {} for strategy {}: {}",
                     clazz.getSimpleName(), strategyType, e.getMessage());
             return null;
         }
@@ -304,8 +300,8 @@ public class StrategyManager {
             // Deep copy each strategy definition
             try {
                 StrategyDefinition copy = objectMapper.readValue(
-                    objectMapper.writeValueAsString(entry.getValue()), 
-                    StrategyDefinition.class
+                        objectMapper.writeValueAsString(entry.getValue()),
+                        StrategyDefinition.class
                 );
                 newSnapshot.put(entry.getKey(), copy);
             } catch (Exception e) {
@@ -324,8 +320,8 @@ public class StrategyManager {
     private StrategyDefinition getStrategyFromSnapshot(String routeId, String strategyType) {
         // Check route-bound in snapshot
         for (StrategyDefinition strategy : strategySnapshot.values()) {
-            if (strategy.isRouteBound() && routeId.equals(strategy.getRouteId()) 
-                && strategyType.equals(strategy.getStrategyType()) && strategy.isEnabled()) {
+            if (strategy.isRouteBound() && routeId.equals(strategy.getRouteId())
+                    && strategyType.equals(strategy.getStrategyType()) && strategy.isEnabled()) {
                 return strategy;
             }
         }
@@ -396,6 +392,7 @@ public class StrategyManager {
 
     /**
      * Get rate limiter config for route.
+     *
      * @deprecated Use {@link #getConfig(String, String)} instead
      */
     public Map<String, Object> getRateLimiterConfig(String routeId) {
@@ -404,6 +401,7 @@ public class StrategyManager {
 
     /**
      * Get IP filter config for route.
+     *
      * @deprecated Use {@link #getConfig(String, String)} instead
      */
     public Map<String, Object> getIPFilterConfig(String routeId) {
@@ -412,6 +410,7 @@ public class StrategyManager {
 
     /**
      * Get timeout config for route.
+     *
      * @deprecated Use {@link #getConfig(String, String)} instead
      */
     public Map<String, Object> getTimeoutConfig(String routeId) {
@@ -420,6 +419,7 @@ public class StrategyManager {
 
     /**
      * Get circuit breaker config for route.
+     *
      * @deprecated Use {@link #getConfig(String, String)} instead
      */
     public Map<String, Object> getCircuitBreakerConfig(String routeId) {
@@ -428,6 +428,7 @@ public class StrategyManager {
 
     /**
      * Get auth config for route.
+     *
      * @deprecated Use {@link #getConfig(String, String)} instead
      */
     public Map<String, Object> getAuthConfig(String routeId) {
@@ -436,6 +437,7 @@ public class StrategyManager {
 
     /**
      * Get retry config for route.
+     *
      * @deprecated Use {@link #getConfig(String, String)} instead
      */
     public Map<String, Object> getRetryConfig(String routeId) {
@@ -444,6 +446,7 @@ public class StrategyManager {
 
     /**
      * Get CORS config for route.
+     *
      * @deprecated Use {@link #getConfig(String, String)} instead
      */
     public Map<String, Object> getCorsConfig(String routeId) {
@@ -452,6 +455,7 @@ public class StrategyManager {
 
     /**
      * Get access log config for route.
+     *
      * @deprecated Use {@link #getConfig(String, String)} instead
      */
     public Map<String, Object> getAccessLogConfig(String routeId) {
@@ -460,6 +464,7 @@ public class StrategyManager {
 
     /**
      * Get header operation config for route.
+     *
      * @deprecated Use {@link #getConfig(String, String)} instead
      */
     public Map<String, Object> getHeaderOpConfig(String routeId) {
@@ -468,6 +473,7 @@ public class StrategyManager {
 
     /**
      * Get cache config for route.
+     *
      * @deprecated Use {@link #getConfig(String, String)} instead
      */
     public Map<String, Object> getCacheConfig(String routeId) {
@@ -476,6 +482,7 @@ public class StrategyManager {
 
     /**
      * Get security config for route.
+     *
      * @deprecated Use {@link #getConfig(String, String)} instead
      */
     public Map<String, Object> getSecurityConfig(String routeId) {
@@ -484,6 +491,7 @@ public class StrategyManager {
 
     /**
      * Get API version config for route.
+     *
      * @deprecated Use {@link #getConfig(String, String)} instead
      */
     public Map<String, Object> getApiVersionConfig(String routeId) {
@@ -492,6 +500,7 @@ public class StrategyManager {
 
     /**
      * Get multi-dimensional rate limiter config for route.
+     *
      * @deprecated Use {@link #getConfig(String, String)} instead
      */
     public Map<String, Object> getMultiDimRateLimiterConfig(String routeId) {
@@ -500,6 +509,7 @@ public class StrategyManager {
 
     /**
      * Get request transform config for route.
+     *
      * @deprecated Use {@link #getConfig(String, String)} instead
      */
     public Map<String, Object> getRequestTransformConfig(String routeId) {
@@ -508,6 +518,7 @@ public class StrategyManager {
 
     /**
      * Get response transform config for route.
+     *
      * @deprecated Use {@link #getConfig(String, String)} instead
      */
     public Map<String, Object> getResponseTransformConfig(String routeId) {
@@ -516,6 +527,7 @@ public class StrategyManager {
 
     /**
      * Get request validation config for route.
+     *
      * @deprecated Use {@link #getConfig(String, String)} instead
      */
     public Map<String, Object> getRequestValidationConfig(String routeId) {
@@ -524,6 +536,7 @@ public class StrategyManager {
 
     /**
      * Get mock response config for route.
+     *
      * @deprecated Use {@link #getConfig(String, String)} instead
      */
     public Map<String, Object> getMockResponseConfig(String routeId) {

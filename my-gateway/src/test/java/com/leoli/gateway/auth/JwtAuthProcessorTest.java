@@ -1,6 +1,5 @@
 package com.leoli.gateway.auth;
 
-import com.leoli.gateway.cache.JwtValidationCache;
 import com.leoli.gateway.enums.AuthType;
 import com.leoli.gateway.model.AuthConfig;
 import io.jsonwebtoken.Jwts;

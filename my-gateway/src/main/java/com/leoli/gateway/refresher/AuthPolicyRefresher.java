@@ -18,6 +18,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static com.leoli.gateway.constants.GatewayConfigConstants.*;
+
 /**
  * Authentication Policy configuration refresher.
  * Listens to policies index and individual policy changes in Nacos.
@@ -32,11 +34,6 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 @Component
 public class AuthPolicyRefresher {
-
-    private static final String GROUP = "DEFAULT_GROUP";
-    private static final String AUTH_POLICIES_INDEX = "config.gateway.metadata.auth-policies-index";
-    private static final String AUTH_POLICY_PREFIX = "config.gateway.auth-policy-";
-    private static final String AUTH_ROUTES_PREFIX = "config.gateway.auth-routes-";
 
     private final AuthBindingManager authBindingManager;
     private final ConfigCenterService configService;

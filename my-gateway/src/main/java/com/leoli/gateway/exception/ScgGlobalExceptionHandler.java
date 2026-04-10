@@ -24,6 +24,12 @@ import java.util.regex.Pattern;
 /**
  * Global exception handler for SCG.
  * Provides detailed error messages in response body.
+ * <p>
+ * Supports:
+ * - GatewayException and its subclasses
+ * - ResponseStatusException
+ * - NotFoundException
+ * - Generic exceptions
  */
 @Slf4j
 @Component
@@ -35,15 +41,13 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
     @Override
     public Mono<Void> handle(ServerWebExchange exchange, Throwable ex) {
         ServerHttpResponse response = exchange.getResponse();
-        
-        // Log the exception
-        if (log.isWarnEnabled()) {
-            log.warn("Gateway exception: {}", ex.getMessage(), ex);
-        }
+
+        // Log the exception with appropriate level
+        logException(ex);
 
         // Determine HTTP status
         HttpStatus status = determineHttpStatus(ex);
-        
+
         if (response.isCommitted()) {
             return Mono.empty();
         }
@@ -51,6 +55,14 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
         // Set response attributes
         response.setStatusCode(status);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+
+        // Add Retry-After header for rate limit errors
+        if (ex instanceof RateLimitException) {
+            RateLimitException rle = (RateLimitException) ex;
+            response.getHeaders().add("Retry-After", String.valueOf(rle.getRetryAfterSeconds()));
+            response.getHeaders().add("X-RateLimit-Limit", String.valueOf(rle.getLimit()));
+            response.getHeaders().add("X-RateLimit-Remaining", "0");
+        }
 
         // Build error response body
         Map<String, Object> errorBody = buildErrorBody(exchange, ex, status);
@@ -68,29 +80,52 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
     }
 
     /**
-     * Determine HTTP status from exception
-     *
-     * Strategy:
-     * 1. ResponseStatusException - use the embedded status code
-     * 2. NotFoundException - analyze the message to determine:
-     *    - Timeout errors → 504 GATEWAY_TIMEOUT
-     *    - No available instances → 503 SERVICE_UNAVAILABLE
-     *    - Connection failures → 503 SERVICE_UNAVAILABLE
-     *    - Other errors with status code in message → use that status code
-     * 3. Other exceptions → 500 INTERNAL_SERVER_ERROR
+     * Log exception with appropriate level based on type.
+     */
+    private void logException(Throwable ex) {
+        if (ex instanceof GatewayException) {
+            GatewayException ge = (GatewayException) ex;
+            ErrorCode errorCode = ge.getErrorCode();
+
+            // Client errors (4xx) - log at debug level
+            if (errorCode.getStatus().is4xxClientError()) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Gateway exception: code={}, message={}",
+                            errorCode.getCode(), ge.getMessage());
+                }
+                return;
+            }
+
+            // Server errors (5xx) - log at warn level
+            log.warn("Gateway error: code={}, message={}",
+                    errorCode.getCode(), ge.getMessage());
+            return;
+        }
+
+        // Non-gateway exceptions - log at warn level with stack trace
+        log.warn("Gateway exception: {}", ex.getMessage(), ex);
+    }
+
+    /**
+     * Determine HTTP status from exception.
      */
     private HttpStatus determineHttpStatus(Throwable ex) {
-        // 1. ResponseStatusException - directly use its status code
+        // 1. GatewayException - use the error code's status
+        if (ex instanceof GatewayException) {
+            return ((GatewayException) ex).getErrorCode().getStatus();
+        }
+
+        // 2. ResponseStatusException - directly use its status code
         if (ex instanceof ResponseStatusException) {
             return HttpStatus.valueOf(((ResponseStatusException) ex).getStatusCode().value());
         }
 
-        // 2. NotFoundException - analyze the message
+        // 3. NotFoundException - analyze the message
         if (ex instanceof NotFoundException) {
             return determineStatusFromNotFoundException((NotFoundException) ex);
         }
 
-        // 3. Default to 500
+        // 4. Default to 500
         return HttpStatus.INTERNAL_SERVER_ERROR;
     }
 
@@ -132,49 +167,35 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
         return HttpStatus.SERVICE_UNAVAILABLE;
     }
 
-    /**
-     * Check if the error message indicates a timeout.
-     */
     private boolean isTimeoutError(String message) {
         String lowerMessage = message.toLowerCase();
         return lowerMessage.contains("gateway_timeout") ||
-               lowerMessage.contains("gateway timeout") ||
-               lowerMessage.contains("took longer than timeout") ||
-               lowerMessage.contains("read timed out") ||
-               lowerMessage.contains("socket timeout") ||
-               lowerMessage.contains("timeout exception");
+                lowerMessage.contains("gateway timeout") ||
+                lowerMessage.contains("took longer than timeout") ||
+                lowerMessage.contains("read timed out") ||
+                lowerMessage.contains("socket timeout") ||
+                lowerMessage.contains("timeout exception");
     }
 
-    /**
-     * Check if the error message indicates no available instances.
-     */
     private boolean isNoInstancesError(String message) {
         String lowerMessage = message.toLowerCase();
         return lowerMessage.contains("no available instances") ||
-               lowerMessage.contains("no instances found") ||
-               lowerMessage.contains("no healthy instances") ||
-               lowerMessage.contains("no service instances");
+                lowerMessage.contains("no instances found") ||
+                lowerMessage.contains("no healthy instances") ||
+                lowerMessage.contains("no service instances");
     }
 
-    /**
-     * Check if the error message indicates a connection failure.
-     */
     private boolean isConnectionError(String message) {
         String lowerMessage = message.toLowerCase();
         return lowerMessage.contains("connection refused") ||
-               lowerMessage.contains("connect exception") ||
-               lowerMessage.contains("connecttimeout") ||
-               lowerMessage.contains("connection reset") ||
-               lowerMessage.contains("broken pipe") ||
-               lowerMessage.contains("failed to connect");
+                lowerMessage.contains("connect exception") ||
+                lowerMessage.contains("connecttimeout") ||
+                lowerMessage.contains("connection reset") ||
+                lowerMessage.contains("broken pipe") ||
+                lowerMessage.contains("failed to connect");
     }
 
-    /**
-     * Try to extract HTTP status code from the error message.
-     * Messages often contain patterns like "504 GATEWAY_TIMEOUT" or "500 INTERNAL_SERVER_ERROR".
-     */
     private HttpStatus extractStatusFromMessage(String message) {
-        // Pattern to match status codes like "504 GATEWAY_TIMEOUT" or "503 SERVICE_UNAVAILABLE"
         Pattern pattern = Pattern.compile("(\\d{3})\\s+[A-Z_]+");
         Matcher matcher = pattern.matcher(message);
 
@@ -182,7 +203,6 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
             try {
                 int statusCode = Integer.parseInt(matcher.group(1));
                 HttpStatus status = HttpStatus.resolve(statusCode);
-                // Only return client/server error status codes (4xx, 5xx)
                 if (status != null && (status.is4xxClientError() || status.is5xxServerError())) {
                     return status;
                 }
@@ -194,49 +214,45 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
     }
 
     /**
-     * Build error response body
+     * Build error response body.
      */
     private Map<String, Object> buildErrorBody(ServerWebExchange exchange, Throwable ex, HttpStatus status) {
         Map<String, Object> body = new LinkedHashMap<>();
-        
+
         body.put("timestamp", Instant.now().toString());
         body.put("path", exchange.getRequest().getPath().value());
+
+        // Handle GatewayException with structured error info
+        if (ex instanceof GatewayException) {
+            body.putAll(((GatewayException) ex).toErrorMap());
+            body.put("status", status.value());
+            return body;
+        }
+
+        // Standard error response for non-GatewayException
         body.put("status", status.value());
         body.put("error", status.getReasonPhrase());
-        
-        // ✅ Add detailed message for better debugging
+
         String message = extractMessage(ex);
         if (message != null && !message.isEmpty()) {
             body.put("message", message);
         }
-        
-        // Note: exchange.getId() is not available in SCG, use request ID from header if exists
+
         String requestId = exchange.getRequest().getHeaders().getFirst("x-request-id");
         if (requestId != null) {
             body.put("requestId", requestId);
-        }
-        
-        // Add debug flag in development mode (optional)
-        if (log.isDebugEnabled()) {
-            body.put("debug", true);
         }
 
         return body;
     }
 
-    /**
-     * Extract clean error message from exception.
-     * Removes status code prefix and quotes added by Spring exceptions.
-     */
     private String extractMessage(Throwable ex) {
         String message = ex.getMessage();
         if (message == null || message.isEmpty()) {
             return "";
         }
-        
+
         // ResponseStatusException format: "503 SERVICE_UNAVAILABLE \"actual message\""
-        // NotFoundException format: "503 SERVICE_UNAVAILABLE \"actual message\""
-        // Remove the status code prefix and quotes
         if (message.contains("\"")) {
             int firstQuote = message.indexOf('"');
             int lastQuote = message.lastIndexOf('"');
@@ -244,7 +260,7 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
                 return message.substring(firstQuote + 1, lastQuote);
             }
         }
-        
+
         return message;
     }
 }

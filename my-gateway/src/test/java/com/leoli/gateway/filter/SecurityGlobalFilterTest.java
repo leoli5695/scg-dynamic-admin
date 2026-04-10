@@ -1,5 +1,6 @@
 package com.leoli.gateway.filter;
 
+import com.leoli.gateway.filter.security.SecurityGlobalFilter;
 import com.leoli.gateway.manager.StrategyManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

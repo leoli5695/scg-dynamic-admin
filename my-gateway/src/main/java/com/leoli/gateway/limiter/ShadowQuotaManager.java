@@ -264,8 +264,8 @@ public class ShadowQuotaManager {
     /**
      * Register a route for shadow quota tracking.
      *
-     * @param routeId    Route identifier
-     * @param configQps  Configured QPS for the route
+     * @param routeId   Route identifier
+     * @param configQps Configured QPS for the route
      */
     public void registerRoute(String routeId, int configQps) {
         int nodeCount = Math.max(1, minNodeCount); // Prevent division by zero
@@ -358,7 +358,7 @@ public class ShadowQuotaManager {
         private final int trackedRoutes;
 
         public ShadowQuotaStatus(boolean redisHealthy, int clusterNodeCount,
-                                  int recoveryProgress, int trackedRoutes) {
+                                 int recoveryProgress, int trackedRoutes) {
             this.redisHealthy = redisHealthy;
             this.clusterNodeCount = clusterNodeCount;
             this.recoveryProgress = recoveryProgress;

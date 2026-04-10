@@ -1,25 +1,26 @@
-package com.leoli.gateway.filter;
+package com.leoli.gateway.filter.transform;
 
+import com.leoli.gateway.constants.FilterOrderConstants;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import com.leoli.gateway.manager.StrategyManager;
-import com.leoli.gateway.model.ResponseTransformConfig;
+import com.leoli.gateway.model.RequestTransformConfig;
 import com.leoli.gateway.util.RouteUtils;
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import org.reactivestreams.Publisher;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferUtils;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
+import org.springframework.core.io.buffer.DefaultDataBufferFactory;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
-import org.springframework.http.server.reactive.ServerHttpResponse;
-import org.springframework.http.server.reactive.ServerHttpResponseDecorator;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.http.server.reactive.ServerHttpRequestDecorator;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
@@ -32,18 +33,18 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Response Transform Filter.
+ * Request Transform Filter.
  * <p>
  * Supports:
  * - Protocol transformation (JSON ↔ XML)
- * - Field mapping (remove internal fields, rename, add)
+ * - Field mapping (rename, remove, add fields)
  * - Data masking (sensitive field obfuscation)
  *
  * @author leoli
  */
 @Component
 @Slf4j
-public class ResponseTransformFilter implements GlobalFilter, Ordered {
+public class RequestTransformFilter implements GlobalFilter, Ordered {
 
     @Autowired
     private StrategyManager strategyManager;
@@ -54,159 +55,180 @@ public class ResponseTransformFilter implements GlobalFilter, Ordered {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String routeId = RouteUtils.getRouteId(exchange);
-        ResponseTransformConfig config = getConfig(routeId);
+        RequestTransformConfig config = getConfig(routeId);
 
         if (config == null || !config.isEnabled()) {
             return chain.filter(exchange);
         }
 
-        log.debug("ResponseTransform filter - routeId: {}", routeId);
+        // Check skip conditions
+        if (shouldSkip(exchange, config)) {
+            return chain.filter(exchange);
+        }
 
-        // Wrap response to intercept body
-        ServerHttpResponse originalResponse = exchange.getResponse();
-        ServerHttpResponseDecorator decoratedResponse = new ServerHttpResponseDecorator(originalResponse) {
-            @Override
-            public Mono<Void> writeWith(Publisher<? extends DataBuffer> body) {
-                // Check status code filter
-                HttpStatus status = HttpStatus.valueOf(getStatusCode().value());
-                if (!shouldTransformStatus(config, status)) {
-                    return super.writeWith(body);
-                }
+        // Only process requests with body
+        HttpMethod method = exchange.getRequest().getMethod();
+        if (method != HttpMethod.POST && method != HttpMethod.PUT && method != HttpMethod.PATCH) {
+            return chain.filter(exchange);
+        }
 
-                // Check content type filter
-                if (shouldSkipContentType(config, getHeaders().getContentType())) {
-                    return super.writeWith(body);
-                }
+        log.debug("RequestTransform filter - routeId: {}, transforming request body", routeId);
 
-                return Flux.from(body)
-                        .collectList()
-                        .flatMap(buffers -> {
-                            if (buffers.isEmpty()) {
-                                return super.writeWith(Flux.empty());
-                            }
-
-                            try {
-                                // Merge all buffers
-                                int totalSize = buffers.stream().mapToInt(DataBuffer::readableByteCount).sum();
-                                byte[] allBytes = new byte[totalSize];
-                                int offset = 0;
-                                for (DataBuffer buffer : buffers) {
-                                    int size = buffer.readableByteCount();
-                                    buffer.read(allBytes, offset, size);
-                                    offset += size;
-                                    DataBufferUtils.release(buffer);
-                                }
-
-                                // Check size limit
-                                if (allBytes.length > config.getMaxBodySize()) {
-                                    log.debug("Response body size {} exceeds limit {}, passing through",
-                                            allBytes.length, config.getMaxBodySize());
-                                    return super.writeWith(Flux.just(originalResponse.bufferFactory().wrap(allBytes)));
-                                }
-
-                                // Transform the body
-                                String originalBody = new String(allBytes, StandardCharsets.UTF_8);
-                                String transformedBody = transformBody(originalBody, config);
-
-                                // Update Content-Type if needed
-                                updateContentType(getHeaders(), config);
-
-                                byte[] newBytes = transformedBody.getBytes(StandardCharsets.UTF_8);
-                                return super.writeWith(Flux.just(originalResponse.bufferFactory().wrap(newBytes)));
-
-                            } catch (Exception e) {
-                                log.error("Error transforming response body: {}", e.getMessage(), e);
-                                // Return original on error based on error handling strategy
-                                return super.writeWith(Flux.just(originalResponse.bufferFactory().wrap(allBytes)));
-                            }
-                        });
-            }
-
-            private byte[] allBytes;
-        };
-
-        return chain.filter(exchange.mutate().response(decoratedResponse).build());
+        // Cache and transform request body
+        return cacheAndTransformBody(exchange, chain, config);
     }
 
     /**
      * Get configuration from StrategyManager.
      */
-    private ResponseTransformConfig getConfig(String routeId) {
-        Map<String, Object> configMap = strategyManager.getResponseTransformConfig(routeId);
+    private RequestTransformConfig getConfig(String routeId) {
+        Map<String, Object> configMap = strategyManager.getRequestTransformConfig(routeId);
         if (configMap == null || configMap.isEmpty()) {
             return null;
         }
 
         try {
-            return objectMapper.convertValue(configMap, ResponseTransformConfig.class);
+            return objectMapper.convertValue(configMap, RequestTransformConfig.class);
         } catch (Exception e) {
-            log.warn("Failed to parse ResponseTransformConfig for route {}: {}", routeId, e.getMessage());
+            log.warn("Failed to parse RequestTransformConfig for route {}: {}", routeId, e.getMessage());
             return null;
         }
     }
 
     /**
-     * Check if status code should be transformed.
+     * Check if transformation should be skipped.
      */
-    private boolean shouldTransformStatus(ResponseTransformConfig config, HttpStatus status) {
-        List<Integer> statusCodes = config.getTransformOnStatusCodes();
-        if (statusCodes == null || statusCodes.isEmpty()) {
-            return true; // Transform all status codes
-        }
-        return statusCodes.contains(status.value());
-    }
-
-    /**
-     * Check if content type should be skipped.
-     */
-    private boolean shouldSkipContentType(ResponseTransformConfig config, MediaType contentType) {
-        if (contentType == null) {
-            return true;
-        }
-
-        List<String> skipTypes = config.getSkipOnContentTypes();
-        if (skipTypes == null || skipTypes.isEmpty()) {
-            return false;
-        }
-
-        String mimeType = contentType.getType() + "/" + contentType.getSubtype();
-        return skipTypes.stream().anyMatch(skipType -> {
-            if (skipType.endsWith("/*")) {
-                return mimeType.startsWith(skipType.substring(0, skipType.length() - 1));
+    private boolean shouldSkip(ServerWebExchange exchange, RequestTransformConfig config) {
+        // Check skip methods
+        List<String> skipMethods = config.getSkipOnMethods();
+        if (skipMethods != null && !skipMethods.isEmpty()) {
+            String method = exchange.getRequest().getMethod().name();
+            if (skipMethods.contains(method)) {
+                return true;
             }
-            return skipType.equalsIgnoreCase(mimeType);
-        });
+        }
+
+        // Check content type
+        MediaType contentType = exchange.getRequest().getHeaders().getContentType();
+        if (contentType == null) {
+            return true; // No content type, skip
+        }
+
+        List<String> transformOnTypes = config.getTransformOnContentTypes();
+        if (transformOnTypes != null && !transformOnTypes.isEmpty()) {
+            String mimeType = contentType.getType() + "/" + contentType.getSubtype();
+            boolean matches = transformOnTypes.stream()
+                    .anyMatch(type -> {
+                        if (type.endsWith("/*")) {
+                            return mimeType.startsWith(type.substring(0, type.length() - 1));
+                        }
+                        return type.equalsIgnoreCase(mimeType);
+                    });
+            if (!matches) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
-     * Transform response body through the transformation pipeline.
+     * Cache request body, transform, and continue.
      */
-    private String transformBody(String body, ResponseTransformConfig config) {
+    private Mono<Void> cacheAndTransformBody(ServerWebExchange exchange, GatewayFilterChain chain,
+                                              RequestTransformConfig config) {
+        ServerHttpRequest request = exchange.getRequest();
+
+        return DataBufferUtils.join(request.getBody())
+                .defaultIfEmpty(new DefaultDataBufferFactory().wrap(new byte[0]))
+                .flatMap(dataBuffer -> {
+                    try {
+                        // Read body bytes
+                        byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                        dataBuffer.read(bytes);
+                        DataBufferUtils.release(dataBuffer);
+
+                        // Check size limit
+                        if (bytes.length > config.getMaxBodySize()) {
+                            log.debug("Request body size {} exceeds limit {}, passing through unchanged",
+                                    bytes.length, config.getMaxBodySize());
+                            return chain.filter(exchange);
+                        }
+
+                        String bodyStr = new String(bytes, StandardCharsets.UTF_8);
+                        if (bodyStr.isEmpty()) {
+                            return chain.filter(exchange);
+                        }
+
+                        // Transform the body
+                        String transformedBody = transformBody(bodyStr, exchange, config);
+
+                        // Create new request with transformed body
+                        byte[] newBytes = transformedBody.getBytes(StandardCharsets.UTF_8);
+
+                        ServerHttpRequest newRequest = new ServerHttpRequestDecorator(request) {
+                            @Override
+                            public Flux<DataBuffer> getBody() {
+                                return Flux.just(exchange.getResponse().bufferFactory().wrap(newBytes));
+                            }
+
+                            @Override
+                            public org.springframework.http.HttpHeaders getHeaders() {
+                                org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+                                headers.putAll(super.getHeaders());
+
+                                // Update Content-Type if protocol transform changed format
+                                if (config.getProtocolTransform().isEnabled()
+                                        && !config.getProtocolTransform().isPreserveOriginalContentType()) {
+                                    String newContentType = config.getProtocolTransform().getTargetFormat().equals("XML")
+                                            ? "application/xml"
+                                            : "application/json";
+                                    headers.setContentType(MediaType.parseMediaType(newContentType));
+                                }
+
+                                headers.setContentLength(newBytes.length);
+                                return headers;
+                            }
+                        };
+
+                        return chain.filter(exchange.mutate().request(newRequest).build());
+
+                    } catch (Exception e) {
+                        log.error("Error transforming request body: {}", e.getMessage(), e);
+                        // On error, pass through original request
+                        return chain.filter(exchange);
+                    }
+                });
+    }
+
+    /**
+     * Transform request body through the transformation pipeline.
+     */
+    private String transformBody(String body, ServerWebExchange exchange, RequestTransformConfig config) {
         try {
-            // Step 1: Parse body
+            // Step 1: Parse body based on source format
             String sourceFormat = detectFormat(body, config.getProtocolTransform().getSourceFormat());
             JsonNode jsonNode = parseToJsonNode(body, sourceFormat);
 
             if (jsonNode == null) {
-                log.warn("Failed to parse response body as {}", sourceFormat);
+                log.warn("Failed to parse request body as {}", sourceFormat);
                 return body;
             }
 
-            // Step 2: Apply field mapping
+            // Step 2: Apply protocol transformation (if needed)
+            String targetFormat = config.getProtocolTransform().getTargetFormat();
+
+            // Step 3: Apply field mapping
             if (config.getFieldMapping().isEnabled()) {
                 jsonNode = applyFieldMapping(jsonNode, config.getFieldMapping());
             }
 
-            // Step 3: Apply data masking
+            // Step 4: Apply data masking
             if (config.getDataMasking().isEnabled()) {
                 jsonNode = applyDataMasking(jsonNode, config.getDataMasking());
             }
 
-            // Step 4: Serialize to target format
-            String targetFormat = config.getProtocolTransform().isEnabled()
-                    ? config.getProtocolTransform().getTargetFormat()
-                    : "JSON";
-
+            // Step 5: Serialize to target format
             return serializeToString(jsonNode, targetFormat);
 
         } catch (Exception e) {
@@ -229,7 +251,7 @@ public class ResponseTransformFilter implements GlobalFilter, Ordered {
         } else if (trimmed.startsWith("<")) {
             return "XML";
         }
-        return "JSON";
+        return "JSON"; // Default
     }
 
     /**
@@ -271,20 +293,20 @@ public class ResponseTransformFilter implements GlobalFilter, Ordered {
     /**
      * Apply field mapping transformations.
      */
-    private JsonNode applyFieldMapping(JsonNode node, ResponseTransformConfig.FieldMappingConfig config) {
+    private JsonNode applyFieldMapping(JsonNode node, RequestTransformConfig.FieldMappingConfig config) {
         if (!node.isObject()) {
             return node;
         }
 
         ObjectNode objectNode = (ObjectNode) node.deepCopy();
 
-        // Remove internal fields
+        // Remove fields
         for (String removePath : config.getRemoveFields()) {
             removeFieldByPath(objectNode, removePath);
         }
 
         // Apply field mappings
-        for (ResponseTransformConfig.FieldMapping mapping : config.getMappings()) {
+        for (RequestTransformConfig.FieldMapping mapping : config.getMappings()) {
             applyFieldMapping(objectNode, mapping);
         }
 
@@ -293,36 +315,13 @@ public class ResponseTransformFilter implements GlobalFilter, Ordered {
             setFieldByPath(objectNode, entry.getKey(), entry.getValue());
         }
 
-        // Wrap in envelope if configured
-        if (config.getWrapInEnvelope() != null && !config.getWrapInEnvelope().isEmpty()) {
-            ObjectNode wrapped = objectMapper.getNodeFactory().objectNode();
-            wrapped.set(config.getWrapInEnvelope(), objectNode);
-            return wrapped;
-        }
-
-        // Unwrap from envelope if configured
-        if (config.getUnwrapFromEnvelope() != null && !config.getUnwrapFromEnvelope().isEmpty()) {
-            String[] path = config.getUnwrapFromEnvelope().split("\\.");
-            JsonNode current = objectNode;
-            for (String part : path) {
-                if (current.has(part)) {
-                    current = current.get(part);
-                } else {
-                    break;
-                }
-            }
-            if (current.isObject()) {
-                return current;
-            }
-        }
-
         return objectNode;
     }
 
     /**
      * Apply a single field mapping.
      */
-    private void applyFieldMapping(ObjectNode node, ResponseTransformConfig.FieldMapping mapping) {
+    private void applyFieldMapping(ObjectNode node, RequestTransformConfig.FieldMapping mapping) {
         JsonNode sourceValue = getFieldByPath(node, mapping.getSourcePath());
         if (sourceValue == null && mapping.getDefaultValue() != null) {
             sourceValue = objectMapper.getNodeFactory().textNode(mapping.getDefaultValue());
@@ -340,7 +339,7 @@ public class ResponseTransformFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * Get field value by path.
+     * Get field value by path (simple dot notation).
      */
     private JsonNode getFieldByPath(JsonNode node, String path) {
         if (path == null || path.isEmpty()) {
@@ -414,14 +413,14 @@ public class ResponseTransformFilter implements GlobalFilter, Ordered {
     /**
      * Apply data masking.
      */
-    private JsonNode applyDataMasking(JsonNode node, ResponseTransformConfig.DataMaskingConfig config) {
+    private JsonNode applyDataMasking(JsonNode node, RequestTransformConfig.DataMaskingConfig config) {
         if (!node.isObject()) {
             return node;
         }
 
         ObjectNode objectNode = (ObjectNode) node.deepCopy();
 
-        for (ResponseTransformConfig.MaskingRule rule : config.getRules()) {
+        for (RequestTransformConfig.MaskingRule rule : config.getRules()) {
             applyMaskingRule(objectNode, rule);
         }
 
@@ -431,7 +430,7 @@ public class ResponseTransformFilter implements GlobalFilter, Ordered {
     /**
      * Apply a single masking rule.
      */
-    private void applyMaskingRule(ObjectNode node, ResponseTransformConfig.MaskingRule rule) {
+    private void applyMaskingRule(ObjectNode node, RequestTransformConfig.MaskingRule rule) {
         JsonNode fieldValue = getFieldByPath(node, rule.getFieldPath());
         if (fieldValue == null || !fieldValue.isTextual()) {
             return;
@@ -446,7 +445,7 @@ public class ResponseTransformFilter implements GlobalFilter, Ordered {
     /**
      * Mask a value based on the rule.
      */
-    private String maskValue(String value, ResponseTransformConfig.MaskingRule rule) {
+    private String maskValue(String value, RequestTransformConfig.MaskingRule rule) {
         if (value == null || value.isEmpty()) {
             return value;
         }
@@ -468,6 +467,7 @@ public class ResponseTransformFilter implements GlobalFilter, Ordered {
                     }
                     return replacement + value.substring(value.length() - keepLength);
                 } else {
+                    // START
                     if (value.length() <= keepLength) {
                         return value;
                     }
@@ -492,27 +492,9 @@ public class ResponseTransformFilter implements GlobalFilter, Ordered {
         }
     }
 
-    /**
-     * Update Content-Type header.
-     */
-    private void updateContentType(HttpHeaders headers, ResponseTransformConfig config) {
-        if (!config.getProtocolTransform().isEnabled()) {
-            return;
-        }
-
-        String customContentType = config.getProtocolTransform().getCustomContentType();
-        if (customContentType != null && !customContentType.isEmpty()) {
-            headers.setContentType(MediaType.parseMediaType(customContentType));
-        } else {
-            String targetFormat = config.getProtocolTransform().getTargetFormat();
-            String newContentType = "XML".equals(targetFormat) ? "application/xml" : "application/json";
-            headers.setContentType(MediaType.parseMediaType(newContentType));
-        }
-    }
-
     @Override
     public int getOrder() {
-        // Before response is committed
-        return -45;
+        // After authentication (-250), before rate limiting
+        return FilterOrderConstants.REQUEST_TRANSFORM;
     }
 }

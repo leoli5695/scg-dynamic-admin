@@ -1,5 +1,6 @@
 package com.leoli.gateway.filter;
 
+import com.leoli.gateway.filter.ratelimit.MultiDimRateLimiterFilter;
 import com.leoli.gateway.limiter.DistributedRateLimiter;
 import com.leoli.gateway.limiter.RateLimitResult;
 import com.leoli.gateway.limiter.RedisHealthChecker;

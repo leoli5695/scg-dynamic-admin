@@ -3,19 +3,18 @@ package com.leoli.gateway.auth;
 import com.leoli.gateway.enums.AuthType;
 import com.leoli.gateway.model.AuthConfig;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
-import org.springframework.http.HttpHeaders;
 import reactor.core.publisher.Mono;
 
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * API Key Authentication Processor.
  * Validates requests using API Key from header or query parameter.
- *
+ * <p>
  * Features:
  * - Single or multiple API keys support
  * - Configurable header name
@@ -91,7 +90,7 @@ public class ApiKeyAuthProcessor extends AbstractAuthProcessor {
         // Try configured header name first
         String headerName = config.getApiKeyHeader() != null ? config.getApiKeyHeader() : DEFAULT_API_KEY_HEADER;
         String apiKey = headers.getFirst(headerName);
-        
+
         if (apiKey != null && !apiKey.isEmpty()) {
             // Handle "Bearer" prefix if present
             if (apiKey.toLowerCase().startsWith("bearer ")) {
@@ -164,19 +163,19 @@ public class ApiKeyAuthProcessor extends AbstractAuthProcessor {
         if (a == null || b == null) {
             return false;
         }
-        
+
         byte[] aBytes = a.getBytes();
         byte[] bBytes = b.getBytes();
-        
+
         if (aBytes.length != bBytes.length) {
             return false;
         }
-        
+
         int result = 0;
         for (int i = 0; i < aBytes.length; i++) {
             result |= aBytes[i] ^ bBytes[i];
         }
-        
+
         return result == 0;
     }
 
@@ -216,8 +215,16 @@ public class ApiKeyAuthProcessor extends AbstractAuthProcessor {
             return new ValidationResult(false, reason, null);
         }
 
-        public boolean isValid() { return valid; }
-        public String getReason() { return reason; }
-        public Map<String, Object> getMetadata() { return metadata; }
+        public boolean isValid() {
+            return valid;
+        }
+
+        public String getReason() {
+            return reason;
+        }
+
+        public Map<String, Object> getMetadata() {
+            return metadata;
+        }
     }
 }

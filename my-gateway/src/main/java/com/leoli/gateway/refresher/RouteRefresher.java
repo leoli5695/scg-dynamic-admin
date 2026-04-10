@@ -13,9 +13,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.route.RouteDefinition;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Mono;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+
+import static com.leoli.gateway.constants.GatewayConfigConstants.*;
 
 /**
  * Route configuration refresher with per-route incremental refresh.
@@ -26,10 +29,6 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 @Component
 public class RouteRefresher {
-
-    private static final String GROUP = "DEFAULT_GROUP";
-    private static final String ROUTE_PREFIX = "config.gateway.route-";
-    private static final String ROUTES_INDEX = "config.gateway.metadata.routes-index";
 
     private final RouteManager routeManager;
     private final ConfigCenterService configService;
@@ -191,19 +190,22 @@ public class RouteRefresher {
     private void addRouteListener(String routeId) {
         String routeDataId = ROUTE_PREFIX + routeId;
 
-        // Try to load route config with retry
+        // Try to load route config with retry using reactive delay
         String routeConfig = null;
         for (int i = 0; i < 3; i++) {
             routeConfig = configService.getConfig(routeDataId, GROUP);
             if (routeConfig != null && !routeConfig.isBlank()) {
                 break;
             }
-            // Wait a bit before retry (Nacos eventual consistency)
-            try {
-                Thread.sleep(100 * (i + 1));
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
+            // Wait a bit before retry (Nacos eventual consistency) - using Mono.delay
+            if (i < 2) {
+                try {
+                    // Use Mono.delay for non-blocking wait, then block to maintain synchronous API
+                    Mono.delay(java.time.Duration.ofMillis(100 * (i + 1))).block();
+                } catch (Exception e) {
+                    log.debug("Retry delay interrupted for route: {}", routeId);
+                    break;
+                }
             }
         }
 

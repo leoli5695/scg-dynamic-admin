@@ -1,5 +1,6 @@
 package com.leoli.gateway.filter;
 
+import com.leoli.gateway.filter.security.IPFilterGlobalFilter;
 import com.leoli.gateway.config.TrustedProxyProperties;
 import com.leoli.gateway.manager.StrategyManager;
 import org.junit.jupiter.api.BeforeEach;

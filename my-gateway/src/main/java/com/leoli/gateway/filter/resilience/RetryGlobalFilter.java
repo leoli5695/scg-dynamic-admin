@@ -1,5 +1,6 @@
-package com.leoli.gateway.filter;
+package com.leoli.gateway.filter.resilience;
 
+import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.StrategyDefinition;
 import com.leoli.gateway.util.RouteUtils;
@@ -9,7 +10,6 @@ import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
 import org.springframework.core.Ordered;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
@@ -60,7 +60,7 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
      * Execute request with retry logic.
      */
     private Mono<Void> executeWithRetry(ServerWebExchange exchange, GatewayFilterChain chain,
-                                         RetryConfig config, int attempt) {
+                                        RetryConfig config, int attempt) {
         // Save original gateway request URL on first attempt
         if (attempt == 0) {
             URI originalUrl = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR);
@@ -205,7 +205,7 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        return 9999; // Execute before RouteToRequestUrlFilter (10000) and MultiServiceLoadBalancerFilter (10001)
+        return FilterOrderConstants.RETRY;
     }
 
     /**

@@ -1,5 +1,6 @@
-package com.leoli.gateway.filter;
+package com.leoli.gateway.filter.ratelimit;
 
+import com.leoli.gateway.constants.FilterOrderConstants;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
@@ -408,7 +409,7 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
     @Override
     public int getOrder() {
         // After HybridRateLimiterFilter (HIGHEST_PRECEDENCE + 20)
-        return Ordered.HIGHEST_PRECEDENCE + 21;
+        return FilterOrderConstants.MULTI_DIM_RATE_LIMITER;
     }
 
     // ============== Inner Classes ==============
@@ -449,6 +450,8 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
 
     /**
      * Thread-safe sliding time window rate limiter with burst support.
+     * Uses CAS for low contention, tryLock fallback for high contention.
+     * This hybrid approach avoids blocking EventLoop threads in reactive context.
      */
     @Data
     public static class RateLimiterWindow {
@@ -458,6 +461,7 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
         private final AtomicInteger currentCount = new AtomicInteger(0);
         private final AtomicInteger burstTokens = new AtomicInteger(0);
         private final AtomicLong windowStartTime = new AtomicLong(System.currentTimeMillis());
+        // Fallback lock for high contention scenarios (tryLock only, never blocks)
         private final ReentrantLock lock = new ReentrantLock();
 
         public RateLimiterWindow(int maxRequests, int burstCapacity, long windowSizeMs) {
@@ -468,36 +472,77 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
         }
 
         public boolean tryAcquire() {
-            lock.lock();
-            try {
-                long now = System.currentTimeMillis();
-                long windowStart = windowStartTime.get();
+            long now = System.currentTimeMillis();
+            long windowStart = windowStartTime.get();
 
-                if (now - windowStart >= windowSizeMs) {
+            // Try to reset window if expired (CAS ensures only one thread performs reset)
+            if (now - windowStart >= windowSizeMs) {
+                if (windowStartTime.compareAndSet(windowStart, now)) {
                     currentCount.set(0);
-                    int newBurstTokens = Math.min(burstCapacity, maxRequests + burstTokens.get());
+                    int prevBurst = burstTokens.get();
+                    int newBurstTokens = Math.min(burstCapacity, maxRequests + prevBurst);
                     burstTokens.set(newBurstTokens);
-                    windowStartTime.set(now);
                 }
-
-                int count = currentCount.get();
-                int tokens = burstTokens.get();
-
-                if (count >= maxRequests && tokens > 0) {
-                    burstTokens.decrementAndGet();
-                    currentCount.incrementAndGet();
-                    return true;
-                }
-
-                if (count < maxRequests) {
-                    currentCount.incrementAndGet();
-                    return true;
-                }
-
-                return false;
-            } finally {
-                lock.unlock();
             }
+
+            // Fast path: try CAS for low contention (optimistic)
+            int count = currentCount.get();
+            if (count < maxRequests) {
+                if (currentCount.compareAndSet(count, count + 1)) {
+                    return true;
+                }
+                // CAS failed due to contention - fall through to slow path
+            } else {
+                // Steady rate exhausted, try burst tokens with CAS
+                int tokens = burstTokens.get();
+                if (tokens > 0) {
+                    if (burstTokens.compareAndSet(tokens, tokens - 1)) {
+                        currentCount.incrementAndGet();
+                        return true;
+                    }
+                    // CAS failed - fall through to slow path
+                } else {
+                    return false;
+                }
+            }
+
+            // Slow path: tryLock for high contention (never blocks!)
+            if (lock.tryLock()) {
+                try {
+                    count = currentCount.get();
+
+                    // Re-check window reset under lock
+                    now = System.currentTimeMillis();
+                    windowStart = windowStartTime.get();
+                    if (now - windowStart >= windowSizeMs) {
+                        currentCount.set(0);
+                        int prevBurst = burstTokens.get();
+                        int newBurstTokens = Math.min(burstCapacity, maxRequests + prevBurst);
+                        burstTokens.set(newBurstTokens);
+                        windowStartTime.set(now);
+                        count = 0;
+                    }
+
+                    if (count < maxRequests) {
+                        currentCount.incrementAndGet();
+                        return true;
+                    }
+
+                    int tokens = burstTokens.get();
+                    if (tokens > 0) {
+                        burstTokens.decrementAndGet();
+                        currentCount.incrementAndGet();
+                        return true;
+                    }
+
+                    return false;
+                } finally {
+                    lock.unlock();
+                }
+            }
+
+            // tryLock failed - immediately reject without blocking
+            return false;
         }
 
         public int getRemaining() {

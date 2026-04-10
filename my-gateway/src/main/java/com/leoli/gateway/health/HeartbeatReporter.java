@@ -17,6 +17,7 @@ import org.springframework.web.client.RestTemplate;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import reactor.core.publisher.Mono;
 
 /**
  * Heartbeat Reporter.
@@ -121,9 +122,10 @@ public class HeartbeatReporter {
             retries++;
             if (retries < properties.getMaxRetries()) {
                 try {
-                    Thread.sleep(properties.getRetryIntervalMs());
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
+                    // Use Mono.delay for non-blocking wait, then block to maintain synchronous API
+                    Mono.delay(java.time.Duration.ofMillis(properties.getRetryIntervalMs())).block();
+                } catch (Exception ie) {
+                    log.debug("Heartbeat retry delay interrupted");
                     break;
                 }
             }

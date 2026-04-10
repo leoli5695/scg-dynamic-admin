@@ -1,6 +1,7 @@
 package com.leoli.gateway.filter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.util.RouteUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,12 +24,14 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * Global filter for capturing error and slow requests for tracing and replay.
  * Records requests with 4xx/5xx status codes or high latency.
- *
+ * <p>
  * Note: This filter reuses the trace ID set by TraceIdGlobalFilter (order=-300).
  * It reads the trace ID from exchange attributes instead of generating its own.
  *
@@ -98,7 +101,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
      * Cache request body and continue filter chain.
      */
     private Mono<Void> cacheRequestBodyAndContinue(ServerWebExchange exchange, GatewayFilterChain chain,
-                                                    long startTime, String traceId) {
+                                                   long startTime, String traceId) {
         ServerHttpRequest request = exchange.getRequest();
 
         return DataBufferUtils.join(request.getBody())
@@ -289,6 +292,6 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
     @Override
     public int getOrder() {
         // Run after response is received, but ensure TraceIdGlobalFilter (-300) has run first
-        return 100;
+        return FilterOrderConstants.TRACE_CAPTURE;
     }
 }

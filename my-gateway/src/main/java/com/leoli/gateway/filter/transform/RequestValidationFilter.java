@@ -1,5 +1,6 @@
-package com.leoli.gateway.filter;
+package com.leoli.gateway.filter.transform;
 
+import com.leoli.gateway.constants.FilterOrderConstants;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -595,7 +596,7 @@ public class RequestValidationFilter implements GlobalFilter, Ordered {
     @Override
     public int getOrder() {
         // After RequestTransform (-255)
-        return -254;
+        return FilterOrderConstants.REQUEST_VALIDATION;
     }
 
     // ============== Inner Classes ==============

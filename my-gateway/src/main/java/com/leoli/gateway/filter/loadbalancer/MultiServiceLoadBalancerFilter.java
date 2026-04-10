@@ -1,5 +1,6 @@
-package com.leoli.gateway.filter;
+package com.leoli.gateway.filter.loadbalancer;
 
+import com.leoli.gateway.constants.FilterOrderConstants;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.model.MultiServiceConfig;
 import com.leoli.gateway.model.ServiceBindingType;
@@ -24,19 +25,32 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * Multi-service load balancer filter for gray release and service selection.
  * <p>
- * Execution order:
- * 1. RouteToRequestUrlFilter (MIN_VALUE) - sets GATEWAY_REQUEST_URL_ATTR with path/query
- * 2. MultiServiceLoadBalancerFilter (-100) - this filter, selects service and sets lb://
- * 3. DiscoveryLoadBalancerFilter (10150) - handles STATIC type (marked with ORIGINAL_STATIC_URI_ATTR)
- * 4. SCG ReactiveLoadBalancer - handles DISCOVERY type (native lb:// without mark)
+ * <b>Two Load Balancing Strategies:</b>
+ * <ul>
+ *   <li><b>DISCOVERY (lb://)</b>: For services registered in service registry (Nacos/Consul/Eureka).
+ *       Uses Spring Cloud LoadBalancer for dynamic instance discovery.</li>
+ *   <li><b>STATIC (static://)</b>: For legacy services NOT registered in service registry.
+ *       Uses static IP:port configuration. Suitable for old systems not yet migrated to microservices.</li>
+ * </ul>
  * <p>
- * This filter handles:
- * 1. Single-service mode: Direct routing to one service (STATIC or DISCOVERY)
- * 2. Multi-service mode: Weight-based selection among multiple services
- * 3. Gray release rules (header/cookie/query/weight)
- * 4. Always sets lb:// URI, with ORIGINAL_STATIC_URI_ATTR to distinguish STATIC vs DISCOVERY
+ * <b>Execution order:</b>
+ * <ol>
+ *   <li>RouteToRequestUrlFilter (MIN_VALUE) - sets GATEWAY_REQUEST_URL_ATTR with path/query</li>
+ *   <li>MultiServiceLoadBalancerFilter (10001) - this filter, selects service and sets lb://</li>
+ *   <li>DiscoveryLoadBalancerFilter (10150) - handles STATIC type</li>
+ *   <li>SCG ReactiveLoadBalancer - handles DISCOVERY type (native lb://)</li>
+ * </ol>
+ * <p>
+ * <b>Features:</b>
+ * <ul>
+ *   <li>Single-service mode: Direct routing to one service (STATIC or DISCOVERY)</li>
+ *   <li>Multi-service mode: Weight-based selection among multiple services</li>
+ *   <li>Gray release rules (header/cookie/query/weight)</li>
+ * </ul>
  *
  * @author leoli
+ * @see DiscoveryLoadBalancerFilter for STATIC type handling
+ * @see FilterOrderConstants#MULTI_SERVICE_LOAD_BALANCER for order value
  */
 @Slf4j
 @Component
@@ -456,7 +470,7 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
     public int getOrder() {
         // Execute after RouteToRequestUrlFilter (10000) but before DiscoveryLoadBalancerFilter (10150)
         // RouteToRequestUrlFilter sets GATEWAY_REQUEST_URL_ATTR, we need to modify it after that
-        return 10001;
+        return FilterOrderConstants.MULTI_SERVICE_LOAD_BALANCER;
     }
 
     /**

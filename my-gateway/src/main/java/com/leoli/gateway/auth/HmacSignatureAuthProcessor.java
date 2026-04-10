@@ -13,16 +13,15 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Map;
-import java.util.Arrays;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * HMAC Signature Authentication Processor.
  * Validates requests using HMAC signature (similar to AWS Signature V4).
- *
+ * <p>
  * Features:
  * - Request signing with HMAC-SHA256
  * - Timestamp validation to prevent replay attacks
@@ -137,16 +136,16 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
         try {
             long requestTime = Long.parseLong(timestamp);
             long currentTime = Instant.now().toEpochMilli();
-            long clockSkewMs = (config.getClockSkewMinutes() > 0 ? 
+            long clockSkewMs = (config.getClockSkewMinutes() > 0 ?
                     config.getClockSkewMinutes() : DEFAULT_CLOCK_SKEW_MINUTES) * 60 * 1000L;
-            
+
             return Math.abs(currentTime - requestTime) <= clockSkewMs;
         } catch (NumberFormatException e) {
             // Try parsing as ISO 8601 format
             try {
                 Instant requestTime = Instant.parse(timestamp);
                 long currentTime = Instant.now().toEpochMilli();
-                long clockSkewMs = (config.getClockSkewMinutes() > 0 ? 
+                long clockSkewMs = (config.getClockSkewMinutes() > 0 ?
                         config.getClockSkewMinutes() : DEFAULT_CLOCK_SKEW_MINUTES) * 60 * 1000L;
                 return Math.abs(currentTime - requestTime.toEpochMilli()) <= clockSkewMs;
             } catch (Exception ex) {
@@ -163,12 +162,12 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
         // Clean up expired nonces
         long currentTime = System.currentTimeMillis();
         nonceCache.entrySet().removeIf(entry -> currentTime - entry.getValue() > NONCE_EXPIRY_MS);
-        
+
         // Check if nonce has been used
         if (nonceCache.containsKey(nonce)) {
             return false;
         }
-        
+
         // Add nonce to cache
         nonceCache.put(nonce, currentTime);
         return true;
@@ -185,12 +184,12 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
                 return secret;
             }
         }
-        
+
         // Fallback to single access key/secret pair
         if (config.getAccessKey() != null && config.getAccessKey().equals(accessKey)) {
             return config.getSecretKey();
         }
-        
+
         return null;
     }
 
@@ -199,13 +198,13 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
      */
     private String buildStringToSign(ServerWebExchange exchange, String timestamp, String nonce) {
         StringBuilder sb = new StringBuilder();
-        
+
         // HTTP Method
         sb.append(exchange.getRequest().getMethod().name()).append("\n");
-        
+
         // Request URI
         sb.append(exchange.getRequest().getURI().getPath()).append("\n");
-        
+
         // Query string (sorted)
         String query = exchange.getRequest().getURI().getQuery();
         if (query != null && !query.isEmpty()) {
@@ -213,15 +212,15 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
         } else {
             sb.append("\n");
         }
-        
+
         // Timestamp
         sb.append(timestamp).append("\n");
-        
+
         // Nonce (if present)
         if (nonce != null) {
             sb.append(nonce);
         }
-        
+
         return sb.toString();
     }
 
@@ -241,7 +240,7 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
         try {
             String algo = algorithm != null ? algorithm.toUpperCase() : "HMAC-SHA256";
             String macAlgorithm;
-            
+
             switch (algo) {
                 case "HMAC-SHA1":
                     macAlgorithm = "HmacSHA1";
@@ -254,12 +253,12 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
                     macAlgorithm = "HmacSHA256";
                     break;
             }
-            
+
             Mac mac = Mac.getInstance(macAlgorithm);
             SecretKeySpec secretKeySpec = new SecretKeySpec(secretKey.getBytes(StandardCharsets.UTF_8), macAlgorithm);
             mac.init(secretKeySpec);
             byte[] hmacBytes = mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
-            
+
             return Base64.getEncoder().encodeToString(hmacBytes);
         } catch (Exception e) {
             log.error("Failed to calculate HMAC signature", e);
@@ -274,19 +273,19 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
         if (a == null || b == null) {
             return false;
         }
-        
+
         byte[] aBytes = a.getBytes(StandardCharsets.UTF_8);
         byte[] bBytes = b.getBytes(StandardCharsets.UTF_8);
-        
+
         if (aBytes.length != bBytes.length) {
             return false;
         }
-        
+
         int result = 0;
         for (int i = 0; i < aBytes.length; i++) {
             result |= aBytes[i] ^ bBytes[i];
         }
-        
+
         return result == 0;
     }
 

@@ -44,13 +44,13 @@ public class NacosCenterAutoConfiguration {
         // namespace is REQUIRED - gateway instance must have its own namespace for config isolation
         if (namespace == null || namespace.isEmpty()) {
             throw new IllegalStateException("Nacos namespace is REQUIRED for gateway instance. " +
-                "Please set NACOS_NAMESPACE environment variable or spring.cloud.nacos.namespace property. " +
-                "Gateway cannot start without namespace isolation.");
+                    "Please set NACOS_NAMESPACE environment variable or spring.cloud.nacos.namespace property. " +
+                    "Gateway cannot start without namespace isolation.");
         }
         props.setProperty("namespace", namespace);
 
-        log.info("Initializing Nacos ConfigService with server: {} namespace: {}", 
-                 props.getProperty("serverAddr"), namespace);
+        log.info("Initializing Nacos ConfigService with server: {} namespace: {}",
+                props.getProperty("serverAddr"), namespace);
 
         this.configService = NacosFactory.createConfigService(props);
         log.info("Nacos ConfigService initialized successfully");
@@ -69,8 +69,8 @@ public class NacosCenterAutoConfiguration {
         // namespace is REQUIRED - gateway instance must have its own namespace for service discovery isolation
         if (namespace == null || namespace.isEmpty()) {
             throw new IllegalStateException("Nacos namespace is REQUIRED for gateway instance. " +
-                "Please set NACOS_NAMESPACE environment variable or spring.cloud.nacos.namespace property. " +
-                "Gateway cannot start without namespace isolation.");
+                    "Please set NACOS_NAMESPACE environment variable or spring.cloud.nacos.namespace property. " +
+                    "Gateway cannot start without namespace isolation.");
         }
         props.setProperty("namespace", namespace);
 

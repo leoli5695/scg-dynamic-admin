@@ -1,5 +1,6 @@
 package com.leoli.gateway.filter;
 
+import com.leoli.gateway.constants.FilterOrderConstants;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.leoli.gateway.manager.StrategyManager;
@@ -240,7 +241,7 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        return 50; // Execute after response is ready
+        return FilterOrderConstants.CACHE;
     }
 
     /**

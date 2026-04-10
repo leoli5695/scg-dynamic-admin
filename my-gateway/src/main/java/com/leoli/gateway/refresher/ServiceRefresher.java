@@ -19,6 +19,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static com.leoli.gateway.constants.GatewayConfigConstants.*;
+
 /**
  * Service configuration refresher with per-service incremental refresh.
  * Listens to services-index and individual service changes in Nacos.
@@ -29,10 +31,6 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 @Component
 public class ServiceRefresher {
-
-    private static final String GROUP = "DEFAULT_GROUP";
-    private static final String SERVICE_PREFIX = "config.gateway.service-";
-    private static final String SERVICES_INDEX = "config.gateway.metadata.services-index";
 
     private final ConfigCenterService configService;
     private final ObjectMapper objectMapper = new ObjectMapper();

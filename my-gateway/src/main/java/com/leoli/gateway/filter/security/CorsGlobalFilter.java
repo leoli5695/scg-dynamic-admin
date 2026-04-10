@@ -1,5 +1,6 @@
-package com.leoli.gateway.filter;
+package com.leoli.gateway.filter.security;
 
+import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.StrategyDefinition;
 import com.leoli.gateway.util.RouteUtils;
@@ -177,6 +178,6 @@ public class CorsGlobalFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        return -300; // Execute very early, before other filters
+        return FilterOrderConstants.CORS;
     }
 }

@@ -2,7 +2,7 @@ package com.leoli.gateway.manager;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.leoli.gateway.cache.JwtValidationCache;
+import com.leoli.gateway.auth.JwtValidationCache;
 import com.leoli.gateway.center.spi.ConfigCenterService;
 import com.leoli.gateway.enums.AuthType;
 import com.leoli.gateway.model.AuthConfig;
@@ -13,6 +13,8 @@ import org.springframework.stereotype.Component;
 import jakarta.annotation.PostConstruct;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+
+import static com.leoli.gateway.constants.GatewayConfigConstants.*;
 
 /**
  * Authentication Binding Manager.
@@ -32,10 +34,6 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 @Component
 public class AuthBindingManager {
-
-    private static final String AUTH_POLICY_PREFIX = "config.gateway.auth-policy-";
-    private static final String AUTH_ROUTES_PREFIX = "config.gateway.auth-routes-";
-    private static final String DEFAULT_GROUP = "DEFAULT_GROUP";
 
     // Policy cache: policyId -> AuthConfig
     private final Map<String, AuthConfig> policyCache = new ConcurrentHashMap<>();
@@ -477,7 +475,7 @@ public class AuthBindingManager {
     public void loadPolicyFromNacos(String policyId) {
         String dataId = AUTH_POLICY_PREFIX + policyId;
         try {
-            String configJson = configCenterService.getConfig(dataId, DEFAULT_GROUP);
+            String configJson = configCenterService.getConfig(dataId, GROUP);
             if (configJson != null && !configJson.isEmpty()) {
                 AuthConfig config = objectMapper.readValue(configJson, AuthConfig.class);
                 if (config != null) {
@@ -500,7 +498,7 @@ public class AuthBindingManager {
     public void loadPolicyRoutesFromNacos(String policyId) {
         String dataId = AUTH_ROUTES_PREFIX + policyId;
         try {
-            String routesJson = configCenterService.getConfig(dataId, DEFAULT_GROUP);
+            String routesJson = configCenterService.getConfig(dataId, GROUP);
             if (routesJson != null && !routesJson.isEmpty()) {
                 List<String> routeIds = objectMapper.readValue(routesJson, new TypeReference<List<String>>() {});
                 setPolicyRoutes(policyId, routeIds);

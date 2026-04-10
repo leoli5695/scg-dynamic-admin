@@ -2,6 +2,8 @@ package com.leoli.gateway.filter;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leoli.gateway.constants.FilterOrderConstants;
+import com.leoli.gateway.constants.GatewayConfigConstants;
 import com.leoli.gateway.center.spi.ConfigCenterService;
 import com.leoli.gateway.manager.AuthBindingManager;
 import com.leoli.gateway.manager.RouteManager;
@@ -33,6 +35,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -44,7 +47,9 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static com.leoli.gateway.constants.GatewayConfigConstants.*;
 
 /**
  * Access log global filter with file output support.
@@ -64,8 +69,6 @@ import java.util.concurrent.locks.ReentrantLock;
 @Component
 public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
 
-    private static final String CONFIG_KEY = "config.gateway.access-log";
-    private static final String GROUP = "DEFAULT_GROUP";
     private static final String START_TIME_ATTR = "accessLogStartTime";
     private static final String REQUEST_ID_ATTR = "requestId";
     private static final String RESPONSE_BODY_ATTR = "accessLogResponseBody";
@@ -86,10 +89,8 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
     // Current config
     private volatile AccessLogConfig config = new AccessLogConfig();
 
-    // File writer state
-    private volatile Path currentLogPath;
-    private volatile String currentDate;
-    private final ReentrantLock fileLock = new ReentrantLock();
+    // File writer state (atomic for thread-safe file operations)
+    private final AtomicReference<LogFileState> logFileState = new AtomicReference<>(new LogFileState(null, null));
 
     // Config listener
     private ConfigCenterService.ConfigListener configListener;
@@ -101,20 +102,20 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
             log.info("🔥 Access log config changed");
             loadConfig();
         };
-        configCenterService.addListener(CONFIG_KEY, GROUP, configListener);
+        configCenterService.addListener(ACCESS_LOG_CONFIG, GROUP, configListener);
         log.info("✅ AccessLogGlobalFilter initialized, enabled: {}", config.isEnabled());
     }
 
     @PreDestroy
     public void destroy() {
         if (configListener != null) {
-            configCenterService.removeListener(CONFIG_KEY, GROUP, configListener);
+            configCenterService.removeListener(ACCESS_LOG_CONFIG, GROUP, configListener);
         }
     }
 
     private void loadConfig() {
         try {
-            String content = configCenterService.getConfig(CONFIG_KEY, GROUP);
+            String content = configCenterService.getConfig(ACCESS_LOG_CONFIG, GROUP);
             if (content != null && !content.isEmpty()) {
                 config = objectMapper.readValue(content, AccessLogConfig.class);
                 log.info("✅ Loaded access log config: enabled={}, mode={}, format={}",
@@ -179,32 +180,48 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
         boolean needRequestBody = config.isLogRequestBody() && shouldCacheBody(request);
         boolean needResponseBody = config.isLogResponseBody();
 
+        // Skip response body caching for WebSocket upgrade requests
+        // WebSocket uses a streaming connection after upgrade, response body is not applicable
+        if (needResponseBody && isWebSocketUpgrade(exchange)) {
+            log.debug("Skipping response body logging for WebSocket upgrade, routeId: {}", routeId);
+            needResponseBody = false;
+        }
+
+        // Use final variable for lambda capture
+        final boolean shouldLogResponseBody = needResponseBody;
+
         // Wrap exchange for response body caching if needed
-        ServerWebExchange wrappedExchange = needResponseBody ?
-                wrapExchangeForResponseBody(exchange) : exchange;
+        ServerWebExchange wrappedExchange = shouldLogResponseBody ?
+                wrapExchangeForResponseBody(exchange, routeId) : exchange;
 
         // Check if need to cache request body
         if (needRequestBody) {
             return cacheRequestBodyAndContinue(wrappedExchange, chain, traceId, requestId, routeId, serviceId,
-                    authInfo, method, path, query, clientIp, userAgent, contentType, startTime, needResponseBody);
+                    authInfo, method, path, query, clientIp, userAgent, contentType, startTime, shouldLogResponseBody);
         }
 
         // Continue without caching request body
         return chain.filter(wrappedExchange).then(Mono.fromRunnable(() -> {
-            String responseBody = needResponseBody ?
+            String responseBody = shouldLogResponseBody ?
                     exchange.getAttribute(RESPONSE_BODY_ATTR) : null;
             logRequest(exchange, traceId, requestId, routeId, serviceId, authInfo, method, path,
                     query, clientIp, userAgent, contentType, null, responseBody, startTime);
         }));
     }
 
-    private ServerWebExchange wrapExchangeForResponseBody(ServerWebExchange exchange) {
+    private ServerWebExchange wrapExchangeForResponseBody(ServerWebExchange exchange, String routeId) {
         ServerHttpResponse originalResponse = exchange.getResponse();
         DataBufferFactory bufferFactory = originalResponse.bufferFactory();
 
         ServerHttpResponseDecorator decoratedResponse = new ServerHttpResponseDecorator(originalResponse) {
             @Override
             public Mono<Void> writeWith(Publisher<? extends DataBuffer> body) {
+                // Skip SSE (Server-Sent Events) responses - SSE requires streaming response
+                if (isSseResponse(getHeaders().getContentType())) {
+                    log.debug("Skipping response body logging for SSE response, routeId: {}", routeId);
+                    return super.writeWith(body);
+                }
+
                 // Convert any Publisher to Flux for uniform handling
                 return Flux.from(body)
                         .collectList()
@@ -212,7 +229,7 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
                             if (buffers.isEmpty()) {
                                 return super.writeWith(Flux.empty());
                             }
-                            
+
                             // Combine all buffers into one
                             int totalSize = buffers.stream().mapToInt(DataBuffer::readableByteCount).sum();
                             byte[] allBytes = new byte[totalSize];
@@ -223,11 +240,11 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
                                 offset += size;
                                 DataBufferUtils.release(buffer);
                             }
-                            
+
                             // Store response body for logging
                             String bodyContent = truncate(new String(allBytes, StandardCharsets.UTF_8), config.getMaxBodyLength());
                             exchange.getAttributes().put(RESPONSE_BODY_ATTR, maskSensitiveFields(bodyContent));
-                            
+
                             // Write the buffer and return Mono<Void>
                             return super.writeWith(Flux.just(bufferFactory.wrap(allBytes)));
                         });
@@ -351,26 +368,51 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
             return;
         }
 
+        // Capture current state for async operation
+        final String logDirectory = config.getLogDirectory();
+        final String fileNamePattern = config.getFileNamePattern();
+
+        // Execute file I/O on boundedElastic scheduler to avoid blocking EventLoop
+        // This is "fire and forget" - we don't wait for the write to complete
+        Mono.fromRunnable(() -> writeToFileAsync(line, logDirectory, fileNamePattern))
+                .subscribeOn(Schedulers.boundedElastic())
+                .subscribe(
+                        v -> {}, // onSuccess - do nothing
+                        error -> log.error("Failed to write log to file: {}", error.getMessage())
+                );
+    }
+
+    /**
+     * Actual file write operation, executed on boundedElastic scheduler.
+     * This method performs blocking I/O and should NOT be called on EventLoop thread.
+     */
+    private void writeToFileAsync(String line, String logDirectory, String fileNamePattern) {
         try {
             String today = LocalDateTime.now().format(fileDateFormatter);
 
-            fileLock.lock();
-            try {
-                // Check if need to rollover to new file
-                if (!today.equals(currentDate) || currentLogPath == null) {
-                    currentDate = today;
-                    String fileName = config.getFileNamePattern()
-                            .replace("{yyyy-MM-dd}", today)
-                            .replace("{date}", today);
-                    currentLogPath = Paths.get(config.getLogDirectory(), fileName);
-                }
+            // Use CAS to atomically update file path if date changed
+            LogFileState currentState = logFileState.get();
+            Path logPath = currentState.logPath;
 
-                // Write line to file
-                Files.writeString(currentLogPath, line + "\n",
-                        StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-            } finally {
-                fileLock.unlock();
+            // Check if need to rollover to new file
+            if (!today.equals(currentState.currentDate) || logPath == null) {
+                String fileName = fileNamePattern
+                        .replace("{yyyy-MM-dd}", today)
+                        .replace("{date}", today);
+                Path newPath = Paths.get(logDirectory, fileName);
+                LogFileState newState = new LogFileState(newPath, today);
+
+                // CAS update - if another thread already updated, use their path
+                if (!logFileState.compareAndSet(currentState, newState)) {
+                    logPath = logFileState.get().logPath;
+                } else {
+                    logPath = newPath;
+                }
             }
+
+            // Write line to file (blocking I/O, but on boundedElastic thread)
+            Files.writeString(logPath, line + "\n",
+                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (Exception e) {
             log.error("Failed to write log to file: {}", e.getMessage());
         }
@@ -505,9 +547,30 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
                 request.getRemoteAddress().getAddress().getHostAddress() : "unknown";
     }
 
+    /**
+     * Check if request is a WebSocket upgrade request.
+     * WebSocket requires a streaming connection and should not have response body cached.
+     */
+    private boolean isWebSocketUpgrade(ServerWebExchange exchange) {
+        String upgrade = exchange.getRequest().getHeaders().getFirst("Upgrade");
+        return "websocket".equalsIgnoreCase(upgrade);
+    }
+
+    /**
+     * Check if response is SSE (Server-Sent Events).
+     * SSE uses text/event-stream content type and requires streaming response.
+     */
+    private boolean isSseResponse(MediaType contentType) {
+        if (contentType == null) {
+            return false;
+        }
+        String mimeType = contentType.getType() + "/" + contentType.getSubtype();
+        return "text/event-stream".equalsIgnoreCase(mimeType);
+    }
+
     @Override
     public int getOrder() {
-        return -400;
+        return FilterOrderConstants.ACCESS_LOG;
     }
 
     @Data
@@ -550,6 +613,21 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
         String authType;
         String authPolicy;
         String authUser;
+    }
+
+    /**
+     * Immutable state for log file (path + date).
+     * Used with AtomicReference for thread-safe file operations.
+     */
+    @Data
+    private static class LogFileState {
+        final Path logPath;
+        final String currentDate;
+
+        LogFileState(Path logPath, String currentDate) {
+            this.logPath = logPath;
+            this.currentDate = currentDate;
+        }
     }
 
 }

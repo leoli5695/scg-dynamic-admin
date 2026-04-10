@@ -1,5 +1,6 @@
-package com.leoli.gateway.filter;
+package com.leoli.gateway.filter.loadbalancer;
 
+import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.discovery.staticdiscovery.StaticDiscoveryService;
 import com.leoli.gateway.health.HybridHealthChecker;
 import com.leoli.gateway.manager.ServiceManager;
@@ -20,11 +21,36 @@ import java.net.URI;
 import java.util.HashSet;
 import java.util.List;
 
-import static com.leoli.gateway.filter.MultiServiceLoadBalancerFilter.*;
+import static com.leoli.gateway.filter.loadbalancer.MultiServiceLoadBalancerFilter.*;
 
 /**
- * Load Balancer Filter for static:// protocol.
- * Orchestrates instance discovery, selection, filtering, and retry.
+ * Load Balancer Filter for STATIC type services.
+ * <p>
+ * <b>Use Case:</b> Handles load balancing for legacy services that are NOT registered
+ * in a service registry (Nacos/Consul/Eureka). These are typically older systems that
+ * have not yet been migrated to microservices architecture.
+ * <p>
+ * <b>Two Load Balancing Strategies:</b>
+ * <ul>
+ *   <li><b>DISCOVERY (lb://)</b>: Handled by SCG's native ReactiveLoadBalancerClientFilter.
+ *       For services registered in service registry.</li>
+ *   <li><b>STATIC (static://)</b>: Handled by this filter.
+ *       For legacy services with static IP:port configuration.</li>
+ * </ul>
+ * <p>
+ * <b>Execution Order:</b> This filter (10150) runs AFTER MultiServiceLoadBalancerFilter (10001)
+ * and handles requests marked with ORIGINAL_STATIC_URI_ATTR.
+ * <p>
+ * <b>Features:</b>
+ * <ul>
+ *   <li>Instance discovery from static configuration</li>
+ *   <li>Health-based instance filtering</li>
+ *   <li>Retry on failure with alternative instances</li>
+ * </ul>
+ *
+ * @author leoli
+ * @see MultiServiceLoadBalancerFilter for service selection logic
+ * @see FilterOrderConstants#DISCOVERY_LOAD_BALANCER for order value
  */
 @Slf4j
 @Component
@@ -119,6 +145,6 @@ public class DiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        return 10150;
+        return FilterOrderConstants.DISCOVERY_LOAD_BALANCER;
     }
 }

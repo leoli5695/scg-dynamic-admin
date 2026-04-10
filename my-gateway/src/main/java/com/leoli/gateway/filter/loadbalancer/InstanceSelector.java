@@ -1,6 +1,8 @@
-package com.leoli.gateway.filter;
+package com.leoli.gateway.filter.loadbalancer;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.client.ServiceInstance;
+import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 
 import java.security.MessageDigest;
@@ -10,9 +12,6 @@ import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
-
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
 
 /**
  * Load balancing instance selection strategies.
@@ -26,7 +25,7 @@ public class InstanceSelector {
     private final Map<String, java.util.concurrent.atomic.AtomicInteger> roundRobinCounters = new ConcurrentHashMap<>();
 
     public ServiceInstance select(List<ServiceInstance> instances, String strategy,
-                                   ServerWebExchange exchange) {
+                                  ServerWebExchange exchange) {
         if (instances.isEmpty()) return null;
         if (instances.size() == 1) return instances.get(0);
 
@@ -144,11 +143,16 @@ public class InstanceSelector {
         private static final MessageDigest md5;
 
         static {
-            try { md5 = MessageDigest.getInstance("MD5"); }
-            catch (NoSuchAlgorithmException e) { throw new RuntimeException("MD5 not available", e); }
+            try {
+                md5 = MessageDigest.getInstance("MD5");
+            } catch (NoSuchAlgorithmException e) {
+                throw new RuntimeException("MD5 not available", e);
+            }
         }
 
-        void addNode(String key, ServiceInstance instance) { ring.put(hash(key), instance); }
+        void addNode(String key, ServiceInstance instance) {
+            ring.put(hash(key), instance);
+        }
 
         ServiceInstance getNode(String key) {
             if (ring.isEmpty()) return null;

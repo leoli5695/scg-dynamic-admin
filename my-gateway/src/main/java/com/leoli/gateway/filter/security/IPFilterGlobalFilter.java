@@ -1,5 +1,6 @@
-package com.leoli.gateway.filter;
+package com.leoli.gateway.filter.security;
 
+import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.config.TrustedProxyProperties;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.util.RouteUtils;
@@ -516,6 +517,6 @@ public class IPFilterGlobalFilter implements GlobalFilter, Ordered {
         // High priority - execute before authentication
         // IP filtering is coarse-grained protection, should run first to block malicious IPs
         // This avoids unnecessary authentication computation for blocked IPs
-        return -280;
+        return FilterOrderConstants.IP_FILTER;
     }
 }

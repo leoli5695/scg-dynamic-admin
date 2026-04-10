@@ -9,14 +9,13 @@ import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Basic Authentication Processor.
  * Validates HTTP Basic Authentication credentials.
- *
+ * <p>
  * Features:
  * - Standard HTTP Basic Auth (RFC 7617)
  * - Multiple user credentials support
@@ -101,8 +100,8 @@ public class BasicAuthProcessor extends AbstractAuthProcessor {
     private Mono<Boolean> validateCredentials(String username, String password, AuthConfig config) {
         // Check if using single credential from config
         if (config.getBasicUsername() != null && config.getBasicPassword() != null) {
-            boolean valid = config.getBasicUsername().equals(username) && 
-                           verifyPassword(password, config.getBasicPassword(), config.getPasswordHashAlgorithm());
+            boolean valid = config.getBasicUsername().equals(username) &&
+                    verifyPassword(password, config.getBasicPassword(), config.getPasswordHashAlgorithm());
             return Mono.just(valid);
         }
 
@@ -206,7 +205,7 @@ public class BasicAuthProcessor extends AbstractAuthProcessor {
     private Mono<Void> writeUnauthorizedResponseWithRealm(ServerWebExchange exchange, AuthConfig config, String message) {
         String realm = config.getRealm() != null ? config.getRealm() : "Gateway API";
         exchange.getResponse().setStatusCode(org.springframework.http.HttpStatus.UNAUTHORIZED);
-        exchange.getResponse().getHeaders().add(WWW_AUTHENTICATE_HEADER, 
+        exchange.getResponse().getHeaders().add(WWW_AUTHENTICATE_HEADER,
                 "Basic realm=\"" + realm + "\", charset=\"UTF-8\"");
         exchange.getResponse().getHeaders().add(org.springframework.http.HttpHeaders.CONTENT_TYPE, "application/json");
         String body = "{\"error\":\"Unauthorized\",\"message\":\"" + message + "\"}";
@@ -250,8 +249,16 @@ public class BasicAuthProcessor extends AbstractAuthProcessor {
             this.hashAlgorithm = hashAlgorithm;
         }
 
-        public String getUsername() { return username; }
-        public String getPassword() { return password; }
-        public String getHashAlgorithm() { return hashAlgorithm; }
+        public String getUsername() {
+            return username;
+        }
+
+        public String getPassword() {
+            return password;
+        }
+
+        public String getHashAlgorithm() {
+            return hashAlgorithm;
+        }
     }
 }
