@@ -1,6 +1,7 @@
 package com.leoli.gateway.admin.controller;
 
 import com.leoli.gateway.admin.model.RequestTrace;
+import com.leoli.gateway.admin.service.FilterChainExecutionService;
 import com.leoli.gateway.admin.service.RequestTraceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -9,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -25,6 +27,7 @@ import java.util.Optional;
 public class RequestTraceController {
 
     private final RequestTraceService requestTraceService;
+    private final FilterChainExecutionService filterChainExecutionService;
 
     /**
      * Get trace statistics
@@ -57,13 +60,55 @@ public class RequestTraceController {
     }
 
     /**
-     * Get trace by ID
+     * Get trace by ID with filter execution details
      */
     @GetMapping("/{id}")
-    public ResponseEntity<RequestTrace> getTraceById(@PathVariable Long id) {
-        return requestTraceService.getTraceById(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<Map<String, Object>> getTraceById(@PathVariable Long id) {
+        Optional<RequestTrace> traceOpt = requestTraceService.getTraceById(id);
+        if (traceOpt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        RequestTrace trace = traceOpt.get();
+        Map<String, Object> result = new LinkedHashMap<>();
+
+        // Basic trace info
+        result.put("id", trace.getId());
+        result.put("traceId", trace.getTraceId());
+        result.put("instanceId", trace.getInstanceId());
+        result.put("routeId", trace.getRouteId());
+        result.put("method", trace.getMethod());
+        result.put("uri", trace.getUri());
+        result.put("path", trace.getPath());
+        result.put("queryString", trace.getQueryString());
+        result.put("statusCode", trace.getStatusCode());
+        result.put("latencyMs", trace.getLatencyMs());
+        result.put("clientIp", trace.getClientIp());
+        result.put("userAgent", trace.getUserAgent());
+        result.put("targetInstance", trace.getTargetInstance());
+        result.put("errorMessage", trace.getErrorMessage());
+        result.put("errorType", trace.getErrorType());
+        result.put("traceType", trace.getTraceType());
+        result.put("replayable", trace.getReplayable());
+        result.put("replayType", trace.getReplayType());
+        result.put("replayCount", trace.getReplayCount());
+        result.put("lastReplayResult", trace.getLastReplayResult());
+        result.put("traceTime", trace.getTraceTime());
+        result.put("createdAt", trace.getCreatedAt());
+
+        // Request/Response data
+        result.put("requestHeaders", trace.getRequestHeaders());
+        result.put("requestBody", trace.getRequestBody());
+        result.put("responseHeaders", trace.getResponseHeaders());
+        result.put("responseBody", trace.getResponseBody());
+
+        // Add filter chain execution summary
+        Map<String, Object> filterSummary = filterChainExecutionService.getTraceExecutionSummary(trace.getTraceId());
+        if (Boolean.TRUE.equals(filterSummary.get("hasFilterData"))) {
+            result.put("filterChain", filterSummary);
+        }
+
+        return ResponseEntity.ok(result);
     }
 
     /**
@@ -80,12 +125,55 @@ public class RequestTraceController {
     }
 
     /**
-     * Get trace by trace ID
+     * Get trace by trace ID with filter execution details
+     */
     @GetMapping("/trace-id/{traceId}")
-    public ResponseEntity<RequestTrace> getTraceByTraceId(@PathVariable String traceId) {
-        return requestTraceService.getTraceByTraceId(traceId)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<Map<String, Object>> getTraceByTraceId(@PathVariable String traceId) {
+        Optional<RequestTrace> traceOpt = requestTraceService.getTraceByTraceId(traceId);
+        if (traceOpt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        RequestTrace trace = traceOpt.get();
+        Map<String, Object> result = new LinkedHashMap<>();
+
+        // Basic trace info
+        result.put("id", trace.getId());
+        result.put("traceId", trace.getTraceId());
+        result.put("instanceId", trace.getInstanceId());
+        result.put("routeId", trace.getRouteId());
+        result.put("method", trace.getMethod());
+        result.put("uri", trace.getUri());
+        result.put("path", trace.getPath());
+        result.put("queryString", trace.getQueryString());
+        result.put("statusCode", trace.getStatusCode());
+        result.put("latencyMs", trace.getLatencyMs());
+        result.put("clientIp", trace.getClientIp());
+        result.put("userAgent", trace.getUserAgent());
+        result.put("targetInstance", trace.getTargetInstance());
+        result.put("errorMessage", trace.getErrorMessage());
+        result.put("errorType", trace.getErrorType());
+        result.put("traceType", trace.getTraceType());
+        result.put("replayable", trace.getReplayable());
+        result.put("replayType", trace.getReplayType());
+        result.put("replayCount", trace.getReplayCount());
+        result.put("lastReplayResult", trace.getLastReplayResult());
+        result.put("traceTime", trace.getTraceTime());
+        result.put("createdAt", trace.getCreatedAt());
+
+        // Request/Response data
+        result.put("requestHeaders", trace.getRequestHeaders());
+        result.put("requestBody", trace.getRequestBody());
+        result.put("responseHeaders", trace.getResponseHeaders());
+        result.put("responseBody", trace.getResponseBody());
+
+        // Add filter chain execution summary
+        Map<String, Object> filterSummary = filterChainExecutionService.getTraceExecutionSummary(traceId);
+        if (Boolean.TRUE.equals(filterSummary.get("hasFilterData"))) {
+            result.put("filterChain", filterSummary);
+        }
+
+        return ResponseEntity.ok(result);
     }
 
     /**

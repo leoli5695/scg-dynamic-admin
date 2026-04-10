@@ -336,9 +336,14 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
 
     /**
      * Send trace to admin service.
+     * Also sends filter execution data separately for database persistence.
      */
     private void sendTraceToAdmin(Map<String, Object> trace) {
         try {
+            String traceId = (String) trace.get("traceId");
+            String instanceId = (String) trace.get("instanceId");
+
+            // Send trace data
             webClient
                     .post()
                     .uri(adminUrl + "/api/traces/internal")
@@ -347,11 +352,70 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
                     .retrieve()
                     .bodyToMono(String.class)
                     .subscribe(
-                            response -> log.debug("Trace saved: {}", trace.get("traceId")),
+                            response -> log.debug("Trace saved: {}", traceId),
                             error -> log.error("Failed to send trace to admin: {}", error.getMessage())
                     );
+
+            // Send filter execution data separately for database persistence
+            if (trace.containsKey("filterExecutions") && includeFilterChain) {
+                sendFilterExecutionsToAdmin(traceId, instanceId,
+                        (List<Map<String, Object>>) trace.get("filterExecutions"),
+                        (Long) trace.get("latencyMs"));
+            }
         } catch (Exception e) {
             log.error("Failed to send trace to admin", e);
+        }
+    }
+
+    /**
+     * Send filter execution data to admin service for database persistence.
+     */
+    private void sendFilterExecutionsToAdmin(String traceId, String instanceId,
+                                               List<Map<String, Object>> filterExecutions,
+                                               Long totalDurationMs) {
+        if (filterExecutions == null || filterExecutions.isEmpty()) {
+            return;
+        }
+
+        try {
+            // Convert to format for database storage
+            List<Map<String, Object>> executionData = filterExecutions.stream()
+                    .map(exec -> {
+                        Map<String, Object> data = new HashMap<>();
+                        data.put("traceId", traceId);
+                        data.put("instanceId", instanceId);
+                        data.put("filterName", exec.get("filterName"));
+                        data.put("filterOrder", exec.get("order"));
+                        data.put("durationMs", exec.get("durationMs"));
+                        data.put("durationMicros", exec.get("durationMicros"));
+                        data.put("success", exec.get("success"));
+
+                        // Calculate numeric percentage
+                        Long durationMs = (Long) exec.get("durationMs");
+                        if (totalDurationMs != null && totalDurationMs > 0 && durationMs != null) {
+                            data.put("timePercentage", durationMs * 100.0 / totalDurationMs);
+                        }
+
+                        if (exec.get("error") != null) {
+                            data.put("errorMessage", exec.get("error"));
+                        }
+                        return data;
+                    })
+                    .toList();
+
+            webClient
+                    .post()
+                    .uri(adminUrl + "/api/filter-executions/internal")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(executionData)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .subscribe(
+                            response -> log.debug("Filter executions saved for trace: {}", traceId),
+                            error -> log.error("Failed to send filter executions: {}", error.getMessage())
+                    );
+        } catch (Exception e) {
+            log.error("Failed to send filter executions to admin", e);
         }
     }
 
