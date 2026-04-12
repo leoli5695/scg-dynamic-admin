@@ -2,9 +2,9 @@ package com.leoli.gateway.filter.loadbalancer;
 
 import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.discovery.staticdiscovery.StaticDiscoveryService;
-import com.leoli.gateway.health.HybridHealthChecker;
 import com.leoli.gateway.manager.ServiceManager;
 import com.leoli.gateway.util.SimpleResponse;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.loadbalancer.Response;
@@ -21,7 +21,8 @@ import java.net.URI;
 import java.util.HashSet;
 import java.util.List;
 
-import static com.leoli.gateway.filter.loadbalancer.MultiServiceLoadBalancerFilter.*;
+import static com.leoli.gateway.filter.loadbalancer.MultiServiceLoadBalancerFilter.ORIGINAL_STATIC_URI_ATTR;
+import static com.leoli.gateway.filter.loadbalancer.MultiServiceLoadBalancerFilter.TARGET_SERVICE_ID_ATTR;
 
 /**
  * Load Balancer Filter for STATIC type services.
@@ -54,26 +55,14 @@ import static com.leoli.gateway.filter.loadbalancer.MultiServiceLoadBalancerFilt
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class DiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
 
     private final ServiceManager serviceManager;
-    private final StaticDiscoveryService staticDiscoveryService;
-    private final InstanceSelector instanceSelector;
     private final InstanceFilter instanceFilter;
+    private final InstanceSelector instanceSelector;
     private final InstanceRetryExecutor retryExecutor;
-
-    public DiscoveryLoadBalancerFilter(StaticDiscoveryService staticDiscoveryService,
-                                        HybridHealthChecker healthChecker,
-                                        ServiceManager serviceManager,
-                                        InstanceSelector instanceSelector,
-                                        InstanceFilter instanceFilter) {
-        this.staticDiscoveryService = staticDiscoveryService;
-        this.serviceManager = serviceManager;
-        this.instanceSelector = instanceSelector;
-        this.instanceFilter = instanceFilter;
-        this.retryExecutor = new InstanceRetryExecutor(healthChecker, instanceFilter);
-        log.info("DiscoveryLoadBalancerFilter initialized");
-    }
+    private final StaticDiscoveryService staticDiscoveryService;
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
@@ -137,8 +126,8 @@ public class DiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
     }
 
     private Mono<Void> executeWithRetry(ServerWebExchange exchange, GatewayFilterChain chain,
-                                         String serviceId, ServiceInstance instance,
-                                         java.util.Set<String> triedInstances) {
+                                        String serviceId, ServiceInstance instance,
+                                        java.util.Set<String> triedInstances) {
         List<ServiceInstance> allInstances = staticDiscoveryService.getInstances(serviceId);
         return retryExecutor.execute(exchange, chain, serviceId, instance, allInstances, triedInstances);
     }

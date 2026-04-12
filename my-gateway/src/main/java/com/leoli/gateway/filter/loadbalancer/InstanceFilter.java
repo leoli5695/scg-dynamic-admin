@@ -86,7 +86,7 @@ public class InstanceFilter {
      * Find alternative instance that hasn't been tried.
      */
     public ServiceInstance findAlternative(String serviceId, List<ServiceInstance> allInstances,
-                                            java.util.Set<String> triedInstances) {
+                                           java.util.Set<String> triedInstances) {
         for (ServiceInstance inst : allInstances) {
             String key = inst.getHost() + ":" + inst.getPort();
             if (!triedInstances.contains(key) && isEnabled(inst)) {

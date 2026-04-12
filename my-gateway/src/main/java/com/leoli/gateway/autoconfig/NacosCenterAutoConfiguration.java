@@ -6,6 +6,7 @@ import com.alibaba.nacos.api.exception.NacosException;
 import com.alibaba.nacos.api.naming.NamingService;
 import com.leoli.gateway.center.nacos.NacosConfigService;
 import com.leoli.gateway.discovery.nacos.NacosDiscoveryService;
+import com.leoli.gateway.discovery.nacos.NacosNamingServiceFactory;
 import jakarta.annotation.PreDestroy;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -96,11 +97,21 @@ public class NacosCenterAutoConfiguration {
     }
 
     /**
-     * Create NacosDiscoveryService wrapper bean.
+     * Create NacosNamingServiceFactory bean for multi-namespace support.
      */
     @Bean
-    public NacosDiscoveryService nacosDiscoveryService(NamingService nacosNamingService) {
-        return new NacosDiscoveryService(nacosNamingService);
+    public NacosNamingServiceFactory nacosNamingServiceFactory() {
+        log.info("NacosNamingServiceFactory created for multi-namespace discovery support");
+        return new NacosNamingServiceFactory();
+    }
+
+    /**
+     * Create NacosDiscoveryService wrapper bean with multi-namespace support.
+     */
+    @Bean
+    public NacosDiscoveryService nacosDiscoveryService(NamingService nacosNamingService,
+                                                        NacosNamingServiceFactory namingServiceFactory) {
+        return new NacosDiscoveryService(nacosNamingService, namingServiceFactory);
     }
 
     /**

@@ -950,7 +950,7 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
                 label={t('strategy.description_label')}
                 extra={t('strategy.description_helper')}
               >
-                <Input.TextArea rows={2} size="large" showCount maxLength={500} />
+                <Input.TextArea rows={2} showCount maxLength={500} />
               </Form.Item>
             </div>
           </div>
@@ -1087,7 +1087,7 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
                 label={t('strategy.description_label')}
                 extra={t('strategy.description_helper')}
               >
-                <Input.TextArea rows={2} size="large" showCount maxLength={500} />
+                <Input.TextArea rows={2} showCount maxLength={500} />
               </Form.Item>
             </div>
           </div>

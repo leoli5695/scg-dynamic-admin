@@ -9,7 +9,8 @@ import {
   ClusterOutlined, MinusCircleOutlined, CloudServerOutlined, ApiOutlined,
   WarningOutlined, ExclamationCircleOutlined, CloseOutlined, EyeOutlined,
   CopyOutlined, CheckCircleOutlined, CloseCircleOutlined, SearchOutlined,
-  ReloadOutlined, ThunderboltOutlined, LinkOutlined, TrophyOutlined
+  ReloadOutlined, ThunderboltOutlined, LinkOutlined, TrophyOutlined,
+  SwapOutlined, AimOutlined, ForkOutlined
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import api from '../utils/api';
@@ -703,7 +704,7 @@ const ServicesPage: React.FC<ServicesPageProps> = ({ instanceId }) => {
         open={createModalVisible}
         onCancel={() => { setCreateModalVisible(false); createForm.resetFields(); setInstances([]); }}
         footer={null}
-        width={720}
+        width={600}
         className="service-modal service-create-modal"
         destroyOnClose
         maskClosable={true}
@@ -731,10 +732,10 @@ const ServicesPage: React.FC<ServicesPageProps> = ({ instanceId }) => {
                   initialValue="weighted"
                   className="form-item-half"
                 >
-                  <Select size="large" className="select-with-icon" dropdownClassName="loadBalancer-dropdown" optionLabelProp="label">
+                  <Select size="large" className="select-with-icon" dropdownClassName="loadBalancer-dropdown" optionLabelProp="label" listHeight={280}>
                     <Select.Option value="weighted" label={<span className="custom-select-label"><TrophyOutlined className="option-icon" /><span className="option-title">{t('services.weighted')}</span></span>}>
                       <span className="option-wrapper">
-                        <TrophyOutlined className="option-icon" />
+                        <TrophyOutlined className="option-icon option-icon-weighted" />
                         <span className="option-text">
                           <span className="option-title">{t('services.weighted')}</span>
                           <span className="option-desc">平滑加权轮询，推荐</span>
@@ -743,7 +744,7 @@ const ServicesPage: React.FC<ServicesPageProps> = ({ instanceId }) => {
                     </Select.Option>
                     <Select.Option value="round-robin" label={<span className="custom-select-label"><ReloadOutlined className="option-icon" /><span className="option-title">{t('services.round_robin')}</span></span>}>
                       <span className="option-wrapper">
-                        <ReloadOutlined className="option-icon" />
+                        <SwapOutlined className="option-icon option-icon-roundrobin" />
                         <span className="option-text">
                           <span className="option-title">{t('services.round_robin')}</span>
                           <span className="option-desc">简单轮询分发</span>
@@ -752,7 +753,7 @@ const ServicesPage: React.FC<ServicesPageProps> = ({ instanceId }) => {
                     </Select.Option>
                     <Select.Option value="random" label={<span className="custom-select-label"><ThunderboltOutlined className="option-icon" /><span className="option-title">{t('services.random')}</span></span>}>
                       <span className="option-wrapper">
-                        <ThunderboltOutlined className="option-icon" />
+                        <AimOutlined className="option-icon option-icon-random" />
                         <span className="option-text">
                           <span className="option-title">{t('services.random')}</span>
                           <span className="option-desc">随机选择</span>
@@ -761,7 +762,7 @@ const ServicesPage: React.FC<ServicesPageProps> = ({ instanceId }) => {
                     </Select.Option>
                     <Select.Option value="consistent-hash" label={<span className="custom-select-label"><LinkOutlined className="option-icon" /><span className="option-title">{t('services.consistent_hash')}</span></span>}>
                       <span className="option-wrapper">
-                        <LinkOutlined className="option-icon" />
+                        <ForkOutlined className="option-icon option-icon-hash" />
                         <span className="option-text">
                           <span className="option-title">{t('services.consistent_hash')}</span>
                           <span className="option-desc">基于哈希值，适合会话保持</span>
@@ -773,11 +774,11 @@ const ServicesPage: React.FC<ServicesPageProps> = ({ instanceId }) => {
               </div>
               <Form.Item
                 name="description"
+                label={t('services.description')}
               >
                 <Input.TextArea
                   rows={2}
                   placeholder={t('services.description_placeholder')}
-                  size="large"
                   showCount
                   maxLength={500}
                 />
@@ -849,7 +850,7 @@ const ServicesPage: React.FC<ServicesPageProps> = ({ instanceId }) => {
           setEditInstances([]);
         }}
         footer={null}
-        width={720}
+        width={600}
         className="service-modal service-edit-modal"
         destroyOnClose
         maskClosable={true}
@@ -867,10 +868,10 @@ const ServicesPage: React.FC<ServicesPageProps> = ({ instanceId }) => {
                   <Input disabled size="large" />
                 </Form.Item>
                 <Form.Item name="loadBalancer" label={t('services.loadBalancer')} className="form-item-half">
-                  <Select size="large" className="select-with-icon" dropdownClassName="loadBalancer-dropdown" optionLabelProp="label">
+                  <Select size="large" className="select-with-icon" dropdownClassName="loadBalancer-dropdown" optionLabelProp="label" listHeight={280}>
                     <Select.Option value="weighted" label={<span className="custom-select-label"><TrophyOutlined className="option-icon" /><span className="option-title">{t('services.weighted')}</span></span>}>
                       <span className="option-wrapper">
-                        <TrophyOutlined className="option-icon" />
+                        <TrophyOutlined className="option-icon option-icon-weighted" />
                         <span className="option-text">
                           <span className="option-title">{t('services.weighted')}</span>
                           <span className="option-desc">平滑加权轮询，推荐</span>
@@ -879,7 +880,7 @@ const ServicesPage: React.FC<ServicesPageProps> = ({ instanceId }) => {
                     </Select.Option>
                     <Select.Option value="round-robin" label={<span className="custom-select-label"><ReloadOutlined className="option-icon" /><span className="option-title">{t('services.round_robin')}</span></span>}>
                       <span className="option-wrapper">
-                        <ReloadOutlined className="option-icon" />
+                        <SwapOutlined className="option-icon option-icon-roundrobin" />
                         <span className="option-text">
                           <span className="option-title">{t('services.round_robin')}</span>
                           <span className="option-desc">简单轮询分发</span>
@@ -888,7 +889,7 @@ const ServicesPage: React.FC<ServicesPageProps> = ({ instanceId }) => {
                     </Select.Option>
                     <Select.Option value="random" label={<span className="custom-select-label"><ThunderboltOutlined className="option-icon" /><span className="option-title">{t('services.random')}</span></span>}>
                       <span className="option-wrapper">
-                        <ThunderboltOutlined className="option-icon" />
+                        <AimOutlined className="option-icon option-icon-random" />
                         <span className="option-text">
                           <span className="option-title">{t('services.random')}</span>
                           <span className="option-desc">随机选择</span>
@@ -897,7 +898,7 @@ const ServicesPage: React.FC<ServicesPageProps> = ({ instanceId }) => {
                     </Select.Option>
                     <Select.Option value="consistent-hash" label={<span className="custom-select-label"><LinkOutlined className="option-icon" /><span className="option-title">{t('services.consistent_hash')}</span></span>}>
                       <span className="option-wrapper">
-                        <LinkOutlined className="option-icon" />
+                        <ForkOutlined className="option-icon option-icon-hash" />
                         <span className="option-text">
                           <span className="option-title">{t('services.consistent_hash')}</span>
                           <span className="option-desc">基于哈希值，适合会话保持</span>
@@ -907,8 +908,8 @@ const ServicesPage: React.FC<ServicesPageProps> = ({ instanceId }) => {
                   </Select>
                 </Form.Item>
               </div>
-              <Form.Item name="description">
-                <Input.TextArea rows={2} placeholder={t('services.description_placeholder')} size="large" showCount maxLength={500} />
+              <Form.Item name="description" label={t('services.description')}>
+                <Input.TextArea rows={2} placeholder={t('services.description_placeholder')} showCount maxLength={500} />
               </Form.Item>
             </div>
           </div>

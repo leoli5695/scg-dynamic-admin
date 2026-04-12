@@ -43,6 +43,9 @@ public class ServiceController extends BaseController {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private com.leoli.gateway.admin.repository.GatewayInstanceRepository gatewayInstanceRepository;
+
     /**
      * Get all services with instance health status.
      * @param instanceId Optional instance ID to filter services
@@ -405,14 +408,42 @@ public class ServiceController extends BaseController {
 
     /**
      * Get registered service names from Nacos service discovery.
+     * Queries services from all namespaces (public + all gateway instances' namespaces).
+     * Each service includes its actual namespace and group.
      */
     @GetMapping("/nacos-discovery")
     public ResponseEntity<Map<String, Object>> getNacosDiscoveryServices() {
-        List<String> services = nacosConfigCenterService.getDiscoveryServiceNames();
-        Map<String, Object> result = new HashMap<>();
-        result.put("code", 200);
-        result.put("message", "success");
-        result.put("data", services);
-        return ResponseEntity.ok(result);
+        try {
+            // Get all namespaces: public (null) + all gateway instances' namespaces
+            List<String> namespaces = new ArrayList<>();
+            namespaces.add(null); // Always include public namespace
+
+            // Add all gateway instances' namespaces
+            List<com.leoli.gateway.admin.model.GatewayInstanceEntity> instances = gatewayInstanceRepository.findAll();
+            for (com.leoli.gateway.admin.model.GatewayInstanceEntity instance : instances) {
+                String ns = instance.getNacosNamespace();
+                if (ns != null && !ns.isEmpty() && !namespaces.contains(ns)) {
+                    namespaces.add(ns);
+                }
+            }
+
+            // Query services from all namespaces
+            List<com.leoli.gateway.admin.model.NacosDiscoveryServiceInfo> services =
+                nacosConfigCenterService.getDiscoveryServicesFromAllNamespaces(namespaces);
+
+            log.info("Found {} Nacos services from {} namespaces", services.size(), namespaces.size());
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 200);
+            result.put("message", "success");
+            result.put("data", services);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("Failed to get Nacos discovery services", e);
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 500);
+            result.put("message", "Failed to get services: " + e.getMessage());
+            return ResponseEntity.status(500).body(result);
+        }
     }
 }

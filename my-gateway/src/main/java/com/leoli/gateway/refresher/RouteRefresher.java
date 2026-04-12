@@ -308,6 +308,16 @@ public class RouteRefresher {
                     multiConfig.setServiceId((String) routeMap.get("serviceId"));
                 }
 
+                // Parse serviceNamespace (for DISCOVERY type, Nacos namespace)
+                if (routeMap.containsKey("serviceNamespace")) {
+                    multiConfig.setServiceNamespace((String) routeMap.get("serviceNamespace"));
+                }
+
+                // Parse serviceGroup (for DISCOVERY type, Nacos group)
+                if (routeMap.containsKey("serviceGroup")) {
+                    multiConfig.setServiceGroup((String) routeMap.get("serviceGroup"));
+                }
+
                 // Parse serviceType if explicitly set, otherwise infer from URI scheme
                 if (routeMap.containsKey("serviceType") && routeMap.get("serviceType") != null) {
                     String typeStr = (String) routeMap.get("serviceType");
@@ -339,6 +349,14 @@ public class RouteRefresher {
                         if (svc.get("type") != null) {
                             String typeStr = (String) svc.get("type");
                             binding.setType(com.leoli.gateway.model.ServiceBindingType.fromString(typeStr));
+                        }
+                        // Parse serviceNamespace (for DISCOVERY type)
+                        if (svc.get("serviceNamespace") != null) {
+                            binding.setServiceNamespace((String) svc.get("serviceNamespace"));
+                        }
+                        // Parse serviceGroup (for DISCOVERY type)
+                        if (svc.get("serviceGroup") != null) {
+                            binding.setServiceGroup((String) svc.get("serviceGroup"));
                         }
                         bindings.add(binding);
                     }
@@ -375,8 +393,9 @@ public class RouteRefresher {
                 }
                 route.getMetadata().put(MultiServiceConfig.METADATA_KEY, multiConfig);
 
-                log.debug("Parsed multi-service config for route {}: mode={}, services={}",
+                log.info("Parsed multi-service config for route {}: mode={}, serviceNamespace={}, serviceGroup={}, services={}",
                         route.getId(), multiConfig.getMode(),
+                        multiConfig.getServiceNamespace(), multiConfig.getServiceGroup(),
                         multiConfig.getServices() != null ? multiConfig.getServices().size() : 0);
 
             } catch (Exception e) {

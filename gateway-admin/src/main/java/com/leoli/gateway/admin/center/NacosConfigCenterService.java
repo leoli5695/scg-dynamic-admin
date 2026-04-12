@@ -17,6 +17,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +59,9 @@ public class NacosConfigCenterService implements ConfigCenterService {
 
     // ConfigService cache per namespace: namespace -> ConfigService
     private final Map<String, ConfigService> namespaceConfigServiceCache = new ConcurrentHashMap<>();
+
+    // NamingService cache per namespace: namespace -> NamingService
+    private final Map<String, NamingService> namespaceNamingServiceCache = new ConcurrentHashMap<>();
 
     // Nacos availability status
     private volatile boolean nacosAvailable = true;
@@ -478,6 +482,11 @@ public class NacosConfigCenterService implements ConfigCenterService {
             return cached;
         }
 
+        // Ensure namespace exists in Nacos before creating ConfigService
+        if (cacheKey != null && !cacheKey.isEmpty() && !"public".equals(cacheKey)) {
+            ensureNamespaceExists(cacheKey);
+        }
+
         // Create new ConfigService for this namespace
         Properties properties = new Properties();
         properties.put("serverAddr", serverAddr);
@@ -696,6 +705,106 @@ public class NacosConfigCenterService implements ConfigCenterService {
             log.error("Error getting instances for service {} from Nacos discovery", serviceName, e);
             return Collections.emptyList();
         }
+    }
+
+    /**
+     * Get NamingService for a specific namespace.
+     * Creates a new NamingService if not cached.
+     *
+     * @param targetNamespace Target namespace (null for default/public namespace)
+     * @return NamingService for the namespace
+     */
+    public NamingService getNamingServiceForNamespace(String targetNamespace) {
+        String nsKey = (targetNamespace == null || targetNamespace.isEmpty()) ? "public" : targetNamespace;
+
+        return namespaceNamingServiceCache.computeIfAbsent(nsKey, ns -> {
+            try {
+                Properties properties = new Properties();
+                properties.put("serverAddr", serverAddr);
+                // Nacos public namespace must use empty string, not "public"
+                if (!"public".equals(ns)) {
+                    properties.put("namespace", ns);
+                }
+                properties.put("group", group);
+
+                NamingService nsService = new NacosNamingService(properties);
+                log.info("Created NamingService for namespace: {}", ns);
+                return nsService;
+            } catch (NacosException e) {
+                log.error("Failed to create NamingService for namespace: {}", ns, e);
+                return namingService; // Fallback to default
+            }
+        });
+    }
+
+    /**
+     * Get all registered services from a specific namespace with namespace and group info.
+     *
+     * @param targetNamespace Target namespace (null for default/public namespace)
+     * @return List of NacosDiscoveryServiceInfo with serviceName, namespace, group
+     */
+    public List<com.leoli.gateway.admin.model.NacosDiscoveryServiceInfo> getDiscoveryServicesWithInfo(String targetNamespace) {
+        try {
+            NamingService nsNamingService = getNamingServiceForNamespace(targetNamespace);
+            List<String> serviceNames = nsNamingService.getServicesOfServer(1, Integer.MAX_VALUE).getData();
+
+            if (serviceNames == null || serviceNames.isEmpty()) {
+                return Collections.emptyList();
+            }
+
+            String effectiveNamespace = (targetNamespace == null || targetNamespace.isEmpty()) ? "public" : targetNamespace;
+            String effectiveGroup = (group == null || group.isEmpty()) ? "DEFAULT_GROUP" : group;
+
+            List<com.leoli.gateway.admin.model.NacosDiscoveryServiceInfo> result = new ArrayList<>();
+            for (String serviceName : serviceNames) {
+                try {
+                    // Get instance count
+                    List<Instance> instances = nsNamingService.getAllInstances(serviceName);
+                    int instanceCount = instances != null ? instances.size() : 0;
+
+                    result.add(new com.leoli.gateway.admin.model.NacosDiscoveryServiceInfo(
+                        serviceName,
+                        effectiveNamespace,
+                        effectiveGroup,
+                        instanceCount
+                    ));
+                } catch (Exception e) {
+                    log.warn("Failed to get instances for service: {}", serviceName);
+                    // Still add the service without instance count
+                    result.add(new com.leoli.gateway.admin.model.NacosDiscoveryServiceInfo(
+                        serviceName,
+                        effectiveNamespace,
+                        effectiveGroup,
+                        0
+                    ));
+                }
+            }
+            return result;
+        } catch (Exception e) {
+            log.error("Error getting services from Nacos discovery for namespace: {}", targetNamespace, e);
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Get all registered services from multiple namespaces with namespace and group info.
+     *
+     * @param namespaces List of namespaces to query (null or empty entry means public/default namespace)
+     * @return List of NacosDiscoveryServiceInfo with serviceName, namespace, group
+     */
+    public List<com.leoli.gateway.admin.model.NacosDiscoveryServiceInfo> getDiscoveryServicesFromAllNamespaces(List<String> namespaces) {
+        List<com.leoli.gateway.admin.model.NacosDiscoveryServiceInfo> allServices = new ArrayList<>();
+
+        for (String ns : namespaces) {
+            // null or empty string means public namespace
+            String effectiveNamespace = (ns == null || ns.isEmpty() || "public".equals(ns)) ? null : ns;
+            List<com.leoli.gateway.admin.model.NacosDiscoveryServiceInfo> servicesInNs = getDiscoveryServicesWithInfo(effectiveNamespace);
+
+            // Add all services from this namespace
+            allServices.addAll(servicesInNs);
+        }
+
+        return allServices;
     }
 
     // ==================== Batch operations ====================

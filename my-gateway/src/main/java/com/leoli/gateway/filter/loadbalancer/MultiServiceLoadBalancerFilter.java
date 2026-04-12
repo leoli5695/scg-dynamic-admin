@@ -1,7 +1,7 @@
 package com.leoli.gateway.filter.loadbalancer;
 
-import com.leoli.gateway.constants.FilterOrderConstants;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.model.MultiServiceConfig;
 import com.leoli.gateway.model.ServiceBindingType;
 import lombok.extern.slf4j.Slf4j;
@@ -94,11 +94,15 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
 
         String routeId = route.getId();
 
+        // Log route metadata for debugging
+        log.info("MultiServiceLoadBalancerFilter - routeId: {}, metadata: {}", routeId, route.getMetadata());
+
         // Try to get multi-service config from route metadata
         MultiServiceConfig config = extractMultiServiceConfig(route);
         if (config == null) {
             // No config, skip
-            log.debug("Route {} has no multi-service config, skipping", routeId);
+            log.warn("Route {} has no multi-service config, metadata keys: {}", routeId,
+                    route.getMetadata() != null ? route.getMetadata().keySet() : "null");
             return chain.filter(exchange);
         }
 
@@ -136,6 +140,16 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
         // Store service info for downstream filters
         exchange.getAttributes().put(TARGET_SERVICE_ID_ATTR, targetServiceId);
         exchange.getAttributes().put(SERVICE_BINDING_TYPE_ATTR, serviceType);
+
+        // Store namespace/group for DISCOVERY type (used by NacosDiscoveryLoadBalancerFilter)
+        String namespace = config.getServiceNamespace();
+        String group = config.getServiceGroup();
+        if (namespace != null) {
+            exchange.getAttributes().put(NacosDiscoveryLoadBalancerFilter.SERVICE_NAMESPACE_ATTR, namespace);
+        }
+        if (group != null) {
+            exchange.getAttributes().put(NacosDiscoveryLoadBalancerFilter.SERVICE_GROUP_ATTR, group);
+        }
 
         // For STATIC type, mark it so DiscoveryLoadBalancerFilter will handle it
         if (serviceType == ServiceBindingType.STATIC) {
@@ -207,6 +221,16 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
         exchange.getAttributes().put(TARGET_VERSION_ATTR, targetVersion);
         exchange.getAttributes().put(SERVICE_BINDING_TYPE_ATTR, serviceType);
 
+        // Store namespace/group for DISCOVERY type (used by NacosDiscoveryLoadBalancerFilter)
+        String namespace = selectedBinding.getServiceNamespace();
+        String group = selectedBinding.getServiceGroup();
+        if (namespace != null) {
+            exchange.getAttributes().put(NacosDiscoveryLoadBalancerFilter.SERVICE_NAMESPACE_ATTR, namespace);
+        }
+        if (group != null) {
+            exchange.getAttributes().put(NacosDiscoveryLoadBalancerFilter.SERVICE_GROUP_ATTR, group);
+        }
+
         // Step 6: Transform URI based on service type
         transformUriForServiceType(exchange, targetServiceId, serviceType);
 
@@ -219,7 +243,7 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
     /**
      * Transform URI for multi-service mode.
      * Only called when selected service differs from route URI.
-     *
+     * <p>
      * - STATIC:  static://serviceId + ORIGINAL_STATIC_URI_ATTR → DiscoveryLoadBalancerFilter handles
      * - DISCOVERY: lb://serviceId (no mark) → SCG native ReactiveLoadBalancer handles
      */

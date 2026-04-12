@@ -64,6 +64,20 @@ public class RouteDefinition {
     private String serviceId;
 
     /**
+     * Service namespace for DISCOVERY type (Nacos namespace).
+     * Only applicable for lb:// services.
+     * Default: null (uses gateway's namespace).
+     */
+    private String serviceNamespace;
+
+    /**
+     * Service group for DISCOVERY type (Nacos group).
+     * Only applicable for lb:// services.
+     * Default: DEFAULT_GROUP.
+     */
+    private String serviceGroup;
+
+    /**
      * Service bindings for multi-service routing (for MULTI mode).
      * Each binding has serviceId, weight, and version.
      */

@@ -34,6 +34,20 @@ public class MultiServiceConfig {
     private String serviceId;
 
     /**
+     * Service namespace for DISCOVERY type (Nacos namespace).
+     * Only applicable for lb:// services.
+     * Default: null (uses gateway's namespace).
+     */
+    private String serviceNamespace;
+
+    /**
+     * Service group for DISCOVERY type (Nacos group).
+     * Only applicable for lb:// services.
+     * Default: DEFAULT_GROUP.
+     */
+    private String serviceGroup;
+
+    /**
      * Service type for single mode (STATIC or DISCOVERY).
      * Defaults to STATIC for backward compatibility.
      */
@@ -103,10 +117,31 @@ public class MultiServiceConfig {
         private ServiceBindingType type = ServiceBindingType.STATIC;
 
         /**
-         * Convenience constructor without type (defaults to STATIC).
+         * Service namespace for DISCOVERY type (Nacos namespace).
+         * Only applicable when type=DISCOVERY.
+         * Default: null (uses gateway's namespace).
+         */
+        private String serviceNamespace;
+
+        /**
+         * Service group for DISCOVERY type (Nacos group).
+         * Only applicable when type=DISCOVERY.
+         * Default: DEFAULT_GROUP.
+         */
+        private String serviceGroup;
+
+        /**
+         * Convenience constructor without namespace/group (backward compatibility).
          */
         public ServiceBinding(String serviceId, String serviceName, int weight, String version, boolean enabled) {
-            this(serviceId, serviceName, weight, version, enabled, ServiceBindingType.STATIC);
+            this(serviceId, serviceName, weight, version, enabled, ServiceBindingType.STATIC, null, null);
+        }
+
+        /**
+         * Convenience constructor with type but without namespace/group.
+         */
+        public ServiceBinding(String serviceId, String serviceName, int weight, String version, boolean enabled, ServiceBindingType type) {
+            this(serviceId, serviceName, weight, version, enabled, type, null, null);
         }
     }
 

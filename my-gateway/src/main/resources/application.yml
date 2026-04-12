@@ -8,6 +8,11 @@ server:
     enabled: true
 
 spring:
+  main:
+    web-application-type: reactive
+  web:
+    resources:
+      add-mappings: false  # 禁用静态资源映射（避免/**被其他handler匹配）
   application:
     name: my-gateway
   config:
@@ -15,9 +20,9 @@ spring:
       - optional:classpath:config/cache-settings.yml
   autoconfigure:
     exclude:
-      - org.springframework.cloud.consul.serviceregistry.ConsulAutoServiceRegistrationAutoConfiguration
       - org.springframework.cloud.consul.discovery.ConsulDiscoveryClientConfiguration
       - org.springframework.cloud.consul.discovery.ReactiveConsulDiscoveryClientConfiguration
+      - org.springframework.cloud.consul.serviceregistry.ConsulAutoServiceRegistrationAutoConfiguration
   cloud:
     # Enable load balancer with DiscoveryClient
     loadbalancer:
@@ -139,14 +144,12 @@ gateway:
     # If more than this number of instances change state at once, it's considered network flap
     network-flap-threshold: 10
   
-  # Active Health Check Configuration
-  health-check:
-    endpoint: /actuator/health
-    timeout: 3000
-    # Enable HTTP health check for application-level health verification
-    # TCP port check only verifies network connectivity, not application health
-    http-enabled: ${GATEWAY_HEALTH_CHECK_HTTP_ENABLED:true}
-    http-path: ${GATEWAY_HEALTH_CHECK_PATH:/actuator/health}
+  # Active Health Check Configuration - DISABLED: Actuator removed
+  # health-check:
+  #   endpoint: /actuator/health
+  #   timeout: 3000
+  #   http-enabled: ${GATEWAY_HEALTH_CHECK_HTTP_ENABLED:true}
+  #   http-path: ${GATEWAY_HEALTH_CHECK_PATH:/actuator/health}
   
   # Rate Limiter Configuration
   rate-limiter:
@@ -183,67 +186,64 @@ logging:
     org.springframework.boot.actuate: WARN
     org.springframework.cloud.client: WARN
     org.springframework.cloud.commons: WARN
-management:
-  server:
-    port: ${MANAGEMENT_SERVER_PORT:8081}  # Separate port for actuator endpoints (bypasses gateway routing)
-  endpoints:
-    web:
-      exposure:
-        include: health,info,prometheus,metrics
-  endpoint:
-    health:
-      show-details: always
-    prometheus:
-      enabled: true
-  metrics:
-    tags:
-      application: ${spring.application.name}
-      gateway_instance_id: ${GATEWAY_INSTANCE_ID:unknown}
-  health:
-    consul:
-      enabled: false
-    # Enable Kubernetes liveness/readiness probes
-    liveness:
-      enabled: true
-    readiness:
-      enabled: true
-  # OpenTelemetry Tracing Configuration
-  tracing:
-    enabled: ${OTEL_TRACING_ENABLED:true}
-    sampling:
-      probability: ${OTEL_SAMPLING_PROBABILITY:1.0}  # 1.0 = 100% sampling (adjust for production)
-  otlp:
-    tracing:
-      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
-      # Optional: Add authentication headers if required
-      # headers:
-      #   Authorization: Bearer ${OTEL_AUTH_TOKEN:}
-    metrics:
-      export:
-        enabled: ${OTEL_METRICS_EXPORT_ENABLED:true}
-        step: ${OTEL_METRICS_EXPORT_STEP:1m}
+# Management/Actuator - DISABLED: Causes HttpHandler binding issues with Spring Cloud Gateway
+# See: https://github.com/spring-cloud/spring-cloud-gateway/issues/3786
+# management:
+#   server:
+#     port: ${MANAGEMENT_SERVER_PORT:8081}
+#   endpoints:
+#     web:
+#       exposure:
+#         include: health,info,prometheus,metrics
+#   endpoint:
+#     health:
+#       show-details: always
+#     prometheus:
+#       enabled: true
+#   metrics:
+#     tags:
+#       application: ${spring.application.name}
+#       gateway_instance_id: ${GATEWAY_INSTANCE_ID:unknown}
+#   health:
+#     consul:
+#       enabled: false
+#     liveness:
+#       enabled: true
+#     readiness:
+#       enabled: true
+#   tracing:
+#     enabled: ${OTEL_TRACING_ENABLED:true}
+#     sampling:
+#       probability: ${OTEL_SAMPLING_PROBABILITY:1.0}
+#   otlp:
+#     tracing:
+#       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+#     metrics:
+#       export:
+#         enabled: ${OTEL_METRICS_EXPORT_ENABLED:true}
+#         step: ${OTEL_METRICS_EXPORT_STEP:1m}
 
-# SpringDoc OpenAPI Configuration
-springdoc:
-  api-docs:
-    enabled: ${SPRINGDOC_ENABLED:true}
-    path: /v3/api-docs
-  swagger-ui:
-    enabled: ${SPRINGDOC_SWAGGER_UI_ENABLED:true}
-    path: /swagger-ui.html
-  show-actuator: true
+# SpringDoc OpenAPI Configuration - DISABLED: Actuator removed
+# springdoc:
+#   api-docs:
+#     enabled: ${SPRINGDOC_ENABLED:true}
+#     path: /v3/api-docs
+#   swagger-ui:
+#     enabled: ${SPRINGDOC_SWAGGER_UI_ENABLED:true}
+#     path: /swagger-ui.html
+#   show-actuator: true
 
-# OpenTelemetry SDK Configuration
-otel:
-  sdk:
-    disabled: ${OTEL_SDK_DISABLED:false}
-  service:
-    name: ${spring.application.name:my-gateway}
-  exporter:
-    otlp:
-      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}
-      protocol: ${OTEL_EXPORTER_OTLP_PROTOCOL:http/protobuf}
-  traces:
-    exporter: ${OTEL_TRACES_EXPORTER:otlp}
-  metrics:
-    exporter: ${OTEL_METRICS_EXPORTER:otlp}
+# OpenTelemetry SDK Configuration - DISABLED: Actuator removed
+# otel:
+#   sdk:
+#     disabled: ${OTEL_SDK_DISABLED:false}
+#   service:
+#     name: ${spring.application.name:my-gateway}
+#   exporter:
+#     otlp:
+#       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}
+#       protocol: ${OTEL_EXPORTER_OTLP_PROTOCOL:http/protobuf}
+#   traces:
+#     exporter: ${OTEL_TRACES_EXPORTER:otlp}
+#   metrics:
+#     exporter: ${OTEL_METRICS_EXPORTER:otlp}

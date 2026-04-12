@@ -4,8 +4,8 @@ import {
   DatePicker, Radio
 } from 'antd';
 import {
-  RobotOutlined, CheckCircleOutlined, CloseCircleOutlined,
-  ApiOutlined, ThunderboltOutlined, ClockCircleOutlined
+  RobotOutlined, CheckCircleOutlined,
+  ThunderboltOutlined, ClockCircleOutlined
 } from '@ant-design/icons';
 import api from '../utils/api';
 import { useTranslation } from 'react-i18next';
@@ -18,8 +18,6 @@ interface AiProvider {
   providerName: string;
   region: string;
   model: string;
-  apiKey: string;
-  baseUrl: string;
   isValid: boolean;
 }
 
@@ -40,7 +38,6 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
   const [validated, setValidated] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<string>('');
-  const [analysisMode, setAnalysisMode] = useState<'realtime' | 'timerange'>('realtime');
   const [timeRange, setTimeRange] = useState<[Dayjs | null, Dayjs | null]>([null, null]);
   const { t } = useTranslation();
 
@@ -59,9 +56,9 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
 
   const loadProviders = async () => {
     try {
-      const res = await api.get('/api/ai/providers');
-      if (res.data.code === 200) {
-        setProviders(res.data.data);
+      const res = await api.get('/api/copilot/providers');
+      if (Array.isArray(res.data)) {
+        setProviders(res.data);
       }
     } catch (e) {
       console.error('Failed to load providers:', e);
@@ -70,9 +67,9 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
 
   const loadModels = async (provider: string) => {
     try {
-      const res = await api.get(`/api/ai/providers/${provider}/models`);
-      if (res.data.code === 200) {
-        setModels(res.data.data);
+      const res = await api.get(`/api/copilot/providers/${provider}/models`);
+      if (Array.isArray(res.data)) {
+        setModels(res.data);
       }
     } catch (e) {
       console.error('Failed to load models:', e);
@@ -83,8 +80,6 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
     const config = providers.find(p => p.provider === provider);
     if (config) {
       setSelectedModel(config.model || '');
-      setApiKey(config.apiKey || '');
-      setBaseUrl(config.baseUrl || '');
       setValidated(config.isValid || false);
     }
   };
@@ -97,19 +92,17 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
 
     setValidating(true);
     try {
-      const res = await api.post('/api/ai/validate', {
+      const res = await api.post('/api/copilot/validate', {
         provider: selectedProvider,
         apiKey,
         baseUrl: baseUrl || null
       });
-      if (res.data.code === 200 && res.data.data.valid) {
+      if (res.data.valid) {
         setValidated(true);
         message.success(t('ai.validate_success') || 'API Key验证成功');
       } else {
         setValidated(false);
-        const errorMsg = res.data.message || t('ai.validate_failed') || 'API Key验证失败';
-        message.error(errorMsg);
-        console.error('Validation failed:', res.data);
+        message.error(t('ai.validate_failed') || 'API Key验证失败');
       }
     } catch (e: any) {
       setValidated(false);
@@ -131,17 +124,14 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
       return;
     }
 
-    // 时间段分析时检查时间
-    if (analysisMode === 'timerange') {
-      if (!timeRange[0] || !timeRange[1]) {
-        message.warning(t('ai.please_select_time_range') || '请选择时间段');
-        return;
-      }
+    if (!timeRange[0] || !timeRange[1]) {
+      message.warning(t('ai.please_select_time_range') || '请选择时间段');
+      return;
     }
 
-    // 保存配置
+    // Save config via copilot endpoint
     try {
-      await api.post('/api/ai/config', {
+      await api.post('/api/copilot/config', {
         provider: selectedProvider,
         model: selectedModel,
         apiKey,
@@ -151,26 +141,16 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
       console.error('Failed to save config:', e);
     }
 
-    // 开始分析
+    // Run time-range analysis
     setAnalyzing(true);
     setResult('');
     try {
-      let res;
-      if (analysisMode === 'timerange') {
-        // 时间段分析
-        res = await api.post('/api/ai/analyze/timerange', {
-          provider: selectedProvider,
-          startTime: timeRange[0]!.valueOf(),
-          endTime: timeRange[1]!.valueOf(),
-          language
-        });
-      } else {
-        // 实时分析
-        res = await api.post('/api/ai/analyze', {
-          provider: selectedProvider,
-          language
-        });
-      }
+      const res = await api.post('/api/ai/analyze/timerange', {
+        provider: selectedProvider,
+        startTime: timeRange[0]!.valueOf(),
+        endTime: timeRange[1]!.valueOf(),
+        language
+      });
       if (res.data.code === 200) {
         setResult(res.data.data.result);
       } else {
@@ -312,62 +292,42 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
                 />
               </div>
 
-              <Divider>{t('ai.analysis_mode') || '分析模式'}</Divider>
+              <Divider>{t('ai.timerange_analysis') || '时间段分析'}</Divider>
 
               <div style={{ marginBottom: 12 }}>
-                <Radio.Group
-                  value={analysisMode}
-                  onChange={e => setAnalysisMode(e.target.value)}
-                  optionType="button"
-                  buttonStyle="solid"
-                >
-                  <Radio.Button value="realtime">
-                    <ThunderboltOutlined style={{ marginRight: 4 }} />
-                    {t('ai.realtime_analysis') || '实时分析'}
-                  </Radio.Button>
-                  <Radio.Button value="timerange">
-                    <ClockCircleOutlined style={{ marginRight: 4 }} />
-                    {t('ai.timerange_analysis') || '时间段分析'}
-                  </Radio.Button>
-                </Radio.Group>
-              </div>
-
-              {analysisMode === 'timerange' && (
-                <div style={{ marginBottom: 12 }}>
-                  <label style={{ display: 'block', marginBottom: 8 }}>
-                    {t('ai.select_time_range') || '选择时间段'}
-                  </label>
-                  <Space direction="vertical" style={{ width: '100%' }} size="small">
-                    <Space wrap>
-                      <Button size="small" onClick={() => setTimeRange([dayjs().subtract(10, 'minute'), dayjs()])}>
-                        {t('ai.last_10min') || '最近10分钟'}
-                      </Button>
-                      <Button size="small" onClick={() => setTimeRange([dayjs().subtract(30, 'minute'), dayjs()])}>
-                        {t('ai.last_30min') || '最近30分钟'}
-                      </Button>
-                      <Button size="small" onClick={() => setTimeRange([dayjs().subtract(1, 'hour'), dayjs()])}>
-                        {t('ai.last_1hour') || '最近1小时'}
-                      </Button>
-                      <Button size="small" onClick={() => setTimeRange([dayjs().subtract(6, 'hour'), dayjs()])}>
-                        {t('ai.last_6hours') || '最近6小时'}
-                      </Button>
-                    </Space>
-                    <DatePicker.RangePicker
-                      showTime
-                      value={timeRange}
-                      onChange={(dates) => setTimeRange(dates as [Dayjs | null, Dayjs | null])}
-                      style={{ width: '100%' }}
-                      placeholder={[t('ai.start_time') || '开始时间', t('ai.end_time') || '结束时间']}
-                    />
+                <label style={{ display: 'block', marginBottom: 8 }}>
+                  {t('ai.select_time_range') || '选择时间段'}
+                </label>
+                <Space direction="vertical" style={{ width: '100%' }} size="small">
+                  <Space wrap>
+                    <Button size="small" onClick={() => setTimeRange([dayjs().subtract(10, 'minute'), dayjs()])}>
+                      {t('ai.last_10min') || '最近10分钟'}
+                    </Button>
+                    <Button size="small" onClick={() => setTimeRange([dayjs().subtract(30, 'minute'), dayjs()])}>
+                      {t('ai.last_30min') || '最近30分钟'}
+                    </Button>
+                    <Button size="small" onClick={() => setTimeRange([dayjs().subtract(1, 'hour'), dayjs()])}>
+                      {t('ai.last_1hour') || '最近1小时'}
+                    </Button>
+                    <Button size="small" onClick={() => setTimeRange([dayjs().subtract(6, 'hour'), dayjs()])}>
+                      {t('ai.last_6hours') || '最近6小时'}
+                    </Button>
                   </Space>
-                </div>
-              )}
+                  <DatePicker.RangePicker
+                    showTime
+                    value={timeRange}
+                    onChange={(dates) => setTimeRange(dates as [Dayjs | null, Dayjs | null])}
+                    style={{ width: '100%' }}
+                    placeholder={[t('ai.start_time') || '开始时间', t('ai.end_time') || '结束时间']}
+                  />
+                </Space>
+              </div>
 
               <Button
                 type="primary"
-                icon={<ThunderboltOutlined />}
+                icon={<ClockCircleOutlined />}
                 loading={analyzing}
-                disabled={!validated || !selectedModel || (analysisMode === 'timerange' && (!timeRange[0] || !timeRange[1]))}
+                disabled={!validated || !selectedModel || !timeRange[0] || !timeRange[1]}
                 onClick={handleSaveAndAnalyze}
                 block
               >

@@ -9,7 +9,7 @@ import {
   PlayCircleOutlined, EditOutlined, CompassOutlined, MoreOutlined,
   ApiOutlined, BranchesOutlined, ThunderboltOutlined, FileTextOutlined,
   CloudOutlined, GlobalOutlined, FilterOutlined, SplitCellsOutlined, CloseOutlined,
-  SearchOutlined
+  SearchOutlined, QuestionCircleOutlined
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import api from '../utils/api';
@@ -34,6 +34,8 @@ interface RouteServiceBinding {
   enabled: boolean;
   description?: string;
   type?: ServiceBindingType; // STATIC or DISCOVERY, defaults to STATIC
+  serviceNamespace?: string; // Nacos namespace (only for DISCOVERY type)
+  serviceGroup?: string;     // Nacos group (only for DISCOVERY type)
 }
 
 // Gray rule - matches backend GrayRule
@@ -57,6 +59,8 @@ interface Route {
   uri: string;
   mode?: RoutingMode;
   serviceId?: string;
+  serviceNamespace?: string; // Nacos namespace (only for lb:// type)
+  serviceGroup?: string;     // Nacos group (only for lb:// type)
   services?: RouteServiceBinding[];
   grayRules?: GrayRules;
   predicates?: any[];
@@ -118,6 +122,10 @@ interface Service {
 
 interface NacosService {
   serviceName: string;
+  namespace?: string;
+  group?: string;
+  instanceCount?: number;
+  displayName?: string;
 }
 
 // Predicate Item Component
@@ -265,49 +273,62 @@ const FilterItem: React.FC<{
 
   return (
     <div key={name} className="form-item-row">
-      <Form.Item {...restField} name={[name, 'name']} noStyle>
-        <Select
-          placeholder={t('routes.filter_type')}
-          style={{ 
-            width: 160,
-            backgroundColor: 'rgba(0, 0, 0, 0.3)',
-            border: '1px solid rgba(148, 163, 184, 0.15)'
-          }}
-          onChange={(value) => setFilterType(value)}
-          suffixIcon={<span style={{ color: '#94a3b8', fontSize: '12px' }}>▼</span>}
-        >
-          <Select.OptGroup label={t('plugin.category.request_headers')}>
-            <Select.Option value="AddRequestHeader">{t('plugin.AddRequestHeader.name')}</Select.Option>
-            <Select.Option value="RemoveRequestHeader">{t('plugin.RemoveRequestHeader.name')}</Select.Option>
-            <Select.Option value="SetRequestHeader">{t('plugin.SetRequestHeader.name')}</Select.Option>
-          </Select.OptGroup>
-          <Select.OptGroup label={t('plugin.category.request_params')}>
-            <Select.Option value="AddRequestParameter">{t('plugin.AddRequestParameter.name')}</Select.Option>
-            <Select.Option value="RemoveRequestParameter">{t('plugin.RemoveRequestParameter.name')}</Select.Option>
-          </Select.OptGroup>
-          <Select.OptGroup label={t('plugin.category.response_headers')}>
-            <Select.Option value="AddResponseHeader">{t('plugin.AddResponseHeader.name')}</Select.Option>
-            <Select.Option value="RemoveResponseHeader">{t('plugin.RemoveResponseHeader.name')}</Select.Option>
-            <Select.Option value="SetResponseHeader">{t('plugin.SetResponseHeader.name')}</Select.Option>
-          </Select.OptGroup>
-          <Select.OptGroup label={t('plugin.category.path_modification')}>
-            <Select.Option value="StripPrefix">{t('plugin.StripPrefix.name')}</Select.Option>
-            <Select.Option value="PrefixPath">{t('plugin.PrefixPath.name')}</Select.Option>
-            <Select.Option value="RewritePath">{t('plugin.RewritePath.name')}</Select.Option>
-            <Select.Option value="SetPath">{t('plugin.SetPath.name')}</Select.Option>
-          </Select.OptGroup>
-          <Select.OptGroup label={t('plugin.category.status_code')}>
-            <Select.Option value="SetStatus">{t('plugin.SetStatus.name')}</Select.Option>
-            <Select.Option value="RedirectTo">{t('plugin.RedirectTo.name')}</Select.Option>
-          </Select.OptGroup>
-          <Select.OptGroup label={t('plugin.category.security')}>
-            <Select.Option value="SecureHeaders">{t('plugin.SecureHeaders.name')}</Select.Option>
-          </Select.OptGroup>
-          <Select.OptGroup label={t('plugin.category.request_size')}>
-            <Select.Option value="RequestSize">{t('plugin.RequestSize.name')}</Select.Option>
-          </Select.OptGroup>
-        </Select>
-      </Form.Item>
+      <Tooltip 
+        title={filterType ? t(`plugin.${filterType}.detail`) : ''} 
+        placement="topLeft" 
+        mouseEnterDelay={0}
+        overlayInnerStyle={{ 
+          maxWidth: '350px',
+          fontSize: '13px',
+          lineHeight: '1.6',
+          padding: '10px 14px'
+        }}
+      >
+        <Form.Item {...restField} name={[name, 'name']} noStyle>
+          <Select
+            placeholder={t('routes.filter_type')}
+            className="plugin-type-select"
+            style={{ 
+              width: 160,
+              backgroundColor: 'rgba(0, 0, 0, 0.3)',
+              border: '1px solid rgba(148, 163, 184, 0.15)'
+            }}
+            onChange={(value) => setFilterType(value)}
+            suffixIcon={<span style={{ color: '#94a3b8', fontSize: '12px' }}>▼</span>}
+          >
+            <Select.OptGroup label={t('plugin.category.request_headers')}>
+              <Select.Option value="AddRequestHeader">{t('plugin.AddRequestHeader.name')}</Select.Option>
+              <Select.Option value="RemoveRequestHeader">{t('plugin.RemoveRequestHeader.name')}</Select.Option>
+              <Select.Option value="SetRequestHeader">{t('plugin.SetRequestHeader.name')}</Select.Option>
+            </Select.OptGroup>
+            <Select.OptGroup label={t('plugin.category.request_params')}>
+              <Select.Option value="AddRequestParameter">{t('plugin.AddRequestParameter.name')}</Select.Option>
+              <Select.Option value="RemoveRequestParameter">{t('plugin.RemoveRequestParameter.name')}</Select.Option>
+            </Select.OptGroup>
+            <Select.OptGroup label={t('plugin.category.response_headers')}>
+              <Select.Option value="AddResponseHeader">{t('plugin.AddResponseHeader.name')}</Select.Option>
+              <Select.Option value="RemoveResponseHeader">{t('plugin.RemoveResponseHeader.name')}</Select.Option>
+              <Select.Option value="SetResponseHeader">{t('plugin.SetResponseHeader.name')}</Select.Option>
+            </Select.OptGroup>
+            <Select.OptGroup label={t('plugin.category.path_modification')}>
+              <Select.Option value="StripPrefix">{t('plugin.StripPrefix.name')}</Select.Option>
+              <Select.Option value="PrefixPath">{t('plugin.PrefixPath.name')}</Select.Option>
+              <Select.Option value="RewritePath">{t('plugin.RewritePath.name')}</Select.Option>
+              <Select.Option value="SetPath">{t('plugin.SetPath.name')}</Select.Option>
+            </Select.OptGroup>
+            <Select.OptGroup label={t('plugin.category.status_code')}>
+              <Select.Option value="SetStatus">{t('plugin.SetStatus.name')}</Select.Option>
+              <Select.Option value="RedirectTo">{t('plugin.RedirectTo.name')}</Select.Option>
+            </Select.OptGroup>
+            <Select.OptGroup label={t('plugin.category.security')}>
+              <Select.Option value="SecureHeaders">{t('plugin.SecureHeaders.name')}</Select.Option>
+            </Select.OptGroup>
+            <Select.OptGroup label={t('plugin.category.request_size')}>
+              <Select.Option value="RequestSize">{t('plugin.RequestSize.name')}</Select.Option>
+            </Select.OptGroup>
+          </Select>
+        </Form.Item>
+      </Tooltip>
       <Form.Item {...restField} name={[name, 'args']} noStyle>
         {needsKeyValueInput.includes(filterType) ? (
           // name:value format (colon separated) - 分开显示
@@ -450,11 +471,22 @@ const FilterItem: React.FC<{
         )}
       </Form.Item>
       {filterType && (
-        <div className="plugin-desc">
-          <Tooltip title={t(`plugin.${filterType}.detail`)}>
-            <span style={{ cursor: 'help' }}>ℹ️ {t(`plugin.${filterType}.desc`)}</span>
-          </Tooltip>
-        </div>
+        <Tooltip 
+          title={t(`plugin.${filterType}.detail`)} 
+          placement="top" 
+          mouseEnterDelay={0}
+          overlayInnerStyle={{ 
+            maxWidth: '350px',
+            fontSize: '13px',
+            lineHeight: '1.6',
+            padding: '10px 14px'
+          }}
+          className="plugin-tooltip"
+        >
+          <QuestionCircleOutlined 
+            className="plugin-help-icon"
+          />
+        </Tooltip>
       )}
       <Tooltip title={t('common.delete')}>
         <Button 
@@ -561,8 +593,8 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
     try {
       const response = await api.get('/api/services/nacos-discovery');
       if (response.data.code === 200) {
-        const nacosServiceList: string[] = response.data.data || [];
-        setNacosServices(nacosServiceList.map(name => ({ serviceName: name })));
+        const nacosServiceList: NacosService[] = response.data.data || [];
+        setNacosServices(nacosServiceList);
       }
     } catch (error: any) {
       console.error('Load Nacos services error:', error);
@@ -585,6 +617,7 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
   // Pagination
   const totalRoutes = routes.length;
   const enabledRoutes = routes.filter(r => r.enabled).length;
+  const disabledRoutes = routes.filter(r => !r.enabled).length;
   const startIndex = (currentPage - 1) * pageSize;
   const endIndex = startIndex + pageSize;
   const paginatedRoutes = filteredRoutes.slice(startIndex, endIndex);
@@ -624,14 +657,20 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
     };
 
     if (routingMode === 'SINGLE') {
-      // Single service mode - serviceId is already full URI (static://xxx or lb://xxx)
+      // Single service mode - serviceId is in format: static://xxx or lb://serviceName
       routeData.uri = values.serviceId || values.uri;
       // Extract serviceId from URI for backend compatibility
       if (values.serviceId) {
         const uriParts = values.serviceId.split('://');
         if (uriParts.length === 2) {
-          routeData.serviceId = uriParts[1];
+          routeData.serviceId = uriParts[1]; // Pure service name without query params
         }
+      }
+      // Use namespace/group from form hidden fields (for lb:// services)
+      // Always set these fields for lb:// services (even if empty string for public namespace)
+      if (values.serviceId && values.serviceId.startsWith('lb://')) {
+        routeData.serviceNamespace = values.serviceNamespace || '';
+        routeData.serviceGroup = values.serviceGroup || 'DEFAULT_GROUP';
       }
     } else {
       // Multi-service mode
@@ -649,7 +688,7 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
       }
 
       routeData.services = serviceBindings.map((s: any) => {
-        // s.serviceId is now full URI (static://xxx or lb://xxx)
+        // s.serviceId is in format: static://xxx or lb://serviceName
         const uriParts = (s.serviceId || '').split('://');
         const protocol = uriParts[0] || 'static';
         const serviceId = uriParts[1] || s.serviceId;
@@ -669,7 +708,9 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
           weight: s.weight || 100,
           version: s.version,
           enabled: s.enabled !== false,
-          type: bindingType
+          type: bindingType,
+          serviceNamespace: s.serviceNamespace,  // From form field (onChange sets it)
+          serviceGroup: s.serviceGroup           // From form field (onChange sets it)
         };
       });
 
@@ -754,7 +795,7 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
     };
 
     if (editRoutingMode === 'SINGLE') {
-      // Single service mode - serviceId is already full URI (static://xxx or lb://xxx)
+      // Single service mode - serviceId is in format: static://xxx or lb://serviceName
       const finalUri = values.serviceId || values.uri;
       if (!finalUri) {
         message.error(t('routes.uri_required'));
@@ -764,8 +805,14 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
       if (values.serviceId) {
         const uriParts = values.serviceId.split('://');
         if (uriParts.length === 2) {
-          routeData.serviceId = uriParts[1];
+          routeData.serviceId = uriParts[1];  // Pure service name
         }
+      }
+      // Use namespace/group from form hidden fields (for lb:// services)
+      // Always set these fields for lb:// services (even if empty string for public namespace)
+      if (values.serviceId && values.serviceId.startsWith('lb://')) {
+        routeData.serviceNamespace = values.serviceNamespace || '';
+        routeData.serviceGroup = values.serviceGroup || 'DEFAULT_GROUP';
       }
     } else {
       // Multi-service mode
@@ -778,8 +825,26 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
       routeData.services = serviceBindings.map((s: any) => {
         const uriParts = (s.serviceId || '').split('://');
         const protocol = uriParts[0] || 'static';
-        const serviceId = uriParts[1] || s.serviceId;
+        const serviceInfo = uriParts[1] || s.serviceId;
         const bindingType: ServiceBindingType = protocol === 'lb' ? 'DISCOVERY' : 'STATIC';
+
+        // For Nacos services (lb://), parse serviceName?namespace=xxx&group=yyy format
+        let serviceId: string;
+        let serviceNamespace: string | undefined;
+        let serviceGroup: string | undefined;
+
+        if (protocol === 'lb') {
+          // Parse query parameters: serviceName?namespace=xxx&group=yyy
+          const [namePart, queryPart] = serviceInfo.split('?');
+          serviceId = namePart || serviceInfo;
+          if (queryPart) {
+            const params = new URLSearchParams(queryPart);
+            serviceNamespace = params.get('namespace') || undefined;
+            serviceGroup = params.get('group') || 'DEFAULT_GROUP';
+          }
+        } else {
+          serviceId = serviceInfo;
+        }
 
         // For Nacos services (lb://), use serviceId directly as serviceName
         // For static services, look up name from services list
@@ -793,7 +858,9 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
           weight: s.weight || 100,
           version: s.version,
           enabled: s.enabled !== false,
-          type: bindingType
+          type: bindingType,
+          serviceNamespace: s.serviceNamespace,  // From form field (onChange sets it)
+          serviceGroup: s.serviceGroup           // From form field (onChange sets it)
         };
       });
 
@@ -1122,6 +1189,11 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
           <div className="stat-value text-green-600">{enabledRoutes}</div>
           <div className="stat-label">{t('routes.stats_enabled')}</div>
         </div>
+        <Divider type="vertical" className="stat-divider" />
+        <div className="stat-item">
+          <div className="stat-value text-red-600">{disabledRoutes}</div>
+          <div className="stat-label">{t('routes.stats_disabled')}</div>
+        </div>
       </div>
 
       {/* Header */}
@@ -1336,7 +1408,16 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
           </div>
         }
         open={createModalVisible}
-        onCancel={() => { setCreateModalVisible(false); createForm.resetFields(); }}
+        onCancel={() => { 
+          setCreateModalVisible(false); 
+          createForm.resetFields(); 
+          createForm.setFieldsValue({ filters: [] });
+        }}
+        afterOpenChange={(open) => {
+          if (open) {
+            createForm.setFieldsValue({ filters: [] });
+          }
+        }}
         footer={null}
         width={720}
         className="route-modal route-create-modal"
@@ -1362,7 +1443,7 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
                 </Form.Item>
               </div>
               <Form.Item name="description" label={t('routes.description_label')}>
-                <TextArea rows={2} placeholder={t('routes.description_placeholder')} size="large" showCount maxLength={500} />
+                <TextArea rows={2} placeholder={t('routes.description_placeholder')} showCount maxLength={500} />
               </Form.Item>
             </div>
           </div>
@@ -1388,29 +1469,52 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
 
               {/* Single Service Mode */}
               {routingMode === 'SINGLE' && (
-                <Form.Item name="serviceId" label={t('routes.target_service')} rules={[{ required: true }]}>
-                  <Select placeholder={t('routes.select_service')} size="large" onChange={(value) => {
-                    // value is already in format: "static://serviceId" or "lb://serviceName"
-                    createForm.setFieldValue('uri', value || '');
-                  }} showSearch>
-                    <Select.OptGroup label={<><CloudOutlined style={{ marginRight: 6 }} /> {t('routes.static_services')}</>}>
-                      {services.map(s => (
-                        <Select.Option key={`static-${s.serviceId}`} value={`static://${s.serviceId}`}>
-                          <span>{s.name || s.serviceId}</span>
-                          <span className="service-option-tag static">Static</span>
-                        </Select.Option>
-                      ))}
-                    </Select.OptGroup>
-                    <Select.OptGroup label={<><GlobalOutlined style={{ marginRight: 6 }} /> {t('routes.nacos_services')}</>}>
-                      {nacosServices.map(s => (
-                        <Select.Option key={`lb-${s.serviceName}`} value={`lb://${s.serviceName}`}>
-                          <span>{s.serviceName}</span>
-                          <span className="service-option-tag nacos">Nacos</span>
-                        </Select.Option>
-                      ))}
-                    </Select.OptGroup>
-                  </Select>
-                </Form.Item>
+                <>
+                  <Form.Item name="serviceId" label={t('routes.target_service')} rules={[{ required: true }]}>
+                    <Select placeholder={t('routes.select_service')} size="large" onChange={(value, option) => {
+                      // value is in format: "static://serviceId" or "lb://serviceName"
+                      createForm.setFieldValue('uri', value || '');
+                      // For lb:// services, extract namespace/group from option key and store in hidden fields
+                      if (value && value.startsWith('lb://')) {
+                        const serviceName = value.replace('lb://', '');
+                        // Find the matching nacos service to get namespace/group
+                        const nacosService = nacosServices.find(s => s.serviceName === serviceName);
+                        if (nacosService) {
+                          createForm.setFieldValue('serviceNamespace', nacosService.namespace || '');
+                          createForm.setFieldValue('serviceGroup', nacosService.group || 'DEFAULT_GROUP');
+                        }
+                      } else {
+                        // Clear namespace/group for static services
+                        createForm.setFieldValue('serviceNamespace', undefined);
+                        createForm.setFieldValue('serviceGroup', undefined);
+                      }
+                    }} showSearch>
+                      <Select.OptGroup label={<><CloudOutlined style={{ marginRight: 6 }} /> {t('routes.static_services')}</>}>
+                        {services.map(s => (
+                          <Select.Option key={`static-${s.serviceId}`} value={`static://${s.serviceId}`}>
+                            <span>{s.name || s.serviceId}</span>
+                            <span className="service-option-tag static">Static</span>
+                          </Select.Option>
+                        ))}
+                      </Select.OptGroup>
+                      <Select.OptGroup label={<><GlobalOutlined style={{ marginRight: 6 }} /> {t('routes.nacos_services')}</>}>
+                        {nacosServices.map(s => (
+                          <Select.Option key={`lb-${s.serviceName}-${s.namespace || 'public'}-${s.group || 'DEFAULT_GROUP'}`} value={`lb://${s.serviceName}`}>
+                            <span>{s.displayName || `${s.serviceName} (${s.namespace || 'public'}/${s.group || 'DEFAULT_GROUP'})`}</span>
+                            <span className="service-option-tag nacos">Nacos</span>
+                          </Select.Option>
+                        ))}
+                      </Select.OptGroup>
+                    </Select>
+                  </Form.Item>
+                  {/* Hidden fields for namespace/group (only for lb:// services) */}
+                  <Form.Item name="serviceNamespace" hidden>
+                    <Input type="hidden" />
+                  </Form.Item>
+                  <Form.Item name="serviceGroup" hidden>
+                    <Input type="hidden" />
+                  </Form.Item>
+                </>
               )}
 
               {/* Multi-Service Mode */}
@@ -1461,18 +1565,31 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
                                   size="middle"
                                   showSearch
                                   onChange={(value) => {
-                                    // Auto-fill serviceName based on selection
+                                    // Auto-fill serviceName and namespace/group based on selection
                                     let serviceName = '';
+                                    let serviceNamespace = undefined;
+                                    let serviceGroup = undefined;
                                     if (value?.startsWith('static://')) {
                                       const id = value.replace('static://', '');
                                       const found = services.find(s => s.serviceId === id);
                                       serviceName = found?.name || id;
                                     } else if (value?.startsWith('lb://')) {
                                       serviceName = value.replace('lb://', '');
+                                      // Find matching nacos service for namespace/group
+                                      const nacosService = nacosServices.find(s => s.serviceName === serviceName);
+                                      if (nacosService) {
+                                        serviceNamespace = nacosService.namespace || '';
+                                        serviceGroup = nacosService.group || 'DEFAULT_GROUP';
+                                      }
                                     }
-                                    // Update serviceName in the same service binding
+                                    // Update serviceName and namespace/group in the same service binding
                                     const currentServices = createForm.getFieldValue('services') || [];
-                                    currentServices[name] = { ...currentServices[name], serviceName };
+                                    currentServices[name] = { 
+                                      ...currentServices[name], 
+                                      serviceName,
+                                      serviceNamespace,
+                                      serviceGroup
+                                    };
                                     createForm.setFieldsValue({ services: currentServices });
                                   }}
                                 >
@@ -1486,8 +1603,8 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
                                   </Select.OptGroup>
                                   <Select.OptGroup label={<><GlobalOutlined style={{ marginRight: 6 }} /> {t('routes.nacos_services')}</>}>
                                     {nacosServices.map(s => (
-                                      <Select.Option key={`lb-${s.serviceName}`} value={`lb://${s.serviceName}`}>
-                                        <span>{s.serviceName}</span>
+                                      <Select.Option key={`lb-${s.serviceName}-${s.namespace || 'public'}-${s.group || 'DEFAULT_GROUP'}`} value={`lb://${s.serviceName}`}>
+                                        <span>{s.displayName || `${s.serviceName} (${s.namespace || 'public'}/${s.group || 'DEFAULT_GROUP'})`}</span>
                                         <span className="service-option-tag nacos">Nacos</span>
                                       </Select.Option>
                                     ))}
@@ -1667,7 +1784,7 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
               <span className="section-title">{t('routes.filters_section')}</span>
             </div>
             <div className="section-content">
-              <Form.List name="filters">
+              <Form.List name="filters" initialValue={[]}>
                 {(fields, { add, remove }) => (
                   <>
                     {fields.map(({ key, name, ...restField }) => (
@@ -1734,7 +1851,7 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
                 </Form.Item>
               </div>
               <Form.Item name="description" label={t('routes.description_label')}>
-                <TextArea rows={2} placeholder={t('routes.description_placeholder')} size="large" showCount maxLength={500} />
+                <TextArea rows={2} placeholder={t('routes.description_placeholder')} showCount maxLength={500} />
               </Form.Item>
             </div>
           </div>
@@ -1760,15 +1877,49 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
 
               {/* Single Service Mode */}
               {editRoutingMode === 'SINGLE' && (
-                <Form.Item name="serviceId" label={t('routes.target_service')} rules={[{ required: true }]}>
-                  <Select placeholder={t('routes.select_service')} size="large" onChange={(value) => {
-                    editForm.setFieldValue('uri', value ? `static://${value}` : '');
-                  }} showSearch>
-                    {services.map(s => (
-                      <Select.Option key={s.serviceId} value={s.serviceId}>{s.serviceId} ({s.name})</Select.Option>
-                    ))}
-                  </Select>
-                </Form.Item>
+                <>
+                  <Form.Item name="serviceId" label={t('routes.target_service')} rules={[{ required: true }]}>
+                    <Select placeholder={t('routes.select_service')} size="large" onChange={(value, option) => {
+                      editForm.setFieldValue('uri', value || '');
+                      // For lb:// services, extract namespace/group and store in hidden fields
+                      if (value && value.startsWith('lb://')) {
+                        const serviceName = value.replace('lb://', '');
+                        const nacosService = nacosServices.find(s => s.serviceName === serviceName);
+                        if (nacosService) {
+                          editForm.setFieldValue('serviceNamespace', nacosService.namespace || '');
+                          editForm.setFieldValue('serviceGroup', nacosService.group || 'DEFAULT_GROUP');
+                        }
+                      } else {
+                        editForm.setFieldValue('serviceNamespace', undefined);
+                        editForm.setFieldValue('serviceGroup', undefined);
+                      }
+                    }} showSearch>
+                      <Select.OptGroup label={<><CloudOutlined style={{ marginRight: 6 }} /> {t('routes.static_services')}</>}>
+                        {services.map(s => (
+                          <Select.Option key={`static-${s.serviceId}`} value={`static://${s.serviceId}`}>
+                            <span>{s.name || s.serviceId}</span>
+                            <span className="service-option-tag static">Static</span>
+                          </Select.Option>
+                        ))}
+                      </Select.OptGroup>
+                      <Select.OptGroup label={<><GlobalOutlined style={{ marginRight: 6 }} /> {t('routes.nacos_services')}</>}>
+                        {nacosServices.map(s => (
+                          <Select.Option key={`lb-${s.serviceName}-${s.namespace || 'public'}-${s.group || 'DEFAULT_GROUP'}`} value={`lb://${s.serviceName}`}>
+                            <span>{s.displayName || `${s.serviceName} (${s.namespace || 'public'}/${s.group || 'DEFAULT_GROUP'})`}</span>
+                            <span className="service-option-tag nacos">Nacos</span>
+                          </Select.Option>
+                        ))}
+                      </Select.OptGroup>
+                    </Select>
+                  </Form.Item>
+                  {/* Hidden fields for namespace/group (only for lb:// services) */}
+                  <Form.Item name="serviceNamespace" hidden>
+                    <Input type="hidden" />
+                  </Form.Item>
+                  <Form.Item name="serviceGroup" hidden>
+                    <Input type="hidden" />
+                  </Form.Item>
+                </>
               )}
 
               {/* Multi-Service Mode */}
@@ -1819,18 +1970,31 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
                                   size="middle"
                                   showSearch
                                   onChange={(value) => {
-                                    // Auto-fill serviceName based on selection
+                                    // Auto-fill serviceName and namespace/group based on selection
                                     let serviceName = '';
+                                    let serviceNamespace = undefined;
+                                    let serviceGroup = undefined;
                                     if (value?.startsWith('static://')) {
                                       const id = value.replace('static://', '');
                                       const found = services.find(s => s.serviceId === id);
                                       serviceName = found?.name || id;
                                     } else if (value?.startsWith('lb://')) {
                                       serviceName = value.replace('lb://', '');
+                                      // Find matching nacos service for namespace/group
+                                      const nacosService = nacosServices.find(s => s.serviceName === serviceName);
+                                      if (nacosService) {
+                                        serviceNamespace = nacosService.namespace || '';
+                                        serviceGroup = nacosService.group || 'DEFAULT_GROUP';
+                                      }
                                     }
-                                    // Update serviceName in the same service binding
+                                    // Update serviceName and namespace/group in the same service binding
                                     const currentServices = editForm.getFieldValue('services') || [];
-                                    currentServices[name] = { ...currentServices[name], serviceName };
+                                    currentServices[name] = { 
+                                      ...currentServices[name], 
+                                      serviceName,
+                                      serviceNamespace,
+                                      serviceGroup
+                                    };
                                     editForm.setFieldsValue({ services: currentServices });
                                   }}
                                 >
@@ -1844,8 +2008,8 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
                                   </Select.OptGroup>
                                   <Select.OptGroup label={<><GlobalOutlined style={{ marginRight: 6 }} /> {t('routes.nacos_services')}</>}>
                                     {nacosServices.map(s => (
-                                      <Select.Option key={`lb-${s.serviceName}`} value={`lb://${s.serviceName}`}>
-                                        <span>{s.serviceName}</span>
+                                      <Select.Option key={`lb-${s.serviceName}-${s.namespace || 'public'}-${s.group || 'DEFAULT_GROUP'}`} value={`lb://${s.serviceName}`}>
+                                        <span>{s.displayName || `${s.serviceName} (${s.namespace || 'public'}/${s.group || 'DEFAULT_GROUP'})`}</span>
                                         <span className="service-option-tag nacos">Nacos</span>
                                       </Select.Option>
                                     ))}

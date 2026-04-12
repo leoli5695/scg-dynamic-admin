@@ -43,4 +43,25 @@ public class HealthCheckProperties {
      * Gateway ID.
      */
     private String gatewayId = "gateway-1";
+
+    /**
+     * Degraded check threshold (consecutive unhealthy checks before entering degraded mode).
+     * When an instance fails this many consecutive health checks, its check frequency is reduced.
+     * Default: 5 checks
+     */
+    private int degradedCheckThreshold = 5;
+
+    /**
+     * Degraded check interval in milliseconds (frequency for degraded mode instances).
+     * When an instance enters degraded mode, health checks are performed at this reduced frequency.
+     * Default: 180000ms (3 minutes)
+     */
+    private long degradedCheckInterval = 180000L;
+
+    /**
+     * Regular check interval in milliseconds.
+     * Normal frequency for healthy or recently unhealthy instances.
+     * Default: 30000ms (30 seconds)
+     */
+    private long regularCheckInterval = 30000L;
 }

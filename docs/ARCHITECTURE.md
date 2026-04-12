@@ -1989,7 +1989,728 @@ private Set<String> discoverGatewayInstances() {
 
 ---
 
-## 21. Summary
+## 21. Audit Logs Architecture
+
+### 21.1 Overview
+
+Audit logs system tracks all configuration changes for compliance and troubleshooting.
+
+```
++------------------------------------------------------------------+
+|                    AUDIT LOGS ARCHITECTURE                        |
++------------------------------------------------------------------+
+
+   Configuration Operation (CREATE/UPDATE/DELETE)
+          |
+          v
+   +-------------------+
+   | Controller Layer  |
+   | (Route, Service,  |
+   |  Strategy, Auth)  |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | AuditLogService   |
+   | - Record operation|
+   | - Capture old/new |
+   | - Compute diff    |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | AuditLogRepository|
+   | (MySQL Storage)   |
+   +-------------------+
+            |
+            | Scheduled Cleanup
+            v
+   +-------------------+
+   | AuditLogCleanup   |
+   | Scheduler         |
+   | (Delete > 30 days)|
+   +-------------------+
+```
+
+### 21.2 Data Model
+
+```java
+@Entity
+public class AuditLogEntity {
+    private Long id;
+    private String instanceId;       // Instance isolation
+    private String operator;         // Who made the change
+    private String operationType;    // CREATE, UPDATE, DELETE, etc.
+    private String targetType;       // ROUTE, SERVICE, STRATEGY, AUTH_POLICY
+    private String targetId;         // ID of changed object
+    private String targetName;       // Display name
+    private String oldValue;         // JSON before change
+    private String newValue;         // JSON after change
+    private String ipAddress;        // Client IP
+    private Date createdAt;          // Timestamp
+}
+```
+
+### 21.3 Diff Computation
+
+```
++------------------------------------------------------------------+
+|                    DIFF COMPUTATION                               |
++------------------------------------------------------------------+
+
+   oldValue JSON     newValue JSON
+        |                |
+        v                v
+   +------------------------------------------+
+   |         JSON Diff Algorithm               |
+   |  - Compare field by field                 |
+   |  - Detect added, removed, modified fields |
+   |  - Generate structured diff report        |
+   +------------------------------------------+
+            |
+            v
+   +-------------------+
+   | DiffResult        |
+   | changes: [{       |
+   |   type: "modified"|
+   |   field: "qps"    |
+   |   oldValue: "100" |
+   |   newValue: "200" |
+   | }]                |
+   +-------------------+
+```
+
+### 21.4 Rollback Mechanism
+
+```
++------------------------------------------------------------------+
+|                    ROLLBACK FLOW                                  |
++------------------------------------------------------------------+
+
+   User selects audit log entry
+          |
+          v
+   +-------------------+
+   | Get oldValue JSON |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Validate oldValue |
+   | (Schema check)    |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Apply oldValue    |
+   | to current config |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Publish to Nacos  |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Record ROLLBACK   |
+   | operation         |
+   +-------------------+
+```
+
+---
+
+## 22. System Diagnostic Architecture
+
+### 22.1 Overview
+
+System diagnostic performs comprehensive health checks across all gateway components.
+
+```
++------------------------------------------------------------------+
+|                    DIAGNOSTIC ARCHITECTURE                        |
++------------------------------------------------------------------+
+
+   User Request (quick/full)
+          |
+          v
+   +-------------------+
+   | DiagnosticService |
+   | - Coordinate checks|
+   | - Aggregate results|
+   +--------+----------+
+            |
+      +-----+-----+-----+-----+-----+-----+
+      |     |     |     |     |     |     |
+      v     v     v     v     v     v     v
+   +-----+ +-----+ +-----+ +-----+ +-----+ +-----+
+   | DB  | |Redis| |Nacos| |Route| |Auth | |Inst |
+   |Check| |Check| |Check| |Check| |Check| |Check|
+   +-----+ +-----+ +-----+ +-----+ +-----+ +-----+
+      |     |     |     |     |     |     |
+      +-----+-----+-----+-----+-----+-----+
+            |
+            v
+   +-------------------+
+   | DiagnosticReport  |
+   | - Overall score   |
+   | - Recommendations |
+   | - Component status|
+   +-------------------+
+```
+
+### 22.2 Check Types
+
+| Check | Implementation |
+|-------|----------------|
+| **Database** | JPA health check, query timing, connection pool status |
+| **Redis** | Ping test, INFO command parsing, memory analysis |
+| **Nacos** | Config read/write test, service discovery test |
+| **Routes** | Load all routes, validate predicates/filters |
+| **Auth** | Test JWT validation, check policy consistency |
+| **Instances** | Heartbeat status, pod health via K8s API |
+| **Performance** | JVM metrics, thread count, CPU/memory usage |
+
+### 22.3 Scoring Algorithm
+
+```
++------------------------------------------------------------------+
+|                    HEALTH SCORE CALCULATION                       |
++------------------------------------------------------------------+
+
+   Component Scores:
+   - Database:     100 if HEALTHY, 50 if WARNING, 0 if CRITICAL
+   - Redis:        100 if HEALTHY, 50 if WARNING, 0 if CRITICAL
+   - Nacos:        100 if HEALTHY, 50 if WARNING, 0 if CRITICAL
+   - Routes:       Based on enabled/valid route percentage
+   - Auth:         100 if policies valid, 0 if issues
+   - Instances:    Based on healthy instance percentage
+   - Performance:  Based on CPU/memory thresholds
+
+   Overall Score = Weighted Average:
+   - Database:     20%
+   - Redis:        15%
+   - Nacos:        20%
+   - Routes:       15%
+   - Auth:         10%
+   - Instances:    10%
+   - Performance:  10%
+```
+
+---
+
+## 23. Traffic Topology Architecture
+
+### 23.1 Overview
+
+Traffic topology visualizes real-time request flow through the gateway using ECharts force-directed graph.
+
+```
++------------------------------------------------------------------+
+|                    TOPOLOGY DATA COLLECTION                       |
++------------------------------------------------------------------+
+
+   Gateway Access Logs
+          |
+          v
+   +-------------------+
+   | Access Log Parser |
+   | - Extract clientIP|
+   | - Extract routeId |
+   | - Extract service |
+   | - Aggregate metrics|
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Topology Graph    |
+   | Builder           |
+   | - Create nodes    |
+   | - Create edges    |
+   | - Compute metrics |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Frontend ECharts  |
+   | Force-directed    |
+   | Graph             |
+   +-------------------+
+```
+
+### 23.2 Node Types
+
+| Node Type | Source | Size Logic |
+|-----------|--------|------------|
+| `gateway` | Instance config | Fixed size (60) |
+| `route` | Route definitions | Fixed size (40) |
+| `service` | Service registry | Fixed size (50) |
+| `client` | Client IP aggregation | Dynamic (15-30) based on request count |
+
+### 23.3 Edge Metrics
+
+```
++------------------------------------------------------------------+
+|                    EDGE METRIC COMPUTATION                        |
++------------------------------------------------------------------+
+
+   For each client -> route -> service path:
+
+   Edge Metrics:
+   - requestCount: Sum of requests on this path
+   - avgLatency: Weighted average of response times
+   - errorRate: (4xx + 5xx) / total requests
+
+   Edge Width:
+   - Width = min(8, max(1, requestCount / 50))
+
+   Edge Color:
+   - Green: errorRate < 5%
+   - Orange: errorRate 5-10%
+   - Red: errorRate > 10%
+```
+
+---
+
+## 24. Filter Chain Analysis Architecture
+
+### 24.1 Overview
+
+Filter chain analysis tracks execution statistics for each filter in the request processing pipeline.
+
+```
++------------------------------------------------------------------+
+|                    FILTER CHAIN TRACKING                          |
++------------------------------------------------------------------+
+
+   Request Processing
+          |
+          v
+   +-------------------+
+   | Filter Execution  |
+   | (Each Filter)     |
+   +--------+----------+
+            |
+            | Record: filterName, duration, success/error
+            v
+   +-------------------+
+   | FilterChainTracker|
+   | - Atomic counters |
+   | - Ring buffer for |
+   |   recent traces   |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Statistics Store  |
+   | (ConcurrentHashMap|
+   |  per filter)      |
+   +-------------------+
+```
+
+### 24.2 Statistics Collection
+
+```java
+public class FilterStats {
+    private String filterName;
+    private int order;
+    private AtomicLong totalCount = new AtomicLong();
+    private AtomicLong successCount = new AtomicLong();
+    private AtomicLong failureCount = new AtomicLong();
+    private AtomicLong totalDurationMicros = new AtomicLong();
+    private AtomicLong maxDurationMicros = new AtomicLong();
+    private AtomicLong minDurationMicros = new AtomicLong(Long.MAX_VALUE);
+}
+```
+
+### 24.3 Trace Recording
+
+```
++------------------------------------------------------------------+
+|                    TRACE RECORD STRUCTURE                         |
++------------------------------------------------------------------+
+
+   FilterChainRecord:
+   - traceId: Unique request ID
+   - createdAt: Timestamp
+   - totalDurationMs: Total request duration
+   - successCount: Filters that succeeded
+   - failureCount: Filters that failed
+   - executions: [
+       {
+         filter: "AuthenticationGlobalFilter",
+         order: -250,
+         durationMs: 5,
+         durationMicros: 5200,
+         success: true,
+         error: null
+       },
+       {
+         filter: "RateLimiterFilter",
+         order: -200,
+         durationMs: 2,
+         durationMicros: 2100,
+         success: false,
+         error: "Rate limit exceeded"
+       }
+     ]
+```
+
+---
+
+## 25. Request Replay Architecture
+
+### 25.1 Overview
+
+Request replay allows developers to replay captured requests with modifications for debugging.
+
+```
++------------------------------------------------------------------+
+|                    REQUEST REPLAY FLOW                            |
++------------------------------------------------------------------+
+
+   Select Trace Record
+          |
+          v
+   +-------------------+
+   | Load Trace Data   |
+   | - method          |
+   | - path            |
+   | - headers         |
+   | - body            |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | User Modifications|
+   | (Optional)        |
+   | - Edit path       |
+   | - Edit headers    |
+   | - Edit body       |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Replay Execution  |
+   | - WebClient call  |
+   | - Capture response|
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Compare Results   |
+   | - Status match    |
+   | - Latency diff    |
+   | - Body diff       |
+   +-------------------+
+```
+
+### 25.2 Replayable Request Structure
+
+```java
+public class ReplayableRequest {
+    private Long traceId;
+    private String traceUuid;
+    private String method;
+    private String path;
+    private String queryString;
+    private Map<String, String> headers;
+    private Map<String, String> originalHeaders;  // For diff
+    private String requestBody;
+    private String originalRequestBody;          // For diff
+    private int originalStatusCode;
+    private String originalResponseBody;
+    private long originalLatencyMs;
+}
+```
+
+### 25.3 Comparison Algorithm
+
+```
++------------------------------------------------------------------+
+|                    RESPONSE COMPARISON                            |
++------------------------------------------------------------------+
+
+   Original Response    Replayed Response
+          |                    |
+          v                    v
+   +------------------------------------------+
+   |           Comparison Engine               |
+   |                                          |
+   | 1. Status comparison:                    |
+   |    statusMatch = (orig == replay)        |
+   |                                          |
+   | 2. Latency comparison:                   |
+   |    latencyDiff = replay - orig           |
+   |                                          |
+   | 3. Body comparison (JSON):               |
+   |    - Parse both JSONs                    |
+   |    - Field-by-field comparison           |
+   |    - Detect added/removed/modified       |
+   +------------------------------------------+
+            |
+            v
+   +-------------------+
+   | ComparisonResult  |
+   +-------------------+
+```
+
+---
+
+## 26. AI Copilot Architecture
+
+### 26.1 Overview
+
+AI Copilot integrates multiple large language model providers for intelligent gateway assistance.
+
+```
++------------------------------------------------------------------+
+|                    AI COPILOT ARCHITECTURE                        |
++------------------------------------------------------------------+
+
+   User Request
+          |
+          v
+   +-------------------+
+   | CopilotController |
+   | - Chat            |
+   | - Generate route  |
+   | - Analyze error   |
+   | - Optimize        |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | CopilotService    |
+   | - Provider routing|
+   | - Context building|
+   | - Response parsing|
+   +--------+----------+
+            |
+      +-----+-----+-----+-----+-----+
+      |     |     |     |     |     |
+      v     v     v     v     v     v
+   +-----+ +-----+ +-----+ +-----+ +-----+
+   |Qwen | |DeepS| |OpenAI| |Anthr| |Ollam|
+   |API  | |eek  | | API  | |opic | |a    |
+   +-----+ +-----+ +-----+ +-----+ +-----+
+```
+
+### 26.2 Provider Configuration
+
+```java
+public class AiProviderConfig {
+    private String provider;        // qwen, deepseek, openai, anthropic, ollama
+    private String apiKey;          // API key (encrypted)
+    private String baseUrl;         // Custom API endpoint (optional)
+    private String model;           // Model name
+    private String region;          // DOMESTIC or OVERSEAS
+    private boolean isValid;        // API key validated
+}
+```
+
+### 26.3 Context Building
+
+```
++------------------------------------------------------------------+
+|                    CONTEXT BUILDING FOR AI                        |
++------------------------------------------------------------------+
+
+   For Route Generation:
+   +------------------------------------------+
+   |  Context:                                |
+   |  - Gateway capabilities description      |
+   |  - Available predicates/filters          |
+   |  - Current services list                 |
+   |  - User description                      |
+   +------------------------------------------+
+
+   For Error Analysis:
+   +------------------------------------------+
+   |  Context:                                |
+   |  - Gateway architecture                  |
+   |  - Common error patterns                 |
+   |  - Error message to analyze              |
+   |  - Current configuration                 |
+   +------------------------------------------+
+
+   For Optimization:
+   +------------------------------------------+
+   |  Context:                                |
+   |  - Current metrics (CPU, memory, QPS)    |
+   |  - Route configuration                   |
+   |  - Strategy settings                     |
+   |  - Performance tuning guidelines         |
+   +------------------------------------------+
+```
+
+### 26.4 Response Processing
+
+```
++------------------------------------------------------------------+
+|                    AI RESPONSE PROCESSING                         |
++------------------------------------------------------------------+
+
+   AI Response (Markdown)
+          |
+          v
+   +-------------------+
+   | Parse Response    |
+   | - Extract JSON    |
+   | - Extract text    |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Validate JSON     |
+   | (for route config)|
+   +--------+----------+
+            |
+            | Valid?
+      +-----+-----+
+      Yes    No
+      |       |
+      v       v
+   Return   Return
+   Config   Error
+   to User  Message
+```
+
+---
+
+## 27. Stress Test Architecture
+
+### 27.1 Overview
+
+Stress test tool simulates concurrent load on gateway endpoints to measure performance.
+
+```
++------------------------------------------------------------------+
+|                    STRESS TEST ARCHITECTURE                       |
++------------------------------------------------------------------+
+
+   User Request
+          |
+          v
+   +-------------------+
+   | StressTestService |
+   | - Create test plan|
+   | - Coordinate load |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Load Generator    |
+   | (Virtual Users)   |
+   | - Concurrent pools|
+   | - Request queue   |
+   +--------+----------+
+            |
+      +-----+-----+-----+-----+
+      |     |     |     |     |
+      v     v     v     v     v
+   HTTP Requests to Target
+            |
+            v
+   +-------------------+
+   | Metrics Collector |
+   | - Latency tracking|
+   | - Success/failure |
+   | - Response size   |
+   +--------+----------+
+            |
+            v
+   +-------------------+
+   | Statistics Engine |
+   | - Percentile calc |
+   | - QPS calculation |
+   +-------------------+
+```
+
+### 27.2 Load Generation
+
+```java
+public class StressTestConfig {
+    private String targetUrl;
+    private String method;
+    private Map<String, String> headers;
+    private String body;
+    private int concurrentUsers;     // Virtual users
+    private int totalRequests;       // Total requests to send
+    private int targetQps;           // Optional QPS limit
+    private int rampUpSeconds;       // Gradual load increase
+}
+```
+
+### 27.3 Execution Flow
+
+```
++------------------------------------------------------------------+
+|                    LOAD GENERATION FLOW                           |
++------------------------------------------------------------------+
+
+   Test Started
+          |
+          v
+   +-------------------+
+   | Create Executor   |
+   | Pool (concurrent  |
+   | users)            |
+   +--------+----------+
+            |
+            | Ramp-up phase (if configured)
+            v
+   +-------------------+
+   | Gradual User      |
+   | Addition          |
+   | - Start with 1    |
+   | - Add users over  |
+   |   rampUpSeconds   |
+   +--------+----------+
+            |
+            | Steady state
+            v
+   +-------------------+
+   | Request Dispatch  |
+   | - Each user sends |
+   |   requests        |
+   | - Track results   |
+   +--------+----------+
+            |
+            | Test completed
+            v
+   +-------------------+
+   | Final Statistics  |
+   | Computation       |
+   +-------------------+
+```
+
+### 27.4 Metrics Collection
+
+```
++------------------------------------------------------------------+
+|                    METRICS COLLECTION                             |
++------------------------------------------------------------------+
+
+   Per-Request Metrics:
+   - startTime: Request start timestamp
+   - endTime: Response received timestamp
+   - latencyMs: endTime - startTime
+   - statusCode: HTTP status code
+   - success: statusCode in [200-299]
+   - responseSize: Bytes received
+
+   Aggregated Metrics:
+   - minLatency, maxLatency, avgLatency
+   - P50, P90, P95, P99 latencies (sorted array percentile)
+   - requestsPerSecond: totalRequests / totalTimeSeconds
+   - errorRate: failedRequests / totalRequests * 100
+   - throughput: totalBytes / totalTimeSeconds
+```
+
+---
+
+## 28. Summary
 
 This API Gateway architecture demonstrates:
 
@@ -2005,6 +2726,13 @@ This API Gateway architecture demonstrates:
 - **Heartbeat monitoring** for real-time instance health tracking
 - **Performance optimizations** including JWT cache, shadow quota, non-blocking locks
 - **Comprehensive testing** with 382 tests ensuring reliability
+- **Audit logging** for compliance and configuration rollback
+- **System diagnostic** for proactive health monitoring
+- **Traffic topology** for real-time traffic visualization
+- **Filter chain analysis** for performance debugging
+- **Request replay** for issue troubleshooting
+- **AI Copilot** for intelligent configuration assistance
+- **Stress testing** for performance validation
 
 ---
 

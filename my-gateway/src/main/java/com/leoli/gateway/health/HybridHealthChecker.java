@@ -42,6 +42,12 @@ public class HybridHealthChecker {
     @Value("${gateway.health.network-flap-threshold:10}")
     private int networkFlapThreshold; // Network flap threshold (default: 10 nodes changing at once)
 
+    @Value("${gateway.health.degraded-check-threshold:5}")
+    private int degradedCheckThreshold; // Threshold for entering degraded check mode (default: 5 consecutive unhealthy checks)
+
+    @Value("${gateway.health.degraded-check-interval-ms:180000}")
+    private long degradedCheckIntervalMs; // Degraded check interval (default: 3 minutes)
+
     // Local cache (high performance)
     private final Cache<String, InstanceHealth> healthCache = Caffeine.newBuilder()
             .maximumSize(10000)
@@ -79,39 +85,45 @@ public class HybridHealthChecker {
     }
 
     /**
-     * Initialize instance (called when discovered from Nacos).
-     * Creates instance with PENDING status - actual health determined by active check.
+     * Initialize instance (called when discovered from Nacos or config update).
+     * Does NOT set initial health status - waits for immediate health check to determine status.
      * If instance already exists in cache, marks it as needing re-check.
      */
     public void initializeInstance(String serviceId, String ip, int port) {
         String key = InstanceHealth.buildKey(serviceId, ip, port);
 
         if (!healthCache.asMap().containsKey(key)) {
-            log.info("Initializing new instance from config: {}:{} (pending health check)", ip, port);
-            // Create as unhealthy initially - will be marked healthy after active check passes
+            log.info("Initializing new instance from config: {}:{} (waiting for immediate health check)", ip, port);
+            // Create instance but do NOT set health status yet
+            // The immediate health check will determine the actual status
             InstanceHealth health = new InstanceHealth();
             health.setServiceId(serviceId);
             health.setIp(ip);
             health.setPort(port);
-            health.setHealthy(false);  // Initially unhealthy until checked
-            health.setUnhealthyReason("PENDING: Waiting for health check");
+            health.setHealthy(true);  // Assume healthy initially - will be updated by health check
+            health.setUnhealthyReason(null);
             health.setConsecutiveFailures(0);
+            health.setTotalUnhealthyChecks(0);
+            health.setDegradedCheckMode(false);
+            health.setDegradedModeEnteredTime(null);
             health.setLastRequestTime(System.currentTimeMillis());
             health.setCheckType("INIT");
             healthCache.put(key, health);
 
-            // Queue for push to admin so it shows as pending/unhealthy
-            queueForBatchPush(serviceId, ip, port, false);
+            // Do NOT push to admin yet - wait for health check result
         } else {
             // Instance already in cache - mark as needing re-check
             InstanceHealth existing = healthCache.getIfPresent(key);
             if (existing != null) {
                 log.debug("Instance {}:{} already in cache, marking for re-check (current healthy={})",
                         ip, port, existing.isHealthy());
-                // Mark as pending re-check so health check will run
+                // Reset degraded mode counters for re-check
+                existing.setTotalUnhealthyChecks(0);
+                existing.setDegradedCheckMode(false);
+                existing.setDegradedModeEnteredTime(null);
                 existing.setUnhealthyReason("PENDING: Configuration changed, awaiting re-check");
                 existing.setCheckType("REINIT");
-                // Don't change healthy status - let the health check update it
+                // Keep current healthy status - let the health check update it
             }
         }
     }
@@ -158,6 +170,7 @@ public class HybridHealthChecker {
 
     /**
      * Mark as healthy (active check call).
+     * Resets total unhealthy checks and exits degraded mode.
      */
     public void markHealthy(String serviceId, String ip, int port, String checkType) {
         String key = InstanceHealth.buildKey(serviceId, ip, port);
@@ -170,6 +183,7 @@ public class HybridHealthChecker {
         }
 
         boolean wasHealthy = health.isHealthy();
+        boolean wasDegraded = health.isDegradedCheckMode();
 
         log.debug("markHealthy called for {}:{}:{} - wasHealthy={}, setting healthy=true",
                 serviceId, ip, port, wasHealthy);
@@ -178,6 +192,14 @@ public class HybridHealthChecker {
         health.setConsecutiveFailures(0);
         health.setLastActiveCheckTime(System.currentTimeMillis());
         health.setCheckType(checkType);
+
+        // Reset degraded mode counters when instance becomes healthy
+        health.setTotalUnhealthyChecks(0);
+        if (wasDegraded) {
+            health.setDegradedCheckMode(false);
+            health.setDegradedModeEnteredTime(null);
+            log.info("Instance {}:{}:{} exited DEGRADED check mode after recovery", serviceId, ip, port);
+        }
 
         healthCache.put(key, health);
 
@@ -281,6 +303,7 @@ public class HybridHealthChecker {
 
     /**
      * Mark as unhealthy (active check call).
+     * Also tracks total unhealthy checks for degraded mode decision.
      */
     public void markUnhealthy(String serviceId, String ip, int port, String reason, String checkType) {
         String key = InstanceHealth.buildKey(serviceId, ip, port);
@@ -300,11 +323,25 @@ public class HybridHealthChecker {
         health.setLastActiveCheckTime(System.currentTimeMillis());
         health.setCheckType(checkType);
 
+        // Increment total unhealthy checks counter
+        int newTotalUnhealthyChecks = health.getTotalUnhealthyChecks() + 1;
+        health.setTotalUnhealthyChecks(newTotalUnhealthyChecks);
+
+        // Check if should enter degraded check mode
+        if (!health.isDegradedCheckMode() && newTotalUnhealthyChecks >= degradedCheckThreshold) {
+            health.setDegradedCheckMode(true);
+            health.setDegradedModeEnteredTime(System.currentTimeMillis());
+            log.warn("Instance {}:{}:{} entered DEGRADED check mode after {} consecutive unhealthy checks. " +
+                     "Check frequency will be reduced to every {}ms",
+                     serviceId, ip, port, newTotalUnhealthyChecks, degradedCheckIntervalMs);
+        }
+
         healthCache.put(key, health);
 
         // Queue for batch push ONLY when state changes (true -> false)
         if (wasHealthy) {
-            log.warn("Instance {}:{}:{} became UNHEALTHY: {} (state changed: true->false)", serviceId, ip, port, reason);
+            log.warn("Instance {}:{}:{} became UNHEALTHY: {} (state changed: true->false, totalChecks={})",
+                     serviceId, ip, port, reason, newTotalUnhealthyChecks);
 
             // Check for network flap (sudden mass failure)
             if (isPotentialNetworkFlap(false)) {
@@ -316,7 +353,8 @@ public class HybridHealthChecker {
             log.debug("Adding {}:{}:{} to push queue with healthy=false", serviceId, ip, port);
             queueForBatchPush(serviceId, ip, port, false);
         } else {
-            log.debug("Instance {}:{}:{} remains UNHEALTHY: {} (no state change)", serviceId, ip, port, reason);
+            log.debug("Instance {}:{}:{} remains UNHEALTHY: {} (no state change, totalChecks={}, degraded={})",
+                     serviceId, ip, port, reason, newTotalUnhealthyChecks, health.isDegradedCheckMode());
         }
     }
 
@@ -440,6 +478,44 @@ public class HybridHealthChecker {
     }
 
     /**
+     * Get instances in degraded check mode (need lower frequency check).
+     */
+    public List<InstanceHealth> getDegradedInstances() {
+        List<InstanceHealth> degraded = healthCache.asMap().values().stream()
+                .filter(h -> h.isDegradedCheckMode())
+                .collect(java.util.stream.Collectors.toList());
+
+        log.debug("Found {} instances in degraded check mode", degraded.size());
+        return degraded;
+    }
+
+    /**
+     * Get instances that need regular frequency check (not in degraded mode).
+     */
+    public List<InstanceHealth> getRegularCheckInstances() {
+        List<InstanceHealth> regular = healthCache.asMap().values().stream()
+                .filter(h -> !h.isDegradedCheckMode())
+                .collect(java.util.stream.Collectors.toList());
+
+        log.debug("Found {} instances needing regular frequency check", regular.size());
+        return regular;
+    }
+
+    /**
+     * Get degraded check interval in milliseconds.
+     */
+    public long getDegradedCheckIntervalMs() {
+        return degradedCheckIntervalMs;
+    }
+
+    /**
+     * Get degraded check threshold.
+     */
+    public int getDegradedCheckThreshold() {
+        return degradedCheckThreshold;
+    }
+
+    /**
      * Check if should attempt recovery.
      */
     private boolean shouldRecover(InstanceHealth health) {
@@ -461,6 +537,9 @@ public class HybridHealthChecker {
         health.setPort(port);
         health.setHealthy(true);
         health.setConsecutiveFailures(0);
+        health.setTotalUnhealthyChecks(0);
+        health.setDegradedCheckMode(false);
+        health.setDegradedModeEnteredTime(null);
         health.setLastRequestTime(System.currentTimeMillis());
         health.setCheckType("PASSIVE");
         return health;

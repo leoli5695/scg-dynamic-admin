@@ -59,44 +59,126 @@ public class RouteServiceBinding {
     private String description;
 
     /**
+     * Service namespace for DISCOVERY type (Nacos namespace).
+     * Only applicable when serviceType = NACOS.
+     * Default: null (uses gateway's namespace).
+     */
+    private String serviceNamespace;
+
+    /**
+     * Service group for DISCOVERY type (Nacos group).
+     * Only applicable when serviceType = NACOS.
+     * Default: DEFAULT_GROUP.
+     */
+    private String serviceGroup;
+
+    /**
      * Create a simple binding with default weight (STATIC type).
      */
     public static RouteServiceBinding of(String serviceId, String serviceName) {
-        return new RouteServiceBinding(ServiceType.STATIC, serviceId, serviceName, 100, null, true, null);
+        RouteServiceBinding binding = new RouteServiceBinding();
+        binding.setServiceType(ServiceType.STATIC);
+        binding.setServiceId(serviceId);
+        binding.setServiceName(serviceName);
+        binding.setWeight(100);
+        binding.setEnabled(true);
+        return binding;
     }
 
     /**
      * Create a binding with type and service name (for NACOS/CONSUL).
      */
     public static RouteServiceBinding of(ServiceType serviceType, String serviceId, String serviceName) {
-        return new RouteServiceBinding(serviceType, serviceId, serviceName, 100, null, true, null);
+        RouteServiceBinding binding = new RouteServiceBinding();
+        binding.setServiceType(serviceType);
+        binding.setServiceId(serviceId);
+        binding.setServiceName(serviceName);
+        binding.setWeight(100);
+        binding.setEnabled(true);
+        return binding;
     }
 
     /**
      * Create a binding with weight (STATIC type).
      */
     public static RouteServiceBinding of(String serviceId, String serviceName, int weight) {
-        return new RouteServiceBinding(ServiceType.STATIC, serviceId, serviceName, weight, null, true, null);
+        RouteServiceBinding binding = new RouteServiceBinding();
+        binding.setServiceType(ServiceType.STATIC);
+        binding.setServiceId(serviceId);
+        binding.setServiceName(serviceName);
+        binding.setWeight(weight);
+        binding.setEnabled(true);
+        return binding;
     }
 
     /**
      * Create a binding with type, service name and weight.
      */
     public static RouteServiceBinding of(ServiceType serviceType, String serviceId, String serviceName, int weight) {
-        return new RouteServiceBinding(serviceType, serviceId, serviceName, weight, null, true, null);
+        RouteServiceBinding binding = new RouteServiceBinding();
+        binding.setServiceType(serviceType);
+        binding.setServiceId(serviceId);
+        binding.setServiceName(serviceName);
+        binding.setWeight(weight);
+        binding.setEnabled(true);
+        return binding;
     }
 
     /**
      * Create a binding with weight and version (STATIC type).
      */
     public static RouteServiceBinding of(String serviceId, String serviceName, int weight, String version) {
-        return new RouteServiceBinding(ServiceType.STATIC, serviceId, serviceName, weight, version, true, null);
+        RouteServiceBinding binding = new RouteServiceBinding();
+        binding.setServiceType(ServiceType.STATIC);
+        binding.setServiceId(serviceId);
+        binding.setServiceName(serviceName);
+        binding.setWeight(weight);
+        binding.setVersion(version);
+        binding.setEnabled(true);
+        return binding;
     }
 
     /**
      * Create a full binding with all parameters.
      */
     public static RouteServiceBinding of(ServiceType serviceType, String serviceId, String serviceName, int weight, String version) {
-        return new RouteServiceBinding(serviceType, serviceId, serviceName, weight, version, true, null);
+        RouteServiceBinding binding = new RouteServiceBinding();
+        binding.setServiceType(serviceType);
+        binding.setServiceId(serviceId);
+        binding.setServiceName(serviceName);
+        binding.setWeight(weight);
+        binding.setVersion(version);
+        binding.setEnabled(true);
+        return binding;
+    }
+
+    /**
+     * Create a DISCOVERY binding with namespace and group.
+     */
+    public static RouteServiceBinding ofDiscovery(String serviceId, String serviceName, String namespace, String group) {
+        RouteServiceBinding binding = new RouteServiceBinding();
+        binding.setServiceType(ServiceType.NACOS);
+        binding.setServiceId(serviceId);
+        binding.setServiceName(serviceName);
+        binding.setWeight(100);
+        binding.setEnabled(true);
+        binding.setServiceNamespace(namespace);
+        binding.setServiceGroup(group);
+        return binding;
+    }
+
+    /**
+     * Create a DISCOVERY binding with weight, namespace and group.
+     */
+    public static RouteServiceBinding ofDiscovery(String serviceId, String serviceName, int weight, String namespace, String group) {
+        RouteServiceBinding binding = new RouteServiceBinding();
+        binding.setServiceType(ServiceType.NACOS);
+        binding.setServiceId(serviceId);
+        binding.setServiceName(serviceName);
+        binding.setWeight(weight);
+        binding.setEnabled(true);
+        binding.setServiceNamespace(namespace);
+        binding.setServiceGroup(group);
+        return binding;
     }
 }

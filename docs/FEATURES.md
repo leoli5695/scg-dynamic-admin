@@ -27,6 +27,13 @@
 19. [Gateway Instance Management](#19-gateway-instance-management)
 20. [Kubernetes Integration](#20-kubernetes-integration)
 21. [API Reference](#21-api-reference)
+22. [Audit Logs](#22-audit-logs)
+23. [System Diagnostic](#23-system-diagnostic)
+24. [Traffic Topology](#24-traffic-topology)
+25. [Filter Chain Analysis](#25-filter-chain-analysis)
+26. [Request Replay Debugger](#26-request-replay-debugger)
+27. [AI Copilot Assistant](#27-ai-copilot-assistant)
+28. [Stress Test Tool](#28-stress-test-tool)
 
 ---
 
@@ -1075,6 +1082,505 @@ GET /api/monitor/history?range=1h
 
 # AI analysis
 POST /api/monitor/analyze
+```
+
+---
+
+## 22. Audit Logs
+
+### 22.1 Overview
+
+Audit logs track all configuration changes in the gateway, providing a complete history of operations for compliance and troubleshooting.
+
+### 22.2 Features
+
+| Feature | Description |
+|---------|-------------|
+| **Operation Tracking** | Record all CREATE, UPDATE, DELETE, ENABLE, DISABLE operations |
+| **Diff Comparison** | Show before/after values for each change |
+| **Rollback Support** | Revert configuration to a previous state |
+| **Timeline View** | Visualize changes in chronological order |
+| **Auto Cleanup** | Automatic cleanup of logs older than retention period |
+
+### 22.3 Tracked Operations
+
+| Operation Type | Description |
+|----------------|-------------|
+| `CREATE` | New configuration created |
+| `UPDATE` | Configuration modified |
+| `DELETE` | Configuration deleted |
+| `ROLLBACK` | Configuration rolled back |
+
+### 22.4 Target Types
+
+| Target Type | Description |
+|-------------|-------------|
+| `ROUTE` | Route configuration |
+| `SERVICE` | Service configuration |
+| `STRATEGY` | Strategy configuration |
+| `AUTH_POLICY` | Authentication policy |
+
+### 22.5 API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/audit-logs` | List audit logs with filters |
+| `GET` | `/api/audit-logs/{id}/diff` | Get change diff for a log entry |
+| `POST` | `/api/audit-logs/{id}/rollback` | Rollback to this version |
+| `GET` | `/api/audit-logs/timeline/{instanceId}` | Get timeline view |
+| `GET` | `/api/audit-logs/cleanup/stats` | Get cleanup statistics |
+| `POST` | `/api/audit-logs/cleanup` | Trigger cleanup of expired logs |
+
+### 22.6 Configuration
+
+```yaml
+audit:
+  retention-days: 30        # Keep logs for 30 days
+  cleanup-schedule: "0 0 2 * * ?"  # Daily cleanup at 2 AM
+```
+
+---
+
+## 23. System Diagnostic
+
+### 23.1 Overview
+
+System diagnostic provides comprehensive health checks for all gateway components, helping identify issues before they cause problems.
+
+### 23.2 Diagnostic Types
+
+| Type | Description | Duration |
+|------|-------------|----------|
+| `quick` | Fast health check of key components | ~2-5 seconds |
+| `full` | Complete diagnostic with detailed analysis | ~30-60 seconds |
+
+### 23.3 Components Checked
+
+| Component | Checks |
+|-----------|--------|
+| **Database** | Connection status, query latency, table integrity |
+| **Redis** | Connection status, memory usage, key count |
+| **Config Center (Nacos)** | Connection status, config sync status |
+| **Routes** | Route count, enabled/disabled status, invalid routes |
+| **Authentication** | Auth policy status, JWT validation test |
+| **Gateway Instances** | Instance count, health status, heartbeat check |
+| **Performance** | CPU usage, memory usage, thread count, JVM metrics |
+
+### 23.4 Health Status
+
+| Status | Description |
+|--------|-------------|
+| `HEALTHY` | All checks passed |
+| `WARNING` | Minor issues detected |
+| `CRITICAL` | Major issues requiring attention |
+| `NOT_CONFIGURED` | Component not configured |
+
+### 23.5 API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/diagnostic/quick` | Quick diagnostic |
+| `GET` | `/api/diagnostic/full` | Full diagnostic |
+
+### 23.6 Response Example
+
+```json
+{
+  "overallScore": 85,
+  "status": "HEALTHY",
+  "duration": "5.2s",
+  "recommendations": [
+    "Consider increasing Redis memory allocation",
+    "Review expired SSL certificates"
+  ],
+  "database": {
+    "status": "HEALTHY",
+    "metrics": {
+      "connectionPoolSize": 10,
+      "activeConnections": 3,
+      "avgQueryLatencyMs": 12
+    }
+  },
+  "redis": {
+    "status": "WARNING",
+    "warnings": ["Memory usage above 80%"],
+    "metrics": {
+      "connected": true,
+      "memoryUsageMB": 512,
+      "keyCount": 15000
+    }
+  }
+}
+```
+
+---
+
+## 24. Traffic Topology
+
+### 24.1 Overview
+
+Traffic topology provides a real-time visualization of request flow through the gateway, showing relationships between clients, routes, and backend services.
+
+### 24.2 Features
+
+| Feature | Description |
+|---------|-------------|
+| **Real-time Graph** | Interactive force-directed graph visualization |
+| **Traffic Metrics** | Request count, error rate, latency per connection |
+| **Time Range Selection** | View topology for last 15min, 30min, 1h, 3h, 6h |
+| **Auto Refresh** | Automatic refresh every 30 seconds |
+| **Node Details** | Click nodes to see detailed metrics |
+
+### 24.3 Node Types
+
+| Node Type | Color | Description |
+|-----------|-------|-------------|
+| `gateway` | Blue | Gateway instance |
+| `route` | Cyan | Route definition |
+| `service` | Purple | Backend service |
+| `client` | Orange | Client IP address |
+
+### 24.4 Edge Metrics
+
+| Metric | Description |
+|---------|-------------|
+| `requestCount` | Total requests on this path |
+| `avgLatency` | Average response latency |
+| `errorRate` | Error percentage |
+
+### 24.5 API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/topology/{instanceId}` | Get topology data |
+
+### 24.6 Response Example
+
+```json
+{
+  "nodes": [
+    {"id": "gateway-1", "type": "gateway", "name": "Gateway"},
+    {"id": "route-users", "type": "route", "name": "/api/users/**"},
+    {"id": "service-user", "type": "service", "name": "user-service"}
+  ],
+  "edges": [
+    {
+      "source": "client-192.168.1.100",
+      "target": "gateway-1",
+      "metrics": {"requestCount": 500, "avgLatency": 45}
+    }
+  ],
+  "metrics": {
+    "totalRequests": 15000,
+    "requestsPerSecond": 125.5,
+    "avgLatency": 45.2,
+    "errorRate": 0.5,
+    "uniqueClients": 50,
+    "uniqueRoutes": 10
+  }
+}
+```
+
+---
+
+## 25. Filter Chain Analysis
+
+### 25.1 Overview
+
+Filter chain analysis provides detailed statistics on each filter's execution, helping identify performance bottlenecks and failures.
+
+### 25.2 Features
+
+| Feature | Description |
+|---------|-------------|
+| **Filter Statistics** | Execution count, success rate, latency per filter |
+| **Trace Records** | Individual request trace through filter chain |
+| **Trace Search** | Search by trace ID to see filter execution details |
+| **Error Analysis** | Identify filters causing failures |
+
+### 25.3 Statistics per Filter
+
+| Metric | Description |
+|--------|-------------|
+| `totalCount` | Total executions |
+| `successCount` | Successful executions |
+| `failureCount` | Failed executions |
+| `successRate` | Success percentage |
+| `avgDurationMicros` | Average execution time (microseconds) |
+| `maxDurationMicros` | Maximum execution time |
+| `minDurationMicros` | Minimum execution time |
+
+### 25.4 API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/filter-chain/{instanceId}/stats` | Get filter statistics |
+| `GET` | `/api/filter-chain/{instanceId}/records` | Get recent trace records |
+| `GET` | `/api/filter-chain/{instanceId}/trace/{traceId}` | Get specific trace details |
+| `DELETE` | `/api/filter-chain/{instanceId}/stats` | Clear statistics |
+
+### 25.5 Use Cases
+
+| Use Case | Benefit |
+|----------|---------|
+| **Performance Tuning** | Identify slow filters |
+| **Troubleshooting** | Find which filter caused a failure |
+| **Capacity Planning** | Understand filter execution patterns |
+
+---
+
+## 26. Request Replay Debugger
+
+### 26.1 Overview
+
+Request replay allows developers to debug issues by replaying captured requests with modifications, comparing original vs. replayed responses.
+
+### 26.2 Features
+
+| Feature | Description |
+|---------|-------------|
+| **Request Capture** | Capture error and slow requests automatically |
+| **Request Editing** | Modify path, headers, body before replay |
+| **Quick Replay** | Replay original request without modifications |
+| **Response Comparison** | Compare original vs. replayed response |
+| **Body Diff** | Show field-level differences in response body |
+
+### 26.3 Workflow
+
+```
+1. Select trace from recent traces list
+2. Edit request (optional):
+   - Modify path
+   - Add/remove headers
+   - Modify request body
+3. Execute replay
+4. View results:
+   - Status code comparison
+   - Latency comparison
+   - Response body diff
+```
+
+### 26.4 API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/replay/prepare/{traceId}` | Prepare replayable request |
+| `POST` | `/api/replay/execute/{traceId}` | Execute replay with modifications |
+
+### 26.5 Request Modifications
+
+```json
+{
+  "modifiedPath": "/api/v2/users",
+  "modifiedQueryString": "debug=true",
+  "modifiedHeaders": {
+    "Authorization": "Bearer new-token",
+    "X-Debug": "true"
+  },
+  "modifiedBody": "{\"name\": \"test\"}",
+  "compareWithOriginal": true
+}
+```
+
+### 26.6 Replay Result
+
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "latencyMs": 45,
+  "responseBody": "{\"id\": 1, \"name\": \"test\"}",
+  "comparison": {
+    "originalStatus": 500,
+    "replayedStatus": 200,
+    "statusMatch": false,
+    "originalLatencyMs": 1500,
+    "replayedLatencyMs": 45,
+    "latencyDiffMs": -1455,
+    "bodyMatch": false,
+    "bodyDiff": [
+      {"field": "error", "originalValue": "timeout", "replayedValue": null, "type": "REMOVED"}
+    ]
+  }
+}
+```
+
+---
+
+## 27. AI Copilot Assistant
+
+### 27.1 Overview
+
+AI Copilot is an intelligent assistant powered by large language models, helping users configure, troubleshoot, and optimize the gateway.
+
+### 27.2 Supported AI Providers
+
+| Region | Providers | Models |
+|--------|-----------|--------|
+| **Domestic (China)** | Qwen, DeepSeek | qwen-plus, qwen-turbo, deepseek-chat |
+| **Overseas** | OpenAI, Anthropic | GPT-4, GPT-3.5-turbo, Claude-3 |
+
+### 27.3 Features
+
+| Feature | Description |
+|---------|-------------|
+| **Chat Interface** | Natural language conversation about gateway |
+| **Route Generator** | Generate route config from description |
+| **Error Analyzer** | Analyze error messages and suggest fixes |
+| **Performance Optimizer** | Get optimization suggestions based on metrics |
+| **Concept Explainer** | Learn gateway concepts with explanations |
+| **Config Validation** | Validate generated route configurations |
+
+### 27.4 Tabs
+
+| Tab | Features |
+|-----|----------|
+| **Chat** | Free conversation with AI assistant |
+| **Tools** | Route generator, error analyzer, performance optimizer |
+| **Learn** | Concept explanations, quick reference |
+
+### 27.5 API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/copilot/providers` | List available AI providers |
+| `GET` | `/api/copilot/providers/{provider}/models` | Get available models |
+| `POST` | `/api/copilot/validate` | Validate API key |
+| `POST` | `/api/copilot/config` | Save AI configuration |
+| `POST` | `/api/copilot/chat` | Send chat message |
+| `DELETE` | `/api/copilot/chat/{sessionId}` | Clear conversation |
+| `POST` | `/api/copilot/generate-route` | Generate route from description |
+| `POST` | `/api/copilot/validate-route` | Validate route JSON |
+| `POST` | `/api/copilot/apply-route` | Apply generated route |
+| `POST` | `/api/copilot/analyze-error` | Analyze error message |
+| `GET` | `/api/copilot/optimizations/{instanceId}` | Get optimization suggestions |
+| `GET` | `/api/copilot/explain` | Explain a concept |
+
+### 27.6 Route Generation Example
+
+**Input:**
+```
+"Create a route for user API, path pattern /api/users/**, 
+forward to user-service with rate limiting 100 QPS"
+```
+
+**Output:**
+```json
+{
+  "routeName": "User API Route",
+  "uri": "lb://user-service",
+  "predicates": [
+    {"name": "Path", "args": {"pattern": "/api/users/**"}}
+  ],
+  "filters": [
+    {"name": "StripPrefix", "args": {"parts": "1"}}
+  ],
+  "strategies": {
+    "rateLimiter": {
+      "enabled": true,
+      "qps": 100
+    }
+  },
+  "enabled": true
+}
+```
+
+---
+
+## 28. Stress Test Tool
+
+### 28.1 Overview
+
+Stress test tool allows users to test gateway performance under load, measuring throughput, latency, and error rates.
+
+### 28.2 Features
+
+| Feature | Description |
+|---------|-------------|
+| **Custom Test Configuration** | Configure target URL, method, headers, body |
+| **Concurrent Users Simulation** | Simulate multiple concurrent users |
+| **Real-time Progress** | Live view of test progress and metrics |
+| **Detailed Statistics** | P50, P90, P95, P99 latency distribution |
+| **AI Analysis** | AI-powered analysis of test results |
+| **Quick Test** | One-click quick test with preset parameters |
+
+### 28.3 Test Configuration
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `testName` | Test name for identification | - |
+| `targetUrl` | Target endpoint URL (optional, uses instance URL if not set) | - |
+| `path` | Path to append to instance URL | - |
+| `method` | HTTP method | `GET` |
+| `headers` | Request headers (JSON) | - |
+| `body` | Request body for POST/PUT | - |
+| `concurrentUsers` | Number of concurrent users | `10` |
+| `totalRequests` | Total requests to send (use with durationSeconds) | `1000` |
+| `durationSeconds` | Test duration in seconds (alternative to totalRequests) | - |
+| `targetQps` | Target QPS limit | - |
+| `rampUpSeconds` | Ramp-up time for gradual load increase | `0` |
+| `requestTimeoutSeconds` | Per-request timeout | `30` |
+
+### 28.4 Metrics Collected
+
+| Metric | Description |
+|--------|-------------|
+| `actualRequests` | Actual requests sent |
+| `successfulRequests` | Successful requests (2xx) |
+| `failedRequests` | Failed requests (4xx/5xx) |
+| `minResponseTimeMs` | Minimum response time |
+| `maxResponseTimeMs` | Maximum response time |
+| `avgResponseTimeMs` | Average response time |
+| `p50ResponseTimeMs` | 50th percentile latency |
+| `p90ResponseTimeMs` | 90th percentile latency |
+| `p95ResponseTimeMs` | 95th percentile latency |
+| `p99ResponseTimeMs` | 99th percentile latency |
+| `requestsPerSecond` | Achieved QPS |
+| `errorRate` | Error percentage |
+| `throughputKbps` | Throughput in KB/s |
+
+### 28.5 Test Status
+
+| Status | Description |
+|--------|-------------|
+| `RUNNING` | Test is currently executing |
+| `COMPLETED` | Test finished successfully |
+| `STOPPED` | Test stopped by user |
+| `FAILED` | Test failed to complete |
+
+### 28.6 API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/stress-test/instance/{instanceId}` | List tests for instance |
+| `POST` | `/api/stress-test/start` | Start new test |
+| `POST` | `/api/stress-test/quick` | Quick test with defaults |
+| `GET` | `/api/stress-test/{testId}/status` | Get running test status |
+| `POST` | `/api/stress-test/{testId}/stop` | Stop running test |
+| `DELETE` | `/api/stress-test/{testId}` | Delete test record |
+| `GET` | `/api/stress-test/{testId}/analyze` | AI analysis of test results |
+
+### 28.7 Example Test Result
+
+```json
+{
+  "id": 1,
+  "testName": "API Gateway Load Test",
+  "status": "COMPLETED",
+  "actualRequests": 10000,
+  "successfulRequests": 9950,
+  "failedRequests": 50,
+  "minResponseTimeMs": 5,
+  "maxResponseTimeMs": 2500,
+  "avgResponseTimeMs": 45,
+  "p50ResponseTimeMs": 35,
+  "p90ResponseTimeMs": 80,
+  "p95ResponseTimeMs": 120,
+  "p99ResponseTimeMs": 500,
+  "requestsPerSecond": 833.3,
+  "errorRate": 0.5,
+  "throughputKbps": 1250
+}
 ```
 
 ---

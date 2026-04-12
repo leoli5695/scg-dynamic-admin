@@ -10,6 +10,8 @@ import com.leoli.gateway.admin.model.GatewayInstanceEntity;
 import com.leoli.gateway.admin.model.RouteDefinition;
 import com.leoli.gateway.admin.model.RouteEntity;
 import com.leoli.gateway.admin.model.RouteResponse;
+import com.leoli.gateway.admin.model.RouteServiceBinding;
+import com.leoli.gateway.admin.model.ServiceType;
 import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
 import com.leoli.gateway.admin.repository.RouteRepository;
 import com.leoli.gateway.admin.validation.RouteValidator;

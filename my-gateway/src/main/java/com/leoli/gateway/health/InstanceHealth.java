@@ -20,8 +20,24 @@ public class InstanceHealth {
     private int consecutiveFailures;
     private Long lastRequestTime;
     private Long lastActiveCheckTime;
-    private String checkType; // "PASSIVE" or "ACTIVE"
+    private String checkType; // "PASSIVE" or "ACTIVE" or "INIT"
     private String unhealthyReason;
+
+    /**
+     * Total consecutive unhealthy check count (for degraded check frequency).
+     * Used to determine if check frequency should be reduced.
+     */
+    private int totalUnhealthyChecks;
+
+    /**
+     * Whether this instance is in degraded check mode (lower frequency).
+     */
+    private boolean degradedCheckMode;
+
+    /**
+     * Last time when degraded mode was entered (for logging/debugging).
+     */
+    private Long degradedModeEnteredTime;
 
     /**
      * Build unique key - use only ip:port
@@ -49,7 +65,10 @@ public class InstanceHealth {
                 System.currentTimeMillis(),
                 null,
                 "PASSIVE",
-                null
+                null,
+                0,    // totalUnhealthyChecks
+                false, // degradedCheckMode
+                null  // degradedModeEnteredTime
         );
     }
 }

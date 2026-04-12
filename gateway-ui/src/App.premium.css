@@ -441,8 +441,8 @@
 /* Input fields in modal - clean style */
 .ant-modal .ant-input,
 .ant-modal .ant-input-affix-wrapper {
-  background: #09090b !important;
-  border: 1px solid #3f3f46 !important;
+  background: rgba(15, 23, 42, 0.6) !important;
+  border: 1px solid rgba(71, 85, 105, 0.5) !important;
   border-radius: 6px !important;
   color: #fafafa !important;
   padding: 8px 12px !important;
@@ -454,19 +454,40 @@
 .ant-modal .ant-input-affix-wrapper:focus,
 .ant-modal .ant-input-focused,
 .ant-modal .ant-input-affix-wrapper-focused {
-  border-color: #71717a !important;
-  box-shadow: 0 0 0 2px rgba(113, 113, 122, 0.1) !important;
-  background: #0f0f11 !important;
+  border-color: rgba(99, 102, 241, 0.5) !important;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1) !important;
+  background: rgba(15, 23, 42, 0.8) !important;
 }
 
 .ant-modal .ant-input:hover,
 .ant-modal .ant-input-affix-wrapper:hover {
-  border-color: #52525b !important;
+  border-color: rgba(100, 116, 139, 0.6) !important;
 }
 
 .ant-modal .ant-input::placeholder,
 .ant-modal .ant-input-affix-wrapper .ant-input::placeholder {
-  color: #52525b !important;
+  color: #64748b !important;
+}
+
+/* TextArea in modal */
+.ant-modal .ant-input-textarea {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+}
+
+.ant-modal .ant-input-textarea .ant-input {
+  background: rgba(15, 23, 42, 0.6) !important;
+  border: 1px solid rgba(71, 85, 105, 0.5) !important;
+  border-radius: 8px !important;
+  height: auto !important;
+  padding: 8px 12px !important;
+  box-shadow: none !important;
+}
+
+.ant-modal .ant-input-textarea .ant-input:focus {
+  border-color: rgba(99, 102, 241, 0.5) !important;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1) !important;
 }
 
 /* Select fields in modal */
@@ -476,8 +497,8 @@
 
 .ant-modal .ant-select-selector,
 .ant-modal .ant-select-content {
-  background: #09090b !important;
-  border: 1px solid #3f3f46 !important;
+  background: rgba(15, 23, 42, 0.6) !important;
+  border: 1px solid rgba(71, 85, 105, 0.5) !important;
   border-radius: 6px !important;
   color: #fafafa !important;
   height: 36px !important;
@@ -486,13 +507,13 @@
 
 .ant-modal .ant-select-open .ant-select-content,
 .ant-modal .ant-select-focused .ant-select-content {
-  border-color: #71717a !important;
-  box-shadow: 0 0 0 2px rgba(113, 113, 122, 0.1) !important;
-  background: #0f0f11 !important;
+  border-color: rgba(99, 102, 241, 0.5) !important;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1) !important;
+  background: rgba(15, 23, 42, 0.8) !important;
 }
 
 .ant-modal .ant-select:hover .ant-select-content {
-  border-color: #52525b !important;
+  border-color: rgba(100, 116, 139, 0.6) !important;
 }
 
 /* Divider lines in modal */
@@ -2949,15 +2970,41 @@
   border: 1px solid rgba(148, 163, 184, 0.15);
 }
 
-.plugin-desc {
-  font-size: 12px;
+/* 插件帮助图标样式 */
+.plugin-help-icon {
   color: #94a3b8;
-  padding: 8px 12px;
-  background: #1a2338;
-  border-radius: 6px;
-  border-left: 3px solid #3b82f6;
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  margin-top: 8px;
+  font-size: 15px;
+  cursor: help;
+  margin-left: 8px;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.plugin-help-icon:hover {
+  color: #60a5fa;
+  transform: scale(1.1);
+}
+
+/* 插件类型选择器样式 */
+.plugin-type-select {
+  transition: all 0.2s ease;
+}
+
+.plugin-type-select:hover {
+  border-color: rgba(96, 165, 250, 0.5) !important;
+}
+
+/* Tooltip 样式优化 */
+.plugin-tooltip .ant-tooltip-inner {
+  background: rgba(15, 23, 42, 0.95) !important;
+  border: 1px solid rgba(71, 85, 105, 0.5) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+.plugin-tooltip .ant-tooltip-arrow::before {
+  background: rgba(15, 23, 42, 0.95) !important;
+  border: 1px solid rgba(71, 85, 105, 0.5) !important;
 }
 
 .drawer-footer {
@@ -3280,9 +3327,9 @@
   letter-spacing: 0.1px;
 }
 
-.strategy-modal .ant-input,
-.route-modal .ant-input,
-.service-modal .ant-input,
+.strategy-modal .ant-input:not(.ant-input-textarea .ant-input),
+.route-modal .ant-input:not(.ant-input-textarea .ant-input),
+.service-modal .ant-input:not(.ant-input-textarea .ant-input),
 .strategy-modal .ant-input-number,
 .route-modal .ant-input-number,
 .service-modal .ant-input-number,
@@ -3290,18 +3337,84 @@
 .route-modal .ant-select-selector,
 .service-modal .ant-select-selector {
   border-radius: 8px !important;
-  border: 1px solid rgba(148, 163, 184, 0.35) !important;
-  background: rgba(30, 41, 59, 0.95) !important;
+  border: 1px solid rgba(71, 85, 105, 0.5) !important;
+  background: rgba(15, 23, 42, 0.6) !important;
   transition: all 0.2s ease !important;
   font-size: 14px;
 }
 
-.strategy-modal .ant-input:focus,
-.route-modal .ant-input:focus,
-.service-modal .ant-input:focus,
-.strategy-modal .ant-input-focused,
-.route-modal .ant-input-focused,
-.service-modal .ant-input-focused,
+/* TextArea specific fix to prevent double border */
+/* 移除外层容器的所有边框 */
+.service-modal .ant-input-textarea,
+.service-create-modal .ant-input-textarea,
+.service-edit-modal .ant-input-textarea,
+.service-modal .ant-form-item-control-input .ant-input-textarea,
+.service-create-modal .ant-form-item-control-input .ant-input-textarea,
+.service-edit-modal .ant-form-item-control-input .ant-input-textarea,
+.route-modal .ant-input-textarea,
+.route-modal .ant-form-item-control-input .ant-input-textarea,
+.strategy-modal .ant-input-textarea,
+.strategy-modal .ant-form-item-control-input .ant-input-textarea,
+.service-modal .ant-input-textarea-affix-wrapper,
+.service-create-modal .ant-input-textarea-affix-wrapper,
+.service-edit-modal .ant-input-textarea-affix-wrapper {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* 确保textarea本身有正确的边框 */
+.service-modal .ant-input-textarea textarea,
+.service-create-modal .ant-input-textarea textarea,
+.service-edit-modal .ant-input-textarea textarea,
+.route-modal .ant-input-textarea textarea,
+.strategy-modal .ant-input-textarea textarea,
+.service-modal .ant-input-textarea .ant-input,
+.service-create-modal .ant-input-textarea .ant-input,
+.service-edit-modal .ant-input-textarea .ant-input,
+.route-modal .ant-input-textarea .ant-input,
+.strategy-modal .ant-input-textarea .ant-input {
+  background: rgba(15, 23, 42, 0.6) !important;
+  border: 1px solid rgba(71, 85, 105, 0.5) !important;
+  border-radius: 8px !important;
+  padding: 8px 12px !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.service-modal .ant-input-textarea .ant-input:focus,
+.service-create-modal .ant-input-textarea .ant-input:focus,
+.service-edit-modal .ant-input-textarea .ant-input:focus,
+.route-modal .ant-input-textarea .ant-input:focus,
+.strategy-modal .ant-input-textarea .ant-input:focus {
+  border-color: rgba(99, 102, 241, 0.5) !important;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1) !important;
+}
+
+.service-modal .ant-input-textarea .ant-input::placeholder,
+.service-create-modal .ant-input-textarea .ant-input::placeholder,
+.service-edit-modal .ant-input-textarea .ant-input::placeholder,
+.route-modal .ant-input-textarea .ant-input::placeholder,
+.strategy-modal .ant-input-textarea .ant-input::placeholder {
+  color: #64748b !important;
+}
+
+/* Fix for showCount wrapper */
+.service-modal .ant-input-textarea .ant-input-show-count-suffix,
+.service-create-modal .ant-input-textarea .ant-input-show-count-suffix,
+.service-edit-modal .ant-input-textarea .ant-input-show-count-suffix {
+  color: #64748b !important;
+  font-size: 12px !important;
+}
+
+.strategy-modal .ant-input:focus:not(.ant-input-textarea .ant-input),
+.route-modal .ant-input:focus:not(.ant-input-textarea .ant-input),
+.service-modal .ant-input:focus:not(.ant-input-textarea .ant-input),
+.strategy-modal .ant-input-focused:not(.ant-input-textarea .ant-input-focused),
+.route-modal .ant-input-focused:not(.ant-input-textarea .ant-input-focused),
+.service-modal .ant-input-focused:not(.ant-input-textarea .ant-input-focused),
 .strategy-modal .ant-select-focused .ant-select-selector,
 .route-modal .ant-select-focused .ant-select-selector,
 .service-modal .ant-select-focused .ant-select-selector {
@@ -3408,7 +3521,29 @@
   flex-shrink: 0;
 }
 
-/* 插件说明框在底部独占一行 */
+/* 插件帮助图标样式 */
+.plugin-help-icon {
+  color: #94a3b8;
+  font-size: 15px;
+  cursor: help;
+  margin-left: 8px;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.plugin-help-icon:hover {
+  color: #60a5fa;
+  transform: scale(1.1);
+}
+
+/* 插件类型选择器样式 */
+.plugin-type-select {
+  transition: all 0.2s ease;
+}
+
+.plugin-type-select:hover {
+  border-color: rgba(96, 165, 250, 0.5) !important;
+}
 .form-item-row > .plugin-desc {
   order: 999 !important;
   flex: 1 1 100% !important;
@@ -3460,6 +3595,47 @@
 .ant-radio-group-solid .ant-radio-button-wrapper-checked {
   background: #0F172A;
   border-color: #0F172A;
+}
+
+/* 路由模式按钮组优化 */
+.route-modal .ant-radio-group {
+  display: inline-flex;
+  gap: 8px;
+  background: rgba(15, 23, 42, 0.4);
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(71, 85, 105, 0.3);
+}
+
+.route-modal .ant-radio-group .ant-radio-button-wrapper {
+  border: none !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: #94a3b8 !important;
+  padding: 8px 16px !important;
+  height: auto !important;
+  line-height: 1.5 !important;
+  transition: all 0.2s ease;
+  margin: 0 !important;
+}
+
+.route-modal .ant-radio-group .ant-radio-button-wrapper:hover {
+  color: #e2e8f0 !important;
+  background: rgba(100, 116, 139, 0.2) !important;
+}
+
+.route-modal .ant-radio-group .ant-radio-button-wrapper-checked {
+  background: linear-gradient(135deg, #6366f1, #4f46e5) !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3) !important;
+}
+
+.route-modal .ant-radio-group .ant-radio-button-wrapper-checked::before {
+  display: none !important;
+}
+
+.route-modal .ant-radio-group .ant-radio-button-wrapper .anticon {
+  margin-right: 6px;
 }
 
 /* Switch in Modal */
@@ -3526,15 +3702,15 @@
 .form-section-modern {
   margin-bottom: 16px;
   padding: 14px 16px;
-  background: linear-gradient(180deg, #F8FAFC 0%, #FFFFFF 100%);
+  background: rgba(15, 23, 42, 0.4);
   border-radius: 12px;
-  border: 1px solid #E2E8F0;
+  border: 1px solid rgba(71, 85, 105, 0.3);
   transition: all 0.2s ease;
 }
 
 .form-section-modern:hover {
-  border-color: #CBD5E1;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+  border-color: rgba(71, 85, 105, 0.5);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .section-header {
@@ -3543,7 +3719,7 @@
   gap: 10px;
   margin-bottom: 14px;
   padding-bottom: 12px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  border-bottom: 1px solid rgba(71, 85, 105, 0.3);
 }
 
 .section-icon {
@@ -3772,8 +3948,8 @@
 
 /* 服务模态框中的选择器优化 */
 .service-modal .ant-select-selector {
-  background: rgba(17, 24, 39, 0.6) !important;
-  border: 1px solid rgba(148, 163, 184, 0.15) !important;
+  background: rgba(15, 23, 42, 0.6) !important;
+  border: 1px solid rgba(71, 85, 105, 0.5) !important;
   color: #f1f5f9 !important;
 }
 
@@ -3789,8 +3965,8 @@
 }
 
 .service-modal .ant-select-dropdown {
-  background: rgba(17, 24, 39, 0.95);
-  border: 1px solid rgba(148, 163, 184, 0.15);
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(71, 85, 105, 0.4);
 }
 
 .service-modal .ant-select-dropdown .ant-select-item-option-content {
@@ -4258,15 +4434,15 @@
 .form-section-modern {
   margin-bottom: 16px;
   padding: 14px 16px;
-  background: linear-gradient(180deg, #F8FAFC 0%, #FFFFFF 100%);
+  background: rgba(15, 23, 42, 0.4);
   border-radius: 12px;
-  border: 1px solid #E2E8F0;
+  border: 1px solid rgba(71, 85, 105, 0.3);
   transition: all 0.2s ease;
 }
 
 .form-section-modern:hover {
-  border-color: #CBD5E1;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+  border-color: rgba(71, 85, 105, 0.5);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .section-header {
@@ -4275,7 +4451,7 @@
   gap: 10px;
   margin-bottom: 14px;
   padding-bottom: 12px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  border-bottom: 1px solid rgba(71, 85, 105, 0.3);
 }
 
 .section-icon {
@@ -4504,8 +4680,8 @@
 
 /* 服务模态框中的选择器优化 */
 .service-modal .ant-select-selector {
-  background: rgba(17, 24, 39, 0.6) !important;
-  border: 1px solid rgba(148, 163, 184, 0.15) !important;
+  background: rgba(15, 23, 42, 0.6) !important;
+  border: 1px solid rgba(71, 85, 105, 0.5) !important;
   color: #f1f5f9 !important;
 }
 
@@ -4521,8 +4697,8 @@
 }
 
 .service-modal .ant-select-dropdown {
-  background: rgba(17, 24, 39, 0.95);
-  border: 1px solid rgba(148, 163, 184, 0.15);
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(71, 85, 105, 0.4);
 }
 
 .service-modal .ant-select-dropdown .ant-select-item-option-content {
@@ -4629,15 +4805,15 @@
 .form-section-modern {
   margin-bottom: 16px;
   padding: 14px 16px;
-  background: linear-gradient(180deg, #F8FAFC 0%, #FFFFFF 100%);
+  background: rgba(15, 23, 42, 0.4);
   border-radius: 12px;
-  border: 1px solid #E2E8F0;
+  border: 1px solid rgba(71, 85, 105, 0.3);
   transition: all 0.2s ease;
 }
 
 .form-section-modern:hover {
-  border-color: #CBD5E1;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+  border-color: rgba(71, 85, 105, 0.5);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .section-header {
@@ -4646,7 +4822,7 @@
   gap: 10px;
   margin-bottom: 14px;
   padding-bottom: 12px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  border-bottom: 1px solid rgba(71, 85, 105, 0.3);
 }
 
 .section-icon {
@@ -4875,8 +5051,8 @@
 
 /* 服务模态框中的选择器优化 */
 .service-modal .ant-select-selector {
-  background: rgba(17, 24, 39, 0.6) !important;
-  border: 1px solid rgba(148, 163, 184, 0.15) !important;
+  background: rgba(15, 23, 42, 0.6) !important;
+  border: 1px solid rgba(71, 85, 105, 0.5) !important;
   color: #f1f5f9 !important;
 }
 
@@ -4892,8 +5068,8 @@
 }
 
 .service-modal .ant-select-dropdown {
-  background: rgba(17, 24, 39, 0.95);
-  border: 1px solid rgba(148, 163, 184, 0.15);
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(71, 85, 105, 0.4);
 }
 
 .service-modal .ant-select-dropdown .ant-select-item-option-content {
@@ -9470,21 +9646,53 @@ kbd {
   height: auto !important;
 }
 
+/* 修复路由弹窗textarea双边框问题 */
+.route-modal .ant-input-textarea,
+.route-modal .ant-input-textarea-affix-wrapper {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.route-modal .ant-input-textarea textarea,
+.route-modal .ant-input-textarea .ant-input {
+  background: rgba(15, 23, 42, 0.6) !important;
+  border: 1px solid rgba(71, 85, 105, 0.5) !important;
+  border-radius: 8px !important;
+  padding: 8px 12px !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.route-modal .ant-input-textarea textarea:focus,
+.route-modal .ant-input-textarea .ant-input:focus {
+  border-color: rgba(99, 102, 241, 0.5) !important;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1) !important;
+}
+
 /* 帮助提示文字 */
 .ant-form-item-extra {
   color: #64748b !important;
 }
 
 /* 负载均衡下拉选项样式 */
+.loadBalancer-dropdown {
+  min-width: 280px !important;
+  max-width: 350px !important;
+}
+
 .loadBalancer-dropdown .ant-select-item-option-content {
-  padding: 8px 12px !important;
+  padding: 6px 12px !important;
 }
 
 .loadBalancer-dropdown .option-wrapper {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: flex-start;
+  gap: 10px;
   width: 100%;
+  padding: 4px 0;
 }
 
 .loadBalancer-dropdown .option-text {
@@ -9492,17 +9700,20 @@ kbd {
   flex-direction: column;
   gap: 2px;
   flex: 1;
+  min-width: 0;
 }
 
 .loadBalancer-dropdown .option-title {
   color: #e2e8f0;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
+  line-height: 1.4;
 }
 
 .loadBalancer-dropdown .option-desc {
   color: rgba(148, 163, 184, 0.8);
   font-size: 12px;
+  line-height: 1.3;
 }
 
 .loadBalancer-dropdown .option-icon {
@@ -9568,12 +9779,65 @@ kbd {
   color: rgba(129, 140, 248, 0.8);
 }
 
+/* 负载均衡策略图标独特样式 */
+.option-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  font-size: 16px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.option-icon-weighted {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(217, 119, 6, 0.2));
+  color: #fbbf24;
+}
+
+.option-icon-roundrobin {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(37, 99, 235, 0.2));
+  color: #60a5fa;
+}
+
+.option-icon-random {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.2));
+  color: #34d399;
+}
+
+.option-icon-hash {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(124, 58, 237, 0.2));
+  color: #a78bfa;
+}
+
+.loadBalancer-dropdown .ant-select-item-option-active:not(.ant-select-item-option-disabled) .option-icon {
+  transform: scale(1.05);
+}
+
+.loadBalancer-dropdown .ant-select-item-option-selected .option-icon-weighted {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.3), rgba(217, 119, 6, 0.3));
+}
+
+.loadBalancer-dropdown .ant-select-item-option-selected .option-icon-roundrobin {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(37, 99, 235, 0.3));
+}
+
+.loadBalancer-dropdown .ant-select-item-option-selected .option-icon-random {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(5, 150, 105, 0.3));
+}
+
+.loadBalancer-dropdown .ant-select-item-option-selected .option-icon-hash {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(124, 58, 237, 0.3));
+}
+
 /* ==================== 服务模态框选择器强制深色样式 ==================== */
 .service-modal .ant-select-selector,
 .service-create-modal .ant-select-selector,
 .service-edit-modal .ant-select-selector {
-  background: rgba(30, 41, 59, 0.95) !important;
-  border-color: rgba(148, 163, 184, 0.35) !important;
+  background: rgba(15, 23, 42, 0.6) !important;
+  border-color: rgba(71, 85, 105, 0.5) !important;
   color: #f8fafc !important;
 }
 
@@ -10063,6 +10327,51 @@ kbd {
 /* 卡片图标增强 */
 .instance-card .anticon[style*="font-size: 24px"] {
   filter: drop-shadow(0 2px 8px rgba(59, 130, 246, 0.4)) !important;
+}
+
+/* ==================== 终极TextArea修复 - 修复双重边框问题 ==================== */
+/* 重置所有modal中的TextArea外层容器 */
+.ant-modal .ant-input-textarea,
+.ant-modal .ant-input-textarea * {
+  box-sizing: border-box !important;
+}
+
+/* 移除外层容器的边框 */
+.ant-modal .ant-input-textarea {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+/* 为textarea本身设置统一的边框 */
+.ant-modal textarea.ant-input,
+.ant-modal .ant-input-textarea textarea {
+  background: rgba(15, 23, 42, 0.6) !important;
+  border: 1px solid rgba(71, 85, 105, 0.5) !important;
+  border-radius: 8px !important;
+  padding: 8px 12px !important;
+  box-shadow: none !important;
+  outline: none !important;
+  color: #f1f5f9 !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+}
+
+.ant-modal textarea.ant-input:hover,
+.ant-modal .ant-input-textarea textarea:hover {
+  border-color: rgba(100, 116, 139, 0.6) !important;
+}
+
+.ant-modal textarea.ant-input:focus,
+.ant-modal .ant-input-textarea textarea:focus {
+  border-color: rgba(99, 102, 241, 0.5) !important;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1) !important;
+}
+
+.ant-modal textarea.ant-input::placeholder,
+.ant-modal .ant-input-textarea textarea::placeholder {
+  color: #64748b !important;
 }
 
 

@@ -172,6 +172,16 @@ public interface FilterOrderConstants {
     int MULTI_SERVICE_LOAD_BALANCER = 10001;
 
     /**
+     * Nacos discovery load balancer filter.
+     * Handles lb:// services with namespace/group override.
+     * Execute BEFORE SCG's native ReactiveLoadBalancerClientFilter (10150).
+     * <p>
+     * Use case: Query services in different Nacos namespaces/groups.
+     * Triggered when serviceNamespace or serviceGroup is specified in route config.
+     */
+    int NACOS_DISCOVERY_LOAD_BALANCER = 10100;
+
+    /**
      * Discovery load balancer filter.
      * SCG built-in ReactiveLoadBalancerClientFilter is at 10150.
      * This filter handles service discovery based load balancing.

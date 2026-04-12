@@ -85,6 +85,7 @@ const resources = {
       'routes.no_plugins': 'No plugins',
       'routes.stats_routes': 'Routes',
       'routes.stats_enabled': 'Enabled',
+      'routes.stats_disabled': 'Disabled',
       'routes.predicate_type': 'Predicate Type',
       'routes.filter_type': 'Route Plugin Type',
       'routes.arguments': 'Arguments',
@@ -1413,8 +1414,6 @@ const resources = {
       'ai.analyzing': 'AI analyzing, please wait...',
       'ai.analysis_failed': 'AI analysis failed',
       'ai.reanalyze': 'Re-analyze',
-      'ai.analysis_mode': 'Analysis Mode',
-      'ai.realtime_analysis': 'Realtime',
       'ai.timerange_analysis': 'Time Range',
       'ai.select_time_range': 'Select Time Range',
       'ai.please_select_time_range': 'Please select a time range',
@@ -1495,6 +1494,8 @@ const resources = {
       'copilot.not_configured': 'Not Configured',
       'copilot.select_provider': 'Select Provider',
       'copilot.select_model_first': 'Please configure AI model first',
+      'copilot.target_service': 'Target Service',
+      'copilot.select_service': 'Select service (optional)',
 
       // Diagnostic
       'diagnostic.title': 'System Diagnostic',
@@ -1701,6 +1702,7 @@ const resources = {
       'routes.no_plugins': '无插件',
       'routes.stats_routes': '路由',
       'routes.stats_enabled': '已启用',
+      'routes.stats_disabled': '已禁用',
       'routes.predicate_type': '断言类型',
       'routes.filter_type': '路由插件类型',
       'routes.arguments': '参数',
@@ -2985,8 +2987,6 @@ const resources = {
       'ai.analyzing': 'AI分析中，请稍候...',
       'ai.analysis_failed': 'AI分析失败',
       'ai.reanalyze': '重新分析',
-      'ai.analysis_mode': '分析模式',
-      'ai.realtime_analysis': '实时分析',
       'ai.timerange_analysis': '时间段分析',
       'ai.select_time_range': '选择时间段',
       'ai.please_select_time_range': '请选择时间段',
@@ -3067,6 +3067,8 @@ const resources = {
       'copilot.not_configured': '未配置',
       'copilot.select_provider': '选择提供商',
       'copilot.select_model_first': '请先配置AI模型',
+      'copilot.target_service': '目标服务',
+      'copilot.select_service': '选择服务（可选）',
 
       // Diagnostic - Chinese
       'diagnostic.title': '系统诊断',

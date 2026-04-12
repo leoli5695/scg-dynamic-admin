@@ -2,37 +2,35 @@ package com.leoli.gateway.filter.loadbalancer;
 
 import com.leoli.gateway.health.HybridHealthChecker;
 import com.leoli.gateway.health.InstanceHealth;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.loadbalancer.LoadBalancerUriTools;
+import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.support.NotFoundException;
 import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
-import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.net.URI;
+import java.util.List;
 import java.util.Set;
 
 /**
  * Handles request execution with instance-level retry on failure.
  */
 @Slf4j
+@Component
+@RequiredArgsConstructor
 public class InstanceRetryExecutor {
 
-    private final HybridHealthChecker healthChecker;
     private final InstanceFilter instanceFilter;
+    private final HybridHealthChecker healthChecker;
 
-    public InstanceRetryExecutor(HybridHealthChecker healthChecker, InstanceFilter instanceFilter) {
-        this.healthChecker = healthChecker;
-        this.instanceFilter = instanceFilter;
-    }
-
-    public Mono<Void> execute(ServerWebExchange exchange,
-                               org.springframework.cloud.gateway.filter.GatewayFilterChain chain,
-                               String serviceId, ServiceInstance instance,
-                               java.util.List<ServiceInstance> allInstances,
-                               Set<String> triedInstances) {
+    public Mono<Void> execute(ServerWebExchange exchange, GatewayFilterChain chain,
+                              String serviceId, ServiceInstance instance,
+                              List<ServiceInstance> allInstances, Set<String> triedInstances) {
         URI uri = exchange.getRequest().getURI();
         String overrideScheme = instance.isSecure() ? "https" : "http";
         DelegatingServiceInstance serviceInstance = new DelegatingServiceInstance(instance, overrideScheme);
@@ -93,7 +91,7 @@ public class InstanceRetryExecutor {
     }
 
     private String buildDetailedErrorMessage(String serviceId, ServiceInstance instance,
-                                              InstanceHealth health, Throwable error) {
+                                             InstanceHealth health, Throwable error) {
         StringBuilder message = new StringBuilder();
         message.append("Failed to connect to service instance")
                 .append(" [serviceId=").append(serviceId)
@@ -138,12 +136,39 @@ public class InstanceRetryExecutor {
             this.scheme = scheme;
         }
 
-        @Override public String getServiceId() { return delegate.getServiceId(); }
-        @Override public String getHost() { return delegate.getHost(); }
-        @Override public int getPort() { return delegate.getPort(); }
-        @Override public boolean isSecure() { return "https".equals(scheme); }
-        @Override public URI getUri() { return delegate.getUri(); }
-        @Override public java.util.Map<String, String> getMetadata() { return delegate.getMetadata(); }
-        @Override public String getInstanceId() { return delegate.getInstanceId(); }
+        @Override
+        public String getServiceId() {
+            return delegate.getServiceId();
+        }
+
+        @Override
+        public String getHost() {
+            return delegate.getHost();
+        }
+
+        @Override
+        public int getPort() {
+            return delegate.getPort();
+        }
+
+        @Override
+        public boolean isSecure() {
+            return "https".equals(scheme);
+        }
+
+        @Override
+        public URI getUri() {
+            return delegate.getUri();
+        }
+
+        @Override
+        public java.util.Map<String, String> getMetadata() {
+            return delegate.getMetadata();
+        }
+
+        @Override
+        public String getInstanceId() {
+            return delegate.getInstanceId();
+        }
     }
 }
