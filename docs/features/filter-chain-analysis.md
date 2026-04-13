@@ -1,12 +1,12 @@
 # Filter Chain Analysis
 
-> Filter Chain 分析功能追踪每个 Filter 的执行统计，包括 P50/P95/P99 分位数、慢请求检测、时间占比分析，帮助精准定位性能瓶颈。
+> Filter Chain analysis functionality tracks execution statistics for each Filter, including P50/P95/P99 percentiles, slow request detection, and time percentage analysis, helping to precisely locate performance bottlenecks.
 
 ---
 
 ## Overview
 
-追踪每个 Filter 的执行情况：
+Track each Filter's execution:
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -39,28 +39,28 @@
 
 ## Statistics per Filter
 
-每个 Filter 维护以下统计指标：
+Each Filter maintains the following statistical metrics:
 
 | Metric | Description | Precision |
 |--------|-------------|-----------|
-| `totalCount` | 总执行次数 | 原子计数器 |
-| `successCount` | 成功次数 | 原子计数器 |
-| `failureCount` | 失败次数 | 原子计数器 |
-| `successRate` | 成功率百分比 | 实时计算 |
-| `avgDurationMicros` | 平均执行时间（微秒） | 原子累加 |
-| `avgDurationMs` | 平均执行时间（毫秒） | 转换 |
-| `maxDurationMicros` | 最大执行时间 | CAS 更新 |
-| `minDurationMicros` | 最小执行时间 | CAS 更新 |
+| `totalCount` | Total execution count | Atomic counter |
+| `successCount` | Success count | Atomic counter |
+| `failureCount` | Failure count | Atomic counter |
+| `successRate` | Success rate percentage | Real-time calculation |
+| `avgDurationMicros` | Average execution time (microseconds) | Atomic accumulation |
+| `avgDurationMs` | Average execution time (milliseconds) | Conversion |
+| `maxDurationMicros` | Maximum execution time | CAS update |
+| `minDurationMicros` | Minimum execution time | CAS update |
 
-### Percentile Statistics (滑动窗口)
+### Percentile Statistics (Sliding Window)
 
 | Metric | Description |
 |--------|-------------|
-| `p50Micros` / `p50Ms` | 中位数响应时间 |
-| `p95Micros` / `p95Ms` | 95% 请求响应时间 |
-| `p99Micros` / `p99Ms` | 99% 请求响应时间 |
+| `p50Micros` / `p50Ms` | Median response time |
+| `p95Micros` / `p95Ms` | 95% request response time |
+| `p99Micros` / `p99Ms` | 99% request response time |
 
-**滑动窗口机制**：保留最近 100 次执行时间，用于分位数计算，避免历史数据干扰。
+**Sliding Window Mechanism**: Keeps the last 100 execution times for percentile calculation, avoiding historical data interference.
 
 ---
 
@@ -68,22 +68,22 @@
 
 ### Threshold Configuration
 
-- **默认阈值**: 1000ms（1 秒）
-- **可动态调整**: 通过 API 或 AI Copilot 工具修改
-- **触发告警**: 单个 Filter 或整个链超过阈值时记录
+- **Default threshold**: 1000ms (1 second)
+- **Dynamically adjustable**: Modify via API or AI Copilot tool
+- **Alert trigger**: Recorded when single Filter or entire chain exceeds threshold
 
 ### Slow Request Tracking
 
-当请求总耗时超过阈值时：
-1. 记录到慢请求列表
-2. 增加慢请求计数器
-3. 保留完整 Filter 执行明细
+When request total duration exceeds threshold:
+1. Record to slow request list
+2. Increment slow request counter
+3. Retain complete Filter execution details
 
 ---
 
 ## Trace Record Structure
 
-单个请求的 Filter Chain 记录：
+Single request's Filter Chain record:
 
 ```json
 {
@@ -126,7 +126,7 @@
 }
 ```
 
-**timeBreakdown** 字段显示每个 Filter 占总时间的百分比，快速定位瓶颈。
+**timeBreakdown** field shows each Filter's percentage of total time, quickly identifying bottlenecks.
 
 ---
 
@@ -134,12 +134,12 @@
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/internal/filter-chain/stats` | Filter 统计摘要 |
-| `GET` | `/internal/filter-chain/slowest-filters` | 最慢 Filter 排名 |
-| `GET` | `/internal/filter-chain/slow` | 慢请求列表 |
-| `GET` | `/internal/filter-chain/trace/{traceId}` | 单个 trace 详情 |
-| `POST` | `/internal/filter-chain/threshold` | 设置慢请求阈值 |
-| `DELETE` | `/internal/filter-chain/stats` | 清除统计 |
+| `GET` | `/internal/filter-chain/stats` | Filter statistics summary |
+| `GET` | `/internal/filter-chain/slowest-filters` | Slowest Filter ranking |
+| `GET` | `/internal/filter-chain/slow` | Slow request list |
+| `GET` | `/internal/filter-chain/trace/{traceId}` | Single trace details |
+| `POST` | `/internal/filter-chain/threshold` | Set slow request threshold |
+| `DELETE` | `/internal/filter-chain/stats` | Clear statistics |
 
 ### Get Summary Report
 
@@ -183,45 +183,45 @@ Response:
 curl http://localhost:8080/internal/filter-chain/slowest-filters?limit=10
 ```
 
-按平均耗时排序，快速定位瓶颈 Filter。
+Sort by average duration, quickly identify bottleneck Filters.
 
 ---
 
 ## Performance Optimizations
 
-实现采用多项优化：
+Implementation uses multiple optimizations:
 
 | Optimization | Description |
 |--------------|-------------|
-| **ConcurrentLinkedDeque** | 高并发队列存储记录 |
-| **Atomic Counters** | 原子计数器减少锁竞争 |
-| **Sliding Window** | 滑动窗口分位数计算，避免全量排序 |
-| **Rolling Window** | 最多保留 1000 条记录，自动淘汰旧记录 |
+| **ConcurrentLinkedDeque** | High-concurrency queue for storing records |
+| **Atomic Counters** | Atomic counters reduce lock contention |
+| **Sliding Window** | Sliding window percentile calculation, avoiding full sorting |
+| **Rolling Window** | Keep up to 1000 records, automatically evict old records |
 
 ---
 
 ## AI Copilot Integration
 
-AI Copilot 可调用以下工具分析 Filter Chain：
+AI Copilot can call the following tools to analyze Filter Chain:
 
 | Tool | Capability |
 |------|------------|
-| `get_filter_chain_stats` | 获取统计摘要、慢请求数量 |
-| `get_slowest_filters` | 获取最慢 Filter 排名 |
-| `get_slow_requests` | 获取慢请求列表及 traceId |
-| `get_filter_trace_detail` | 获取单个 trace 的完整执行明细 |
-| `set_slow_threshold` | 动态调整慢请求阈值（需确认） |
-| `suggest_filter_reorder` | 分析并给出 Filter 重排序建议 |
+| `get_filter_chain_stats` | Get statistics summary, slow request count |
+| `get_slowest_filters` | Get slowest Filter ranking |
+| `get_slow_requests` | Get slow request list and traceId |
+| `get_filter_trace_detail` | Get complete execution details for single trace |
+| `set_slow_threshold` | Dynamically adjust slow request threshold (requires confirmation) |
+| `suggest_filter_reorder` | Analyze and provide Filter reorder suggestions |
 
-### suggest_filter_reorder 输出
+### suggest_filter_reorder Output
 
 ```
-分析内容：
-- Filter 执行耗时排名
-- 可提前执行的 Filter（认证/限流类）
-- 必须在路由匹配后执行的 Filter（负载均衡/重试类）
-- 性能趋势对比（当前时间段 vs 前一时间段）
-- 预期性能提升估算
+Analysis content:
+- Filter execution duration ranking
+- Filters that can be executed earlier (authentication/rate limiting)
+- Filters that must execute after route matching (load balancing/retry)
+- Performance trend comparison (current period vs previous period)
+- Expected performance improvement estimation
 ```
 
 ---
@@ -230,28 +230,28 @@ AI Copilot 可调用以下工具分析 Filter Chain：
 
 | Use Case | How to Use |
 |----------|------------|
-| **性能调优** | 查看最慢 Filter 排名，优化耗时最高的 Filter |
-| **故障排查** | 查看失败率高 Filter，结合 error 信息定位问题 |
-| **容量规划** | 分析 P95/P99 响应时间，评估系统容量 |
-| **优化验证** | 对比优化前后的统计数据，验证效果 |
-| **Filter 顺序优化** | 使用 `suggest_filter_reorder` 工具获取建议 |
+| **Performance Tuning** | View slowest Filter ranking, optimize highest duration Filters |
+| **Troubleshooting** | View high failure rate Filters, locate issues with error information |
+| **Capacity Planning** | Analyze P95/P99 response times, evaluate system capacity |
+| **Optimization Verification** | Compare statistics before and after optimization, verify effectiveness |
+| **Filter Order Optimization** | Use `suggest_filter_reorder` tool for suggestions |
 
 ---
 
 ## Best Practices
 
-1. **定期分析**: 监控 P95/P99 分位数而非只看平均值
-2. **关注异常**: 失败率 > 5% 的 Filter 需调查
-3. **时间占比**: 关注 timeBreakdown 中占比 > 30% 的 Filter
-4. **阈值调整**: 根据业务响应时间要求调整 slowThresholdMs
-5. **滚动窗口**: 保留 1000 条记录足够分析，无需增加
+1. **Regular Analysis**: Monitor P95/P99 percentiles rather than just averages
+2. **Watch for Anomalies**: Investigate Filters with failure rate > 5%
+3. **Time Percentage**: Focus on Filters with > 30% in timeBreakdown
+4. **Threshold Adjustment**: Adjust slowThresholdMs based on business response time requirements
+5. **Rolling Window**: 1000 records is sufficient for analysis, no need to increase
 
 ---
 
 ## Related Features
 
-- [Request Tracing](request-tracing.md) - 请求追踪
-- [Request Replay](request-replay.md) - 请求重放调试
-- [Monitoring & Alerts](monitoring-alerts.md) - 监控
-- [AI Copilot](ai-copilot.md) - AI 工具调用分析
-- [ARCHITECTURE.md](../ARCHITECTURE.md) - Filter Chain 架构
+- [Request Tracing](request-tracing.md) - Request tracing
+- [Request Replay](request-replay.md) - Request replay debugging
+- [Monitoring & Alerts](monitoring-alerts.md) - Monitoring
+- [AI Copilot](ai-copilot.md) - AI tool call analysis
+- [ARCHITECTURE.md](../ARCHITECTURE.md) - Filter Chain architecture

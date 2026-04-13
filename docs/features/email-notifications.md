@@ -1,15 +1,15 @@
 # Email Notifications
 
-> 邮件通知功能支持 SMTP 配置，发送告警和系统通知。
+> Email notifications support SMTP configuration for sending alerts and system notifications.
 
 ---
 
 ## Overview
 
-邮件通知用于：
-- 告警通知
-- SSL 证书到期提醒
-- 系统状态报告
+Email notifications are used for:
+- Alert notifications
+- SSL certificate expiration reminders
+- System status reports
 
 ---
 
@@ -29,12 +29,12 @@
 
 | Parameter | Description |
 |-----------|-------------|
-| `host` | SMTP 服务器地址 |
-| `port` | SMTP 端口 |
-| `username` | 认证用户名 |
-| `password` | 认证密码 |
-| `from` | 发件人地址 |
-| `useStartTls` | 是否使用 STARTTLS |
+| `host` | SMTP server address |
+| `port` | SMTP port |
+| `username` | Authentication username |
+| `password` | Authentication password |
+| `from` | Sender address |
+| `useStartTls` | Whether to use STARTTLS |
 
 ---
 
@@ -68,7 +68,7 @@ Response:
 
 ## Email Templates
 
-告警邮件使用 HTML 模板：
+Alert emails use HTML templates:
 
 ```html
 Subject: [ALERT] Gateway Alert
@@ -109,17 +109,17 @@ Subject: [ALERT] Gateway Alert
 
 ## Best Practices
 
-1. **SMTP 配置**：使用企业邮箱服务
-2. **STARTTLS**：启用加密传输
-3. **告警分级**：不同级别发送不同邮件
-4. **接收人管理**：根据告警类型设置接收人
-5. **测试验证**：配置后发送测试邮件
+1. **SMTP Configuration**: Use enterprise email services
+2. **STARTTLS**: Enable encrypted transmission
+3. **Alert Levels**: Send different emails for different severity levels
+4. **Recipient Management**: Set recipients based on alert type
+5. **Test Validation**: Send test email after configuration
 
 ---
 
 ## Related Features
 
-- [Monitoring & Alerts](monitoring-alerts.md) - 告警触发源
-- [SSL Termination](ssl-termination.md) - 证书到期提醒
-- [Gateway Instance Management](instance-management.md) - 实例状态告警
-- [AI-Powered Analysis](ai-analysis.md) - AI 生成邮件内容
+- [Monitoring & Alerts](monitoring-alerts.md) - Alert trigger source
+- [SSL Termination](ssl-termination.md) - Certificate expiration reminders
+- [Gateway Instance Management](instance-management.md) - Instance status alerts
+- [AI-Powered Analysis](ai-analysis.md) - AI-generated email content

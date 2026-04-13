@@ -1,12 +1,12 @@
 # Response Caching
 
-> 响应缓存功能基于 Caffeine 实现内存缓存，加速 GET/HEAD 请求。
+> Response caching uses Caffeine for in-memory caching to accelerate GET/HEAD requests.
 
 ---
 
 ## Overview
 
-响应缓存对 GET/HEAD 请求生效：
+Response caching applies to GET/HEAD requests:
 
 ```
 GET/HEAD Request
@@ -49,8 +49,8 @@ GET/HEAD Request
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `ttl` | 缓存过期时间 (秒) | `300` |
-| `maxSize` | 最大缓存条目数 | `1000` |
+| `ttl` | Cache expiration time (seconds) | `300` |
+| `maxSize` | Maximum number of cache entries | `1000` |
 
 ---
 
@@ -58,8 +58,8 @@ GET/HEAD Request
 
 | Header | Description |
 |--------|-------------|
-| `X-Cache` | `HIT` 或 `MISS` |
-| `Age` | 缓存时间（秒） |
+| `X-Cache` | `HIT` or `MISS` |
+| `Age` | Cache age (seconds) |
 
 Response Headers:
 ```
@@ -71,14 +71,14 @@ Age: 120
 
 ## Cache Key
 
-缓存 Key 由以下组成：
+Cache key consists of:
 - Route ID
-- 请求 URL（含 Query 参数）
-- Vary Headers（如配置）
+- Request URL (including query parameters)
+- Vary Headers (if configured)
 
 ### Vary Headers
 
-配置区分缓存的 Header：
+Configure headers to differentiate cache:
 
 ```json
 {
@@ -86,7 +86,7 @@ Age: 120
 }
 ```
 
-不同 `Accept` Header 的请求缓存分开存储。
+Requests with different `Accept` headers are cached separately.
 
 ---
 
@@ -94,7 +94,7 @@ Age: 120
 
 ### TTL Expiration
 
-自动过期：
+Automatic expiration:
 
 ```yaml
 # Default 5 minutes
@@ -103,7 +103,7 @@ ttl: 300
 
 ### Manual Clear
 
-通过 API 清除缓存：
+Clear cache via API:
 
 ```bash
 DELETE /api/cache/{routeId}
@@ -111,10 +111,10 @@ DELETE /api/cache/{routeId}
 
 ### Skip Cache
 
-请求携带以下 Header 不缓存：
+Requests with the following headers are not cached:
 - `Cache-Control: no-cache`
 - `Pragma: no-cache`
-- `Authorization` (存在时)
+- `Authorization` (when present)
 
 ---
 
@@ -131,7 +131,7 @@ DELETE /api/cache/{routeId}
 
 ## API Endpoints
 
-通过 Strategy API 配置：
+Configure via Strategy API:
 
 ```bash
 curl -X PUT http://localhost:9090/api/strategies/cache \
@@ -144,7 +144,7 @@ curl -X PUT http://localhost:9090/api/strategies/cache \
   }'
 ```
 
-清除缓存：
+Clear cache:
 ```bash
 curl -X DELETE http://localhost:9090/api/cache/static-api
 ```
@@ -153,15 +153,15 @@ curl -X DELETE http://localhost:9090/api/cache/static-api
 
 ## Best Practices
 
-1. **合理 TTL**：根据数据更新频率设置
-2. **缓存大小**：根据内存限制设置
-3. **Vary Headers**：区分不同客户端缓存
-4. **监控命中率**：优化缓存策略
-5. **主动失效**：数据更新时清除缓存
+1. **Appropriate TTL**: Set based on data update frequency
+2. **Cache Size**: Set based on memory constraints
+3. **Vary Headers**: Differentiate cache for different clients
+4. **Monitor Hit Rate**: Optimize caching strategy
+5. **Proactive Invalidation**: Clear cache when data is updated
 
 ---
 
 ## Related Features
 
-- [Response Transform](response-transform.md) - 缓存转换后响应
-- [Monitoring & Alerts](monitoring-alerts.md) - 缓存监控
+- [Response Transform](response-transform.md) - Cache transformed responses
+- [Monitoring & Alerts](monitoring-alerts.md) - Cache monitoring

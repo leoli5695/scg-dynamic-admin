@@ -1,12 +1,12 @@
 # IP Filtering
 
-> IP 过滤提供黑名单/白名单访问控制，支持 CIDR 格式。
+> IP filtering provides blacklist/whitelist access control, supporting CIDR format.
 
 ---
 
 ## Overview
 
-IP 过滤在认证之前执行，快速拒绝恶意请求：
+IP filtering executes before authentication, quickly rejecting malicious requests:
 
 ```
 Request Flow:
@@ -19,9 +19,9 @@ Request Flow:
   Authentication (-250) → Auth check
 ```
 
-**为什么在认证之前？**
-- 快速拒绝，节省认证开销
-- 防止恶意 IP 消耗系统资源
+**Why before authentication?**
+- Quick rejection, saving authentication overhead
+- Prevent malicious IPs from consuming system resources
 
 ---
 
@@ -29,8 +29,8 @@ Request Flow:
 
 | Mode | Description | Use Case |
 |------|-------------|----------|
-| `blacklist` | 黑名单模式 | 阻止已知恶意 IP |
-| `whitelist` | 白名单模式 | 仅允许特定 IP 访问 |
+| `blacklist` | Blacklist mode | Block known malicious IPs |
+| `whitelist` | Whitelist mode | Only allow specific IPs to access |
 
 ---
 
@@ -38,9 +38,9 @@ Request Flow:
 
 | Format | Example | Description |
 |--------|---------|-------------|
-| Exact | `192.168.1.100` | 精确匹配 |
-| Wildcard | `192.168.1.*` | 通配符匹配 |
-| CIDR | `192.168.1.0/24` | CIDR 网段 |
+| Exact | `192.168.1.100` | Exact match |
+| Wildcard | `192.168.1.*` | Wildcard match |
+| CIDR | `192.168.1.0/24` | CIDR network segment |
 
 ### CIDR Examples
 
@@ -69,7 +69,7 @@ Request Flow:
 }
 ```
 
-黑名单中的 IP 被拒绝，其他 IP 允许访问。
+IPs in the blacklist are rejected, other IPs are allowed.
 
 ### Whitelist Mode
 
@@ -85,13 +85,13 @@ Request Flow:
 }
 ```
 
-仅白名单中的 IP 允许访问，其他 IP 被拒绝。
+Only IPs in the whitelist are allowed, other IPs are rejected.
 
 ---
 
 ## Trusted Proxies
 
-当 Gateway 位于反向代理后面时，需要配置可信代理：
+When Gateway is behind a reverse proxy, trusted proxies need to be configured:
 
 ```yaml
 gateway:
@@ -102,7 +102,7 @@ gateway:
       - "10.0.0.2"    # Load balancer
 ```
 
-Gateway 会从 `X-Forwarded-For` Header 中提取真实客户端 IP。
+Gateway extracts the real client IP from the `X-Forwarded-For` Header.
 
 ### IP Extraction Logic
 
@@ -118,7 +118,7 @@ Extract: Rightmost non-trusted IP = 10.0.0.100
 
 ## Error Response
 
-IP 被阻止时返回：
+When IP is blocked, returns:
 
 ```json
 {
@@ -133,7 +133,7 @@ IP 被阻止时返回：
 
 ## API Endpoints
 
-通过 Strategy API 配置：
+Configure via Strategy API:
 
 ```bash
 curl -X PUT http://localhost:9090/api/strategies/ip-filter \
@@ -150,16 +150,16 @@ curl -X PUT http://localhost:9090/api/strategies/ip-filter \
 
 ## Best Practices
 
-1. **白名单优先**：内部 API 使用白名单模式
-2. **定期更新黑名单**：根据安全日志更新恶意 IP
-3. **CIDR 优化**：使用 CIDR 替代大量单独 IP
-4. **可信代理配置**：确保正确提取真实 IP
-5. **结合监控**：记录被阻止的 IP 用于分析
+1. **Whitelist First**: Use whitelist mode for internal APIs
+2. **Regular Blacklist Updates**: Update malicious IPs based on security logs
+3. **CIDR Optimization**: Use CIDR instead of large numbers of individual IPs
+4. **Trusted Proxy Configuration**: Ensure correct real IP extraction
+5. **Combine with Monitoring**: Log blocked IPs for analysis
 
 ---
 
 ## Related Features
 
-- [Authentication](authentication.md) - 认证配置
-- [Rate Limiting](rate-limiting.md) - 按IP限流
-- [Request Tracing](request-tracing.md) - 安全事件追踪
+- [Authentication](authentication.md) - Authentication configuration
+- [Rate Limiting](rate-limiting.md) - IP-based rate limiting
+- [Request Tracing](request-tracing.md) - Security event tracing

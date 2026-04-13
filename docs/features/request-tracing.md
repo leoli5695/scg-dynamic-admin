@@ -1,54 +1,54 @@
 # Request Tracing
 
-> 请求追踪功能捕获错误和慢请求，支持多实例查询、按路由/IP筛选、时间范围统计，为请求重放调试提供数据源。
+> Request tracing functionality captures errors and slow requests, supports multi-instance queries, filtering by route/IP, time range statistics, providing data source for request replay debugging.
 
 ---
 
 ## Overview
 
-请求追踪自动捕获：
+Request tracing automatically captures:
 
 | Capture Type | Condition | Storage |
 |--------------|-----------|---------|
-| **ERROR** | HTTP 4xx/5xx | 完整请求/响应 |
-| **SLOW** | 超过阈值（可配置） | 完整请求/响应 |
-| **ALL** | 采样模式（可选） | 采样请求 |
+| **ERROR** | HTTP 4xx/5xx | Complete request/response |
+| **SLOW** | Exceeds threshold (configurable) | Complete request/response |
+| **ALL** | Sampling mode (optional) | Sampled requests |
 
 ---
 
 ## Trace Data Fields
 
-每条追踪记录包含：
+Each trace record contains:
 
 | Field | Description | Max Size |
 |-------|-------------|----------|
-| `traceId` | UUID 格式追踪 ID | 36 chars |
-| `instanceId` | 网关实例 ID | 12 chars |
-| `routeId` | 匹配的路由 ID | UUID |
-| `method` | HTTP 方法 | GET/POST/PUT/DELETE |
-| `uri` | 完整 URI | - |
-| `path` | 请求路径 | - |
-| `queryString` | Query 参数 | - |
-| `requestHeaders` | 请求 Headers JSON | - |
-| `requestBody` | 请求体 | 64KB（超截断） |
-| `statusCode` | 响应状态码 | 100-599 |
-| `responseBody` | 响应体 | 64KB（超截断） |
-| `latencyMs` | 响应时间（毫秒） | - |
-| `clientIp` | 客户端 IP | - |
+| `traceId` | UUID format trace ID | 36 chars |
+| `instanceId` | Gateway instance ID | 12 chars |
+| `routeId` | Matched route ID | UUID |
+| `method` | HTTP method | GET/POST/PUT/DELETE |
+| `uri` | Complete URI | - |
+| `path` | Request path | - |
+| `queryString` | Query parameters | - |
+| `requestHeaders` | Request Headers JSON | - |
+| `requestBody` | Request body | 64KB (truncated if exceeded) |
+| `statusCode` | Response status code | 100-599 |
+| `responseBody` | Response body | 64KB (truncated if exceeded) |
+| `latencyMs` | Response time (milliseconds) | - |
+| `clientIp` | Client IP | - |
 | `userAgent` | User-Agent | - |
-| `targetInstance` | 目标后端实例 | IP:Port |
-| `traceTime` | 时间戳 | LocalDateTime |
-| `traceType` | 类型 | ERROR/SLOW/ALL |
-| `replayType` | 重放类型 | HTTP/WEBSOCKET/SSE |
-| `replayable` | 是否可重放 | true/false |
-| `replayCount` | 已重放次数 | - |
-| `replayResult` | 最后重放结果 | - |
+| `targetInstance` | Target backend instance | IP:Port |
+| `traceTime` | Timestamp | LocalDateTime |
+| `traceType` | Type | ERROR/SLOW/ALL |
+| `replayType` | Replay type | HTTP/WEBSOCKET/SSE |
+| `replayable` | Whether replayable | true/false |
+| `replayCount` | Replay count | - |
+| `replayResult` | Last replay result | - |
 
 ---
 
 ## Multi-Instance Support
 
-所有查询支持按实例筛选：
+All queries support filtering by instance:
 
 | API | Instance Filter |
 |-----|-----------------|
@@ -63,16 +63,16 @@
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/traces` | 分页查询所有 traces |
-| `GET` | `/api/traces/errors` | 错误请求（4xx/5xx） |
-| `GET` | `/api/traces/slow` | 慢请求 |
-| `GET` | `/api/traces/{id}` | Trace 详情 |
-| `GET` | `/api/traces/stats` | 统计摘要 |
-| `GET` | `/api/traces/route/{routeId}` | 按路由查询 |
-| `GET` | `/api/traces/client/{ip}` | 按客户端 IP 查询 |
-| `GET` | `/api/traces/time-range` | 按时间范围查询 |
-| `DELETE` | `/api/traces/{id}` | 删除单个 trace |
-| `DELETE` | `/api/traces/old` | 清理旧 traces |
+| `GET` | `/api/traces` | Paginated query all traces |
+| `GET` | `/api/traces/errors` | Error requests (4xx/5xx) |
+| `GET` | `/api/traces/slow` | Slow requests |
+| `GET` | `/api/traces/{id}` | Trace details |
+| `GET` | `/api/traces/stats` | Statistics summary |
+| `GET` | `/api/traces/route/{routeId}` | Query by route |
+| `GET` | `/api/traces/client/{ip}` | Query by client IP |
+| `GET` | `/api/traces/time-range` | Query by time range |
+| `DELETE` | `/api/traces/{id}` | Delete single trace |
+| `DELETE` | `/api/traces/old` | Clean up old traces |
 
 ### List Error Traces
 
@@ -134,7 +134,7 @@ Response:
 GET /api/traces/route/user-api-route?instanceId=gateway-1
 ```
 
-用途：分析特定路由的错误模式和响应时间分布。
+Purpose: Analyze error patterns and response time distribution for specific routes.
 
 ### By Client IP
 
@@ -142,7 +142,7 @@ GET /api/traces/route/user-api-route?instanceId=gateway-1
 GET /api/traces/client/192.168.1.100?instanceId=gateway-1
 ```
 
-用途：追踪特定客户端的请求问题，识别异常客户端。
+Purpose: Track request issues from specific clients, identify abnormal clients.
 
 ### By Time Range
 
@@ -150,7 +150,7 @@ GET /api/traces/client/192.168.1.100?instanceId=gateway-1
 GET /api/traces/time-range?start=2024-01-15T00:00:00&end=2024-01-15T23:59:59&instanceId=gateway-1
 ```
 
-用途：分析特定时间段的问题，如故障时段排查。
+Purpose: Analyze issues in specific time periods, such as fault period investigation.
 
 ---
 
@@ -160,37 +160,37 @@ GET /api/traces/time-range?start=2024-01-15T00:00:00&end=2024-01-15T23:59:59&ins
 GET /api/traces/slow?thresholdMs=1000&instanceId=gateway-1
 ```
 
-动态阈值查询，响应时间超过阈值的请求。
+Dynamic threshold query, requests with response time exceeding threshold.
 
 ---
 
 ## Trace Type Detection
 
-系统自动检测请求类型并标记：
+System automatically detects request type and marks:
 
 | replayType | Detection Method | replayable |
 |------------|------------------|------------|
-| `HTTP` | 默认 | true |
-| `WEBSOCKET` | Upgrade 头、ws://、wss:// | false |
+| `HTTP` | Default | true |
+| `WEBSOCKET` | Upgrade header, ws://, wss:// | false |
 | `SSE` | Accept: text/event-stream | false |
 
 ---
 
 ## Data Retention
 
-清理旧数据：
+Clean up old data:
 
 ```bash
 DELETE /api/traces/old?daysToKeep=7&instanceId=gateway-1
 ```
 
-按天保留，默认清理超过指定天数的 traces。
+Retain by days, default cleans up traces older than specified days.
 
 ---
 
 ## Route Performance Statistics
 
-AI Copilot 可调用的路由级统计：
+Route-level statistics available for AI Copilot:
 
 ```bash
 # AI Tool: get_route_metrics
@@ -200,7 +200,7 @@ GET /internal/traces/route-metrics?hours=1&sortBy=count&limit=10
 Response:
 ```json
 {
-  "timeRange": "1小时",
+  "timeRange": "1 hour",
   "sortBy": "count",
   "totalRoutes": 25,
   "routeMetrics": [
@@ -218,27 +218,27 @@ Response:
 }
 ```
 
-排序选项：
-- `count`: 按请求数排序（高流量路由）
-- `avgLatency`: 按平均延迟排序（慢路由）
-- `errorRate`: 按错误率排序（问题路由）
+Sort options:
+- `count`: Sort by request count (high traffic routes)
+- `avgLatency`: Sort by average latency (slow routes)
+- `errorRate`: Sort by error rate (problem routes)
 
 ---
 
 ## Request Replay
 
-重放捕获的请求用于调试：
+Replay captured requests for debugging:
 
 ```bash
 POST /api/traces/{id}/replay?gatewayUrl=http://localhost:8080
 ```
 
-Gateway 会：
-1. 加载原始请求数据
-2. 检查 replayable 标志
-3. 重新执行请求（添加 X-Replay-Trace-Id Header）
-4. 返回比较结果
-5. 更新 replayCount 和 replayResult
+Gateway will:
+1. Load original request data
+2. Check replayable flag
+3. Re-execute request (add X-Replay-Trace-Id Header)
+4. Return comparison result
+5. Update replayCount and replayResult
 
 ### Replay Result
 
@@ -257,12 +257,12 @@ Gateway 会：
 
 ## AI Copilot Integration
 
-AI Copilot 可调用以下工具分析 traces：
+AI Copilot can call the following tools to analyze traces:
 
 | Tool | Capability |
 |------|------------|
-| `audit_query` | 查询审计日志（配置变更历史） |
-| `get_route_metrics` | 获取路由级性能统计 |
+| `audit_query` | Query audit logs (configuration change history) |
+| `get_route_metrics` | Get route-level performance statistics |
 
 ---
 
@@ -283,10 +283,10 @@ gateway:
 
 ## Body Truncation
 
-请求/响应体超过 64KB 时自动截断：
+Request/response body automatically truncated when exceeding 64KB:
 
 ```
-{"data": "...very long content..."} → 
+{"data": "...very long content..."} -> 
 {"data": "...first 64KB...[TRUNCATED]"}
 ```
 
@@ -296,30 +296,30 @@ gateway:
 
 | Use Case | Query | Benefit |
 |----------|-------|---------|
-| **故障排查** | `/errors` + traceId 详情 | 定位失败请求原因 |
-| **性能分析** | `/slow?thresholdMs=500` | 识别慢请求模式 |
-| **路由优化** | `/route/{routeId}` | 分析特定路由问题 |
-| **客户端追踪** | `/client/{ip}` | 识别异常客户端 |
-| **时段分析** | `/time-range` | 分析故障时段 |
-| **容量规划** | `/stats` + `/route-metrics` | 评估流量分布 |
+| **Troubleshooting** | `/errors` + traceId details | Locate failed request cause |
+| **Performance Analysis** | `/slow?thresholdMs=500` | Identify slow request patterns |
+| **Route Optimization** | `/route/{routeId}` | Analyze specific route issues |
+| **Client Tracking** | `/client/{ip}` | Identify abnormal clients |
+| **Time Period Analysis** | `/time-range` | Analyze fault periods |
+| **Capacity Planning** | `/stats` + `/route-metrics` | Evaluate traffic distribution |
 
 ---
 
 ## Best Practices
 
-1. **阈值设置**: 根据业务 P95 响应时间设置慢请求阈值
-2. **定期清理**: 设置合理保留天数（7-30天）
-3. **按实例查询**: 多实例部署时按 instanceId 筛选
-4. **按路由分析**: 高错误率路由优先排查
-5. **采样配置**: 生产环境可采样而非全量捕获
-6. **敏感数据**: 注意请求体中的敏感信息
-7. **重放验证**: 问题修复后重放验证效果
+1. **Threshold Setting**: Set slow request threshold based on business P95 response time
+2. **Regular Cleanup**: Set reasonable retention days (7-30 days)
+3. **Query by Instance**: Filter by instanceId in multi-instance deployment
+4. **Route Analysis**: Prioritize investigating high error rate routes
+5. **Sampling Configuration**: Production can sample instead of full capture
+6. **Sensitive Data**: Be aware of sensitive information in request body
+7. **Replay Verification**: Replay after fix to verify effectiveness
 
 ---
 
 ## Related Features
 
-- [Request Replay Debugger](request-replay.md) - 详细重放功能
-- [Filter Chain Analysis](filter-chain-analysis.md) - 过滤器执行分析
-- [Monitoring & Alerts](monitoring-alerts.md) - 监控告警
-- [AI Copilot](ai-copilot.md) - AI 工具调用分析
+- [Request Replay Debugger](request-replay.md) - Detailed replay functionality
+- [Filter Chain Analysis](filter-chain-analysis.md) - Filter execution analysis
+- [Monitoring & Alerts](monitoring-alerts.md) - Monitoring and alerts
+- [AI Copilot](ai-copilot.md) - AI tool call analysis

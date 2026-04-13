@@ -1,21 +1,21 @@
 # Stress Test Tool
 
-> 压力测试工具模拟并发负载，测量 Gateway 性能。
+> Stress test tool simulates concurrent load to measure Gateway performance.
 
 ---
 
 ## Overview
 
-压力测试功能：
+Stress test features:
 
 | Feature | Description |
 |---------|-------------|
-| **Custom Configuration** | 配置目标 URL、方法、Headers、Body |
-| **Concurrent Users** | 模拟多用户并发 |
-| **Real-time Progress** | 实时查看测试进度 |
-| **Detailed Statistics** | P50, P90, P95, P99 延迟分布 |
-| **AI Analysis** | AI 分析测试结果 |
-| **Quick Test** | 一键快速测试 |
+| **Custom Configuration** | Configure target URL, method, headers, body |
+| **Concurrent Users** | Simulate multi-user concurrency |
+| **Real-time Progress** | View test progress in real-time |
+| **Detailed Statistics** | P50, P90, P95, P99 latency distribution |
+| **AI Analysis** | AI analysis of test results |
+| **Quick Test** | One-click quick test |
 
 ---
 
@@ -39,17 +39,17 @@
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `testName` | 测试名称 | - |
-| `targetUrl` | 目标 URL（可选，使用实例 URL） | - |
-| `path` | 路径（追加到实例 URL） | - |
-| `method` | HTTP 方法 | `GET` |
-| `headers` | 请求 Headers | - |
-| `body` | 请求 Body（POST/PUT） | - |
-| `concurrentUsers` | 并发用户数 | `10` |
-| `totalRequests` | 总请求数 | `1000` |
-| `targetQps` | 目标 QPS 限制 | - |
-| `rampUpSeconds` | 渐进加载时间 | `0` |
-| `requestTimeoutSeconds` | 请求超时 | `30` |
+| `testName` | Test name | - |
+| `targetUrl` | Target URL (optional, uses instance URL) | - |
+| `path` | Path (appended to instance URL) | - |
+| `method` | HTTP method | `GET` |
+| `headers` | Request headers | - |
+| `body` | Request body (POST/PUT) | - |
+| `concurrentUsers` | Number of concurrent users | `10` |
+| `totalRequests` | Total number of requests | `1000` |
+| `targetQps` | Target QPS limit | - |
+| `rampUpSeconds` | Ramp-up duration | `0` |
+| `requestTimeoutSeconds` | Request timeout | `30` |
 
 ---
 
@@ -57,19 +57,19 @@
 
 | Metric | Description |
 |--------|-------------|
-| `actualRequests` | 实际发送请求数 |
-| `successfulRequests` | 成功请求数 (2xx) |
-| `failedRequests` | 失败请求数 (4xx/5xx) |
-| `minResponseTimeMs` | 最小响应时间 |
-| `maxResponseTimeMs` | 最大响应时间 |
-| `avgResponseTimeMs` | 平均响应时间 |
-| `p50ResponseTimeMs` | 50th 百分位延迟 |
-| `p90ResponseTimeMs` | 90th 百分位延迟 |
-| `p95ResponseTimeMs` | 95th 百分位延迟 |
-| `p99ResponseTimeMs` | 99th 百分位延迟 |
-| `requestsPerSecond` | 实际 QPS |
-| `errorRate` | 错误率百分比 |
-| `throughputKbps` | 吞吐量 KB/s |
+| `actualRequests` | Actual requests sent |
+| `successfulRequests` | Successful requests (2xx) |
+| `failedRequests` | Failed requests (4xx/5xx) |
+| `minResponseTimeMs` | Minimum response time |
+| `maxResponseTimeMs` | Maximum response time |
+| `avgResponseTimeMs` | Average response time |
+| `p50ResponseTimeMs` | 50th percentile latency |
+| `p90ResponseTimeMs` | 90th percentile latency |
+| `p95ResponseTimeMs` | 95th percentile latency |
+| `p99ResponseTimeMs` | 99th percentile latency |
+| `requestsPerSecond` | Actual QPS |
+| `errorRate` | Error rate percentage |
+| `throughputKbps` | Throughput KB/s |
 
 ---
 
@@ -77,10 +77,10 @@
 
 | Status | Description |
 |--------|-------------|
-| `RUNNING` | 正在执行 |
-| `COMPLETED` | 成功完成 |
-| `STOPPED` | 用户停止 |
-| `FAILED` | 执行失败 |
+| `RUNNING` | Currently executing |
+| `COMPLETED` | Successfully completed |
+| `STOPPED` | Stopped by user |
+| `FAILED` | Execution failed |
 
 ---
 
@@ -177,15 +177,15 @@ curl -X POST http://localhost:9090/api/stress-test/start \
 
 ## Best Practices
 
-1. **渐进加载**：使用 rampUp 避免突发负载
-2. **监控并发**：测试期间监控 Gateway 状态
-3. **多次测试**：不同参数多次测试对比
-4. **AI 分析**：利用 AI 分析测试结果
-5. **生产谨慎**：生产环境测试需谨慎
+1. **Gradual Ramp-up**: Use rampUp to avoid sudden load spikes
+2. **Monitor Concurrency**: Monitor Gateway status during testing
+3. **Multiple Tests**: Compare results from multiple tests with different parameters
+4. **AI Analysis**: Leverage AI to analyze test results
+5. **Production Caution**: Be cautious when testing in production environments
 
 ---
 
 ## Related Features
 
-- [Monitoring & Alerts](monitoring-alerts.md) - 测试期间监控
-- [AI-Powered Analysis](ai-analysis.md) - 结果分析
+- [Monitoring & Alerts](monitoring-alerts.md) - Monitoring during tests
+- [AI-Powered Analysis](ai-analysis.md) - Result analysis

@@ -1,12 +1,12 @@
 # System Diagnostic
 
-> 系统诊断功能提供全面的健康检查，帮助识别潜在问题。
+> System diagnostic provides comprehensive health checks to help identify potential issues.
 
 ---
 
 ## Overview
 
-系统诊断检查所有关键组件：
+System diagnostic checks all critical components:
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -38,8 +38,8 @@
 
 | Type | Duration | Description |
 |------|----------|-------------|
-| `quick` | ~2-5 seconds | 快速检查关键组件 |
-| `full` | ~30-60 seconds | 完整诊断详细分析 |
+| `quick` | ~2-5 seconds | Quick check of critical components |
+| `full` | ~30-60 seconds | Full diagnostic with detailed analysis |
 
 ---
 
@@ -47,13 +47,13 @@
 
 | Component | Checks |
 |-----------|--------|
-| **Database** | 连接状态、查询延迟、表完整性 |
-| **Redis** | 连接状态、内存使用、Key 数量 |
-| **Nacos** | 连接状态、配置同步状态 |
-| **Routes** | 路由数量、启用状态、无效路由 |
-| **Authentication** | 认证策略状态、JWT 验证测试 |
-| **Gateway Instances** | 实例数量、健康状态、心跳检查 |
-| **Performance** | CPU、内存、线程数、JVM 指标 |
+| **Database** | Connection status, query latency, table integrity |
+| **Redis** | Connection status, memory usage, key count |
+| **Nacos** | Connection status, configuration sync status |
+| **Routes** | Route count, enabled status, invalid routes |
+| **Authentication** | Authentication policy status, JWT verification test |
+| **Gateway Instances** | Instance count, health status, heartbeat check |
+| **Performance** | CPU, memory, thread count, JVM metrics |
 
 ---
 
@@ -61,10 +61,10 @@
 
 | Status | Description |
 |--------|-------------|
-| `HEALTHY` | 所有检查通过 |
-| `WARNING` | 发现轻微问题 |
-| `CRITICAL` | 发现严重问题 |
-| `NOT_CONFIGURED` | 组件未配置 |
+| `HEALTHY` | All checks passed |
+| `WARNING` | Minor issues detected |
+| `CRITICAL` | Critical issues detected |
+| `NOT_CONFIGURED` | Component not configured |
 
 ---
 
@@ -141,16 +141,16 @@ Overall Score = Weighted Average:
 
 ## Best Practices
 
-1. **定期诊断**：设置定时诊断任务
-2. **关注 WARNING**：及时处理预警问题
-3. **完整诊断**：重大变更后执行完整诊断
-4. **监控历史**：对比历史诊断结果
-5. **AI 分析**：结合 AI 分析诊断报告
+1. **Regular Diagnostics**: Set up scheduled diagnostic tasks
+2. **Address Warnings**: Promptly handle warning issues
+3. **Full Diagnostics**: Run full diagnostics after major changes
+4. **Monitor History**: Compare historical diagnostic results
+5. **AI Analysis**: Combine with AI analysis for diagnostic reports
 
 ---
 
 ## Related Features
 
-- [Monitoring & Alerts](monitoring-alerts.md) - 监控数据源
-- [AI-Powered Analysis](ai-analysis.md) - AI 分析诊断结果
-- [Gateway Instance Management](instance-management.md) - 实例健康检查
+- [Monitoring & Alerts](monitoring-alerts.md) - Monitoring data source
+- [AI-Powered Analysis](ai-analysis.md) - AI analysis of diagnostic results
+- [Gateway Instance Management](instance-management.md) - Instance health check

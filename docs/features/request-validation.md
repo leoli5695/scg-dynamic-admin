@@ -1,12 +1,12 @@
 # Request Validation
 
-> 请求验证功能支持 JSON Schema 验证、必填字段检查、类型约束。
+> Request validation supports JSON Schema validation, required field checking, and type constraints.
 
 ---
 
 ## Overview
 
-请求验证在转换之后、认证之前执行：
+Request validation executes after transformation, before authentication:
 
 ```
 Request Flow:
@@ -23,11 +23,11 @@ Request Flow:
 
 | Type | Description |
 |------|-------------|
-| **JSON Schema** | 按规范验证完整结构 |
-| **Required Fields** | 检查必填字段 |
-| **Type Constraints** | 字段类型验证 |
-| **Format Validation** | 格式验证（email、date） |
-| **Range Validation** | 数值范围验证 |
+| **JSON Schema** | Validate complete structure per specification |
+| **Required Fields** | Check required fields |
+| **Type Constraints** | Field type validation |
+| **Format Validation** | Format validation (email, date) |
+| **Range Validation** | Numeric range validation |
 
 ---
 
@@ -81,7 +81,7 @@ Request Flow:
 
 ### FORMAT
 
-格式验证：
+Format validation:
 
 ```json
 {
@@ -91,15 +91,15 @@ Request Flow:
 }
 ```
 
-支持格式：
-- `email` - 邮箱地址
-- `date` - ISO 日期格式
-- `uri` - URL 格式
-- `uuid` - UUID 格式
+Supported formats:
+- `email` - Email address
+- `date` - ISO date format
+- `uri` - URL format
+- `uuid` - UUID format
 
 ### RANGE
 
-数值范围：
+Numeric range:
 
 ```json
 {
@@ -112,7 +112,7 @@ Request Flow:
 
 ### REQUIRED
 
-必填字段：
+Required field:
 
 ```json
 {
@@ -123,7 +123,7 @@ Request Flow:
 
 ### REGEX
 
-正则表达式：
+Regular expression:
 
 ```json
 {
@@ -135,7 +135,7 @@ Request Flow:
 
 ### JSON_SCHEMA
 
-完整 JSON Schema：
+Complete JSON Schema:
 
 ```json
 {
@@ -154,7 +154,7 @@ Request Flow:
 
 ## Error Response
 
-验证失败返回：
+Validation failure returns:
 
 ```json
 {
@@ -171,7 +171,7 @@ Request Flow:
 
 ## API Endpoints
 
-通过 Strategy API 配置：
+Configure via Strategy API:
 
 ```bash
 curl -X PUT http://localhost:9090/api/strategies/request-validation \
@@ -187,15 +187,15 @@ curl -X PUT http://localhost:9090/api/strategies/request-validation \
 
 ## Best Practices
 
-1. **明确错误信息**：提供清晰的验证错误提示
-2. **JSON Schema**：复杂结构使用 JSON Schema
-3. **必填优先**：先验证必填字段
-4. **性能优化**：避免过度复杂的正则
-5. **国际化**：支持多语言错误信息
+1. **Clear Error Messages**: Provide clear validation error messages
+2. **JSON Schema**: Use JSON Schema for complex structures
+3. **Required First**: Validate required fields first
+4. **Performance Optimization**: Avoid overly complex regular expressions
+5. **Internationalization**: Support multi-language error messages
 
 ---
 
 ## Related Features
 
-- [Request Transform](request-transform.md) - 请求转换
-- [Mock Response](mock-response.md) - Mock 响应（测试验证规则）
+- [Request Transform](request-transform.md) - Request transformation
+- [Mock Response](mock-response.md) - Mock response (test validation rules)

@@ -1,23 +1,23 @@
 # Retry
 
-> 重试策略在请求失败时自动重试，提高系统容错能力。
+> Retry strategy automatically retries on request failure, improving system fault tolerance.
 
 ---
 
 ## Overview
 
-Gateway 支持配置重试策略，在以下场景自动重试：
-- 连接超时
-- 响应超时
-- HTTP 5xx 错误
-- 网络异常
+Gateway supports configurable retry strategy, automatically retrying in the following scenarios:
+- Connection failure
+- Response timeout
+- HTTP 5xx errors
+- Network exceptions
 
 ```
 Request Flow:
   ...
   Circuit Breaker (-100) → Check circuit state
        ↓
-  Retry (9999) → Retry on failure
+  Retry (2147483647) → Retry on failure
        ↓
   RouteToRequestUrlFilter (10000) → Forward to backend
 ```
@@ -29,25 +29,25 @@ Request Flow:
 ```json
 {
   "routeId": "unstable-api",
-  "maxRetries": 3,
-  "retryOnStatuses": [500, 502, 503, 504],
-  "retryOnExceptions": ["timeout", "connection"],
-  "backoff": {
-    "type": "EXPONENTIAL",
-    "initialDelay": 100,
-    "maxDelay": 1000,
-    "multiplier": 2
-  },
+  "maxAttempts": 3,
+  "retryIntervalMs": 1000,
+  "retryOnStatusCodes": [500, 502, 503, 504],
+  "retryOnExceptions": [
+    "java.net.ConnectException",
+    "java.net.SocketTimeoutException",
+    "java.io.IOException"
+  ],
   "enabled": true
 }
 ```
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `maxRetries` | 最大重试次数 | `3` |
-| `retryOnStatuses` | 触发重试的 HTTP 状态码 | `[500, 502, 503, 504]` |
-| `retryOnExceptions` | 触发重试的异常类型 | `["timeout", "connection"]` |
-| `backoff` | 退避策略配置 | 见下方 |
+| `maxAttempts` | Maximum retry attempts (including initial request) | `3` |
+| `retryIntervalMs` | Retry interval (milliseconds) | `1000` |
+| `retryOnStatusCodes` | HTTP status codes that trigger retry | `[500, 502, 503, 504]` |
+| `retryOnExceptions` | Full class path of exceptions that trigger retry | See defaults below |
+| `enabled` | Whether to enable retry | `true` |
 
 ---
 
@@ -55,101 +55,32 @@ Request Flow:
 
 ### HTTP Status Codes
 
+Default status codes for retry:
+
 | Status | Description | Retry? |
 |--------|-------------|--------|
-| `500` | Internal Server Error | ✅ |
-| `502` | Bad Gateway | ✅ |
-| `503` | Service Unavailable | ✅ |
-| `504` | Gateway Timeout | ✅ |
-| `400` | Bad Request | ❌ |
-| `401` | Unauthorized | ❌ |
-| `403` | Forbidden | ❌ |
-| `404` | Not Found | ❌ |
-| `429` | Too Many Requests | ❌ |
+| `500` | Internal Server Error | Yes |
+| `502` | Bad Gateway | Yes |
+| `503` | Service Unavailable | Yes |
+| `504` | Gateway Timeout | Yes |
+| `400` | Bad Request | No |
+| `401` | Unauthorized | No |
+| `403` | Forbidden | No |
+| `404` | Not Found | No |
+| `429` | Too Many Requests | No |
 
 ### Exceptions
 
-| Exception Type | Description | Retry? |
-|----------------|-------------|--------|
-| `timeout` | 响应超时 | ✅ |
-| `connection` | 连接失败 | ✅ |
-| `read_error` | 读取错误 | ✅ |
-| `write_error` | 写入错误 | ✅ |
+Default exception types for retry:
 
----
+| Exception | Description | Retry? |
+|-----------|-------------|--------|
+| `java.net.ConnectException` | Connection failure | Yes |
+| `java.net.SocketTimeoutException` | Socket timeout | Yes |
+| `java.io.IOException` | IO exception | Yes |
+| `NotFoundException` | Service instance not found | Yes |
 
-## Backoff Strategies
-
-### Fixed Backoff
-
-每次重试间隔固定：
-
-```json
-{
-  "backoff": {
-    "type": "FIXED",
-    "delay": 500
-  }
-}
-```
-
-重试间隔：500ms, 500ms, 500ms...
-
-### Linear Backoff
-
-每次重试间隔线性增加：
-
-```json
-{
-  "backoff": {
-    "type": "LINEAR",
-    "initialDelay": 100,
-    "maxDelay": 2000
-  }
-}
-```
-
-重试间隔：100ms, 200ms, 300ms, 400ms...
-
-### Exponential Backoff
-
-每次重试间隔指数增加（推荐）：
-
-```json
-{
-  "backoff": {
-    "type": "EXPONENTIAL",
-    "initialDelay": 100,
-    "maxDelay": 10000,
-    "multiplier": 2
-  }
-}
-```
-
-重试间隔：100ms, 200ms, 400ms, 800ms, 1600ms...
-
-```
-┌─────────────────────────────────────────────┐
-│         EXPONENTIAL BACKOFF                   │
-│                                              │
-│   Request Failed                              │
-│         │                                     │
-│         ▼                                     │
-│   Retry 1: wait 100ms                         │
-│         │                                     │
-│         ▼                                     │
-│   Retry 2: wait 200ms (100 * 2)               │
-│         │                                     │
-│         ▼                                     │
-│   Retry 3: wait 400ms (200 * 2)               │
-│         │                                     │
-│         ▼                                     │
-│   Retry 4: wait 800ms (400 * 2)               │
-│         │                                     │
-│         ▼                                     │
-│   Max Retries Reached → Return Error          │
-└─────────────────────────────────────────────┘
-```
+> **Note:** Exception types require the full Java class path name.
 
 ---
 
@@ -178,28 +109,63 @@ Request arrives
                 │         │
                 ▼         ▼
           ┌──────────┐  Return Error
-          │ Backoff  │
           │ Wait     │
+          │ (retryMs)│
           └──────────┘
                 │
                 ▼
-          Retry (if maxRetries not reached)
+          Retry (if attempts < maxAttempts)
 ```
+
+---
+
+## Retry Interval
+
+Retry uses fixed interval strategy:
+
+```
+┌─────────────────────────────────────────────┐
+│         FIXED INTERVAL RETRY                 │
+│                                              │
+│   Request Failed                              │
+│         │                                     │
+│         ▼                                     │
+│   Retry 1: wait 1000ms                        │
+│         │                                     │
+│         ▼                                     │
+│   Retry 2: wait 1000ms                        │
+│         │                                     │
+│         ▼                                     │
+│   Retry 3: wait 1000ms                        │
+│         │                                     │
+│         ▼                                     │
+│   Max Attempts Reached → Return Error         │
+└─────────────────────────────────────────────┘
+```
+
+**Configuration Example:**
+
+```json
+{
+  "maxAttempts": 3,
+  "retryIntervalMs": 500
+}
+```
+
+Retry intervals: 500ms, 500ms, 500ms...
 
 ---
 
 ## Error Response
 
-重试全部失败后返回：
+Returned after all retries fail:
 
 ```json
 {
   "code": 50201,
   "error": "Upstream Error",
-  "message": "Request failed after 3 retries",
-  "data": null,
-  "retries": 3,
-  "lastError": "503 Service Unavailable"
+  "message": "Request failed after 3 attempts",
+  "data": null
 }
 ```
 
@@ -207,7 +173,7 @@ Request arrives
 
 ## Circuit Breaker Interaction
 
-重试与熔断配合使用：
+Retry works with circuit breaker:
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -218,7 +184,7 @@ Request arrives
 │   3. Send request                             │
 │   4. If failure:                              │
 │      - Record failure in Circuit Breaker      │
-│      - Retry with backoff                     │
+│      - Retry after interval                   │
 │   5. If all retries fail:                     │
 │      - Increment Circuit Breaker failure rate │
 │      - Return error to client                 │
@@ -228,7 +194,7 @@ Request arrives
 └─────────────────────────────────────────────┘
 ```
 
-**重要：** 重试失败会计入熔断器失败统计，可能触发熔断。
+**Important:** Retry failures count towards circuit breaker failure statistics and may trigger circuit break.
 
 ---
 
@@ -236,49 +202,42 @@ Request arrives
 
 ### Transient Failure Recovery
 
-短暂网络抖动的自动恢复：
+Automatic recovery from brief network jitter:
 
 ```json
 {
-  "maxRetries": 2,
-  "retryOnExceptions": ["connection"],
-  "backoff": {
-    "type": "FIXED",
-    "delay": 100
-  }
+  "maxAttempts": 2,
+  "retryIntervalMs": 100,
+  "retryOnExceptions": ["java.net.ConnectException"]
 }
 ```
 
 ### Slow Backend Recovery
 
-后端服务偶尔超时：
+Backend service occasional timeout:
 
 ```json
 {
-  "maxRetries": 3,
-  "retryOnStatuses": [504],
-  "backoff": {
-    "type": "EXPONENTIAL",
-    "initialDelay": 500,
-    "maxDelay": 5000
-  }
+  "maxAttempts": 3,
+  "retryIntervalMs": 500,
+  "retryOnStatusCodes": [504]
 }
 ```
 
 ### High-Availability Service
 
-关键服务需要更高容错：
+Critical services need higher fault tolerance:
 
 ```json
 {
-  "maxRetries": 5,
-  "retryOnStatuses": [500, 502, 503, 504],
-  "retryOnExceptions": ["timeout", "connection"],
-  "backoff": {
-    "type": "EXPONENTIAL",
-    "initialDelay": 200,
-    "maxDelay": 10000
-  }
+  "maxAttempts": 5,
+  "retryIntervalMs": 200,
+  "retryOnStatusCodes": [500, 502, 503, 504],
+  "retryOnExceptions": [
+    "java.net.ConnectException",
+    "java.net.SocketTimeoutException",
+    "java.io.IOException"
+  ]
 }
 ```
 
@@ -286,20 +245,16 @@ Request arrives
 
 ## API Endpoints
 
-通过 Strategy API 配置：
+Configure via Strategy API:
 
 ```bash
 curl -X PUT http://localhost:9090/api/strategies/retry \
   -H "Content-Type: application/json" \
   -d '{
     "routeId": "unstable-api",
-    "maxRetries": 3,
-    "retryOnStatuses": [500, 502, 503, 504],
-    "backoff": {
-      "type": "EXPONENTIAL",
-      "initialDelay": 100,
-      "maxDelay": 1000
-    },
+    "maxAttempts": 3,
+    "retryIntervalMs": 1000,
+    "retryOnStatusCodes": [500, 502, 503, 504],
     "enabled": true
   }'
 ```
@@ -308,17 +263,17 @@ curl -X PUT http://localhost:9090/api/strategies/retry \
 
 ## Best Practices
 
-1. **合理重试次数**：通常 2-3 次，过多会增加延迟
-2. **指数退避**：避免对后端造成更大压力
-3. **区分错误类型**：只对可恢复错误重试（5xx、超时）
-4. **结合熔断**：避免重试加剧后端问题
-5. **监控重试率**：高重试率说明后端不稳定
-6. **设置最大延迟**：避免用户等待过久
+1. **Reasonable Retry Count**: Usually 2-3 times, too many will increase latency
+2. **Appropriate Interval**: Too short intervals pressure backend, too long affects user experience
+3. **Distinguish Error Types**: Only retry recoverable errors (5xx, timeout, connection failure)
+4. **Combine with Circuit Breaker**: Avoid retry exacerbating backend issues
+5. **Monitor Retry Rate**: High retry rate indicates backend instability
+6. **Exception Class Full Path**: Use full Java class path when configuring exception types
 
 ---
 
 ## Related Features
 
-- [Circuit Breaker](circuit-breaker.md) - 熔断保护
-- [Timeout Control](timeout-control.md) - 超时配置
-- [Monitoring & Alerts](monitoring-alerts.md) - 重试监控
+- [Circuit Breaker](circuit-breaker.md) - Circuit breaker protection
+- [Timeout Control](timeout-control.md) - Timeout configuration
+- [Monitoring & Alerts](monitoring-alerts.md) - Retry monitoring

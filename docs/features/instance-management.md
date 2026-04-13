@@ -1,12 +1,12 @@
 # Gateway Instance Management
 
-> 网关实例管理功能支持多实例部署，每个实例有独立的 Nacos 命名空间。
+> Gateway instance management supports multi-instance deployment, with each instance having its own independent Nacos namespace.
 
 ---
 
 ## Overview
 
-从单一 Admin 管理多个 Gateway 实例：
+Manage multiple Gateway instances from a single Admin:
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -66,7 +66,7 @@ POST /api/instances
 
 ## Heartbeat Monitoring
 
-每个实例每 10 秒发送心跳：
+Each instance sends a heartbeat every 10 seconds:
 
 ```bash
 POST /api/instances/{instanceId}/heartbeat
@@ -80,15 +80,15 @@ POST /api/instances/{instanceId}/heartbeat
 
 ### Status Detection
 
-- **Running**: 心跳在 30 秒内收到
-- **Warning**: 连续缺失 1-2 次心跳 (30-60 秒)
-- **Error**: 连续缺失 3+ 次心跳 (> 60 秒)
+- **Running**: Heartbeat received within 30 seconds
+- **Warning**: 1-2 consecutive missed heartbeats (30-60 seconds)
+- **Error**: 3+ consecutive missed heartbeats (> 60 seconds)
 
 ---
 
 ## Namespace Isolation
 
-每个实例有独立的 Nacos 命名空间：
+Each instance has its own independent Nacos namespace:
 
 ```
 Instance: gateway-prod
@@ -136,16 +136,16 @@ curl -X POST http://localhost:9090/api/instances/1/restart
 
 ## Best Practices
 
-1. **环境隔离**：不同环境使用不同实例
-2. **合理规格**：根据流量选择规格
-3. **心跳监控**：确保心跳正常发送
-4. **命名空间**：使用清晰的命名空间命名
-5. **高可用**：生产环境至少 3 个副本
+1. **Environment Isolation**: Use different instances for different environments
+2. **Appropriate Specifications**: Choose specifications based on traffic
+3. **Heartbeat Monitoring**: Ensure heartbeats are sent properly
+4. **Namespace Naming**: Use clear namespace naming conventions
+5. **High Availability**: At least 3 replicas for production environments
 
 ---
 
 ## Related Features
 
-- [Kubernetes Integration](kubernetes-integration.md) - K8s 部署
-- [Monitoring & Alerts](monitoring-alerts.md) - 实例监控
-- [Email Notifications](email-notifications.md) - 实例状态告警
+- [Kubernetes Integration](kubernetes-integration.md) - K8s deployment
+- [Monitoring & Alerts](monitoring-alerts.md) - Instance monitoring
+- [Email Notifications](email-notifications.md) - Instance status alerts

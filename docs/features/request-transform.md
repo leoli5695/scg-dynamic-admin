@@ -1,12 +1,12 @@
 # Request Body Transformation
 
-> 请求体转换功能支持协议转换、字段映射、数据脱敏。
+> Request body transformation supports protocol conversion, field mapping, and data masking.
 
 ---
 
 ## Overview
 
-请求体转换在认证之前执行，修改请求内容：
+Request body transformation executes before authentication, modifying request content:
 
 ```
 Request Flow:
@@ -25,9 +25,9 @@ Request Flow:
 | Operation | Description |
 |-----------|-------------|
 | **Protocol Conversion** | JSON ↔ XML |
-| **Field Mapping** | 重命名、添加、删除字段 |
-| **Data Masking** | 脱敏敏感字段（密码、token） |
-| **Field Injection** | 注入静态或动态值 |
+| **Field Mapping** | Rename, add, delete fields |
+| **Data Masking** | Mask sensitive fields (password, token) |
+| **Field Injection** | Inject static or dynamic values |
 
 ---
 
@@ -71,7 +71,7 @@ Request Flow:
 
 ### FIELD_MAP
 
-字段映射/重命名：
+Field mapping/renaming:
 
 ```json
 {
@@ -93,7 +93,7 @@ Output:
 
 ### FIELD_MASK
 
-数据脱敏：
+Data masking:
 
 ```json
 {
@@ -115,7 +115,7 @@ Output:
 
 ### FIELD_INJECT
 
-字段注入：
+Field injection:
 
 ```json
 {
@@ -125,15 +125,15 @@ Output:
 }
 ```
 
-注入的值：
-- `${timestamp}` - 当前时间戳
-- `${request.header.X-Id}` - 请求头值
-- `${route.id}` - 路由 ID
-- 静态字符串
+Injectable values:
+- `${timestamp}` - Current timestamp
+- `${request.header.X-Id}` - Request header value
+- `${route.id}` - Route ID
+- Static strings
 
 ### FIELD_REMOVE
 
-删除字段：
+Delete field:
 
 ```json
 {
@@ -144,7 +144,7 @@ Output:
 
 ### XML_TO_JSON
 
-XML 转 JSON：
+XML to JSON:
 
 ```json
 {
@@ -168,7 +168,7 @@ Output:
 
 ### JSON_TO_XML
 
-JSON 转 XML：
+JSON to XML:
 
 ```json
 {
@@ -183,7 +183,7 @@ JSON 转 XML：
 
 ### Legacy API Integration
 
-现代 API 调用遗留系统（字段名不同）：
+Modern API calling legacy system (different field names):
 
 ```json
 {
@@ -196,7 +196,7 @@ JSON 转 XML：
 
 ### Data Sanitization
 
-移除敏感字段后转发：
+Remove sensitive fields before forwarding:
 
 ```json
 {
@@ -210,7 +210,7 @@ JSON 转 XML：
 
 ### Protocol Bridge
 
-XML 系统对接 JSON API：
+XML system connecting to JSON API:
 
 ```json
 {
@@ -224,7 +224,7 @@ XML 系统对接 JSON API：
 
 ## API Endpoints
 
-通过 Strategy API 配置：
+Configure via Strategy API:
 
 ```bash
 curl -X PUT http://localhost:9090/api/strategies/request-transform \
@@ -240,16 +240,16 @@ curl -X PUT http://localhost:9090/api/strategies/request-transform \
 
 ## Best Practices
 
-1. **路径表达式**：使用 JSONPath 格式 (`$.field`)
-2. **顺序执行**：规则按配置顺序执行
-3. **性能考虑**：大 JSON 转换可能影响性能
-4. **测试验证**：在生产前充分测试转换结果
-5. **日志记录**：记录转换前后内容用于调试
+1. **Path Expressions**: Use JSONPath format (`$.field`)
+2. **Sequential Execution**: Rules execute in configuration order
+3. **Performance Considerations**: Large JSON transformations may impact performance
+4. **Testing Validation**: Thoroughly test transformation results before production
+5. **Logging**: Log content before and after transformation for debugging
 
 ---
 
 ## Related Features
 
-- [Request Validation](request-validation.md) - 请求验证
-- [Response Transform](response-transform.md) - 响应转换
-- [Mock Response](mock-response.md) - Mock 响应
+- [Request Validation](request-validation.md) - Request validation
+- [Response Transform](response-transform.md) - Response transformation
+- [Mock Response](mock-response.md) - Mock response

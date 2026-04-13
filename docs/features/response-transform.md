@@ -1,12 +1,12 @@
 # Response Body Transformation
 
-> 响应体转换功能支持在返回客户端前修改后端响应。
+> Response body transformation supports modifying backend responses before returning them to clients.
 
 ---
 
 ## Overview
 
-响应体转换在响应返回前执行：
+Response body transformation executes before the response is returned:
 
 ```
 Backend Response
@@ -17,7 +17,7 @@ Backend Response
 └─────────────────┘
        ↓
 ┌─────────────────┐
-│ Cache (50)      │ (可选)
+│ Cache (50)      │ (Optional)
 └─────────────────┘
        ↓
   Client Response
@@ -29,10 +29,10 @@ Backend Response
 
 | Operation | Description |
 |-----------|-------------|
-| **Field Filtering** | 移除敏感/内部字段 |
-| **Field Mapping** | 重命名/重组字段 |
-| **Format Conversion** | 格式转换（XML → JSON） |
-| **Response Wrapping** | 包装成统一格式 |
+| **Field Filtering** | Remove sensitive/internal fields |
+| **Field Mapping** | Rename/restructure fields |
+| **Format Conversion** | Format conversion (XML → JSON) |
+| **Response Wrapping** | Wrap into unified format |
 
 ---
 
@@ -75,7 +75,7 @@ Backend Response
 
 ### FIELD_REMOVE
 
-删除字段：
+Remove fields:
 
 ```json
 {
@@ -103,7 +103,7 @@ After:
 
 ### FIELD_MAP
 
-字段映射：
+Field mapping:
 
 ```json
 {
@@ -125,7 +125,7 @@ After:
 
 ### JSON_TO_XML
 
-JSON 转 XML：
+Convert JSON to XML:
 
 ```json
 {
@@ -136,7 +136,7 @@ JSON 转 XML：
 
 ### Response Wrapper
 
-包装响应：
+Wrap response:
 
 ```json
 {
@@ -175,7 +175,7 @@ After (Client):
 
 ### API Versioning
 
-旧版本 API 字段名映射：
+Map legacy API field names:
 
 ```json
 {
@@ -188,7 +188,7 @@ After (Client):
 
 ### Data Filtering
 
-移除内部字段：
+Remove internal fields:
 
 ```json
 {
@@ -202,7 +202,7 @@ After (Client):
 
 ### Legacy System Integration
 
-现代 JSON API 对接 XML 系统：
+Modern JSON API to XML system:
 
 ```json
 {
@@ -216,7 +216,7 @@ After (Client):
 
 ## API Endpoints
 
-通过 Strategy API 配置：
+Configure via Strategy API:
 
 ```bash
 curl -X PUT http://localhost:9090/api/strategies/response-transform \
@@ -232,16 +232,16 @@ curl -X PUT http://localhost:9090/api/strategies/response-transform \
 
 ## Best Practices
 
-1. **移除敏感数据**：确保不泄露内部信息
-2. **字段映射**：保持一致的命名风格
-3. **性能考虑**：大响应体转换可能影响延迟
-4. **测试验证**：充分测试转换逻辑
-5. **日志记录**：记录转换后响应用于调试
+1. **Remove Sensitive Data**: Ensure internal information is not leaked
+2. **Field Mapping**: Maintain consistent naming conventions
+3. **Performance Considerations**: Large response body transformations may affect latency
+4. **Testing & Validation**: Thoroughly test transformation logic
+5. **Logging**: Log transformed responses for debugging
 
 ---
 
 ## Related Features
 
-- [Request Transform](request-transform.md) - 请求转换
-- [Response Caching](response-caching.md) - 缓存转换后响应
-- [Mock Response](mock-response.md) - Mock 响应
+- [Request Transform](request-transform.md) - Request transformation
+- [Response Caching](response-caching.md) - Cache transformed responses
+- [Mock Response](mock-response.md) - Mock responses

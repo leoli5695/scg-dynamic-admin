@@ -1,12 +1,12 @@
 # Kubernetes Integration
 
-> Kubernetes 集成功能支持从 Admin UI 一键部署网关实例到 K8s 集群。
+> Kubernetes integration supports one-click deployment of gateway instances to K8s clusters from the Admin UI.
 
 ---
 
 ## Overview
 
-从 Admin UI 管理 Kubernetes 部署：
+Manage Kubernetes deployments from Admin UI:
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -35,10 +35,10 @@ POST /api/kubernetes/clusters
 
 | Parameter | Description |
 |-----------|-------------|
-| `name` | 集群名称 |
+| `name` | Cluster name |
 | `apiServer` | K8s API Server URL |
 | `token` | Service Account Token |
-| `namespace` | 默认部署命名空间 |
+| `namespace` | Default deployment namespace |
 
 ---
 
@@ -129,12 +129,12 @@ spec:
 
 | Variable | Description |
 |----------|-------------|
-| `NACOS_SERVER_ADDR` | Nacos 服务地址 |
-| `NACOS_NAMESPACE` | 实例命名空间 |
-| `GATEWAY_ADMIN_URL` | Admin 服务 URL |
-| `GATEWAY_ID` | 实例标识 |
-| `REDIS_HOST` | Redis 服务地址 |
-| `REDIS_PORT` | Redis 端口 |
+| `NACOS_SERVER_ADDR` | Nacos service address |
+| `NACOS_NAMESPACE` | Instance namespace |
+| `GATEWAY_ADMIN_URL` | Admin service URL |
+| `GATEWAY_ID` | Instance identifier |
+| `REDIS_HOST` | Redis service address |
+| `REDIS_PORT` | Redis port |
 
 ---
 
@@ -190,7 +190,7 @@ DELETE /api/kubernetes/pods/{podName}
 
 ## Metrics Integration
 
-Pod 暴露 Prometheus 指标：
+Pods expose Prometheus metrics:
 
 ```
 http://pod:8081/actuator/prometheus
@@ -205,15 +205,15 @@ jvm_memory_used_bytes
 
 ## Best Practices
 
-1. **Service Account**：配置适当的 K8s 权限
-2. **资源限制**：设置合理的 requests/limits
-3. **健康检查**：确保 liveness/readiness 正常
-4. **命名空间隔离**：不同环境使用不同 namespace
-5. **监控集成**：连接 Prometheus 监控
+1. **Service Account**: Configure appropriate K8s permissions
+2. **Resource Limits**: Set reasonable requests/limits
+3. **Health Checks**: Ensure liveness/readiness probes work properly
+4. **Namespace Isolation**: Use different namespaces for different environments
+5. **Monitoring Integration**: Connect to Prometheus monitoring
 
 ---
 
 ## Related Features
 
-- [Gateway Instance Management](instance-management.md) - 实例管理
-- [Monitoring & Alerts](monitoring-alerts.md) - Prometheus 集成
+- [Gateway Instance Management](instance-management.md) - Instance management
+- [Monitoring & Alerts](monitoring-alerts.md) - Prometheus integration

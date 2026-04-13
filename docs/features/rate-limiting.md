@@ -1,14 +1,14 @@
 # Rate Limiting
 
-> Gateway 提供分布式限流功能，支持 Redis + 本地混合模式，优雅降级。
+> Gateway provides distributed rate limiting functionality, supporting Redis + local hybrid mode with graceful degradation.
 
 ---
 
 ## Overview
 
-Gateway 使用混合限流架构：
-- **Redis 限流**：分布式场景，多实例共享计数
-- **本地限流**：Redis 故障时自动降级
+Gateway uses a hybrid rate limiting architecture:
+- **Redis Rate Limiting**: Distributed scenarios, multi-instance shared counters
+- **Local Rate Limiting**: Automatic fallback when Redis fails
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -67,26 +67,26 @@ Gateway 使用混合限流架构：
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `qps` | 每秒请求数限制 | - |
-| `burstCapacity` | 突发容量 | `2 * qps` |
-| `keyType` | 限流 Key 类型 | `ip` |
-| `enabled` | 是否启用 | `true` |
+| `qps` | Requests per second limit | - |
+| `burstCapacity` | Burst capacity | `2 * qps` |
+| `keyType` | Rate limiting key type | `ip` |
+| `enabled` | Whether to enable | `true` |
 
 ### Key Types
 
 | Key Type | Description | Use Case |
 |----------|-------------|----------|
-| `ip` | 按客户端 IP | 防单 IP 滥用 |
-| `route` | 按路由共享 | 全局保护 |
-| `combined` | 路由 + IP 组合 | 精细控制 |
-| `header` | 按 Header 值 | 按用户/租户限流 |
-| `user` | 按用户 ID | 认证后限流 |
+| `ip` | By client IP | Prevent single IP abuse |
+| `route` | Shared by route | Global protection |
+| `combined` | Route + IP combination | Fine-grained control |
+| `header` | By header value | Rate limit by user/tenant |
+| `user` | By user ID | Post-authentication rate limiting |
 
 ---
 
 ## Multi-Dimensional Rate Limiting
 
-支持层级限流：全局 → 租户 → 用户 → IP
+Supports hierarchical rate limiting: Global → Tenant → User → IP
 
 ### Configuration
 
@@ -156,7 +156,7 @@ Request arrives
 
 ### Problem
 
-Redis 故障时，简单降级到本地限流会导致流量激增：
+When Redis fails, simple fallback to local rate limiting can cause traffic spikes:
 
 ```
 Scenario: 5 gateway nodes, global limit = 10,000 QPS
@@ -196,7 +196,7 @@ Redis fails (naive fallback):
 
 ### Recovery Strategy
 
-Redis 恢复时，渐进式流量迁移：
+When Redis recovers, gradual traffic migration:
 
 ```
 Redis Recovery Timeline:
@@ -211,7 +211,7 @@ Second 9:  100% traffic to Redis, fully recovered
 
 ## Sliding Window Algorithm
 
-使用滑动窗口实现精确限流：
+Uses sliding window for precise rate limiting:
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -233,7 +233,7 @@ Second 9:  100% traffic to Redis, fully recovered
 
 ## Non-Blocking Lock Optimization
 
-本地限流器使用 CAS + tryLock 策略，避免阻塞 EventLoop：
+Local rate limiter uses CAS + tryLock strategy to avoid blocking EventLoop:
 
 ```java
 // Fast path: CAS for low contention
@@ -262,7 +262,7 @@ return false;  // Prevents EventLoop thread starvation
 
 ## Error Response
 
-限流触发时返回：
+Returned when rate limit is triggered:
 
 ```json
 {
@@ -286,7 +286,7 @@ Retry-After: 1
 
 ## API Endpoints
 
-限流配置通过 Strategy API 管理：
+Rate limiting configuration is managed via Strategy API:
 
 ```bash
 # Configure rate limiting
@@ -305,16 +305,16 @@ curl -X PUT http://localhost:9090/api/strategies/rate-limiter \
 
 ## Best Practices
 
-1. **合理设置 QPS**：根据后端容量设置
-2. **突发容量**：设置适当的 burstCapacity 允许短暂高峰
-3. **监控 Redis**：确保 Redis 健康，避免降级
-4. **Key Type 选择**：根据业务场景选择合适的 Key Type
-5. **渐进式恢复**：Redis 恢复后观察流量稳定性
+1. **Reasonable QPS Settings**: Set based on backend capacity
+2. **Burst Capacity**: Set appropriate burstCapacity to allow short traffic spikes
+3. **Monitor Redis**: Ensure Redis health to avoid fallback
+4. **Key Type Selection**: Choose appropriate Key Type based on business scenario
+5. **Gradual Recovery**: Monitor traffic stability after Redis recovery
 
 ---
 
 ## Related Features
 
-- [Circuit Breaker](circuit-breaker.md) - 熔断保护
-- [Monitoring & Alerts](monitoring-alerts.md) - 限流监控
-- [Request Tracing](request-tracing.md) - 记录限流事件
+- [Circuit Breaker](circuit-breaker.md) - Circuit breaker protection
+- [Monitoring & Alerts](monitoring-alerts.md) - Rate limiting monitoring
+- [Request Tracing](request-tracing.md) - Record rate limiting events

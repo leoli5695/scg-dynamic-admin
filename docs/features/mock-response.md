@@ -1,12 +1,12 @@
 # Mock Response
 
-> Mock 响应功能支持返回静态/动态/模板响应，用于前后端协作和测试。
+> Mock response functionality supports returning static/dynamic/template responses, used for frontend-backend collaboration and testing.
 
 ---
 
 ## Overview
 
-Mock 响应在认证之后执行，可跳过后端调用：
+Mock response executes after authentication, can skip backend calls:
 
 ```
 Request Flow:
@@ -24,9 +24,9 @@ Request Flow:
 
 | Mode | Description | Use Case |
 |------|-------------|----------|
-| **STATIC** | 固定响应体 | 简单 Mock |
-| **DYNAMIC** | 按条件选择响应 | 模拟不同场景 |
-| **TEMPLATE** | 模板引擎生成响应 | 模拟真实数据结构 |
+| **STATIC** | Fixed response body | Simple mock |
+| **DYNAMIC** | Select response by condition | Simulate different scenarios |
+| **TEMPLATE** | Template engine generated response | Simulate real data structure |
 
 ---
 
@@ -50,31 +50,13 @@ Request Flow:
 }
 ```
 
-### Template Mock (Handlebars)
-
-```json
-{
-  "routeId": "test-api",
-  "enabled": true,
-  "mockMode": "TEMPLATE",
-  "templateMock": {
-    "templateEngine": "HANDLEBARS",
-    "template": "{\"id\": \"{{id}}\", \"name\": \"{{name}}\", \"email\": \"{{email}}\"}",
-    "variables": {
-      "id": "{{random.uuid}}",
-      "name": "{{random.name}}",
-      "email": "{{random.email}}"
-    },
-    "extractFromRequest": [
-      {
-        "source": "PATH",
-        "name": "userId",
-        "expression": "/users/{id}"
-      }
-    ]
-  }
-}
-```
+| Field | Description | Default |
+|-------|-------------|---------|
+| `statusCode` | HTTP status code | `200` |
+| `contentType` | Content-Type | `application/json` |
+| `headers` | Custom response headers | `{}` |
+| `body` | Response body string | - |
+| `bodyFile` | Response body file path | - |
 
 ### Dynamic Mock (Conditional)
 
@@ -92,7 +74,7 @@ Request Flow:
         },
         "response": {
           "statusCode": 200,
-          "body": "{\"version\": \"v2\", \"data\": {...}}"
+          "body": "{\"version\": \"v2\"}"
         }
       },
       {
@@ -102,19 +84,100 @@ Request Flow:
         },
         "response": {
           "statusCode": 200,
-          "body": "{\"preview\": true, \"data\": {...}}"
+          "body": "{\"preview\": true}"
         }
       }
     ],
     "defaultResponse": {
       "statusCode": 200,
-      "body": "{\"version\": \"v1\", \"data\": {...}}"
+      "body": "{\"version\": \"v1\"}"
     }
   }
 }
 ```
 
-### Error Simulation
+| Field | Description |
+|-------|-------------|
+| `conditions` | Condition list, matched in order |
+| `defaultResponse` | Default response when no condition matches |
+
+**MockCondition fields:**
+
+| Field | Description | Default |
+|-------|-------------|---------|
+| `matchType` | Match type: PATH, HEADER, QUERY, BODY | `PATH` |
+| `pathPattern` | Ant-style path pattern | - |
+| `headerConditions` | Header condition mapping | `{}` |
+| `queryConditions` | Query parameter condition mapping | `{}` |
+| `bodyConditions` | JSONPath Body condition | `{}` |
+| `response` | Response returned when matched | - |
+
+> **Note:** One condition can configure multiple condition types, all must match to be considered a hit.
+
+### Template Mock (Handlebars)
+
+```json
+{
+  "routeId": "test-api",
+  "enabled": true,
+  "mockMode": "TEMPLATE",
+  "templateMock": {
+    "templateEngine": "HANDLEBARS",
+    "template": "{\"id\": \"{{id}}\", \"name\": \"{{name}}\"}",
+    "variables": {
+      "id": "123",
+      "name": "Test User"
+    },
+    "extractFromRequest": [
+      {
+        "source": "PATH",
+        "name": "userId",
+        "expression": "/users/{id}"
+      },
+      {
+        "source": "HEADER",
+        "name": "token",
+        "expression": "X-Token"
+      },
+      {
+        "source": "QUERY",
+        "name": "page",
+        "expression": "page"
+      }
+    ]
+  }
+}
+```
+
+| Field | Description | Default |
+|-------|-------------|---------|
+| `templateEngine` | Template engine: HANDLEBARS, MUSTACHE, JSON_TEMPLATE | `HANDLEBARS` |
+| `template` | Template content | - |
+| `templateFile` | Template file path | - |
+| `variables` | Static variable mapping | `{}` |
+| `extractFromRequest` | Extract variables from request | `[]` |
+
+**RequestExtractConfig fields:**
+
+| Field | Description | Default |
+|-------|-------------|---------|
+| `source` | Extract source: PATH, HEADER, QUERY, BODY | `PATH` |
+| `name` | Variable name (referenced in template) | - |
+| `expression` | Extract expression | - |
+| `defaultValue` | Default value when extraction fails | - |
+
+**Extract expression description:**
+
+| Source | Expression example | Description |
+|--------|-------------------|-------------|
+| `PATH` | `/users/{id}` | Ant-style path, extract `{id}` |
+| `HEADER` | `X-Token` | Header name |
+| `QUERY` | `page` | Query parameter name |
+| `BODY` | `$.data.id` | JSONPath (not yet implemented) |
+
+---
+
+## Error Simulation
 
 ```json
 {
@@ -134,9 +197,18 @@ Request Flow:
 }
 ```
 
-10% 的请求返回模拟错误（500/503/504 随机）。
+| Field | Description | Default |
+|-------|-------------|---------|
+| `enabled` | Whether to enable error simulation | `false` |
+| `errorRate` | Error rate percentage (0-100) | `0` |
+| `errorStatusCodes` | Error status code list | `[500, 503, 504]` |
+| `errorBodyTemplate` | Error response template | See default value |
 
-### Delayed Mock
+10% of requests return simulated errors (500/503/504 random). `${statusCode}` will be replaced with the actual status code.
+
+---
+
+## Delay Simulation
 
 ```json
 {
@@ -155,12 +227,38 @@ Request Flow:
       "minMs": 100,
       "maxMs": 1000
     },
-    "networkConditions": "3G"
+    "networkConditions": "FAST"
   }
 }
 ```
 
-### Pass Through (Bypass Mock)
+| Field | Description | Default |
+|-------|-------------|---------|
+| `enabled` | Whether to enable delay | `false` |
+| `fixedDelayMs` | Fixed delay in milliseconds | `0` |
+| `randomDelay` | Random delay configuration | See below |
+| `networkConditions` | Preset network condition | `FAST` |
+
+**RandomDelayConfig fields:**
+
+| Field | Description | Default |
+|-------|-------------|---------|
+| `enabled` | Whether to enable random delay | `false` |
+| `minMs` | Minimum delay | `100` |
+| `maxMs` | Maximum delay | `500` |
+
+**Preset network conditions (added to fixed delay):**
+
+| Condition | Additional delay |
+|-----------|-----------------|
+| `FAST` | 0ms (only fixed delay) |
+| `4G` | 0-100ms random |
+| `3G` | 300-800ms |
+| `SLOW_3G` | 1000-3000ms |
+
+---
+
+## Pass Through (Bypass Mock)
 
 ```json
 {
@@ -180,32 +278,31 @@ Request Flow:
 }
 ```
 
-携带特定 Header 或 Query 参数时跳过 Mock，转发到真实后端。
+| Field | Description |
+|-------|-------------|
+| `enabled` | Whether to enable pass through |
+| `conditions` | Pass through condition list |
+
+**PassThroughCondition fields:**
+
+| Field | Description | Format |
+|-------|-------------|--------|
+| `headerCondition` | Header condition | `X-Mock-Bypass=true` |
+| `queryCondition` | Query condition | `mock=false` |
+
+Skip mock when specific header or query parameter is present, forward to real backend.
 
 ---
 
-## Template Variables
+## Mock Response Header
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `{{random.uuid}}` | 随机 UUID | `a1b2c3d4-e5f6-...` |
-| `{{random.name}}` | 随机姓名 | `John Doe` |
-| `{{random.email}}` | 随机邮箱 | `john@example.com` |
-| `{{random.int}}` | 随机整数 | `12345` |
-| `{{timestamp}}` | 当前时间戳 | `2024-01-15T10:30:00Z` |
-| `{{request.header.X-Id}}` | 请求头值 | 从请求获取 |
-| `{{request.path}}` | 请求路径 | `/api/users` |
+All mock responses automatically add an identification header:
 
----
+```
+X-Mock-Response: true
+```
 
-## Delay Presets
-
-| Network Condition | Typical Latency |
-|-------------------|-----------------|
-| `FAST` | 固定延迟 |
-| `4G` | +0-100ms 随机 |
-| `3G` | +300-800ms |
-| `SLOW_3G` | +1000-3000ms |
+For easy identification of whether the response is from mock.
 
 ---
 
@@ -213,20 +310,21 @@ Request Flow:
 
 ### Frontend-Backend Collaboration
 
-前端开发时后端 API 未就绪：
+Backend API not ready during frontend development:
 
 ```json
 {
-  "mockMode": "TEMPLATE",
-  "templateMock": {
-    "template": "{\"users\": [{{#each users}},{\"id\": \"{{this.id}}\", \"name\": \"{{this.name}}\"}{{/each}}]}"
+  "mockMode": "STATIC",
+  "staticMock": {
+    "statusCode": 200,
+    "body": "{\"users\": [{\"id\": 1, \"name\": \"Alice\"}]}"
   }
 }
 ```
 
 ### Error Handling Test
 
-测试前端错误处理逻辑：
+Test frontend error handling logic:
 
 ```json
 {
@@ -238,11 +336,11 @@ Request Flow:
 }
 ```
 
-50% 的请求返回 500 错误。
+50% of requests return 500 error.
 
 ### Performance Test
 
-模拟慢网络场景：
+Simulate slow network scenarios:
 
 ```json
 {
@@ -255,7 +353,7 @@ Request Flow:
 
 ### API Versioning Mock
 
-不同版本返回不同响应：
+Different versions return different responses:
 
 ```json
 {
@@ -263,7 +361,6 @@ Request Flow:
   "dynamicMock": {
     "conditions": [
       {
-        "matchType": "HEADER",
         "headerConditions": {"X-Version": "v2"},
         "response": {"statusCode": 200, "body": "{\"version\": \"v2\"}"}
       }
@@ -277,7 +374,7 @@ Request Flow:
 
 ## API Endpoints
 
-通过 Strategy API 配置：
+Configure via Strategy API:
 
 ```bash
 curl -X PUT http://localhost:9090/api/strategies/mock-response \
@@ -297,16 +394,16 @@ curl -X PUT http://localhost:9090/api/strategies/mock-response \
 
 ## Best Practices
 
-1. **标识 Mock**：添加 `X-Mock: true` Header 便于识别
-2. **模板数据**：使用模板变量模拟真实数据结构
-3. **禁用切换**：生产环境确保禁用 Mock 或设置 `enabled: false`
-4. **错误模拟**：测试前端错误处理逻辑
-5. **延迟测试**：测试超时和加载状态
-6. **Pass Through**：为测试人员保留跳过 Mock 的能力
+1. **Identify Mock**: Automatically adds `X-Mock-Response: true` header for easy identification
+2. **Template Data**: Use `variables` and `extractFromRequest` to simulate real data
+3. **Disable Toggle**: Ensure `enabled: false` in production environment
+4. **Error Simulation**: Test frontend error handling logic
+5. **Delay Testing**: Test timeout and loading states
+6. **Pass Through**: Preserve ability to skip mock for testers
 
 ---
 
 ## Related Features
 
-- [Request Validation](request-validation.md) - 验证 Mock 请求
-- [Response Transform](response-transform.md) - 转换 Mock 响应
+- [Request Validation](request-validation.md) - Validate mock requests
+- [Response Transform](response-transform.md) - Transform mock responses

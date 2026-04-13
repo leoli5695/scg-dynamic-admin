@@ -1,12 +1,12 @@
 # Circuit Breaker
 
-> 熔断器保护后端服务免受级联故障，使用 Resilience4j 实现。
+> Circuit breaker protects backend services from cascading failures, implemented using Resilience4j.
 
 ---
 
 ## Overview
 
-熔断器状态机：
+Circuit breaker state machine:
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -51,40 +51,40 @@
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `failureRateThreshold` | 失败率阈值 (%) | `50` |
-| `slowCallDurationThreshold` | 慢调用阈值 (ms) | `60000` |
-| `slowCallRateThreshold` | 慢调用率阈值 (%) | `80` |
-| `waitDurationInOpenState` | OPEN 状态等待时间 (ms) | `30000` |
-| `slidingWindowSize` | 滑动窗口大小 | `10` |
-| `minimumNumberOfCalls` | 最小调用次数 | `5` |
-| `permittedNumberOfCallsInHalfOpenState` | HALF_OPEN 测试次数 | `3` |
+| `failureRateThreshold` | Failure rate threshold (%) | `50` |
+| `slowCallDurationThreshold` | Slow call threshold (ms) | `60000` |
+| `slowCallRateThreshold` | Slow call rate threshold (%) | `80` |
+| `waitDurationInOpenState` | OPEN state wait duration (ms) | `30000` |
+| `slidingWindowSize` | Sliding window size | `10` |
+| `minimumNumberOfCalls` | Minimum number of calls | `5` |
+| `permittedNumberOfCallsInHalfOpenState` | HALF_OPEN test count | `3` |
 
 ---
 
 ## State Descriptions
 
-### CLOSED (正常)
+### CLOSED (Normal)
 
-- 所有请求正常转发
-- 记录成功/失败/慢调用统计
-- 失败率超过阈值时切换到 OPEN
+- All requests are forwarded normally
+- Records success/failure/slow call statistics
+- Switches to OPEN when failure rate exceeds threshold
 
-### OPEN (熔断)
+### OPEN (Circuit Open)
 
-- 所有请求立即返回错误（不转发）
-- 等待 `waitDurationInOpenState` 后切换到 HALF_OPEN
+- All requests immediately return error (not forwarded)
+- Waits for `waitDurationInOpenState` before switching to HALF_OPEN
 
-### HALF_OPEN (试探)
+### HALF_OPEN (Testing)
 
-- 允许 `permittedNumberOfCallsInHalfOpenState` 个请求通过
-- 成功 → 切换到 CLOSED
-- 失败 → 切换回 OPEN
+- Allows `permittedNumberOfCallsInHalfOpenState` requests through
+- Success → Switch to CLOSED
+- Failure → Switch back to OPEN
 
 ---
 
 ## Error Response
 
-熔断触发时返回：
+Returned when circuit is open:
 
 ```json
 {
@@ -102,12 +102,12 @@
 
 | Type | Description |
 |------|-------------|
-| `COUNT_BASED` | 基于调用次数的滑动窗口 |
-| `TIME_BASED` | 基于时间的滑动窗口 |
+| `COUNT_BASED` | Count-based sliding window |
+| `TIME_BASED` | Time-based sliding window |
 
 ### COUNT_BASED
 
-最近 N 次调用的统计：
+Statistics for the most recent N calls:
 
 ```
 Sliding Window Size: 10 calls
@@ -121,7 +121,7 @@ Failure rate: 5/10 = 50%
 
 ### TIME_BASED
 
-最近 N 秒内的调用统计：
+Statistics for calls within the most recent N seconds:
 
 ```
 Sliding Window Size: 10 seconds
@@ -136,18 +136,18 @@ Failure rate: 60%
 
 ## Monitoring
 
-熔断状态可在 UI 监控：
+Circuit breaker status can be monitored in UI:
 
-- 当前状态 (CLOSED/OPEN/HALF_OPEN)
-- 失败率
-- 慢调用率
-- 最近调用统计
+- Current state (CLOSED/OPEN/HALF_OPEN)
+- Failure rate
+- Slow call rate
+- Recent call statistics
 
 ---
 
 ## API Endpoints
 
-通过 Strategy API 配置：
+Configure via Strategy API:
 
 ```bash
 curl -X PUT http://localhost:9090/api/strategies/circuit-breaker \
@@ -165,17 +165,17 @@ curl -X PUT http://localhost:9090/api/strategies/circuit-breaker \
 
 ## Best Practices
 
-1. **阈值设置**：根据服务容错能力调整
-2. **等待时间**：给后端服务恢复时间
-3. **最小调用次数**：避免少量请求触发误熔断
-4. **监控告警**：熔断时发送告警通知
-5. **结合 Retry**：熔断后可配合重试策略
+1. **Threshold Settings**: Adjust based on service fault tolerance
+2. **Wait Duration**: Give backend service time to recover
+3. **Minimum Call Count**: Avoid false circuit breaks from small number of requests
+4. **Monitoring Alerts**: Send alert notifications when circuit breaks
+5. **Combine with Retry**: Coordinate with retry strategy after circuit break
 
 ---
 
 ## Related Features
 
-- [Rate Limiting](rate-limiting.md) - 限流保护
-- [Retry](retry.md) - 重试策略
-- [Timeout Control](timeout-control.md) - 超时控制
-- [Monitoring & Alerts](monitoring-alerts.md) - 状态监控
+- [Rate Limiting](rate-limiting.md) - Rate limiting protection
+- [Retry](retry.md) - Retry strategy
+- [Timeout Control](timeout-control.md) - Timeout control
+- [Monitoring & Alerts](monitoring-alerts.md) - Status monitoring

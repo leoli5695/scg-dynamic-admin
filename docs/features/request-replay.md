@@ -1,12 +1,12 @@
 # Request Replay Debugger
 
-> 请求重放调试器支持修改并重放捕获的请求，对比原始响应和新响应。支持批量重放、并发控制、WebSocket/SSE 检测、深度 JSON 对比。
+> Request Replay Debugger supports modifying and replaying captured requests, comparing original and new responses. Supports batch replay, concurrency control, WebSocket/SSE detection, and deep JSON comparison.
 
 ---
 
 ## Overview
 
-请求重放流程：
+Request replay workflow:
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -56,15 +56,15 @@
 
 ## Request Type Detection
 
-系统自动检测请求类型，决定是否可重放：
+System automatically detects request type, determining if replayable:
 
 | Type | Detection | Replayable | Behavior |
 |------|-----------|------------|----------|
-| **HTTP** | 普通 HTTP 请求 | ✅ Yes | 可完整重放 |
-| **WEBSOCKET** | Upgrade 头 或 ws:// | ❌ No | 返回错误提示 |
-| **SSE** | Accept: text/event-stream | ❌ No | 返回错误提示 |
+| **HTTP** | Normal HTTP request | Yes | Can fully replay |
+| **WEBSOCKET** | Upgrade header or ws:// | No | Return error message |
+| **SSE** | Accept: text/event-stream | No | Return error message |
 
-**WebSocket/SSE 不可重放原因**：使用持久流连接，无法用 HTTP Client 重现。
+**Why WebSocket/SSE cannot be replayed**: Uses persistent stream connections, cannot be reproduced with HTTP Client.
 
 ---
 
@@ -72,16 +72,16 @@
 
 | Feature | Description |
 |---------|-------------|
-| **Request Capture** | 自动捕获错误和慢请求 |
-| **Request Editing** | 修改路径、Headers、Body、Query 参数 |
-| **Quick Replay** | 直接重放原始请求 |
-| **Response Comparison** | 对比原始和新响应 |
-| **JSON Deep Diff** | 深度对比 JSON 字段差异 |
-| **Batch Replay** | 批量重放多个请求 |
-| **Concurrency Control** | 并发数和请求间隔控制 |
-| **Custom Target** | 指定重放目标 URL |
-| **Sensitive Filter** | 自动过滤敏感 Header |
-| **Error Classification** | 错误类型分类（连接/客户端/服务端） |
+| **Request Capture** | Automatically capture errors and slow requests |
+| **Request Editing** | Modify path, Headers, Body, Query parameters |
+| **Quick Replay** | Directly replay original request |
+| **Response Comparison** | Compare original and new responses |
+| **JSON Deep Diff** | Deep compare JSON field differences |
+| **Batch Replay** | Batch replay multiple requests |
+| **Concurrency Control** | Concurrency count and request interval control |
+| **Custom Target** | Specify replay target URL |
+| **Sensitive Filter** | Automatically filter sensitive Headers |
+| **Error Classification** | Error type classification (connection/client/server) |
 
 ---
 
@@ -89,11 +89,11 @@
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/replay/prepare/{traceId}` | 准备重放请求（检测类型） |
-| `POST` | `/api/replay/execute/{traceId}` | 执行单个重放 |
-| `POST` | `/api/replay/batch` | 批量重放 |
-| `GET` | `/api/replay/batch/{sessionId}` | 查询批量状态 |
-| `DELETE` | `/api/replay/batch/{sessionId}` | 取消批量重放 |
+| `GET` | `/api/replay/prepare/{traceId}` | Prepare replay request (detect type) |
+| `POST` | `/api/replay/execute/{traceId}` | Execute single replay |
+| `POST` | `/api/replay/batch` | Batch replay |
+| `GET` | `/api/replay/batch/{sessionId}` | Query batch status |
+| `DELETE` | `/api/replay/batch/{sessionId}` | Cancel batch replay |
 
 ### Prepare Replay
 
@@ -101,7 +101,7 @@
 GET /api/replay/prepare/123
 ```
 
-Response (HTTP 请求):
+Response (HTTP Request):
 ```json
 {
   "traceId": 123,
@@ -121,7 +121,7 @@ Response (HTTP 请求):
 }
 ```
 
-Response (WebSocket 请求):
+Response (WebSocket Request):
 ```json
 {
   "traceId": 123,
@@ -186,7 +186,7 @@ Response:
 
 ## Batch Replay
 
-批量重放多个请求，支持并发控制和进度跟踪：
+Batch replay multiple requests with concurrency control and progress tracking:
 
 ```bash
 POST /api/replay/batch?instanceId=gateway-1
@@ -241,73 +241,73 @@ DELETE /api/replay/batch/batch-replay-abc123
 
 ## Concurrency Control
 
-批量重放参数：
+Batch replay parameters:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `maxConcurrent` | 5 | 最大并发请求数 |
-| `requestIntervalMs` | 100 | 请求间隔（毫秒） |
+| `maxConcurrent` | 5 | Maximum concurrent requests |
+| `requestIntervalMs` | 100 | Request interval (milliseconds) |
 
-使用 Semaphore 限制并发，避免压垮目标服务。
+Use Semaphore to limit concurrency, avoid overwhelming target service.
 
 ---
 
 ## Error Classification
 
-重放失败时返回错误类型：
+Returns error type on replay failure:
 
 | ErrorType | Description | Example |
 |-----------|-------------|---------|
-| `CONNECTION_ERROR` | 网络连接问题 | Connection refused, Timeout |
-| `CLIENT_ERROR` | HTTP 4xx 错误 | 400 Bad Request, 401 Unauthorized |
-| `SERVER_ERROR` | HTTP 5xx 错误 | 500 Internal Error, 503 Unavailable |
-| `UNSUPPORTED_TYPE` | WebSocket/SSE 不支持 | WebSocket requests cannot be replayed |
+| `CONNECTION_ERROR` | Network connection issue | Connection refused, Timeout |
+| `CLIENT_ERROR` | HTTP 4xx error | 400 Bad Request, 401 Unauthorized |
+| `SERVER_ERROR` | HTTP 5xx error | 500 Internal Error, 503 Unavailable |
+| `UNSUPPORTED_TYPE` | WebSocket/SSE not supported | WebSocket requests cannot be replayed |
 
 ### User-Friendly Error Messages
 
-系统将技术错误转换为友好提示：
+System converts technical errors to friendly messages:
 
 | Technical Error | User-Friendly Message |
 |-----------------|----------------------|
-| Connection refused | "无法连接到目标服务 [URL] - 连接被拒绝。请检查：1. 目标服务是否运行 2. 端口是否正确 3. 防火墙配置" |
-| Timeout | "连接超时 [URL] - 目标服务响应时间过长" |
-| Unknown host | "无法解析主机名 [URL] - 请检查域名配置" |
+| Connection refused | "Cannot connect to target service [URL] - Connection refused. Please check: 1. Target service is running 2. Port is correct 3. Firewall configuration" |
+| Timeout | "Connection timeout [URL] - Target service response time too long" |
+| Unknown host | "Cannot resolve hostname [URL] - Please check domain configuration" |
 
 ---
 
 ## Sensitive Header Filtering
 
-重放时自动过滤敏感 Header：
+Automatically filter sensitive Headers during replay:
 
 | Header | Behavior |
 |--------|----------|
-| `Authorization` | 编辑版本中移除，需手动添加新值 |
-| `Cookie` | 同上 |
-| `Set-Cookie` | 同上 |
-| `Proxy-Authorization` | 同上 |
-| `Host` | 重放时自动移除（会自动设置） |
-| `Content-Length` | 重放时自动移除（会自动计算） |
+| `Authorization` | Remove in edit version, need to manually add new value |
+| `Cookie` | Same as above |
+| `Set-Cookie` | Same as above |
+| `Proxy-Authorization` | Same as above |
+| `Host` | Automatically remove during replay (will be set automatically) |
+| `Content-Length` | Automatically remove during replay (will be calculated automatically) |
 
 ---
 
 ## Request Modifications
 
-支持的修改：
+Supported modifications:
 
 | Modification | Description |
 |--------------|-------------|
-| `modifiedPath` | 修改请求路径 |
-| `modifiedQueryString` | 修改 Query 参数 |
-| `modifiedHeaders` | 添加/修改 Headers |
-| `removedHeaders` | 移除指定 Headers |
-| `modifiedBody` | 修改请求体 |
-| `customTargetUrl` | 指定重放目标 URL |
+| `modifiedPath` | Modify request path |
+| `modifiedQueryString` | Modify Query parameters |
+| `modifiedHeaders` | Add/Modify Headers |
+| `removedHeaders` | Remove specified Headers |
+| `modifiedBody` | Modify request body |
+| `customTargetUrl` | Specify replay target URL |
 
 ---
 
 ## JSON Deep Diff Algorithm
 
-使用 JsonDiffService 进行深度对比：
+Use JsonDiffService for deep comparison:
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -343,40 +343,40 @@ DELETE /api/replay/batch/batch-replay-abc123
 
 | Use Case | How to Use |
 |----------|------------|
-| **Debug Production Issues** | 重放失败请求，修改参数定位问题 |
-| **Test Fixes** | 修改请求验证修复效果 |
-| **API Version Migration** | 修改 path 对比新旧 API 响应差异 |
-| **Performance Testing** | 对比不同配置的响应时间变化 |
-| **批量验证** | 批量重放验证修复是否解决所有类似问题 |
-| **环境切换** | 使用 customTargetUrl 在测试环境重放 |
+| **Debug Production Issues** | Replay failed requests, modify parameters to locate issues |
+| **Test Fixes** | Modify requests to verify fix effectiveness |
+| **API Version Migration** | Modify path to compare old and new API response differences |
+| **Performance Testing** | Compare response time changes under different configurations |
+| **Batch Verification** | Batch replay to verify if fix resolves all similar issues |
+| **Environment Switch** | Use customTargetUrl to replay in test environment |
 
 ---
 
 ## Replay Headers Added
 
-重放请求会添加特殊 Header：
+Replay requests add special Headers:
 
 | Header | Value | Purpose |
 |--------|-------|---------|
-| `X-Replay-Trace-Id` | 原始 traceId | 关联原始请求 |
-| `X-Replay-Mode` | `debug` | 标识为调试请求 |
+| `X-Replay-Trace-Id` | Original traceId | Associate with original request |
+| `X-Replay-Mode` | `debug` | Mark as debug request |
 
 ---
 
 ## Best Practices
 
-1. **敏感数据**: 重放前检查请求是否包含敏感数据
-2. **类型检测**: WebSocket/SSE 请求无法重放，使用原始记录分析
-3. **修改验证**: 修改参数后验证请求格式有效性
-4. **批量控制**: 批量重放设置合理的并发数和间隔
-5. **生产谨慎**: 生产环境重放需谨慎，避免影响正常流量
-6. **进度监控**: 批量重放时定期查询进度
-7. **错误分类**: 关注 errorType 区分问题类型
+1. **Sensitive Data**: Check if request contains sensitive data before replay
+2. **Type Detection**: WebSocket/SSE requests cannot be replayed, use original records for analysis
+3. **Modification Validation**: Validate request format validity after modifying parameters
+4. **Batch Control**: Set reasonable concurrency and interval for batch replay
+5. **Production Caution**: Be cautious when replaying in production, avoid affecting normal traffic
+6. **Progress Monitoring**: Periodically query progress during batch replay
+7. **Error Classification**: Focus on errorType to distinguish problem types
 
 ---
 
 ## Related Features
 
-- [Request Tracing](request-tracing.md) - 请求追踪数据源
-- [Filter Chain Analysis](filter-chain-analysis.md) - Filter 执行分析
-- [AI Copilot](ai-copilot.md) - AI 可调用工具分析重放结果
+- [Request Tracing](request-tracing.md) - Request tracing data source
+- [Filter Chain Analysis](filter-chain-analysis.md) - Filter execution analysis
+- [AI Copilot](ai-copilot.md) - AI can call tools to analyze replay results

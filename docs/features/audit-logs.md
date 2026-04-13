@@ -1,15 +1,15 @@
 # Audit Logs
 
-> 审计日志记录所有配置变更，支持差异对比和配置回滚。
+> Audit logs record all configuration changes, supporting diff comparison and configuration rollback.
 
 ---
 
 ## Overview
 
-审计日志功能：
-- 记录所有 CREATE/UPDATE/DELETE 操作
-- 显示变更前后差异
-- 支持回滚到历史版本
+Audit log features:
+- Record all CREATE/UPDATE/DELETE operations
+- Display before and after change differences
+- Support rollback to historical versions
 
 ---
 
@@ -17,12 +17,12 @@
 
 | Operation | Description |
 |-----------|-------------|
-| `CREATE` | 新建配置 |
-| `UPDATE` | 更新配置 |
-| `DELETE` | 删除配置 |
-| `ENABLE` | 启用配置 |
-| `DISABLE` | 禁用配置 |
-| `ROLLBACK` | 回滚配置 |
+| `CREATE` | Create configuration |
+| `UPDATE` | Update configuration |
+| `DELETE` | Delete configuration |
+| `ENABLE` | Enable configuration |
+| `DISABLE` | Disable configuration |
+| `ROLLBACK` | Rollback configuration |
 
 ---
 
@@ -30,10 +30,10 @@
 
 | Target Type | Description |
 |-------------|-------------|
-| `ROUTE` | 路由配置 |
-| `SERVICE` | 服务配置 |
-| `STRATEGY` | 策略配置 |
-| `AUTH_POLICY` | 认证策略 |
+| `ROUTE` | Route configuration |
+| `SERVICE` | Service configuration |
+| `STRATEGY` | Strategy configuration |
+| `AUTH_POLICY` | Authentication policy |
 
 ---
 
@@ -42,16 +42,16 @@
 ```java
 public class AuditLogEntity {
     private Long id;
-    private String instanceId;       // 实例隔离
-    private String operator;         // 操作者
+    private String instanceId;       // Instance isolation
+    private String operator;         // Operator
     private String operationType;    // CREATE/UPDATE/DELETE
     private String targetType;       // ROUTE/SERVICE/STRATEGY
-    private String targetId;         // 目标 ID
-    private String targetName;       // 目标名称
-    private String oldValue;         // 变更前 JSON
-    private String newValue;         // 变更后 JSON
-    private String ipAddress;        // 客户端 IP
-    private Date createdAt;          // 时间戳
+    private String targetId;         // Target ID
+    private String targetName;       // Target name
+    private String oldValue;         // JSON before change
+    private String newValue;         // JSON after change
+    private String ipAddress;        // Client IP
+    private Date createdAt;          // Timestamp
 }
 ```
 
@@ -125,12 +125,12 @@ Response:
 POST /api/audit-logs/{id}/rollback
 ```
 
-流程：
-1. 加载历史版本配置
-2. 验证配置有效性
-3. 应用配置到当前
-4. 发布到 Nacos
-5. 记录 ROLLBACK 操作
+Process:
+1. Load historical version configuration
+2. Validate configuration validity
+3. Apply configuration to current
+4. Publish to Nacos
+5. Record ROLLBACK operation
 
 ---
 
@@ -146,16 +146,16 @@ audit:
 
 ## Best Practices
 
-1. **定期清理**：设置合理保留天数
-2. **回滚验证**：回滚前验证配置有效性
-3. **操作审计**：记录操作者用于追溯
-4. **关键变更**：重要变更单独记录
-5. **定期备份**：导出审计日志备份
+1. **Regular Cleanup**: Set reasonable retention days
+2. **Rollback Validation**: Validate configuration validity before rollback
+3. **Operation Audit**: Record operators for traceability
+4. **Critical Changes**: Separately record important changes
+5. **Regular Backup**: Export audit log backups
 
 ---
 
 ## Related Features
 
-- [Route Management](route-management.md) - 路由审计
-- [Service Discovery](service-discovery.md) - 服务审计
-- [Authentication](authentication.md) - 认证策略审计
+- [Route Management](route-management.md) - Route audit
+- [Service Discovery](service-discovery.md) - Service audit
+- [Authentication](authentication.md) - Authentication policy audit

@@ -1,15 +1,15 @@
 # SSL Termination
 
-> Gateway 提供 HTTPS 终止功能，支持动态证书管理和到期监控。
+> Gateway provides HTTPS termination with support for dynamic certificate management and expiry monitoring.
 
 ---
 
 ## Overview
 
-Gateway 在端口 8443 提供 HTTPS 服务，支持：
-- 多域名证书（SNI）
-- 动态热加载（无需重启）
-- 证书到期监控和告警
+Gateway provides HTTPS service on port 8443, supporting:
+- Multi-domain certificates (SNI)
+- Dynamic hot reload (no restart required)
+- Certificate expiry monitoring and alerts
 
 ---
 
@@ -25,9 +25,9 @@ gateway:
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `enabled` | 是否启用 SSL | `false` |
-| `port` | HTTPS 端口 | `8443` |
-| `cert-path` | 证书存储路径 | `/opt/certificates` |
+| `enabled` | Whether to enable SSL | `false` |
+| `port` | HTTPS port | `8443` |
+| `cert-path` | Certificate storage path | `/opt/certificates` |
 
 ---
 
@@ -35,20 +35,20 @@ gateway:
 
 | Format | Extension | Description |
 |--------|-----------|-------------|
-| PEM | `.pem`, `.crt`, `.key` | 证书和私钥分离 |
-| PKCS12 | `.p12`, `.pfx` | 证书和私钥打包 |
+| PEM | `.pem`, `.crt`, `.key` | Certificate and private key separate |
+| PKCS12 | `.p12`, `.pfx` | Certificate and private key packaged |
 | JKS | `.jks` | Java KeyStore |
 
 ### PEM Format
 
-需要上传两个文件：
-- `certificate.pem` - 证书文件
-- `private.key` - 私钥文件
+Requires uploading two files:
+- `certificate.pem` - Certificate file
+- `private.key` - Private key file
 
 ### PKCS12 Format
 
-单个文件包含证书和私钥：
-- `certificate.p12` - 需要密码解密
+Single file containing certificate and private key:
+- `certificate.p12` - Requires password to decrypt
 
 ---
 
@@ -98,15 +98,15 @@ curl -X POST http://localhost:9090/api/ssl/upload-pkcs12 \
 
 | Status | Condition | Action |
 |--------|-----------|--------|
-| `VALID` | 到期时间 > 30 天 | 正常使用 |
-| `EXPIRING_SOON` | 到期时间 < 30 天 | 发送告警邮件 |
-| `EXPIRED` | 已过期 | 阻止使用，告警 |
+| `VALID` | Expiry > 30 days | Normal use |
+| `EXPIRING_SOON` | Expiry < 30 days | Send alert email |
+| `EXPIRED` | Already expired | Block usage, alert |
 
 ---
 
 ## Multi-Domain Support (SNI)
 
-Gateway 支持多域名证书，通过 SNI 选择对应证书：
+Gateway supports multi-domain certificates, selecting the appropriate certificate via SNI:
 
 ```
 Client Request (HTTPS)
@@ -137,7 +137,7 @@ Client Request (HTTPS)
 
 ## Hot Reload
 
-证书更新无需重启 Gateway：
+Certificate updates do not require Gateway restart:
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -169,9 +169,9 @@ alerts:
 
 ### Alert Actions
 
-- **Warning (30天前)**: 发送邮件提醒
-- **Critical (7天前)**: 发送紧急邮件 + UI 高亮显示
-- **Expired**: 证书自动禁用，发送错误告警
+- **Warning (30 days before)**: Send email reminder
+- **Critical (7 days before)**: Send urgent email + UI highlight
+- **Expired**: Certificate automatically disabled, error alert sent
 
 ---
 
@@ -247,14 +247,14 @@ Response:
 
 ## Best Practices
 
-1. **证书存储**：使用安全的文件路径，限制访问权限
-2. **到期监控**：设置告警阈值，提前更换证书
-3. **证书备份**：定期备份证书文件
-4. **私钥保护**：私钥文件不通过 API 返回，仅存储
+1. **Certificate Storage**: Use secure file paths, restrict access permissions
+2. **Expiry Monitoring**: Set alert thresholds, replace certificates in advance
+3. **Certificate Backup**: Regularly backup certificate files
+4. **Private Key Protection**: Private key files not returned via API, stored only
 
 ---
 
 ## Related Features
 
-- [Monitoring & Alerts](monitoring-alerts.md) - 配置告警通知
-- [Email Notifications](email-notifications.md) - 邮件告警配置
+- [Monitoring & Alerts](monitoring-alerts.md) - Configure alert notifications
+- [Email Notifications](email-notifications.md) - Email alert configuration

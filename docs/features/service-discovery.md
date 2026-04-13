@@ -1,17 +1,17 @@
 # Service Discovery
 
-> 服务发现支持动态（Nacos/Consul）和静态两种模式，提供负载均衡能力。
+> Service discovery supports both dynamic (Nacos/Consul) and static modes, providing load balancing capabilities.
 
 ---
 
 ## Overview
 
-Gateway 支持两种服务发现协议：
+Gateway supports two service discovery protocols:
 
 | Protocol | Description | Use Case |
 |----------|-------------|----------|
-| `lb://` | 动态服务发现 (Nacos/Consul) | 服务注册到服务中心的场景 |
-| `static://` | 静态服务发现 | 固定 IP 地址、外部 API |
+| `lb://` | Dynamic service discovery (Nacos/Consul) | Services registered to service center |
+| `static://` | Static service discovery | Fixed IP addresses, external APIs |
 
 ---
 
@@ -19,7 +19,7 @@ Gateway 支持两种服务发现协议：
 
 ### Configuration
 
-在路由 URI 中使用 `lb://` 协议：
+Use the `lb://` protocol in route URI:
 
 ```json
 {
@@ -27,11 +27,11 @@ Gateway 支持两种服务发现协议：
 }
 ```
 
-Gateway 自动从 Nacos/Consul 获取 `user-service` 的所有实例。
+Gateway automatically retrieves all instances of `user-service` from Nacos/Consul.
 
 ### Service Registration
 
-后端服务需要注册到 Nacos：
+Backend services need to register with Nacos:
 
 ```yaml
 # user-service application.yml
@@ -47,7 +47,7 @@ spring:
 
 ### Namespace/Group Override
 
-支持跨命名空间/分组的服务发现：
+Supports cross-namespace/group service discovery:
 
 ```json
 {
@@ -60,9 +60,9 @@ spring:
 }
 ```
 
-**应用场景：**
-- 网关在 `gateway-prod` namespace
-- 需要调用 `external-ns` namespace 的服务
+**Use Cases:**
+- Gateway is in `gateway-prod` namespace
+- Need to call services in `external-ns` namespace
 
 ---
 
@@ -70,7 +70,7 @@ spring:
 
 ### Configuration
 
-使用 `static://` 协议：
+Use the `static://` protocol:
 
 ```json
 {
@@ -78,7 +78,7 @@ spring:
 }
 ```
 
-然后在 `gateway-services.json` 中定义实例：
+Then define instances in `gateway-services.json`:
 
 ```json
 {
@@ -105,16 +105,16 @@ spring:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `ip` | String | 实例 IP 地址 |
-| `port` | Integer | 实例端口 |
-| `weight` | Integer | 负载均衡权重 (1-100) |
-| `enabled` | Boolean | 是否启用 |
+| `ip` | String | Instance IP address |
+| `port` | Integer | Instance port |
+| `weight` | Integer | Load balancing weight (1-100) |
+| `enabled` | Boolean | Whether enabled |
 
 ### Use Cases
 
-- **Legacy Systems**: 未接入服务注册中心的遗留系统
-- **External APIs**: 第三方 API 服务
-- **Fixed Endpoints**: 固定地址的内部服务
+- **Legacy Systems**: Legacy systems not connected to service registry
+- **External APIs**: Third-party API services
+- **Fixed Endpoints**: Internal services with fixed addresses
 
 ---
 
@@ -122,10 +122,10 @@ spring:
 
 | Strategy | Description | Best For |
 |----------|-------------|----------|
-| `weighted` | 平滑加权轮询 | 实例性能不均等 |
-| `round-robin` | 顺序轮询 | 实例性能相近 |
-| `random` | 随机选择 | 简单场景 |
-| `consistent-hash` | 基于 Hash (IP/Header) | 会话保持 |
+| `weighted` | Smooth weighted round-robin | Unequal instance performance |
+| `round-robin` | Sequential round-robin | Similar instance performance |
+| `random` | Random selection | Simple scenarios |
+| `consistent-hash` | Hash-based (IP/Header) | Session persistence |
 
 ### Weighted Round-Robin
 
@@ -145,7 +145,7 @@ Result: A -> B -> B -> C -> A -> B -> B -> C -> ...
 
 ### Consistent Hash
 
-基于客户端 IP 或 Header 进行 Hash：
+Hash based on client IP or Header:
 
 ```json
 {
@@ -154,9 +154,9 @@ Result: A -> B -> B -> C -> A -> B -> B -> C -> ...
 }
 ```
 
-**应用场景：**
-- 会话保持
-- 缓存命中率优化
+**Use Cases:**
+- Session persistence
+- Cache hit rate optimization
 
 ---
 
@@ -164,30 +164,30 @@ Result: A -> B -> B -> C -> A -> B -> B -> C -> ...
 
 ### Features
 
-- **自动跳过不健康实例**
-- **禁用实例不参与负载均衡**
-- **健康状态实时同步到 UI**
+- **Automatically skip unhealthy instances**
+- **Disabled instances do not participate in load balancing**
+- **Health status synced to UI in real-time**
 
 ### Health Check
 
-Gateway 支持混合健康检查：
+Gateway supports hybrid health checking:
 
 ```
 ┌─────────────────────────────────────────────┐
 │         Hybrid Health Checker                │
 │                                              │
-│   Passive Check (零开销):                    │
-│   - 每次请求成功 → 更新健康缓存              │
-│   - 无额外网络调用                           │
+│   Passive Check (zero overhead):             │
+│   - Each successful request -> update cache  │
+│   - No additional network calls              │
 │                                              │
-│   Active Check (按需):                       │
-│   - 连续失败时触发                           │
-│   - HTTP 调用 /actuator/health              │
-│   - 失败阈值: 3 次连续失败                   │
+│   Active Check (on-demand):                  │
+│   - Triggered on consecutive failures        │
+│   - HTTP call to /actuator/health           │
+│   - Failure threshold: 3 consecutive fails   │
 │                                              │
 │   Local Cache (Caffeine):                    │
-│   - 最大 10,000 实例                         │
-│   - 过期时间 5 分钟                          │
+│   - Max 10,000 instances                      │
+│   - Expiration: 5 minutes                    │
 └─────────────────────────────────────────────┘
 ```
 
@@ -234,7 +234,7 @@ curl -X POST http://localhost:9090/api/services \
 
 ## Service Discovery SPI
 
-Gateway 支持可扩展的服务发现 SPI：
+Gateway supports extensible service discovery SPI:
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -258,16 +258,16 @@ Gateway 支持可扩展的服务发现 SPI：
 
 ## Best Practices
 
-1. **命名规范**：服务名使用 `-` 分隔，如 `user-service`
-2. **权重设置**：根据实例性能设置合理权重
-3. **健康检查**：后端服务暴露 `/actuator/health` 端点
-4. **命名空间隔离**：不同环境使用不同 namespace
-5. **优雅下线**：先禁用实例，再停止服务
+1. **Naming Convention**: Use `-` separator for service names, e.g., `user-service`
+2. **Weight Settings**: Set reasonable weights based on instance performance
+3. **Health Check**: Backend services expose `/actuator/health` endpoint
+4. **Namespace Isolation**: Use different namespaces for different environments
+5. **Graceful Shutdown**: Disable instance first, then stop service
 
 ---
 
 ## Related Features
 
-- [Route Management](route-management.md) - 路由 URI 配置
-- [Multi-Service Routing](multi-service-routing.md) - 多服务路由
-- [Circuit Breaker](circuit-breaker.md) - 实例熔断保护
+- [Route Management](route-management.md) - Route URI configuration
+- [Multi-Service Routing](multi-service-routing.md) - Multi-service routing
+- [Circuit Breaker](circuit-breaker.md) - Instance circuit breaker protection

@@ -1,14 +1,14 @@
 # Timeout Control
 
-> 超时控制保护 Gateway 和后端服务免受长时间等待。
+> Timeout control protects Gateway and backend services from long waits.
 
 ---
 
 ## Overview
 
-Gateway 支持两种超时配置：
-- **连接超时**：TCP 连接建立时间
-- **响应超时**：完整响应等待时间
+Gateway supports two timeout configurations:
+- **Connect Timeout**: TCP connection establishment time
+- **Response Timeout**: Complete response wait time
 
 ---
 
@@ -25,8 +25,8 @@ Gateway 支持两种超时配置：
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `connectTimeout` | TCP 连接超时 (ms) | `5000` |
-| `responseTimeout` | 响应超时 (ms) | `30000` |
+| `connectTimeout` | TCP connection timeout (ms) | `5000` |
+| `responseTimeout` | Response timeout (ms) | `30000` |
 
 ---
 
@@ -34,26 +34,26 @@ Gateway 支持两种超时配置：
 
 ### Connect Timeout
 
-TCP 连接建立的超时时间：
+Timeout for TCP connection establishment:
 
 ```
 Gateway ───────▶ Backend
 
-TCP SYN ───────▶ (等待)
+TCP SYN ───────▶ (waiting)
       │
       │ connectTimeout exceeded
       ▼
    Connection Failed
 ```
 
-影响因素：
-- 网络延迟
-- 后端服务是否启动
-- 网络拥塞
+Factors affecting:
+- Network latency
+- Whether backend service is started
+- Network congestion
 
 ### Response Timeout
 
-从请求发送到响应完成的超时时间：
+Timeout from request sent to response completed:
 
 ```
 Gateway ───────▶ Backend
@@ -65,16 +65,16 @@ Request ───────▶ Processing
    Timeout Error (504)
 ```
 
-影响因素：
-- 后端处理时间
-- 数据传输时间
-- 后端负载
+Factors affecting:
+- Backend processing time
+- Data transfer time
+- Backend load
 
 ---
 
 ## Error Response
 
-超时触发时返回：
+Returned when timeout is triggered:
 
 ```json
 {
@@ -89,7 +89,7 @@ Request ───────▶ Processing
 
 ## API Endpoints
 
-通过 Strategy API 配置：
+Configure via Strategy API:
 
 ```bash
 curl -X PUT http://localhost:9090/api/strategies/timeout \
@@ -106,16 +106,16 @@ curl -X PUT http://localhost:9090/api/strategies/timeout \
 
 ## Best Practices
 
-1. **合理设置**：根据后端平均响应时间设置
-2. **分级配置**：不同 API 设置不同超时
-3. **监控告警**：超时频繁时发送告警
-4. **结合熔断**：超时视为失败，触发熔断统计
-5. **长连接场景**：适当增加超时时间
+1. **Reasonable Settings**: Set based on backend average response time
+2. **Tiered Configuration**: Set different timeouts for different APIs
+3. **Monitoring Alerts**: Send alerts when timeouts are frequent
+4. **Combine with Circuit Breaker**: Treat timeout as failure, count towards circuit breaker statistics
+5. **Long Connection Scenarios**: Appropriately increase timeout duration
 
 ---
 
 ## Related Features
 
-- [Circuit Breaker](circuit-breaker.md) - 熔断器（超时视为失败）
-- [Retry](retry.md) - 超时后重试
-- [Monitoring & Alerts](monitoring-alerts.md) - 超时监控
+- [Circuit Breaker](circuit-breaker.md) - Circuit breaker (timeout treated as failure)
+- [Retry](retry.md) - Retry after timeout
+- [Monitoring & Alerts](monitoring-alerts.md) - Timeout monitoring

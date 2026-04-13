@@ -1,12 +1,12 @@
 # Traffic Topology
 
-> 流量拓扑功能可视化展示请求流向，支持实时和历史数据。
+> Traffic topology visually displays request flow, supporting real-time and historical data.
 
 ---
 
 ## Overview
 
-流量拓扑使用 ECharts 力导向图展示：
+Traffic topology uses ECharts force-directed graph for visualization:
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -33,11 +33,11 @@
 
 | Feature | Description |
 |---------|-------------|
-| **Real-time Graph** | 实时流量拓扑图 |
-| **Traffic Metrics** | 请求数、错误率、延迟 |
+| **Real-time Graph** | Real-time traffic topology graph |
+| **Traffic Metrics** | Request count, error rate, latency |
 | **Time Range** | 15min, 30min, 1h, 3h, 6h |
-| **Auto Refresh** | 每 30 秒自动刷新 |
-| **Node Details** | 点击查看详细指标 |
+| **Auto Refresh** | Auto refresh every 30 seconds |
+| **Node Details** | Click to view detailed metrics |
 
 ---
 
@@ -45,10 +45,10 @@
 
 | Node Type | Color | Description |
 |-----------|-------|-------------|
-| `gateway` | Blue | Gateway 实例 |
-| `route` | Cyan | 路由定义 |
-| `service` | Purple | 后端服务 |
-| `client` | Orange | 客户端 IP |
+| `gateway` | Blue | Gateway instance |
+| `route` | Cyan | Route definition |
+| `service` | Purple | Backend service |
+| `client` | Orange | Client IP |
 
 ---
 
@@ -56,17 +56,17 @@
 
 | Metric | Description |
 |--------|-------------|
-| `requestCount` | 该路径请求总数 |
-| `avgLatency` | 平均响应延迟 |
-| `errorRate` | 错误率百分比 |
+| `requestCount` | Total requests on this path |
+| `avgLatency` | Average response latency |
+| `errorRate` | Error rate percentage |
 
 ### Edge Styling
 
-- **宽度**: `min(8, max(1, requestCount / 50))`
-- **颜色**:
-  - 绿色: errorRate < 5%
-  - 橙色: errorRate 5-10%
-  - 红色: errorRate > 10%
+- **Width**: `min(8, max(1, requestCount / 50))`
+- **Color**:
+  - Green: errorRate < 5%
+  - Orange: errorRate 5-10%
+  - Red: errorRate > 10%
 
 ---
 
@@ -113,16 +113,16 @@
 
 ## Best Practices
 
-1. **定期查看**：了解流量分布
-2. **异常检测**：关注红色边路径
-3. **延迟分析**：识别高延迟路径
-4. **客户端分析**：了解主要客户端来源
-5. **结合监控**：与监控数据对比分析
+1. **Regular Review**: Understand traffic distribution
+2. **Anomaly Detection**: Focus on red edge paths
+3. **Latency Analysis**: Identify high latency paths
+4. **Client Analysis**: Understand primary client sources
+5. **Combine with Monitoring**: Compare with monitoring data for analysis
 
 ---
 
 ## Related Features
 
-- [Monitoring & Alerts](monitoring-alerts.md) - 监控数据
-- [Request Tracing](request-tracing.md) - 请求追踪
-- [Analytics](analytics.md) - 数据分析
+- [Monitoring & Alerts](monitoring-alerts.md) - Monitoring data
+- [Request Tracing](request-tracing.md) - Request tracing
+- [Analytics](analytics.md) - Data analysis

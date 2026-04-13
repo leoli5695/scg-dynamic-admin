@@ -1,15 +1,15 @@
 # Multi-Service Routing & Gray Release
 
-> 多服务路由允许单个路由将流量分发到多个后端服务，支持灰度发布和 A/B 测试。
+> Multi-service routing allows a single route to distribute traffic to multiple backend services, supporting gray release and A/B testing.
 
 ---
 
 ## Overview
 
-传统网关只能将请求路由到单一后端服务。多服务路由功能允许：
-- 将流量按权重分发到多个版本
-- 基于请求特征（Header/Cookie/Query）进行精准路由
-- 实现灰度发布、A/B 测试、金丝雀部署
+Traditional gateways can only route requests to a single backend service. Multi-service routing enables:
+- Distributing traffic by weight to multiple versions
+- Precise routing based on request characteristics (Header/Cookie/Query)
+- Implementing gray release, A/B testing, canary deployment
 
 ---
 
@@ -53,19 +53,19 @@
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `mode` | String | `SINGLE` (默认) 或 `MULTI` |
-| `services` | Array | 目标服务列表 |
-| `grayRules` | Object | 灰度规则配置 |
+| `mode` | String | `SINGLE` (default) or `MULTI` |
+| `services` | Array | List of target services |
+| `grayRules` | Object | Gray release rule configuration |
 
 ### Service Binding
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `serviceId` | String | 服务标识符 |
-| `serviceName` | String | 服务显示名称 |
-| `weight` | Integer | 权重 (1-100) |
-| `type` | String | `DISCOVERY` 或 `STATIC` |
-| `enabled` | Boolean | 是否启用 |
+| `serviceId` | String | Service identifier |
+| `serviceName` | String | Service display name |
+| `weight` | Integer | Weight (1-100) |
+| `type` | String | `DISCOVERY` or `STATIC` |
+| `enabled` | Boolean | Whether enabled |
 
 ---
 
@@ -73,10 +73,10 @@
 
 | Type | Description | Match Example |
 |------|-------------|---------------|
-| `HEADER` | 匹配 HTTP Header | `X-Version: v2` |
-| `COOKIE` | 匹配 Cookie 值 | `version=v2` |
-| `QUERY` | 匹配 URL 参数 | `?version=v2` |
-| `WEIGHT` | 按权重百分比 | 10% 流量到 v2 |
+| `HEADER` | Match HTTP Header | `X-Version: v2` |
+| `COOKIE` | Match Cookie value | `version=v2` |
+| `QUERY` | Match URL parameter | `?version=v2` |
+| `WEIGHT` | By weight percentage | 10% traffic to v2 |
 
 ### HEADER Rule
 
@@ -89,7 +89,7 @@
 }
 ```
 
-请求包含 `X-Version: v2` Header 时，强制路由到 `user-v2`。
+When request contains `X-Version: v2` Header, route to `user-v2`.
 
 ### COOKIE Rule
 
@@ -102,7 +102,7 @@
 }
 ```
 
-Cookie `version=beta` 的用户路由到 beta 服务。
+Users with Cookie `version=beta` are routed to the beta service.
 
 ### QUERY Rule
 
@@ -115,7 +115,7 @@ Cookie `version=beta` 的用户路由到 beta 服务。
 }
 ```
 
-URL 包含 `?preview=true` 时路由到预览服务。
+When URL contains `?preview=true`, route to preview service.
 
 ### WEIGHT Rule
 
@@ -127,7 +127,7 @@ URL 包含 `?preview=true` 时路由到预览服务。
 }
 ```
 
-10% 的流量随机分配到 `user-v2`。
+10% of traffic is randomly assigned to `user-v2`.
 
 ---
 
@@ -151,7 +151,7 @@ Request arrives
   Service
 ```
 
-**First-match-wins:** 规按配置顺序依次检查，首个匹配的规则生效。
+**First-match-wins:** Rules are checked in configuration order, the first matching rule takes effect.
 
 ### Multiple Rules Example
 
@@ -186,26 +186,26 @@ Request arrives
 }
 ```
 
-匹配顺序：
-1. 检查 `X-Force-V2` Header → 匹配则路由到 v2
-2. 检查 `beta_user` Cookie → 匹配则路由到 v2
-3. 无匹配则按权重：95% v1, 5% v2
+Matching order:
+1. Check `X-Force-V2` Header -> route to v2 if matched
+2. Check `beta_user` Cookie -> route to v2 if matched
+3. No match -> use weights: 95% v1, 5% v2
 
 ---
 
 ## Use Cases
 
-### Canary Deployment (金丝雀部署)
+### Canary Deployment
 
-逐步将流量从旧版本迁移到新版本：
+Gradually migrate traffic from old version to new version:
 
 | Stage | V1 Weight | V2 Weight | Description |
 |-------|-----------|-----------|-------------|
-| Stage 1 | 99% | 1% | 新版本上线，极小流量测试 |
-| Stage 2 | 95% | 5% | 观察新版本稳定性 |
-| Stage 3 | 80% | 20% | 扩大测试范围 |
-| Stage 4 | 50% | 50% | 平滑过渡 |
-| Stage 5 | 0% | 100% | 完全切换 |
+| Stage 1 | 99% | 1% | New version online, minimal traffic testing |
+| Stage 2 | 95% | 5% | Observe new version stability |
+| Stage 3 | 80% | 20% | Expand testing scope |
+| Stage 4 | 50% | 50% | Smooth transition |
+| Stage 5 | 0% | 100% | Complete switchover |
 
 ```json
 {
@@ -219,7 +219,7 @@ Request arrives
 
 ### A/B Testing
 
-同时运行不同版本，收集用户反馈：
+Run different versions simultaneously to collect user feedback:
 
 ```json
 {
@@ -233,7 +233,7 @@ Request arrives
 
 ### Internal Testing
 
-内部用户/测试人员路由到新版本：
+Route internal users/testers to new version:
 
 ```json
 {
@@ -252,7 +252,7 @@ Request arrives
 
 ### Beta User Program
 
-白名单用户体验新功能：
+Whitelist users to experience new features:
 
 ```json
 {
@@ -273,7 +273,7 @@ Request arrives
 
 ## Weight-Based Load Balancing
 
-使用平滑加权轮询算法：
+Uses smooth weighted round-robin algorithm:
 
 ```
 Instances: [A(weight=1), B(weight=2), C(weight=1)]
@@ -282,15 +282,15 @@ Total Weight: 4
 Selection Sequence: A -> B -> B -> C -> A -> B -> B -> C -> ...
 ```
 
-**特点：**
-- 权重高的服务被选中概率更高
-- 分布均匀，避免集中请求
+**Features:**
+- Services with higher weights have higher selection probability
+- Even distribution, avoiding concentrated requests
 
 ---
 
 ## API Endpoints
 
-通过 Route API 配置多服务路由，在 route 的 `strategies` 中设置：
+Configure multi-service routing through Route API, set in route's `strategies`:
 
 ```bash
 curl -X POST http://localhost:9090/api/routes \
@@ -324,16 +324,16 @@ curl -X POST http://localhost:9090/api/routes \
 
 ## Best Practices
 
-1. **渐进式发布**：从小比例开始，逐步增加
-2. **监控告警**：密切监控新版本错误率和响应时间
-3. **快速回滚**：发现问题时立即调整权重或禁用新版本
-4. **用户隔离**：使用 Header/Cookie 精准控制测试用户
-5. **版本命名**：使用清晰的版本标识，如 `user-v1`, `user-v2`
+1. **Progressive Release**: Start with small proportions, gradually increase
+2. **Monitoring & Alerts**: Closely monitor new version error rates and response times
+3. **Quick Rollback**: Immediately adjust weights or disable new version when issues detected
+4. **User Isolation**: Use Header/Cookie for precise test user control
+5. **Version Naming**: Use clear version identifiers, such as `user-v1`, `user-v2`
 
 ---
 
 ## Related Features
 
-- [Route Management](route-management.md) - 基础路由配置
-- [Service Discovery](service-discovery.md) - 服务发现机制
-- [Monitoring & Alerts](monitoring-alerts.md) - 监控新版本性能
+- [Route Management](route-management.md) - Basic routing configuration
+- [Service Discovery](service-discovery.md) - Service discovery mechanisms
+- [Monitoring & Alerts](monitoring-alerts.md) - Monitor new version performance
