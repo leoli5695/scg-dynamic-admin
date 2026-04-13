@@ -423,7 +423,7 @@ The gateway uses a **simple and effective** caching strategy:
 | **Trust Nacos/Consul** | Rely on config center's real-time push capability |
 | **Fast Reads** | All reads from local memory, no network calls |
 
-**Why Not Multi-Level Cache?**
+**Why Not MultiLevel Cache?**
 
 A multi-level cache with fallback would be **over-engineering** for this use case:
 
@@ -923,7 +923,7 @@ Before Redis failure:
 Redis fails (naive fallback):
   - All 5 nodes reset their local counters to 0
   - Each node independently allows up to its local limit
-  - Backend may receive 10,000+ QPS instantly → cascading failure
+  - Backend may receive 10,000+ QPS instantly --> cascading failure
 ```
 
 This is the difference between a **demo project** and a **production-grade system**.
@@ -963,9 +963,9 @@ We chose the "Shadow Quota" approach for graceful degradation:
 
 | Approach | Complexity | Traffic Behavior | Use Case |
 |----------|------------|------------------|----------|
-| **Reset Counter** | ⭐ | Traffic doubles/triples | Demo / Non-critical |
-| **Shadow Quota** (chosen) | ⭐⭐ | Smooth degradation | **Production** |
-| **Async Dual-Write** | ⭐⭐⭐⭐ | High performance, weak consistency | Extreme performance |
+| **Reset Counter** | Low | Traffic doubles/triples | Demo / Non-critical |
+| **Shadow Quota** (chosen) | Medium | Smooth degradation | **Production** |
+| **Async Dual-Write** | High | High performance, weak consistency | Extreme performance |
 
 ---
 
@@ -976,7 +976,7 @@ When designing the Redis failover strategy for rate limiting, we evaluated two p
 | Criterion | Shadow Quota | Async Dual-Write |
 |-----------|--------------|------------------|
 | **Core Idea** | Pre-calculate local quota based on historical traffic | Write to both Redis and local counters asynchronously |
-| **Complexity** | Medium (⭐⭐) | High (⭐⭐⭐⭐) |
+| **Complexity** | Medium | High |
 | **Traffic Stability** | Excellent - smooth transition | Good - may have brief inconsistency |
 | **Consistency Model** | Approximate (based on snapshot) | Weak (async reconciliation) |
 | **Recovery Complexity** | Simple (gradual shift) | Complex (counter sync, conflict resolution) |
@@ -993,21 +993,21 @@ When designing the Redis failover strategy for rate limiting, we evaluated two p
 **How it works:**
 ```
 Normal Operation:
-┌─────────────────────────────────────────────────────────────┐
-│  Every 1 second:                                            │
-│    1. Fetch current global QPS from Redis                   │
-│    2. Get gateway node count from service discovery         │
-│    3. Calculate: shadowQuota = globalQPS / nodeCount        │
-│    4. Store in AtomicLong (in-memory)                       │
-└─────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------+
+|  Every 1 second:                                            |
+|    1. Fetch current global QPS from Redis                   |
+|    2. Get gateway node count from service discovery         |
+|    3. Calculate: shadowQuota = globalQPS / nodeCount        |
+|    4. Store in AtomicLong (in-memory)                       |
++-------------------------------------------------------------+
 
 Redis Failure:
-┌─────────────────────────────────────────────────────────────┐
-│  1. Detect Redis unavailable (error in rate limit call)     │
-│  2. Switch to local mode immediately                        │
-│  3. Use pre-calculated shadowQuota as local limit           │
-│  4. No counter reset - continues at same rate!              │
-└─────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------+
+|  1. Detect Redis unavailable (error in rate limit call)     |
+|  2. Switch to local mode immediately                        |
+|  3. Use pre-calculated shadowQuota as local limit           |
+|  4. No counter reset - continues at same rate!              |
++-------------------------------------------------------------+
 ```
 
 **Advantages:**
@@ -1034,24 +1034,24 @@ Redis Failure:
 **How it works:**
 ```
 Normal Operation:
-┌─────────────────────────────────────────────────────────────┐
-│  Every request:                                             │
-│    1. Write to Redis counter (async, non-blocking)          │
-│    2. Write to local counter (sync, in-memory)              │
-│    3. Use local counter for decision (faster)               │
-│                                                              │
-│  Background reconciliation (every 100ms):                   │
-│    4. Sync local counters with Redis                        │
-│    5. Resolve conflicts (Redis wins for consistency)        │
-└─────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------+
+|  Every request:                                             |
+|    1. Write to Redis counter (async, non-blocking)          |
+|    2. Write to local counter (sync, in-memory)              |
+|    3. Use local counter for decision (faster)               |
+|                                                              |
+|  Background reconciliation (every 100ms):                   |
+|    4. Sync local counters with Redis                        |
+|    5. Resolve conflicts (Redis wins for consistency)        |
++-------------------------------------------------------------+
 
 Redis Failure:
-┌─────────────────────────────────────────────────────────────┐
-│  1. Redis write fails silently (async)                      │
-│  2. Local counter continues working                         │
-│  3. Queue pending Redis writes for retry                    │
-│  4. When Redis recovers: flush pending writes               │
-└─────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------+
+|  1. Redis write fails silently (async)                      |
+|  2. Local counter continues working                         |
+|  3. Queue pending Redis writes for retry                    |
+|  4. When Redis recovers: flush pending writes               |
++-------------------------------------------------------------+
 ```
 
 **Advantages:**
@@ -1095,20 +1095,20 @@ After evaluating both approaches, we chose **Shadow Quota** for the following re
 
 ```
 Shadow Quota implementation:
-┌─────────────────────────────────────────────────────────────┐
-│  Core code: ~100 lines                                      │
-│  Variables: 3 AtomicLongs                                   │
-│  Background tasks: 1 scheduled update                       │
-│  Failure handling: Simple switch + gradual recovery         │
-└─────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------+
+|  Core code: ~100 lines                                      |
+|  Variables: 3 AtomicLongs                                   |
+|  Background tasks: 1 scheduled update                       |
+|  Failure handling: Simple switch + gradual recovery         |
++-------------------------------------------------------------+
 
 Async Dual-Write implementation:
-┌─────────────────────────────────────────────────────────────┐
-│  Core code: ~500+ lines                                     │
-│  Variables: Map<String, AtomicLong> + pending queue         │
-│  Background tasks: Sync + reconcile + conflict resolution   │
-│  Failure handling: Queue management + retry + merge logic   │
-└─────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------+
+|  Core code: ~500+ lines                                     |
+|  Variables: Map<String, AtomicLong> + pending queue         |
+|  Background tasks: Sync + reconcile + conflict resolution   |
+|  Failure handling: Queue management + retry + merge logic   |
++-------------------------------------------------------------+
 ```
 
 **Production systems fail in unexpected ways.** More complexity = more failure modes.
@@ -1142,19 +1142,19 @@ Async Dual-Write:
 
 ```
 Team skill requirements:
-┌─────────────────────────────────────────────────────────────┐
-│  Shadow Quota:                                              │
-│    - Basic concurrent programming (AtomicLong)              │
-│    - Spring @Scheduled                                      │
-│    - Service discovery integration                          │
-│                                                              │
-│  Async Dual-Write:                                          │
-│    - Advanced concurrent programming (queues, CAS)          │
-│    - Distributed systems (CAP theorem, consistency models)  │
-│    - Conflict resolution algorithms                         │
-│    - Memory management for large counter maps               │
-│    - Async error handling and retry strategies              │
-└─────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------+
+|  Shadow Quota:                                              |
+|    - Basic concurrent programming (AtomicLong)              |
+|    - Spring @Scheduled                                      |
+|    - Service discovery integration                          |
+|                                                              |
+|  Async Dual-Write:                                          |
+|    - Advanced concurrent programming (queues, CAS)          |
+|    - Distributed systems (CAP theorem, consistency models)  |
+|    - Conflict resolution algorithms                         |
+|    - Memory management for large counter maps               |
+|    - Async error handling and retry strategies              |
++-------------------------------------------------------------+
 ```
 
 Shadow Quota can be maintained by mid-level engineers.
@@ -1177,17 +1177,17 @@ We simulated both approaches under identical conditions:
 ```
 Shadow Quota Traffic Pattern:
 T=0-30s:   Each node: ~2,000 QPS (stable)
-T=30s:     Redis fails → Each node: ~2,000 QPS (NO CHANGE!)
-T=60s:     Recovery starts → Gradual shift over 10s
+T=30s:     Redis fails --> Each node: ~2,000 QPS (NO CHANGE!)
+T=60s:     Recovery starts --> Gradual shift over 10s
 T=70s:     Full recovery, traffic normal
 
 Backend receives: Stable 10,000 QPS throughout
 
 Async Dual-Write Traffic Pattern:
 T=0-30s:   Each node: ~2,000 QPS (stable)
-T=30s:     Redis fails → Brief spike to ~12,000 QPS (sync lag)
-T=35s:     Local counters adjust → Back to ~10,000 QPS
-T=60s:     Recovery → Pending writes flush, brief dip to ~8,000
+T=30s:     Redis fails --> Brief spike to ~12,000 QPS (sync lag)
+T=35s:     Local counters adjust --> Back to ~10,000 QPS
+T=60s:     Recovery --> Pending writes flush, brief dip to ~8,000
 T=65s:     Stabilized
 
 Backend receives: Variable 8,000-12,000 QPS during transitions
@@ -1203,10 +1203,10 @@ For a typical enterprise API gateway serving 1K - 100K QPS:
 
 | Factor | Winner |
 |--------|--------|
-| Implementation simplicity | Shadow Quota ✅ |
-| Operational predictability | Shadow Quota ✅ |
-| Team maintenance cost | Shadow Quota ✅ |
-| Traffic stability | Shadow Quota ✅ |
+| Implementation simplicity | Shadow Quota |
+| Operational predictability | Shadow Quota |
+| Team maintenance cost | Shadow Quota |
+| Traffic stability | Shadow Quota |
 | Raw performance (latency) | Async Dual-Write |
 | Ultra-high QPS scaling | Async Dual-Write |
 
@@ -1219,7 +1219,7 @@ The slight performance advantage of Async Dual-Write does not justify its 5x com
 3. **Operational cost** - No extra sync traffic or memory overhead
 
 > "A system that is simple enough to understand is simple enough to fix."
-> — The pragmatism behind our design decision
+> -- The pragmatism behind our design decision
 
 ---
 
@@ -1402,18 +1402,14 @@ This API Gateway architecture demonstrates:
 - **High availability** with fallback caching and graceful degradation
 - **Real-time configuration** with < 1 second propagation latency
 - **Enterprise features** including multi-auth, circuit breaking, and rate limiting
-- **Multi-service routing** with gray release support for canary deployments
-- **SSL termination** with dynamic certificate loading and expiry monitoring
 
 ---
 
 ## 12. Multi-Service Routing Architecture
 
-> See [Multi-Service Routing](features/multi-service-routing.md) for gray release and canary deployment configuration.
+> For detailed configuration and usage, see [Multi-Service Routing](features/multi-service-routing.md).
 
 ### 12.1 Overview
-
-Multi-service routing enables a single route to distribute traffic across multiple backend services with configurable weights and rules.
 
 ```
 +------------------------------------------------------------------+
@@ -1462,39 +1458,13 @@ Multi-service routing enables a single route to distribute traffic across multip
    +-------------------+
 ```
 
-### 12.2 Gray Rule Matching
-
-```
-+------------------------------------------------------------------+
-|                    GRAY RULE PRIORITY                             |
-+------------------------------------------------------------------+
-
-   Rules evaluated in order (first-match-wins):
-
-   1. HEADER rule    --> If X-Version: v2, route to v2
-   2. COOKIE rule    --> If cookie[version]=v2, route to v2
-   3. QUERY rule     --> If ?version=v2, route to v2
-   4. WEIGHT rule    --> 10% of traffic to v2
-
-   Default: Weight-based distribution
-```
-
-### 12.3 Service Binding Types
-
-| Type | Protocol | Use Case |
-|------|----------|----------|
-| `DISCOVERY` | `lb://service-name` | Services registered in Nacos/Consul |
-| `STATIC` | `static://service-id` | Fixed IP:port instances |
-
 ---
 
 ## 13. SSL Termination Architecture
 
-> See [SSL Termination](features/ssl-termination.md) for certificate management and renewal features.
+> For detailed certificate management and renewal features, see [SSL Termination](features/ssl-termination.md).
 
 ### 13.1 Overview
-
-The gateway provides HTTPS termination with dynamic certificate management.
 
 ```
 +------------------------------------------------------------------+
@@ -1528,51 +1498,13 @@ The gateway provides HTTPS termination with dynamic certificate management.
    +-------------------+
 ```
 
-### 13.2 Certificate Management
-
-```
-+------------------------------------------------------------------+
-|                    CERTIFICATE LIFECYCLE                          |
-+------------------------------------------------------------------+
-
-   Upload Certificate
-         |
-         v
-   +-------------------+
-   | Parse Certificate |
-   | - Extract domain  |
-   | - Extract expiry  |
-   | - Validate chain  |
-   +--------+----------+
-            |
-            v
-   +-------------------+
-   | Store in DB       |
-   | + File System     |
-   +--------+----------+
-            |
-            v
-   +-------------------+
-   | Push to Gateway   |
-   | (Hot-reload)      |
-   +-------------------+
-```
-
-### 13.3 Certificate Status
-
-| Status | Condition | Action |
-|--------|-----------|--------|
-| `VALID` | > 30 days to expiry | Normal operation |
-| `EXPIRING_SOON` | < 30 days to expiry | Send alert email |
-| `EXPIRED` | Past expiry date | Block usage, alert |
-
 ---
 
 ## 14. Request Tracing Architecture
 
-> See [Request Tracing](features/request-tracing.md) and [Request Replay Debugger](features/request-replay.md) for detailed features.
+> For detailed trace capture and debugging features, see [Request Tracing](features/request-tracing.md) and [Request Replay Debugger](features/request-replay.md).
 
-### 14.1 Trace Capture Flow
+### 14.1 Overview
 
 ```
 +------------------------------------------------------------------+
@@ -1615,38 +1547,13 @@ The gateway provides HTTPS termination with dynamic certificate management.
    +-------------------+
 ```
 
-### 14.2 Replay Capability
-
-```
-+------------------------------------------------------------------+
-|                    REQUEST REPLAY                                 |
-+------------------------------------------------------------------+
-
-   Select captured request
-         |
-         v
-   +-------------------+
-   | Reconstruct:      |
-   | - Method          |
-   | - Path            |
-   | - Headers         |
-   | - Body            |
-   +--------+----------+
-            |
-            v
-   +-------------------+
-   | Execute against   |
-   | specified gateway |
-   +-------------------+
-```
-
 ---
 
 ## 15. AI Integration Architecture
 
-> See [AI Copilot Assistant](features/ai-copilot.md) for detailed tool calling capabilities, and [AI-Powered Analysis](features/ai-analysis.md) for metrics analysis.
+> For detailed tool calling capabilities, see [AI Copilot Assistant](features/ai-copilot.md). For metrics analysis features, see [AI-Powered Analysis](features/ai-analysis.md).
 
-### 15.1 Supported Providers
+### 15.1 Overview
 
 ```
 +------------------------------------------------------------------+
@@ -1662,23 +1569,13 @@ The gateway provides HTTPS termination with dynamic certificate management.
          +-- Ollama (local models)
 ```
 
-### 15.2 Use Cases
-
-| Feature | Description |
-|---------|-------------|
-| **Metrics Analysis** | Analyze current metrics, identify anomalies |
-| **Alert Generation** | Generate alert content with recommendations |
-| **Trend Prediction** | Predict resource needs based on history |
-
 ---
 
 ## 16. Gateway Instance Management Architecture
 
-> See [Instance Management](features/instance-management.md) for lifecycle management features, and [Kubernetes Integration](features/kubernetes-integration.md) for deployment automation.
+> For detailed lifecycle management features, see [Instance Management](features/instance-management.md). For Kubernetes deployment automation, see [Kubernetes Integration](features/kubernetes-integration.md).
 
 ### 16.1 Overview
-
-The platform supports managing multiple gateway instances, each deployed to Kubernetes with isolated configuration.
 
 ```
 +------------------------------------------------------------------+
@@ -1719,108 +1616,13 @@ The platform supports managing multiple gateway instances, each deployed to Kube
    +-------------------+
 ```
 
-### 16.2 Instance Entity
-
-```
-+------------------------------------------------------------------+
-|                    GatewayInstanceEntity                          |
-+------------------------------------------------------------------+
-
-   +-------------------------------------------------------------+
-   |  instanceId: UUID          - Unique identifier              |
-   |  instanceName: String      - Display name                   |
-   |  clusterId: Long           - K8s cluster reference          |
-   |  namespace: String         - K8s namespace                  |
-   |  nacosNamespace: String    - Nacos namespace for isolation  |
-   |  specType: String          - small/medium/large/xlarge      |
-   |  cpuCores: Double          - CPU allocation                 |
-   |  memoryMB: Integer         - Memory allocation              |
-   |  replicas: Integer         - Pod replica count              |
-   |  statusCode: Integer       - 0=starting, 1=running, ...     |
-   |  lastHeartbeatTime: Date   - Last heartbeat timestamp       |
-   +-------------------------------------------------------------+
-```
-
-### 16.3 Namespace Isolation
-
-Each gateway instance has its own Nacos namespace for configuration isolation:
-
-```
-+------------------------------------------------------------------+
-|                    NAMESPACE ISOLATION                            |
-+------------------------------------------------------------------+
-
-   Instance: gateway-dev
-   Nacos Namespace: gateway-dev-xxx
-   +-------------------------------------------------------------+
-   |  config.gateway.route-{id}        - Route configs            |
-   |  config.gateway.service-{id}      - Service configs          |
-   |  config.gateway.strategy-{id}     - Strategy configs         |
-   |  config.gateway.metadata.*-index  - Index metadata           |
-   +-------------------------------------------------------------+
-
-   Instance: gateway-prod
-   Nacos Namespace: gateway-prod-xxx
-   +-------------------------------------------------------------+
-   |  config.gateway.route-{id}        - Route configs            |
-   |  config.gateway.service-{id}      - Service configs          |
-   |  config.gateway.strategy-{id}     - Strategy configs         |
-   |  config.gateway.metadata.*-index  - Index metadata           |
-   +-------------------------------------------------------------+
-```
-
-### 16.4 Heartbeat Mechanism
-
-```
-+------------------------------------------------------------------+
-|                    HEARTBEAT FLOW                                 |
-+------------------------------------------------------------------+
-
-   Gateway Instance (K8s Pod)
-          |
-          | POST /api/instances/{id}/heartbeat
-          | every 10 seconds
-          v
-   +-------------------+
-   | gateway-admin     |
-   | InstanceHealth    |
-   | Controller        |
-   +--------+----------+
-            |
-            v
-   +-------------------+
-   | Update Database   |
-   | - lastHeartbeat   |
-   | - cpuUsage        |
-   | - memoryUsage     |
-   | - requestsPerSec  |
-   +--------+----------+
-            |
-            v
-   +-------------------+
-   | Check Status      |
-   | - If heartbeat ok |
-   |   → RUNNING       |
-   | - If missed > 3   |
-   |   → ERROR         |
-   +-------------------+
-```
-
-### 16.5 Instance Status Codes
-
-| Code | Status | Description |
-|------|--------|-------------|
-| 0 | STARTING | Pod is starting up |
-| 1 | RUNNING | Healthy, receiving heartbeats |
-| 2 | ERROR | Missed heartbeats or crashed |
-| 3 | STOPPING | Pod is shutting down |
-| 4 | STOPPED | Pod is stopped |
-
 ---
 
 ## 17. Kubernetes Integration Architecture
 
-### 17.1 Deployment Flow
+> For detailed deployment and resource management, see [Kubernetes Integration](features/kubernetes-integration.md).
+
+### 17.1 Overview
 
 ```
 +------------------------------------------------------------------+
@@ -1856,69 +1658,6 @@ Each gateway instance has its own Nacos namespace for configuration isolation:
    | - Ready?          |
    | - Error?          |
    +-------------------+
-```
-
-### 17.2 Resource Specs
-
-```
-+------------------------------------------------------------------+
-|                    INSTANCE SPEC TYPES                            |
-+------------------------------------------------------------------+
-
-   small (Development)
-   +-------------------------------------------------------------+
-   |  CPU: 0.5 cores    |  Memory: 512MB   |  Replicas: 1       |
-   +-------------------------------------------------------------+
-
-   medium (Staging)
-   +-------------------------------------------------------------+
-   |  CPU: 1 core       |  Memory: 1GB     |  Replicas: 2       |
-   +-------------------------------------------------------------+
-
-   large (Production)
-   +-------------------------------------------------------------+
-   |  CPU: 2 cores      |  Memory: 2GB     |  Replicas: 3       |
-   +-------------------------------------------------------------+
-
-   xlarge (High-traffic)
-   +-------------------------------------------------------------+
-   |  CPU: 4 cores      |  Memory: 4GB     |  Replicas: 5       |
-   +-------------------------------------------------------------+
-```
-
-### 17.3 Environment Variables
-
-Each gateway pod receives these environment variables:
-
-| Variable | Description |
-|----------|-------------|
-| `NACOS_SERVER_ADDR` | Nacos server address |
-| `NACOS_NAMESPACE` | Isolated namespace ID |
-| `GATEWAY_ADMIN_URL` | Admin service URL for heartbeats |
-| `GATEWAY_ID` | Unique instance identifier |
-| `REDIS_HOST` | Redis server for rate limiting |
-| `REDIS_PORT` | Redis port |
-
-### 17.4 Health Checks
-
-```
-+------------------------------------------------------------------+
-|                    K8S HEALTH CHECKS                              |
-+------------------------------------------------------------------+
-
-   Liveness Probe:
-   +-------------------------------------------------------------+
-   |  Path: /actuator/health/liveness                            |
-   |  Port: 8081                                                 |
-   |  Initial: 60s | Period: 15s | Timeout: 10s                  |
-   +-------------------------------------------------------------+
-
-   Readiness Probe:
-   +-------------------------------------------------------------+
-   |  Path: /actuator/health/readiness                           |
-   |  Port: 8081                                                 |
-   |  Initial: 30s | Period: 10s | Timeout: 5s                   |
-   +-------------------------------------------------------------+
 ```
 
 ---
@@ -1957,14 +1696,6 @@ The reconcile task ensures consistency between database and Nacos configuration.
              (Repair)
 ```
 
-### 18.2 Reconciliation Tasks
-
-| Task | Description |
-|------|-------------|
-| `RouteReconcileTask` | Ensures routes are synced to Nacos |
-| `ServiceReconcileTask` | Ensures services are synced to Nacos |
-| `AuthPolicyReconcileTask` | Ensures auth policies are synced |
-
 ---
 
 ## 19. Testing Architecture
@@ -1976,7 +1707,7 @@ The reconcile task ensures consistency between database and Nacos configuration.
 | **my-gateway** | 332 | Filters, Auth, Rate Limiting, Strategies |
 | **gateway-admin** | 229 | API, Services, Repository, Integration |
 
-### 19.2 Test Categories
+### 19.2 Test Structure
 
 ```
 +------------------------------------------------------------------+
@@ -2000,262 +1731,15 @@ The reconcile task ensures consistency between database and Nacos configuration.
    +-------------------------------------------------------------+
 ```
 
-### 19.3 Test Namespace Isolation
-
-Tests use isolated Nacos namespace (`gateway-test`) to avoid polluting production configuration:
-
-```yaml
-# application-test.yml
-spring:
-  cloud:
-    nacos:
-      discovery:
-        namespace: gateway-test
-      config:
-        namespace: gateway-test
-```
-
-The namespace is auto-created if it doesn't exist.
-
 ---
 
 ## 20. Performance Optimizations
 
-The gateway implements several performance optimizations to ensure high throughput and low latency.
+> For detailed performance monitoring, see [Filter Chain Analysis](features/filter-chain-analysis.md).
 
-### 20.1 JWT Validation Cache
+### 20.1 Overview
 
-Avoids repeated signature verification for the same token:
-
-```
-+------------------------------------------------------------------+
-|                    JWT VALIDATION CACHE                           |
-+------------------------------------------------------------------+
-
-   Incoming Request with JWT
-            │
-            ▼
-   +-----------------+
-   | Cache Lookup    │ ── Hit ──▶ Return cached Claims (O(1))
-   +--------+--------+
-            │ Miss
-            ▼
-   +-----------------+
-   | Verify Signature│
-   | Parse Claims    │
-   +--------+--------+
-            │
-            ▼
-   +-----------------+
-   | Cache Result    │
-   | (with TTL)      │
-   +-----------------+
-
-   Cache Features:
-   - Max size: 10,000 entries
-   - Auto-expiration based on JWT exp claim
-   - Scheduled cleanup every 60 seconds
-   - Memory-efficient eviction (oldest 20% when full)
-```
-
-**Configuration:**
-```yaml
-# JWT cache is enabled by default
-# Automatic cleanup runs every 60 seconds
-# Max cache size: 10,000 entries
-```
-
-**Performance Impact:** ~90% reduction in JWT verification overhead for repeated tokens.
-
-### 20.2 Shadow Quota for Redis Failover
-
-Graceful degradation when Redis becomes unavailable:
-
-```
-+------------------------------------------------------------------+
-|                    SHADOW QUOTA FAILOVER                          |
-+------------------------------------------------------------------+
-
-   Normal Operation (Redis Healthy):
-   +-------------------------------------------------------------+
-   |  1. Record global QPS snapshot every second                |
-   |  2. Monitor cluster node count via service discovery       |
-   |  3. Calculate: localQuota = globalQPS / nodeCount          |
-   |  4. Store as "shadow quota" for failover                   |
-   +-------------------------------------------------------------+
-
-   Redis Failure Detected:
-   +-------------------------------------------------------------+
-   |  1. Switch to local rate limiting mode                      |
-   |  2. Inherit pre-calculated shadow quota (no reset!)         |
-   |  3. Continue limiting at approximately same rate            |
-   |  4. Backend receives stable traffic (no spike!)             |
-   +-------------------------------------------------------------+
-
-   Redis Recovery:
-   +-------------------------------------------------------------+
-   |  1. Gradual traffic shifting (10% per second)              |
-   |  2. Prevent thundering herd to Redis                        |
-   |  3. Full recovery in 10 seconds                             |
-   +-------------------------------------------------------------+
-
-   Example:
-   - Global limit: 10,000 QPS, Nodes: 5
-   - Shadow quota: 10,000 / 5 = 2,000 QPS per node
-   - Redis fails → Each node continues at ~2,000 QPS
-   - Backend traffic: stable at ~10,000 QPS
-```
-
-**Configuration:**
-```yaml
-gateway:
-  rate-limiter:
-    shadow-quota:
-      enabled: true
-      min-node-count: 1
-```
-
-### 20.3 WebClient Connection Pool
-
-Optimized HTTP connection pooling for outbound calls:
-
-```
-+------------------------------------------------------------------+
-|                    WEBCLIENT CONNECTION POOL                      |
-+------------------------------------------------------------------+
-
-   Configuration:
-   +-------------------------------------------------------------+
-   |  maxConnections: 100          (total pool size)             |
-   |  maxConnectionsPerHost: 20    (per-target limit)            |
-   |  pendingAcquireTimeout: 30s   (wait for available conn)     |
-   |  pendingAcquireMaxCount: 500  (max waiting requests)        |
-   |  idleTimeout: 60s             (evict idle connections)      |
-   |  maxLifeTime: 5min            (force refresh connections)   |
-   |  connectTimeout: 5s           (TCP connection timeout)      |
-   |  responseTimeout: 30s         (full response timeout)       |
-   +-------------------------------------------------------------+
-
-   Features:
-   - Shared connection pool for OAuth2, heartbeat, trace replay
-   - Automatic connection refresh prevents stale connections
-   - Compression enabled (gzip)
-```
-
-### 20.4 Hybrid Health Checker
-
-Combines passive and active health checks with local caching:
-
-```
-+------------------------------------------------------------------+
-|                    HYBRID HEALTH CHECKER                          |
-+------------------------------------------------------------------+
-
-   Passive Check (Zero Overhead):
-   +-------------------------------------------------------------+
-   |  recordSuccess(serviceId, ip, port)                         |
-   |  - Called after each successful request                     |
-   |  - Updates local health cache                               |
-   |  - No additional network calls                               |
-   +-------------------------------------------------------------+
-
-   Active Check (On-demand):
-   +-------------------------------------------------------------+
-   |  checkHealth(serviceId, ip, port)                           |
-   |  - Triggered when passive check indicates unhealthy         |
-   |  - HTTP call to /actuator/health endpoint                   |
-   |  - Failure threshold: 3 consecutive failures                |
-   +-------------------------------------------------------------+
-
-   Local Cache (Caffeine):
-   +-------------------------------------------------------------+
-   |  Maximum size: 10,000 instances                             |
-   |  Expiration: 5 minutes                                      |
-   |  Stats recording enabled                                    |
-   +-------------------------------------------------------------+
-
-   Network Flap Protection:
-   +-------------------------------------------------------------+
-   |  - Ignore mass status changes (>10 at once)                 |
-   |  - Prevents cascading false negatives                       |
-   +-------------------------------------------------------------+
-```
-
-**Configuration:**
-```yaml
-gateway:
-  health:
-    batch-size: 50
-    failure-threshold: 3
-    recovery-time: 30000
-    idle-threshold: 300000
-    network-flap-threshold: 10
-```
-
-### 20.5 Non-Blocking Lock Optimization (CAS + tryLock)
-
-Local rate limiter uses hybrid locking to avoid blocking EventLoop threads:
-
-```
-+------------------------------------------------------------------+
-|                    NON-BLOCKING LOCK STRATEGY                     |
-+------------------------------------------------------------------+
-
-   Fast Path (Low Contention - Optimistic):
-   +-------------------------------------------------------------+
-   |  if (currentCount.compareAndSet(count, count + 1)) {       |
-   |      return true;  // Success without blocking              |
-   |  }                                                          |
-   +-------------------------------------------------------------+
-
-   Slow Path (High Contention - Never Blocks!):
-   +-------------------------------------------------------------+
-   |  if (lock.tryLock()) {                                      |
-   |      try {                                                  |
-   |          // Double-check under lock                         |
-   |          if (count < maxRequests) {                         |
-   |              currentCount.incrementAndGet();                |
-   |              return true;                                   |
-   |          }                                                  |
-   |          return false;                                      |
-   |      } finally {                                            |
-   |          lock.unlock();                                     |
-   |      }                                                      |
-   |  }                                                          |
-   |  return false;  // Immediately reject - no blocking!        |
-   +-------------------------------------------------------------+
-
-   Benefits:
-   - No thread blocking in reactive context
-   - High throughput under normal load (CAS)
-   - Safe degradation under extreme contention (tryLock)
-   - Prevents EventLoop thread starvation
-```
-
-### 20.6 Access Log File Rotation (CAS Atomic Update)
-
-Atomic file path updates for daily log rotation:
-
-```java
-// Use CAS to atomically update file path if date changed
-if (!logFileState.compareAndSet(currentState, newState)) {
-    // CAS update - if another thread already updated, use their path
-    currentState = logFileState.get();
-}
-```
-
-### 20.7 Instance Discovery Optimization
-
-O(1) contains check instead of O(n):
-
-```java
-// Optimized: Use Set for O(1) contains() check instead of List's O(n)
-private Set<String> discoverGatewayInstances() {
-    // Returns Set for fast lookup
-}
-```
-
-### 20.8 Performance Summary
+The gateway implements several performance optimizations:
 
 | Optimization | Technique | Benefit |
 |--------------|-----------|---------|
@@ -2269,728 +1753,86 @@ private Set<String> discoverGatewayInstances() {
 
 ---
 
-## 21. Audit Logs Architecture
+## 21. Feature Documentation Index
 
-### 21.1 Overview
+All feature documentation is organized by category:
 
-Audit logs system tracks all configuration changes for compliance and troubleshooting.
+### Core Gateway Features
 
-```
-+------------------------------------------------------------------+
-|                    AUDIT LOGS ARCHITECTURE                        |
-+------------------------------------------------------------------+
+| Feature | Description | Documentation |
+|---------|-------------|---------------|
+| **Authentication** | JWT, API Key, Basic, HMAC, OAuth2 | [authentication.md](features/authentication.md) |
+| **IP Filtering** | Whitelist/blacklist access control | [ip-filtering.md](features/ip-filtering.md) |
+| **Rate Limiting** | Redis + Local hybrid rate limiting | [rate-limiting.md](features/rate-limiting.md) |
+| **Circuit Breaker** | Resilience4j integration | [circuit-breaker.md](features/circuit-breaker.md) |
+| **Timeout Control** | Request timeout configuration | [timeout-control.md](features/timeout-control.md) |
+| **Retry** | Configurable retry with fixed interval | [retry.md](features/retry.md) |
 
-   Configuration Operation (CREATE/UPDATE/DELETE)
-          |
-          v
-   +-------------------+
-   | Controller Layer  |
-   | (Route, Service,  |
-   |  Strategy, Auth)  |
-   +--------+----------+
-            |
-            v
-   +-------------------+
-   | AuditLogService   |
-   | - Record operation|
-   | - Capture old/new |
-   | - Compute diff    |
-   +--------+----------+
-            |
-            v
-   +-------------------+
-   | AuditLogRepository|
-   | (MySQL Storage)   |
-   +-------------------+
-            |
-            | Scheduled Cleanup
-            v
-   +-------------------+
-   | AuditLogCleanup   |
-   | Scheduler         |
-   | (Delete > 30 days)|
-   +-------------------+
-```
+### Routing & Service Discovery
 
-### 21.2 Data Model
+| Feature | Description | Documentation |
+|---------|-------------|---------------|
+| **Multi-Service Routing** | Gray release and canary deployment | [multi-service-routing.md](features/multi-service-routing.md) |
+| **Service Discovery** | Nacos/Consul/Static discovery | [service-discovery.md](features/service-discovery.md) |
+| **Route Management** | Dynamic route configuration | [route-management.md](features/route-management.md) |
 
-```java
-@Entity
-public class AuditLogEntity {
-    private Long id;
-    private String instanceId;       // Instance isolation
-    private String operator;         // Who made the change
-    private String operationType;    // CREATE, UPDATE, DELETE, etc.
-    private String targetType;       // ROUTE, SERVICE, STRATEGY, AUTH_POLICY
-    private String targetId;         // ID of changed object
-    private String targetName;       // Display name
-    private String oldValue;         // JSON before change
-    private String newValue;         // JSON after change
-    private String ipAddress;        // Client IP
-    private Date createdAt;          // Timestamp
-}
-```
+### Request/Response Processing
 
-### 21.3 Diff Computation
+| Feature | Description | Documentation |
+|---------|-------------|---------------|
+| **Request Transform** | Body transformation (JSON/XML/field mapping) | [request-transform.md](features/request-transform.md) |
+| **Request Validation** | Schema and field validation | [request-validation.md](features/request-validation.md) |
+| **Response Transform** | Response body transformation | [response-transform.md](features/response-transform.md) |
+| **Mock Response** | Mock responses for testing | [mock-response.md](features/mock-response.md) |
+| **Response Caching** | Caffeine-based caching | [response-caching.md](features/response-caching.md) |
 
-```
-+------------------------------------------------------------------+
-|                    DIFF COMPUTATION                               |
-+------------------------------------------------------------------+
+### SSL & Security
 
-   oldValue JSON     newValue JSON
-        |                |
-        v                v
-   +------------------------------------------+
-   |         JSON Diff Algorithm               |
-   |  - Compare field by field                 |
-   |  - Detect added, removed, modified fields |
-   |  - Generate structured diff report        |
-   +------------------------------------------+
-            |
-            v
-   +-------------------+
-   | DiffResult        |
-   | changes: [{       |
-   |   type: "modified"|
-   |   field: "qps"    |
-   |   oldValue: "100" |
-   |   newValue: "200" |
-   | }]                |
-   +-------------------+
-```
+| Feature | Description | Documentation |
+|---------|-------------|---------------|
+| **SSL Termination** | HTTPS with dynamic certificate management | [ssl-termination.md](features/ssl-termination.md) |
 
-### 21.4 Rollback Mechanism
+### Kubernetes & Deployment
 
-```
-+------------------------------------------------------------------+
-|                    ROLLBACK FLOW                                  |
-+------------------------------------------------------------------+
+| Feature | Description | Documentation |
+|---------|-------------|---------------|
+| **Kubernetes Integration** | K8s deployment automation | [kubernetes-integration.md](features/kubernetes-integration.md) |
+| **Instance Management** | Gateway instance lifecycle | [instance-management.md](features/instance-management.md) |
 
-   User selects audit log entry
-          |
-          v
-   +-------------------+
-   | Get oldValue JSON |
-   +--------+----------+
-            |
-            v
-   +-------------------+
-   | Validate oldValue |
-   | (Schema check)    |
-   +--------+----------+
-            |
-            v
-   +-------------------+
-   | Apply oldValue    |
-   | to current config |
-   +--------+----------+
-            |
-            v
-   +-------------------+
-   | Publish to Nacos  |
-   +--------+----------+
-            |
-            v
-   +-------------------+
-   | Record ROLLBACK   |
-   | operation         |
-   +-------------------+
-```
+### Monitoring & Observability
+
+| Feature | Description | Documentation |
+|---------|-------------|---------------|
+| **Request Tracing** | Capture and analyze request traces | [request-tracing.md](features/request-tracing.md) |
+| **Monitoring Alerts** | Prometheus metrics and alerts | [monitoring-alerts.md](features/monitoring-alerts.md) |
+| **Filter Chain Analysis** | Filter execution statistics | [filter-chain-analysis.md](features/filter-chain-analysis.md) |
+| **Traffic Topology** | Real-time traffic visualization | [traffic-topology.md](features/traffic-topology.md) |
+
+### Debugging & Analysis
+
+| Feature | Description | Documentation |
+|---------|-------------|---------------|
+| **Request Replay** | Replay captured requests for debugging | [request-replay.md](features/request-replay.md) |
+| **System Diagnostic** | Comprehensive health checks | [system-diagnostic.md](features/system-diagnostic.md) |
+| **Stress Test** | Load testing tool | [stress-test.md](features/stress-test.md) |
+
+### AI Integration
+
+| Feature | Description | Documentation |
+|---------|-------------|---------------|
+| **AI Copilot** | Intelligent gateway assistance | [ai-copilot.md](features/ai-copilot.md) |
+| **AI Analysis** | AI-powered metrics analysis | [ai-analysis.md](features/ai-analysis.md) |
+
+### Administration
+
+| Feature | Description | Documentation |
+|---------|-------------|---------------|
+| **Audit Logs** | Configuration change tracking | [audit-logs.md](features/audit-logs.md) |
+| **Email Notifications** | Alert email configuration | [email-notifications.md](features/email-notifications.md) |
 
 ---
 
-## 22. System Diagnostic Architecture
-
-### 22.1 Overview
-
-System diagnostic performs comprehensive health checks across all gateway components.
-
-```
-+------------------------------------------------------------------+
-|                    DIAGNOSTIC ARCHITECTURE                        |
-+------------------------------------------------------------------+
-
-   User Request (quick/full)
-          |
-          v
-   +-------------------+
-   | DiagnosticService |
-   | - Coordinate checks|
-   | - Aggregate results|
-   +--------+----------+
-            |
-      +-----+-----+-----+-----+-----+-----+
-      |     |     |     |     |     |     |
-      v     v     v     v     v     v     v
-   +-----+ +-----+ +-----+ +-----+ +-----+ +-----+
-   | DB  | |Redis| |Nacos| |Route| |Auth | |Inst |
-   |Check| |Check| |Check| |Check| |Check| |Check|
-   +-----+ +-----+ +-----+ +-----+ +-----+ +-----+
-      |     |     |     |     |     |     |
-      +-----+-----+-----+-----+-----+-----+
-            |
-            v
-   +-------------------+
-   | DiagnosticReport  |
-   | - Overall score   |
-   | - Recommendations |
-   | - Component status|
-   +-------------------+
-```
-
-### 22.2 Check Types
-
-| Check | Implementation |
-|-------|----------------|
-| **Database** | JPA health check, query timing, connection pool status |
-| **Redis** | Ping test, INFO command parsing, memory analysis |
-| **Nacos** | Config read/write test, service discovery test |
-| **Routes** | Load all routes, validate predicates/filters |
-| **Auth** | Test JWT validation, check policy consistency |
-| **Instances** | Heartbeat status, pod health via K8s API |
-| **Performance** | JVM metrics, thread count, CPU/memory usage |
-
-### 22.3 Scoring Algorithm
-
-```
-+------------------------------------------------------------------+
-|                    HEALTH SCORE CALCULATION                       |
-+------------------------------------------------------------------+
-
-   Component Scores:
-   - Database:     100 if HEALTHY, 50 if WARNING, 0 if CRITICAL
-   - Redis:        100 if HEALTHY, 50 if WARNING, 0 if CRITICAL
-   - Nacos:        100 if HEALTHY, 50 if WARNING, 0 if CRITICAL
-   - Routes:       Based on enabled/valid route percentage
-   - Auth:         100 if policies valid, 0 if issues
-   - Instances:    Based on healthy instance percentage
-   - Performance:  Based on CPU/memory thresholds
-
-   Overall Score = Weighted Average:
-   - Database:     20%
-   - Redis:        15%
-   - Nacos:        20%
-   - Routes:       15%
-   - Auth:         10%
-   - Instances:    10%
-   - Performance:  10%
-```
-
----
-
-## 23. Traffic Topology Architecture
-
-### 23.1 Overview
-
-Traffic topology visualizes real-time request flow through the gateway using ECharts force-directed graph.
-
-```
-+------------------------------------------------------------------+
-|                    TOPOLOGY DATA COLLECTION                       |
-+------------------------------------------------------------------+
-
-   Gateway Access Logs
-          |
-          v
-   +-------------------+
-   | Access Log Parser |
-   | - Extract clientIP|
-   | - Extract routeId |
-   | - Extract service |
-   | - Aggregate metrics|
-   +--------+----------+
-            |
-            v
-   +-------------------+
-   | Topology Graph    |
-   | Builder           |
-   | - Create nodes    |
-   | - Create edges    |
-   | - Compute metrics |
-   +--------+----------+
-            |
-            v
-   +-------------------+
-   | Frontend ECharts  |
-   | Force-directed    |
-   | Graph             |
-   +-------------------+
-```
-
-### 23.2 Node Types
-
-| Node Type | Source | Size Logic |
-|-----------|--------|------------|
-| `gateway` | Instance config | Fixed size (60) |
-| `route` | Route definitions | Fixed size (40) |
-| `service` | Service registry | Fixed size (50) |
-| `client` | Client IP aggregation | Dynamic (15-30) based on request count |
-
-### 23.3 Edge Metrics
-
-```
-+------------------------------------------------------------------+
-|                    EDGE METRIC COMPUTATION                        |
-+------------------------------------------------------------------+
-
-   For each client -> route -> service path:
-
-   Edge Metrics:
-   - requestCount: Sum of requests on this path
-   - avgLatency: Weighted average of response times
-   - errorRate: (4xx + 5xx) / total requests
-
-   Edge Width:
-   - Width = min(8, max(1, requestCount / 50))
-
-   Edge Color:
-   - Green: errorRate < 5%
-   - Orange: errorRate 5-10%
-   - Red: errorRate > 10%
-```
-
----
-
-## 24. Filter Chain Analysis Architecture
-
-### 24.1 Overview
-
-Filter chain analysis tracks execution statistics for each filter in the request processing pipeline.
-
-```
-+------------------------------------------------------------------+
-|                    FILTER CHAIN TRACKING                          |
-+------------------------------------------------------------------+
-
-   Request Processing
-          |
-          v
-   +-------------------+
-   | Filter Execution  |
-   | (Each Filter)     |
-   +--------+----------+
-            |
-            | Record: filterName, duration, success/error
-            v
-   +-------------------+
-   | FilterChainTracker|
-   | - Atomic counters |
-   | - Ring buffer for |
-   |   recent traces   |
-   +--------+----------+
-            |
-            v
-   +-------------------+
-   | Statistics Store  |
-   | (ConcurrentHashMap|
-   |  per filter)      |
-   +-------------------+
-```
-
-### 24.2 Statistics Collection
-
-```java
-public class FilterStats {
-    private String filterName;
-    private int order;
-    private AtomicLong totalCount = new AtomicLong();
-    private AtomicLong successCount = new AtomicLong();
-    private AtomicLong failureCount = new AtomicLong();
-    private AtomicLong totalDurationMicros = new AtomicLong();
-    private AtomicLong maxDurationMicros = new AtomicLong();
-    private AtomicLong minDurationMicros = new AtomicLong(Long.MAX_VALUE);
-}
-```
-
-### 24.3 Trace Recording
-
-```
-+------------------------------------------------------------------+
-|                    TRACE RECORD STRUCTURE                         |
-+------------------------------------------------------------------+
-
-   FilterChainRecord:
-   - traceId: Unique request ID
-   - createdAt: Timestamp
-   - totalDurationMs: Total request duration
-   - successCount: Filters that succeeded
-   - failureCount: Filters that failed
-   - executions: [
-       {
-         filter: "AuthenticationGlobalFilter",
-         order: -250,
-         durationMs: 5,
-         durationMicros: 5200,
-         success: true,
-         error: null
-       },
-       {
-         filter: "RateLimiterFilter",
-         order: -200,
-         durationMs: 2,
-         durationMicros: 2100,
-         success: false,
-         error: "Rate limit exceeded"
-       }
-     ]
-```
-
----
-
-## 25. Request Replay Architecture
-
-### 25.1 Overview
-
-Request replay allows developers to replay captured requests with modifications for debugging.
-
-```
-+------------------------------------------------------------------+
-|                    REQUEST REPLAY FLOW                            |
-+------------------------------------------------------------------+
-
-   Select Trace Record
-          |
-          v
-   +-------------------+
-   | Load Trace Data   |
-   | - method          |
-   | - path            |
-   | - headers         |
-   | - body            |
-   +--------+----------+
-            |
-            v
-   +-------------------+
-   | User Modifications|
-   | (Optional)        |
-   | - Edit path       |
-   | - Edit headers    |
-   | - Edit body       |
-   +--------+----------+
-            |
-            v
-   +-------------------+
-   | Replay Execution  |
-   | - WebClient call  |
-   | - Capture response|
-   +--------+----------+
-            |
-            v
-   +-------------------+
-   | Compare Results   |
-   | - Status match    |
-   | - Latency diff    |
-   | - Body diff       |
-   +-------------------+
-```
-
-### 25.2 Replayable Request Structure
-
-```java
-public class ReplayableRequest {
-    private Long traceId;
-    private String traceUuid;
-    private String method;
-    private String path;
-    private String queryString;
-    private Map<String, String> headers;
-    private Map<String, String> originalHeaders;  // For diff
-    private String requestBody;
-    private String originalRequestBody;          // For diff
-    private int originalStatusCode;
-    private String originalResponseBody;
-    private long originalLatencyMs;
-}
-```
-
-### 25.3 Comparison Algorithm
-
-```
-+------------------------------------------------------------------+
-|                    RESPONSE COMPARISON                            |
-+------------------------------------------------------------------+
-
-   Original Response    Replayed Response
-          |                    |
-          v                    v
-   +------------------------------------------+
-   |           Comparison Engine               |
-   |                                          |
-   | 1. Status comparison:                    |
-   |    statusMatch = (orig == replay)        |
-   |                                          |
-   | 2. Latency comparison:                   |
-   |    latencyDiff = replay - orig           |
-   |                                          |
-   | 3. Body comparison (JSON):               |
-   |    - Parse both JSONs                    |
-   |    - Field-by-field comparison           |
-   |    - Detect added/removed/modified       |
-   +------------------------------------------+
-            |
-            v
-   +-------------------+
-   | ComparisonResult  |
-   +-------------------+
-```
-
----
-
-## 26. AI Copilot Architecture
-
-### 26.1 Overview
-
-AI Copilot integrates multiple large language model providers for intelligent gateway assistance.
-
-```
-+------------------------------------------------------------------+
-|                    AI COPILOT ARCHITECTURE                        |
-+------------------------------------------------------------------+
-
-   User Request
-          |
-          v
-   +-------------------+
-   | CopilotController |
-   | - Chat            |
-   | - Generate route  |
-   | - Analyze error   |
-   | - Optimize        |
-   +--------+----------+
-            |
-            v
-   +-------------------+
-   | CopilotService    |
-   | - Provider routing|
-   | - Context building|
-   | - Response parsing|
-   +--------+----------+
-            |
-      +-----+-----+-----+-----+-----+
-      |     |     |     |     |     |
-      v     v     v     v     v     v
-   +-----+ +-----+ +-----+ +-----+ +-----+
-   |Qwen | |DeepS| |OpenAI| |Anthr| |Ollam|
-   |API  | |eek  | | API  | |opic | |a    |
-   +-----+ +-----+ +-----+ +-----+ +-----+
-```
-
-### 26.2 Provider Configuration
-
-```java
-public class AiProviderConfig {
-    private String provider;        // qwen, deepseek, openai, anthropic, ollama
-    private String apiKey;          // API key (encrypted)
-    private String baseUrl;         // Custom API endpoint (optional)
-    private String model;           // Model name
-    private String region;          // DOMESTIC or OVERSEAS
-    private boolean isValid;        // API key validated
-}
-```
-
-### 26.3 Context Building
-
-```
-+------------------------------------------------------------------+
-|                    CONTEXT BUILDING FOR AI                        |
-+------------------------------------------------------------------+
-
-   For Route Generation:
-   +------------------------------------------+
-   |  Context:                                |
-   |  - Gateway capabilities description      |
-   |  - Available predicates/filters          |
-   |  - Current services list                 |
-   |  - User description                      |
-   +------------------------------------------+
-
-   For Error Analysis:
-   +------------------------------------------+
-   |  Context:                                |
-   |  - Gateway architecture                  |
-   |  - Common error patterns                 |
-   |  - Error message to analyze              |
-   |  - Current configuration                 |
-   +------------------------------------------+
-
-   For Optimization:
-   +------------------------------------------+
-   |  Context:                                |
-   |  - Current metrics (CPU, memory, QPS)    |
-   |  - Route configuration                   |
-   |  - Strategy settings                     |
-   |  - Performance tuning guidelines         |
-   +------------------------------------------+
-```
-
-### 26.4 Response Processing
-
-```
-+------------------------------------------------------------------+
-|                    AI RESPONSE PROCESSING                         |
-+------------------------------------------------------------------+
-
-   AI Response (Markdown)
-          |
-          v
-   +-------------------+
-   | Parse Response    |
-   | - Extract JSON    |
-   | - Extract text    |
-   +--------+----------+
-            |
-            v
-   +-------------------+
-   | Validate JSON     |
-   | (for route config)|
-   +--------+----------+
-            |
-            | Valid?
-      +-----+-----+
-      Yes    No
-      |       |
-      v       v
-   Return   Return
-   Config   Error
-   to User  Message
-```
-
----
-
-## 27. Stress Test Architecture
-
-### 27.1 Overview
-
-Stress test tool simulates concurrent load on gateway endpoints to measure performance.
-
-```
-+------------------------------------------------------------------+
-|                    STRESS TEST ARCHITECTURE                       |
-+------------------------------------------------------------------+
-
-   User Request
-          |
-          v
-   +-------------------+
-   | StressTestService |
-   | - Create test plan|
-   | - Coordinate load |
-   +--------+----------+
-            |
-            v
-   +-------------------+
-   | Load Generator    |
-   | (Virtual Users)   |
-   | - Concurrent pools|
-   | - Request queue   |
-   +--------+----------+
-            |
-      +-----+-----+-----+-----+
-      |     |     |     |     |
-      v     v     v     v     v
-   HTTP Requests to Target
-            |
-            v
-   +-------------------+
-   | Metrics Collector |
-   | - Latency tracking|
-   | - Success/failure |
-   | - Response size   |
-   +--------+----------+
-            |
-            v
-   +-------------------+
-   | Statistics Engine |
-   | - Percentile calc |
-   | - QPS calculation |
-   +-------------------+
-```
-
-### 27.2 Load Generation
-
-```java
-public class StressTestConfig {
-    private String targetUrl;
-    private String method;
-    private Map<String, String> headers;
-    private String body;
-    private int concurrentUsers;     // Virtual users
-    private int totalRequests;       // Total requests to send
-    private int targetQps;           // Optional QPS limit
-    private int rampUpSeconds;       // Gradual load increase
-}
-```
-
-### 27.3 Execution Flow
-
-```
-+------------------------------------------------------------------+
-|                    LOAD GENERATION FLOW                           |
-+------------------------------------------------------------------+
-
-   Test Started
-          |
-          v
-   +-------------------+
-   | Create Executor   |
-   | Pool (concurrent  |
-   | users)            |
-   +--------+----------+
-            |
-            | Ramp-up phase (if configured)
-            v
-   +-------------------+
-   | Gradual User      |
-   | Addition          |
-   | - Start with 1    |
-   | - Add users over  |
-   |   rampUpSeconds   |
-   +--------+----------+
-            |
-            | Steady state
-            v
-   +-------------------+
-   | Request Dispatch  |
-   | - Each user sends |
-   |   requests        |
-   | - Track results   |
-   +--------+----------+
-            |
-            | Test completed
-            v
-   +-------------------+
-   | Final Statistics  |
-   | Computation       |
-   +-------------------+
-```
-
-### 27.4 Metrics Collection
-
-```
-+------------------------------------------------------------------+
-|                    METRICS COLLECTION                             |
-+------------------------------------------------------------------+
-
-   Per-Request Metrics:
-   - startTime: Request start timestamp
-   - endTime: Response received timestamp
-   - latencyMs: endTime - startTime
-   - statusCode: HTTP status code
-   - success: statusCode in [200-299]
-   - responseSize: Bytes received
-
-   Aggregated Metrics:
-   - minLatency, maxLatency, avgLatency
-   - P50, P90, P95, P99 latencies (sorted array percentile)
-   - requestsPerSecond: totalRequests / totalTimeSeconds
-   - errorRate: failedRequests / totalRequests * 100
-   - throughput: totalBytes / totalTimeSeconds
-```
-
----
-
-## 28. Summary
+## 22. Summary
 
 This API Gateway architecture demonstrates:
 
@@ -3006,13 +1848,7 @@ This API Gateway architecture demonstrates:
 - **Heartbeat monitoring** for real-time instance health tracking
 - **Performance optimizations** including JWT cache, shadow quota, non-blocking locks
 - **Comprehensive testing** with 561 tests ensuring reliability
-- **Audit logging** for compliance and configuration rollback
-- **System diagnostic** for proactive health monitoring
-- **Traffic topology** for real-time traffic visualization
-- **Filter chain analysis** for performance debugging
-- **Request replay** for issue troubleshooting
-- **AI Copilot** for intelligent configuration assistance
-- **Stress testing** for performance validation
+- **28 feature modules** documented in dedicated feature documentation
 
 ---
 
