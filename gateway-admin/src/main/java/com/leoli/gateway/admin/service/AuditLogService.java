@@ -227,6 +227,9 @@ public class AuditLogService {
 
     /**
      * Rollback to a specific version.
+     * @param logId The audit log ID to rollback from
+     * @param operator The operator performing the rollback
+     * @return Result map with success status, auditLogId for the rollback operation, and details
      */
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> rollback(Long logId, String operator) {
@@ -237,8 +240,13 @@ public class AuditLogService {
 
         AuditLogEntity auditLog = logOpt.get();
 
+        // For CREATE operations, oldValue is null - rollback means delete
+        String operationType = auditLog.getOperationType();
         if (auditLog.getOldValue() == null || auditLog.getOldValue().isEmpty()) {
-            return Map.of("success", false, "message", "No previous version to rollback to");
+            if (!"CREATE".equals(operationType)) {
+                return Map.of("success", false, "message", "No previous version to rollback to");
+            }
+            // CREATE operation rollback = DELETE
         }
 
         String targetType = auditLog.getTargetType();
@@ -249,7 +257,7 @@ public class AuditLogService {
             String currentValue = getCurrentValue(targetType, targetId);
 
             // Perform rollback based on target type
-            boolean rolledBack = performRollback(targetType, targetId, auditLog.getOldValue());
+            boolean rolledBack = performRollback(targetType, targetId, auditLog.getOldValue(), operationType);
 
             if (!rolledBack) {
                 return Map.of("success", false, "message", "Rollback failed for type: " + targetType);
@@ -258,26 +266,88 @@ public class AuditLogService {
             // Create audit log for rollback operation
             AuditLogEntity rollbackLog = new AuditLogEntity();
             rollbackLog.setOperator(operator);
+            rollbackLog.setOperatorType("AI_COPILOT");  // 标记操作来源
             rollbackLog.setOperationType("ROLLBACK");
             rollbackLog.setTargetType(targetType);
             rollbackLog.setTargetId(targetId);
+            rollbackLog.setTargetName(auditLog.getTargetName());
             rollbackLog.setOldValue(currentValue);
             rollbackLog.setNewValue(auditLog.getOldValue());
             rollbackLog.setIpAddress("system");
-            auditLogRepository.save(rollbackLog);
+            rollbackLog = auditLogRepository.save(rollbackLog);
 
-            log.info("Configuration rolled back: type={}, id={}, from log {}", targetType, targetId, logId);
+            log.info("Configuration rolled back: type={}, id={}, from log {}, rollbackLogId={}",
+                     targetType, targetId, logId, rollbackLog.getId());
 
             return Map.of(
                     "success", true,
                     "message", "Rollback successful",
+                    "auditLogId", rollbackLog.getId(),
                     "targetType", targetType,
-                    "targetId", targetId
+                    "targetId", targetId,
+                    "rolledBackFromLogId", logId
             );
 
         } catch (Exception e) {
             log.error("Rollback failed", e);
             return Map.of("success", false, "message", "Rollback failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Perform the actual rollback with operation type awareness.
+     */
+    private boolean performRollback(String targetType, String targetId, String oldValue, String operationType) {
+        try {
+            // For CREATE operations, rollback means delete
+            if ("CREATE".equals(operationType)) {
+                return performDeleteRollback(targetType, targetId);
+            }
+            // For other operations, restore old value
+            switch (targetType) {
+                case "ROUTE":
+                    return rollbackRoute(targetId, oldValue);
+                case "SERVICE":
+                    return rollbackService(targetId, oldValue);
+                case "STRATEGY":
+                    return rollbackStrategy(targetId, oldValue);
+                case "AUTH_POLICY":
+                    return rollbackAuthPolicy(targetId, oldValue);
+                default:
+                    log.warn("Unknown target type for rollback: {}", targetType);
+                    return false;
+            }
+        } catch (Exception e) {
+            log.error("Rollback failed for {} {}", targetType, targetId, e);
+            return false;
+        }
+    }
+
+    /**
+     * Perform delete rollback (for CREATE operations).
+     */
+    private boolean performDeleteRollback(String targetType, String targetId) {
+        try {
+            switch (targetType) {
+                case "ROUTE":
+                    Optional<RouteEntity> routeOpt = routeRepository.findById(targetId);
+                    if (routeOpt.isPresent()) {
+                        routeRepository.delete(routeOpt.get());
+                        // Remove from Nacos
+                        String dataId = "config.gateway.route-" + targetId;
+                        configCenterService.removeConfig(dataId);
+                        log.info("Route {} deleted as part of CREATE rollback", targetId);
+                    } else {
+                        log.info("Route {} already deleted, no action needed", targetId);
+                    }
+                    return true;
+                default:
+                    log.warn("Delete rollback not supported for type: {}", targetType);
+                    return false;
+            }
+        } catch (Exception e) {
+            log.error("Delete rollback failed for {} {}", targetType, targetId, e);
+            return false;
         }
     }
 
@@ -296,30 +366,6 @@ public class AuditLogService {
         } catch (Exception e) {
             log.error("Failed to get current value", e);
             return null;
-        }
-    }
-
-    /**
-     * Perform the actual rollback.
-     */
-    private boolean performRollback(String targetType, String targetId, String oldValue) {
-        try {
-            switch (targetType) {
-                case "ROUTE":
-                    return rollbackRoute(targetId, oldValue);
-                case "SERVICE":
-                    return rollbackService(targetId, oldValue);
-                case "STRATEGY":
-                    return rollbackStrategy(targetId, oldValue);
-                case "AUTH_POLICY":
-                    return rollbackAuthPolicy(targetId, oldValue);
-                default:
-                    log.warn("Unknown target type for rollback: {}", targetType);
-                    return false;
-            }
-        } catch (Exception e) {
-            log.error("Rollback failed for {} {}", targetType, targetId, e);
-            return false;
         }
     }
 

@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -16,7 +17,9 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class GrayRules {
+public class GrayRules implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     /**
      * Whether gray rules are enabled.
@@ -35,7 +38,8 @@ public class GrayRules {
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
-    public static class GrayRule {
+    public static class GrayRule implements Serializable {
+        private static final long serialVersionUID = 1L;
 
         /**
          * Rule type: HEADER, COOKIE, QUERY, WEIGHT.

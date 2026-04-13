@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, lazy, Suspense, useCallback } from "react";
 import {
   Layout,
   Menu,
@@ -8,6 +8,7 @@ import {
   message,
   Tooltip,
   ConfigProvider,
+  Spin,
 } from "antd";
 import type { MenuProps } from "antd";
 import zhCN from "antd/locale/zh_CN";
@@ -23,11 +24,26 @@ import {
   MenuUnfoldOutlined,
 } from "@ant-design/icons";
 import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
-import KubernetesPage from "./pages/KubernetesPage";
-import InstancesPage from "./pages/InstancesPage";
-import InstanceCreatePage from "./pages/InstanceCreatePage";
-import InstanceDetailPage from "./pages/InstanceDetailPage";
-import LoginPage from "./pages/LoginPage";
+
+// Lazy load page components for better performance
+const KubernetesPage = lazy(() => import("./pages/KubernetesPage"));
+const InstancesPage = lazy(() => import("./pages/InstancesPage"));
+const InstanceCreatePage = lazy(() => import("./pages/InstanceCreatePage"));
+const InstanceDetailPage = lazy(() => import("./pages/InstanceDetailPage"));
+const LoginPage = lazy(() => import("./pages/LoginPage"));
+
+// Loading fallback component
+const PageLoadingFallback = () => (
+  <div style={{
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '100%',
+    minHeight: '400px',
+  }}>
+    <Spin size="large" />
+  </div>
+);
 import LanguageSwitcher from "./components/LanguageSwitcher";
 import { useTranslation } from "react-i18next";
 import i18n from "./i18n";
@@ -109,7 +125,7 @@ const App: React.FC = () => {
     navigate(`/${e.key}`);
   };
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     localStorage.removeItem("token");
     localStorage.removeItem("username");
     localStorage.removeItem("nickname");
@@ -118,7 +134,7 @@ const App: React.FC = () => {
     setUser(null);
     message.success("Logout successful");
     window.location.href = "/login";
-  };
+  }, []);
 
   // User dropdown menu items
   const userMenuItems: MenuItem[] = useMemo(
@@ -133,12 +149,16 @@ const App: React.FC = () => {
         },
       },
     ],
-    [t],
+    [t, handleLogout],
   );
 
   // If not logged in, show login page only
   if (!isLoggedIn) {
-    return <LoginPage />;
+    return (
+      <Suspense fallback={<PageLoadingFallback />}>
+        <LoginPage />
+      </Suspense>
+    );
   }
 
   // Check if we're in instance detail page
@@ -240,31 +260,33 @@ const App: React.FC = () => {
             </Header>
           )}
           <Content className="main-content" style={{ overflow: "auto" }}>
-            <Routes>
-              <Route path="/" element={<InstancesPage />} />
-              <Route path="/instances" element={<InstancesPage />} />
-              <Route path="/instances/create" element={<InstanceCreatePage />} />
-              <Route path="/instances/:instanceId" element={<InstanceDetailPage />}>
-                <Route index element={null} />
-                <Route path="services" element={null} />
-                <Route path="routes" element={null} />
-                <Route path="strategies" element={null} />
-                <Route path="authentication" element={null} />
-                <Route path="certificates" element={null} />
-                <Route path="trace" element={null} />
-                <Route path="monitor" element={null} />
-                <Route path="alerts" element={null} />
-                <Route path="access_log" element={null} />
-                <Route path="audit_logs" element={null} />
-                <Route path="diagnostic" element={null} />
-                <Route path="topology" element={null} />
-                <Route path="filter_chain" element={null} />
-                <Route path="request_replay" element={null} />
-                <Route path="copilot" element={null} />
-                <Route path="stress_test" element={null} />
-              </Route>
-              <Route path="/kubernetes" element={<KubernetesPage />} />
-            </Routes>
+            <Suspense fallback={<PageLoadingFallback />}>
+              <Routes>
+                <Route path="/" element={<InstancesPage />} />
+                <Route path="/instances" element={<InstancesPage />} />
+                <Route path="/instances/create" element={<InstanceCreatePage />} />
+                <Route path="/instances/:instanceId" element={<InstanceDetailPage />}>
+                  <Route index element={null} />
+                  <Route path="services" element={null} />
+                  <Route path="routes" element={null} />
+                  <Route path="strategies" element={null} />
+                  <Route path="authentication" element={null} />
+                  <Route path="certificates" element={null} />
+                  <Route path="trace" element={null} />
+                  <Route path="monitor" element={null} />
+                  <Route path="alerts" element={null} />
+                  <Route path="access_log" element={null} />
+                  <Route path="audit_logs" element={null} />
+                  <Route path="diagnostic" element={null} />
+                  <Route path="topology" element={null} />
+                  <Route path="filter_chain" element={null} />
+                  <Route path="request_replay" element={null} />
+                  <Route path="copilot" element={null} />
+                  <Route path="stress_test" element={null} />
+                </Route>
+                <Route path="/kubernetes" element={<KubernetesPage />} />
+              </Routes>
+            </Suspense>
           </Content>
 
           {/* Page Footer - only show for non-instance-detail pages */}

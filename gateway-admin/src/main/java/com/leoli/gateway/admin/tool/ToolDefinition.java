@@ -20,14 +20,22 @@ public class ToolDefinition {
     private final Map<String, Object> parameters;
     private final String category;
     private final boolean readOnly;
+    private final boolean requiresConfirmation;  // 写操作需要二次确认
 
     public ToolDefinition(String name, String description, Map<String, Object> parameters,
-                          String category, boolean readOnly) {
+                          String category, boolean readOnly, boolean requiresConfirmation) {
         this.name = name;
         this.description = description;
         this.parameters = parameters;
         this.category = category;
         this.readOnly = readOnly;
+        this.requiresConfirmation = requiresConfirmation;
+    }
+
+    // 兼容旧构造方法（默认不需要确认）
+    public ToolDefinition(String name, String description, Map<String, Object> parameters,
+                          String category, boolean readOnly) {
+        this(name, description, parameters, category, readOnly, false);
     }
 
     /**
@@ -76,13 +84,25 @@ public class ToolDefinition {
     // ===================== 工具定义工厂方法 =====================
 
     /**
-     * 创建简单参数的工具定义
+     * 创建简单参数的工具定义（默认不需要确认）
      */
     public static ToolDefinition create(String name, String description,
                                         Map<String, Object> properties,
                                         List<String> required,
                                         String category,
                                         boolean readOnly) {
+        return create(name, description, properties, required, category, readOnly, false);
+    }
+
+    /**
+     * 创建简单参数的工具定义（支持确认标记）
+     */
+    public static ToolDefinition create(String name, String description,
+                                        Map<String, Object> properties,
+                                        List<String> required,
+                                        String category,
+                                        boolean readOnly,
+                                        boolean requiresConfirmation) {
         Map<String, Object> parameters = new LinkedHashMap<>();
         parameters.put("type", "object");
         parameters.put("properties", properties);
@@ -90,7 +110,7 @@ public class ToolDefinition {
             parameters.put("required", required);
         }
 
-        return new ToolDefinition(name, description, parameters, category, readOnly);
+        return new ToolDefinition(name, description, parameters, category, readOnly, requiresConfirmation);
     }
 
     /**
@@ -102,12 +122,12 @@ public class ToolDefinition {
         parameters.put("type", "object");
         parameters.put("properties", new LinkedHashMap<>());
 
-        return new ToolDefinition(name, description, parameters, category, readOnly);
+        return new ToolDefinition(name, description, parameters, category, readOnly, false);
     }
 
     @Override
     public String toString() {
-        return String.format("ToolDefinition{name='%s', category='%s', readOnly=%s}",
-                name, category, readOnly);
+        return String.format("ToolDefinition{name='%s', category='%s', readOnly=%s, requiresConfirmation=%s}",
+                name, category, readOnly, requiresConfirmation);
     }
 }

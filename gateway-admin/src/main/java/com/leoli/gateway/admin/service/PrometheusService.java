@@ -723,6 +723,79 @@ public class PrometheusService {
     }
 
     /**
+     * Get detailed GC metrics with Young/Old GC breakdown.
+     * This provides more granular GC statistics for performance analysis.
+     * @param instanceId Optional instance ID to filter for a specific instance
+     */
+    public Map<String, Object> getDetailedGCMetrics(String instanceId) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        String instanceFilter = buildInstanceFilter(instanceId);
+
+        try {
+            // Young GC (G1 Young Generation / ParNew / PS Scavenge)
+            Map<String, Object> youngGC = new LinkedHashMap<>();
+            String youngCountQuery = "sum(increase(jvm_gc_pause_seconds_count{application=\"my-gateway\"" + instanceFilter + ",gc=~\"G1 Young Generation|ParNew|PS Scavenge|Copy\"}[5m]))";
+            String youngTimeQuery = "sum(increase(jvm_gc_pause_seconds_sum{application=\"my-gateway\"" + instanceFilter + ",gc=~\"G1 Young Generation|ParNew|PS Scavenge|Copy\"}[5m]))";
+            double youngCount = extractValue(queryPrometheus(youngCountQuery), 0);
+            double youngTime = extractValue(queryPrometheus(youngTimeQuery), 0);
+            youngGC.put("count", (long) youngCount);
+            youngGC.put("totalTimeSeconds", Math.round(youngTime * 1000) / 1000.0);
+            youngGC.put("avgTimeMs", youngCount > 0 ? Math.round(youngTime / youngCount * 1000) : 0);
+            result.put("youngGC", youngGC);
+
+            // Old/Full GC (G1 Old Generation / CMS / PS MarkSweep)
+            Map<String, Object> oldGC = new LinkedHashMap<>();
+            String oldCountQuery = "sum(increase(jvm_gc_pause_seconds_count{application=\"my-gateway\"" + instanceFilter + ",gc=~\"G1 Old Generation|ConcurrentMarkSweep|PS MarkSweep|MarkSweepCompact\"}[5m]))";
+            String oldTimeQuery = "sum(increase(jvm_gc_pause_seconds_sum{application=\"my-gateway\"" + instanceFilter + ",gc=~\"G1 Old Generation|ConcurrentMarkSweep|PS MarkSweep|MarkSweepCompact\"}[5m]))";
+            double oldCount = extractValue(queryPrometheus(oldCountQuery), 0);
+            double oldTime = extractValue(queryPrometheus(oldTimeQuery), 0);
+            oldGC.put("count", (long) oldCount);
+            oldGC.put("totalTimeSeconds", Math.round(oldTime * 1000) / 1000.0);
+            oldGC.put("avgTimeMs", oldCount > 0 ? Math.round(oldTime / oldCount * 1000) : 0);
+            result.put("oldGC", oldGC);
+
+            // Summary
+            Map<String, Object> summary = new LinkedHashMap<>();
+            double totalTime = youngTime + oldTime;
+            long totalCount = (long) (youngCount + oldCount);
+            summary.put("totalGCTimeSeconds", Math.round(totalTime * 1000) / 1000.0);
+            summary.put("totalGCCount", totalCount);
+
+            // GC Overhead percentage (5分钟内GC时间占比)
+            double overheadPercent = (totalTime / 300.0) * 100; // 5分钟 = 300秒
+            summary.put("gcOverheadPercent", Math.round(overheadPercent * 100) / 100.0);
+
+            // Health status
+            String healthStatus = "健康";
+            if (overheadPercent > 10) {
+                healthStatus = "警告: GC开销过高";
+            } else if (overheadPercent > 5) {
+                healthStatus = "注意: GC开销偏高";
+            }
+            summary.put("healthStatus", healthStatus);
+
+            // Recommendation
+            String recommendation = "";
+            if (oldCount > 0) {
+                recommendation = "检测到Full GC，建议检查堆内存配置和对象生命周期";
+            } else if (overheadPercent > 5) {
+                recommendation = "Young GC频率较高，建议优化对象创建或调整年轻代大小";
+            } else {
+                recommendation = "GC表现正常";
+            }
+            summary.put("recommendation", recommendation);
+
+            result.put("summary", summary);
+
+        } catch (Exception e) {
+            log.warn("Failed to get detailed GC metrics: {}", e.getMessage());
+            result.put("error", e.getMessage());
+        }
+
+        return result;
+    }
+
+    /**
      * Get history metrics for charts.
      * @param hours Number of hours to look back (default 24)
      * @param instanceId Optional instance ID to filter for a specific instance

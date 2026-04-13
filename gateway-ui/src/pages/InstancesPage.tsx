@@ -150,6 +150,17 @@ const InstancesPage: React.FC = () => {
     }
   };
 
+  const getStatusCodeClass = (statusCode: number) => {
+    switch (statusCode) {
+      case 1: return "status-running";
+      case 0: return "status-starting";
+      case 4: return "status-stopped";
+      case 2: return "status-error";
+      case 3: return "status-stopping";
+      default: return "";
+    }
+  };
+
   const getStatusText = (statusCode: number, status: string) => {
     switch (statusCode) {
       case 0: return t("instance.status_starting");
@@ -198,7 +209,7 @@ const InstancesPage: React.FC = () => {
           {instances.map((instance) => (
             <Col xs={24} sm={12} lg={8} xl={6} key={instance.id}>
               <Card
-                className="instance-card"
+                className={`instance-card ${getStatusCodeClass(instance.statusCode)}`}
                 hoverable
                 onClick={() => navigate(`/instances/${instance.instanceId}`)}
                 bodyStyle={{ padding: 20 }}

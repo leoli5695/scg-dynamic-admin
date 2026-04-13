@@ -30,6 +30,12 @@ public class AuditLogEntity {
     @Column(length = 100)
     private String operator;
 
+    /**
+     * Operator type: MANUAL (user operation) or AI_COPILOT (AI assistant operation).
+     */
+    @Column(name = "operator_type", length = 20)
+    private String operatorType;
+
     @Column(name = "operation_type", nullable = false, length = 50)
     private String operationType;
 

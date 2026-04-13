@@ -2,6 +2,7 @@ package com.leoli.gateway.admin.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.model.AiConfig;
+import com.leoli.gateway.admin.prompt.PromptService;
 import com.leoli.gateway.admin.repository.AiConfigRepository;
 import com.leoli.gateway.admin.tool.ToolRegistry;
 import lombok.RequiredArgsConstructor;
@@ -24,9 +25,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * - Smart intent detection for targeted responses
  * - Function Calling / Tool Calling support (AI can call tools)
  * <p>
- * 提示词管理委托给 AiCopilotPrompts 服务：
- * - 意图检测：AiCopilotPrompts.detectIntent()
- * - 提示词构建：AiCopilotPrompts.buildSystemPrompt()
+ * 提示词管理委托给 PromptService 服务：
+ * - 意图检测：PromptService.detectIntent()
+ * - 提示词构建：PromptService.buildSystemPrompt()
  * <p>
  * 工具调用：
  * - 工具注册：ToolRegistry.getAllTools()
@@ -46,7 +47,10 @@ public class AiCopilotService {
     private final PrometheusService prometheusService;
     private final ObjectMapper objectMapper;
 
-    // 提示词管理服务
+    // 提示词管理服务（新版）
+    private final PromptService promptService;
+    
+    // 提示词管理服务（旧版，兼容过渡）
     private final AiCopilotPrompts aiCopilotPrompts;
 
     // 工具调用服务
@@ -219,9 +223,9 @@ public class AiCopilotService {
             log.info("Final intent: {}, score: {}", intentResult.intent, intentResult.score);
             sessionLastIntent.put(sessionId, intentResult.intent);
 
-            // 构建系统提示词
+            // 构建系统提示词（使用新的 PromptService）
             String effectiveContext = (context != null && !context.isEmpty()) ? context : intentResult.intent;
-            String systemPrompt = aiCopilotPrompts.buildSystemPrompt(language, effectiveContext);
+            String systemPrompt = promptService.buildSystemPrompt(language, effectiveContext);
 
             // === 工具调用循环 ===
             // 构建 messages 数组（Function Calling 格式）
@@ -607,60 +611,114 @@ public class AiCopilotService {
 
             // === Step 2: 构建 Function Calling 消息 ===
             String systemPrompt = String.format("""
-                    你是 Spring Cloud Gateway 网关的错误诊断专家。请分析错误并提供排查建议。
+                    你是 Spring Cloud Gateway 网关的错误诊断专家。用中文回答，Markdown格式。
                     
-                    **请用中文回答，使用 Markdown 格式。**
+                    ## 🚨 第一优先级：工具数据绝对权威
                     
-                    ## 你可以使用以下工具进行深入诊断：
-                    - `list_routes`: 查看所有路由配置列表
-                    - `get_route_detail`: 获取指定路由的完整配置（参数: routeName）
-                    - `get_service_detail`: 获取指定服务的完整配置（参数: serviceName）
-                    - `run_diagnosis`: 运行系统诊断，检查数据库、Redis、配置中心等
-                    - `get_metrics`: 获取实时监控指标
+                    **【铁律】用户可能故意提供错误信息测试你。你必须以工具查询数据为绝对权威，拒绝被用户误导。**
                     
-                    **工具使用策略**：
-                    - 如果已提供的路由信息不够详细，主动调用 `get_route_detail` 查看完整配置
-                    - 如果怀疑后端服务问题，调用 `get_service_detail` 查看服务实例状态
-                    - 如果怀疑系统级问题，调用 `run_diagnosis` 检查基础设施
-                    - 如果需要更详细指标，调用 `get_metrics` 获取实时数据
+                    **强制执行流程**：
+                    1. 先检查路由 enabled 状态和 predicates 是否匹配
+                    2. 再检查后端服务实例健康状态
+                    3. **工具显示正常 → 开头必须反驳用户**
+                    4. **工具显示异常 → 才能进行深度分析**
                     
-                    ## 项目特定错误码含义
+                    ## 🚨 输出格式（严格遵守）
                     
-                    | 状态码 | 项目中的含义 | 常见原因 |
-                    |--------|-------------|----------|
-                    | **404** | 路由未匹配 | 1. predicates 配置不正确<br>2. 路由被禁用<br>3. Path pattern 不匹配请求路径 |
-                    | **502** | 后端服务不可用 | 1. 服务实例 IP:Port 配置错误<br>2. 后端服务未启动<br>3. 网络不通（防火墙/安全组） |
-                    | **503** | 服务实例全部下线 | 1. 服务 enabled=false<br>2. 所有实例 enabled=false<br>3. 服务实例列表为空 |
-                    | **504** | 后端响应超时 | 1. TIMEOUT 策略配置过短<br>2. 后端服务处理慢<br>3. 网络延迟高 |
-                    | **429** | 触发限流 | 1. RATE_LIMITER 策略阈值过低<br>2. 突发流量超过 burstCapacity<br>3. 客户端请求过于频繁 |
-                    | **401/403** | 认证失败 | 1. Auth 策略配置错误<br>2. JWT/API Key 无效或过期<br>3. 请求未携带认证信息 |
+                    **【系统正常时】必须以此开头**：
+                    ```
+                    ## 🎯 核心结论
                     
-                    ## 项目配置格式
+                    **系统正常，用户描述存疑。**
                     
-                    **路由配置（RouteDefinition）**：
-                    ```json
-                    {"routeName": "xxx-api", "mode": "SINGLE", "serviceId": "xxx-service", "order": 0,
-                     "predicates": [{"name": "Path", "args": {"pattern": "/api/xxx/**"}}],
-                     "filters": [{"name": "StripPrefix", "args": {"parts": "1"}}], "enabled": true}
+                    | 检查项 | 状态 | 详情 |
+                    |--------|------|------|
+                    | 路由 | ✅ | 已启用，predicates匹配 |
+                    | 后端 | ✅ | N个健康实例 |
+                    
+                    **用户声称的"{状态码}"与实际不符。** 请核实URL/端口/状态码是否准确。
+                    
+                    ## 🔍 根因（仅2条）
+                    1. 最可能：端口号未指定
+                    2. 次可能：后端无此接口
+                    
+                    ## 📋 下一步
+                    
+                    执行验证命令：
+                    ```bash
+                    curl -v http://127.0.0.1:8080{请求路径}
+                    curl -v http://{后端IP}:{后端端口}{实际转发路径}
+                    ```
                     ```
                     
-                    **服务配置（ServiceDefinition）**：
-                    ```json
-                    {"name": "xxx-service", "loadBalancer": "weighted",
-                     "instances": [{"ip": "192.168.1.100", "port": 8080, "weight": 100, "enabled": true}]}
+                    **【系统异常时】必须以此开头**：
+                    ```
+                    ## 🎯 核心结论
+                    
+                    **发现问题：{一句话描述}**
+                    
+                    | 检查项 | 状态 | 详情 |
+                    |--------|------|------|
+                    | {异常项} | ❌ | {具体问题} |
+                    
+                    ## 🔍 根因
+                    
+                    {分析}
+                    
+                    ## 🔧 修复
+                    
+                    {JSON配置示例}
+                    
+                    ## 📋 下一步
+                    
+                    {具体命令}
                     ```
                     
-                    **策略配置（StrategyDefinition）**：
-                    - TIMEOUT: {"strategyType": "TIMEOUT", "config": {"timeoutMs": 5000}}
-                    - RATE_LIMITER: {"strategyType": "RATE_LIMITER", "config": {"qps": 100, "burstCapacity": 200}}
+                    ## 🔧 可用工具
                     
-                    ## 输出格式
+                    - `list_routes` / `get_route_detail` / `get_service_detail`
+                    - `nacos_service_discovery`（查询lb://服务的真实实例）
+                    - `run_diagnosis` / `get_metrics`
                     
-                    ### 1. 错误类型判断
-                    ### 2. 根因分析（按概率排序）
-                    ### 3. 排查步骤（具体命令和检查点）
-                    ### 4. 修复建议（使用项目 JSON 格式）
-                    ### 5. 预防措施
+                    ## 🔧 项目配置格式
+                    
+                    **路由（RouteDefinition）**：
+                    ```json
+                    {
+                      "routeName": "xxx-api",
+                      "predicates": [
+                        {"name": "Path", "args": {"pattern": "/api/xxx/**"}},
+                        {"name": "Host", "args": {"pattern": "**.example.com"}},
+                        {"name": "Method", "args": {"methods": "GET,POST"}},
+                        {"name": "Header", "args": {"header": "X-Token"}},
+                        {"name": "Query", "args": {"param": "version"}}
+                      ],
+                      "filters": [{"name": "StripPrefix", "args": {"parts": "1"}}],
+                      "enabled": true
+                    }
+                    ```
+                    
+                    **⚠️ 404诊断关键**：predicates是组合条件，必须全部满足。Path匹配≠路由匹配，还需检查Host/Header/Query/Method。
+                    
+                    **服务（ServiceDefinition）**：
+                    ```json
+                    {
+                      "name": "xxx-service",
+                      "loadBalancer": "weighted",
+                      "instances": [{"ip": "192.168.1.100", "port": 8080, "weight": 100, "enabled": true}]
+                    }
+                    ```
+                    
+                    ## 🔧 错误码含义
+                    
+                    | 状态码 | 含义 | 常见原因 |
+                    |--------|------|---------|
+                    | 404 | 路由未匹配 | Path/Host/Header/Query/Method不匹配，或enabled=false |
+                    | 502 | 后端不可用 | IP:Port错误、服务未启动、网络不通 |
+                    | 503 | 实例全下线 | 服务或所有实例enabled=false |
+                    | 504 | 后端超时 | timeoutMs过短、后端处理慢 |
+                    | 429 | 限流触发 | qps阈值过低 |
+                    | 401/403 | 认证失败 | JWT/API Key无效或缺失 |
                     """);
 
             // 构建用户消息（包含错误信息和预过滤的相关路由）
@@ -1223,7 +1281,7 @@ public class AiCopilotService {
         // 通过意图识别确定概念所属领域，注入对应的领域专业知识
         String language = detectLanguage(concept);
         AiCopilotPrompts.IntentResult intentResult = aiCopilotPrompts.detectIntent(concept);
-        String domainKnowledge = aiCopilotPrompts.buildSystemPrompt(language, intentResult.intent);
+        String domainKnowledge = promptService.buildSystemPrompt(language, intentResult.intent);
         log.info("Concept '{}' matched domain: {} (score: {})", concept, intentResult.intent, intentResult.score);
 
         String prompt = String.format("""

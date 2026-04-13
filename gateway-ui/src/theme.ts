@@ -1,70 +1,78 @@
 import type { ThemeConfig } from 'antd';
 
+/**
+ * Ant Design Theme Configuration
+ * Colors aligned with CSS variables in variables.css for consistency
+ * Note: Antd requires hex colors in theme config (CSS vars not supported)
+ */
 const theme: ThemeConfig = {
   token: {
-    colorBgBase: '#0a0f1c',           // 整体背景 - 深邃海军蓝黑
-    colorBgContainer: '#111827',      // 卡片背景 - 稍亮的深灰
-    colorBgElevated: '#1f2937',       // 悬浮/弹窗背景
-    colorBorder: 'rgba(148, 163, 184, 0.12)',   // 柔和边框
-    colorText: '#f1f5f9',
-    colorTextSecondary: '#94a3b8',
-    colorTextTertiary: '#64748b',
+    // Background - aligned with --bg-base (#09090b) and --bg-secondary
+    colorBgBase: '#09090b',
+    colorBgContainer: '#18181b',      // aligned with --bg-secondary
+    colorBgElevated: '#27272a',       // aligned with --bg-elevated
+    colorBorder: 'rgba(255, 255, 255, 0.10)',   // aligned with --border-default
+    // Text - aligned with CSS variables
+    colorText: '#fafafa',             // aligned with --text-primary
+    colorTextSecondary: '#a1a1aa',    // aligned with --text-secondary
+    colorTextTertiary: '#71717a',     // aligned with --text-muted
     borderRadius: 12,
     boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
-    colorPrimary: '#3b82f6',
-    colorSuccess: '#10b981',
-    colorWarning: '#f59e0b',
-    colorError: '#ef4444',
+    // Brand colors - aligned with CSS variables
+    colorPrimary: '#3b82f6',          // aligned with --primary-color
+    colorSuccess: '#22c55e',          // aligned with --success-color
+    colorWarning: '#eab308',          // aligned with --warning-color
+    colorError: '#ef4444',            // aligned with --error-color
     colorBgContainerDisabled: 'rgba(255,255,255,0.05)',
   },
   components: {
     Card: {
-      colorBgContainer: '#111827',
+      colorBgContainer: '#18181b',    // aligned with --bg-secondary
       borderRadius: 12,
       boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)',
     },
     Layout: {
-      colorBgHeader: '#0a0f1c',
-      colorBgBody: '#0a0f1c',
+      colorBgHeader: '#09090b',       // aligned with --bg-base
+      colorBgBody: '#09090b',         // aligned with --bg-base
     },
     Menu: {
-      colorBgContainer: '#0a0f1c',
+      colorBgContainer: '#09090b',    // aligned with --bg-base
     },
     Button: {
       borderRadius: 8,
-      colorPrimary: '#3b82f6',
+      colorPrimary: '#3b82f6',        // aligned with --primary-color
     },
     Tag: {
       colorBgContainer: 'rgba(255,255,255,0.08)',
     },
     Alert: {
-      colorBgContainer: 'rgba(245, 158, 11, 0.1)',
+      colorBgContainer: 'rgba(234, 179, 8, 0.1)',  // aligned with --warning-color
     },
     Statistic: {
-      colorText: '#f1f5f9',
-      colorTextSecondary: '#94a3b8',
+      colorText: '#fafafa',           // aligned with --text-primary
+      colorTextSecondary: '#a1a1aa',  // aligned with --text-secondary
     },
     Input: {
-      colorBgContainer: '#111827',
-      colorBorder: 'rgba(148, 163, 184, 0.12)',
+      colorBgContainer: '#09090b',    // aligned with --bg-input
+      colorBorder: 'rgba(255, 255, 255, 0.10)',  // aligned with --border-default
     },
     Select: {
-      colorBgContainer: '#1e293b',
-      colorBorder: 'rgba(148, 163, 184, 0.35)',
-      colorText: '#f1f5f9',
-      optionSelectedBg: '#243044',
+      colorBgContainer: '#18181b',    // aligned with --bg-secondary
+      colorBorder: 'rgba(255, 255, 255, 0.15)',  // aligned with --border-strong
+      colorText: '#fafafa',           // aligned with --text-primary
+      optionSelectedBg: '#27272a',    // aligned with --bg-elevated
     },
     Modal: {
-      colorBgContainer: '#111827',
-      colorBgElevated: '#1f2937',
+      colorBgContainer: '#18181b',    // aligned with --bg-secondary
+      colorBgElevated: '#27272a',     // aligned with --bg-elevated
       lineWidthFocus: 0,
     },
     Drawer: {
-      colorBgContainer: '#111827',
+      colorBgContainer: '#18181b',    // aligned with --bg-secondary
     },
     Table: {
-      colorBgContainer: '#111827',
-      colorBorder: 'rgba(148, 163, 184, 0.12)',
+      colorBgContainer: '#18181b',    // aligned with --bg-secondary
+      colorBorder: 'rgba(255, 255, 255, 0.10)',  // aligned with --border-default
     },
   },
 };

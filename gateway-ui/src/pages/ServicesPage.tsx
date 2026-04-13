@@ -281,8 +281,6 @@ const ServicesPage: React.FC<ServicesPageProps> = ({ instanceId }) => {
   const [editInstances, setEditInstances] = useState<ServiceInstance[]>([]);
   const { t } = useTranslation();
 
-  useEffect(() => { loadServices(); }, [instanceId]);
-
   // Stable callback for closing drawer - prevents re-renders
   const handleCloseDrawer = useCallback(() => {
     setDetailDrawerVisible(false);
@@ -301,6 +299,8 @@ const ServicesPage: React.FC<ServicesPageProps> = ({ instanceId }) => {
       setLoading(false);
     }
   }, [t, instanceId]);
+
+  useEffect(() => { loadServices(); }, [loadServices]);
 
   // Optimized instance update handlers
   const handleInstanceChange = useCallback((index: number, field: string, value: any) => {

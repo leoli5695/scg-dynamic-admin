@@ -3,6 +3,7 @@ package com.leoli.gateway.admin.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.model.AiConfig;
+import com.leoli.gateway.admin.prompt.PromptService;
 import com.leoli.gateway.admin.repository.AiConfigRepository;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +26,7 @@ public class AiAnalysisService {
 
     private final AiConfigRepository aiConfigRepository;
     private final PrometheusService prometheusService;
+    private final PromptService promptService;  // 新增：用于动态提示词
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @PostConstruct
@@ -777,8 +779,23 @@ public class AiAnalysisService {
 
     /**
      * 构建压力测试分析 prompt
+     * Uses PromptService for dynamic configuration, falls back to inline defaults.
      */
     private String buildStressTestAnalysisPrompt(String stressTestData, String metricsData, String language) {
+        // 尝试从 PromptService 获取模板
+        String templateKey = "task.stressTestAnalysis." + language;
+        String template = promptService.getPrompt(templateKey);
+        
+        if (template != null && !template.isEmpty()) {
+            // 使用动态模板
+            String langName = "zh".equals(language) ? "中文" : "English";
+            return template
+                .replace("{langName}", langName)
+                .replace("{stressTestData}", stressTestData)
+                .replace("{metricsData}", metricsData.isEmpty() ? "【服务器监控数据】\n暂无 Prometheus 监控数据" : metricsData);
+        }
+        
+        // 默认内联提示词（兜底）
         String langName = "zh".equals(language) ? "中文" : "English";
 
         return String.format("""

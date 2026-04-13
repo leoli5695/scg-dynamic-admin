@@ -49,8 +49,11 @@ public class RequestTransformFilter implements GlobalFilter, Ordered {
     @Autowired
     private StrategyManager strategyManager;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
-    private final XmlMapper xmlMapper = new XmlMapper();
+    @Autowired
+    private ObjectMapper objectMapper;  // Use injected singleton
+
+    @Autowired
+    private XmlMapper xmlMapper;  // Use injected singleton
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {

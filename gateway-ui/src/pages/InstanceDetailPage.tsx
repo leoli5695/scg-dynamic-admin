@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, lazy, Suspense } from "react";
 import {
   Card,
   Tabs,
@@ -17,7 +17,10 @@ import {
   Modal,
   InputNumber,
   Form,
+  Dropdown,
+  Avatar,
 } from "antd";
+import type { MenuProps } from "antd";
 import {
   ArrowLeftOutlined,
   ReloadOutlined,
@@ -41,31 +44,46 @@ import {
   FilterOutlined,
   BugOutlined,
   RobotOutlined,
-
+  UserOutlined,
+  LogoutOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import axios from "axios";
+import LanguageSwitcher from "../components/LanguageSwitcher";
 
-// Import existing pages
-import ServicesPage from "./ServicesPage";
-import RoutesPage from "./RoutesPage";
-import StrategiesPage from "./StrategiesPage";
-import AuthPoliciesPage from "./AuthPoliciesPage";
-import CertificatePage from "./CertificatePage";
-import TracePage from "./TracePage";
-import MonitorPage from "./MonitorPage";
-import AlertPage from "./AlertPage";
-import AccessLogConfigPage from "./AccessLogConfigPage";
-import AuditLogsPage from "./AuditLogsPage";
-import DiagnosticPage from "./DiagnosticPage";
-import TrafficTopologyPage from "./TrafficTopologyPage";
-import FilterChainPage from "./FilterChainPage";
+// Lazy load sub-pages for better performance
+const ServicesPage = lazy(() => import("./ServicesPage"));
+const RoutesPage = lazy(() => import("./RoutesPage"));
+const StrategiesPage = lazy(() => import("./StrategiesPage"));
+const AuthPoliciesPage = lazy(() => import("./AuthPoliciesPage"));
+const CertificatePage = lazy(() => import("./CertificatePage"));
+const TracePage = lazy(() => import("./TracePage"));
+const MonitorPage = lazy(() => import("./MonitorPage"));
+const AlertPage = lazy(() => import("./AlertPage"));
+const AccessLogConfigPage = lazy(() => import("./AccessLogConfigPage"));
+const AuditLogsPage = lazy(() => import("./AuditLogsPage"));
+const DiagnosticPage = lazy(() => import("./DiagnosticPage"));
+const TrafficTopologyPage = lazy(() => import("./TrafficTopologyPage"));
+const FilterChainPage = lazy(() => import("./FilterChainPage"));
+const RequestReplayPage = lazy(() => import("./RequestReplayPage"));
+const AiCopilotPage = lazy(() => import("./AiCopilotPage"));
+const StressTestPage = lazy(() => import("./StressTestPage"));
 
-import RequestReplayPage from "./RequestReplayPage";
-import AiCopilotPage from "./AiCopilotPage";
-import StressTestPage from "./StressTestPage";
+// Tab loading fallback component
+const TabLoading: React.FC = () => (
+  <div style={{
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: '300px',
+  }}>
+    <Spin size="large" />
+  </div>
+);
+
+import "./InstanceDetailPage.css";
 
 const { Title, Text } = Typography;
 
@@ -132,6 +150,51 @@ const InstanceDetailPage: React.FC = () => {
   const [scaleModalVisible, setScaleModalVisible] = useState(false);
   const [scaleReplicas, setScaleReplicas] = useState(1);
   const [scaleLoading, setScaleLoading] = useState(false);
+
+  // User info for header display
+  const [user, setUser] = useState<{
+    username: string;
+    nickname: string;
+    role: string;
+  } | null>(null);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+
+  // Load user info from localStorage
+  useEffect(() => {
+    const username = localStorage.getItem("username");
+    const nickname = localStorage.getItem("nickname");
+    const role = localStorage.getItem("role");
+    if (username) {
+      setUser({
+        username,
+        nickname: nickname || username,
+        role: role || "USER",
+      });
+    }
+  }, []);
+
+  // Handle logout
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("username");
+    localStorage.removeItem("nickname");
+    localStorage.removeItem("role");
+    message.success(t("common.logout_success") || "Logout successful");
+    window.location.href = "/login";
+  };
+
+  // User dropdown menu items
+  const userMenuItems: MenuProps["items"] = [
+    {
+      key: "logout",
+      icon: <LogoutOutlined />,
+      label: t("common.logout"),
+      onClick: () => {
+        setUserMenuOpen(false);
+        handleLogout();
+      },
+    },
+  ];
 
   // Derive activeTab from URL path
   const getActiveTabFromPath = (): string => {
@@ -435,57 +498,57 @@ const InstanceDetailPage: React.FC = () => {
     switch (activeTab) {
       case "overview":
         return (
-          <div style={{ padding: "24px" }}>
+          <div className="instance-overview-stats">
             <Row gutter={[24, 24]}>
               <Col xs={24} md={12} lg={6}>
-                <Card style={{ background: "rgba(255,255,255,0.05)" }}>
+                <Card className="instance-stat-card">
                   <Statistic
-                    title={<span style={{ color: "rgba(255,255,255,0.65)" }}>{t("instance.status")}</span>}
+                    title={t("instance.status")}
                     value={getStatusText(instance.status)}
                     valueStyle={{
-                      color: instance.status === "RUNNING" ? "#52c41a" : "#faad14",
+                      color: instance.status === "RUNNING" ? "var(--success-color)" : "var(--warning-color)",
                     }}
                     prefix={<Badge status={instance.status === "RUNNING" ? "success" : "warning"} />}
                   />
                 </Card>
               </Col>
               <Col xs={24} md={12} lg={6}>
-                <Card style={{ background: "rgba(255,255,255,0.05)" }}>
+                <Card className="instance-stat-card">
                   <Statistic
-                    title={<span style={{ color: "rgba(255,255,255,0.65)" }}>{t("instance.replicas")}</span>}
+                    title={t("instance.replicas")}
                     value={instance.replicas}
                     suffix="Pods"
-                    valueStyle={{ color: "#165DFF" }}
+                    valueStyle={{ color: "var(--primary-color)" }}
                   />
                 </Card>
               </Col>
               <Col xs={24} md={12} lg={6}>
-                <Card style={{ background: "rgba(255,255,255,0.05)" }}>
+                <Card className="instance-stat-card">
                   <Statistic
-                    title={<span style={{ color: "rgba(255,255,255,0.65)" }}>{t("instance.spec")}</span>}
+                    title={t("instance.spec")}
                     value={getSpecText(instance)}
-                    valueStyle={{ color: "#fff" }}
+                    valueStyle={{ color: "var(--text-primary)" }}
                   />
                 </Card>
               </Col>
               <Col xs={24} md={12} lg={6}>
-                <Card style={{ background: "rgba(255,255,255,0.05)" }}>
+                <Card className="instance-stat-card">
                   <Statistic
-                    title={<span style={{ color: "rgba(255,255,255,0.65)" }}>{t("instance.node_port")}</span>}
+                    title={t("instance.node_port")}
                     value={instance.nodePort || "-"}
-                    valueStyle={{ color: "#fff" }}
+                    valueStyle={{ color: "var(--text-primary)" }}
                   />
                 </Card>
               </Col>
             </Row>
 
             <Card
+              className="instance-info-section"
               title={t("instance.basic_info")}
-              style={{ marginTop: "24px", background: "rgba(255,255,255,0.05)" }}
             >
               <Descriptions column={{ xs: 1, sm: 2, md: 3 }}>
                 <Descriptions.Item label={t("instance.instance_id")}>
-                  <Text copyable style={{ color: "#fff" }}>
+                  <Text copyable>
                     {instance.instanceId}
                   </Text>
                 </Descriptions.Item>
@@ -496,7 +559,7 @@ const InstanceDetailPage: React.FC = () => {
                   {instance.namespace}
                 </Descriptions.Item>
                 <Descriptions.Item label={t("instance.nacos_namespace")}>
-                  <Text copyable style={{ color: "#fff" }}>
+                  <Text copyable>
                     {instance.nacosNamespace}
                   </Text>
                 </Descriptions.Item>
@@ -530,7 +593,7 @@ const InstanceDetailPage: React.FC = () => {
                             href={accessUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            style={{ color: "#165DFF" }}
+                            className="instance-access-url"
                           >
                             <LinkOutlined style={{ marginRight: "4px" }} />
                             {accessUrl}
@@ -549,7 +612,7 @@ const InstanceDetailPage: React.FC = () => {
                       href={`http://${getEffectiveNacosServerAddr(instance)}/nacos/#/configurationManagement?dataId=&group=&namespace=${instance.nacosNamespace}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{ color: "#165DFF" }}
+                      className="instance-access-url"
                     >
                       <LinkOutlined style={{ marginRight: "4px" }} />
                       http://{getEffectiveNacosServerAddr(instance)}/nacos
@@ -571,37 +634,37 @@ const InstanceDetailPage: React.FC = () => {
 
       // Pass instanceId to existing pages for configuration isolation
       case "services":
-        return <ServicesPage instanceId={instance.instanceId} />;
+        return <Suspense fallback={<TabLoading />}><ServicesPage instanceId={instance.instanceId} /></Suspense>;
       case "routes":
-        return <RoutesPage instanceId={instance.instanceId} />;
+        return <Suspense fallback={<TabLoading />}><RoutesPage instanceId={instance.instanceId} /></Suspense>;
       case "strategies":
-        return <StrategiesPage instanceId={instance.instanceId} />;
+        return <Suspense fallback={<TabLoading />}><StrategiesPage instanceId={instance.instanceId} /></Suspense>;
       case "authentication":
-        return <AuthPoliciesPage instanceId={instance.instanceId} />;
+        return <Suspense fallback={<TabLoading />}><AuthPoliciesPage instanceId={instance.instanceId} /></Suspense>;
       case "certificates":
-        return <CertificatePage instanceId={instance.instanceId} />;
+        return <Suspense fallback={<TabLoading />}><CertificatePage instanceId={instance.instanceId} /></Suspense>;
       case "trace":
-        return <TracePage instanceId={instance.instanceId} onNavigateToReplay={() => handleTabChange('request_replay')} />;
+        return <Suspense fallback={<TabLoading />}><TracePage instanceId={instance.instanceId} onNavigateToReplay={() => handleTabChange('request_replay')} /></Suspense>;
       case "monitor":
-        return <MonitorPage instanceId={instance.instanceId} />;
+        return <Suspense fallback={<TabLoading />}><MonitorPage instanceId={instance.instanceId} /></Suspense>;
       case "alerts":
-        return <AlertPage instanceId={instance.instanceId} />;
+        return <Suspense fallback={<TabLoading />}><AlertPage instanceId={instance.instanceId} /></Suspense>;
       case "access_log":
-        return <AccessLogConfigPage instanceId={instance.instanceId} />;
+        return <Suspense fallback={<TabLoading />}><AccessLogConfigPage instanceId={instance.instanceId} /></Suspense>;
       case "audit_logs":
-        return <AuditLogsPage instanceId={instance.instanceId} />;
+        return <Suspense fallback={<TabLoading />}><AuditLogsPage instanceId={instance.instanceId} /></Suspense>;
       case "diagnostic":
-        return <DiagnosticPage instanceId={instance.instanceId} />;
+        return <Suspense fallback={<TabLoading />}><DiagnosticPage instanceId={instance.instanceId} /></Suspense>;
       case "topology":
-        return <TrafficTopologyPage instanceId={instance.instanceId} />;
+        return <Suspense fallback={<TabLoading />}><TrafficTopologyPage instanceId={instance.instanceId} /></Suspense>;
       case "filter_chain":
-        return <FilterChainPage instanceId={instance.instanceId} />;
+        return <Suspense fallback={<TabLoading />}><FilterChainPage instanceId={instance.instanceId} /></Suspense>;
       case "request_replay":
-        return <RequestReplayPage instanceId={instance.instanceId} />;
+        return <Suspense fallback={<TabLoading />}><RequestReplayPage instanceId={instance.instanceId} /></Suspense>;
       case "copilot":
-        return <AiCopilotPage instanceId={instance.instanceId} />;
+        return <Suspense fallback={<TabLoading />}><AiCopilotPage instanceId={instance.instanceId} /></Suspense>;
       case "stress_test":
-        return <StressTestPage instanceId={instance.instanceId} />;
+        return <Suspense fallback={<TabLoading />}><StressTestPage instanceId={instance.instanceId} /></Suspense>;
       default:
         return null;
     }
@@ -620,33 +683,26 @@ const InstanceDetailPage: React.FC = () => {
   }
 
   return (
-    <div className="instance-detail-page" style={{ minHeight: "100vh" }}>
+    <div className="instance-detail-page">
       {/* Header */}
-      <div
-        style={{
-          background: "rgba(255,255,255,0.05)",
-          borderBottom: "1px solid rgba(255,255,255,0.1)",
-          padding: "16px 24px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <Space>
+      <div className="instance-detail-header">
+        <div className="instance-detail-header-left">
           <Button
             type="text"
             icon={<ArrowLeftOutlined />}
             onClick={() => navigate("/instances")}
-            style={{ color: "rgba(255,255,255,0.85)" }}
+            className="instance-detail-back-btn"
           />
-          <CloudServerOutlined style={{ fontSize: "24px", color: "#165DFF" }} />
-          <Title level={4} style={{ margin: 0, color: "#fff" }}>
+          <CloudServerOutlined className="instance-detail-icon" />
+          <Title level={4} className="instance-detail-title">
             {instance.instanceName}
           </Title>
-          <Tag color={getStatusColor(instance.status)}>{getStatusText(instance.status)}</Tag>
-        </Space>
+          <Tag className="instance-detail-status-tag" color={getStatusColor(instance.status)}>
+            {getStatusText(instance.status)}
+          </Tag>
+        </div>
 
-        <Space>
+        <div className="instance-detail-header-right">
           {instance.status === "Running" && (
             <>
               <Button icon={<PlusSquareOutlined />} onClick={openScaleModal}>
@@ -665,7 +721,27 @@ const InstanceDetailPage: React.FC = () => {
           <Tooltip title={t("common.refresh")}>
             <Button icon={<ReloadOutlined />} onClick={fetchInstance} />
           </Tooltip>
-        </Space>
+          <LanguageSwitcher />
+          {user && (
+            <Dropdown
+              menu={{ items: userMenuItems }}
+              placement="bottomRight"
+              arrow
+              trigger={["click"]}
+              open={userMenuOpen}
+              onOpenChange={setUserMenuOpen}
+            >
+              <Space className="user-info" style={{ cursor: "pointer", marginLeft: 12 }}>
+                <Avatar
+                  style={{ backgroundColor: "#165DFF" }}
+                  icon={<UserOutlined />}
+                  size="small"
+                />
+                <span className="username">{user.nickname || user.username}</span>
+              </Space>
+            </Dropdown>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}
@@ -673,15 +749,11 @@ const InstanceDetailPage: React.FC = () => {
         activeKey={activeTab}
         onChange={handleTabChange}
         items={tabItems}
-        style={{ paddingLeft: "24px", paddingRight: "24px" }}
-        tabBarStyle={{
-          marginBottom: 0,
-          borderBottom: "1px solid rgba(255,255,255,0.1)",
-        }}
+        className="instance-detail-tabs"
       />
 
       {/* Content */}
-      <div style={{ background: "rgba(0,0,0,0.2)", minHeight: "calc(100vh - 120px)" }}>
+      <div className="instance-detail-content">
         {renderTabContent()}
       </div>
 

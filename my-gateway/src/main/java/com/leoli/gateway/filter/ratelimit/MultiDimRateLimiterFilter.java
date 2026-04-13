@@ -11,7 +11,7 @@ import com.leoli.gateway.limiter.ShadowQuotaManager;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.MultiDimRateLimiterConfig;
 import com.leoli.gateway.model.StrategyDefinition;
-import com.leoli.gateway.util.RouteUtils;
+import com.leoli.gateway.util.*;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,14 +24,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
-import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Multi-Dimensional Rate Limiter Filter.
@@ -63,18 +59,19 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
     @Autowired
     private ShadowQuotaManager shadowQuotaManager;
 
+    @Autowired
+    private ObjectMapper objectMapper;  // Use injected ObjectMapper
+
     @Value("${gateway.rate-limiter.redis.enabled:true}")
     private boolean redisLimitEnabled;
 
     @Value("${gateway.rate-limiter.shadow-quota.enabled:true}")
     private boolean shadowQuotaEnabled;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
-
     /**
      * Local rate limiter cache: key -> RateLimiterWindow.
      */
-    private final Cache<String, RateLimiterWindow> rateLimiterCache = Caffeine.newBuilder()
+    private final Cache<String, com.leoli.gateway.util.RateLimiterWindow> rateLimiterCache = Caffeine.newBuilder()
             .maximumSize(50000)
             .expireAfterWrite(1, TimeUnit.HOURS)
             .build();
@@ -93,10 +90,12 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
         // Extract dimension identifiers
         String tenantId = extractTenantId(exchange, config.multiDimConfig);
         String userId = extractUserId(exchange, config.multiDimConfig);
-        String clientIp = extractClientIp(exchange);
+        String clientIp = IpAddressExtractor.extractClientIp(exchange);
 
-        log.debug("Multi-dim rate limiter - routeId: {}, tenantId: {}, userId: {}, ip: {}",
-                routeId, tenantId, userId, clientIp);
+        if (log.isDebugEnabled()) {
+            log.debug("Multi-dim rate limiter - routeId: {}, tenantId: {}, userId: {}, ip: {}",
+                    routeId, tenantId, userId, clientIp);
+        }
 
         // Build dimension keys
         List<DimensionKey> keys = buildDimensionKeys(routeId, tenantId, userId, clientIp, config.multiDimConfig);
@@ -106,7 +105,7 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
 
         if (result.isAllowed()) {
             // Add rate limit headers
-            addRateLimitHeaders(exchange, result);
+            GatewayResponseHelper.addRateLimitHeaders(exchange.getResponse(), result.getMinRemaining(), result.getMinRemaining());
             return chain.filter(exchange);
         } else {
             log.warn("Multi-dim rate limit exceeded - routeId: {}, level: {}, key: {}",
@@ -249,9 +248,9 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
             // Redis unavailable, fall through to local
         }
 
-        // Use local rate limiter
-        RateLimiterWindow window = rateLimiterCache.get(dimKey.getKey(),
-                k -> new RateLimiterWindow(quota.getQps(), quota.getBurstCapacity(), quota.getWindowSizeMs()));
+        // Use local rate limiter (shared utility class)
+        com.leoli.gateway.util.RateLimiterWindow window = rateLimiterCache.get(dimKey.getKey(),
+                k -> new com.leoli.gateway.util.RateLimiterWindow(quota.getQps(), quota.getBurstCapacity(), quota.getWindowSizeMs()));
 
         result.setAllowed(window.tryAcquire());
         result.setRemaining(window.getRemaining());
@@ -357,37 +356,6 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * Extract client IP address.
-     */
-    private String extractClientIp(ServerWebExchange exchange) {
-        String forwardedFor = exchange.getRequest().getHeaders().getFirst("X-Forwarded-For");
-        if (forwardedFor != null && !forwardedFor.isEmpty()) {
-            String[] ips = forwardedFor.split(",");
-            return ips[0].trim();
-        }
-
-        String realIp = exchange.getRequest().getHeaders().getFirst("X-Real-IP");
-        if (realIp != null && !realIp.isEmpty()) {
-            return realIp.trim();
-        }
-
-        InetSocketAddress remoteAddress = exchange.getRequest().getRemoteAddress();
-        if (remoteAddress != null && remoteAddress.getHostString() != null) {
-            return remoteAddress.getHostString();
-        }
-
-        return "unknown";
-    }
-
-    /**
-     * Add rate limit headers to response.
-     */
-    private void addRateLimitHeaders(ServerWebExchange exchange, RateCheckResult result) {
-        exchange.getResponse().getHeaders().add("X-RateLimit-Limit-Level", String.valueOf(result.getMinRemaining()));
-        exchange.getResponse().getHeaders().add("X-RateLimit-Remaining", String.valueOf(result.getMinRemaining()));
-    }
-
-    /**
      * Reject request with 429 response.
      */
     private Mono<Void> rejectRequest(ServerWebExchange exchange, RateCheckResult result) {
@@ -396,9 +364,11 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
         exchange.getResponse().getHeaders().add("X-RateLimit-Limit-Level", result.getExceededLevel());
         exchange.getResponse().getHeaders().add("X-RateLimit-Remaining", "0");
 
+        // Keep "error" field for frontend compatibility
         String body = String.format(
-                "{\"error\":\"Too Many Requests\",\"message\":\"Rate limit exceeded at %s level\",\"level\":\"%s\"}",
-                result.getExceededLevel(), result.getExceededLevel()
+                "{\"code\":52901,\"error\":\"Too Many Requests\",\"message\":\"Rate limit exceeded at %s level\",\"data\":null,\"level\":\"%s\"}",
+                GatewayResponseHelper.escapeJson(result.getExceededLevel()),
+                GatewayResponseHelper.escapeJson(result.getExceededLevel())
         );
 
         return exchange.getResponse().writeWith(
@@ -446,107 +416,5 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
         private String exceededKey;
         private int minRemaining;
         private List<CheckResult> totalResults = new ArrayList<>();
-    }
-
-    /**
-     * Thread-safe sliding time window rate limiter with burst support.
-     * Uses CAS for low contention, tryLock fallback for high contention.
-     * This hybrid approach avoids blocking EventLoop threads in reactive context.
-     */
-    @Data
-    public static class RateLimiterWindow {
-        private final int maxRequests;
-        private final int burstCapacity;
-        private final long windowSizeMs;
-        private final AtomicInteger currentCount = new AtomicInteger(0);
-        private final AtomicInteger burstTokens = new AtomicInteger(0);
-        private final AtomicLong windowStartTime = new AtomicLong(System.currentTimeMillis());
-        // Fallback lock for high contention scenarios (tryLock only, never blocks)
-        private final ReentrantLock lock = new ReentrantLock();
-
-        public RateLimiterWindow(int maxRequests, int burstCapacity, long windowSizeMs) {
-            this.maxRequests = maxRequests;
-            this.burstCapacity = Math.max(burstCapacity, maxRequests);
-            this.windowSizeMs = windowSizeMs;
-            this.burstTokens.set(this.burstCapacity);
-        }
-
-        public boolean tryAcquire() {
-            long now = System.currentTimeMillis();
-            long windowStart = windowStartTime.get();
-
-            // Try to reset window if expired (CAS ensures only one thread performs reset)
-            if (now - windowStart >= windowSizeMs) {
-                if (windowStartTime.compareAndSet(windowStart, now)) {
-                    currentCount.set(0);
-                    int prevBurst = burstTokens.get();
-                    int newBurstTokens = Math.min(burstCapacity, maxRequests + prevBurst);
-                    burstTokens.set(newBurstTokens);
-                }
-            }
-
-            // Fast path: try CAS for low contention (optimistic)
-            int count = currentCount.get();
-            if (count < maxRequests) {
-                if (currentCount.compareAndSet(count, count + 1)) {
-                    return true;
-                }
-                // CAS failed due to contention - fall through to slow path
-            } else {
-                // Steady rate exhausted, try burst tokens with CAS
-                int tokens = burstTokens.get();
-                if (tokens > 0) {
-                    if (burstTokens.compareAndSet(tokens, tokens - 1)) {
-                        currentCount.incrementAndGet();
-                        return true;
-                    }
-                    // CAS failed - fall through to slow path
-                } else {
-                    return false;
-                }
-            }
-
-            // Slow path: tryLock for high contention (never blocks!)
-            if (lock.tryLock()) {
-                try {
-                    count = currentCount.get();
-
-                    // Re-check window reset under lock
-                    now = System.currentTimeMillis();
-                    windowStart = windowStartTime.get();
-                    if (now - windowStart >= windowSizeMs) {
-                        currentCount.set(0);
-                        int prevBurst = burstTokens.get();
-                        int newBurstTokens = Math.min(burstCapacity, maxRequests + prevBurst);
-                        burstTokens.set(newBurstTokens);
-                        windowStartTime.set(now);
-                        count = 0;
-                    }
-
-                    if (count < maxRequests) {
-                        currentCount.incrementAndGet();
-                        return true;
-                    }
-
-                    int tokens = burstTokens.get();
-                    if (tokens > 0) {
-                        burstTokens.decrementAndGet();
-                        currentCount.incrementAndGet();
-                        return true;
-                    }
-
-                    return false;
-                } finally {
-                    lock.unlock();
-                }
-            }
-
-            // tryLock failed - immediately reject without blocking
-            return false;
-        }
-
-        public int getRemaining() {
-            return Math.max(0, burstCapacity - currentCount.get());
-        }
     }
 }

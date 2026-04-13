@@ -1,0 +1,180 @@
+/**
+ * Gateway-UI CSS Variables
+ * Minimalist, professional design system - Western-friendly aesthetic
+ */
+
+:root {
+  /* ==================== Brand Colors ==================== */
+  --primary-color: #3b82f6;
+  --primary-hover: #2563eb;
+  --primary-light: #60a5fa;
+
+  /* Accent Color - For highlights and emphasis */
+  --accent-color: #fbbf24;
+  --accent-hover: #fcd34d;
+  --accent-light: #fef3c7;
+
+  /* Status Colors - Subtle, professional */
+  --success-color: #22c55e;
+  --warning-color: #eab308;
+  --error-color: #ef4444;
+  --info-color: #6366f1;
+  
+  /* ==================== Neutral Palette ==================== */
+  /* Background - Deep, sophisticated dark */
+  --bg-base: #09090b;
+  --bg-primary: #0c0c0f;
+  --bg-secondary: #18181b;
+  --bg-card: #1c1c21;
+  --bg-elevated: #27272a;
+  --bg-hover: rgba(39, 39, 42, 0.5);
+  --bg-input: #09090b;
+  
+  /* Text - Clean hierarchy */
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --text-disabled: #52525b;
+  
+  /* Border - Subtle, minimal */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(255, 255, 255, 0.15);
+  --border-focus: #3b82f6;
+  
+  /* ==================== Shadows - Subtle depth ==================== */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.12);
+  --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.16);
+  --shadow-xl: 0 16px 32px rgba(0, 0, 0, 0.20);
+
+  /* ==================== Advanced Visual Effects ==================== */
+  /* Gradient borders and backgrounds */
+  --gradient-card: linear-gradient(135deg, rgba(59, 130, 246, 0.03) 0%, rgba(139, 92, 246, 0.03) 100%);
+  --gradient-card-hover: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(139, 92, 246, 0.05) 100%);
+  --gradient-primary: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  --gradient-accent: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  --gradient-success: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  --gradient-border: linear-gradient(135deg, rgba(59, 130, 246, 0.3) 0%, rgba(139, 92, 246, 0.2) 100%);
+
+  /* Glow effects for status indicators */
+  --glow-success: 0 0 20px rgba(34, 197, 94, 0.4), 0 0 40px rgba(34, 197, 94, 0.1);
+  --glow-warning: 0 0 20px rgba(234, 179, 8, 0.4), 0 0 40px rgba(234, 179, 8, 0.1);
+  --glow-error: 0 0 20px rgba(239, 68, 68, 0.4), 0 0 40px rgba(239, 68, 68, 0.1);
+  --glow-primary: 0 0 20px rgba(59, 130, 246, 0.4), 0 0 40px rgba(59, 130, 246, 0.1);
+  --glow-accent: 0 0 20px rgba(251, 191, 36, 0.4), 0 0 40px rgba(251, 191, 36, 0.1);
+
+  /* Card hover shadow with subtle glow */
+  --shadow-card-hover: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(59, 130, 246, 0.15);
+  --shadow-card-active: 0 12px 40px rgba(0, 0, 0, 0.4), 0 0 0 2px rgba(59, 130, 246, 0.25);
+
+  /* Glass effect */
+  --glass-bg: rgba(28, 28, 33, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-blur: blur(12px);
+  
+  /* ==================== Radius - Clean, modern ==================== */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+  
+  /* ==================== Spacing - Generous whitespace ==================== */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  
+  /* Legacy aliases for compatibility */
+  --spacing-xs: var(--space-1);
+  --spacing-sm: var(--space-2);
+  --spacing-md: var(--space-4);
+  --spacing-lg: var(--space-6);
+  --spacing-xl: var(--space-8);
+  
+  /* ==================== Typography ==================== */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Monaco, Consolas, monospace;
+  
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 30px;
+  
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.75;
+  
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  
+  /* ==================== Transitions - Minimal, functional ==================== */
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+  --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  
+  /* Legacy aliases */
+  --transition-fast: var(--duration-fast) var(--ease-default);
+  --transition-normal: var(--duration-normal) var(--ease-default);
+  --transition-slow: var(--duration-slow) var(--ease-default);
+  
+  /* ==================== Z-Index ==================== */
+  --z-dropdown: 1000;
+  --z-sticky: 1020;
+  --z-fixed: 1030;
+  --z-modal-backdrop: 1040;
+  --z-modal: 1050;
+  --z-popover: 1060;
+  --z-tooltip: 1070;
+}
+
+/* Dark theme (default) */
+[data-theme='dark'] {
+  --bg-base: #09090b;
+  --bg-primary: #0c0c0f;
+  --bg-secondary: #18181b;
+  --bg-card: #1c1c21;
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+}
+
+/* Light theme option */
+[data-theme='light'] {
+  --bg-base: #ffffff;
+  --bg-primary: #fafafa;
+  --bg-secondary: #f4f4f5;
+  --bg-card: #ffffff;
+  --bg-elevated: #f4f4f5;
+  --bg-hover: rgba(0, 0, 0, 0.04);
+  --bg-input: #ffffff;
+  
+  --text-primary: #18181b;
+  --text-secondary: #52525b;
+  --text-muted: #71717a;
+  --text-disabled: #a1a1aa;
+  
+  --border-subtle: rgba(0, 0, 0, 0.05);
+  --border-default: rgba(0, 0, 0, 0.10);
+  --border-strong: rgba(0, 0, 0, 0.15);
+  
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.10);
+}

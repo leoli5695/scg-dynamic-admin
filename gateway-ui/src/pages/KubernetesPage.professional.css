@@ -1,13 +1,13 @@
 /* ============================================================================
    Kubernetes & Instance Management - Modern Redesign (Vercel-inspired)
-   Clean, Minimalist Design
+   Clean, Minimalist Design - Using CSS Variables
    ============================================================================ */
 
 /* ==================== Page Layout ==================== */
 .page-container {
   min-height: 100vh;
-  background: #09090b !important;
-  padding: 24px 32px;
+  background: var(--bg-primary) !important;
+  padding: var(--spacing-lg);
 }
 
 .kubernetes-page {
@@ -20,7 +20,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  margin-bottom: var(--spacing-lg);
   padding: 0;
   background: transparent;
   border: none;
@@ -31,30 +31,30 @@
 .k8s-page-header-left {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--spacing-xs);
 }
 
 .k8s-page-title {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--spacing-md);
   margin: 0;
 }
 
 .k8s-page-title .anticon {
   font-size: 24px;
-  color: #fafafa;
+  color: var(--text-primary);
 }
 
 .k8s-page-subtitle {
   font-size: 14px;
-  color: #71717a;
+  color: var(--text-muted);
   margin: 0;
 }
 
 .k8s-page-header-actions {
   display: flex;
-  gap: 12px;
+  gap: var(--spacing-md);
   align-items: center;
 }
 
@@ -62,23 +62,23 @@
 .k8s-stats-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 24px;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
 }
 
 .stat-card-premium {
-  background: #18181b;
-  border: 1px solid #27272a;
-  border-radius: 10px;
-  padding: 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
   position: relative;
   overflow: hidden;
-  transition: all 0.15s ease;
+  transition: all var(--transition-normal);
 }
 
 .stat-card-premium:hover {
-  background: #1f1f23;
-  border-color: #3f3f46;
+  background: var(--bg-elevated);
+  border-color: var(--border-secondary);
 }
 
 .stat-card-premium::before {
@@ -91,11 +91,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
-  margin-bottom: 12px;
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-md);
   font-size: 20px;
-  background: #27272a;
-  color: #a1a1aa;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
 }
 
 .stat-card-icon.default {
@@ -110,7 +110,7 @@
 
 .stat-card-icon.warning {
   background: rgba(245, 158, 11, 0.1);
-  color: #fbbf24;
+  color: var(--accent-color);
 }
 
 .stat-card-label {
@@ -351,7 +351,7 @@
 }
 
 .cluster-card-status-dot.warning {
-  background: #fbbf24;
+  background: var(--accent-color);
 }
 
 .cluster-card-status-text {
@@ -632,7 +632,7 @@
 }
 
 .cluster-card-status-dot-inline.warning {
-  background: #fbbf24;
+  background: var(--accent-color);
 }
 
 .cluster-card-divider {
@@ -828,7 +828,7 @@ body .ant-modal {
 .ant-alert-warning {
   background: rgba(245, 158, 11, 0.05) !important;
   border-color: rgba(245, 158, 11, 0.2) !important;
-  color: #fbbf24 !important;
+  color: var(--accent-color) !important;
 }
 
 .ant-alert-error {

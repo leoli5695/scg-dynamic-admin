@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Card, Row, Col, Statistic, Progress, Spin, Alert, Tag, Typography, Space,
   Table, Badge, Divider, Select, Button
@@ -8,7 +8,7 @@ import {
   ClockCircleOutlined, WarningOutlined, CheckCircleOutlined, CloseCircleOutlined,
   DashboardFilled, FundOutlined, LineChartOutlined, RobotOutlined
 } from '@ant-design/icons';
-import api from '../utils/api';
+import api, { createCancelToken, isCancel } from '../utils/api';
 import { useTranslation } from 'react-i18next';
 import { ResponsiveLine } from '@nivo/line';
 import AiAnalysisModal from '../components/AiAnalysisModal';
@@ -194,29 +194,56 @@ const MonitorPage: React.FC<MonitorPageProps> = ({ instanceId }) => {
   const [historyHours, setHistoryHours] = useState(1);
   const [aiModalVisible, setAiModalVisible] = useState(false);
   const { t, i18n } = useTranslation();
+  
+  // Track cancel tokens for cleanup
+  const cancelTokensRef = useRef<Map<string, any>>(new Map());
 
-  const loadMetrics = async () => {
+  const loadMetrics = useCallback(async () => {
+    const requestId = `metrics-${Date.now()}`;
+    const cancelToken = createCancelToken();
+    cancelTokensRef.current.set(requestId, cancelToken);
+    
     try {
       setLoading(true); setError(null);
       const params = instanceId ? `?instanceId=${instanceId}` : '';
-      const res = await api.get(`/api/monitor/metrics${params}`);
+      const res = await api.get(`/api/monitor/metrics${params}`, {
+        cancelToken: cancelToken.token
+      });
       if (res.data.code === 200) {
         setMetrics(res.data.data);
         setPrometheusAvailable(res.data.prometheusAvailable);
       } else setError(res.data.message || 'Failed to load metrics');
-    } catch (e: any) { setError(e.message || 'Failed to connect to server'); }
-    finally { setLoading(false); }
-  };
+    } catch (e: any) {
+      if (!isCancel(e)) {
+        setError(e.message || 'Failed to connect to server');
+      }
+    } finally {
+      setLoading(false);
+      cancelTokensRef.current.delete(requestId);
+    }
+  }, [instanceId]);
 
-  const loadHistory = async (hours: number, showLoading: boolean = false) => {
+  const loadHistory = useCallback(async (hours: number, showLoading: boolean = false) => {
+    const requestId = `history-${Date.now()}`;
+    const cancelToken = createCancelToken();
+    cancelTokensRef.current.set(requestId, cancelToken);
+    
     try {
       if (showLoading) setHistoryLoading(true);
       const instanceParam = instanceId ? `&instanceId=${instanceId}` : '';
-      const res = await api.get(`/api/monitor/history?hours=${hours}${instanceParam}`);
+      const res = await api.get(`/api/monitor/history?hours=${hours}${instanceParam}`, {
+        cancelToken: cancelToken.token
+      });
       if (res.data.code === 200) setHistoryData(res.data.data);
-    } catch (e) { console.error('Failed to load history:', e); }
-    finally { setHistoryLoading(false); }
-  };
+    } catch (e) {
+      if (!isCancel(e)) {
+        console.error('Failed to load history:', e);
+      }
+    } finally {
+      setHistoryLoading(false);
+      cancelTokensRef.current.delete(requestId);
+    }
+  }, [instanceId]);
 
   // Initial load and metrics refresh every 10s
   useEffect(() => {
@@ -228,8 +255,13 @@ const MonitorPage: React.FC<MonitorPageProps> = ({ instanceId }) => {
     return () => {
       clearInterval(metricsInterval);
       clearInterval(historyInterval);
+      // Cancel all pending requests
+      cancelTokensRef.current.forEach((token) => {
+        token.cancel('Component unmounted');
+      });
+      cancelTokensRef.current.clear();
     };
-  }, [instanceId, historyHours]);
+  }, [instanceId, historyHours, loadMetrics, loadHistory]);
 
   const formatBytes = (bytes: number): { value: number; unit: string; display: string } => {
     if (!bytes) return { value: 0, unit: 'B', display: '0 B' };

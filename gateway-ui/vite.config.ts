@@ -21,8 +21,24 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: undefined,
+        // Code splitting configuration for better performance
+        manualChunks: {
+          // React core - smallest possible bundle
+          'react-vendor': ['react', 'react-dom'],
+          // React Router
+          'router': ['react-router-dom'],
+          // Ant Design UI library
+          'antd': ['antd', '@ant-design/icons'],
+          // Charts libraries
+          'charts': ['echarts', '@nivo/core', '@nivo/line', '@nivo/pie'],
+          // Internationalization
+          'i18n': ['i18next', 'react-i18next', 'i18next-browser-languagedetector'],
+          // Other utilities
+          'utils': ['axios', 'copy-to-clipboard', 'react-markdown'],
+        },
       },
     },
+    // Increase chunk size warning limit since we're intentionally splitting
+    chunkSizeWarningLimit: 600,
   },
 })

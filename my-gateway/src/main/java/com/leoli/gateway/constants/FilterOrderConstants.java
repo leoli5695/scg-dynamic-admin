@@ -47,12 +47,14 @@ public interface FilterOrderConstants {
     /**
      * CORS filter - Cross-origin handling.
      * Execute early to handle preflight requests.
+     * Should execute before Trace ID to handle CORS errors cleanly.
      */
-    int CORS = -300;
+    int CORS = -301;
 
     /**
      * Trace ID filter - Distributed tracing.
      * Generate trace ID early for full request tracing.
+     * Execute after CORS to ensure trace ID in all responses.
      */
     int TRACE_ID = -300;
 
@@ -200,7 +202,7 @@ public interface FilterOrderConstants {
     // -500     SecurityGlobalFilter            XSS/SQL injection protection
     // -490     IPFilterGlobalFilter            IP whitelist/blacklist
     // -400     AccessLogGlobalFilter           Request/response logging
-    // -300     CorsGlobalFilter                CORS handling
+    // -301     CorsGlobalFilter                CORS handling (preflight)
     // -300     TraceIdGlobalFilter             Trace ID generation
     // -255     RequestTransformFilter          Request transformation
     // -254     RequestValidationFilter         Request validation

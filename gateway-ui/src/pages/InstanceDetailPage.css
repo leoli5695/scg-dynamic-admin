@@ -1,0 +1,221 @@
+/**
+ * Instance Detail Page Styles
+ * Minimalist, professional design for instance detail view
+ */
+
+/* ==================== Page Layout ==================== */
+.instance-detail-page {
+  min-height: 100vh;
+  background: var(--bg-primary);
+}
+
+/* ==================== Detail Header ==================== */
+.instance-detail-header {
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: var(--space-4) var(--space-6);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+}
+
+.instance-detail-header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.instance-detail-back-btn {
+  color: var(--text-secondary);
+  transition: color var(--duration-fast) var(--ease-default);
+}
+
+.instance-detail-back-btn:hover {
+  color: var(--primary-color);
+}
+
+.instance-detail-icon {
+  font-size: 20px;
+  color: var(--primary-color);
+}
+
+.instance-detail-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-lg);
+}
+
+.instance-detail-status-tag {
+  margin-left: var(--space-2);
+}
+
+.instance-detail-header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* ==================== Tabs Layout ==================== */
+.instance-detail-tabs {
+  padding: 0 var(--space-6);
+}
+
+.instance-detail-tabs .ant-tabs-nav {
+  margin-bottom: 0;
+}
+
+.instance-detail-tabs .ant-tabs-nav::before {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.instance-detail-tabs .ant-tabs-tab {
+  padding: var(--space-3) var(--space-4);
+  color: var(--text-secondary);
+  transition: color var(--duration-fast) var(--ease-default);
+}
+
+.instance-detail-tabs .ant-tabs-tab:hover {
+  color: var(--text-primary);
+}
+
+.instance-detail-tabs .ant-tabs-tab-active {
+  color: var(--primary-color);
+}
+
+.instance-detail-tabs .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--primary-color);
+  font-weight: var(--weight-medium);
+}
+
+.instance-detail-tabs .ant-tabs-ink-bar {
+  background: var(--primary-color);
+  height: 2px;
+}
+
+.instance-detail-tabs .ant-tabs-tab .anticon {
+  margin-right: var(--space-2);
+  font-size: 14px;
+}
+
+/* ==================== Tab Content ==================== */
+.instance-detail-content {
+  padding: var(--space-6);
+  background: var(--bg-primary);
+  min-height: calc(100vh - 120px);
+}
+
+/* ==================== Overview Stats ==================== */
+.instance-overview-stats {
+  padding: var(--space-6);
+}
+
+.instance-stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  transition: border-color var(--duration-fast) var(--ease-default);
+}
+
+.instance-stat-card:hover {
+  border-color: var(--border-default);
+}
+
+.instance-stat-card .ant-statistic-title {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.instance-stat-card .ant-statistic-content-value {
+  color: var(--text-primary);
+  font-weight: var(--weight-bold);
+}
+
+/* Status colors */
+.instance-stat-status-running { color: var(--success-color); }
+.instance-stat-status-stopped { color: var(--warning-color); }
+.instance-stat-replicas { color: var(--primary-color); }
+
+/* ==================== Info Section ==================== */
+.instance-info-section {
+  margin-top: var(--space-6);
+}
+
+.instance-info-section.ant-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.instance-info-section .ant-card-head-title {
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
+}
+
+.instance-info-section .ant-descriptions-item-label {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.instance-info-section .ant-descriptions-item-content {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+}
+
+/* Links */
+.instance-access-url {
+  color: var(--primary-color);
+  transition: color var(--duration-fast) var(--ease-default);
+}
+
+.instance-access-url:hover {
+  color: var(--primary-hover);
+}
+
+/* ==================== Responsive ==================== */
+@media (max-width: 768px) {
+  .instance-detail-header {
+    flex-direction: column;
+    gap: var(--space-4);
+    padding: var(--space-4);
+  }
+
+  .instance-detail-header-left {
+    width: 100%;
+  }
+
+  .instance-detail-header-right {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .instance-detail-tabs {
+    padding: 0 var(--space-4);
+  }
+
+  .instance-detail-tabs .ant-tabs-tab {
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .instance-detail-content {
+    padding: var(--space-4);
+  }
+
+  .instance-overview-stats {
+    padding: var(--space-4);
+  }
+}
+
+@media (max-width: 480px) {
+  .instance-detail-title {
+    font-size: var(--text-base);
+  }
+
+  .instance-detail-tabs .ant-tabs-tab .anticon {
+    display: none;
+  }
+}

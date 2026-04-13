@@ -3,13 +3,14 @@ import {
   Card, Table, Button, Space, Tag, Select, DatePicker, Input,
   Typography, message, Modal, Descriptions, Spin, Popconfirm, Badge,
   Row, Col, Statistic, Tooltip, Radio, Timeline, Empty, Collapse,
+  Alert, Divider,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
   HistoryOutlined, ReloadOutlined, DiffOutlined, RollbackOutlined,
   DeleteOutlined, EditOutlined, PlusOutlined, SearchOutlined,
   ClockCircleOutlined, UserOutlined, CheckCircleOutlined, StopOutlined,
-  TableOutlined, UnorderedListOutlined,
+  TableOutlined, UnorderedListOutlined, ExclamationCircleOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import api from '../utils/api';
@@ -30,6 +31,18 @@ interface AuditLog {
   newValue: string;
   ipAddress: string;
   createdAt: string;
+}
+
+interface RollbackConflict {
+  error: string;
+  detail: {
+    auditLogId: number;
+    auditLogTime: string;
+    auditOperator: string;
+    currentRouteName: string;
+    expectedRouteName: string;
+    suggestion: string;
+  };
 }
 
 interface DiffResult {
@@ -128,6 +141,13 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
   const [timeline, setTimeline] = useState<TimelineResult | null>(null);
   const [timelineDays, setTimelineDays] = useState(7);
   const [timelineTargetType, setTimelineTargetType] = useState<string | undefined>(undefined);
+
+  // Rollback conflict (版本冲突处理)
+  const [rollbackLoading, setRollbackLoading] = useState(false);
+  const [rollbackConflict, setRollbackConflict] = useState<RollbackConflict | null>(null);
+  const [conflictModalVisible, setConflictModalVisible] = useState(false);
+  const [forceRollbackLogId, setForceRollbackLogId] = useState<number | null>(null);
+  const [forceRollbackLoading, setForceRollbackLoading] = useState(false);
 
   // ===================== Table View Logic =====================
 
@@ -255,20 +275,131 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
     }
   };
 
-  const handleRollback = async (logId: number) => {
+  const handleRollback = async (logId: number, skipVersionCheck: boolean = false) => {
+    setRollbackLoading(true);
     try {
-      const res = await api.post(`/api/audit-logs/${logId}/rollback`, { operator: 'admin' });
+      const res = await api.post(`/api/audit-logs/${logId}/rollback`, {
+        operator: 'admin',
+        skipVersionCheck,
+        confirmed: true,
+      });
       if (res.data.code === 200) {
-        message.success(t('audit.rollback_success') || '回滚成功');
-        loadLogs();
+        const data = res.data.data;
+        if (data && data.success) {
+          message.success(t('audit.rollback_success') || '回滚成功');
+          loadLogs();
+        } else if (data && data.error && data.error.includes('版本冲突')) {
+          // Show version conflict modal
+          setRollbackConflict({
+            error: data.error,
+            detail: data.detail || {
+              auditLogId: logId,
+              auditLogTime: '',
+              auditOperator: '',
+              currentRouteName: '',
+              expectedRouteName: '',
+              suggestion: '',
+            },
+          });
+          setForceRollbackLogId(logId);
+          setConflictModalVisible(true);
+        } else {
+          message.error(data?.error || res.data.message || t('audit.rollback_failed') || '回滚失败');
+        }
       } else {
         message.error(res.data.message || t('audit.rollback_failed') || '回滚失败');
       }
     } catch (e) {
       console.error('Rollback failed:', e);
       message.error(t('audit.rollback_failed') || '回滚失败');
+    } finally {
+      setRollbackLoading(false);
     }
   };
+
+  const handleForceRollback = async () => {
+    if (!forceRollbackLogId) return;
+    setForceRollbackLoading(true);
+    try {
+      await handleRollback(forceRollbackLogId, true);
+      setConflictModalVisible(false);
+      setRollbackConflict(null);
+      setForceRollbackLogId(null);
+    } finally {
+      setForceRollbackLoading(false);
+    }
+  };
+
+  const handleCancelConflict = () => {
+    setConflictModalVisible(false);
+    setRollbackConflict(null);
+    setForceRollbackLogId(null);
+  };
+
+  // Render conflict modal
+  const renderConflictModal = () => (
+    <Modal
+      title={
+        <Space>
+          <ExclamationCircleOutlined style={{ color: '#ff4d4f' }} />
+          {t('audit.version_conflict') || '版本冲突警告'}
+        </Space>
+      }
+      open={conflictModalVisible}
+      onCancel={handleCancelConflict}
+      footer={
+        <Space>
+          <Button onClick={handleCancelConflict}>
+            {t('audit.cancel_rollback') || '取消回滚'}
+          </Button>
+          <Button
+            type="primary"
+            danger
+            onClick={handleForceRollback}
+            loading={forceRollbackLoading}
+          >
+            {t('audit.force_rollback') || '强制回滚（跳过校验）'}
+          </Button>
+        </Space>
+      }
+      width={700}
+    >
+      <Alert
+        type="error"
+        showIcon
+        message={t('audit.conflict_detected') || '检测到版本冲突'}
+        description={rollbackConflict?.error}
+        style={{ marginBottom: 16 }}
+      />
+
+      <Descriptions column={2} bordered size="small">
+        <Descriptions.Item label={t('audit.audit_log_id') || '审计日志ID'}>
+          {rollbackConflict?.detail?.auditLogId}
+        </Descriptions.Item>
+        <Descriptions.Item label={t('audit.audit_log_time') || '审计日志时间'}>
+          {rollbackConflict?.detail?.auditLogTime}
+        </Descriptions.Item>
+        <Descriptions.Item label={t('audit.original_operator') || '原操作者'}>
+          {rollbackConflict?.detail?.auditOperator}
+        </Descriptions.Item>
+        <Descriptions.Item label={t('audit.current_route_name') || '当前路由名'}>
+          <Text type="warning">{rollbackConflict?.detail?.currentRouteName}</Text>
+        </Descriptions.Item>
+        <Descriptions.Item label={t('audit.expected_route_name') || '预期路由名'}>
+          <Text>{rollbackConflict?.detail?.expectedRouteName}</Text>
+        </Descriptions.Item>
+      </Descriptions>
+
+      <Divider />
+
+      <Alert
+        type="info"
+        showIcon
+        message={t('audit.suggestion') || '建议'}
+        description={rollbackConflict?.detail?.suggestion}
+      />
+    </Modal>
+  );
 
   // ===================== Timeline View Logic =====================
 
@@ -813,6 +944,9 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
       >
         {renderDiffContent()}
       </Modal>
+
+      {/* Conflict Modal */}
+      {renderConflictModal()}
     </div>
   );
 };

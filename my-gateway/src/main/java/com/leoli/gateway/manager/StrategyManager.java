@@ -3,6 +3,7 @@ package com.leoli.gateway.manager;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.model.StrategyDefinition;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 
@@ -42,7 +43,13 @@ public class StrategyManager {
     // Health status indicator
     private volatile boolean configCenterHealthy = true;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    // Injected ObjectMapper for consistent serialization
+    private final ObjectMapper objectMapper;
+
+    @Autowired
+    public StrategyManager(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
 
     // ============================================================
     // Strategy Management
@@ -293,9 +300,14 @@ public class StrategyManager {
     /**
      * Create snapshot of current cache state.
      * Called when config refresh succeeds, to preserve a known-good state.
+     * <p>
+     * Note: Failed copies are skipped to ensure snapshot independence
+     * from primary cache (no shared references).
      */
     public void createSnapshot() {
         Map<String, StrategyDefinition> newSnapshot = new ConcurrentHashMap<>();
+        int failedCount = 0;
+
         for (Map.Entry<String, StrategyDefinition> entry : strategyCache.entrySet()) {
             // Deep copy each strategy definition
             try {
@@ -305,13 +317,20 @@ public class StrategyManager {
                 );
                 newSnapshot.put(entry.getKey(), copy);
             } catch (Exception e) {
-                log.warn("Failed to snapshot strategy {}: {}", entry.getKey(), e.getMessage());
-                // Keep original reference as fallback
-                newSnapshot.put(entry.getKey(), entry.getValue());
+                log.warn("Failed to deep copy strategy {} for snapshot: {}", entry.getKey(), e.getMessage());
+                // Skip instead of keeping reference - ensures snapshot independence
+                failedCount++;
             }
         }
+
         this.strategySnapshot = newSnapshot;
-        log.info("Strategy snapshot created with {} entries", newSnapshot.size());
+
+        if (failedCount > 0) {
+            log.warn("Snapshot created with {} entries, {} strategies skipped due to copy failures",
+                    newSnapshot.size(), failedCount);
+        } else {
+            log.info("Strategy snapshot created with {} entries", newSnapshot.size());
+        }
     }
 
     /**

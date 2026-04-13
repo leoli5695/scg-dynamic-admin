@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -21,7 +22,9 @@ import java.util.Map;
  */
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class RouteDefinition {
+public class RouteDefinition implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     /**
      * Route ID (UUID) - Primary identifier, used as Nacos config key.
@@ -144,7 +147,8 @@ public class RouteDefinition {
      * Route predicate definition
      */
     @Data
-    public static class PredicateDefinition {
+    public static class PredicateDefinition implements Serializable {
+        private static final long serialVersionUID = 1L;
         /**
          * Predicate name (e.g. Path, Host, Method)
          */
@@ -168,7 +172,8 @@ public class RouteDefinition {
      * Filter definition
      */
     @Data
-    public static class FilterDefinition {
+    public static class FilterDefinition implements Serializable {
+        private static final long serialVersionUID = 1L;
         /**
          * Filter name (e.g. StripPrefix, AddRequestHeader, RateLimiter)
          */

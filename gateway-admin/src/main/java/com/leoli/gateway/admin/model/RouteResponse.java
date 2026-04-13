@@ -2,11 +2,15 @@ package com.leoli.gateway.admin.model;
 
 import lombok.Data;
 
+import java.io.Serializable;
+
 /**
  * Route response DTO with both route name and UUID.
  */
 @Data
-public class RouteResponse {
+public class RouteResponse implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     /**
      * Route ID (UUID - system identifier, used for deletion)

@@ -17,6 +17,7 @@ import {
   Tooltip,
   Alert,
   Radio,
+  Descriptions,
 } from "antd";
 import {
   SendOutlined,
@@ -31,6 +32,8 @@ import {
   BulbOutlined,
   SettingOutlined,
   CheckCircleOutlined,
+  ExclamationCircleOutlined,
+  WarningOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import ReactMarkdown from "react-markdown";
@@ -43,6 +46,24 @@ interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+}
+
+interface PendingConfirmation {
+  toolName: string;
+  preview: {
+    operationType?: string;
+    riskLevel?: string;
+    warning?: string;
+    affectedRoutes?: string;
+    confirmationPrompt?: string;
+    routeId?: string;
+    routeName?: string;
+    routeIds?: string;
+    newEnabledState?: boolean;
+    logId?: number;
+    [key: string]: any;
+  };
+  originalArgs?: Record<string, any>;
 }
 
 interface AiProvider {
@@ -102,6 +123,11 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
   const [conceptName, setConceptName] = useState("");
   const [conceptExplanation, setConceptExplanation] = useState("");
   const [conceptLoading, setConceptLoading] = useState(false);
+
+  // Confirmation flow (二次确认)
+  const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
+  const [confirmationModalVisible, setConfirmationModalVisible] = useState(false);
+  const [confirmLoading, setConfirmLoading] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -261,6 +287,22 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
         };
         setMessages((prev) => [...prev, assistantMessage]);
         setSessionId(response.data.sessionId);
+      } else if (response.data.pendingConfirmation) {
+        // Handle pending confirmation (二次确认)
+        setPendingConfirmation({
+          toolName: response.data.toolName,
+          preview: response.data.confirmationPreview || {},
+          originalArgs: response.data.originalArgs,
+        });
+        setConfirmationModalVisible(true);
+        // Add a message to inform user
+        const confirmMessage: ChatMessage = {
+          role: "assistant",
+          content: `⚠️ **操作需要确认**\n\n${response.data.confirmationPreview?.warning || '此操作需要您的确认。'}\n\n请在弹出的对话框中确认或取消。`,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, confirmMessage]);
+        setSessionId(response.data.sessionId);
       } else {
         message.error(response.data.error || t("copilot.chat_failed"));
       }
@@ -269,6 +311,62 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Handle confirmation execute
+  const handleConfirmExecute = async () => {
+    if (!pendingConfirmation) return;
+
+    setConfirmLoading(true);
+    try {
+      const response = await axios.post("/api/copilot/chat", {
+        sessionId,
+        message: `确认执行 ${pendingConfirmation.toolName} 操作`,
+        context: "gateway",
+        instanceId,
+        provider: selectedProvider || undefined,
+        model: selectedModel || undefined,
+        confirmed: true,
+        toolName: pendingConfirmation.toolName,
+        ...pendingConfirmation.originalArgs,
+      });
+
+      if (response.data.success) {
+        message.success(t("copilot.operation_success") || "操作执行成功");
+        const resultMessage: ChatMessage = {
+          role: "assistant",
+          content: response.data.response,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, resultMessage]);
+      } else {
+        message.error(response.data.error || t("copilot.operation_failed") || "操作执行失败");
+        const errorMessage: ChatMessage = {
+          role: "assistant",
+          content: `❌ **操作失败**\n\n${response.data.error}`,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+      }
+    } catch (error: any) {
+      message.error(error.response?.data?.message || t("copilot.operation_failed"));
+    } finally {
+      setConfirmLoading(false);
+      setConfirmationModalVisible(false);
+      setPendingConfirmation(null);
+    }
+  };
+
+  // Handle confirmation cancel
+  const handleConfirmCancel = () => {
+    const cancelMessage: ChatMessage = {
+      role: "assistant",
+      content: "✅ 操作已取消。如需重新执行，请再次提出请求。",
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, cancelMessage]);
+    setConfirmationModalVisible(false);
+    setPendingConfirmation(null);
   };
 
   // Clear conversation
@@ -506,6 +604,101 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
         )}
       </Space>
     </Card>
+  );
+
+  // Render confirmation modal (二次确认对话框)
+  const renderConfirmationModal = () => (
+    <Modal
+      title={
+        <Space>
+          {pendingConfirmation?.preview?.riskLevel === 'HIGH'
+            ? <ExclamationCircleOutlined style={{ color: '#ff4d4f' }} />
+            : <WarningOutlined style={{ color: '#faad14' }} />
+          }
+          {pendingConfirmation?.preview?.operationType || t("copilot.confirm_title") || "操作确认"}
+        </Space>
+      }
+      open={confirmationModalVisible}
+      onCancel={handleConfirmCancel}
+      footer={
+        <Space>
+          <Button onClick={handleConfirmCancel}>
+            {t("copilot.confirm_cancel") || "取消"}
+          </Button>
+          <Button
+            type="primary"
+            danger={pendingConfirmation?.preview?.riskLevel === 'HIGH'}
+            onClick={handleConfirmExecute}
+            loading={confirmLoading}
+          >
+            {t("copilot.confirm_execute") || "确认执行"}
+          </Button>
+        </Space>
+      }
+      width={600}
+    >
+      {/* Risk level and details */}
+      <Descriptions column={1} size="small" style={{ marginBottom: 16 }}>
+        <Descriptions.Item label={t("copilot.risk_level") || "风险级别"}>
+          <Tag color={
+            pendingConfirmation?.preview?.riskLevel === 'HIGH' ? 'red' :
+            pendingConfirmation?.preview?.riskLevel === 'MEDIUM' ? 'orange' : 'green'
+          }>
+            {pendingConfirmation?.preview?.riskLevel === 'HIGH' ? (t("copilot.risk_high") || "高危") :
+             pendingConfirmation?.preview?.riskLevel === 'MEDIUM' ? (t("copilot.risk_medium") || "中危") :
+             (t("copilot.risk_low") || "低危")}
+          </Tag>
+        </Descriptions.Item>
+        {pendingConfirmation?.preview?.affectedRoutes && (
+          <Descriptions.Item label={t("copilot.affected_routes") || "影响范围"}>
+            {pendingConfirmation.preview.affectedRoutes}
+          </Descriptions.Item>
+        )}
+        {pendingConfirmation?.preview?.routeId && (
+          <Descriptions.Item label="路由ID">
+            {pendingConfirmation.preview.routeId}
+          </Descriptions.Item>
+        )}
+        {pendingConfirmation?.preview?.routeName && (
+          <Descriptions.Item label="路由名称">
+            {pendingConfirmation.preview.routeName}
+          </Descriptions.Item>
+        )}
+        {pendingConfirmation?.preview?.routeIds && (
+          <Descriptions.Item label="路由列表">
+            {pendingConfirmation.preview.routeIds}
+          </Descriptions.Item>
+        )}
+        {pendingConfirmation?.preview?.logId && (
+          <Descriptions.Item label="审计日志ID">
+            {pendingConfirmation.preview.logId}
+          </Descriptions.Item>
+        )}
+      </Descriptions>
+
+      <Divider />
+
+      {/* Warning message */}
+      {pendingConfirmation?.preview?.warning && (
+        <Alert
+          type="warning"
+          showIcon
+          message={t("copilot.warning") || "警告"}
+          description={pendingConfirmation.preview.warning}
+          style={{ marginBottom: 16 }}
+        />
+      )}
+
+      {/* Confirmation prompt */}
+      {pendingConfirmation?.preview?.confirmationPrompt && (
+        <Alert
+          type="info"
+          showIcon
+          message={t("copilot.please_confirm") || "请确认操作"}
+          description={pendingConfirmation.preview.confirmationPrompt}
+        />
+      )}
+    </Modal>
   );
 
   // Render config modal
@@ -1104,6 +1297,9 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
 
       {/* Config Modal */}
       {renderConfigModal()}
+
+      {/* Confirmation Modal */}
+      {renderConfirmationModal()}
     </div>
   );
 };

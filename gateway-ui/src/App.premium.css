@@ -17,9 +17,9 @@
   background: #020617 !important;
 }
 
-/* Force dark theme on all cards and containers */
-.ant-card,
-.ant-card-body {
+/* Force dark theme on cards - but preserve instance-card styling */
+.ant-card:not(.instance-card),
+.ant-card-body:not(.instance-card .ant-card-body) {
   background: transparent !important;
 }
 
@@ -27,7 +27,7 @@
 /* Select - Global fix for dropdown arrow and selected text visibility */
 /* Use bright yellow-green for maximum visibility */
 .ant-select-arrow {
-  color: #fbbf24 !important;
+  color: var(--accent-color) !important;
   font-size: 18px !important;
   opacity: 1 !important;
   display: flex !important;
@@ -35,17 +35,17 @@
 }
 
 .ant-select-arrow .anticon {
-  color: #fbbf24 !important;
+  color: var(--accent-color) !important;
   font-size: 18px !important;
 }
 
 .ant-select-arrow .anticon-down {
-  color: #fbbf24 !important;
+  color: var(--accent-color) !important;
   font-size: 18px !important;
 }
 
 .ant-select-suffix {
-  color: #fbbf24 !important;
+  color: var(--accent-color) !important;
   font-size: 18px !important;
 }
 
@@ -111,25 +111,25 @@
 
 .ant-select-item-option-selected {
   background: rgba(251, 191, 36, 0.25) !important;
-  color: #fbbf24 !important;
+  color: var(--accent-color) !important;
   font-weight: 700 !important;
-  border-left: 3px solid #fbbf24 !important;
+  border-left: 3px solid var(--accent-color) !important;
   padding-left: 13px !important;
 }
 
 .ant-select-item-option-selected .ant-select-item-option-content {
-  color: #fbbf24 !important;
+  color: var(--accent-color) !important;
   font-weight: 700 !important;
   text-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
 }
 
 .ant-select-item-option-state {
-  color: #fbbf24 !important;
+  color: var(--accent-color) !important;
 }
 
 /* InputNumber - Global fix for visibility */
 .ant-input-number {
-  border-color: #fbbf24 !important;
+  border-color: var(--accent-color) !important;
   border-width: 2px !important;
   background: rgba(15, 23, 42, 0.98) !important;
 }
@@ -154,7 +154,7 @@
 }
 
 .ant-input-number-handler {
-  color: #fbbf24 !important;
+  color: var(--accent-color) !important;
 }
 
 .ant-input-number-handler:hover {
@@ -163,7 +163,7 @@
 
 .ant-input-number-handler-up-inner,
 .ant-input-number-handler-down-inner {
-  color: #fbbf24 !important;
+  color: var(--accent-color) !important;
 }
 
 /* Dropdown menus */
@@ -664,7 +664,7 @@
   --color-success: #10b981;
   --color-success-light: #34d399;
   --color-warning: #f59e0b;
-  --color-warning-light: #fbbf24;
+  --color-warning-light: var(--accent-color);
   --color-danger: #ef4444;
   --color-danger-light: #f87171;
   --color-info: #06b6d4;
@@ -701,7 +701,7 @@
   
   --tag-orange-bg: rgba(245, 158, 11, 0.12);
   --tag-orange-border: rgba(245, 158, 11, 0.25);
-  --tag-orange-text: #fbbf24;
+  --tag-orange-text: var(--accent-color);
   
   --tag-red-bg: rgba(239, 68, 68, 0.12);
   --tag-red-border: rgba(239, 68, 68, 0.25);
@@ -1740,7 +1740,7 @@
 
 .service-card-warning .service-icon {
   background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(245, 158, 11, 0.08) 100%);
-  color: #fbbf24;
+  color: var(--accent-color);
 }
 
 .service-warning-alert {
@@ -1753,7 +1753,7 @@
 
 .service-warning-alert .ant-alert-message {
   font-size: 12px;
-  color: #fbbf24;
+  color: var(--accent-color);
   font-weight: 500;
 }
 
@@ -2787,7 +2787,7 @@
 /* Error Level Tag - Enhanced Deep Orange */
 .error-tag {
   background-color: rgba(245, 158, 11, 0.2) !important;
-  color: #fbbf24 !important;
+  color: var(--accent-color) !important;
   border: 1px solid rgba(245, 158, 11, 0.5) !important;
   padding: 6px 14px !important;
   border-radius: 9999px !important;
@@ -4165,7 +4165,7 @@
 .ant-tag-warning {
   background: rgba(245, 158, 11, 0.15) !important;
   border-color: rgba(245, 158, 11, 0.3) !important;
-  color: #fbbf24 !important;
+  color: var(--accent-color) !important;
 }
 
 .ant-tag-error {
@@ -5556,23 +5556,7 @@
   padding: 20px !important;
 }
 
-/* 实例卡片 */
-.instance-card {
-  padding: 20px !important;
-  background: rgba(17, 24, 39, 0.8) !important;
-  border: 1px solid rgba(148, 163, 184, 0.15) !important;
-  border-radius: 12px !important;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-  backdrop-filter: blur(8px) !important;
-}
-
-.instance-card:hover {
-  transform: translateY(-4px) !important;
-  border-color: rgba(59, 130, 246, 0.5) !important;
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4),
-              0 0 0 1px rgba(59, 130, 246, 0.1) !important;
-  background: rgba(17, 24, 39, 0.95) !important;
-}
+/* 实例卡片样式由 InstancesPage.css 管理 */
 
 /* 图表容器 */
 .trend-grid {
@@ -6437,7 +6421,7 @@
 }
 
 .ant-alert-warning .ant-alert-message {
-  color: #fbbf24 !important;
+  color: var(--accent-color) !important;
 }
 
 .ant-alert-error {
@@ -7684,289 +7668,6 @@ kbd {
   }
 }
 
-/* Hover scale for interactive elements */
-.hover-scale {
-  transition: transform var(--transition-base);
-}
-
-.hover-scale:hover {
-  transform: scale(1.05);
-}
-
-/* Ripple effect for clickable elements */
-@keyframes ripple {
-  0% {
-    transform: scale(0);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(4);
-    opacity: 0;
-  }
-}
-
-.ripple-effect {
-  position: relative;
-  overflow: hidden;
-}
-
-.ripple-effect::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.5);
-  transform: translate(-50%, -50%);
-  transition: width 0.5s, height 0.5s, opacity 0.5s;
-}
-
-.ripple-effect:active::after {
-  width: 300px;
-  height: 300px;
-  opacity: 0;
-}
-
-/* Glow effect for important elements */
-.glow-effect {
-  box-shadow: 0 0 20px rgba(102, 126, 234, 0.3);
-  transition: box-shadow var(--transition-base);
-}
-
-.glow-effect:hover {
-  box-shadow: 0 0 40px rgba(102, 126, 234, 0.5);
-}
-
-/* Gradient border animation */
-@keyframes borderRotate {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-.gradient-border {
-  position: relative;
-  background: linear-gradient(90deg, #667eea, #764ba2, #06b6d4, #667eea);
-  background-size: 400% 400%;
-  animation: borderRotate 8s ease infinite;
-}
-
-/* Floating animation for decorative elements */
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
-}
-
-.float-animation {
-  animation: float 3s ease-in-out infinite;
-}
-
-/* Pulse animation for status indicators */
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.5;
-    transform: scale(1.2);
-  }
-}
-
-.pulse-animation {
-  animation: pulse 2s ease-in-out infinite;
-}
-
-/* Slide up animation for lists */
-.slide-up {
-  animation: slideUp 0.4s ease-out;
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Fade in animation */
-.fade-in {
-  animation: fadeIn 0.4s ease-out;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-/* Zoom in animation */
-.zoom-in {
-  animation: zoomIn 0.3s ease-out;
-}
-
-@keyframes zoomIn {
-  from {
-    opacity: 0;
-    transform: scale(0.9);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-/* Rotate animation for refresh icons */
-@keyframes rotate {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.rotate-animation {
-  animation: rotate 1s linear infinite;
-}
-
-/* Bounce animation for notifications */
-@keyframes bounce {
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-5px);
-  }
-}
-
-.bounce-animation {
-  animation: bounce 2s ease-in-out infinite;
-}
-
-/* Shake animation for errors */
-@keyframes shake {
-  0%, 100% {
-    transform: translateX(0);
-  }
-  10%, 30%, 50%, 70%, 90% {
-    transform: translateX(-5px);
-  }
-  20%, 40%, 60%, 80% {
-    transform: translateX(5px);
-  }
-}
-
-.shake-animation {
-  animation: shake 0.5s ease-in-out;
-}
-
-/* Success checkmark animation */
-@keyframes checkmark {
-  0% {
-    stroke-dashoffset: 100;
-  }
-  100% {
-    stroke-dashoffset: 0;
-  }
-}
-
-.checkmark-animation {
-  animation: checkmark 0.5s ease-out forwards;
-}
-
-/* Gradient text animation */
-.gradient-text {
-  background: linear-gradient(90deg, #667eea, #764ba2, #06b6d4);
-  background-size: 200% auto;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  animation: textShine 3s linear infinite;
-}
-
-@keyframes textShine {
-  to {
-    background-position: 200% center;
-  }
-}
-
-/* Hover lift effect */
-.hover-lift {
-  transition: transform var(--transition-base), box-shadow var(--transition-base);
-}
-
-.hover-lift:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-xl);
-}
-
-/* Magnetic effect for buttons */
-.magnetic-effect {
-  position: relative;
-}
-
-.magnetic-effect::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 100%;
-  height: 100%;
-  background: radial-gradient(circle, rgba(102, 126, 234, 0.3) 0%, transparent 70%);
-  transform: translate(-50%, -50%) scale(0);
-  transition: transform var(--transition-base);
-  border-radius: 50%;
-}
-
-.magnetic-effect:hover::before {
-  transform: translate(-50%, -50%) scale(1.5);
-}
-
-/* Aurora effect for backgrounds */
-@keyframes aurora {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-.aurora-effect {
-  background: linear-gradient(
-    -45deg,
-    rgba(102, 126, 234, 0.1),
-    rgba(118, 75, 162, 0.1),
-    rgba(6, 182, 212, 0.1),
-    rgba(102, 126, 234, 0.1)
-  );
-  background-size: 400% 400%;
-  animation: aurora 15s ease infinite;
-}
-
 /* ============================================================================
    ALERT SETTINGS PAGE - Premium Dark Theme
    Modern Enterprise Dashboard Style (Vercel / Tailwind UI inspired)
@@ -8594,7 +8295,7 @@ kbd {
 
 .tracing-tag-pending {
   background-color: rgba(245, 158, 11, 0.15) !important;
-  color: #fbbf24 !important;
+  color: var(--accent-color) !important;
   border: 1px solid rgba(245, 158, 11, 0.3) !important;
 }
 
@@ -9072,7 +8773,7 @@ kbd {
 
 .status-expiring {
   background-color: rgba(245, 158, 11, 0.15) !important;
-  color: #fbbf24 !important;
+  color: var(--accent-color) !important;
   border: 1px solid rgba(245, 158, 11, 0.3) !important;
   border-radius: 9999px !important;
   padding: 4px 12px !important;
@@ -9099,7 +8800,7 @@ kbd {
 
 .expiring-tag {
   background-color: rgba(245, 158, 11, 0.15) !important;
-  color: #fbbf24 !important;
+  color: var(--accent-color) !important;
   border: 1px solid rgba(245, 158, 11, 0.3) !important;
   padding: 4px 12px;
   border-radius: 9999px;
@@ -9794,7 +9495,7 @@ kbd {
 
 .option-icon-weighted {
   background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(217, 119, 6, 0.2));
-  color: #fbbf24;
+  color: var(--accent-color);
 }
 
 .option-icon-roundrobin {
@@ -10088,7 +9789,7 @@ kbd {
 }
 
 .k8s-stat-card.warning::before {
-  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+  background: linear-gradient(90deg, #f59e0b, var(--accent-color));
 }
 
 .k8s-stat-card .ant-statistic-title {
@@ -10117,23 +9818,23 @@ kbd {
 
 /* Namespace Select - Make dropdown arrow more visible */
 .namespace-select .ant-select-arrow {
-  color: #fbbf24 !important;
+  color: var(--accent-color) !important;
   font-size: 20px !important;
   opacity: 1 !important;
 }
 
 .namespace-select .ant-select-arrow .anticon-down {
-  color: #fbbf24 !important;
+  color: var(--accent-color) !important;
   font-size: 20px !important;
 }
 
 .namespace-select .ant-select-suffix {
-  color: #fbbf24 !important;
+  color: var(--accent-color) !important;
   font-size: 20px !important;
 }
 
 .namespace-select .ant-select-selector {
-  border-color: #fbbf24 !important;
+  border-color: var(--accent-color) !important;
   border-width: 3px !important;
   background: rgba(15, 23, 42, 1) !important;
 }
@@ -10252,83 +9953,7 @@ kbd {
   margin-bottom: 20px;
 }
 
-/* ==================== Instance Cards - Premium Enhancement ==================== */
-/* 统一操作按钮尺寸 */
-.instance-card .ant-btn-text {
-  width: 32px !important;
-  height: 32px !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  border-radius: 6px !important;
-  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
-}
-
-.instance-card .ant-btn-text:hover {
-  background: rgba(255, 255, 255, 0.1) !important;
-  transform: scale(1.15) !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
-}
-
-/* 停止按钮 - 黄色 */
-.instance-card .ant-btn-text[style*="color: rgb(250, 173, 20)"],
-.instance-card .ant-btn-text[style*="color: #faad14"] {
-  color: #fbbf24 !important;
-}
-
-.instance-card .ant-btn-text[style*="color: rgb(250, 173, 20)"]:hover,
-.instance-card .ant-btn-text[style*="color: #faad14"]:hover {
-  background: rgba(251, 191, 36, 0.15) !important;
-  color: #fcd34d !important;
-}
-
-/* 启动按钮 - 绿色 */
-.instance-card .ant-btn-text[style*="color: rgb(82, 196, 26)"],
-.instance-card .ant-btn-text[style*="color: #52c41a"] {
-  color: #22c55e !important;
-}
-
-.instance-card .ant-btn-text[style*="color: rgb(82, 196, 26)"]:hover,
-.instance-card .ant-btn-text[style*="color: #52c41a"]:hover {
-  background: rgba(34, 197, 94, 0.15) !important;
-  color: #4ade80 !important;
-}
-
-/* 刷新按钮 - 蓝色 */
-.instance-card .ant-btn-text[style*="color: rgb(22, 93, 255)"],
-.instance-card .ant-btn-text[style*="color: #165DFF"] {
-  color: #3b82f6 !important;
-}
-
-.instance-card .ant-btn-text[style*="color: rgb(22, 93, 255)"]:hover,
-.instance-card .ant-btn-text[style*="color: #165DFF"]:hover {
-  background: rgba(59, 130, 246, 0.15) !important;
-  color: #60a5fa !important;
-}
-
-/* 删除按钮 - 红色 (danger) */
-.instance-card .ant-btn-dangerous.ant-btn-text {
-  color: #ef4444 !important;
-}
-
-.instance-card .ant-btn-dangerous.ant-btn-text:hover {
-  background: rgba(239, 68, 68, 0.15) !important;
-  color: #f87171 !important;
-}
-
-/* 状态标签增强 */
-.instance-card .ant-tag {
-  border: 1px solid currentColor !important;
-  background: rgba(0, 0, 0, 0.2) !important;
-  font-weight: 600 !important;
-  backdrop-filter: blur(4px) !important;
-}
-
-/* 卡片图标增强 */
-.instance-card .anticon[style*="font-size: 24px"] {
-  filter: drop-shadow(0 2px 8px rgba(59, 130, 246, 0.4)) !important;
-}
-
+/* ==================== Instance Cards样式由InstancesPage.css管理 ==================== */
 /* ==================== 终极TextArea修复 - 修复双重边框问题 ==================== */
 /* 重置所有modal中的TextArea外层容器 */
 .ant-modal .ant-input-textarea,

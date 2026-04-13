@@ -6,6 +6,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.io.Serializable;
+
 /**
  * Route service binding for multi-service routing (gray release support).
  *
@@ -14,7 +16,9 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class RouteServiceBinding {
+public class RouteServiceBinding implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     /**
      * Service type: STATIC (fixed nodes), NACOS (Nacos discovery), CONSUL (Consul discovery).

@@ -87,12 +87,7 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
   const [editForm] = Form.useForm();
   const { t } = useTranslation();
 
-  useEffect(() => {
-    loadStrategies();
-    loadRoutes();
-  }, [instanceId]);
-
-  const loadRoutes = async () => {
+  const loadRoutes = useCallback(async () => {
     try {
       const params = instanceId ? { instanceId } : {};
       const response = await api.get('/api/routes', { params });
@@ -102,7 +97,7 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
     } catch (error: any) {
       console.error('Load routes error:', error);
     }
-  };
+  }, [instanceId]);
 
   const loadStrategies = useCallback(async () => {
     try {
@@ -119,15 +114,28 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
     }
   }, [t, instanceId]);
 
-  const filteredStrategies = strategies.filter(s => {
+  useEffect(() => {
+    loadStrategies();
+    loadRoutes();
+  }, [loadStrategies, loadRoutes]);
+
+  // Memoize filtered strategies to avoid recalculation on every render
+  const filteredStrategies = useMemo(() => strategies.filter(s => {
     const matchesType = filterType === 'all' || s.strategyType === filterType;
     const matchesScope = filterScope === 'all' || s.scope === filterScope;
     return matchesType && matchesScope;
-  });
+  }), [strategies, filterType, filterScope]);
 
-  const totalStrategies = strategies.length;
-  const enabledStrategies = strategies.filter(s => s.enabled).length;
-  const globalStrategies = strategies.filter(s => s.scope === 'GLOBAL').length;
+  // Memoize strategy statistics
+  const strategyStats = useMemo(() => ({
+    total: strategies.length,
+    enabled: strategies.filter(s => s.enabled).length,
+    global: strategies.filter(s => s.scope === 'GLOBAL').length,
+  }), [strategies]);
+
+  const totalStrategies = strategyStats.total;
+  const enabledStrategies = strategyStats.enabled;
+  const globalStrategies = strategyStats.global;
 
   // Use dynamic strategy types from API
   const { strategyTypes, loading: typesLoading, getStrategyType } = useStrategyTypes();

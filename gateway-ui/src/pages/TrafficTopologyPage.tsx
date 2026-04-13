@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Card, Row, Col, Spin, Alert, Typography, Space, Button, Select,
   Statistic, Tag, Badge, Tooltip, Empty
@@ -94,13 +94,28 @@ const TrafficTopologyPage: React.FC<TrafficTopologyPageProps> = ({ instanceId })
     return () => clearInterval(interval);
   }, [autoRefresh, loadTopology]);
 
-  // Render ECharts graph
+  // Initialize chart instance only once
   useEffect(() => {
-    if (!chartRef.current || !topology || topology.nodes.length === 0) return;
+    if (!chartRef.current) return;
+    
+    chartInstance.current = echarts.init(chartRef.current);
+    
+    // Handle resize - only added once on mount
+    const handleResize = () => {
+      chartInstance.current?.resize();
+    };
+    window.addEventListener('resize', handleResize);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      chartInstance.current?.dispose();
+      chartInstance.current = null;
+    };
+  }, []);
 
-    if (!chartInstance.current) {
-      chartInstance.current = echarts.init(chartRef.current);
-    }
+  // Memoize chart option to avoid recalculation on every render
+  const chartOption = useMemo(() => {
+    if (!topology || topology.nodes.length === 0) return null;
 
     // Convert topology to ECharts format
     const nodes = topology.nodes.map((node, index) => {
@@ -157,7 +172,7 @@ const TrafficTopologyPage: React.FC<TrafficTopologyPageProps> = ({ instanceId })
       { name: 'client', itemStyle: { color: '#FA8C16' } }
     ];
 
-    const option: echarts.EChartsOption = {
+    return {
       backgroundColor: 'transparent',
       tooltip: {
         trigger: 'item',
@@ -181,7 +196,7 @@ const TrafficTopologyPage: React.FC<TrafficTopologyPageProps> = ({ instanceId })
         data: categories.map(c => c.name)
       },
       animationDuration: 1500,
-      animationEasingUpdate: 'quinticInOut',
+      animationEasingUpdate: 'quinticInOut' as any,
       series: [{
         type: 'graph' as const,
         layout: 'force',
@@ -208,26 +223,15 @@ const TrafficTopologyPage: React.FC<TrafficTopologyPageProps> = ({ instanceId })
         }
       }]
     };
-
-    chartInstance.current.setOption(option);
-
-    // Handle resize
-    const handleResize = () => {
-      chartInstance.current?.resize();
-    };
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-    };
   }, [topology]);
 
-  // Cleanup
+  // Update chart when option changes
   useEffect(() => {
-    return () => {
-      chartInstance.current?.dispose();
-    };
-  }, []);
+    if (!chartInstance.current || !chartOption) return;
+    
+    // Use incremental update (notMerge: false) for better performance
+    chartInstance.current.setOption(chartOption, { notMerge: false });
+  }, [chartOption]);
 
   const getNodeSize = (node: TopologyNode): number => {
     switch (node.type) {

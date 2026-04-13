@@ -121,4 +121,83 @@ public interface FilterChainExecutionRepository extends JpaRepository<FilterChai
      */
     @Query("SELECT COUNT(e) FROM FilterChainExecution e WHERE e.success = false AND e.createdAt >= :startTime")
     long countFailedExecutions(LocalDateTime startTime);
+
+    // ===================== 性能分析增强查询方法 =====================
+
+    /**
+     * Filter趋势对比（两个时间段对比）
+     * 返回: filterName, count1, avgDuration1, failCount1, count2, avgDuration2, failCount2
+     */
+    @Query("SELECT e.filterName, " +
+           "SUM(CASE WHEN e.createdAt BETWEEN :start1 AND :end1 THEN 1 ELSE 0 END) as count1, " +
+           "AVG(CASE WHEN e.createdAt BETWEEN :start1 AND :end1 THEN e.durationMs END) as avgDuration1, " +
+           "SUM(CASE WHEN e.createdAt BETWEEN :start1 AND :end1 AND e.success = false THEN 1 ELSE 0 END) as failCount1, " +
+           "SUM(CASE WHEN e.createdAt BETWEEN :start2 AND :end2 THEN 1 ELSE 0 END) as count2, " +
+           "AVG(CASE WHEN e.createdAt BETWEEN :start2 AND :end2 THEN e.durationMs END) as avgDuration2, " +
+           "SUM(CASE WHEN e.createdAt BETWEEN :start2 AND :end2 AND e.success = false THEN 1 ELSE 0 END) as failCount2 " +
+           "FROM FilterChainExecution e " +
+           "WHERE e.instanceId = :instanceId AND e.createdAt BETWEEN :start1 AND :end2 " +
+           "GROUP BY e.filterName")
+    List<Object[]> findFilterTrendComparison(String instanceId, LocalDateTime start1, LocalDateTime end1, LocalDateTime start2, LocalDateTime end2);
+
+    /**
+     * 每小时Filter执行趋势
+     * 返回: hour, filterName, count, avgDuration, failCount
+     */
+    @Query("SELECT HOUR(e.createdAt) as hour, e.filterName, " +
+           "COUNT(e) as count, AVG(e.durationMs) as avgDuration, " +
+           "SUM(CASE WHEN e.success = false THEN 1 ELSE 0 END) as failCount " +
+           "FROM FilterChainExecution e " +
+           "WHERE e.instanceId = :instanceId AND e.createdAt >= :startTime " +
+           "GROUP BY HOUR(e.createdAt), e.filterName " +
+           "ORDER BY hour ASC, avgDuration DESC")
+    List<Object[]> findHourlyFilterTrend(String instanceId, LocalDateTime startTime);
+
+    /**
+     * Filter详细统计（带时间范围和分位数基础数据）
+     * 返回: filterName, count, avgDuration, minDuration, maxDuration, failCount, avgTimePercentage
+     */
+    @Query("SELECT e.filterName, COUNT(e) as count, AVG(e.durationMs) as avgDuration, " +
+           "MIN(e.durationMs) as minDuration, MAX(e.durationMs) as maxDuration, " +
+           "SUM(CASE WHEN e.success = false THEN 1 ELSE 0 END) as failCount, " +
+           "AVG(e.timePercentage) as avgTimePercentage " +
+           "FROM FilterChainExecution e " +
+           "WHERE e.instanceId = :instanceId AND e.createdAt BETWEEN :startTime AND :endTime " +
+           "GROUP BY e.filterName " +
+           "ORDER BY avgDuration DESC")
+    List<Object[]> findFilterDetailedStats(String instanceId, LocalDateTime startTime, LocalDateTime endTime);
+
+    /**
+     * 获取某Filter的执行耗时列表（用于计算P95/P99）
+     */
+    @Query("SELECT e.durationMs FROM FilterChainExecution e " +
+           "WHERE e.instanceId = :instanceId AND e.filterName = :filterName AND e.createdAt >= :startTime " +
+           "ORDER BY e.durationMs ASC")
+    List<Long> findDurationsByFilterName(String instanceId, String filterName, LocalDateTime startTime);
+
+    /**
+     * 获取Filter执行顺序配置（通过查询最近的执行记录）
+     * 返回: filterName, filterOrder
+     */
+    @Query("SELECT DISTINCT e.filterName, e.filterOrder " +
+           "FROM FilterChainExecution e " +
+           "WHERE e.instanceId = :instanceId AND e.createdAt >= :startTime " +
+           "ORDER BY e.filterOrder ASC")
+    List<Object[]> findFilterOrderConfig(String instanceId, LocalDateTime startTime);
+
+    /**
+     * 按traceId聚合的Filter执行统计（用于trace详情）
+     * 返回: traceId, filterCount, totalDurationMs, failCount, maxDuration, slowestFilter
+     * 注意：使用原生SQL查询，因为JPQL不支持子查询中的LIMIT
+     */
+    @Query(value = "SELECT e.trace_id, COUNT(*) as filter_count, SUM(e.duration_ms) as total_duration_ms, " +
+           "SUM(CASE WHEN e.success = 0 THEN 1 ELSE 0 END) as fail_count, " +
+           "MAX(e.duration_ms) as max_duration, " +
+           "(SELECT e2.filter_name FROM filter_chain_execution e2 " +
+           "WHERE e2.trace_id = e.trace_id AND e2.duration_ms = MAX(e.duration_ms) LIMIT 1) as slowest_filter " +
+           "FROM filter_chain_execution e " +
+           "WHERE e.instance_id = :instanceId AND e.created_at >= :startTime " +
+           "GROUP BY e.trace_id " +
+           "ORDER BY total_duration_ms DESC", nativeQuery = true)
+    List<Object[]> findTraceFilterSummary(String instanceId, LocalDateTime startTime);
 }

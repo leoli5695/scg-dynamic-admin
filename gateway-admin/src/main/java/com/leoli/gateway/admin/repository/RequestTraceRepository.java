@@ -258,4 +258,88 @@ public interface RequestTraceRepository extends JpaRepository<RequestTrace, Long
            "GROUP BY t.method " +
            "ORDER BY count DESC")
     List<Object[]> findMethodStats(LocalDateTime startTime);
+
+    // ===================== 性能分析增强查询方法 =====================
+
+    /**
+     * 路由维度详细统计（带时间范围和分位数基础数据）
+     * 返回: routeId, count, avgLatency, minLatency, maxLatency, errorCount, serverErrorCount
+     */
+    @Query("SELECT t.routeId, COUNT(t) as count, AVG(t.latencyMs) as avgLatency, " +
+           "MIN(t.latencyMs) as minLatency, MAX(t.latencyMs) as maxLatency, " +
+           "SUM(CASE WHEN t.statusCode >= 400 THEN 1 ELSE 0 END) as errorCount, " +
+           "SUM(CASE WHEN t.statusCode >= 500 THEN 1 ELSE 0 END) as serverErrorCount " +
+           "FROM RequestTrace t " +
+           "WHERE t.instanceId = :instanceId AND t.traceTime BETWEEN :startTime AND :endTime " +
+           "GROUP BY t.routeId " +
+           "ORDER BY count DESC")
+    List<Object[]> findRouteStatsByInstanceIdAndTimeRange(String instanceId, LocalDateTime startTime, LocalDateTime endTime);
+
+    /**
+     * 路由维度详细统计（无instanceId过滤）
+     */
+    @Query("SELECT t.routeId, COUNT(t) as count, AVG(t.latencyMs) as avgLatency, " +
+           "MIN(t.latencyMs) as minLatency, MAX(t.latencyMs) as maxLatency, " +
+           "SUM(CASE WHEN t.statusCode >= 400 THEN 1 ELSE 0 END) as errorCount, " +
+           "SUM(CASE WHEN t.statusCode >= 500 THEN 1 ELSE 0 END) as serverErrorCount " +
+           "FROM RequestTrace t " +
+           "WHERE t.traceTime BETWEEN :startTime AND :endTime " +
+           "GROUP BY t.routeId " +
+           "ORDER BY count DESC")
+    List<Object[]> findRouteStatsByTimeRange(LocalDateTime startTime, LocalDateTime endTime);
+
+    /**
+     * 趋势对比（两个时间段对比）
+     * 返回: routeId, count1, avgLatency1, errorCount1, count2, avgLatency2, errorCount2
+     */
+    @Query("SELECT t.routeId, " +
+           "SUM(CASE WHEN t.traceTime BETWEEN :start1 AND :end1 THEN 1 ELSE 0 END) as count1, " +
+           "AVG(CASE WHEN t.traceTime BETWEEN :start1 AND :end1 THEN t.latencyMs END) as avgLatency1, " +
+           "SUM(CASE WHEN t.traceTime BETWEEN :start1 AND :end1 AND t.statusCode >= 400 THEN 1 ELSE 0 END) as errorCount1, " +
+           "SUM(CASE WHEN t.traceTime BETWEEN :start2 AND :end2 THEN 1 ELSE 0 END) as count2, " +
+           "AVG(CASE WHEN t.traceTime BETWEEN :start2 AND :end2 THEN t.latencyMs END) as avgLatency2, " +
+           "SUM(CASE WHEN t.traceTime BETWEEN :start2 AND :end2 AND t.statusCode >= 400 THEN 1 ELSE 0 END) as errorCount2 " +
+           "FROM RequestTrace t " +
+           "WHERE t.traceTime BETWEEN :start1 AND :end2 " +
+           "GROUP BY t.routeId")
+    List<Object[]> findRouteTrendComparison(LocalDateTime start1, LocalDateTime end1, LocalDateTime start2, LocalDateTime end2);
+
+    /**
+     * 每小时请求量趋势（带延迟统计）
+     * 返回: hour, count, avgLatency, errorCount
+     */
+    @Query("SELECT HOUR(t.traceTime) as hour, COUNT(t) as count, AVG(t.latencyMs) as avgLatency, " +
+           "SUM(CASE WHEN t.statusCode >= 400 THEN 1 ELSE 0 END) as errorCount " +
+           "FROM RequestTrace t " +
+           "WHERE t.instanceId = :instanceId AND t.traceTime >= :startTime " +
+           "GROUP BY HOUR(t.traceTime) " +
+           "ORDER BY hour ASC")
+    List<Object[]> findHourlyTrend(String instanceId, LocalDateTime startTime);
+
+    /**
+     * 每小时请求量趋势（无instanceId过滤）
+     */
+    @Query("SELECT HOUR(t.traceTime) as hour, COUNT(t) as count, AVG(t.latencyMs) as avgLatency, " +
+           "SUM(CASE WHEN t.statusCode >= 400 THEN 1 ELSE 0 END) as errorCount " +
+           "FROM RequestTrace t " +
+           "WHERE t.traceTime >= :startTime " +
+           "GROUP BY HOUR(t.traceTime) " +
+           "ORDER BY hour ASC")
+    List<Object[]> findHourlyTrendGlobal(LocalDateTime startTime);
+
+    /**
+     * 获取某路由的延迟值列表（用于计算P95/P99）
+     */
+    @Query("SELECT t.latencyMs FROM RequestTrace t " +
+           "WHERE t.routeId = :routeId AND t.traceTime >= :startTime " +
+           "ORDER BY t.latencyMs ASC")
+    List<Long> findLatenciesByRouteId(String routeId, LocalDateTime startTime);
+
+    /**
+     * 获取某路由的延迟值列表（带instanceId过滤）
+     */
+    @Query("SELECT t.latencyMs FROM RequestTrace t " +
+           "WHERE t.instanceId = :instanceId AND t.routeId = :routeId AND t.traceTime >= :startTime " +
+           "ORDER BY t.latencyMs ASC")
+    List<Long> findLatenciesByRouteIdAndInstanceId(String instanceId, String routeId, LocalDateTime startTime);
 }

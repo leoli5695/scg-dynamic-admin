@@ -475,6 +475,18 @@ const resources = {
       'audit.type': 'Type',
       'audit.view_diff': 'View Diff',
 
+      // Version Conflict
+      'audit.version_conflict': 'Version Conflict Warning',
+      'audit.conflict_detected': 'Version conflict detected',
+      'audit.force_rollback': 'Force Rollback (Skip Validation)',
+      'audit.cancel_rollback': 'Cancel Rollback',
+      'audit.audit_log_id': 'Audit Log ID',
+      'audit.audit_log_time': 'Audit Log Time',
+      'audit.original_operator': 'Original Operator',
+      'audit.current_route_name': 'Current Route Name',
+      'audit.expected_route_name': 'Expected Route Name',
+      'audit.suggestion': 'Suggestion',
+
       // Access Log Configuration
       'access_log.title': 'Access Log Configuration',
       'access_log.basic_settings': 'Basic Settings',
@@ -1477,6 +1489,20 @@ const resources = {
       'copilot.explain_error': 'Failed to explain concept',
       'copilot.copied': 'Copied to clipboard',
 
+      // Confirmation Flow (二次确认)
+      'copilot.confirm_title': 'Operation Confirmation',
+      'copilot.confirm_execute': 'Confirm Execute',
+      'copilot.confirm_cancel': 'Cancel',
+      'copilot.risk_level': 'Risk Level',
+      'copilot.risk_high': 'High Risk',
+      'copilot.risk_medium': 'Medium Risk',
+      'copilot.risk_low': 'Low Risk',
+      'copilot.affected_routes': 'Affected Routes',
+      'copilot.warning': 'Warning',
+      'copilot.please_confirm': 'Please confirm the operation',
+      'copilot.operation_success': 'Operation executed successfully',
+      'copilot.operation_failed': 'Operation failed',
+
       // Common Concepts
       'copilot.concept.route_predicate': 'Route Predicate',
       'copilot.concept.gateway_filter': 'Gateway Filter',
@@ -2080,6 +2106,18 @@ const resources = {
       'audit.change_details': '变更详情',
       'audit.type': '类型',
       'audit.view_diff': '查看差异',
+
+      // Version Conflict - Chinese
+      'audit.version_conflict': '版本冲突警告',
+      'audit.conflict_detected': '检测到版本冲突',
+      'audit.force_rollback': '强制回滚（跳过校验）',
+      'audit.cancel_rollback': '取消回滚',
+      'audit.audit_log_id': '审计日志ID',
+      'audit.audit_log_time': '审计日志时间',
+      'audit.original_operator': '原操作者',
+      'audit.current_route_name': '当前路由名',
+      'audit.expected_route_name': '预期路由名',
+      'audit.suggestion': '建议',
 
       // Access Log Configuration - Chinese
       'access_log.title': '访问日志配置',
@@ -3049,6 +3087,20 @@ const resources = {
       'copilot.explain_failed': '解释概念失败',
       'copilot.explain_error': '解释概念失败',
       'copilot.copied': '已复制到剪贴板',
+
+      // Confirmation Flow (二次确认) - Chinese
+      'copilot.confirm_title': '操作确认',
+      'copilot.confirm_execute': '确认执行',
+      'copilot.confirm_cancel': '取消',
+      'copilot.risk_level': '风险级别',
+      'copilot.risk_high': '高危',
+      'copilot.risk_medium': '中危',
+      'copilot.risk_low': '低危',
+      'copilot.affected_routes': '影响范围',
+      'copilot.warning': '警告',
+      'copilot.please_confirm': '请确认操作',
+      'copilot.operation_success': '操作执行成功',
+      'copilot.operation_failed': '操作执行失败',
 
       // Common Concepts - Chinese
       'copilot.concept.route_predicate': '路由断言',

@@ -3,6 +3,8 @@ package com.leoli.gateway.filter.resilience;
 import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.StrategyDefinition;
+import com.leoli.gateway.util.ConfigValueExtractor;
+import com.leoli.gateway.util.GatewayResponseHelper;
 import com.leoli.gateway.util.RouteUtils;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -56,7 +58,9 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        log.debug("Applying circuit breaker for route {}", routeId);
+        if (log.isDebugEnabled()) {
+            log.debug("Applying circuit breaker for route {}", routeId);
+        }
 
         // Create or get circuit breaker from registry
         CircuitBreaker circuitBreaker = getOrCreateCircuitBreaker(routeId, config);
@@ -67,13 +71,7 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
                 .transform(CircuitBreakerOperator.of(circuitBreaker))
                 .onErrorResume(CallNotPermittedException.class, ex -> {
                     log.warn("Circuit breaker is OPEN for route {}, rejecting request", routeId);
-                    exchange.getResponse().setStatusCode(HttpStatus.SERVICE_UNAVAILABLE);
-                    exchange.getResponse().getHeaders().add("Content-Type", "application/json");
-                    String body = "{\"error\":\"Service Unavailable\",\"message\":\"Circuit breaker is open," +
-                            " please try again later\",\"routeId\":\"" + routeId + "\"}";
-                    return exchange.getResponse().writeWith(
-                            Mono.just(exchange.getResponse().bufferFactory().wrap(body.getBytes()))
-                    );
+                    return GatewayResponseHelper.writeCircuitBreakerOpen(exchange.getResponse(), routeId);
                 });
     }
 
@@ -139,13 +137,13 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
      * Create a new circuit breaker with the given configuration.
      */
     private CircuitBreaker createCircuitBreaker(String routeId, Map<String, Object> config) {
-        float failureRateThreshold = getFloatValue(config, "failureRateThreshold", 50.0f);
-        long slowCallDurationThreshold = getLongValue(config, "slowCallDurationThreshold", 60000L);
-        float slowCallRateThreshold = getFloatValue(config, "slowCallRateThreshold", 80.0f);
-        long waitDurationInOpenState = getLongValue(config, "waitDurationInOpenState", 30000L);
-        int slidingWindowSize = getIntValue(config, "slidingWindowSize", 10);
-        int minimumNumberOfCalls = getIntValue(config, "minimumNumberOfCalls", 5);
-        boolean automaticTransition = getBooleanValue(config, "automaticTransitionFromOpenToHalfOpenEnabled", true);
+        float failureRateThreshold = ConfigValueExtractor.getFloat(config, "failureRateThreshold", 50.0f);
+        long slowCallDurationThreshold = ConfigValueExtractor.getLong(config, "slowCallDurationThreshold", 60000L);
+        float slowCallRateThreshold = ConfigValueExtractor.getFloat(config, "slowCallRateThreshold", 80.0f);
+        long waitDurationInOpenState = ConfigValueExtractor.getLong(config, "waitDurationInOpenState", 30000L);
+        int slidingWindowSize = ConfigValueExtractor.getInt(config, "slidingWindowSize", 10);
+        int minimumNumberOfCalls = ConfigValueExtractor.getInt(config, "minimumNumberOfCalls", 5);
+        boolean automaticTransition = ConfigValueExtractor.getBoolean(config, "automaticTransitionFromOpenToHalfOpenEnabled", true);
 
         io.github.resilience4j.circuitbreaker.CircuitBreakerConfig circuitBreakerConfig =
                 io.github.resilience4j.circuitbreaker.CircuitBreakerConfig.custom()
@@ -171,50 +169,29 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * Generate a hash string from config for change detection.
+     * Generate a stable hash string from config for change detection.
+     * <p>
+     * Uses sorted keys to ensure consistent hash regardless of Map iteration order.
      */
     private String generateConfigHash(Map<String, Object> config) {
-        return String.valueOf(config.hashCode());
-    }
-
-    private float getFloatValue(Map<String, Object> map, String key, float defaultValue) {
-        Object value = map.get(key);
-        if (value == null) return defaultValue;
-        if (value instanceof Number) return ((Number) value).floatValue();
-        try {
-            return Float.parseFloat(String.valueOf(value));
-        } catch (NumberFormatException e) {
-            return defaultValue;
+        if (config == null) {
+            return "null";
         }
-    }
 
-    private long getLongValue(Map<String, Object> map, String key, long defaultValue) {
-        Object value = map.get(key);
-        if (value == null) return defaultValue;
-        if (value instanceof Number) return ((Number) value).longValue();
-        try {
-            return Long.parseLong(String.valueOf(value));
-        } catch (NumberFormatException e) {
-            return defaultValue;
-        }
-    }
+        // Sort keys for stable hash
+        StringBuilder sb = new StringBuilder();
+        config.keySet().stream()
+                .sorted()
+                .forEach(key -> {
+                    sb.append(key).append("=");
+                    Object value = config.get(key);
+                    if (value != null) {
+                        sb.append(value);
+                    }
+                    sb.append(";");
+                });
 
-    private int getIntValue(Map<String, Object> map, String key, int defaultValue) {
-        Object value = map.get(key);
-        if (value == null) return defaultValue;
-        if (value instanceof Number) return ((Number) value).intValue();
-        try {
-            return Integer.parseInt(String.valueOf(value));
-        } catch (NumberFormatException e) {
-            return defaultValue;
-        }
-    }
-
-    private boolean getBooleanValue(Map<String, Object> map, String key, boolean defaultValue) {
-        Object value = map.get(key);
-        if (value == null) return defaultValue;
-        if (value instanceof Boolean) return (Boolean) value;
-        return Boolean.parseBoolean(String.valueOf(value));
+        return String.valueOf(sb.toString().hashCode());
     }
 
     @Override

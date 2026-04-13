@@ -3,6 +3,7 @@ package com.leoli.gateway.admin.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.model.AiConfig;
+import com.leoli.gateway.admin.prompt.PromptService;
 import com.leoli.gateway.admin.repository.AiConfigRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +27,7 @@ public class AlertContentGenerator {
 
     private final AiConfigRepository aiConfigRepository;
     private final PrometheusService prometheusService;
+    private final PromptService promptService;  // 新增：用于动态提示词
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private final RestTemplate restTemplate = createRestTemplate();
@@ -86,10 +88,26 @@ public class AlertContentGenerator {
 
     /**
      * Build the prompt for alert analysis.
+     * Uses PromptService for dynamic configuration, falls back to inline defaults.
      */
     private String buildPrompt(String alertType, String metricName,
                                double currentValue, double threshold,
                                String metricsContext, String language) {
+        // 尝试从 PromptService 获取模板
+        String templateKey = "task.alertAnalysis." + language;
+        String template = promptService.getPrompt(templateKey);
+        
+        if (template != null && !template.isEmpty()) {
+            // 使用动态模板
+            return template
+                .replace("{alertType}", alertType)
+                .replace("{metricName}", metricName)
+                .replace("{currentValue}", String.format("%.2f", currentValue))
+                .replace("{threshold}", String.format("%.2f", threshold))
+                .replace("{metricsContext}", metricsContext);
+        }
+        
+        // 默认内联提示词（兜底）
         if ("zh".equals(language)) {
             return String.format("""
                 你是网关运维专家。以下指标超过阈值，请分析可能原因并给出建议。

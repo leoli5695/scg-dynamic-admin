@@ -601,7 +601,8 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
     }
   };
 
-  const filteredRoutes = routes.filter(route => {
+  // Memoize filtered routes to avoid recalculation on every render
+  const filteredRoutes = useMemo(() => routes.filter(route => {
     const matchesSearch = !searchTerm ||
       route.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (route.routeName && route.routeName.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -612,15 +613,22 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
       (statusFilter === 'disabled' && !route.enabled);
 
     return matchesSearch && matchesStatus;
-  });
+  }), [routes, searchTerm, statusFilter]);
+
+  // Memoize route statistics
+  const routeStats = useMemo(() => ({
+    total: routes.length,
+    enabled: routes.filter(r => r.enabled).length,
+    disabled: routes.filter(r => !r.enabled).length,
+  }), [routes]);
 
   // Pagination
-  const totalRoutes = routes.length;
-  const enabledRoutes = routes.filter(r => r.enabled).length;
-  const disabledRoutes = routes.filter(r => !r.enabled).length;
+  const totalRoutes = routeStats.total;
+  const enabledRoutes = routeStats.enabled;
+  const disabledRoutes = routeStats.disabled;
   const startIndex = (currentPage - 1) * pageSize;
   const endIndex = startIndex + pageSize;
-  const paginatedRoutes = filteredRoutes.slice(startIndex, endIndex);
+  const paginatedRoutes = useMemo(() => filteredRoutes.slice(startIndex, endIndex), [filteredRoutes, startIndex, endIndex]);
 
   const handleCreate = (values: any) => {
     if (!values.predicates || values.predicates.length === 0) {
