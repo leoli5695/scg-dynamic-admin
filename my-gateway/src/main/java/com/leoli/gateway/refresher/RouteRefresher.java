@@ -1,6 +1,5 @@
 package com.leoli.gateway.refresher;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.center.spi.ConfigCenterService;
 import com.leoli.gateway.manager.RouteManager;
@@ -33,8 +32,7 @@ public class RouteRefresher {
     private final RouteManager routeManager;
     private final ConfigCenterService configService;
     private final DynamicRouteDefinitionLocator routeLocator;
-    private final ObjectMapper objectMapper = new ObjectMapper()
-            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+    private final ObjectMapper objectMapper;
 
     // Currently listening route IDs
     private final Set<String> listeningRouteIds = ConcurrentHashMap.newKeySet();
@@ -45,10 +43,12 @@ public class RouteRefresher {
     @Autowired
     public RouteRefresher(RouteManager routeManager,
                           ConfigCenterService configService,
-                          DynamicRouteDefinitionLocator routeLocator) {
+                          DynamicRouteDefinitionLocator routeLocator,
+                          ObjectMapper objectMapper) {
         this.routeManager = routeManager;
         this.configService = configService;
         this.routeLocator = routeLocator;
+        this.objectMapper = objectMapper;
         log.info("RouteRefresher initialized with per-route incremental refresh");
     }
 

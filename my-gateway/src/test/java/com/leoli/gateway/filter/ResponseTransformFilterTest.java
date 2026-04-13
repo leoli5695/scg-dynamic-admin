@@ -1,5 +1,7 @@
 package com.leoli.gateway.filter;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import com.leoli.gateway.filter.transform.ResponseTransformFilter;
 import com.leoli.gateway.manager.StrategyManager;
 import org.junit.jupiter.api.BeforeEach;
@@ -7,7 +9,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -37,11 +38,17 @@ class ResponseTransformFilterTest {
     @Mock
     private GatewayFilterChain chain;
 
-    @InjectMocks
+    // Use real ObjectMapper for actual JSON processing
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final XmlMapper xmlMapper = new XmlMapper();
+
     private ResponseTransformFilter filter;
 
     @BeforeEach
     void setUp() {
+        filter = new ResponseTransformFilter(objectMapper, xmlMapper);
+        // Use reflection to inject strategyManager
+        org.springframework.test.util.ReflectionTestUtils.setField(filter, "strategyManager", strategyManager);
     }
 
     @Nested

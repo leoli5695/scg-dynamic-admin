@@ -6,6 +6,7 @@ import com.leoli.gateway.limiter.RateLimitResult;
 import com.leoli.gateway.limiter.RedisHealthChecker;
 import com.leoli.gateway.limiter.ShadowQuotaManager;
 import com.leoli.gateway.manager.StrategyManager;
+import com.leoli.gateway.util.RateLimiterWindow;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -414,23 +415,23 @@ class HybridRateLimiterFilterTest {
         @Test
         @DisplayName("Window should allow requests within quota")
         void testWindow_tryAcquireAllowed() {
-            HybridRateLimiterFilter.RateLimiterWindow window =
-                    new HybridRateLimiterFilter.RateLimiterWindow(10, 20, 1000);
+            RateLimiterWindow window =
+                    new RateLimiterWindow(10, 20, 1000);
 
             // Should allow first 10 requests
             for (int i = 0; i < 10; i++) {
                 assertTrue(window.tryAcquire());
             }
 
-            assertEquals(10, window.getCurrentCount().get());
+            assertEquals(10, window.getCurrentCount());
         }
 
         @Test
         @DisplayName("Window should use burst capacity for extra requests")
         void testWindow_burstCapacity() {
             // maxRequests=10, burstCapacity=20, burstTokens starts at 20
-            HybridRateLimiterFilter.RateLimiterWindow window =
-                    new HybridRateLimiterFilter.RateLimiterWindow(10, 20, 1000);
+            RateLimiterWindow window =
+                    new RateLimiterWindow(10, 20, 1000);
 
             // Use steady quota (10 requests)
             for (int i = 0; i < 10; i++) {
@@ -450,8 +451,8 @@ class HybridRateLimiterFilterTest {
         @DisplayName("Window should deny requests when quota exceeded")
         void testWindow_tryAcquireDenied() {
             // maxRequests=5, burstCapacity=5, burstTokens starts at 5
-            HybridRateLimiterFilter.RateLimiterWindow window =
-                    new HybridRateLimiterFilter.RateLimiterWindow(5, 5, 1000);
+            RateLimiterWindow window =
+                    new RateLimiterWindow(5, 5, 1000);
 
             // Use steady quota (5 requests)
             for (int i = 0; i < 5; i++) {
@@ -471,8 +472,8 @@ class HybridRateLimiterFilterTest {
         @DisplayName("Window should reset after time expires")
         void testWindow_windowExpiry() throws InterruptedException {
             // maxRequests=5, burstCapacity=10, burstTokens starts at 10
-            HybridRateLimiterFilter.RateLimiterWindow window =
-                    new HybridRateLimiterFilter.RateLimiterWindow(5, 10, 100);
+            RateLimiterWindow window =
+                    new RateLimiterWindow(5, 10, 100);
 
             // Use steady quota (5 requests)
             for (int i = 0; i < 5; i++) {
@@ -490,14 +491,14 @@ class HybridRateLimiterFilterTest {
 
             // Window should reset
             assertTrue(window.tryAcquire());
-            assertEquals(1, window.getCurrentCount().get());
+            assertEquals(1, window.getCurrentCount());
         }
 
         @Test
         @DisplayName("Remaining count should be accurate")
         void testWindow_getRemaining() {
-            HybridRateLimiterFilter.RateLimiterWindow window =
-                    new HybridRateLimiterFilter.RateLimiterWindow(10, 20, 1000);
+            RateLimiterWindow window =
+                    new RateLimiterWindow(10, 20, 1000);
 
             assertEquals(20, window.getRemaining()); // 20 - 0
 

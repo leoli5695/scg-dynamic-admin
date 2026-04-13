@@ -1,5 +1,6 @@
 package com.leoli.gateway.filter;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.filter.ratelimit.MultiDimRateLimiterFilter;
 import com.leoli.gateway.limiter.DistributedRateLimiter;
 import com.leoli.gateway.limiter.RateLimitResult;
@@ -11,7 +12,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -51,11 +51,17 @@ class MultiDimRateLimiterFilterTest {
     @Mock
     private GatewayFilterChain chain;
 
-    @InjectMocks
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private MultiDimRateLimiterFilter filter;
 
     @BeforeEach
     void setUp() {
+        filter = new MultiDimRateLimiterFilter();
+        ReflectionTestUtils.setField(filter, "strategyManager", strategyManager);
+        ReflectionTestUtils.setField(filter, "redisHealthChecker", redisHealthChecker);
+        ReflectionTestUtils.setField(filter, "distributedRateLimiter", distributedRateLimiter);
+        ReflectionTestUtils.setField(filter, "shadowQuotaManager", shadowQuotaManager);
+        ReflectionTestUtils.setField(filter, "objectMapper", objectMapper);
         ReflectionTestUtils.setField(filter, "redisLimitEnabled", true);
         ReflectionTestUtils.setField(filter, "shadowQuotaEnabled", true);
     }
@@ -105,9 +111,9 @@ class MultiDimRateLimiterFilterTest {
             MockServerWebExchange exchange = createMockExchange("/api/test", "test-route");
 
             Map<String, Object> config = createMultiDimConfig(true, 100, true, 50, true, 10, true, 5);
-            when(strategyManager.getMultiDimRateLimiterConfig(anyString())).thenReturn(config);
-            when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(true);
-            when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyLong()))
+            lenient().when(strategyManager.getMultiDimRateLimiterConfig(anyString())).thenReturn(config);
+            lenient().when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(true);
+            lenient().when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyLong()))
                     .thenReturn(RateLimitResult.allowed(99));
             when(chain.filter(any())).thenReturn(Mono.empty());
 
@@ -124,9 +130,9 @@ class MultiDimRateLimiterFilterTest {
             MockServerWebExchange exchange = createMockExchange("/api/test", "test-route");
 
             Map<String, Object> config = createMultiDimConfig(true, 100, false, 0, false, 0, false, 0);
-            when(strategyManager.getMultiDimRateLimiterConfig(anyString())).thenReturn(config);
-            when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(true);
-            when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyLong()))
+            lenient().when(strategyManager.getMultiDimRateLimiterConfig(anyString())).thenReturn(config);
+            lenient().when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(true);
+            lenient().when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyLong()))
                     .thenReturn(RateLimitResult.denied(0));
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -143,8 +149,8 @@ class MultiDimRateLimiterFilterTest {
             MockServerWebExchange exchange = createMockExchange("/api/test", "test-route");
 
             Map<String, Object> config = createMultiDimConfig(true, 100, false, 0, false, 0, false, 0);
-            when(strategyManager.getMultiDimRateLimiterConfig(anyString())).thenReturn(config);
-            when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(false);
+            lenient().when(strategyManager.getMultiDimRateLimiterConfig(anyString())).thenReturn(config);
+            lenient().when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(false);
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -166,9 +172,9 @@ class MultiDimRateLimiterFilterTest {
             exchange.getAttributes().put("api_key_metadata", Map.of("tenantId", "tenant-001"));
 
             Map<String, Object> config = createMultiDimConfig(false, 0, true, 50, false, 0, false, 0);
-            when(strategyManager.getMultiDimRateLimiterConfig(anyString())).thenReturn(config);
-            when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(true);
-            when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyLong()))
+            lenient().when(strategyManager.getMultiDimRateLimiterConfig(anyString())).thenReturn(config);
+            lenient().when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(true);
+            lenient().when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyLong()))
                     .thenReturn(RateLimitResult.allowed(49));
             when(chain.filter(any())).thenReturn(Mono.empty());
 
@@ -186,9 +192,9 @@ class MultiDimRateLimiterFilterTest {
             exchange.getAttributes().put("jwt_subject", "user-123");
 
             Map<String, Object> config = createMultiDimConfig(false, 0, false, 0, true, 10, false, 0);
-            when(strategyManager.getMultiDimRateLimiterConfig(anyString())).thenReturn(config);
-            when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(true);
-            when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyLong()))
+            lenient().when(strategyManager.getMultiDimRateLimiterConfig(anyString())).thenReturn(config);
+            lenient().when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(true);
+            lenient().when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyLong()))
                     .thenReturn(RateLimitResult.allowed(9));
             when(chain.filter(any())).thenReturn(Mono.empty());
 

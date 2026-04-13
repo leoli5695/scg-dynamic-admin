@@ -47,9 +47,15 @@ public class MockResponseFilter implements GlobalFilter, Ordered {
     @Autowired
     private StrategyManager strategyManager;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
-    private final Handlebars handlebars = new Handlebars();
+    private final ObjectMapper objectMapper;
+    private final Handlebars handlebars;
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
+
+    @Autowired
+    public MockResponseFilter(ObjectMapper objectMapper, Handlebars handlebars) {
+        this.objectMapper = objectMapper;
+        this.handlebars = handlebars;
+    }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {

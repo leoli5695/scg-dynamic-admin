@@ -59,7 +59,12 @@ public class AuthBindingManager {
     @Autowired
     private JwtValidationCache jwtValidationCache;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
+
+    @Autowired
+    public AuthBindingManager(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
 
     @PostConstruct
     public void init() {

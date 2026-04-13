@@ -1,5 +1,7 @@
 package com.leoli.gateway.filter;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.jknack.handlebars.Handlebars;
 import com.leoli.gateway.filter.transform.MockResponseFilter;
 import com.leoli.gateway.manager.StrategyManager;
 import org.junit.jupiter.api.BeforeEach;
@@ -7,7 +9,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -38,11 +39,16 @@ class MockResponseFilterTest {
     @Mock
     private GatewayFilterChain chain;
 
-    @InjectMocks
+    // Use real ObjectMapper and Handlebars for actual processing
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final Handlebars handlebars = new Handlebars();
+
     private MockResponseFilter filter;
 
     @BeforeEach
     void setUp() {
+        filter = new MockResponseFilter(objectMapper, handlebars);
+        org.springframework.test.util.ReflectionTestUtils.setField(filter, "strategyManager", strategyManager);
     }
 
     @Nested

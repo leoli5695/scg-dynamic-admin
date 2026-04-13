@@ -1,5 +1,6 @@
 package com.leoli.gateway.filter.resilience;
 
+import com.leoli.gateway.config.TimeoutProperties;
 import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.util.RouteUtils;
@@ -35,6 +36,9 @@ public class TimeoutGlobalFilter implements GlobalFilter, Ordered {
     @Autowired
     private StrategyManager strategyManager;
 
+    @Autowired
+    private TimeoutProperties timeoutProperties;
+
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String routeId = RouteUtils.getRouteId(exchange);
@@ -44,8 +48,12 @@ public class TimeoutGlobalFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        int connectTimeout = config.get("connectTimeout") != null ? ((Number) config.get("connectTimeout")).intValue() : 5000;
-        int responseTimeout = config.get("responseTimeout") != null ? ((Number) config.get("responseTimeout")).intValue() : 30000;
+        int connectTimeout = config.get("connectTimeout") != null 
+                ? ((Number) config.get("connectTimeout")).intValue() 
+                : timeoutProperties.getDefaultConnectTimeout();
+        int responseTimeout = config.get("responseTimeout") != null 
+                ? ((Number) config.get("responseTimeout")).intValue() 
+                : timeoutProperties.getDefaultResponseTimeout();
 
         logger.debug("Applying timeout for route {}: connect={}ms, response={}ms",
                 routeId, connectTimeout, responseTimeout);

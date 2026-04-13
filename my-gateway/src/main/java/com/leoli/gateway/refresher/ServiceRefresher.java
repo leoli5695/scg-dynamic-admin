@@ -33,7 +33,7 @@ import static com.leoli.gateway.constants.GatewayConfigConstants.*;
 public class ServiceRefresher {
 
     private final ConfigCenterService configService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
     private final ServiceManager serviceManager;
     private final HybridHealthChecker hybridHealthChecker;
     private final ActiveHealthChecker activeHealthChecker;
@@ -46,10 +46,12 @@ public class ServiceRefresher {
 
     @Autowired
     public ServiceRefresher(ConfigCenterService configService,
+                            ObjectMapper objectMapper,
                             ServiceManager serviceManager,
                             HybridHealthChecker hybridHealthChecker,
                             ActiveHealthChecker activeHealthChecker) {
         this.configService = configService;
+        this.objectMapper = objectMapper;
         this.serviceManager = serviceManager;
         this.hybridHealthChecker = hybridHealthChecker;
         this.activeHealthChecker = activeHealthChecker;

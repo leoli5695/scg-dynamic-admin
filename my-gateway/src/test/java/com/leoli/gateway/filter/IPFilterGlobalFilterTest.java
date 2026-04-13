@@ -427,9 +427,9 @@ class IPFilterGlobalFilterTest {
     // ============================================================
 
     @Test
-    @DisplayName("Filter order should be -280")
+    @DisplayName("Filter order should be -490 (IP_FILTER)")
     void testGetOrder() {
-        assertEquals(-280, filter.getOrder());
+        assertEquals(-490, filter.getOrder());
     }
 
     // ============================================================

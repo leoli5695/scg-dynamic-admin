@@ -5,6 +5,7 @@ import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.model.MultiServiceConfig;
 import com.leoli.gateway.model.ServiceBindingType;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.cloud.gateway.route.Route;
@@ -56,7 +57,12 @@ import java.util.concurrent.ThreadLocalRandom;
 @Component
 public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
+
+    @Autowired
+    public MultiServiceLoadBalancerFilter(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
 
     // Smooth weighted round-robin state: routeId -> (version -> currentWeight)
     private final Map<String, Map<String, Double>> smoothWeightState = new ConcurrentHashMap<>();

@@ -49,8 +49,14 @@ public class ResponseTransformFilter implements GlobalFilter, Ordered {
     @Autowired
     private StrategyManager strategyManager;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
-    private final XmlMapper xmlMapper = new XmlMapper();
+    private final ObjectMapper objectMapper;
+    private final XmlMapper xmlMapper;
+
+    @Autowired
+    public ResponseTransformFilter(ObjectMapper objectMapper, XmlMapper xmlMapper) {
+        this.objectMapper = objectMapper;
+        this.xmlMapper = xmlMapper;
+    }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {

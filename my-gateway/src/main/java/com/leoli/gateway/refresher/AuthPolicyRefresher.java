@@ -1,7 +1,6 @@
 package com.leoli.gateway.refresher;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.center.spi.ConfigCenterService;
 import com.leoli.gateway.manager.AuthBindingManager;
@@ -37,8 +36,7 @@ public class AuthPolicyRefresher {
 
     private final AuthBindingManager authBindingManager;
     private final ConfigCenterService configService;
-    private final ObjectMapper objectMapper = new ObjectMapper()
-            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+    private final ObjectMapper objectMapper;
 
     // Currently listening policy IDs
     private final Set<String> listeningPolicyIds = ConcurrentHashMap.newKeySet();
@@ -52,9 +50,11 @@ public class AuthPolicyRefresher {
 
     @Autowired
     public AuthPolicyRefresher(AuthBindingManager authBindingManager,
-                               ConfigCenterService configService) {
+                               ConfigCenterService configService,
+                               ObjectMapper objectMapper) {
         this.authBindingManager = authBindingManager;
         this.configService = configService;
+        this.objectMapper = objectMapper;
         log.info("AuthPolicyRefresher initialized");
     }
 

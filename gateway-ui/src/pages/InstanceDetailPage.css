@@ -19,7 +19,7 @@
   justify-content: space-between;
   position: sticky;
   top: 0;
-  z-index: var(--z-sticky);
+  z-index: 100;  /* Lower z-index to allow Modal/Dropdown to overlay */
 }
 
 .instance-detail-header-left {
@@ -57,6 +57,19 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+/* Ensure user dropdown works correctly */
+.instance-detail-header-right .user-info {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.instance-detail-header-right .user-info .username {
+  color: var(--text-secondary);
+  font-size: 14px;
 }
 
 /* ==================== Tabs Layout ==================== */

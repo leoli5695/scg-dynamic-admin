@@ -52,7 +52,12 @@ public class RequestValidationFilter implements GlobalFilter, Ordered {
     @Autowired
     private StrategyManager strategyManager;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
+
+    @Autowired
+    public RequestValidationFilter(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {

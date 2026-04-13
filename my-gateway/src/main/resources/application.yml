@@ -186,42 +186,32 @@ logging:
     org.springframework.boot.actuate: WARN
     org.springframework.cloud.client: WARN
     org.springframework.cloud.commons: WARN
-# Management/Actuator - DISABLED: Causes HttpHandler binding issues with Spring Cloud Gateway
+# Management/Actuator - Enabled on SAME PORT (port 80) to avoid HttpHandler binding issues
+# NOTE: Do NOT configure management.server.port separately - this causes the multi-port HttpHandler conflict
 # See: https://github.com/spring-cloud/spring-cloud-gateway/issues/3786
-# management:
-#   server:
-#     port: ${MANAGEMENT_SERVER_PORT:8081}
-#   endpoints:
-#     web:
-#       exposure:
-#         include: health,info,prometheus,metrics
-#   endpoint:
-#     health:
-#       show-details: always
-#     prometheus:
-#       enabled: true
-#   metrics:
-#     tags:
-#       application: ${spring.application.name}
-#       gateway_instance_id: ${GATEWAY_INSTANCE_ID:unknown}
-#   health:
-#     consul:
-#       enabled: false
-#     liveness:
-#       enabled: true
-#     readiness:
-#       enabled: true
-#   tracing:
-#     enabled: ${OTEL_TRACING_ENABLED:true}
-#     sampling:
-#       probability: ${OTEL_SAMPLING_PROBABILITY:1.0}
-#   otlp:
-#     tracing:
-#       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
-#     metrics:
-#       export:
-#         enabled: ${OTEL_METRICS_EXPORT_ENABLED:true}
-#         step: ${OTEL_METRICS_EXPORT_STEP:1m}
+# Prometheus scrapes from http://gateway:80/actuator/prometheus (same port as main application)
+management:
+  # NO separate management.server.port - use main port 80
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      gateway_instance_id: ${GATEWAY_INSTANCE_ID:unknown}
+  health:
+    consul:
+      enabled: false
+    liveness:
+      enabled: true
+    readiness:
+      enabled: true
 
 # SpringDoc OpenAPI Configuration - DISABLED: Actuator removed
 # springdoc:

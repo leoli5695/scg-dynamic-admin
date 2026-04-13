@@ -5,6 +5,7 @@ import com.leoli.gateway.center.spi.ConfigCenterService;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -33,7 +34,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class DynamicSslContextManager {
 
     private final ConfigCenterService configCenterService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     // Cache of domain -> SSL context
     private final Map<String, SslContext> sslContextCache = new ConcurrentHashMap<>();
@@ -48,8 +49,10 @@ public class DynamicSslContextManager {
     @Value("${gateway.ssl.pem-keystore-password:changeit}")
     private String pemKeystorePassword;
 
-    public DynamicSslContextManager(ConfigCenterService configCenterService) {
+    @Autowired
+    public DynamicSslContextManager(ConfigCenterService configCenterService, ObjectMapper objectMapper) {
         this.configCenterService = configCenterService;
+        this.objectMapper = objectMapper;
         initialize();
     }
 

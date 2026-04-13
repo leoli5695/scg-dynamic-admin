@@ -85,8 +85,13 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
     @Autowired
     private AuthBindingManager authBindingManager;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
     private final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
+
+    @Autowired
+    public AccessLogGlobalFilter(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
     private final DateTimeFormatter fileDateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     // Current config

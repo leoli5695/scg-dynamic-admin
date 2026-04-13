@@ -68,21 +68,17 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- Actuator - DISABLED: Causes HttpHandler binding issues with Spring Cloud Gateway multi-port -->
-        <!--
+        <!-- Actuator - Enabled on same port (not separate management port to avoid HttpHandler binding issues) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
-        -->
 
-        <!-- Prometheus Registry for Metrics - DISABLED: Requires actuator -->
-        <!--
+        <!-- Prometheus Registry for Metrics -->
         <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
-        -->
 
         <!-- OpenTelemetry Distributed Tracing - DISABLED: Requires actuator -->
         <!--

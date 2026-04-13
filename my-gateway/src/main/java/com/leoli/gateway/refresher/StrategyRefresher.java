@@ -31,15 +31,16 @@ public class StrategyRefresher {
 
     private final StrategyManager strategyManager;
     private final ConfigCenterService configService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     // Track active listeners: strategyId -> listener
     private final Map<String, ConfigCenterService.ConfigListener> activeListeners = new ConcurrentHashMap<>();
 
     @Autowired
-    public StrategyRefresher(StrategyManager strategyManager, ConfigCenterService configService) {
+    public StrategyRefresher(StrategyManager strategyManager, ConfigCenterService configService, ObjectMapper objectMapper) {
         this.strategyManager = strategyManager;
         this.configService = configService;
+        this.objectMapper = objectMapper;
         log.info("StrategyRefresher initialized for config center: {}", configService.getCenterType());
     }
 

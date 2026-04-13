@@ -1,5 +1,6 @@
 package com.leoli.gateway.manager;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.model.StrategyDefinition;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -19,10 +20,12 @@ import static org.junit.jupiter.api.Assertions.*;
 class StrategyManagerTest {
 
     private StrategyManager manager;
+    private ObjectMapper objectMapper;
 
     @BeforeEach
     void setUp() {
-        manager = new StrategyManager();
+        objectMapper = new ObjectMapper();
+        manager = new StrategyManager(objectMapper);
     }
 
     @Nested

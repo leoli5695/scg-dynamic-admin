@@ -1,5 +1,6 @@
 package com.leoli.gateway.filter;
 
+import com.leoli.gateway.config.TimeoutProperties;
 import com.leoli.gateway.filter.resilience.TimeoutGlobalFilter;
 import com.leoli.gateway.manager.StrategyManager;
 import org.junit.jupiter.api.BeforeEach;
@@ -7,7 +8,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -47,13 +47,22 @@ class TimeoutGlobalFilterTest {
     @Mock
     private ServerHttpRequest request;
 
-    @InjectMocks
+    @Mock
+    private TimeoutProperties timeoutProperties;
+
     private TimeoutGlobalFilter filter;
 
     private static final String ROUTE_ID = "test-route";
 
     @BeforeEach
     void setUp() {
+        filter = new TimeoutGlobalFilter();
+        org.springframework.test.util.ReflectionTestUtils.setField(filter, "strategyManager", strategyManager);
+        org.springframework.test.util.ReflectionTestUtils.setField(filter, "timeoutProperties", timeoutProperties);
+        
+        lenient().when(timeoutProperties.getDefaultConnectTimeout()).thenReturn(5000);
+        lenient().when(timeoutProperties.getDefaultResponseTimeout()).thenReturn(30000);
+        
         lenient().when(exchange.getRequest()).thenReturn(request);
         lenient().when(chain.filter(any(ServerWebExchange.class))).thenReturn(Mono.empty());
     }

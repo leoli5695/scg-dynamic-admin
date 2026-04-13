@@ -86,7 +86,12 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
     @Autowired(required = false)
     private FilterChainTracker filterChainTracker;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
+
+    @Autowired
+    public TraceCaptureGlobalFilter(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {

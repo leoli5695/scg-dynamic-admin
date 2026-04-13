@@ -1,5 +1,6 @@
 package com.leoli.gateway.filter.resilience;
 
+import com.leoli.gateway.config.RetryProperties;
 import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.StrategyDefinition;
@@ -33,6 +34,9 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
 
     @Autowired
     private StrategyManager strategyManager;
+
+    @Autowired
+    private RetryProperties retryProperties;
 
     // Cache for retry configurations
     private final Map<String, RetryConfig> configCache = new ConcurrentHashMap<>();
@@ -140,12 +144,12 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
         return configCache.computeIfAbsent(routeId, id -> {
             Map<String, Object> config = strategyManager.getRetryConfig(id);
             if (config == null) {
-                return new RetryConfig();
+                return new RetryConfig(retryProperties);
             }
 
-            RetryConfig retryConfig = new RetryConfig();
-            retryConfig.maxAttempts = getIntValue(config, "maxAttempts", 3);
-            retryConfig.retryIntervalMs = getLongValue(config, "retryIntervalMs", 1000L);
+            RetryConfig retryConfig = new RetryConfig(retryProperties);
+            retryConfig.maxAttempts = getIntValue(config, "maxAttempts", retryProperties.getDefaultMaxAttempts());
+            retryConfig.retryIntervalMs = getLongValue(config, "retryIntervalMs", retryProperties.getDefaultRetryIntervalMs());
             retryConfig.enabled = getBoolValue(config, "enabled", true);
 
             Object statusCodes = config.get("retryOnStatusCodes");
@@ -212,15 +216,17 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
      * Retry configuration.
      */
     private static class RetryConfig {
-        int maxAttempts = 3;
-        long retryIntervalMs = 1000;
+        int maxAttempts;
+        long retryIntervalMs;
         boolean enabled = true;
-        Set<Integer> retryOnStatusCodes = Set.of(500, 502, 503, 504);
-        Set<String> retryOnExceptions = Set.of(
-                "java.net.ConnectException",
-                "java.net.SocketTimeoutException",
-                "java.io.IOException",
-                "org.springframework.cloud.gateway.support.NotFoundException"
-        );
+        Set<Integer> retryOnStatusCodes;
+        Set<String> retryOnExceptions;
+
+        RetryConfig(RetryProperties props) {
+            this.maxAttempts = props.getDefaultMaxAttempts();
+            this.retryIntervalMs = props.getDefaultRetryIntervalMs();
+            this.retryOnStatusCodes = props.getDefaultRetryOnStatusCodes();
+            this.retryOnExceptions = props.getDefaultRetryOnExceptions();
+        }
     }
 }

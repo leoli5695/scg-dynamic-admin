@@ -1,5 +1,6 @@
 package com.leoli.gateway.manager;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.auth.JwtValidationCache;
 import com.leoli.gateway.enums.AuthType;
 import com.leoli.gateway.model.AuthConfig;
@@ -23,10 +24,12 @@ class AuthBindingManagerTest {
 
     private AuthBindingManager manager;
     private JwtValidationCache jwtValidationCache;
+    private ObjectMapper objectMapper;
 
     @BeforeEach
     void setUp() throws Exception {
-        manager = new AuthBindingManager();
+        objectMapper = new ObjectMapper();
+        manager = new AuthBindingManager(objectMapper);
         jwtValidationCache = new JwtValidationCache();
         // Use reflection to inject the cache
         Field cacheField = AuthBindingManager.class.getDeclaredField("jwtValidationCache");
