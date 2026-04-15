@@ -1,0 +1,443 @@
+/**
+ * Form Page - Unified Create/Edit Form Styles
+ * Modern, elegant form layout for creation and editing pages
+ */
+
+/* ==================== Form Page Container ==================== */
+.form-page-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 32px;
+  min-height: calc(100vh - 64px);
+}
+
+/* ==================== Form Card ==================== */
+.form-card {
+  background: rgba(28, 28, 33, 0.95) !important;
+  backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 16px !important;
+  overflow: hidden;
+}
+
+.form-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 80px;
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, transparent 100%);
+  z-index: 0;
+}
+
+.form-card .ant-card-head {
+  position: relative;
+  z-index: 1;
+  background: transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 20px 24px;
+}
+
+.form-card .ant-card-body {
+  position: relative;
+  z-index: 1;
+  padding: 32px 32px 24px !important;
+}
+
+/* ==================== Form Header ==================== */
+.form-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.form-header-back {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #a1a1aa;
+  transition: all 0.2s ease;
+}
+
+.form-header-back:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fafafa;
+}
+
+.form-header-icon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  color: white;
+  font-size: 18px;
+}
+
+.form-header-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #fafafa;
+  margin: 0;
+}
+
+/* ==================== Form Sections ==================== */
+.form-section {
+  margin-bottom: 28px;
+  padding: 20px;
+  background: rgba(39, 39, 42, 0.4);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.form-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.form-section-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  font-size: 12px;
+}
+
+.form-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fafafa;
+  letter-spacing: -0.01em;
+}
+
+.form-section-subtitle {
+  font-size: 12px;
+  color: #71717a;
+  margin-left: auto;
+}
+
+.form-section-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ==================== Form Items ==================== */
+.form-page-container .ant-form-item-label > label {
+  color: #a1a1aa;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.form-page-container .ant-form-item-label > label::after {
+  content: '';
+}
+
+.form-page-container .ant-form-item-explain-error {
+  color: #f87171;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.form-page-container .ant-form-item-extra {
+  color: #71717a;
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+/* ==================== Form Inputs ==================== */
+.form-page-container .ant-input,
+.form-page-container .ant-input-number,
+.form-page-container .ant-select-selector,
+.form-page-container .ant-picker {
+  background: rgba(9, 9, 11, 0.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 10px !important;
+  color: #fafafa !important;
+  font-size: 14px !important;
+  transition: all 0.2s ease !important;
+}
+
+.form-page-container .ant-input:hover,
+.form-page-container .ant-input-number:hover,
+.form-page-container .ant-select-selector:hover,
+.form-page-container .ant-picker:hover {
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+.form-page-container .ant-input:focus,
+.form-page-container .ant-input-focused,
+.form-page-container .ant-input-number-focused,
+.form-page-container .ant-select-focused .ant-select-selector,
+.form-page-container .ant-picker-focused {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important;
+}
+
+.form-page-container .ant-input::placeholder {
+  color: #52525b !important;
+}
+
+.form-page-container .ant-input-affix-wrapper {
+  background: rgba(9, 9, 11, 0.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 10px !important;
+  padding: 8px 12px !important;
+}
+
+.form-page-container .ant-input-affix-wrapper:hover {
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+.form-page-container .ant-input-affix-wrapper-focused {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important;
+}
+
+.form-page-container .ant-input-affix-wrapper .ant-input {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+}
+
+/* ==================== Select Dropdown ==================== */
+.form-page-container .ant-select-arrow {
+  color: #71717a !important;
+}
+
+.form-page-container .ant-select-selection-item {
+  color: #fafafa !important;
+  font-weight: 500 !important;
+}
+
+.form-page-container .ant-select-selection-placeholder {
+  color: #52525b !important;
+}
+
+/* ==================== InputNumber ==================== */
+.form-page-container .ant-input-number-input {
+  color: #fafafa !important;
+}
+
+.form-page-container .ant-input-number-handler-wrap {
+  background: rgba(39, 39, 42, 0.6) !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.form-page-container .ant-input-number-handler {
+  color: #71717a !important;
+}
+
+.form-page-container .ant-input-number-handler:hover {
+  color: #a1a1aa !important;
+}
+
+.form-page-container .ant-input-number-handler-up-inner,
+.form-page-container .ant-input-number-handler-down-inner {
+  color: #71717a !important;
+}
+
+/* ==================== TextArea ==================== */
+.form-page-container .ant-input-textarea textarea {
+  background: transparent !important;
+  border: none !important;
+  color: #fafafa !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  resize: vertical;
+}
+
+.form-page-container .ant-input-textarea-show-count::after {
+  color: #71717a !important;
+  font-size: 12px !important;
+}
+
+/* ==================== Radio Group ==================== */
+.form-page-container .ant-radio-group {
+  display: flex;
+  gap: 8px;
+}
+
+.form-page-container .ant-radio-button-wrapper {
+  background: rgba(9, 9, 11, 0.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 8px !important;
+  color: #a1a1aa !important;
+  font-size: 13px !important;
+  padding: 8px 16px !important;
+  transition: all 0.2s ease !important;
+}
+
+.form-page-container .ant-radio-button-wrapper:first-child {
+  border-radius: 8px !important;
+}
+
+.form-page-container .ant-radio-button-wrapper:last-child {
+  border-radius: 8px !important;
+}
+
+.form-page-container .ant-radio-button-wrapper:not(:first-child)::before {
+  background: transparent !important;
+}
+
+.form-page-container .ant-radio-button-wrapper:hover {
+  background: rgba(39, 39, 42, 0.8) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  color: #fafafa !important;
+}
+
+.form-page-container .ant-radio-button-wrapper-checked {
+  background: rgba(59, 130, 246, 0.15) !important;
+  border-color: #3b82f6 !important;
+  color: #60a5fa !important;
+}
+
+.form-page-container .ant-radio-button-wrapper-checked:hover {
+  background: rgba(59, 130, 246, 0.2) !important;
+  border-color: #60a5fa !important;
+  color: #60a5fa !important;
+}
+
+/* ==================== Switch ==================== */
+.form-page-container .ant-switch {
+  background: rgba(255, 255, 255, 0.15) !important;
+}
+
+.form-page-container .ant-switch-checked {
+  background: #3b82f6 !important;
+}
+
+.form-page-container .ant-switch-handle::before {
+  background: #fafafa !important;
+}
+
+/* ==================== Alert ==================== */
+.form-page-container .ant-alert {
+  background: rgba(59, 130, 246, 0.1) !important;
+  border: 1px solid rgba(59, 130, 246, 0.2) !important;
+  border-radius: 10px !important;
+}
+
+.form-page-container .ant-alert-info .ant-alert-icon {
+  color: #60a5fa !important;
+}
+
+.form-page-container .ant-alert-info .ant-alert-message {
+  color: #a1a1aa !important;
+  font-size: 13px !important;
+}
+
+/* ==================== Form Footer ==================== */
+.form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 24px;
+  margin-top: 32px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.form-footer .ant-btn {
+  height: 40px;
+  padding: 0 24px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 10px;
+  transition: all 0.2s ease;
+}
+
+.form-footer .ant-btn-default {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #a1a1aa;
+}
+
+.form-footer .ant-btn-default:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #fafafa;
+}
+
+.form-footer .ant-btn-primary {
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  border: none;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.form-footer .ant-btn-primary:hover {
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+  transform: translateY(-1px);
+}
+
+/* ==================== Form Grid ==================== */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.form-grid-full {
+  grid-column: 1 / -1;
+}
+
+.form-grid-half {
+  grid-column: span 1;
+}
+
+/* ==================== Responsive ==================== */
+@media (max-width: 768px) {
+  .form-page-container {
+    padding: 16px;
+  }
+
+  .form-card .ant-card-body {
+    padding: 24px 20px !important;
+  }
+
+  .form-section {
+    padding: 16px;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-footer {
+    flex-direction: column;
+  }
+
+  .form-footer .ant-btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .form-page-container {
+    padding: 12px;
+  }
+
+  .form-header {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .form-header-title {
+    font-size: 16px;
+  }
+}

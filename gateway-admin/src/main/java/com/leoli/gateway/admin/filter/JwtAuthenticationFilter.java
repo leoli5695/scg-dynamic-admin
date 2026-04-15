@@ -84,7 +84,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                requestURI.startsWith("/actuator/") ||       // Health checks
                requestURI.startsWith("/h2-console/") ||     // Database console
                requestURI.equals("/api/gateway/health/sync") || // Gateway health sync
-               requestURI.startsWith("/api/gateway/health"); // Gateway health query
+               requestURI.startsWith("/api/gateway/health") || // Gateway health query
+               requestURI.startsWith("/api/instances/heartbeat") || // Instance heartbeat (monitoring)
+               requestURI.startsWith("/api/nacos/") ||      // Nacos discovery queries
+               requestURI.startsWith("/api/kubernetes/") || // Kubernetes queries (public read)
+               requestURI.startsWith("/api/stress-test/run"); // Stress test trigger (internal)
     }
 
     /**

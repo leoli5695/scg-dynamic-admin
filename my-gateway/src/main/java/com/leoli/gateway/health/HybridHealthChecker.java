@@ -33,8 +33,8 @@ public class HybridHealthChecker {
     @Value("${gateway.admin.url:http://localhost:9090}")
     private String fallbackAdminUrl;
 
-    @Value("${gateway.id:gateway-1}")
-    private String gatewayId;
+    @Value("${gateway.instance-id:gateway-1}")
+    private String instanceId;
 
     @Value("${gateway.health.batch-size:50}")
     private int batchSize;
@@ -184,9 +184,10 @@ public class HybridHealthChecker {
 
         boolean wasHealthy = health.isHealthy();
         boolean wasDegraded = health.isDegradedCheckMode();
+        String previousCheckType = health.getCheckType();
 
-        log.debug("markHealthy called for {}:{}:{} - wasHealthy={}, setting healthy=true",
-                serviceId, ip, port, wasHealthy);
+        log.debug("markHealthy called for {}:{}:{} - wasHealthy={}, previousCheckType={}",
+                serviceId, ip, port, wasHealthy, previousCheckType);
 
         health.setHealthy(true);
         health.setConsecutiveFailures(0);
@@ -203,12 +204,21 @@ public class HybridHealthChecker {
 
         healthCache.put(key, health);
 
-        // Queue for batch push ONLY when state changes (false -> true)
-        if (!wasHealthy) {
-            log.info("Instance {}:{}:{} recovered to HEALTHY (state changed: false->true)", serviceId, ip, port);
+        // Determine if we need to push:
+        // 1. State changed (false -> true) - normal recovery
+        // 2. First health check after initialization (INIT/REINIT -> ACTIVE) - force push
+        boolean stateChanged = !wasHealthy;
+        boolean isFirstCheckAfterInit = "INIT".equals(previousCheckType) || "REINIT".equals(previousCheckType);
 
-            // Check for network flap (sudden mass recovery)
-            if (isPotentialNetworkFlap(true)) {
+        if (stateChanged || isFirstCheckAfterInit) {
+            if (stateChanged) {
+                log.info("Instance {}:{}:{} recovered to HEALTHY (state changed: false->true)", serviceId, ip, port);
+            } else if (isFirstCheckAfterInit) {
+                log.info("Instance {}:{}:{} confirmed HEALTHY after initialization (first check)", serviceId, ip, port);
+            }
+
+            // Check for network flap (sudden mass recovery) - only for state changes
+            if (stateChanged && isPotentialNetworkFlap(true)) {
                 log.warn("POTENTIAL NETWORK FLAP DETECTED: {} instances suddenly recovered. Skipping push.",
                         batchPushQueue.size() + 1);
                 return; // Don't add to queue
@@ -268,7 +278,7 @@ public class HybridHealthChecker {
             try {
                 pushSingleBatch(batch);
                 log.info("Pushed batch {}/{} ({} items) to admin [{}]",
-                        i + 1, batchCount, batch.size(), gatewayId);
+                        i + 1, batchCount, batch.size(), instanceId);
             } catch (Exception e) {
                 log.warn("Failed to push batch {}/{} to admin, will retry next cycle",
                         i + 1, batchCount, e);
@@ -290,7 +300,7 @@ public class HybridHealthChecker {
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("X-Gateway-Id", gatewayId);
+        headers.set("X-Instance-Id", instanceId);
 
         HttpEntity<List<InstanceHealth>> request = new HttpEntity<>(batch, headers);
 

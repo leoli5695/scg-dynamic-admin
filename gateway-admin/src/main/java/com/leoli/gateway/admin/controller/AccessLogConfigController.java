@@ -78,13 +78,23 @@ public class AccessLogConfigController {
 
     /**
      * Save access log configuration.
+     * @param request Configuration map, must include instanceId
      */
     @PostMapping("/config")
     public ResponseEntity<Map<String, Object>> saveConfig(@RequestBody Map<String, Object> request) {
         Map<String, Object> result = new HashMap<>();
 
         try {
-            AccessLogGlobalConfig config = accessLogConfigService.getConfig();
+            // Extract instanceId from request (required)
+            String instanceId = (String) request.get("instanceId");
+            if (instanceId == null || instanceId.isEmpty()) {
+                result.put("code", 400);
+                result.put("message", "instanceId is required");
+                return ResponseEntity.ok(result);
+            }
+
+            // Get existing config or create default
+            AccessLogGlobalConfig config = accessLogConfigService.getConfig(instanceId);
 
             // Update config from request
             if (request.containsKey("enabled")) {
@@ -141,18 +151,18 @@ public class AccessLogConfigController {
                 config.setIncludeAuthInfo((Boolean) request.get("includeAuthInfo"));
             }
 
-            // Update log directory based on deploy mode
-            if (config.getDeployMode() != AccessLogGlobalConfig.DeployMode.CUSTOM) {
+            // Only use default directory if user didn't provide one
+            if (config.getLogDirectory() == null || config.getLogDirectory().isEmpty()) {
                 config.setLogDirectory(AccessLogGlobalConfig.getDefaultLogDirectory(config.getDeployMode()));
             }
 
-            boolean saved = accessLogConfigService.saveConfig(config);
+            boolean saved = accessLogConfigService.saveConfig(config, instanceId);
 
             if (saved) {
                 result.put("code", 200);
                 result.put("message", "Configuration saved successfully");
-                log.info("Access log config saved: enabled={}, mode={}",
-                        config.isEnabled(), config.getDeployMode());
+                log.info("Access log config saved for instance {}: enabled={}, mode={}",
+                        instanceId, config.isEnabled(), config.getDeployMode());
             } else {
                 result.put("code", 500);
                 result.put("message", "Failed to save configuration");

@@ -253,8 +253,19 @@ public class AiCopilotService {
             // 获取 AI 提供商配置
             AiConfig config = getAiConfig(provider);
 
-            // 工具调用循环
-            String finalResponse = runToolCallLoop(config, model, messages, tools);
+            // 工具调用循环（带置信度）
+            ToolCallLoopResult loopResult = runToolCallLoopWithConfidence(config, model, messages, tools);
+            
+            // 构建最终响应（添加置信度标记）
+            String finalResponse = loopResult.getContent();
+            
+            // 在响应末尾添加置信度信息（仅在非本地兜底情况下）
+            if (loopResult.getConfidence() > 0) {
+                String confidenceMark = language.equals("zh") 
+                    ? String.format("\n\n> AI 置信度：%d%%（%s）", loopResult.getConfidence(), loopResult.getConfidenceReason())
+                    : String.format("\n\n> AI Confidence: %d%% (%s)", loopResult.getConfidence(), loopResult.getConfidenceReason());
+                finalResponse = finalResponse + confidenceMark;
+            }
 
             // 更新历史记录
             history.add(new ChatMessage("user", userMessage));
@@ -265,7 +276,7 @@ public class AiCopilotService {
                 history.remove(0);
             }
 
-            return new ChatResponse(true, finalResponse, null);
+            return new ChatResponse(true, finalResponse, null, loopResult.getConfidence(), loopResult.getConfidenceReason());
 
         } catch (Exception e) {
             log.error("AI Copilot chat failed", e);
@@ -275,13 +286,20 @@ public class AiCopilotService {
 
     /**
      * 工具调用循环（Function Calling 核心）
+     * 返回包含置信度信息的结果
      */
-    private String runToolCallLoop(AiConfig config, String model,
+    private ToolCallLoopResult runToolCallLoopWithConfidence(AiConfig config, String model,
                                    List<Map<String, Object>> messages,
                                    List<Map<String, Object>> tools) {
 
         String effectiveModel = (model != null && !model.isEmpty()) ? model : config.getModel();
         String provider = config.getProvider();
+
+        // 工具调用统计
+        Set<String> calledTools = new HashSet<>();
+        int successfulTools = 0;
+        int totalToolCalls = 0;
+        Set<String> dataTypes = new HashSet<>();  // 获取的数据类型
 
         // 最多调用 MAX_TOOL_CALL_ITERATIONS 轮
         for (int iteration = 0; iteration < MAX_TOOL_CALL_ITERATIONS; iteration++) {
@@ -294,7 +312,15 @@ public class AiCopilotService {
             // 如果没有工具调用，返回最终回复
             if (!response.hasToolCalls()) {
                 log.info("No tool calls, returning final response");
-                return response.getContent() != null ? response.getContent() : "AI 未返回有效回复。";
+                
+                // 计算置信度
+                int confidence = calculateConfidence(calledTools, successfulTools, dataTypes);
+                String reason = buildConfidenceReason(calledTools, dataTypes);
+                
+                return new ToolCallLoopResult(
+                    response.getContent() != null ? response.getContent() : "AI 未返回有效回复。",
+                    confidence, reason, calledTools, dataTypes
+                );
             }
 
             log.info("AI requested {} tool calls: {}",
@@ -308,6 +334,10 @@ public class AiCopilotService {
             for (AiAnalysisService.ToolCall toolCall : response.getToolCalls()) {
                 long startTime = System.currentTimeMillis();
 
+                // 记录工具调用
+                calledTools.add(toolCall.getName());
+                totalToolCalls++;
+
                 // 执行工具
                 ToolExecutor.ToolResult result = toolExecutor.execute(
                         toolCall.getName(), toolCall.getArguments());
@@ -315,6 +345,12 @@ public class AiCopilotService {
                 long duration = System.currentTimeMillis() - startTime;
                 log.info("Tool {} executed in {} ms, success={}",
                         toolCall.getName(), duration, result.isSuccess());
+
+                if (result.isSuccess()) {
+                    successfulTools++;
+                    // 根据工具类型记录数据类型
+                    recordDataType(toolCall.getName(), dataTypes);
+                }
 
                 // 将工具结果加入 messages
                 messages.add(buildToolResultMessage(provider, toolCall.getId(),
@@ -324,7 +360,124 @@ public class AiCopilotService {
 
         // 超过最大轮数
         log.warn("Max tool call iterations reached: {}", MAX_TOOL_CALL_ITERATIONS);
-        return "工具调用次数达到上限，请简化您的问题或分步提问。";
+        int confidence = calculateConfidence(calledTools, successfulTools, dataTypes);
+        String reason = buildConfidenceReason(calledTools, dataTypes) + " (达到调用上限)";
+        
+        return new ToolCallLoopResult(
+            "工具调用次数达到上限，请简化您的问题或分步提问。",
+            Math.max(50, confidence - 20),  // 降低置信度
+            reason, calledTools, dataTypes
+        );
+    }
+
+    /**
+     * 根据工具类型记录获取的数据类型
+     */
+    private void recordDataType(String toolName, Set<String> dataTypes) {
+        if (toolName.startsWith("list_routes") || toolName.startsWith("get_route")) {
+            dataTypes.add("route");
+        } else if (toolName.startsWith("list_services") || toolName.startsWith("get_service") 
+                || toolName.startsWith("nacos_service")) {
+            dataTypes.add("service");
+        } else if (toolName.startsWith("get_gateway_metrics") || toolName.startsWith("get_history_metrics")) {
+            dataTypes.add("metrics");
+        } else if (toolName.startsWith("run_diagnostic")) {
+            dataTypes.add("diagnostic");
+        } else if (toolName.startsWith("audit")) {
+            dataTypes.add("audit");
+        } else if (toolName.startsWith("list_instances") || toolName.startsWith("get_instance")) {
+            dataTypes.add("instance");
+        }
+    }
+
+    /**
+     * 计算置信度分数
+     * 
+     * 基础分数: 70
+     * 工具调用验证: +15
+     * 数据完整性: +10 (有 route + service + metrics)
+     * 多工具验证: +5 (超过3个不同工具)
+     */
+    private int calculateConfidence(Set<String> calledTools, int successfulTools, Set<String> dataTypes) {
+        int confidence = 70;  // 基础分数
+
+        // 工具调用加分
+        if (!calledTools.isEmpty()) {
+            confidence += 15;
+        }
+
+        // 数据完整性加分
+        if (dataTypes.contains("route") && dataTypes.contains("service")) {
+            confidence += 5;
+        }
+        if (dataTypes.contains("metrics")) {
+            confidence += 3;
+        }
+        if (dataTypes.contains("diagnostic")) {
+            confidence += 2;
+        }
+
+        // 多工具验证加分
+        if (calledTools.size() >= 3) {
+            confidence += 5;
+        }
+
+        // 成功率影响
+        if (successfulTools > 0 && calledTools.size() > 0) {
+            double successRate = successfulTools / calledTools.size();
+            if (successRate >= 0.9) {
+                confidence += 5;
+            } else if (successRate < 0.5) {
+                confidence -= 10;
+            }
+        }
+
+        // 限制范围
+        return Math.min(100, Math.max(0, confidence));
+    }
+
+    /**
+     * 构建置信度原因说明
+     */
+    private String buildConfidenceReason(Set<String> calledTools, Set<String> dataTypes) {
+        if (calledTools.isEmpty()) {
+            return "未调用工具验证";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("已调用工具: ").append(calledTools.size()).append("个");
+        
+        if (!dataTypes.isEmpty()) {
+            sb.append("，验证数据: ").append(String.join("+", dataTypes));
+        }
+
+        return sb.toString();
+    }
+
+    /**
+     * 工具调用循环结果（包含置信度）
+     */
+    private static class ToolCallLoopResult {
+        private final String content;
+        private final int confidence;
+        private final String confidenceReason;
+        private final Set<String> calledTools;
+        private final Set<String> dataTypes;
+
+        ToolCallLoopResult(String content, int confidence, String confidenceReason,
+                          Set<String> calledTools, Set<String> dataTypes) {
+            this.content = content;
+            this.confidence = confidence;
+            this.confidenceReason = confidenceReason;
+            this.calledTools = calledTools;
+            this.dataTypes = dataTypes;
+        }
+
+        String getContent() { return content; }
+        int getConfidence() { return confidence; }
+        String getConfidenceReason() { return confidenceReason; }
+        Set<String> getCalledTools() { return calledTools; }
+        Set<String> getDataTypes() { return dataTypes; }
     }
 
     /**
@@ -601,9 +754,15 @@ public class AiCopilotService {
             AiConfig config = getAiConfig(provider);
 
             // === Step 3: Function Calling 循环 ===
-            String finalAnalysis = runToolCallLoop(config, model, messages, tools);
+            ToolCallLoopResult loopResult = runToolCallLoopWithConfidence(config, model, messages, tools);
+            
+            // 构建最终响应（添加置信度标记）
+            String finalAnalysis = loopResult.getContent();
+            String confidenceMark = String.format("\n\n> AI 置信度：%d%%（%s）", 
+                loopResult.getConfidence(), loopResult.getConfidenceReason());
+            finalAnalysis = finalAnalysis + confidenceMark;
 
-            return new DebugAnalysis(true, finalAnalysis, null);
+            return new DebugAnalysis(true, finalAnalysis, null, loopResult.getConfidence(), loopResult.getConfidenceReason());
 
         } catch (Exception e) {
             log.error("Error analysis failed", e);
@@ -1236,11 +1395,23 @@ public class AiCopilotService {
         private boolean success;
         private String response;
         private String error;
+        private int confidence;  // AI 置信度 (0-100)
+        private String confidenceReason;  // 置信度原因说明
 
         public ChatResponse(boolean success, String response, String error) {
             this.success = success;
             this.response = response;
             this.error = error;
+            this.confidence = 70;  // 默认中等置信度
+            this.confidenceReason = "基于基础分析";
+        }
+
+        public ChatResponse(boolean success, String response, String error, int confidence, String confidenceReason) {
+            this.success = success;
+            this.response = response;
+            this.error = error;
+            this.confidence = confidence;
+            this.confidenceReason = confidenceReason;
         }
 
         public Map<String, Object> toMap() {
@@ -1248,6 +1419,8 @@ public class AiCopilotService {
             map.put("success", success);
             if (response != null) map.put("response", response);
             if (error != null) map.put("error", error);
+            map.put("confidence", confidence);
+            map.put("confidenceReason", confidenceReason);
             return map;
         }
 
@@ -1262,6 +1435,14 @@ public class AiCopilotService {
 
         public String getError() {
             return error;
+        }
+
+        public int getConfidence() {
+            return confidence;
+        }
+
+        public String getConfidenceReason() {
+            return confidenceReason;
         }
     }
 
@@ -1302,11 +1483,23 @@ public class AiCopilotService {
         private boolean success;
         private String analysis;
         private String error;
+        private int confidence;
+        private String confidenceReason;
 
         public DebugAnalysis(boolean success, String analysis, String error) {
             this.success = success;
             this.analysis = analysis;
             this.error = error;
+            this.confidence = 70;
+            this.confidenceReason = "基于基础分析";
+        }
+
+        public DebugAnalysis(boolean success, String analysis, String error, int confidence, String confidenceReason) {
+            this.success = success;
+            this.analysis = analysis;
+            this.error = error;
+            this.confidence = confidence;
+            this.confidenceReason = confidenceReason;
         }
 
         public Map<String, Object> toMap() {
@@ -1314,6 +1507,8 @@ public class AiCopilotService {
             map.put("success", success);
             if (analysis != null) map.put("analysis", analysis);
             if (error != null) map.put("error", error);
+            map.put("confidence", confidence);
+            map.put("confidenceReason", confidenceReason);
             return map;
         }
 
@@ -1328,6 +1523,14 @@ public class AiCopilotService {
 
         public String getError() {
             return error;
+        }
+
+        public int getConfidence() {
+            return confidence;
+        }
+
+        public String getConfidenceReason() {
+            return confidenceReason;
         }
     }
 

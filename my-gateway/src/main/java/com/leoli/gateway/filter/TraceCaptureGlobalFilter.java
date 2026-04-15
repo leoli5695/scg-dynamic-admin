@@ -55,6 +55,9 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
     @Value("${gateway.admin-url:http://localhost:9090}")
     private String adminUrl;
 
+    @Value("${gateway.instance-id:${GATEWAY_INSTANCE_ID:gateway-1}}")
+    private String instanceId;
+
     @Value("${gateway.trace.capture-errors:true}")
     private boolean captureErrors;
 
@@ -226,6 +229,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
 
             Map<String, Object> trace = new HashMap<>();
             trace.put("traceId", traceId);
+            trace.put("instanceId", instanceId);
             trace.put("routeId", RouteUtils.getRouteId(exchange));
             trace.put("method", request.getMethod().name());
             trace.put("uri", request.getURI().toString());

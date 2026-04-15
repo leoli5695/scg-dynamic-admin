@@ -155,6 +155,7 @@ public class NacosDiscoveryService extends AbstractDiscoveryService {
 
     /**
      * Convert Nacos Instance objects to our ServiceInstance objects.
+     * Reads enabled, healthy, and weight from Nacos instance metadata.
      */
     private List<ServiceInstance> convertToServiceInstances(List<Instance> nacosInstances) {
         return nacosInstances.stream()
@@ -164,20 +165,10 @@ public class NacosDiscoveryService extends AbstractDiscoveryService {
                             instance.getIp(),
                             instance.getPort()
                     );
+                    // Read from Nacos Instance properties
                     serviceInstance.setHealthy(instance.isHealthy());
+                    serviceInstance.setEnabled(instance.isEnabled());
                     serviceInstance.setWeight(instance.getWeight());
-
-                    // Set metadata if available
-                    if (instance.getMetadata() != null && !instance.getMetadata().isEmpty()) {
-                        String weightStr = instance.getMetadata().get("weight");
-                        if (weightStr != null) {
-                            try {
-                                serviceInstance.setWeight(Double.parseDouble(weightStr));
-                            } catch (NumberFormatException e) {
-                                // Ignore, use default weight
-                            }
-                        }
-                    }
 
                     return serviceInstance;
                 })

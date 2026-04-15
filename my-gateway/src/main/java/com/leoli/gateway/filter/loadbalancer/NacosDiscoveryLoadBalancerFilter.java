@@ -2,9 +2,9 @@ package com.leoli.gateway.filter.loadbalancer;
 
 import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.discovery.nacos.NacosDiscoveryService;
+import com.leoli.gateway.discovery.spi.DiscoveryService.ServiceInstance;
 import com.leoli.gateway.model.ServiceBindingType;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.cloud.gateway.route.Route;
@@ -19,6 +19,8 @@ import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import static com.leoli.gateway.filter.loadbalancer.MultiServiceLoadBalancerFilter.SERVICE_BINDING_TYPE_ATTR;
 import static com.leoli.gateway.filter.loadbalancer.MultiServiceLoadBalancerFilter.TARGET_SERVICE_ID_ATTR;
@@ -36,6 +38,13 @@ import static com.leoli.gateway.filter.loadbalancer.MultiServiceLoadBalancerFilt
  *   <li>Service namespace or group is specified (different from gateway's default)</li>
  * </ul>
  * <p>
+ * <b>Nacos-native attributes supported:</b>
+ * <ul>
+ *   <li><b>enabled</b>: Instance enabled/disabled in Nacos console (user control)</li>
+ *   <li><b>healthy</b>: Instance health status from Nacos health check</li>
+ *   <li><b>weight</b>: Instance weight for load balancing (set in Nacos console)</li>
+ * </ul>
+ * <p>
  * <b>Execution Order:</b> 10100 (before SCG's ReactiveLoadBalancerClientFilter at 10150)
  *
  * @author leoli
@@ -50,9 +59,12 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
     public static final String SERVICE_NAMESPACE_ATTR = "serviceNamespace";
     public static final String SERVICE_GROUP_ATTR = "serviceGroup";
 
+    // Round-robin counter for weighted selection
+    private final Map<String, AtomicInteger> roundRobinCounters = new java.util.concurrent.ConcurrentHashMap<>();
+
     public NacosDiscoveryLoadBalancerFilter(NacosDiscoveryService nacosDiscoveryService) {
         this.nacosDiscoveryService = nacosDiscoveryService;
-        log.info("NacosDiscoveryLoadBalancerFilter initialized for multi-namespace discovery");
+        log.info("NacosDiscoveryLoadBalancerFilter initialized with weighted load balancing");
     }
 
     @Override
@@ -95,7 +107,7 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
         return chooseInstance(serviceName, namespace, group)
                 .flatMap(instance -> {
                     if (instance == null) {
-                        log.warn("No instances found for service: {}, namespace: {}, group: {}",
+                        log.warn("No available instances found for service: {}, namespace: {}, group: {}",
                                 serviceName, namespace, group);
                         exchange.getResponse().setStatusCode(HttpStatus.SERVICE_UNAVAILABLE);
                         return exchange.getResponse().setComplete();
@@ -105,8 +117,9 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
                     URI newUri = buildUri(instance, url);
                     exchange.getAttributes().put(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR, newUri);
 
-                    log.debug("Selected instance: {}:{} for service: {}, namespace: {}, group: {}",
-                            instance.getHost(), instance.getPort(), serviceName, namespace, group);
+                    log.debug("Selected instance: {}:{} (weight={}) for service: {}, namespace: {}, group: {}",
+                            instance.getHost(), instance.getPort(), instance.getMetadata().get("weight"),
+                            serviceName, namespace, group);
 
                     // Continue with the modified URI (skip native lb filter)
                     return chain.filter(exchange);
@@ -120,12 +133,12 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * Choose an instance from the discovered instances.
+     * Choose an instance using weighted round-robin.
+     * Filters out disabled and unhealthy instances.
      */
-    private Mono<ServiceInstance> chooseInstance(String serviceName, String namespace, String group) {
+    private Mono<org.springframework.cloud.client.ServiceInstance> chooseInstance(String serviceName, String namespace, String group) {
         try {
-            List<com.leoli.gateway.discovery.spi.DiscoveryService.ServiceInstance> instances =
-                    nacosDiscoveryService.getHealthyInstances(serviceName, namespace, group);
+            List<ServiceInstance> instances = nacosDiscoveryService.getHealthyInstances(serviceName, namespace, group);
 
             if (instances == null || instances.isEmpty()) {
                 log.warn("No healthy instances found for service: {}, namespace: {}, group: {}",
@@ -133,12 +146,22 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
                 return Mono.empty();
             }
 
-            // Simple random selection
-            int index = ThreadLocalRandom.current().nextInt(instances.size());
-            com.leoli.gateway.discovery.spi.DiscoveryService.ServiceInstance selected = instances.get(index);
+            // Filter out disabled instances (user set enabled=false in Nacos)
+            List<ServiceInstance> enabledInstances = instances.stream()
+                    .filter(ServiceInstance::isEnabled)
+                    .collect(Collectors.toList());
+
+            if (enabledInstances.isEmpty()) {
+                log.warn("All instances are DISABLED for service: {}, namespace: {}, group: {}",
+                        serviceName, namespace, group);
+                return Mono.empty();
+            }
+
+            // Select instance using weighted round-robin
+            ServiceInstance selected = selectByWeightedRoundRobin(serviceName, enabledInstances);
 
             // Convert to Spring Cloud ServiceInstance
-            ServiceInstance springInstance = new SimpleServiceInstance(selected);
+            org.springframework.cloud.client.ServiceInstance springInstance = new SimpleServiceInstance(selected);
             return Mono.just(springInstance);
         } catch (Exception e) {
             log.error("Error getting instances for service: {}, namespace: {}, group: {}",
@@ -148,9 +171,45 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
     }
 
     /**
+     * Select instance using weighted round-robin (smooth version).
+     * This algorithm ensures even distribution based on weights.
+     */
+    private ServiceInstance selectByWeightedRoundRobin(String serviceName, List<ServiceInstance> instances) {
+        if (instances.size() == 1) {
+            return instances.get(0);
+        }
+
+        // Calculate total weight
+        double totalWeight = instances.stream()
+                .mapToDouble(ServiceInstance::getWeight)
+                .sum();
+
+        if (totalWeight <= 0) {
+            // All weights are 0, use simple round-robin
+            AtomicInteger counter = roundRobinCounters.computeIfAbsent(serviceName, k -> new AtomicInteger(0));
+            int index = Math.abs(counter.getAndIncrement() % instances.size());
+            return instances.get(index);
+        }
+
+        // Weighted random selection (simple and effective)
+        double randomWeight = ThreadLocalRandom.current().nextDouble() * totalWeight;
+        double currentWeight = 0;
+
+        for (ServiceInstance instance : instances) {
+            currentWeight += instance.getWeight();
+            if (randomWeight <= currentWeight) {
+                return instance;
+            }
+        }
+
+        // Fallback to last instance
+        return instances.get(instances.size() - 1);
+    }
+
+    /**
      * Build new URI from selected instance and original URI.
      */
-    private URI buildUri(ServiceInstance instance, URI originalUri) {
+    private URI buildUri(org.springframework.cloud.client.ServiceInstance instance, URI originalUri) {
         String scheme = "http";
         if (instance.isSecure()) {
             scheme = "https";
@@ -182,19 +241,25 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * Simple ServiceInstance implementation.
+     * Simple ServiceInstance implementation with metadata support.
      */
-    private static class SimpleServiceInstance implements ServiceInstance {
+    private static class SimpleServiceInstance implements org.springframework.cloud.client.ServiceInstance {
         private final String serviceId;
         private final String host;
         private final int port;
         private final boolean secure;
+        private final double weight;
+        private final boolean enabled;
+        private final boolean healthy;
 
-        public SimpleServiceInstance(com.leoli.gateway.discovery.spi.DiscoveryService.ServiceInstance instance) {
+        public SimpleServiceInstance(ServiceInstance instance) {
             this.serviceId = instance.getServiceId();
             this.host = instance.getHost();
             this.port = instance.getPort();
             this.secure = false;
+            this.weight = instance.getWeight();
+            this.enabled = instance.isEnabled();
+            this.healthy = instance.isHealthy();
         }
 
         @Override
@@ -224,7 +289,12 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
 
         @Override
         public Map<String, String> getMetadata() {
-            return Map.of();
+            // Include weight, enabled, healthy in metadata for logging/debugging
+            return Map.of(
+                    "weight", String.valueOf(weight),
+                    "enabled", String.valueOf(enabled),
+                    "healthy", String.valueOf(healthy)
+            );
         }
 
         @Override

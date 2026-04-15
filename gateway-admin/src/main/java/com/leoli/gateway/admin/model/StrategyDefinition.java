@@ -72,7 +72,6 @@ public class StrategyDefinition {
     public static final String TYPE_AUTH = "AUTH";
     public static final String TYPE_RETRY = "RETRY";
     public static final String TYPE_CORS = "CORS";
-    public static final String TYPE_ACCESS_LOG = "ACCESS_LOG";
     public static final String TYPE_HEADER_OP = "HEADER_OP";
     public static final String TYPE_CACHE = "CACHE";
     public static final String TYPE_SECURITY = "SECURITY";

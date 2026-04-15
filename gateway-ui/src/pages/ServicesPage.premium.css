@@ -1,0 +1,852 @@
+/**
+ * Services Page - Premium Modal Enhancement
+ * Glassmorphism design with gradient icons and refined form inputs
+ */
+
+/* ==================== Services Page Layout ==================== */
+.services-page {
+  padding: 0;
+  min-height: 100%;
+  background: var(--bg-primary);
+}
+
+.services-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: var(--space-5);
+  align-items: stretch;
+}
+
+/* ==================== Service Card ==================== */
+.service-card {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  transition: all var(--duration-normal) var(--ease-default);
+  overflow: hidden;
+  background: var(--bg-card);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.service-card:hover {
+  border-color: var(--border-default);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.service-card .ant-card-body {
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.service-card-warning {
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.service-warning-alert {
+  margin-bottom: 16px;
+}
+
+/* ==================== Card Header ==================== */
+.service-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-3);
+}
+
+.service-info {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+}
+
+.service-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+  flex-shrink: 0;
+}
+
+.service-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.service-name {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  line-height: var(--leading-tight);
+}
+
+.service-id-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.service-id {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+/* ==================== Service Meta ==================== */
+.service-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.lb-tag {
+  background: rgba(139, 92, 246, 0.12);
+  color: #a78bfa;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+}
+
+/* ==================== Instances Section ==================== */
+.instances-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.instances-header {
+  margin-bottom: var(--space-2);
+}
+
+.instances-title {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.instances-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.instance-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: var(--text-xs);
+  background: rgba(39, 39, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+}
+
+.instance-tag-healthy {
+  background: rgba(34, 197, 94, 0.08);
+  border-color: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+}
+
+.instance-tag-unhealthy {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.instance-tag-more {
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+}
+
+.instance-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.instance-addr {
+  font-family: var(--font-mono);
+}
+
+.no-instances {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ==================== Modal Styles - Enhanced Glassmorphism ==================== */
+.service-modal .ant-modal-content {
+  background: rgba(28, 28, 33, 0.95) !important;
+  backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 16px !important;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+}
+
+.service-modal .ant-modal-header {
+  background: transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 20px 24px !important;
+}
+
+.service-modal .ant-modal-body {
+  padding: 24px !important;
+  background: transparent !important;
+}
+
+.service-modal .ant-modal-title {
+  color: #fafafa !important;
+  font-weight: 600 !important;
+}
+
+.service-modal .ant-modal-close {
+  color: #71717a !important;
+  top: 16px !important;
+  right: 16px !important;
+}
+
+.service-modal .ant-modal-close:hover {
+  color: #fafafa !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-radius: 8px !important;
+}
+
+/* ==================== Modal Icon Wrapper - Gradient ==================== */
+.service-modal .modal-icon-wrapper {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 18px;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.service-modal .modal-icon-wrapper.edit {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+}
+
+/* ==================== Form Sections - Enhanced ==================== */
+.service-modal .form-section-modern {
+  margin-bottom: 24px;
+  padding: 20px;
+  background: rgba(39, 39, 42, 0.5);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.service-modal .section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.service-modal .section-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  font-size: 12px;
+}
+
+.service-modal .section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fafafa;
+  letter-spacing: -0.01em;
+}
+
+.service-modal .section-subtitle {
+  font-size: 12px;
+  color: #71717a;
+  margin-left: auto;
+}
+
+.service-modal .section-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ==================== Modal Form Inputs ==================== */
+.service-modal .ant-input,
+.service-modal .ant-input-number,
+.service-modal .ant-select-selector,
+.service-modal .ant-picker {
+  background: rgba(9, 9, 11, 0.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 10px !important;
+  color: #fafafa !important;
+  transition: all 0.2s ease !important;
+}
+
+.service-modal .ant-input:hover,
+.service-modal .ant-select-selector:hover {
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+.service-modal .ant-input:focus,
+.service-modal .ant-input-focused,
+.service-modal .ant-select-focused .ant-select-selector {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important;
+}
+
+.service-modal .ant-input::placeholder {
+  color: #52525b !important;
+}
+
+.service-modal .ant-select-arrow {
+  color: #71717a !important;
+}
+
+.service-modal .ant-select-selection-item {
+  color: #fafafa !important;
+}
+
+.service-modal .ant-select-selection-placeholder {
+  color: #52525b !important;
+}
+
+.service-modal .ant-form-item-label > label {
+  color: #a1a1aa !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+.service-modal .ant-form-item-label > label::after {
+  content: '' !important;
+}
+
+/* ==================== Form Row Layout ==================== */
+.form-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.form-item-half {
+  flex: 1;
+  min-width: 200px;
+}
+
+/* ==================== Instance Row - Modern Style ==================== */
+.instance-row-modern {
+  padding: 16px;
+  margin-bottom: 12px;
+  background: rgba(9, 9, 11, 0.6);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s ease;
+}
+
+.instance-row-modern:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(9, 9, 11, 0.7);
+}
+
+.instance-row-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.instance-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #a1a1aa;
+}
+
+.instance-row-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 480px) {
+  .instance-row-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.instance-form-item {
+  margin-bottom: 0;
+}
+
+.instance-form-item .ant-input,
+.instance-form-item .ant-select-selector {
+  background: rgba(39, 39, 42, 0.6) !important;
+  border-radius: 8px !important;
+}
+
+/* ==================== Status Dot in Select ==================== */
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+.status-dot-success {
+  background: #22c55e;
+}
+
+.status-dot-default {
+  background: #71717a;
+}
+
+/* ==================== Add Instance Button ==================== */
+.add-instance-btn-modern {
+  border: 1px dashed rgba(255, 255, 255, 0.15) !important;
+  background: rgba(39, 39, 42, 0.3) !important;
+  color: #a1a1aa !important;
+  border-radius: 10px !important;
+  transition: all 0.2s ease !important;
+  height: 44px !important;
+}
+
+.add-instance-btn-modern:hover {
+  border-color: #3b82f6 !important;
+  background: rgba(59, 130, 246, 0.08) !important;
+  color: #60a5fa !important;
+}
+
+/* ==================== Modal Footer - Enhanced ==================== */
+.service-modal .modal-footer-modern {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 24px;
+  margin-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.service-modal .modal-footer-modern .ant-btn {
+  height: 40px;
+  padding: 0 24px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 10px;
+  transition: all 0.2s ease;
+}
+
+.service-modal .modal-footer-modern .ant-btn-default {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #a1a1aa;
+}
+
+.service-modal .modal-footer-modern .ant-btn-default:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #fafafa;
+}
+
+.service-modal .modal-footer-modern .ant-btn-primary {
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  border: none;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.service-modal .modal-footer-modern .ant-btn-primary:hover {
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+  transform: translateY(-1px);
+}
+
+/* ==================== LoadBalancer Select Enhancement ==================== */
+.select-with-icon .ant-select-selector {
+  padding: 8px 12px !important;
+}
+
+.option-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.option-icon {
+  font-size: 14px;
+  color: #71717a;
+}
+
+.option-icon-weighted {
+  color: #fbbf24;
+}
+
+.option-icon-roundrobin {
+  color: #60a5fa;
+}
+
+.option-icon-random {
+  color: #a78bfa;
+}
+
+.option-icon-hash {
+  color: #34d399;
+}
+
+.option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.option-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #fafafa;
+}
+
+.option-desc {
+  font-size: 12px;
+  color: #71717a;
+}
+
+.custom-select-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ==================== Service Detail Drawer ==================== */
+.service-detail-drawer .ant-drawer-content {
+  background: rgba(28, 28, 33, 0.98) !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+.service-detail-drawer .ant-drawer-header {
+  background: transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.drawer-content {
+  padding: 24px;
+}
+
+.drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.drawer-header-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.drawer-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+}
+
+.drawer-title-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.drawer-title {
+  color: #fafafa !important;
+  margin: 0 !important;
+}
+
+.drawer-id-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.drawer-close-btn {
+  color: #71717a;
+}
+
+.drawer-close-btn:hover {
+  color: #fafafa;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}
+
+.drawer-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  background: rgba(39, 39, 42, 0.5);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.drawer-section {
+  margin-bottom: 24px;
+}
+
+.drawer-section .section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fafafa;
+  margin-bottom: 16px;
+}
+
+.drawer-section .count {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 12px;
+}
+
+.instances-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.instance-detail-card {
+  padding: 12px 16px;
+  background: rgba(39, 39, 42, 0.4);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.instance-detail-card.healthy {
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.instance-detail-card.unhealthy {
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.instance-main-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.instance-address {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.instance-address .instance-dot {
+  width: 8px;
+  height: 8px;
+}
+
+.instance-address .ant-typography {
+  font-family: var(--font-mono);
+  color: #fafafa !important;
+}
+
+.instance-badges {
+  display: flex;
+  gap: 6px;
+}
+
+.instance-meta {
+  font-size: 12px;
+  color: #71717a;
+}
+
+.drawer-actions {
+  display: flex;
+  gap: 12px;
+  padding-top: 24px;
+  margin-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.drawer-actions .ant-btn-primary {
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  border: none;
+}
+
+.drawer-actions .ant-btn-dangerous {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #f87171;
+}
+
+.drawer-actions .ant-btn-dangerous:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+/* ==================== Modal Warning Alert ==================== */
+.modal-instances-warning {
+  margin-bottom: 16px;
+  background: rgba(245, 158, 11, 0.08) !important;
+  border: 1px solid rgba(245, 158, 11, 0.2) !important;
+  border-radius: 10px !important;
+}
+
+.modal-instances-warning .ant-alert-icon {
+  color: #fbbf24 !important;
+}
+
+.modal-instances-warning .ant-alert-message {
+  color: #fbbf24 !important;
+}
+
+/* ==================== Stats Cards ==================== */
+.stats-card {
+  border-radius: 12px !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background: rgba(28, 28, 33, 0.8) !important;
+}
+
+.stats-card-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.stats-icon-wrapper {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+
+.stats-card-primary .stats-icon-wrapper {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+}
+
+.stats-card-success .stats-icon-wrapper {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+}
+
+.stats-card-danger .stats-icon-wrapper {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.stats-info {
+  flex: 1;
+}
+
+.stats-title {
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.stats-subtitle {
+  color: #52525b;
+  font-size: 11px;
+}
+
+/* ==================== Responsive ==================== */
+@media (max-width: 768px) {
+  .services-grid { grid-template-columns: 1fr; }
+
+  .instance-row-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .service-icon { width: 32px; height: 32px; font-size: 14px; }
+  .service-name { font-size: var(--text-sm); }
+}
+
+/* ==================== Stats Bar ==================== */
+.stats-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  margin-bottom: var(--space-6);
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  transition: all var(--duration-fast) var(--ease-default);
+}
+
+.stat-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.stat-item-active {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.stat-value {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  color: var(--text-primary);
+  line-height: var(--leading-tight);
+}
+
+.stat-label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.stat-divider {
+  border-color: var(--border-subtle);
+  height: 32px;
+}
+
+.text-green-600 { color: #22c55e; }
+.text-red-600 { color: #ef4444; }

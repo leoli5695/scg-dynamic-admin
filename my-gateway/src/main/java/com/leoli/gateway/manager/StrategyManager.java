@@ -473,15 +473,6 @@ public class StrategyManager {
     }
 
     /**
-     * Get access log config for route.
-     *
-     * @deprecated Use {@link #getConfig(String, String)} instead
-     */
-    public Map<String, Object> getAccessLogConfig(String routeId) {
-        return getConfig(routeId, StrategyDefinition.TYPE_ACCESS_LOG);
-    }
-
-    /**
      * Get header operation config for route.
      *
      * @deprecated Use {@link #getConfig(String, String)} instead

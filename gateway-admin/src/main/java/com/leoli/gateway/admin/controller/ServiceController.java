@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.center.NacosConfigCenterService;
 import com.leoli.gateway.admin.model.ServiceDefinition;
 import com.leoli.gateway.admin.model.ServiceInstanceHealth;
+import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
 import com.leoli.gateway.admin.repository.ServiceInstanceHealthRepository;
 import com.leoli.gateway.admin.service.AuditLogService;
 import com.leoli.gateway.admin.service.ServiceService;
@@ -29,30 +30,25 @@ import java.util.Map;
 public class ServiceController extends BaseController {
 
     @Autowired
+    private ObjectMapper objectMapper;
+    @Autowired
     private ServiceService serviceManager;
-
+    @Autowired
+    private AuditLogService auditLogService;
     @Autowired
     private NacosConfigCenterService nacosConfigCenterService;
-
+    @Autowired
+    private GatewayInstanceRepository gatewayInstanceRepository;
     @Autowired
     private ServiceInstanceHealthRepository instanceHealthRepository;
 
-    @Autowired
-    private AuditLogService auditLogService;
-
-    @Autowired
-    private ObjectMapper objectMapper;
-
-    @Autowired
-    private com.leoli.gateway.admin.repository.GatewayInstanceRepository gatewayInstanceRepository;
-
     /**
      * Get all services with instance health status.
+     *
      * @param instanceId Optional instance ID to filter services
      */
     @GetMapping
-    public ResponseEntity<Map<String, Object>> getAllServices(
-            @RequestParam(required = false) String instanceId) {
+    public ResponseEntity<Map<String, Object>> getAllServices(@RequestParam(required = false) String instanceId) {
         List<ServiceDefinition> services;
         if (instanceId != null && !instanceId.isEmpty()) {
             services = serviceManager.getAllServicesByInstanceId(instanceId);
@@ -63,7 +59,7 @@ public class ServiceController extends BaseController {
         // Get ALL instance health records (by ip:port, not serviceId)
         // This ensures same instance shows same health across all services
         List<ServiceInstanceHealth> allHealthRecords = instanceHealthRepository.findAll();
-        
+
         // Map for quick lookup by ip:port
         Map<String, ServiceInstanceHealth> healthMap = new HashMap<>();
         for (ServiceInstanceHealth health : allHealthRecords) {
@@ -158,6 +154,7 @@ public class ServiceController extends BaseController {
 
     /**
      * Register a service.
+     *
      * @param instanceId Optional instance ID for configuration isolation
      */
     @PostMapping
@@ -429,7 +426,7 @@ public class ServiceController extends BaseController {
 
             // Query services from all namespaces
             List<com.leoli.gateway.admin.model.NacosDiscoveryServiceInfo> services =
-                nacosConfigCenterService.getDiscoveryServicesFromAllNamespaces(namespaces);
+                    nacosConfigCenterService.getDiscoveryServicesFromAllNamespaces(namespaces);
 
             log.info("Found {} Nacos services from {} namespaces", services.size(), namespaces.size());
 
@@ -443,6 +440,36 @@ public class ServiceController extends BaseController {
             Map<String, Object> result = new HashMap<>();
             result.put("code", 500);
             result.put("message", "Failed to get services: " + e.getMessage());
+            return ResponseEntity.status(500).body(result);
+        }
+    }
+
+    /**
+     * Sync all services from database to Nacos.
+     * This is a repair function to fix data inconsistency issues.
+     * When services exist in database but missing in Nacos, call this endpoint to repair.
+     */
+    @PostMapping("/sync-to-nacos")
+    public ResponseEntity<Map<String, Object>> syncServicesToNacos(HttpServletRequest request) {
+        try {
+            log.info("Syncing all services from database to Nacos...");
+
+            Map<String, Object> syncResult = serviceManager.syncAllServicesToNacos();
+
+            // Record audit log
+            auditLogService.recordAuditLog(getOperator(), "SYNC", "SERVICES", null,
+                    "sync-all-services", null, objectMapper.writeValueAsString(syncResult), getIpAddress(request));
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 200);
+            result.put("message", "Services synced successfully");
+            result.put("data", syncResult);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("Failed to sync services to Nacos", e);
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 500);
+            result.put("message", "Failed to sync services: " + e.getMessage());
             return ResponseEntity.status(500).body(result);
         }
     }

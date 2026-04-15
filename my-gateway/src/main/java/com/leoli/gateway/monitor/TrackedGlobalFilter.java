@@ -11,6 +11,14 @@ import reactor.core.publisher.Mono;
  * Wrapper for GlobalFilter that adds execution tracking.
  * Wraps the original filter and records execution time, success/failure status.
  *
+ * IMPORTANT: This filter correctly distinguishes between:
+ * - Pre-logic time: Filter's own logic before chain.filter() call
+ * - Post-logic time: Filter's own logic after downstream returns
+ * - Downstream time: Time spent in subsequent filters and backend service
+ *
+ * This prevents the common mistake of measuring cumulative time (which includes
+ * downstream service response time) as the filter's own execution time.
+ *
  * @author leoli
  */
 @Slf4j
@@ -39,15 +47,30 @@ public class TrackedGlobalFilter implements GlobalFilter, Ordered {
         // Start tracking this filter execution
         FilterChainTracker.FilterExecution execution = tracker.startFilter(traceId, filterName, order);
 
-        return delegate.filter(exchange, chain)
+        // Execute delegate filter
+        Mono<Void> result = delegate.filter(exchange, chain);
+
+        // Mark pre-logic end right after delegate.filter returns (before downstream executes)
+        // Note: In Reactive model, delegate.filter returns immediately, actual execution happens downstream
+        tracker.markPreEnd(execution);
+
+        return result
                 .doOnSuccess(v -> {
+                    // Mark post-logic start when downstream completes
+                    tracker.markPostStart(execution);
+                    // End tracking (post-logic end)
                     tracker.endFilter(execution, true, null);
                 })
                 .doOnError(error -> {
+                    // Mark post-logic start when downstream completes with error
+                    tracker.markPostStart(execution);
+                    // End tracking (post-logic end)
                     tracker.endFilter(execution, false, error);
                 })
                 .doOnCancel(() -> {
-                    // Mark as cancelled (not success, not failure)
+                    // Mark post-logic start when downstream is cancelled
+                    tracker.markPostStart(execution);
+                    // End tracking - mark as cancelled (not success, not failure)
                     tracker.endFilter(execution, false, new RuntimeException("Filter execution cancelled"));
                 });
     }

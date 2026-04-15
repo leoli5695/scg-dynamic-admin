@@ -1,0 +1,681 @@
+/**
+ * Routes Page - Premium Modal Enhancement
+ * Glassmorphism design with gradient icons and refined form inputs
+ */
+
+/* ==================== Routes Page Layout ==================== */
+.routes-page {
+  padding: 0;
+  min-height: 100%;
+  background: var(--bg-primary);
+}
+
+.routes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: var(--space-5);
+  align-items: stretch;
+}
+
+/* ==================== Route Card ==================== */
+.route-card {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  transition: all var(--duration-normal) var(--ease-default);
+  overflow: hidden;
+  background: var(--bg-card);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.route-card:hover {
+  border-color: var(--border-default);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.route-card .ant-card-body {
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* ==================== Card Header ==================== */
+.route-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.route-info {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+}
+
+.route-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  flex-shrink: 0;
+}
+
+.route-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.route-name {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  line-height: var(--leading-tight);
+}
+
+.route-id-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.route-id {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.route-status {
+  flex-shrink: 0;
+}
+
+/* ==================== Route Sections ==================== */
+.route-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.section-label {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.service-tag {
+  border-radius: 9999px;
+  padding: 4px 12px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.predicate-tag {
+  border-radius: 9999px;
+}
+
+.plugin-tag {
+  border-radius: 9999px;
+}
+
+.no-data {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ==================== Route Meta ==================== */
+.route-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.route-desc {
+  max-width: 200px;
+}
+
+/* ==================== Modal Styles - Enhanced Glassmorphism ==================== */
+.route-modal .ant-modal-content {
+  background: rgba(28, 28, 33, 0.95) !important;
+  backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 16px !important;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+}
+
+.route-modal .ant-modal-header {
+  background: transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 20px 24px !important;
+}
+
+.route-modal .ant-modal-body {
+  padding: 24px !important;
+  background: transparent !important;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.route-modal .ant-modal-title {
+  color: #fafafa !important;
+  font-weight: 600 !important;
+}
+
+.route-modal .ant-modal-close {
+  color: #71717a !important;
+  top: 16px !important;
+  right: 16px !important;
+}
+
+.route-modal .ant-modal-close:hover {
+  color: #fafafa !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-radius: 8px !important;
+}
+
+/* ==================== Modal Icon Wrapper - Gradient ==================== */
+.route-modal .modal-icon-wrapper {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 18px;
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+}
+
+.route-modal .modal-icon-wrapper.edit {
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+/* ==================== Form Sections - Enhanced ==================== */
+.route-modal .form-section-modern {
+  margin-bottom: 24px;
+  padding: 20px;
+  background: rgba(39, 39, 42, 0.5);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.route-modal .section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.route-modal .section-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  font-size: 12px;
+}
+
+.route-modal .section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fafafa;
+  letter-spacing: -0.01em;
+}
+
+.route-modal .section-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ==================== Modal Form Inputs ==================== */
+.route-modal .ant-input,
+.route-modal .ant-input-number,
+.route-modal .ant-select-selector,
+.route-modal .ant-picker {
+  background: rgba(9, 9, 11, 0.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 10px !important;
+  color: #fafafa !important;
+  transition: all 0.2s ease !important;
+}
+
+.route-modal .ant-input:hover,
+.route-modal .ant-select-selector:hover {
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+.route-modal .ant-input:focus,
+.route-modal .ant-input-focused,
+.route-modal .ant-select-focused .ant-select-selector {
+  border-color: #22c55e !important;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15) !important;
+}
+
+.route-modal .ant-input::placeholder {
+  color: #52525b !important;
+}
+
+.route-modal .ant-select-arrow {
+  color: #71717a !important;
+}
+
+.route-modal .ant-select-selection-item {
+  color: #fafafa !important;
+}
+
+.route-modal .ant-select-selection-placeholder {
+  color: #52525b !important;
+}
+
+.route-modal .ant-form-item-label > label {
+  color: #a1a1aa !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+.route-modal .ant-form-item-label > label::after {
+  content: '' !important;
+}
+
+/* ==================== Radio Button Group ==================== */
+.route-modal .ant-radio-button-wrapper {
+  background: rgba(9, 9, 11, 0.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #a1a1aa !important;
+  border-radius: 8px !important;
+  margin-right: 8px !important;
+}
+
+.route-modal .ant-radio-button-wrapper:not(:first-child)::before {
+  background: transparent !important;
+}
+
+.route-modal .ant-radio-button-wrapper:hover {
+  background: rgba(39, 39, 42, 0.8) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  color: #fafafa !important;
+}
+
+.route-modal .ant-radio-button-wrapper-checked {
+  background: rgba(34, 197, 94, 0.15) !important;
+  border-color: #22c55e !important;
+  color: #34d399 !important;
+}
+
+/* ==================== Switch ==================== */
+.route-modal .ant-switch {
+  background: rgba(255, 255, 255, 0.15) !important;
+}
+
+.route-modal .ant-switch-checked {
+  background: #22c55e !important;
+}
+
+/* ==================== Form Row Layout ==================== */
+.form-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.form-item-half {
+  flex: 1;
+  min-width: 200px;
+}
+
+/* ==================== Predicate/Filter Item Row ==================== */
+.form-item-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  background: rgba(9, 9, 11, 0.6);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s ease;
+}
+
+.form-item-row:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Override inline styles in PredicateItem/FilterItem */
+.form-item-row .ant-select-selector,
+.form-item-row .ant-input {
+  background: rgba(39, 39, 42, 0.6) !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Key-Value Input Container */
+.key-value-inputs {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.key-value-inputs .kv-input {
+  width: 110px;
+}
+
+.key-value-inputs .kv-separator {
+  color: #64748b;
+}
+
+/* Header Input Container */
+.header-inputs {
+  display: flex;
+  width: 300px;
+}
+
+.header-inputs .ant-input {
+  background: rgba(39, 39, 42, 0.6) !important;
+  border-radius: 8px 0 0 8px !important;
+}
+
+.header-inputs .ant-input:last-child {
+  border-radius: 0 8px 8px 0 !important;
+}
+
+/* RewritePath Input Container */
+.rewrite-inputs {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.rewrite-inputs .rewrite-input {
+  width: 110px;
+}
+
+.rewrite-inputs .rewrite-separator {
+  color: #64748b;
+}
+
+/* RedirectTo Input Container */
+.redirect-inputs {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.redirect-inputs .status-select {
+  width: 80px;
+}
+
+.redirect-inputs .url-input {
+  width: 150px;
+}
+
+/* Delete Button in Form Row */
+.form-item-row .delete-btn {
+  color: #ef4444;
+  opacity: 0.8;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s ease;
+  border-radius: 6px;
+}
+
+.form-item-row .delete-btn:hover {
+  opacity: 1;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* No Params Input */
+.no-params-input {
+  opacity: 0.5;
+}
+
+/* ==================== Plugin Type Select ==================== */
+.plugin-type-select {
+  min-width: 160px;
+}
+
+.plugin-help-icon {
+  color: #71717a;
+  font-size: 14px;
+  cursor: help;
+  transition: color 0.2s ease;
+}
+
+.plugin-help-icon:hover {
+  color: #60a5fa;
+}
+
+/* ==================== Service Option Tags ==================== */
+.service-option-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 500;
+  margin-left: 8px;
+}
+
+.service-option-tag.static {
+  background: rgba(139, 92, 246, 0.15);
+  color: #a78bfa;
+}
+
+.service-option-tag.nacos {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+}
+
+/* ==================== Add Buttons ==================== */
+.add-predicate-btn-modern,
+.add-filter-btn-modern {
+  border: 1px dashed rgba(255, 255, 255, 0.15) !important;
+  background: rgba(39, 39, 42, 0.3) !important;
+  color: #a1a1aa !important;
+  border-radius: 10px !important;
+  transition: all 0.2s ease !important;
+  height: 44px !important;
+}
+
+.add-predicate-btn-modern:hover,
+.add-filter-btn-modern:hover {
+  border-color: #22c55e !important;
+  background: rgba(34, 197, 94, 0.08) !important;
+  color: #34d399 !important;
+}
+
+/* ==================== Multi-Service Row ==================== */
+.route-modal .ant-form-list .ant-form-item-control-input {
+  min-height: auto;
+}
+
+/* Override inline styles for service binding rows */
+.route-modal .ant-input-number {
+  background: rgba(39, 39, 42, 0.6) !important;
+}
+
+/* ==================== Weight Indicator ==================== */
+.route-modal .ant-tag.ant-tag-success {
+  background: rgba(34, 197, 94, 0.15) !important;
+  border-color: rgba(34, 197, 94, 0.3) !important;
+  color: #34d399 !important;
+}
+
+.route-modal .ant-tag.ant-tag-warning {
+  background: rgba(245, 158, 11, 0.15) !important;
+  border-color: rgba(245, 158, 11, 0.3) !important;
+  color: #fbbf24 !important;
+}
+
+/* ==================== Gray Rules Row ==================== */
+.gray-rule-select-dropdown .ant-select-item {
+  padding: 8px 12px;
+}
+
+/* ==================== Modal Footer - Enhanced ==================== */
+.route-modal .modal-footer-modern {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 24px;
+  margin-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.route-modal .modal-footer-modern .ant-btn {
+  height: 40px;
+  padding: 0 24px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 10px;
+  transition: all 0.2s ease;
+}
+
+.route-modal .modal-footer-modern .ant-btn-default {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #a1a1aa;
+}
+
+.route-modal .modal-footer-modern .ant-btn-default:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #fafafa;
+}
+
+.route-modal .modal-footer-modern .ant-btn-primary {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  border: none;
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+}
+
+.route-modal .modal-footer-modern .ant-btn-primary:hover {
+  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4);
+  transform: translateY(-1px);
+}
+
+/* ==================== Pagination ==================== */
+.pagination-container {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-5) 0;
+}
+
+.pagination-container .ant-pagination-item {
+  border-radius: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+}
+
+.pagination-container .ant-pagination-item-active {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: #22c55e;
+}
+
+.pagination-container .ant-pagination-item-active a {
+  color: #34d399;
+}
+
+/* ==================== Stats Bar ==================== */
+.stats-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  margin-bottom: var(--space-6);
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.stat-value {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  color: var(--text-primary);
+  line-height: var(--leading-tight);
+}
+
+.stat-label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.stat-divider {
+  border-color: var(--border-subtle);
+  height: 32px;
+}
+
+.text-green-600 { color: #22c55e; }
+.text-red-600 { color: #ef4444; }
+
+/* ==================== Create Button ==================== */
+.create-btn {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%) !important;
+  border: none !important;
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3) !important;
+  transition: all 0.2s ease !important;
+}
+
+.create-btn:hover {
+  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4) !important;
+  transform: translateY(-1px);
+}
+
+/* ==================== Responsive ==================== */
+@media (max-width: 768px) {
+  .routes-grid { grid-template-columns: 1fr; }
+
+  .form-item-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .form-item-row .ant-select,
+  .form-item-row .ant-input {
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .route-icon { width: 32px; height: 32px; font-size: 14px; }
+  .route-name { font-size: var(--text-sm); }
+}

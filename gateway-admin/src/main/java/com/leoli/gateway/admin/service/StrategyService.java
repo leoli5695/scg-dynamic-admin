@@ -72,7 +72,76 @@ public class StrategyService {
     }
 
     /**
+     * Get all registered gateway instance namespaces.
+     * Used for broadcasting global strategies.
+     */
+    private List<String> getAllGatewayNamespaces() {
+        List<GatewayInstanceEntity> instances = gatewayInstanceRepository.findAll();
+        return instances.stream()
+                .map(GatewayInstanceEntity::getNacosNamespace)
+                .filter(ns -> ns != null && !ns.isEmpty())
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Publish strategy to Nacos.
+     * For global strategies (scope=GLOBAL or instanceId=null), broadcast to all gateway namespaces.
+     */
+    private void publishStrategyToNacos(String strategyDataId, String primaryNamespace, StrategyDefinition strategy, boolean isGlobal) {
+        if (isGlobal) {
+            // Broadcast global strategy to all gateway namespaces
+            List<String> namespaces = getAllGatewayNamespaces();
+            for (String namespace : namespaces) {
+                configCenterService.publishConfig(strategyDataId, namespace, strategy);
+                log.info("Global strategy published to namespace: {}", namespace);
+            }
+            // Also publish to public namespace as backup
+            configCenterService.publishConfig(strategyDataId, null, strategy);
+            log.info("Global strategy published to public namespace");
+        } else {
+            // Publish only to the specific namespace
+            configCenterService.publishConfig(strategyDataId, primaryNamespace, strategy);
+            log.info("Strategy published to namespace: {}", primaryNamespace);
+        }
+    }
+
+    /**
+     * Remove strategy from Nacos.
+     * For global strategies, remove from all gateway namespaces.
+     */
+    private void removeStrategyFromNacos(String strategyDataId, String primaryNamespace, boolean isGlobal) {
+        if (isGlobal) {
+            // Remove global strategy from all gateway namespaces
+            List<String> namespaces = getAllGatewayNamespaces();
+            for (String namespace : namespaces) {
+                configCenterService.removeConfig(strategyDataId, namespace);
+                log.info("Global strategy removed from namespace: {}", namespace);
+            }
+            // Also remove from public namespace
+            configCenterService.removeConfig(strategyDataId, null);
+            log.info("Global strategy removed from public namespace");
+        } else {
+            // Remove only from the specific namespace
+            configCenterService.removeConfig(strategyDataId, primaryNamespace);
+            log.info("Strategy removed from namespace: {}", primaryNamespace);
+        }
+    }
+
+    /**
+     * Check if strategy is global (should be broadcast to all namespaces).
+     */
+    private boolean isGlobalStrategy(StrategyDefinition strategy) {
+        return StrategyDefinition.SCOPE_GLOBAL.equals(strategy.getScope()) || strategy.getScope() == null;
+    }
+
+    private boolean isGlobalStrategyEntity(StrategyEntity entity) {
+        return StrategyDefinition.SCOPE_GLOBAL.equals(entity.getScope()) || entity.getScope() == null;
+    }
+
+    /**
      * Load strategies from database and sync enabled ones to Nacos.
+     * Global strategies are broadcast to all gateway namespaces.
      */
     private void loadStrategiesFromDatabase() {
         try {
@@ -81,6 +150,10 @@ public class StrategyService {
                 long enabledCount = entities.stream().filter(StrategyEntity::getEnabled).count();
                 log.info("Loaded {} strategies from database ({} enabled)", entities.size(), enabledCount);
 
+                // Get all gateway namespaces for global strategy broadcast
+                List<String> gatewayNamespaces = getAllGatewayNamespaces();
+                log.info("Found {} gateway namespaces for global strategy broadcast", gatewayNamespaces.size());
+
                 // Check and recover enabled strategies in Nacos
                 int recoveredCount = 0;
                 for (StrategyEntity entity : entities) {
@@ -88,23 +161,57 @@ public class StrategyService {
                         continue;
                     }
 
-                    String nacosNamespace = getNacosNamespace(entity.getInstanceId());
                     String strategyDataId = STRATEGY_PREFIX + entity.getStrategyId();
-                    if (!configCenterService.configExists(strategyDataId, nacosNamespace)) {
-                        StrategyDefinition strategy = toDefinition(entity);
-                        configCenterService.publishConfig(strategyDataId, nacosNamespace, strategy);
-                        recoveredCount++;
-                        log.info("Recovered missing strategy in Nacos: {} (namespace: {})", strategyDataId, nacosNamespace);
+                    StrategyDefinition strategy = toDefinition(entity);
+                    boolean isGlobal = isGlobalStrategyEntity(entity);
+
+                    if (isGlobal) {
+                        // Broadcast global strategy to all gateway namespaces
+                        for (String namespace : gatewayNamespaces) {
+                            if (!configCenterService.configExists(strategyDataId, namespace)) {
+                                configCenterService.publishConfig(strategyDataId, namespace, strategy);
+                                recoveredCount++;
+                                log.info("Recovered global strategy in namespace {}: {}", namespace, strategyDataId);
+                            }
+                        }
+                        // Also check public namespace
+                        if (!configCenterService.configExists(strategyDataId, null)) {
+                            configCenterService.publishConfig(strategyDataId, null, strategy);
+                            log.info("Recovered global strategy in public namespace: {}", strategyDataId);
+                        }
+                    } else {
+                        // Instance-specific strategy
+                        String nacosNamespace = getNacosNamespace(entity.getInstanceId());
+                        if (!configCenterService.configExists(strategyDataId, nacosNamespace)) {
+                            configCenterService.publishConfig(strategyDataId, nacosNamespace, strategy);
+                            recoveredCount++;
+                            log.info("Recovered strategy in namespace {}: {}", nacosNamespace, strategyDataId);
+                        }
                     }
                 }
 
                 if (recoveredCount > 0) {
                     log.info("Recovered {} missing strategies in Nacos on startup", recoveredCount);
                 }
+
+                // Update strategies index for all namespaces
+                updateAllStrategiesIndexes(gatewayNamespaces);
             }
         } catch (Exception e) {
             log.warn("Failed to load strategies from database: {}", e.getMessage());
         }
+    }
+
+    /**
+     * Update strategies index for all gateway namespaces.
+     */
+    private void updateAllStrategiesIndexes(List<String> namespaces) {
+        List<String> allEnabledStrategyIds = getAllStrategyIds();
+        for (String namespace : namespaces) {
+            updateStrategiesIndex(namespace, allEnabledStrategyIds);
+        }
+        // Also update public namespace
+        updateStrategiesIndex(null, allEnabledStrategyIds);
     }
 
     /**
@@ -238,12 +345,12 @@ public class StrategyService {
         // Publish to Nacos if enabled (with namespace)
         if (strategy.isEnabled()) {
             String strategyDataId = STRATEGY_PREFIX + strategyId;
-            configCenterService.publishConfig(strategyDataId, nacosNamespace, strategy);
-            log.info("Strategy published to Nacos: {} (namespace: {})", strategyDataId, nacosNamespace);
+            boolean isGlobal = isGlobalStrategy(strategy);
+            publishStrategyToNacos(strategyDataId, nacosNamespace, strategy, isGlobal);
         }
 
-        // Update strategies index
-        updateStrategiesIndex(nacosNamespace, getEnabledStrategyIds(instanceId));
+        // Update strategies index for all relevant namespaces
+        updateStrategiesIndexForStrategy(strategy);
 
         return entity;
     }
@@ -300,13 +407,15 @@ public class StrategyService {
 
         // Update Nacos (with namespace)
         String strategyDataId = STRATEGY_PREFIX + strategyId;
+        boolean isGlobal = isGlobalStrategy(strategy);
         if (strategy.isEnabled()) {
-            configCenterService.publishConfig(strategyDataId, nacosNamespace, strategy);
-            log.info("Strategy updated in Nacos: {} (namespace: {})", strategyDataId, nacosNamespace);
+            publishStrategyToNacos(strategyDataId, nacosNamespace, strategy, isGlobal);
         } else {
-            configCenterService.removeConfig(strategyDataId, nacosNamespace);
-            log.info("Disabled strategy removed from Nacos: {} (namespace: {})", strategyDataId, nacosNamespace);
+            removeStrategyFromNacos(strategyDataId, nacosNamespace, isGlobal);
         }
+
+        // Update strategies index
+        updateStrategiesIndexForStrategy(strategy);
 
         return entity;
     }
@@ -325,20 +434,24 @@ public class StrategyService {
 
         // Get Nacos namespace from instance
         String nacosNamespace = getNacosNamespace(entity.getInstanceId());
+        boolean isGlobal = isGlobalStrategyEntity(entity);
 
         // Remove from Nacos (with namespace)
         String strategyDataId = STRATEGY_PREFIX + strategyId;
-        configCenterService.removeConfig(strategyDataId, nacosNamespace);
-        log.info("Strategy removed from Nacos: {} (namespace: {})", strategyDataId, nacosNamespace);
+        removeStrategyFromNacos(strategyDataId, nacosNamespace, isGlobal);
 
         // Delete from database (flush immediately so query can see the updated data)
         strategyRepository.delete(entity);
         strategyRepository.flush();
         log.info("Strategy deleted from database: {}", strategyId);
 
-        // Update strategies index
-        List<String> remainingStrategyIds = getEnabledStrategyIds(entity.getInstanceId());
-        updateStrategiesIndex(nacosNamespace, remainingStrategyIds);
+        // Update strategies index for all namespaces
+        List<String> allEnabledStrategyIds = getAllStrategyIds();
+        if (isGlobal) {
+            updateAllStrategiesIndexes(getAllGatewayNamespaces());
+        } else {
+            updateStrategiesIndex(nacosNamespace, allEnabledStrategyIds);
+        }
     }
 
     /**
@@ -366,12 +479,16 @@ public class StrategyService {
         // Publish to Nacos (with namespace)
         StrategyDefinition strategy = toDefinition(entity);
         String strategyDataId = STRATEGY_PREFIX + strategyId;
-        configCenterService.publishConfig(strategyDataId, nacosNamespace, strategy);
-        log.info("Strategy published to Nacos: {} (namespace: {})", strategyDataId, nacosNamespace);
+        boolean isGlobal = isGlobalStrategy(strategy);
+        publishStrategyToNacos(strategyDataId, nacosNamespace, strategy, isGlobal);
 
         // Update strategies index (add enabled strategy to index)
-        List<String> enabledStrategyIds = getEnabledStrategyIds(entity.getInstanceId());
-        updateStrategiesIndex(nacosNamespace, enabledStrategyIds);
+        List<String> allEnabledStrategyIds = getAllStrategyIds();
+        if (isGlobal) {
+            updateAllStrategiesIndexes(getAllGatewayNamespaces());
+        } else {
+            updateStrategiesIndex(nacosNamespace, allEnabledStrategyIds);
+        }
     }
 
     /**
@@ -398,12 +515,32 @@ public class StrategyService {
 
         // Remove from Nacos (with namespace)
         String strategyDataId = STRATEGY_PREFIX + strategyId;
-        configCenterService.removeConfig(strategyDataId, nacosNamespace);
-        log.info("Strategy removed from Nacos: {} (namespace: {})", strategyDataId, nacosNamespace);
+        StrategyDefinition strategy = toDefinition(entity);
+        boolean isGlobal = isGlobalStrategy(strategy);
+        removeStrategyFromNacos(strategyDataId, nacosNamespace, isGlobal);
 
         // Update strategies index (remove disabled strategy from index)
-        List<String> enabledStrategyIds = getEnabledStrategyIds(entity.getInstanceId());
-        updateStrategiesIndex(nacosNamespace, enabledStrategyIds);
+        List<String> allEnabledStrategyIds = getAllStrategyIds();
+        if (isGlobal) {
+            updateAllStrategiesIndexes(getAllGatewayNamespaces());
+        } else {
+            updateStrategiesIndex(nacosNamespace, allEnabledStrategyIds);
+        }
+    }
+
+    /**
+     * Update strategies index for a strategy based on its scope.
+     */
+    private void updateStrategiesIndexForStrategy(StrategyDefinition strategy) {
+        List<String> allEnabledStrategyIds = getAllStrategyIds();
+        boolean isGlobal = isGlobalStrategy(strategy);
+        if (isGlobal) {
+            updateAllStrategiesIndexes(getAllGatewayNamespaces());
+        } else {
+            // For instance-specific strategy, need to find its namespace
+            String nacosNamespace = null; // Default to public
+            updateStrategiesIndex(nacosNamespace, allEnabledStrategyIds);
+        }
     }
 
     /**

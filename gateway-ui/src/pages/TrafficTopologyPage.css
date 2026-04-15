@@ -1,0 +1,217 @@
+/* Traffic Topology Page - Premium Visual Design */
+
+.topology-page {
+  padding: 20px;
+}
+
+/* Page Header */
+.page-header {
+  background: linear-gradient(135deg, rgba(22, 93, 255, 0.08) 0%, rgba(15, 198, 194, 0.05) 100%);
+  padding: 20px 24px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* Metrics Cards */
+.topology-page .ant-row {
+  margin: 0 -8px;
+}
+
+.topology-page .ant-col {
+  padding: 0 8px;
+}
+
+.topology-page .ant-card-small {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.topology-page .ant-card-small::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #165DFF, #0FC6C2);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.topology-page .ant-card-small:hover {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.04) 100%);
+  border-color: rgba(22, 93, 255, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.topology-page .ant-card-small:hover::before {
+  opacity: 1;
+}
+
+.topology-page .ant-card-body {
+  padding: 16px;
+}
+
+.topology-page .ant-statistic-title {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+
+.topology-page .ant-statistic-content {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.topology-page .ant-statistic-content-prefix {
+  margin-right: 8px;
+  font-size: 18px;
+}
+
+/* Graph Card */
+.topology-page > div:nth-child(4) {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.02) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.topology-page > div:nth-child(4) .ant-card-body {
+  padding: 0;
+}
+
+/* Legend Card */
+.topology-page > div:nth-child(5) {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.03) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.topology-page > div:nth-child(5) .ant-card-body {
+  padding: 16px 24px;
+}
+
+/* Legend Items */
+.topology-page .ant-space {
+  gap: 20px;
+}
+
+.topology-page .ant-space-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.topology-page .ant-space-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ECharts Container */
+.topology-page > div:nth-child(4) > div > div {
+  background: radial-gradient(ellipse at center, rgba(22, 93, 255, 0.05) 0%, transparent 70%);
+}
+
+/* Alert */
+.topology-page .ant-alert {
+  background: rgba(245, 63, 63, 0.1);
+  border: 1px solid rgba(245, 63, 63, 0.3);
+  border-radius: 10px;
+}
+
+/* Loading State */
+.topology-page > div:nth-child(4) > div > div[style*="text-align: center"] {
+  padding: 100px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Empty State */
+.topology-page .ant-empty {
+  padding: 60px;
+}
+
+/* Typography */
+.topology-page h4 {
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 600;
+}
+
+/* Ant Design Override */
+.topology-page .ant-card {
+  border: none;
+}
+
+.topology-page .ant-card-bordered {
+  border: none;
+}
+
+.topology-page .ant-typography {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.topology-page .ant-typography-secondary {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* Select and Button Styles */
+.topology-page .ant-select-selector {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+}
+
+.topology-page .ant-select-selector:hover {
+  border-color: rgba(22, 93, 255, 0.5);
+}
+
+.topology-page .ant-btn-default {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.85);
+  border-radius: 8px;
+}
+
+.topology-page .ant-btn-default:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(22, 93, 255, 0.5);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.topology-page .ant-btn-primary {
+  background: linear-gradient(135deg, #165DFF, #4080FF);
+  border: none;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(22, 93, 255, 0.3);
+}
+
+.topology-page .ant-btn-primary:hover {
+  background: linear-gradient(135deg, #4080FF, #165DFF);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .topology-page {
+    padding: 12px;
+  }
+  
+  .page-header {
+    flex-direction: column;
+    gap: 16px;
+  }
+}

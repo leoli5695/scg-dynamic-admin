@@ -40,9 +40,9 @@ public class HealthCheckProperties {
     private String adminUrl = "http://localhost:8080";
 
     /**
-     * Gateway ID.
+     * Gateway instance ID.
      */
-    private String gatewayId = "gateway-1";
+    private String instanceId = "gateway-1";
 
     /**
      * Degraded check threshold (consecutive unhealthy checks before entering degraded mode).

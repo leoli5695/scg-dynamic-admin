@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -70,8 +71,9 @@ public class DiagnosticController {
     public ResponseEntity<Map<String, Object>> diagnoseDatabase() {
         log.info("Running database diagnostic");
         try {
+            //直接调用单个诊断方法，避免执行完整诊断
             DiagnosticService.ComponentDiagnostic diagnostic = 
-                    diagnosticService.runFullDiagnostic().getDatabase();
+                    diagnosticService.diagnoseDatabase();
             return ResponseEntity.ok(diagnostic != null ? diagnostic.toMap() : 
                     Map.of("status", "UNKNOWN", "message", "Database diagnostic not available"));
         } catch (Exception e) {
@@ -88,8 +90,9 @@ public class DiagnosticController {
     public ResponseEntity<Map<String, Object>> diagnoseRedis() {
         log.info("Running Redis diagnostic");
         try {
+            //直接调用单个诊断方法，避免执行完整诊断
             DiagnosticService.ComponentDiagnostic diagnostic = 
-                    diagnosticService.runFullDiagnostic().getRedis();
+                    diagnosticService.diagnoseRedis();
             return ResponseEntity.ok(diagnostic != null ? diagnostic.toMap() : 
                     Map.of("status", "UNKNOWN", "message", "Redis diagnostic not available"));
         } catch (Exception e) {
@@ -106,8 +109,9 @@ public class DiagnosticController {
     public ResponseEntity<Map<String, Object>> diagnoseConfigCenter() {
         log.info("Running config center diagnostic");
         try {
+            //直接调用单个诊断方法，避免执行完整诊断
             DiagnosticService.ComponentDiagnostic diagnostic = 
-                    diagnosticService.runFullDiagnostic().getConfigCenter();
+                    diagnosticService.diagnoseConfigCenter();
             return ResponseEntity.ok(diagnostic != null ? diagnostic.toMap() : 
                     Map.of("status", "UNKNOWN", "message", "Config center diagnostic not available"));
         } catch (Exception e) {
@@ -124,8 +128,9 @@ public class DiagnosticController {
     public ResponseEntity<Map<String, Object>> diagnoseRoutes() {
         log.info("Running routes diagnostic");
         try {
+            //直接调用单个诊断方法，避免执行完整诊断
             DiagnosticService.ComponentDiagnostic diagnostic = 
-                    diagnosticService.runFullDiagnostic().getRoutes();
+                    diagnosticService.diagnoseRoutes();
             return ResponseEntity.ok(diagnostic != null ? diagnostic.toMap() : 
                     Map.of("status", "UNKNOWN", "message", "Routes diagnostic not available"));
         } catch (Exception e) {
@@ -142,8 +147,9 @@ public class DiagnosticController {
     public ResponseEntity<Map<String, Object>> diagnoseAuth() {
         log.info("Running auth diagnostic");
         try {
+            //直接调用单个诊断方法，避免执行完整诊断
             DiagnosticService.ComponentDiagnostic diagnostic = 
-                    diagnosticService.runFullDiagnostic().getAuth();
+                    diagnosticService.diagnoseAuth();
             return ResponseEntity.ok(diagnostic != null ? diagnostic.toMap() : 
                     Map.of("status", "UNKNOWN", "message", "Auth diagnostic not available"));
         } catch (Exception e) {
@@ -160,8 +166,9 @@ public class DiagnosticController {
     public ResponseEntity<Map<String, Object>> diagnoseInstances() {
         log.info("Running gateway instances diagnostic");
         try {
+            //直接调用单个诊断方法，避免执行完整诊断
             DiagnosticService.ComponentDiagnostic diagnostic = 
-                    diagnosticService.runFullDiagnostic().getGatewayInstances();
+                    diagnosticService.diagnoseGatewayInstances();
             return ResponseEntity.ok(diagnostic != null ? diagnostic.toMap() : 
                     Map.of("status", "UNKNOWN", "message", "Instances diagnostic not available"));
         } catch (Exception e) {
@@ -178,8 +185,9 @@ public class DiagnosticController {
     public ResponseEntity<Map<String, Object>> diagnosePerformance() {
         log.info("Running performance diagnostic");
         try {
+            //直接调用单个诊断方法，避免执行完整诊断
             DiagnosticService.ComponentDiagnostic diagnostic = 
-                    diagnosticService.runFullDiagnostic().getPerformance();
+                    diagnosticService.diagnosePerformance();
             return ResponseEntity.ok(diagnostic != null ? diagnostic.toMap() : 
                     Map.of("status", "UNKNOWN", "message", "Performance diagnostic not available"));
         } catch (Exception e) {
@@ -207,6 +215,67 @@ public class DiagnosticController {
             log.error("Health score check failed", e);
             return ResponseEntity.internalServerError()
                     .body(Map.of("error", "Health score check failed: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Get diagnostic history for trend analysis.
+     * @param hours Hours to look back (default 24)
+     * @param instanceId Optional instance ID filter
+     */
+    @GetMapping("/history")
+    public ResponseEntity<Map<String, Object>> getDiagnosticHistory(
+            @RequestParam(defaultValue = "24") int hours,
+            @RequestParam(required = false) String instanceId) {
+        log.info("Getting diagnostic history for last {} hours", hours);
+        try {
+            List<Map<String, Object>> history = diagnosticService.getDiagnosticHistory(hours, instanceId);
+            Map<String, Object> trend = diagnosticService.getScoreTrend(hours);
+
+            return ResponseEntity.ok(Map.of(
+                    "history", history,
+                    "trend", trend,
+                    "hours", hours
+            ));
+        } catch (Exception e) {
+            log.error("Failed to get diagnostic history", e);
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Failed to get diagnostic history: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Get score trend for charts.
+     * @param hours Hours to look back (default 24)
+     */
+    @GetMapping("/trend")
+    public ResponseEntity<Map<String, Object>> getScoreTrend(
+            @RequestParam(defaultValue = "24") int hours) {
+        log.info("Getting score trend for last {} hours", hours);
+        try {
+            Map<String, Object> trend = diagnosticService.getScoreTrend(hours);
+            return ResponseEntity.ok(trend);
+        } catch (Exception e) {
+            log.error("Failed to get score trend", e);
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Failed to get score trend: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Compare current diagnostic with previous.
+     */
+    @GetMapping("/compare")
+    public ResponseEntity<Map<String, Object>> compareWithPrevious() {
+        log.info("Comparing current diagnostic with previous");
+        try {
+            DiagnosticService.DiagnosticReport current = diagnosticService.runQuickDiagnostic();
+            Map<String, Object> comparison = diagnosticService.compareWithPrevious(current);
+            return ResponseEntity.ok(comparison);
+        } catch (Exception e) {
+            log.error("Failed to compare diagnostics", e);
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Failed to compare diagnostics: " + e.getMessage()));
         }
     }
 }

@@ -3,7 +3,7 @@ import {
   Card, Row, Col, Form, Input, Select, Button, Switch, InputNumber,
   Space, message, Spin, Divider, Typography, Tag, Alert, Tooltip,
   Tabs, Table, DatePicker, Statistic, Badge, Tooltip as AntTooltip,
-  Descriptions
+  Descriptions, Radio
 } from 'antd';
 import type { TabsProps } from 'antd';
 import {
@@ -102,6 +102,7 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
   const [logStats, setLogStats] = useState<LogStats | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [filters, setFilters] = useState<{ method?: string; statusCode?: number; path?: string; traceId?: string }>({});
+  const [bodyViewMode, setBodyViewMode] = useState<'raw' | 'formatted'>('formatted');
 
   // Load config
   const loadConfig = async () => {
@@ -382,10 +383,7 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
               <Form.Item
                 name="logDirectory"
                 label={t('access_log.log_directory') || 'Log Directory'}
-                extra={
-                  form.getFieldValue('deployMode') && form.getFieldValue('deployMode') !== 'CUSTOM' ?
-                    (t('access_log.directory_auto') || 'Auto-filled based on mode, you can customize') : ''
-                }
+                extra={t('access_log.directory_hint') || 'Default path based on mode, you can customize'}
               >
                 <Input
                   placeholder={t('access_log.directory_placeholder') || 'Enter log directory path'}
@@ -662,18 +660,40 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
               return dayjs(ts).local().format('YYYY-MM-DD HH:mm:ss.SSS');
             };
 
-            const formatJson = (str: string | undefined) => {
+            // Raw JSON display (one line, no formatting)
+            const renderRawJson = (str: string | undefined) => {
               if (!str) return null;
               try {
                 const parsed = JSON.parse(str);
-                return JSON.stringify(parsed, null, 2);
+                return JSON.stringify(parsed);  // Compact single line
               } catch {
                 return str;
               }
             };
 
-            const reqSize = record.requestHeaders?.['content-length'] || record.requestHeaders?.['Content-Length'] || '-';
-            const resSize = record.responseHeaders?.['content-length'] || record.responseHeaders?.['Content-Length'] || '-';
+            // Formatted JSON with syntax highlighting (compact 1-space indent)
+            const renderFormattedJson = (str: string | undefined) => {
+              if (!str) return null;
+              try {
+                const parsed = JSON.parse(str);
+                const formatted = JSON.stringify(parsed, null, 1);  // 只用1个空格缩进，更紧凑
+                // Apply syntax highlighting colors
+                return formatted
+                  .replace(/"([^"]+)":/g, '<span style="color: #4ec9b0">"$1"</span>:')
+                  .replace(/: "([^"]*)"/g, ': <span style="color: #ce9178">"$1"</span>')
+                  .replace(/: (\d+\.?\d*)/g, ': <span style="color: #b5cea8">$1</span>')
+                  .replace(/: (true|false|null)/g, ': <span style="color: #569cd6">$1</span>')
+                  .replace(/\{/g, '<span style="color: #ffd700">{</span>')
+                  .replace(/\}/g, '<span style="color: #ffd700">}</span>')
+                  .replace(/\[/g, '<span style="color: #ffd700">[</span>')
+                  .replace(/\]/g, '<span style="color: #ffd700">]</span>');
+              } catch {
+                return str;
+              }
+            };
+
+            const reqSize = record.requestHeaders?.['content-length'] || record.requestHeaders?.['Content-Length'] || (record.requestBody ? `${record.requestBody.length}` : '-');
+            const resSize = record.responseHeaders?.['content-length'] || record.responseHeaders?.['Content-Length'] || (record.responseBody ? `${record.responseBody.length}` : '-');
             const contentType = record.requestHeaders?.['content-type'] || record.requestHeaders?.['Content-Type'] || '-';
 
             return (
@@ -713,7 +733,7 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
                     <Text code style={{ fontSize: 12, wordBreak: 'break-all' }}>{record.path}</Text>
                   </Descriptions.Item>
                   <Descriptions.Item label="查询参数">
-                    {record.query ? <Text code style={{ fontSize: 11, wordBreak: 'break-all' }}>{record.query}</Text> : '-'}
+                    {record.query ? <Text code style={{ fontSize: 12, wordBreak: 'break-all' }}>{record.query}</Text> : '-'}
                   </Descriptions.Item>
                 </Descriptions>
 
@@ -738,15 +758,30 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
                 {(record.authType || record.routeId || record.serviceId) && (
                   <Descriptions 
                     size="small" 
-                    column={4}
+                    column={3}
                     labelStyle={{ width: 80, color: '#666' }}
                     style={{ marginBottom: 8 }}
                   >
                     {record.authType && <Descriptions.Item label="认证"><Tag color="purple">{record.authType}</Tag></Descriptions.Item>}
                     {record.authPolicy && <Descriptions.Item label="策略"><Text code style={{ fontSize: 11 }}>{record.authPolicy}</Text></Descriptions.Item>}
                     {record.authUser && <Descriptions.Item label="用户">{record.authUser}</Descriptions.Item>}
-                    {record.routeId && <Descriptions.Item label="路由ID"><Text style={{ fontSize: 11, wordBreak: 'break-all' }}>{record.routeId}</Text></Descriptions.Item>}
-                    {record.serviceId && <Descriptions.Item label="服务ID"><Text style={{ fontSize: 11, wordBreak: 'break-all' }}>{record.serviceId}</Text></Descriptions.Item>}
+                  </Descriptions>
+                )}
+                
+                {/* 第五行：路由和服务信息（单独一行，更宽的显示） */}
+                {(record.routeId || record.serviceId) && (
+                  <Descriptions 
+                    size="small" 
+                    column={2}
+                    labelStyle={{ width: 80, color: '#666' }}
+                    style={{ marginBottom: 8 }}
+                  >
+                    {record.routeId && <Descriptions.Item label="路由ID">
+                      <Text code copyable style={{ fontSize: 11, wordBreak: 'break-all' }}>{record.routeId}</Text>
+                    </Descriptions.Item>}
+                    {record.serviceId && <Descriptions.Item label="服务ID">
+                      <Text code copyable style={{ fontSize: 11 }}>{record.serviceId}</Text>
+                    </Descriptions.Item>}
                   </Descriptions>
                 )}
 
@@ -762,25 +797,42 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
                     color: '#1890ff'
                   }}>
                     📤 请求体 (Request Body) {record.requestBody && <span style={{ fontWeight: 400, color: '#666' }}>({record.requestBody.length} bytes)</span>}
+                    <Radio.Group 
+                      size="small" 
+                      value={bodyViewMode} 
+                      onChange={(e) => setBodyViewMode(e.target.value)}
+                      style={{ marginLeft: 16 }}
+                    >
+                      <Radio.Button value="formatted">格式化</Radio.Button>
+                      <Radio.Button value="raw">原始</Radio.Button>
+                    </Radio.Group>
                   </div>
                   <div style={{ 
                     padding: 12, 
-                    background: '#001529', 
+                    background: '#1e1e1e', 
                     borderRadius: '0 0 4px 4px',
-                    maxHeight: 200,
+                    maxHeight: 250,
                     overflow: 'auto'
                   }}>
                     {record.requestBody ? (
-                      <pre style={{ 
-                        margin: 0, 
-                        fontSize: 12, 
-                        color: '#52c41a',
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-all',
-                        fontFamily: 'Consolas, Monaco, "Courier New", monospace'
-                      }}>
-                        {formatJson(record.requestBody)}
-                      </pre>
+                      bodyViewMode === 'formatted' ? (
+                        <pre 
+                          style={{ 
+                            margin: 0, 
+                            fontSize: 12, 
+                            color: '#d4d4d4',
+                            whiteSpace: 'pre',
+                            fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+                            lineHeight: 1.5,
+                            padding: 0
+                          }}
+                          dangerouslySetInnerHTML={{ __html: renderFormattedJson(record.requestBody) || '' }}
+                        />
+                      ) : (
+                        <Text style={{ color: '#ce9178', fontSize: 12, fontFamily: 'Consolas, Monaco, "Courier New", monospace', wordBreak: 'break-all' }}>
+                          {renderRawJson(record.requestBody)}
+                        </Text>
+                      )
                     ) : <Text style={{ color: '#666' }}>未记录</Text>}
                   </div>
                 </div>
@@ -800,22 +852,30 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
                   </div>
                   <div style={{ 
                     padding: 12, 
-                    background: '#001529', 
+                    background: '#1e1e1e', 
                     borderRadius: '0 0 4px 4px',
-                    maxHeight: 200,
+                    maxHeight: 300,
                     overflow: 'auto'
                   }}>
                     {record.responseBody ? (
-                      <pre style={{ 
-                        margin: 0, 
-                        fontSize: 12, 
-                        color: '#1890ff',
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-all',
-                        fontFamily: 'Consolas, Monaco, "Courier New", monospace'
-                      }}>
-                        {formatJson(record.responseBody)}
-                      </pre>
+                      bodyViewMode === 'formatted' ? (
+                        <pre 
+                          style={{ 
+                            margin: 0, 
+                            fontSize: 12, 
+                            color: '#d4d4d4',
+                            whiteSpace: 'pre',
+                            fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+                            lineHeight: 1.5,
+                            padding: 0
+                          }}
+                          dangerouslySetInnerHTML={{ __html: renderFormattedJson(record.responseBody) || '' }}
+                        />
+                      ) : (
+                        <Text style={{ color: '#ce9178', fontSize: 12, fontFamily: 'Consolas, Monaco, "Courier New", monospace', wordBreak: 'break-all' }}>
+                          {renderRawJson(record.responseBody)}
+                        </Text>
+                      )
                     ) : <Text style={{ color: '#666' }}>未记录</Text>}
                   </div>
                 </div>

@@ -45,6 +45,63 @@ spring:
         namespace: gateway-prod
 ```
 
+### Nacos-Native Attributes Support
+
+Gateway reads instance attributes directly from Nacos, allowing users to control instances from Nacos Console:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│            Nacos Console → Gateway (Real-time Sync)                  │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                       │
+│  ┌────────────────────┐         ┌────────────────────┐              │
+│  │   Nacos Console    │         │     Gateway        │              │
+│  │                    │         │                    │              │
+│  │  ┌──────────────┐  │         │  ┌──────────────┐  │              │
+│  │  │  Instance    │  │ ──────► │  │  Load Balancer│  │              │
+│  │  │  Properties: │  │         │  │  Selection:   │  │              │
+│  │  │              │  │         │  │              │  │              │
+│  │  │  ✓ enabled   │──│─────────│──│ Exclude if   │  │              │
+│  │  │  ✓ healthy   │──│─────────│──│ disabled     │  │              │
+│  │  │  ✓ weight    │──│─────────│──│ Weighted LB  │  │              │
+│  │  │              │  │         │  │              │  │              │
+│  │  └──────────────┘  │         │  └──────────────┘  │              │
+│  │                    │         │                    │              │
+│  └────────────────────┘         └────────────────────┘              │
+│                                                                       │
+│  User operations in Nacos Console instantly affect Gateway routing.  │
+│                                                                       │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+| Attribute | Nacos Console | Gateway Behavior |
+|-----------|---------------|------------------|
+| **enabled** | 下线按钮 / Instance enabled checkbox | Disabled instances are excluded from load balancing |
+| **healthy** | Health check status (auto) | Unhealthy instances filtered by Nacos, not returned to Gateway |
+| **weight** | 权重输入框 (0-100) | Used for weighted round-robin load balancing |
+
+**Use Cases:**
+
+1. **Emergency Instance Removal**: Click "下线" in Nacos Console → Instance immediately excluded from routing
+2. **Traffic Weight Adjustment**: Adjust weight (e.g., 1 → 10) → More traffic routed to that instance
+3. **Gradual Rollout**: Set new instance weight to 1, gradually increase to 100
+
+**Example:**
+
+```bash
+# In Nacos Console, set instance properties:
+# Instance 1: weight=1, enabled=true  → receives ~10% traffic
+# Instance 2: weight=9, enabled=true  → receives ~90% traffic
+# Instance 3: enabled=false           → excluded from routing
+
+# Gateway will automatically:
+# - Filter out Instance 3 (disabled)
+# - Route 10% requests to Instance 1
+# - Route 90% requests to Instance 2
+```
+
+**Note:** This feature works for routes with namespace/group override. For routes using gateway's default namespace, SCG's native LoadBalancer handles the selection.
+
 ### Namespace/Group Override
 
 Supports cross-namespace/group service discovery:
@@ -162,33 +219,248 @@ Hash based on client IP or Header:
 
 ## Health-Aware Routing
 
-### Features
+### Design Philosophy
 
-- **Automatically skip unhealthy instances**
-- **Disabled instances do not participate in load balancing**
-- **Health status synced to UI in real-time**
-
-### Health Check
-
-Gateway supports hybrid health checking:
+Gateway distinguishes between **enabled status** and **health status**, each with different handling strategies:
 
 ```
-┌─────────────────────────────────────────────┐
-│         Hybrid Health Checker                │
-│                                              │
-│   Passive Check (zero overhead):             │
-│   - Each successful request -> update cache  │
-│   - No additional network calls              │
-│                                              │
-│   Active Check (on-demand):                  │
-│   - Triggered on consecutive failures        │
-│   - HTTP call to /actuator/health           │
-│   - Failure threshold: 3 consecutive fails   │
-│                                              │
-│   Local Cache (Caffeine):                    │
-│   - Max 10,000 instances                      │
-│   - Expiration: 5 minutes                    │
-└─────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Instance Selection Strategy                        │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                       │
+│  ┌─────────────────┐    ┌─────────────────┐                         │
+│  │    ENABLED      │    │    HEALTHY      │                         │
+│  │   (User Choice) │    │  (System State) │                         │
+│  └─────────────────┘    └─────────────────┘                         │
+│           │                      │                                   │
+│           │                      │                                   │
+│     ┌─────▼─────┐          ┌─────▼─────┐                            │
+│     │  DISABLED │          │ UNHEALTHY │                            │
+│     │   = true  │          │   = false │                            │
+│     └─────┬─────┘          └─────┬─────┘                            │
+│           │                      │                                   │
+│           │                      │                                   │
+│     ┌─────▼──────────────────────▼─────┐                           │
+│     │                                   │                           │
+│     │  DISABLED: MUST EXCLUDE           │                           │
+│     │  (User's explicit choice)         │                           │
+│     │                                   │                           │
+│     │  UNHEALTHY: Prefer to exclude     │                           │
+│     │  BUT if no healthy instances,     │                           │
+│     │  return unhealthy for LB to try   │                           │
+│     │                                   │                           │
+│     └───────────────────────────────────┘                           │
+│                                                                       │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Why This Design?
+
+**1. Enabled vs Healthy - Fundamental Difference**
+
+| Status | Nature | Who Controls | Handling |
+|--------|--------|--------------|----------|
+| **Enabled** | User decision | User (via UI/API) | Strictly respected - MUST exclude |
+| **Healthy** | System state | Health checker | Soft handling - prefer exclude, but may try |
+
+**Why different handling?**
+
+- **Enabled=false**: User deliberately disabled this node (maintenance, decommission). This is an **explicit decision** that must be respected. The gateway should never route to a disabled node.
+
+- **Healthy=false**: Health check detected a problem, but health checks have **latency**. The node might have just recovered but health check hasn't updated yet. If no healthy nodes exist, trying unhealthy nodes maintains **availability** while health checker catches up.
+
+**2. Availability vs Correctness Trade-off**
+
+```
+Scenario: Single node, currently unhealthy
+
+Option A: Return 503 immediately
+  - Pros: Correct (node is unhealthy)
+  - Cons: Service unavailable even if node just recovered
+  - Result: User sees 503, node might be working
+
+Option B: Try the unhealthy node
+  - Pros: If node recovered, request succeeds
+  - Cons: If still broken, request fails (but returns proper 503)
+  - Result: Better availability, proper error if truly broken
+
+We chose Option B for better availability.
+```
+
+**3. Multiple Unhealthy Nodes**
+
+When all nodes are unhealthy, gateway returns all unhealthy nodes for load balancer to choose one. This enables:
+- Retry mechanism to try different nodes
+- Node that recovered first gets the request
+- Proper 503 error if all nodes truly unavailable
+
+### Selection Logic
+
+```java
+// InstanceFilter.java - Core selection logic
+
+if (enabled == false) {
+    // MUST exclude - user's explicit choice
+    continue;
+}
+
+if (healthy == true) {
+    // Prefer healthy instances
+    healthyList.add(instance);
+} else {
+    // Unhealthy - add to unhealthy list
+    // Will be returned if no healthy instances exist
+    unhealthyList.add(instance);
+}
+
+// Return strategy:
+if (!healthyList.isEmpty()) {
+    return healthyList;  // Only healthy instances
+}
+return unhealthyList;    // No healthy? Return unhealthy for LB to try
+```
+
+### Two Discovery Modes - Different Health Handling
+
+#### Dynamic Discovery (lb://)
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Dynamic Discovery (Nacos)                         │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                       │
+│  ┌────────────────┐                                                 │
+│  │    Nacos       │                                                 │
+│  │  Service Center│                                                 │
+│  └────────────────┘                                                 │
+│         │                                                            │
+│         │ Nacos performs health checks:                             │
+│         │ - Heartbeat from service instances                         │
+│         │ - TCP/HTTP health probes                                   │
+│         │ - Temporary instance removal on failure                    │
+│         │                                                            │
+│         ▼                                                            │
+│  ┌────────────────┐                                                 │
+│  │    Gateway     │                                                 │
+│  │                │                                                 │
+│  │  ┌──────────┐  │                                                 │
+│  │  │ lb://    │  │  Receives ONLY healthy instances from Nacos     │
+│  │  │ services │  │  No additional health check needed              │
+│  │  └──────────┘  │                                                 │
+│  │                │                                                 │
+│  └────────────────┘                                                 │
+│                                                                       │
+│  Gateway trusts Nacos's health status.                               │
+│  Unhealthy instances are automatically excluded by Nacos.            │
+│                                                                       │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Key Points:**
+- Nacos handles all health checking for `lb://` services
+- Gateway receives only instances that Nacos considers healthy
+- No gateway-side health checking for dynamic discovery
+- Unhealthy instances are removed from Nacos's instance list
+
+#### Static Discovery (static://)
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Static Discovery (Gateway-managed)                │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                       │
+│  ┌────────────────┐                                                 │
+│  │  Admin Console │                                                 │
+│  │                │                                                 │
+│  │  Static config │                                                 │
+│  │  (IP:Port list)│                                                 │
+│  └────────────────┘                                                 │
+│         │                                                            │
+│         │ Configuration pushed to Gateway                            │
+│         │                                                            │
+│         ▼                                                            │
+│  ┌────────────────┐                                                 │
+│  │    Gateway     │                                                 │
+│  │                │                                                 │
+│  │  ┌──────────┐  │                                                 │
+│  │  │static:// │  │  Gateway performs health checks                 │
+│  │  │ services │  │  - Active: TCP port check                       │
+│  │  └──────────┘  │  - Passive: Record request success/failure      │
+│  │                │                                                 │
+│  │  Instance      │                                                 │
+│  │  Health Cache  │                                                 │
+│  └────────────────┘                                                 │
+│                                                                       │
+│  Gateway manages health status for static instances.                 │
+│  Health status synced to Admin for UI display.                       │
+│                                                                       │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Key Points:**
+- Gateway performs health checking for `static://` services
+- Hybrid health checker (active + passive)
+- Health status stored in local Caffeine cache
+- Status synced to Admin Console for UI display
+
+### Health Check Mechanism (Static Discovery)
+
+Gateway uses **hybrid health checking** for static instances:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Hybrid Health Checker                              │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                       │
+│  ┌───────────────────────────────────────────────────────────────┐ │
+│  │                    PASSIVE CHECK (Zero Overhead)                │ │
+│  │                                                                  │ │
+│  │  Every business request updates health status:                  │ │
+│  │                                                                  │ │
+│  │  Request succeeds → recordSuccess() → mark instance healthy     │ │
+│  │  Request fails    → recordFailure() → count failures            │ │
+│  │                     → 3+ failures → mark unhealthy              │ │
+│  │                                                                  │ │
+│  │  Pros: No additional network calls                              │ │
+│  │  Cons: Requires actual traffic to update status                 │ │
+│  └───────────────────────────────────────────────────────────────┘ │
+│                                                                       │
+│  ┌───────────────────────────────────────────────────────────────┐ │
+│  │                    ACTIVE CHECK (Scheduled)                      │ │
+│  │                                                                  │ │
+│  │  Scheduled every 30 seconds for static instances:               │ │
+│  │                                                                  │ │
+│  │  TCP Probe: Check if port is open                               │ │
+│  │  HTTP Probe: Call /actuator/health (optional)                   │ │
+│  │                                                                  │ │
+│  │  Two-level frequency:                                            │ │
+│  │  - Regular: 30s for healthy/newly unhealthy instances           │ │
+│  │  - Degraded: 3min for consistently unhealthy instances          │ │
+│  │                                                                  │ │
+│  │  Pros: Detects problems before user traffic                      │ │
+│  │  Cons: Additional network overhead                               │ │
+│  └───────────────────────────────────────────────────────────────┘ │
+│                                                                       │
+│  ┌───────────────────────────────────────────────────────────────┐ │
+│  │                    IMMEDIATE CHECK (On-demand)                   │ │
+│  │                                                                  │ │
+│  │  Triggered when:                                                 │ │
+│  │  - New instance discovered from config                          │ │
+│  │  - No health record exists (INIT state)                         │ │
+│  │  - Routing needs to select but instance unchecked               │ │
+│  │                                                                  │ │
+│  │  Ensures routing decisions are based on actual health status    │ │
+│  └───────────────────────────────────────────────────────────────┘ │
+│                                                                       │
+│  ┌───────────────────────────────────────────────────────────────┐ │
+│  │                    LOCAL CACHE (Caffeine)                        │ │
+│  │                                                                  │ │
+│  │  Max size: 10,000 instances                                      │ │
+│  │  Expiration: 5 minutes                                           │ │
+│  │  Stats recorded for monitoring                                   │ │
+│  └───────────────────────────────────────────────────────────────┘ │
+│                                                                       │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Configuration
@@ -196,10 +468,45 @@ Gateway supports hybrid health checking:
 ```yaml
 gateway:
   health:
-    batch-size: 50
-    failure-threshold: 3
-    recovery-time: 30000
-    idle-threshold: 300000
+    enabled: true
+    failure-threshold: 3        # Mark unhealthy after N failures
+    recovery-time: 30000        # Auto-recover after N ms idle (ms)
+    idle-threshold: 300000      # Consider idle if no requests for N ms (ms)
+    active-check-interval-ms: 30000   # Regular check interval
+    degraded-check-interval-ms: 180000 # Degraded check interval
+    batch-size: 50              # Batch size for status sync
+    network-flap-threshold: 10  # Network flap detection threshold
+```
+
+### Error Response Examples
+
+When all instances are unavailable, gateway returns proper error responses:
+
+**All instances disabled:**
+```json
+{
+  "status": 503,
+  "error": "Service Unavailable",
+  "message": "All instances are DISABLED for service xxx"
+}
+```
+
+**All instances unhealthy and failed:**
+```json
+{
+  "status": 503,
+  "error": "Service Unavailable",
+  "message": "Failed to connect to service instance [host=127.0.0.1, port=9001] - Instance is UNHEALTHY (Gateway request failed 8 times consecutively)"
+}
+```
+
+**Connection timeout:**
+```json
+{
+  "status": 504,
+  "error": "Gateway Timeout",
+  "message": "Request took longer than timeout threshold"
+}
 ```
 
 ---

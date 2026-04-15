@@ -12,15 +12,23 @@ import {
   Tag,
   Tooltip,
   Alert,
+  Row,
+  Col,
+  Divider,
 } from "antd";
 import {
   ClusterOutlined,
   ArrowLeftOutlined,
   CloudServerOutlined,
+  SettingOutlined,
+  CloudSyncOutlined,
+  DatabaseOutlined,
+  AppstoreOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import axios from "axios";
+import "../styles/form-page.css";
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -173,28 +181,24 @@ const InstanceCreatePage: React.FC = () => {
   };
 
   return (
-    <div className="instance-create-page" style={{ padding: "24px", maxWidth: "800px", margin: "0 auto" }}>
-      <Card
-        title={
-          <Space>
-            <Button
-              type="text"
-              icon={<ArrowLeftOutlined />}
-              onClick={handleCancel}
-            />
+    <div className="form-page-container">
+      <Card className="form-card">
+        {/* Header */}
+        <div className="form-header">
+          <Button
+            type="text"
+            icon={<ArrowLeftOutlined />}
+            onClick={handleCancel}
+            className="form-header-back"
+          />
+          <div className="form-header-icon">
             <CloudServerOutlined />
-            {t("instance.create_instance")}
-          </Space>
-        }
-        styles={{
-          header: { borderBottom: "1px solid rgba(255,255,255,0.1)" },
-          body: { padding: "24px" },
-        }}
-        style={{
-          background: "rgba(30, 41, 59, 0.95)",
-          borderRadius: "12px",
-        }}
-      >
+          </div>
+          <h3 className="form-header-title">{t("instance.create_instance")}</h3>
+        </div>
+
+        <Divider style={{ margin: '20px 0 0', borderColor: 'rgba(255,255,255,0.08)' }} />
+
         <Spin spinning={loading}>
           <Form
             form={form}
@@ -208,233 +212,290 @@ const InstanceCreatePage: React.FC = () => {
               imagePullPolicy: "IfNotPresent",
             }}
           >
-            <Form.Item
-              name="instanceName"
-              label={t("instance.instance_name")}
-              rules={[{ required: true, message: t("common.required") }]}
-            >
-              <Input placeholder={t("instance.instance_name_placeholder")} />
-            </Form.Item>
-
-            <Form.Item
-              name="clusterId"
-              label={t("instance.cluster")}
-              rules={[{ required: true, message: t("common.required") }]}
-            >
-              <Select placeholder={t("instance.select_cluster")}>
-                {clusters
-                  .filter((c) => c.connectionStatus === "CONNECTED")
-                  .map((cluster) => (
-                    <Option key={cluster.id} value={cluster.id}>
-                      <Space>
-                        <ClusterOutlined />
-                        {cluster.clusterName}
-                        <Tag color="blue">{cluster.clusterVersion}</Tag>
-                      </Space>
-                    </Option>
-                  ))}
-              </Select>
-            </Form.Item>
-
-            <Form.Item
-              name="namespace"
-              label={t("instance.namespace")}
-              rules={[{ required: true, message: t("common.required") }]}
-            >
-              <Input placeholder={t("instance.namespace_placeholder")} />
-            </Form.Item>
-
-            <Form.Item name="createNamespace" label={t("instance.create_namespace")}>
-              <Select>
-                <Option value={true}>{t("common.yes")}</Option>
-                <Option value={false}>{t("common.no")}</Option>
-              </Select>
-            </Form.Item>
-
-            {/* Nacos & Redis Configuration */}
-            <Alert
-              message={t("instance.config_hint")}
-              type="info"
-              showIcon
-              style={{ marginBottom: 16 }}
-            />
-            <Form.Item
-              name="nacosServerAddr"
-              label={t("instance.nacos_server_addr")}
-              tooltip={t("instance.nacos_server_addr_tooltip")}
-            >
-              <Input placeholder={t("instance.nacos_server_addr_placeholder")} />
-            </Form.Item>
-
-            <Form.Item
-              name="redisServerAddr"
-              label={t("instance.redis_server_addr")}
-              tooltip={t("instance.redis_server_addr_tooltip")}
-            >
-              <Input placeholder={t("instance.redis_server_addr_placeholder")} />
-            </Form.Item>
-
-            <Form.Item
-              name="specType"
-              label={t("instance.spec_type")}
-              rules={[{ required: true }]}
-            >
-              <Select>
-                {specs.map((spec) => (
-                  <Option key={spec.type} value={spec.type}>
-                    {spec.type === "custom"
-                      ? t("instance.spec_custom")
-                      : t(`instance.spec_${spec.type}`)}
-                  </Option>
-                ))}
-              </Select>
-            </Form.Item>
-
-            {selectedSpecType === "custom" && (
-              <Space style={{ width: "100%" }} size="large">
-                <Form.Item
-                  name="cpuCores"
-                  label={t("instance.cpu_cores")}
-                  rules={[{ required: true, message: t("common.required") }]}
-                  style={{ width: "200px", marginBottom: 0 }}
-                >
-                  <InputNumber
-                    min={0.1}
-                    max={16}
-                    step={0.5}
-                    style={{ width: "100%" }}
-                    placeholder="1.0"
-                  />
-                </Form.Item>
-                <Form.Item
-                  name="memoryMB"
-                  label={t("instance.memory_mb")}
-                  rules={[{ required: true, message: t("common.required") }]}
-                  style={{ width: "200px", marginBottom: 0 }}
-                >
-                  <InputNumber
-                    min={128}
-                    max={16384}
-                    step={128}
-                    style={{ width: "100%" }}
-                    placeholder="1024"
-                  />
-                </Form.Item>
-              </Space>
-            )}
-
-            <Form.Item
-              name="replicas"
-              label={t("instance.replicas")}
-              rules={[{ required: true }]}
-              style={{ marginBottom: 24 }}
-            >
-              <InputNumber min={1} max={10} style={{ width: "200px" }} />
-            </Form.Item>
-
-            <Form.Item
-              name="imagePullPolicy"
-              label={t("instance.image_pull_policy")}
-              tooltip={t("instance.image_pull_policy_tooltip")}
-              style={{ marginBottom: 24 }}
-            >
-              <Select style={{ width: "100%" }}>
-                <Option value="IfNotPresent">{t("instance.pull_if_not_present")}</Option>
-                <Option value="Always">{t("instance.pull_always")}</Option>
-                <Option value="Never">{t("instance.pull_never")}</Option>
-              </Select>
-            </Form.Item>
-
-            <Form.Item
-              name="image"
-              label={t("instance.image")}
-              tooltip={
-                selectedImagePullPolicy === "Never" 
-                  ? "Select from local images available on cluster nodes (k8s.io namespace shown by default)"
-                  : t("instance.image_tooltip")
-              }
-              style={{ marginBottom: 24 }}
-            >
-              {selectedImagePullPolicy === "Never" ? (
-                loadingImages ? (
-                  <Spin tip="Loading images from cluster..." />
-                ) : localImages.length > 0 ? (
-                  <Space direction="vertical" style={{ width: "100%" }} size="small">
-                    {/* Namespace Filter */}
-                    <Select
-                      value={selectedImageNamespace || 'all'}
-                      onChange={setSelectedImageNamespace}
-                      style={{ width: "100%" }}
-                      placeholder="Filter by namespace"
+            {/* Basic Info Section */}
+            <div className="form-section">
+              <div className="form-section-header">
+                <div className="form-section-icon">
+                  <AppstoreOutlined />
+                </div>
+                <span className="form-section-title">{t("instance.basic_info")}</span>
+              </div>
+              <div className="form-section-content">
+                <Row gutter={16}>
+                  <Col span={12}>
+                    <Form.Item
+                      name="instanceName"
+                      label={t("instance.instance_name")}
+                      rules={[{ required: true, message: t("common.required") }]}
                     >
-                      <Option value="all">All Namespaces ({localImages.length})</Option>
-                      {namespaces.map(ns => {
-                        const count = localImages.filter((img: LocalImage) => img.namespace === ns).length;
-                        return (
-                          <Option key={ns} value={ns}>
-                            {ns} ({count})
-                          </Option>
-                        );
-                      })}
-                    </Select>
-                    
-                    {/* Image Selector */}
-                    <Select
-                      showSearch
-                      placeholder={selectedImageNamespace ? t('instance.select_image_from_namespace', { ns: selectedImageNamespace }) : t('instance.select_local_image')}
-                      optionFilterProp="children"
-                      loading={loadingImages}
-                      allowClear
-                      style={{ width: "100%" }}
-                      optionLabelProp="title"
+                      <Input placeholder={t("instance.instance_name_placeholder")} size="large" />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item
+                      name="clusterId"
+                      label={t("instance.cluster")}
+                      rules={[{ required: true, message: t("common.required") }]}
                     >
-                      {filteredImages.map((img, idx) => (
-                        <Option key={idx} value={img.name} title={img.name}>
-                          <Space style={{ minWidth: 0, flex: 1 }}>
-                            <Tag color="blue">{img.namespace}</Tag>
-                            <span style={{ 
-                              fontSize: '13px', 
-                              color: '#f1f5f9',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                              maxWidth: '300px',
-                              flex: '1 1 auto'
-                            }} title={img.name}>
-                              {img.image}
-                            </span>
-                            <Tag color="green">{img.tag}</Tag>
-                          </Space>
-                        </Option>
-                      ))}
-                    </Select>
-                  </Space>
-                ) : (
-                  <Input 
-                    placeholder="No local images found in cluster. Enter image name manually." 
-                    style={{ width: "100%" }} 
-                  />
-                )
-              ) : (
-                <Input 
-                  placeholder="e.g., my-gateway:latest" 
-                  style={{ width: "100%" }} 
+                      <Select placeholder={t("instance.select_cluster")} size="large">
+                        {clusters
+                          .filter((c) => c.connectionStatus === "CONNECTED")
+                          .map((cluster) => (
+                            <Option key={cluster.id} value={cluster.id}>
+                              <Space>
+                                <ClusterOutlined style={{ color: '#60a5fa' }} />
+                                {cluster.clusterName}
+                                <Tag color="blue" style={{ marginLeft: 8 }}>{cluster.clusterVersion}</Tag>
+                              </Space>
+                            </Option>
+                          ))}
+                      </Select>
+                    </Form.Item>
+                  </Col>
+                </Row>
+                <Row gutter={16}>
+                  <Col span={12}>
+                    <Form.Item
+                      name="namespace"
+                      label={t("instance.namespace")}
+                      rules={[{ required: true, message: t("common.required") }]}
+                    >
+                      <Input placeholder={t("instance.namespace_placeholder")} size="large" />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item name="createNamespace" label={t("instance.create_namespace")}>
+                      <Select size="large">
+                        <Option value={true}>{t("common.yes")}</Option>
+                        <Option value={false}>{t("common.no")}</Option>
+                      </Select>
+                    </Form.Item>
+                  </Col>
+                </Row>
+              </div>
+            </div>
+
+            {/* Configuration Section */}
+            <div className="form-section">
+              <div className="form-section-header">
+                <div className="form-section-icon">
+                  <DatabaseOutlined />
+                </div>
+                <span className="form-section-title">{t("instance.config_section")}</span>
+                <span className="form-section-subtitle">{t("instance.config_section_hint")}</span>
+              </div>
+              <div className="form-section-content">
+                <Alert
+                  message={t("instance.config_hint")}
+                  type="info"
+                  showIcon
+                  style={{ marginBottom: 16 }}
                 />
-              )}
-            </Form.Item>
+                <Row gutter={16}>
+                  <Col span={12}>
+                    <Form.Item
+                      name="nacosServerAddr"
+                      label={t("instance.nacos_server_addr")}
+                      tooltip={t("instance.nacos_server_addr_tooltip")}
+                    >
+                      <Input placeholder={t("instance.nacos_server_addr_placeholder")} size="large" />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item
+                      name="redisServerAddr"
+                      label={t("instance.redis_server_addr")}
+                      tooltip={t("instance.redis_server_addr_tooltip")}
+                    >
+                      <Input placeholder={t("instance.redis_server_addr_placeholder")} size="large" />
+                    </Form.Item>
+                  </Col>
+                </Row>
+              </div>
+            </div>
 
-            <Form.Item name="description" label={t("instance.description")}>
-              <TextArea rows={3} />
-            </Form.Item>
+            {/* Resource Section */}
+            <div className="form-section">
+              <div className="form-section-header">
+                <div className="form-section-icon">
+                  <SettingOutlined />
+                </div>
+                <span className="form-section-title">{t("instance.resource_section")}</span>
+              </div>
+              <div className="form-section-content">
+                <Row gutter={16}>
+                  <Col span={8}>
+                    <Form.Item
+                      name="specType"
+                      label={t("instance.spec_type")}
+                      rules={[{ required: true }]}
+                    >
+                      <Select size="large">
+                        {specs.map((spec) => (
+                          <Option key={spec.type} value={spec.type}>
+                            {spec.type === "custom"
+                              ? t("instance.spec_custom")
+                              : t(`instance.spec_${spec.type}`)}
+                          </Option>
+                        ))}
+                      </Select>
+                    </Form.Item>
+                  </Col>
+                  {selectedSpecType === "custom" && (
+                    <>
+                      <Col span={8}>
+                        <Form.Item
+                          name="cpuCores"
+                          label={t("instance.cpu_cores")}
+                          rules={[{ required: true, message: t("common.required") }]}
+                        >
+                          <InputNumber
+                            min={0.1}
+                            max={16}
+                            step={0.5}
+                            size="large"
+                            style={{ width: "100%" }}
+                            placeholder="1.0"
+                          />
+                        </Form.Item>
+                      </Col>
+                      <Col span={8}>
+                        <Form.Item
+                          name="memoryMB"
+                          label={t("instance.memory_mb")}
+                          rules={[{ required: true, message: t("common.required") }]}
+                        >
+                          <InputNumber
+                            min={128}
+                            max={16384}
+                            step={128}
+                            size="large"
+                            style={{ width: "100%" }}
+                            placeholder="1024"
+                          />
+                        </Form.Item>
+                      </Col>
+                    </>
+                  )}
+                  <Col span={8}>
+                    <Form.Item
+                      name="replicas"
+                      label={t("instance.replicas")}
+                      rules={[{ required: true }]}
+                    >
+                      <InputNumber min={1} max={10} size="large" style={{ width: "100%" }} />
+                    </Form.Item>
+                  </Col>
+                </Row>
+              </div>
+            </div>
 
-            <Form.Item style={{ marginBottom: 0, marginTop: "24px" }}>
-              <Space>
-                <Button onClick={handleCancel}>{t("common.cancel")}</Button>
-                <Button type="primary" htmlType="submit" loading={submitting}>
-                  {t("instance.create_and_deploy")}
-                </Button>
-              </Space>
-            </Form.Item>
+            {/* Image Section */}
+            <div className="form-section">
+              <div className="form-section-header">
+                <div className="form-section-icon">
+                  <CloudSyncOutlined />
+                </div>
+                <span className="form-section-title">{t("instance.image_section")}</span>
+              </div>
+              <div className="form-section-content">
+                <Row gutter={16}>
+                  <Col span={12}>
+                    <Form.Item
+                      name="imagePullPolicy"
+                      label={t("instance.image_pull_policy")}
+                      tooltip={t("instance.image_pull_policy_tooltip")}
+                    >
+                      <Select size="large" style={{ width: "100%" }}>
+                        <Option value="IfNotPresent">{t("instance.pull_if_not_present")}</Option>
+                        <Option value="Always">{t("instance.pull_always")}</Option>
+                        <Option value="Never">{t("instance.pull_never")}</Option>
+                      </Select>
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item
+                      name="image"
+                      label={t("instance.image")}
+                      tooltip={
+                        selectedImagePullPolicy === "Never" 
+                          ? "Select from local images available on cluster nodes"
+                          : t("instance.image_tooltip")
+                      }
+                    >
+                      {selectedImagePullPolicy === "Never" ? (
+                        loadingImages ? (
+                          <Spin tip="Loading images..." />
+                        ) : localImages.length > 0 ? (
+                          <Space direction="vertical" style={{ width: "100%" }} size="small">
+                            <Select
+                              value={selectedImageNamespace || 'all'}
+                              onChange={setSelectedImageNamespace}
+                              size="large"
+                              style={{ width: "100%" }}
+                              placeholder="Filter by namespace"
+                            >
+                              <Option value="all">All Namespaces ({localImages.length})</Option>
+                              {namespaces.map(ns => {
+                                const count = localImages.filter((img) => img.namespace === ns).length;
+                                return (
+                                  <Option key={ns} value={ns}>
+                                    {ns} ({count})
+                                  </Option>
+                                );
+                              })}
+                            </Select>
+                            <Select
+                              showSearch
+                              size="large"
+                              placeholder={selectedImageNamespace ? `Select from ${selectedImageNamespace}` : 'Select local image'}
+                              optionFilterProp="children"
+                              loading={loadingImages}
+                              allowClear
+                              style={{ width: "100%" }}
+                              optionLabelProp="title"
+                            >
+                              {filteredImages.map((img, idx) => (
+                                <Option key={idx} value={img.name} title={img.name}>
+                                  <Space>
+                                    <Tag color="blue">{img.namespace}</Tag>
+                                    <span style={{ color: '#fafafa' }}>{img.image}</span>
+                                    <Tag color="green">{img.tag}</Tag>
+                                  </Space>
+                                </Option>
+                              ))}
+                            </Select>
+                          </Space>
+                        ) : (
+                          <Input 
+                            size="large"
+                            placeholder="No local images found. Enter manually." 
+                            style={{ width: "100%" }} 
+                          />
+                        )
+                      ) : (
+                        <Input 
+                          size="large"
+                          placeholder="e.g., my-gateway:latest" 
+                          style={{ width: "100%" }} 
+                        />
+                      )}
+                    </Form.Item>
+                  </Col>
+                </Row>
+                <Form.Item name="description" label={t("instance.description")}>
+                  <TextArea rows={3} size="large" showCount maxLength={500} />
+                </Form.Item>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="form-footer">
+              <Button size="large" onClick={handleCancel}>{t("common.cancel")}</Button>
+              <Button type="primary" size="large" htmlType="submit" loading={submitting}>
+                {t("instance.create_and_deploy")}
+              </Button>
+            </div>
           </Form>
         </Spin>
       </Card>

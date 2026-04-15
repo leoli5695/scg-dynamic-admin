@@ -2,19 +2,21 @@ import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import {
   Card, Button, Space, Modal, message, Spin, Tag, Form, Input, Select,
   Empty, Dropdown, Tooltip, Badge, Divider, Typography, Alert, Drawer,
-  Row, Col, Statistic, Popconfirm
+  Popconfirm
 } from 'antd';
 import {
   PlusOutlined, DeleteOutlined, EditOutlined, MoreOutlined,
   ClusterOutlined, MinusCircleOutlined, CloudServerOutlined, ApiOutlined,
   WarningOutlined, ExclamationCircleOutlined, CloseOutlined, EyeOutlined,
-  CopyOutlined, CheckCircleOutlined, CloseCircleOutlined, SearchOutlined,
+  CopyOutlined, SearchOutlined,
   ReloadOutlined, ThunderboltOutlined, LinkOutlined, TrophyOutlined,
   SwapOutlined, AimOutlined, ForkOutlined
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import api from '../utils/api';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
+import './ServicesPage.premium.css';
 
 const { Text, Title } = Typography;
 
@@ -275,11 +277,13 @@ const ServicesPage: React.FC<ServicesPageProps> = ({ instanceId }) => {
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [healthFilter, setHealthFilter] = useState<string>('all');
   const [createForm] = Form.useForm();
   const [editForm] = Form.useForm();
   const [instances, setInstances] = useState<ServiceInstance[]>([]);
   const [editInstances, setEditInstances] = useState<ServiceInstance[]>([]);
   const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Stable callback for closing drawer - prevents re-renders
   const handleCloseDrawer = useCallback(() => {
@@ -301,6 +305,22 @@ const ServicesPage: React.FC<ServicesPageProps> = ({ instanceId }) => {
   }, [t, instanceId]);
 
   useEffect(() => { loadServices(); }, [loadServices]);
+
+  // 处理从拓扑图跳转过来的 highlight 参数，自动打开对应服务的详情
+  useEffect(() => {
+    const highlightId = searchParams.get('highlight');
+    if (highlightId && services.length > 0) {
+      const targetService = services.find(s => s.serviceId === highlightId || s.name === highlightId);
+      if (targetService) {
+        setSelectedService(targetService);
+        setDetailDrawerVisible(true);
+        // 清除 highlight 参数，避免刷新页面时重复打开
+        searchParams.delete('highlight');
+        searchParams.delete('from');
+        setSearchParams(searchParams, { replace: true });
+      }
+    }
+  }, [services, searchParams, setSearchParams]);
 
   // Optimized instance update handlers
   const handleInstanceChange = useCallback((index: number, field: string, value: any) => {
@@ -328,10 +348,16 @@ const ServicesPage: React.FC<ServicesPageProps> = ({ instanceId }) => {
   }, []);
 
   // Memoize filtered services to avoid recalculation on every render
-  const filteredServices = useMemo(() => 
-    services.filter(s => !searchTerm || s.name.toLowerCase().includes(searchTerm.toLowerCase())),
-    [services, searchTerm]
-  );
+  const filteredServices = useMemo(() => {
+    return services.filter(s => {
+      const matchesSearch = !searchTerm || s.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const isHealthy = s.instances && s.instances.some(i => i.healthy !== false);
+      const matchesHealth = healthFilter === 'all' ||
+        (healthFilter === 'healthy' && isHealthy) ||
+        (healthFilter === 'unhealthy' && !isHealthy);
+      return matchesSearch && matchesHealth;
+    });
+  }, [services, searchTerm, healthFilter]);
   
   const totalServices = services.length;
   
@@ -466,61 +492,35 @@ const ServicesPage: React.FC<ServicesPageProps> = ({ instanceId }) => {
 
   return (
     <div className="services-page">
-      {/* Premium Stats Cards with gradients */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 32 }}>
-        <Col xs={24} sm={8}>
-          <Card className="stats-card stats-card-primary" size="small">
-            <div className="stats-card-content">
-              <div className="stats-icon-wrapper">
-                <ClusterOutlined className="stats-icon" />
-              </div>
-              <div className="stats-info">
-                <Statistic
-                  title={<span className="stats-title">{t('services.stats_services')}</span>}
-                  value={totalServices}
-                  valueStyle={{ fontFamily: "'JetBrains Mono', monospace" }}
-                  prefix={<span className="stats-value-prefix"></span>}
-                />
-                <span className="stats-subtitle">Total Services</span>
-              </div>
-            </div>
-          </Card>
-        </Col>
-        <Col xs={24} sm={8}>
-          <Card className="stats-card stats-card-success" size="small">
-            <div className="stats-card-content">
-              <div className="stats-icon-wrapper">
-                <CheckCircleOutlined className="stats-icon" />
-              </div>
-              <div className="stats-info">
-                <Statistic
-                  title={<span className="stats-title">{t('services.stats_healthy')}</span>}
-                  value={healthyServices}
-                  valueStyle={{ fontFamily: "'JetBrains Mono', monospace" }}
-                />
-                <span className="stats-subtitle">Healthy Services</span>
-              </div>
-            </div>
-          </Card>
-        </Col>
-        <Col xs={24} sm={8}>
-          <Card className="stats-card stats-card-danger" size="small">
-            <div className="stats-card-content">
-              <div className="stats-icon-wrapper">
-                <CloseCircleOutlined className="stats-icon" />
-              </div>
-              <div className="stats-info">
-                <Statistic
-                  title={<span className="stats-title">{t('services.stats_unhealthy')}</span>}
-                  value={totalServices - healthyServices}
-                  valueStyle={{ fontFamily: "'JetBrains Mono', monospace" }}
-                />
-                <span className="stats-subtitle">Unhealthy Services</span>
-              </div>
-            </div>
-          </Card>
-        </Col>
-      </Row>
+      {/* Stats Bar */}
+      <div className="stats-bar">
+        <div
+          className={`stat-item ${healthFilter === 'all' ? 'stat-item-active' : ''}`}
+          onClick={() => setHealthFilter('all')}
+          style={{ cursor: 'pointer' }}
+        >
+          <div className="stat-value">{totalServices}</div>
+          <div className="stat-label">{t('services.stats_services')}</div>
+        </div>
+        <Divider type="vertical" className="stat-divider" />
+        <div
+          className={`stat-item ${healthFilter === 'healthy' ? 'stat-item-active' : ''}`}
+          onClick={() => setHealthFilter('healthy')}
+          style={{ cursor: 'pointer' }}
+        >
+          <div className="stat-value text-green-600">{healthyServices}</div>
+          <div className="stat-label">{t('services.stats_healthy')}</div>
+        </div>
+        <Divider type="vertical" className="stat-divider" />
+        <div
+          className={`stat-item ${healthFilter === 'unhealthy' ? 'stat-item-active' : ''}`}
+          onClick={() => setHealthFilter('unhealthy')}
+          style={{ cursor: 'pointer' }}
+        >
+          <div className="stat-value text-red-600">{totalServices - healthyServices}</div>
+          <div className="stat-label">{t('services.stats_unhealthy')}</div>
+        </div>
+      </div>
 
       {/* Header */}
       <div className="page-header-modern">

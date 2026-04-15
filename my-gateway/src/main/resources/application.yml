@@ -85,8 +85,18 @@ spring:
 # Gateway Center Configuration
 # Set type to 'nacos' (default) or 'consul' to switch between config centers
 gateway:
-  # Gateway instance identifier (used for health status reporting)
-  id: ${GATEWAY_ID:gateway-1}
+  # Request Trace Configuration - for topology Client nodes
+  trace:
+    capture-all: ${GATEWAY_TRACE_CAPTURE_ALL:true}
+    capture-errors: ${GATEWAY_TRACE_CAPTURE_ERRORS:true}
+    capture-slow: ${GATEWAY_TRACE_CAPTURE_SLOW:true}
+    slow-threshold-ms: ${GATEWAY_TRACE_SLOW_THRESHOLD:3000}
+    sampling-rate: ${GATEWAY_TRACE_SAMPLING_RATE:50}
+    sampling-rate-for-errors: ${GATEWAY_TRACE_SAMPLING_RATE_ERRORS:100}
+    max-body-size: ${GATEWAY_TRACE_MAX_BODY_SIZE:65536}
+    include-filter-chain: ${GATEWAY_TRACE_INCLUDE_FILTER_CHAIN:true}
+  # Gateway instance identifier (used for trace data and health status reporting)
+  instance-id: ${GATEWAY_INSTANCE_ID:gateway-1}
   # Admin service URL for health status sync and API calls
   admin:
     url: ${GATEWAY_ADMIN_URL:http://127.0.0.1:9090}

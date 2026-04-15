@@ -32,9 +32,12 @@ public interface DiscoveryService {
         private String host;
         private int port;
         private boolean healthy;
+        private boolean enabled;
         private double weight;
 
         public ServiceInstance() {
+            this.healthy = true;
+            this.enabled = true;
             this.weight = 1.0;
         }
 
@@ -43,6 +46,7 @@ public interface DiscoveryService {
             this.host = host;
             this.port = port;
             this.healthy = true;
+            this.enabled = true;
             this.weight = 1.0;
         }
 
@@ -76,6 +80,14 @@ public interface DiscoveryService {
 
         public void setHealthy(boolean healthy) {
             this.healthy = healthy;
+        }
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
         }
 
         public double getWeight() {

@@ -60,6 +60,8 @@ public class ServiceService {
   public void init() {
     // Load services from database to cache
     loadServicesFromDatabase();
+    // Sync all services to Nacos (fix data inconsistency)
+    syncServicesToNacosOnStartup();
     // Rebuild services index for each instance's namespace (not public)
     rebuildServicesIndexForAllInstances();
     log.info("ServiceService initialized with per-service incremental format");
@@ -236,16 +238,21 @@ public class ServiceService {
     serviceCache.put(serviceName, service);
     log.info("Service updated in cache: {}", serviceName);
 
-    // 3. Push to Nacos (overwrite per-service key using service_id UUID)
+    // 3. Push to Nacos (direct overwrite, no need to remove first)
+    // FIX: Don't remove before publish - this can cause data loss if publish fails
     String serviceDataId = SERVICE_PREFIX + entity.getServiceId();
-
-    // First remove old config, then publish new one
-    configCenterService.removeConfig(serviceDataId, nacosNamespace);
-    log.info("Removed old config from Nacos: {} (namespace: {})", serviceDataId, nacosNamespace);
-
+    
     // Set serviceId in ServiceDefinition for Nacos config
     service.setServiceId(entity.getServiceId());
-    configCenterService.publishConfig(serviceDataId, nacosNamespace, service);
+    
+    // Create a copy without description for Nacos
+    ServiceDefinition nacosConfig = new ServiceDefinition();
+    nacosConfig.setName(service.getName());
+    nacosConfig.setServiceId(entity.getServiceId());
+    nacosConfig.setLoadBalancer(service.getLoadBalancer());
+    nacosConfig.setInstances(service.getInstances());
+    
+    configCenterService.publishConfig(serviceDataId, nacosNamespace, nacosConfig);
     log.info("Service updated in Nacos: {} (namespace: {})", serviceDataId, nacosNamespace);
 
     log.info("Service updated successfully: {} (Database + Cache + Nacos)", serviceName);
@@ -622,5 +629,136 @@ public class ServiceService {
       log.error("Error converting object to JSON", e);
       return null;
     }
+  }
+
+  /**
+   * Sync services from database to Nacos on startup.
+   * This ensures all services in database have corresponding config in Nacos.
+   * Only syncs services that don't exist in Nacos (avoid unnecessary updates).
+   */
+  private void syncServicesToNacosOnStartup() {
+    log.info("🔄 Checking service sync status on startup...");
+    
+    List<ServiceEntity> allServices = serviceRepository.findByEnabledTrue();
+    int syncedCount = 0;
+    int skippedCount = 0;
+    
+    for (ServiceEntity entity : allServices) {
+      try {
+        String serviceName = entity.getServiceName();
+        String serviceId = entity.getServiceId();
+        String nacosNamespace = getNacosNamespace(entity.getInstanceId());
+        String serviceDataId = SERVICE_PREFIX + serviceId;
+        
+        // Check if config already exists in Nacos
+        String existingConfig = configCenterService.getConfig(serviceDataId, nacosNamespace, String.class);
+        
+        if (existingConfig == null || existingConfig.isEmpty()) {
+          // Config missing in Nacos, need to sync
+          log.info("⚠️ Service config missing in Nacos: {} (dataId: {})", serviceName, serviceDataId);
+          
+          ServiceDefinition definition = toDefinition(entity);
+          if (definition == null) {
+            log.warn("Failed to convert entity to definition: {}", serviceName);
+            continue;
+          }
+          definition.setServiceId(serviceId);
+          
+          // Create a copy without description for Nacos
+          ServiceDefinition nacosConfig = new ServiceDefinition();
+          nacosConfig.setName(definition.getName());
+          nacosConfig.setServiceId(serviceId);
+          nacosConfig.setLoadBalancer(definition.getLoadBalancer());
+          nacosConfig.setInstances(definition.getInstances());
+          
+          configCenterService.publishConfig(serviceDataId, nacosNamespace, nacosConfig);
+          log.info("✅ Synced service to Nacos: {} (namespace: {})", serviceName, nacosNamespace);
+          syncedCount++;
+        } else {
+          skippedCount++;
+          log.debug("Service config exists in Nacos: {} (skipped)", serviceName);
+        }
+        
+      } catch (Exception e) {
+        log.error("Failed to sync service on startup: {}", entity.getServiceName(), e);
+      }
+    }
+    
+    log.info("✅ Startup sync completed: {} synced, {} already existed", syncedCount, skippedCount);
+  }
+
+  /**
+   * Sync all services from database to Nacos.
+   * This is a repair function to fix data inconsistency issues.
+   * @return sync result with count of synced services
+   */
+  @Transactional(rollbackFor = Exception.class)
+  public Map<String, Object> syncAllServicesToNacos() {
+    log.info("🔄 Starting to sync all services from database to Nacos...");
+    
+    List<ServiceEntity> allServices = serviceRepository.findAll();
+    int successCount = 0;
+    int failCount = 0;
+    List<String> failedServices = new ArrayList<>();
+    
+    for (ServiceEntity entity : allServices) {
+      try {
+        String serviceName = entity.getServiceName();
+        String serviceId = entity.getServiceId();
+        String nacosNamespace = getNacosNamespace(entity.getInstanceId());
+        
+        // Skip disabled services (they shouldn't have config in Nacos)
+        if (!Boolean.TRUE.equals(entity.getEnabled())) {
+          log.debug("Skipping disabled service: {}", serviceName);
+          continue;
+        }
+        
+        // Convert entity to definition
+        ServiceDefinition definition = toDefinition(entity);
+        if (definition == null) {
+          log.warn("Failed to convert entity to definition: {}", serviceName);
+          failCount++;
+          failedServices.add(serviceName + " (conversion failed)");
+          continue;
+        }
+        
+        definition.setServiceId(serviceId);
+        
+        // Push to Nacos
+        String serviceDataId = SERVICE_PREFIX + serviceId;
+        
+        // Create a copy without description for Nacos
+        ServiceDefinition nacosConfig = new ServiceDefinition();
+        nacosConfig.setName(definition.getName());
+        nacosConfig.setServiceId(serviceId);
+        nacosConfig.setLoadBalancer(definition.getLoadBalancer());
+        nacosConfig.setInstances(definition.getInstances());
+        
+        configCenterService.publishConfig(serviceDataId, nacosNamespace, nacosConfig);
+        log.info("✅ Synced service to Nacos: {} (namespace: {}, dataId: {})", 
+            serviceName, nacosNamespace, serviceDataId);
+        successCount++;
+        
+      } catch (Exception e) {
+        log.error("❌ Failed to sync service: {}", entity.getServiceName(), e);
+        failCount++;
+        failedServices.add(entity.getServiceName() + " (" + e.getMessage() + ")");
+      }
+    }
+    
+    // Rebuild services index after sync
+    rebuildServicesIndexForAllInstances();
+    
+    Map<String, Object> result = new HashMap<>();
+    result.put("total", allServices.size());
+    result.put("enabledCount", allServices.stream().filter(e -> Boolean.TRUE.equals(e.getEnabled())).count());
+    result.put("syncedCount", successCount);
+    result.put("failedCount", failCount);
+    result.put("failedServices", failedServices);
+    
+    log.info("✅ Service sync completed: {} synced, {} failed out of {} enabled services", 
+        successCount, failCount, allServices.stream().filter(e -> Boolean.TRUE.equals(e.getEnabled())).count());
+    
+    return result;
   }
 }

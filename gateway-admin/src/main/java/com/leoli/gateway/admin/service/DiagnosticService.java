@@ -1,6 +1,8 @@
 package com.leoli.gateway.admin.service;
 
 import com.leoli.gateway.admin.center.ConfigCenterService;
+import com.leoli.gateway.admin.model.DiagnosticHistoryEntity;
+import com.leoli.gateway.admin.repository.DiagnosticHistoryRepository;
 import com.leoli.gateway.admin.repository.RouteAuthBindingRepository;
 import com.leoli.gateway.admin.repository.RouteRepository;
 import com.leoli.gateway.admin.repository.AuthPolicyRepository;
@@ -13,6 +15,7 @@ import org.springframework.web.client.RestTemplate;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -66,6 +69,12 @@ public class DiagnosticService {
     @Autowired
     private GatewayInstanceService gatewayInstanceService;
 
+    @Autowired
+    private PrometheusService prometheusService;
+
+    @Autowired
+    private DiagnosticHistoryRepository diagnosticHistoryRepository;
+
     /**
      * Run comprehensive diagnostics.
      * Returns a complete diagnostic report.
@@ -116,6 +125,9 @@ public class DiagnosticService {
         // Generate recommendations
         report.setRecommendations(generateRecommendations(report));
 
+        // Save diagnostic history for trend analysis
+        saveDiagnosticHistory(report, "FULL", null);
+
         log.info("Diagnostic completed in {}ms, overall score: {}",
                 report.getDuration(), report.getOverallScore());
 
@@ -141,14 +153,17 @@ public class DiagnosticService {
         report.setEndTime(System.currentTimeMillis());
         report.setDuration(report.getEndTime() - report.startTime);
 
+        // Save diagnostic history for trend analysis
+        saveDiagnosticHistory(report, "QUICK", null);
+
         log.info("Quick diagnostic completed in {}ms", report.getDuration());
         return report;
     }
 
     /**
-     * Diagnose database health.
+     * Diagnose database health (public for single component diagnosis).
      */
-    private ComponentDiagnostic diagnoseDatabase() {
+    public ComponentDiagnostic diagnoseDatabase() {
         ComponentDiagnostic diagnostic = new ComponentDiagnostic("database");
         diagnostic.setComponentType("Database");
 
@@ -195,9 +210,9 @@ public class DiagnosticService {
     }
 
     /**
-     * Diagnose Redis health.
+     * Diagnose Redis health (public for single component diagnosis).
      */
-    private ComponentDiagnostic diagnoseRedis() {
+    public ComponentDiagnostic diagnoseRedis() {
         ComponentDiagnostic diagnostic = new ComponentDiagnostic("redis");
         diagnostic.setComponentType("Redis");
 
@@ -243,9 +258,9 @@ public class DiagnosticService {
     }
 
     /**
-     * Diagnose Config Center (Nacos) health.
+     * Diagnose Config Center (Nacos) health (public for single component diagnosis).
      */
-    private ComponentDiagnostic diagnoseConfigCenter() {
+    public ComponentDiagnostic diagnoseConfigCenter() {
         ComponentDiagnostic diagnostic = new ComponentDiagnostic("configCenter");
         diagnostic.setComponentType("ConfigCenter");
 
@@ -284,9 +299,9 @@ public class DiagnosticService {
     }
 
     /**
-     * Diagnose routes configuration.
+     * Diagnose routes configuration (public for single component diagnosis).
      */
-    private ComponentDiagnostic diagnoseRoutes() {
+    public ComponentDiagnostic diagnoseRoutes() {
         ComponentDiagnostic diagnostic = new ComponentDiagnostic("routes");
         diagnostic.setComponentType("Routes");
 
@@ -327,9 +342,9 @@ public class DiagnosticService {
     }
 
     /**
-     * Diagnose auth configuration.
+     * Diagnose auth configuration (public for single component diagnosis).
      */
-    private ComponentDiagnostic diagnoseAuth() {
+    public ComponentDiagnostic diagnoseAuth() {
         ComponentDiagnostic diagnostic = new ComponentDiagnostic("auth");
         diagnostic.setComponentType("Auth");
 
@@ -364,9 +379,9 @@ public class DiagnosticService {
     }
 
     /**
-     * Diagnose gateway instances.
+     * Diagnose gateway instances (public for single component diagnosis).
      */
-    private ComponentDiagnostic diagnoseGatewayInstances() {
+    public ComponentDiagnostic diagnoseGatewayInstances() {
         ComponentDiagnostic diagnostic = new ComponentDiagnostic("gatewayInstances");
         diagnostic.setComponentType("GatewayInstances");
 
@@ -410,45 +425,157 @@ public class DiagnosticService {
     }
 
     /**
-     * Diagnose performance metrics.
+     * Diagnose performance metrics (public for single component diagnosis).
+     * Now integrates Prometheus real-time gateway metrics.
      */
-    private ComponentDiagnostic diagnosePerformance() {
+    public ComponentDiagnostic diagnosePerformance() {
         ComponentDiagnostic diagnostic = new ComponentDiagnostic("performance");
         diagnostic.setComponentType("Performance");
 
         try {
-            // JVM metrics
+            // 1. Admin服务本地 JVM 指标（自身健康检查）
             Runtime runtime = Runtime.getRuntime();
             long maxMemory = runtime.maxMemory();
             long totalMemory = runtime.totalMemory();
             long freeMemory = runtime.freeMemory();
             long usedMemory = totalMemory - freeMemory;
 
-            diagnostic.addMetric("jvmMaxMemoryMB", maxMemory / (1024 * 1024));
-            diagnostic.addMetric("jvmUsedMemoryMB", usedMemory / (1024 * 1024));
-            diagnostic.addMetric("jvmFreeMemoryMB", freeMemory / (1024 * 1024));
-            diagnostic.addMetric("jvmMemoryUtilization",
+            diagnostic.addMetric("adminJvmMaxMemoryMB", maxMemory / (1024 * 1024));
+            diagnostic.addMetric("adminJvmUsedMemoryMB", usedMemory / (1024 * 1024));
+            diagnostic.addMetric("adminJvmMemoryUtilization",
                     String.format("%.1f%%", (double) usedMemory / maxMemory * 100));
+            diagnostic.addMetric("adminThreadCount", Thread.activeCount());
 
-            // Thread count
-            diagnostic.addMetric("threadCount", Thread.activeCount());
-
-            // Database pool metrics
+            // 2. Database pool metrics
             DatabaseHealthService.ConnectionPoolInfo poolInfo =
                     databaseHealthService.getConnectionPoolInfo();
             if (poolInfo != null) {
                 int poolUtil = poolInfo.totalConnections() > 0 ?
                         poolInfo.activeConnections() * 100 / poolInfo.totalConnections() : 0;
                 diagnostic.addMetric("dbPoolUtilization", poolUtil + "%");
+                diagnostic.addMetric("dbPoolActive", poolInfo.activeConnections());
+                diagnostic.addMetric("dbPoolIdle", poolInfo.idleConnections());
             }
 
-            // Determine status based on metrics
-            double memoryUtil = (double) usedMemory / maxMemory;
-            if (memoryUtil > 0.9) {
+            // 3. Prometheus 网关实时指标（核心优化点）
+            boolean prometheusAvailable = prometheusService.isAvailable();
+            diagnostic.addMetric("prometheusAvailable", prometheusAvailable);
+
+            if (prometheusAvailable) {
+                try {
+                    Map<String, Object> gatewayMetrics = prometheusService.getGatewayMetrics();
+
+                    // JVM Memory (Gateway)
+                    Map<String, Object> jvmMemory = (Map<String, Object>) gatewayMetrics.get("jvmMemory");
+                    if (jvmMemory != null) {
+                        Object heapUsed = jvmMemory.get("heapUsed");
+                        Object heapMax = jvmMemory.get("heapMax");
+                        Object heapUsagePercent = jvmMemory.get("heapUsagePercent");
+                        diagnostic.addMetric("gatewayHeapUsedMB",
+                                heapUsed != null ? Math.round(((Number) heapUsed).doubleValue() / (1024 * 1024)) : 0);
+                        diagnostic.addMetric("gatewayHeapMaxMB",
+                                heapMax != null ? Math.round(((Number) heapMax).doubleValue() / (1024 * 1024)) : 0);
+                        diagnostic.addMetric("gatewayHeapUsagePercent",
+                                heapUsagePercent != null ? heapUsagePercent + "%" : "N/A");
+                    }
+
+                    // HTTP Requests (Gateway) - QPS, 响应时间, 错误率
+                    Map<String, Object> httpStats = (Map<String, Object>) gatewayMetrics.get("httpRequests");
+                    if (httpStats != null) {
+                        Object qps = httpStats.get("requestsPerSecond");
+                        Object avgLatency = httpStats.get("avgResponseTimeMs");
+                        Object errorRate = httpStats.get("errorRate");
+                        diagnostic.addMetric("gatewayQPS", qps != null ? String.format("%.2f", ((Number) qps).doubleValue()) : "0");
+                        diagnostic.addMetric("gatewayAvgLatencyMs", avgLatency != null ? avgLatency + "ms" : "N/A");
+                        diagnostic.addMetric("gatewayErrorRate", errorRate != null ? String.format("%.2f%%", ((Number) errorRate).doubleValue()) : "0%");
+                    }
+
+                    // CPU (Gateway)
+                    Map<String, Object> cpu = (Map<String, Object>) gatewayMetrics.get("cpu");
+                    if (cpu != null) {
+                        Object systemUsage = cpu.get("systemUsage");
+                        Object processUsage = cpu.get("processUsage");
+                        diagnostic.addMetric("gatewayCpuSystemUsage", systemUsage != null ? systemUsage + "%" : "N/A");
+                        diagnostic.addMetric("gatewayCpuProcessUsage", processUsage != null ? processUsage + "%" : "N/A");
+                    }
+
+                    // Threads (Gateway)
+                    Map<String, Object> threads = (Map<String, Object>) gatewayMetrics.get("threads");
+                    if (threads != null) {
+                        Object liveThreads = threads.get("liveThreads");
+                        Object peakThreads = threads.get("peakThreads");
+                        diagnostic.addMetric("gatewayLiveThreads", liveThreads != null ? liveThreads : "N/A");
+                        diagnostic.addMetric("gatewayPeakThreads", peakThreads != null ? peakThreads : "N/A");
+                    }
+
+                    // GC (Gateway)
+                    Map<String, Object> gc = (Map<String, Object>) gatewayMetrics.get("gc");
+                    if (gc != null) {
+                        Object gcCount = gc.get("gcCount");
+                        Object gcTime = gc.get("gcTimeSeconds");
+                        diagnostic.addMetric("gatewayGcCount5m", gcCount != null ? gcCount : "N/A");
+                        diagnostic.addMetric("gatewayGcTime5m", gcTime != null ? gcTime + "s" : "N/A");
+                    }
+
+                    // HTTP Status Distribution
+                    Map<String, Object> httpStatus = (Map<String, Object>) gatewayMetrics.get("httpStatus");
+                    if (httpStatus != null) {
+                        Object status2xx = httpStatus.get("status2xx");
+                        Object status4xx = httpStatus.get("status4xx");
+                        Object status5xx = httpStatus.get("status5xx");
+                        diagnostic.addMetric("gatewayStatus2xxRate", status2xx != null ? String.format("%.2f", ((Number) status2xx).doubleValue()) : "0");
+                        diagnostic.addMetric("gatewayStatus4xxRate", status4xx != null ? String.format("%.2f", ((Number) status4xx).doubleValue()) : "0");
+                        diagnostic.addMetric("gatewayStatus5xxRate", status5xx != null ? String.format("%.2f", ((Number) status5xx).doubleValue()) : "0");
+                    }
+
+                } catch (Exception e) {
+                    log.warn("Failed to get Prometheus gateway metrics: {}", e.getMessage());
+                    diagnostic.addWarning("Prometheus gateway metrics unavailable: " + e.getMessage());
+                }
+            }
+
+            // 4. Determine status based on multiple factors
+            double adminMemoryUtil = (double) usedMemory / maxMemory;
+
+            // Check Prometheus metrics for additional status determination
+            boolean hasHighErrorRate = false;
+            boolean hasHighLatency = false;
+            boolean hasHighMemory = false;
+
+            if (prometheusAvailable) {
+                Map<String, Object> gatewayMetrics = prometheusService.getGatewayMetrics();
+
+                Map<String, Object> httpStats = (Map<String, Object>) gatewayMetrics.get("httpRequests");
+                if (httpStats != null) {
+                    Object errorRate = httpStats.get("errorRate");
+                    if (errorRate != null && ((Number) errorRate).doubleValue() > 5) {
+                        hasHighErrorRate = true;
+                    }
+                    Object avgLatency = httpStats.get("avgResponseTimeMs");
+                    if (avgLatency != null && ((Number) avgLatency).doubleValue() > 500) {
+                        hasHighLatency = true;
+                    }
+                }
+
+                Map<String, Object> jvmMemory = (Map<String, Object>) gatewayMetrics.get("jvmMemory");
+                if (jvmMemory != null) {
+                    Object heapUsagePercent = jvmMemory.get("heapUsagePercent");
+                    if (heapUsagePercent != null && ((Number) heapUsagePercent).doubleValue() > 80) {
+                        hasHighMemory = true;
+                    }
+                }
+            }
+
+            // Determine final status
+            if (adminMemoryUtil > 0.9 || hasHighErrorRate || hasHighMemory) {
                 diagnostic.setStatus("CRITICAL");
-                diagnostic.addWarning("High JVM memory utilization");
-            } else if (memoryUtil > 0.7) {
+                if (adminMemoryUtil > 0.9) diagnostic.addWarning("Admin service high JVM memory utilization");
+                if (hasHighErrorRate) diagnostic.addWarning("Gateway high error rate detected (>5%)");
+                if (hasHighMemory) diagnostic.addWarning("Gateway high heap memory usage (>80%)");
+            } else if (adminMemoryUtil > 0.7 || hasHighLatency) {
                 diagnostic.setStatus("WARNING");
+                if (adminMemoryUtil > 0.7) diagnostic.addWarning("Admin service JVM memory utilization elevated");
+                if (hasHighLatency) diagnostic.addWarning("Gateway high average latency (>500ms)");
             } else {
                 diagnostic.setStatus("HEALTHY");
             }
@@ -464,8 +591,13 @@ public class DiagnosticService {
     /**
      * Diagnose Filter Chain performance across all gateway instances.
      * Collects filter execution statistics and identifies performance bottlenecks.
+     *
+     * IMPORTANT: Uses selfTime (filter's independent logic time) for performance analysis,
+     * NOT totalTime (cumulative time that includes downstream service response time).
+     *
+     * (public for single component diagnosis)
      */
-    private ComponentDiagnostic diagnoseFilterChain() {
+    public ComponentDiagnostic diagnoseFilterChain() {
         ComponentDiagnostic diagnostic = new ComponentDiagnostic("filterChain");
         diagnostic.setComponentType("FilterChain");
 
@@ -480,21 +612,27 @@ public class DiagnosticService {
             }
 
             int instancesChecked = 0;
-            int instancesWithIssues = 0;
             long totalSlowRequests = 0;
-            String slowestFilterOverall = null;
-            long slowestFilterP95Ms = 0;
+            String slowestFilterBySelfTime = null;
+            long slowestFilterSelfP95Ms = 0;
             List<Map<String, Object>> filterStatsAggregated = new ArrayList<>();
             List<String> problemFilters = new ArrayList<>();
 
+            // Thresholds for self-time (filter's own logic, excluding downstream)
+            // These should be much lower than cumulative time thresholds
+            final double SELF_AVG_THRESHOLD_MS = 10;  // 10ms avg self-time is concerning
+            final double SELF_P95_THRESHOLD_MS = 50;  // 50ms P95 self-time is concerning
+            final double SELF_CRITICAL_AVG_MS = 50;   // 50ms avg self-time is critical
+            final double SELF_CRITICAL_P95_MS = 200;  // 200ms P95 self-time is critical
+
             for (var instance : instances) {
                 // Only check running instances (statusCode == 1)
-                Integer statusCode = (Integer) ((Map<?, ?>) instance).get("statusCode");
+                Integer statusCode = instance.getStatusCode();
                 if (statusCode == null || statusCode != 1) {
                     continue;
                 }
 
-                String instanceId = (String) ((Map<?, ?>) instance).get("instanceId");
+                String instanceId = instance.getInstanceId();
                 String accessUrl = gatewayInstanceService.getAccessUrl(instanceId);
                 if (accessUrl == null) {
                     continue;
@@ -521,32 +659,49 @@ public class DiagnosticService {
                         if (filters != null) {
                             for (Map<String, Object> filter : filters) {
                                 String filterName = (String) filter.get("filterName");
-                                String avgMsStr = (String) filter.get("avgDurationMs");
-                                String p95MsStr = (String) filter.get("p95Ms");
+
+                                // Get self-time metrics (filter's own logic time)
+                                String avgSelfMsStr = (String) filter.get("avgSelfTimeMs");
+                                String selfP95MsStr = (String) filter.get("selfP95Ms");
+                                Double avgSelfMsRaw = (Double) filter.get("avgSelfTimeMsRaw");
+
+                                // Also get total-time metrics for context (includes downstream)
+                                String avgTotalMsStr = (String) filter.get("avgDurationMs");
+                                String totalP95MsStr = (String) filter.get("p95Ms");
+
                                 String successRateStr = (String) filter.get("successRate");
                                 Long totalCount = extractLong(filter.get("totalCount"));
 
-                                if (filterName != null && avgMsStr != null) {
-                                    double avgMs = parseDoubleStr(avgMsStr);
-                                    double p95Ms = parseDoubleStr(p95MsStr);
+                                if (filterName != null && avgSelfMsStr != null) {
+                                    double avgSelfMs = parseDoubleStr(avgSelfMsStr);
+                                    double selfP95Ms = parseDoubleStr(selfP95MsStr);
+                                    double avgTotalMs = avgTotalMsStr != null ? parseDoubleStr(avgTotalMsStr) : 0;
+                                    double totalP95Ms = totalP95MsStr != null ? parseDoubleStr(totalP95MsStr) : 0;
 
-                                    // Identify slow filters (avg > 50ms or P95 > 200ms)
-                                    if (avgMs > 50 || p95Ms > 200) {
-                                        problemFilters.add(filterName + "(avg:" + avgMs + "ms, P95:" + p95Ms + "ms)");
-                                        instancesWithIssues++;
+                                    // Identify slow filters based on SELF-TIME (actual filter logic time)
+                                    // This is the key fix: we now measure filter's independent execution time
+                                    if (avgSelfMs > SELF_AVG_THRESHOLD_MS || selfP95Ms > SELF_P95_THRESHOLD_MS) {
+                                        problemFilters.add(filterName +
+                                                "(selfAvg:" + avgSelfMs + "ms, selfP95:" + selfP95Ms + "ms" +
+                                                ", totalAvg:" + avgTotalMs + "ms)");
                                     }
 
-                                    // Track slowest filter overall
-                                    if (p95Ms > slowestFilterP95Ms) {
-                                        slowestFilterP95Ms = (long) p95Ms;
-                                        slowestFilterOverall = filterName;
+                                    // Track slowest filter by self-time
+                                    if (selfP95Ms > slowestFilterSelfP95Ms) {
+                                        slowestFilterSelfP95Ms = (long) selfP95Ms;
+                                        slowestFilterBySelfTime = filterName;
                                     }
 
-                                    // Aggregate filter stats
+                                    // Aggregate filter stats (include both self and total metrics)
                                     Map<String, Object> aggregated = new HashMap<>();
                                     aggregated.put("filterName", filterName);
-                                    aggregated.put("avgMs", avgMs);
-                                    aggregated.put("p95Ms", p95Ms);
+                                    // Self-time (key metric for filter performance)
+                                    aggregated.put("avgSelfMs", avgSelfMs);
+                                    aggregated.put("selfP95Ms", selfP95Ms);
+                                    aggregated.put("avgSelfMsRaw", avgSelfMsRaw != null ? avgSelfMsRaw : avgSelfMs);
+                                    // Total-time (for request profiling context)
+                                    aggregated.put("avgTotalMs", avgTotalMs);
+                                    aggregated.put("totalP95Ms", totalP95Ms);
                                     aggregated.put("successRate", successRateStr);
                                     aggregated.put("totalCount", totalCount);
                                     filterStatsAggregated.add(aggregated);
@@ -563,33 +718,35 @@ public class DiagnosticService {
             diagnostic.addMetric("instancesChecked", instancesChecked);
             diagnostic.addMetric("totalSlowRequests", totalSlowRequests);
             diagnostic.addMetric("problemFiltersCount", problemFilters.size());
-            diagnostic.addMetric("slowestFilter", slowestFilterOverall != null ? slowestFilterOverall : "N/A");
-            diagnostic.addMetric("slowestFilterP95Ms", slowestFilterP95Ms);
+            diagnostic.addMetric("slowestFilter", slowestFilterBySelfTime != null ? slowestFilterBySelfTime : "N/A");
+            diagnostic.addMetric("slowestFilterSelfP95Ms", slowestFilterSelfP95Ms);
+            diagnostic.addMetric("selfAvgThresholdMs", SELF_AVG_THRESHOLD_MS);
+            diagnostic.addMetric("selfP95ThresholdMs", SELF_P95_THRESHOLD_MS);
 
-            // Set status based on findings
+            // Set status based on SELF-TIME findings (actual filter performance)
             if (instancesChecked == 0) {
                 diagnostic.setStatus("WARNING");
                 diagnostic.addWarning("Could not retrieve filter chain stats from any instance");
-            } else if (problemFilters.size() > 3 || slowestFilterP95Ms > 500) {
+            } else if (problemFilters.size() > 3 || slowestFilterSelfP95Ms > SELF_CRITICAL_P95_MS) {
                 diagnostic.setStatus("CRITICAL");
-                diagnostic.addWarning("Multiple filters with high latency detected: " + problemFilters);
-            } else if (problemFilters.size() > 0 || slowestFilterP95Ms > 200) {
+                diagnostic.addWarning("Multiple filters with high SELF-TIME detected (actual filter logic time): " + problemFilters);
+            } else if (problemFilters.size() > 0 || slowestFilterSelfP95Ms > SELF_P95_THRESHOLD_MS) {
                 diagnostic.setStatus("WARNING");
                 if (!problemFilters.isEmpty()) {
-                    diagnostic.addWarning("Slow filters detected: " + problemFilters);
+                    diagnostic.addWarning("Filters with elevated SELF-TIME detected: " + problemFilters);
                 }
-                if (slowestFilterP95Ms > 200) {
-                    diagnostic.addWarning("Slowest filter P95 latency: " + slowestFilterP95Ms + "ms");
+                if (slowestFilterSelfP95Ms > SELF_P95_THRESHOLD_MS) {
+                    diagnostic.addWarning("Slowest filter SELF-P95 latency: " + slowestFilterSelfP95Ms + "ms (threshold: " + SELF_P95_THRESHOLD_MS + "ms)");
                 }
             } else {
                 diagnostic.setStatus("HEALTHY");
             }
 
-            // Add top 5 slowest filters to metrics
+            // Add top 5 slowest filters by SELF-TIME to metrics
             if (!filterStatsAggregated.isEmpty()) {
                 filterStatsAggregated.sort((a, b) -> Double.compare(
-                        (Double) b.getOrDefault("avgMs", 0.0),
-                        (Double) a.getOrDefault("avgMs", 0.0)));
+                        (Double) b.getOrDefault("avgSelfMsRaw", 0.0),
+                        (Double) a.getOrDefault("avgSelfMsRaw", 0.0)));
                 List<Map<String, Object>> topSlowest = filterStatsAggregated.stream()
                         .limit(5)
                         .toList();
@@ -698,33 +855,37 @@ public class DiagnosticService {
             }
         }
 
-        // Filter chain recommendations
+        // Filter chain recommendations - based on SELF-TIME (filter's own logic time, not cumulative)
         if (report.getFilterChain() != null) {
             String slowestFilter = (String) report.getFilterChain().getMetrics().get("slowestFilter");
-            Long slowestP95 = extractLong(report.getFilterChain().getMetrics().get("slowestFilterP95Ms"));
+            Long slowestSelfP95 = extractLong(report.getFilterChain().getMetrics().get("slowestFilterP95Ms"));
             Long slowRequests = extractLong(report.getFilterChain().getMetrics().get("totalSlowRequests"));
             Integer problemCount = extractInteger(report.getFilterChain().getMetrics().get("problemFiltersCount"));
 
-            if (slowestFilter != null && !"N/A".equals(slowestFilter) && slowestP95 != null && slowestP95 > 200) {
-                recommendations.add("Filter '" + slowestFilter + "' has high P95 latency (" + slowestP95 + "ms) - consider optimizing or caching");
+            // Use self-time threshold (50ms for self-P95 is significant)
+            if (slowestFilter != null && !"N/A".equals(slowestFilter) && slowestSelfP95 != null && slowestSelfP95 > 50) {
+                recommendations.add("Filter '" + slowestFilter + "' has high SELF-TIME P95 latency (" + slowestSelfP95 + "ms) - this is actual filter logic time, consider optimizing");
             }
 
             if (slowRequests != null && slowRequests > 100) {
-                recommendations.add("High number of slow requests (" + slowRequests + ") detected - investigate filter chain performance");
+                recommendations.add("High number of slow requests (" + slowRequests + ") detected - investigate downstream service latency");
             }
 
             if (problemCount != null && problemCount > 0) {
-                recommendations.add(problemCount + " filters have performance issues - review filter execution metrics for optimization");
+                recommendations.add(problemCount + " filters have high SELF-TIME - review filter implementation for optimization opportunities");
             }
 
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> topSlowest = (List<Map<String, Object>>) report.getFilterChain().getMetrics().get("topSlowestFilters");
             if (topSlowest != null && !topSlowest.isEmpty()) {
                 Map<String, Object> first = topSlowest.get(0);
-                Double avgMs = (Double) first.get("avgMs");
-                if (avgMs != null && avgMs > 100) {
+                // Use selfTime for recommendation (avgSelfMs is the key metric)
+                Double avgSelfMs = extractDouble(first.get("avgSelfMs"));
+                if (avgSelfMs != null && avgSelfMs > 10) {
                     String name = (String) first.get("filterName");
-                    recommendations.add("Top slowest filter '" + name + "' averages " + String.format("%.1f", avgMs) + "ms - investigate implementation");
+                    Double avgTotalMs = extractDouble(first.get("avgTotalMs"));
+                    String totalContext = avgTotalMs != null ? " (total request time: " + String.format("%.1f", avgTotalMs) + "ms)" : "";
+                    recommendations.add("Filter '" + name + "' has SELF-TIME avg " + String.format("%.1f", avgSelfMs) + "ms" + totalContext + " - investigate filter logic");
                 }
             }
         }
@@ -785,6 +946,18 @@ public class DiagnosticService {
         }
     }
 
+    private Double extractDouble(Object obj) {
+        if (obj == null) return null;
+        if (obj instanceof Number) {
+            return ((Number) obj).doubleValue();
+        }
+        try {
+            return Double.parseDouble(obj.toString());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
     private double parseDoubleStr(String str) {
         if (str == null) return 0;
         try {
@@ -792,6 +965,282 @@ public class DiagnosticService {
         } catch (NumberFormatException e) {
             return 0;
         }
+    }
+
+    // ============== Diagnostic History Methods ==============
+
+    /**
+     * Save diagnostic result to history table.
+     */
+    private void saveDiagnosticHistory(DiagnosticReport report, String diagnosticType, String instanceId) {
+        try {
+            DiagnosticHistoryEntity history = new DiagnosticHistoryEntity();
+            history.setInstanceId(instanceId);
+            history.setDiagnosticType(diagnosticType);
+            history.setOverallScore(report.getOverallScore());
+            history.setStatus(report.getOverallScore() >= 80 ? "HEALTHY" :
+                    report.getOverallScore() >= 50 ? "WARNING" : "CRITICAL");
+            history.setDurationMs(report.getDuration());
+
+            // Component status snapshots
+            if (report.getDatabase() != null) {
+                history.setDatabaseStatus(report.getDatabase().getStatus());
+            }
+            if (report.getRedis() != null) {
+                history.setRedisStatus(report.getRedis().getStatus());
+            }
+            if (report.getConfigCenter() != null) {
+                history.setConfigCenterStatus(report.getConfigCenter().getStatus());
+            }
+            if (report.getRoutes() != null) {
+                history.setRoutesStatus(report.getRoutes().getStatus());
+            }
+            if (report.getAuth() != null) {
+                history.setAuthStatus(report.getAuth().getStatus());
+            }
+            if (report.getGatewayInstances() != null) {
+                history.setGatewayInstancesStatus(report.getGatewayInstances().getStatus());
+            }
+            if (report.getPerformance() != null) {
+                history.setPerformanceStatus(report.getPerformance().getStatus());
+            }
+
+            // Key metrics from performance diagnostic
+            if (report.getPerformance() != null) {
+                Map<String, Object> perfMetrics = report.getPerformance().getMetrics();
+
+                // Gateway metrics (from Prometheus)
+                Object qps = perfMetrics.get("gatewayQPS");
+                if (qps != null) {
+                    history.setGatewayQps(parseDoubleValue(qps));
+                }
+                Object errorRate = perfMetrics.get("gatewayErrorRate");
+                if (errorRate != null) {
+                    // Extract numeric value from "X.XX%" format
+                    history.setGatewayErrorRate(parsePercentValue(errorRate));
+                }
+                Object avgLatency = perfMetrics.get("gatewayAvgLatencyMs");
+                if (avgLatency != null) {
+                    history.setGatewayAvgLatencyMs(parseLatencyValue(avgLatency));
+                }
+                Object heapUsage = perfMetrics.get("gatewayHeapUsagePercent");
+                if (heapUsage != null) {
+                    history.setGatewayHeapUsagePercent(parsePercentValue(heapUsage));
+                }
+                Object cpuUsage = perfMetrics.get("gatewayCpuProcessUsage");
+                if (cpuUsage != null) {
+                    history.setGatewayCpuUsagePercent(parsePercentValue(cpuUsage));
+                }
+
+                // Admin metrics
+                Object adminHeap = perfMetrics.get("adminJvmMemoryUtilization");
+                if (adminHeap != null) {
+                    history.setAdminHeapUsagePercent(parsePercentValue(adminHeap));
+                }
+            }
+
+            // Recommendations
+            if (report.getRecommendations() != null) {
+                history.setRecommendationsCount(report.getRecommendations().size());
+                if (!report.getRecommendations().isEmpty()) {
+                    // Store first 3 recommendations as summary
+                    List<String> topRecs = report.getRecommendations().stream().limit(3).toList();
+                    history.setRecommendationsSummary(String.join("; ", topRecs));
+                }
+            }
+
+            diagnosticHistoryRepository.save(history);
+            log.debug("Saved diagnostic history: score={}, type={}", history.getOverallScore(), diagnosticType);
+
+        } catch (Exception e) {
+            log.warn("Failed to save diagnostic history: {}", e.getMessage());
+        }
+    }
+
+    private double parseDoubleValue(Object obj) {
+        if (obj == null) return 0;
+        if (obj instanceof Number) {
+            return ((Number) obj).doubleValue();
+        }
+        try {
+            String str = obj.toString();
+            return Double.parseDouble(str);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private double parsePercentValue(Object obj) {
+        if (obj == null) return 0;
+        String str = obj.toString();
+        str = str.replace("%", "").replace("%%", "");
+        try {
+            return Double.parseDouble(str);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private double parseLatencyValue(Object obj) {
+        if (obj == null) return 0;
+        String str = obj.toString();
+        str = str.replace("ms", "").replace("N/A", "0");
+        try {
+            return Double.parseDouble(str);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Get diagnostic history for trend analysis.
+     * @param hours Hours to look back (default 24)
+     * @param instanceId Optional instance ID filter
+     */
+    public List<Map<String, Object>> getDiagnosticHistory(int hours, String instanceId) {
+        List<Map<String, Object>> history = new ArrayList<>();
+
+        try {
+            LocalDateTime start = LocalDateTime.now().minusHours(hours);
+
+            List<DiagnosticHistoryEntity> records;
+            if (instanceId != null && !instanceId.isEmpty()) {
+                records = diagnosticHistoryRepository.findByInstanceIdOrderByCreatedAtDesc(instanceId);
+            } else {
+                records = diagnosticHistoryRepository.findByCreatedAtBetween(start, LocalDateTime.now());
+            }
+
+            for (DiagnosticHistoryEntity entity : records) {
+                Map<String, Object> record = new LinkedHashMap<>();
+                record.put("id", entity.getId());
+                record.put("createdAt", entity.getCreatedAt());
+                record.put("type", entity.getDiagnosticType());
+                record.put("score", entity.getOverallScore());
+                record.put("status", entity.getStatus());
+                record.put("durationMs", entity.getDurationMs());
+
+                // Key metrics for trend charts
+                record.put("gatewayQps", entity.getGatewayQps());
+                record.put("gatewayErrorRate", entity.getGatewayErrorRate());
+                record.put("gatewayAvgLatencyMs", entity.getGatewayAvgLatencyMs());
+                record.put("gatewayHeapUsagePercent", entity.getGatewayHeapUsagePercent());
+                record.put("gatewayCpuUsagePercent", entity.getGatewayCpuUsagePercent());
+
+                history.add(record);
+            }
+
+        } catch (Exception e) {
+            log.warn("Failed to get diagnostic history: {}", e.getMessage());
+        }
+
+        return history;
+    }
+
+    /**
+     * Get health score trend for charts.
+     * @param hours Hours to look back
+     */
+    public Map<String, Object> getScoreTrend(int hours) {
+        Map<String, Object> trend = new LinkedHashMap<>();
+
+        try {
+            LocalDateTime start = LocalDateTime.now().minusHours(hours);
+            List<Object[]> scoreData = diagnosticHistoryRepository.getScoreTrend(start);
+
+            List<Long> timestamps = new ArrayList<>();
+            List<Integer> scores = new ArrayList<>();
+
+            for (Object[] row : scoreData) {
+                LocalDateTime time = (LocalDateTime) row[0];
+                Integer score = (Integer) row[1];
+                timestamps.add(time.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli());
+                scores.add(score);
+            }
+
+            trend.put("timestamps", timestamps);
+            trend.put("scores", scores);
+
+            // Calculate statistics
+            if (!scores.isEmpty()) {
+                double avgScore = scores.stream().mapToInt(Integer::intValue).average().orElse(0);
+                int minScore = scores.stream().mapToInt(Integer::intValue).min().orElse(0);
+                int maxScore = scores.stream().mapToInt(Integer::intValue).max().orElse(0);
+
+                trend.put("avgScore", Math.round(avgScore));
+                trend.put("minScore", minScore);
+                trend.put("maxScore", maxScore);
+            }
+
+        } catch (Exception e) {
+            log.warn("Failed to get score trend: {}", e.getMessage());
+        }
+
+        return trend;
+    }
+
+    /**
+     * Compare current diagnostic with previous.
+     * @param current Current diagnostic report
+     */
+    public Map<String, Object> compareWithPrevious(DiagnosticReport current) {
+        Map<String, Object> comparison = new LinkedHashMap<>();
+
+        try {
+            List<DiagnosticHistoryEntity> recent = diagnosticHistoryRepository.findRecentHistory(1);
+            if (recent.isEmpty()) {
+                comparison.put("message", "No previous diagnostic record found");
+                return comparison;
+            }
+
+            DiagnosticHistoryEntity previous = recent.get(0);
+
+            comparison.put("previousScore", previous.getOverallScore());
+            comparison.put("currentScore", current.getOverallScore());
+            comparison.put("scoreChange", current.getOverallScore() - previous.getOverallScore());
+            comparison.put("previousTime", previous.getCreatedAt());
+
+            // Compare key metrics
+            if (current.getPerformance() != null) {
+                Map<String, Object> perfMetrics = current.getPerformance().getMetrics();
+
+                Map<String, Object> metricChanges = new LinkedHashMap<>();
+
+                // Error rate change
+                double currentErrorRate = parsePercentValue(perfMetrics.get("gatewayErrorRate"));
+                if (previous.getGatewayErrorRate() != null) {
+                    metricChanges.put("errorRateChange", currentErrorRate - previous.getGatewayErrorRate());
+                }
+
+                // Latency change
+                double currentLatency = parseLatencyValue(perfMetrics.get("gatewayAvgLatencyMs"));
+                if (previous.getGatewayAvgLatencyMs() != null) {
+                    metricChanges.put("latencyChange", currentLatency - previous.getGatewayAvgLatencyMs());
+                }
+
+                // Heap usage change
+                double currentHeap = parsePercentValue(perfMetrics.get("gatewayHeapUsagePercent"));
+                if (previous.getGatewayHeapUsagePercent() != null) {
+                    metricChanges.put("heapUsageChange", currentHeap - previous.getGatewayHeapUsagePercent());
+                }
+
+                comparison.put("metricChanges", metricChanges);
+            }
+
+            // Generate comparison summary
+            int scoreChange = current.getOverallScore() - previous.getOverallScore();
+            if (scoreChange > 5) {
+                comparison.put("summary", "系统健康度较上次提升 " + scoreChange + " 分");
+            } else if (scoreChange < -5) {
+                comparison.put("summary", "系统健康度较上次下降 " + Math.abs(scoreChange) + " 分，需关注");
+            } else {
+                comparison.put("summary", "系统健康度保持稳定");
+            }
+
+        } catch (Exception e) {
+            log.warn("Failed to compare with previous: {}", e.getMessage());
+        }
+
+        return comparison;
     }
 
     // ============== Diagnostic Report Classes ==============

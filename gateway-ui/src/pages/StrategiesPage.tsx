@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, memo, useMemo } from 'react';
 import {
   Card, Button, Space, Modal, message, Spin, Tag, Form, Input, Select,
-  Empty, Dropdown, Tooltip, Badge, Divider, Typography, Switch, Radio, InputNumber, Row, Col, Collapse, Statistic, Popconfirm
+  Empty, Dropdown, Tooltip, Badge, Divider, Typography, Switch, Radio, InputNumber, Row, Col, Collapse, Popconfirm
 } from 'antd';
 import {
   PlusOutlined, DeleteOutlined, EditOutlined, MoreOutlined,
@@ -83,6 +83,7 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
   const [selectedStrategy, setSelectedStrategy] = useState<StrategyDefinition | null>(null);
   const [filterType, setFilterType] = useState<string>('all');
   const [filterScope, setFilterScope] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [createForm] = Form.useForm();
   const [editForm] = Form.useForm();
   const { t } = useTranslation();
@@ -123,8 +124,11 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
   const filteredStrategies = useMemo(() => strategies.filter(s => {
     const matchesType = filterType === 'all' || s.strategyType === filterType;
     const matchesScope = filterScope === 'all' || s.scope === filterScope;
-    return matchesType && matchesScope;
-  }), [strategies, filterType, filterScope]);
+    const matchesStatus = statusFilter === 'all' ||
+      (statusFilter === 'enabled' && s.enabled) ||
+      (statusFilter === 'disabled' && !s.enabled);
+    return matchesType && matchesScope && matchesStatus;
+  }), [strategies, filterType, filterScope, statusFilter]);
 
   // Memoize strategy statistics
   const strategyStats = useMemo(() => ({
@@ -522,15 +526,17 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
     setTypeSelectModalVisible(true);
   };
 
-  // Group strategy types by category
+  // Group strategy types by category (exclude ACCESS_LOG - now in instance Access Log config)
   const strategyTypesByCategory = useMemo(() => {
     const grouped: Record<string, StrategyType[]> = {};
-    strategyTypes.forEach(st => {
-      if (!grouped[st.category]) {
-        grouped[st.category] = [];
-      }
-      grouped[st.category].push(st);
-    });
+    strategyTypes
+      .filter(st => st.typeCode !== 'ACCESS_LOG')  // ACCESS_LOG moved to instance-level config
+      .forEach(st => {
+        if (!grouped[st.category]) {
+          grouped[st.category] = [];
+        }
+        grouped[st.category].push(st);
+      });
     return grouped;
   }, [strategyTypes]);
 
@@ -555,60 +561,35 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
 
   return (
     <div className="strategies-page">
-      {/* Premium Stats Cards */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 32 }}>
-        <Col xs={24} sm={8}>
-          <Card className="stats-card stats-card-primary" size="small">
-            <div className="stats-card-content">
-              <div className="stats-icon-wrapper">
-                <ThunderboltOutlined className="stats-icon" />
-              </div>
-              <div className="stats-info">
-                <Statistic
-                  title={<span className="stats-title">{t('strategy.stats_total')}</span>}
-                  value={totalStrategies}
-                  valueStyle={{ fontFamily: "'JetBrains Mono', monospace" }}
-                />
-                <span className="stats-subtitle">Total Strategies</span>
-              </div>
-            </div>
-          </Card>
-        </Col>
-        <Col xs={24} sm={8}>
-          <Card className="stats-card stats-card-success" size="small">
-            <div className="stats-card-content">
-              <div className="stats-icon-wrapper">
-                <PlayCircleOutlined className="stats-icon" />
-              </div>
-              <div className="stats-info">
-                <Statistic
-                  title={<span className="stats-title">{t('strategy.stats_enabled')}</span>}
-                  value={enabledStrategies}
-                  valueStyle={{ fontFamily: "'JetBrains Mono', monospace" }}
-                />
-                <span className="stats-subtitle">Active Strategies</span>
-              </div>
-            </div>
-          </Card>
-        </Col>
-        <Col xs={24} sm={8}>
-          <Card className="stats-card stats-card-info" size="small">
-            <div className="stats-card-content">
-              <div className="stats-icon-wrapper">
-                <GlobalOutlined className="stats-icon" />
-              </div>
-              <div className="stats-info">
-                <Statistic
-                  title={<span className="stats-title">{t('strategy.stats_global')}</span>}
-                  value={globalStrategies}
-                  valueStyle={{ fontFamily: "'JetBrains Mono', monospace" }}
-                />
-                <span className="stats-subtitle">Global Scope</span>
-              </div>
-            </div>
-          </Card>
-        </Col>
-      </Row>
+      {/* Stats Bar */}
+      <div className="stats-bar">
+        <div
+          className={`stat-item ${statusFilter === 'all' ? 'stat-item-active' : ''}`}
+          onClick={() => setStatusFilter('all')}
+          style={{ cursor: 'pointer' }}
+        >
+          <div className="stat-value">{totalStrategies}</div>
+          <div className="stat-label">{t('strategy.stats_total')}</div>
+        </div>
+        <Divider type="vertical" className="stat-divider" />
+        <div
+          className={`stat-item ${statusFilter === 'enabled' ? 'stat-item-active' : ''}`}
+          onClick={() => setStatusFilter('enabled')}
+          style={{ cursor: 'pointer' }}
+        >
+          <div className="stat-value text-green-600">{enabledStrategies}</div>
+          <div className="stat-label">{t('strategy.stats_enabled')}</div>
+        </div>
+        <Divider type="vertical" className="stat-divider" />
+        <div
+          className={`stat-item ${statusFilter === 'disabled' ? 'stat-item-active' : ''}`}
+          onClick={() => setStatusFilter('disabled')}
+          style={{ cursor: 'pointer' }}
+        >
+          <div className="stat-value text-red-600">{totalStrategies - enabledStrategies}</div>
+          <div className="stat-label">{t('strategy.stats_disabled')}</div>
+        </div>
+      </div>
 
       {/* Header */}
       <div className="page-header-modern">

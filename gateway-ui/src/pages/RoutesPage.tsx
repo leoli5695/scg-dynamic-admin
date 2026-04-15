@@ -14,7 +14,9 @@ import {
 import type { MenuProps } from 'antd';
 import api from '../utils/api';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import copy from 'copy-to-clipboard';
+import './RoutesPage.premium.css';
 
 const { Text, Title } = Typography;
 const { TextArea } = Input;
@@ -539,6 +541,7 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
   // Store edit services list for gray rules dropdown (more reliable than Form.useWatch)
   const [editServicesList, setEditServicesList] = useState<any[]>([]);
   const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Watch services list for gray rules dropdown (reactive updates) - for create form only
   const createFormServices = Form.useWatch('services', createForm);
@@ -548,6 +551,22 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
     loadServices();
     loadNacosServices();
   }, [instanceId]);
+
+  // 处理从拓扑图跳转过来的 highlight 参数，自动打开对应路由的详情
+  useEffect(() => {
+    const highlightId = searchParams.get('highlight');
+    if (highlightId && routes.length > 0) {
+      const targetRoute = routes.find(r => r.id === highlightId || r.routeName === highlightId);
+      if (targetRoute) {
+        setSelectedRoute(targetRoute);
+        setDetailDrawerVisible(true);
+        // 清除 highlight 参数，避免刷新页面时重复打开
+        searchParams.delete('highlight');
+        searchParams.delete('from');
+        setSearchParams(searchParams, { replace: true });
+      }
+    }
+  }, [routes, searchParams, setSearchParams]);
 
   // Reset to first page when search/filter changes
   useEffect(() => {

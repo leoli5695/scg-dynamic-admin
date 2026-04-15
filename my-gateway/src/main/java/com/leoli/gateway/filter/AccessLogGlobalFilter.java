@@ -326,9 +326,21 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
             int statusCode = exchange.getResponse().getStatusCode() != null ?
                     exchange.getResponse().getStatusCode().value() : 0;
 
+            // Get traceId from final request headers (may be added by TraceIdGlobalFilter after this filter started)
+            String finalTraceId = traceId;
+            if (finalTraceId == null) {
+                finalTraceId = exchange.getRequest().getHeaders().getFirst("X-Trace-Id");
+            }
+
+            // Get authInfo from final exchange attributes (may be set by AuthenticationGlobalFilter after this filter started)
+            AuthInfo finalAuthInfo = authInfo;
+            if (finalAuthInfo.authType == null && finalAuthInfo.authUser == null) {
+                finalAuthInfo = getAuthInfo(exchange, routeId);
+            }
+
             Map<String, Object> logEntry = new LinkedHashMap<>();
             logEntry.put("@timestamp", Instant.ofEpochMilli(startTime).toString());
-            logEntry.put("traceId", traceId);
+            logEntry.put("traceId", finalTraceId);
             logEntry.put("requestId", requestId);
             logEntry.put("routeId", routeId);
             logEntry.put("serviceId", serviceId);
@@ -341,14 +353,14 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
             logEntry.put("durationMs", duration);
 
             // Auth info
-            if (authInfo.authType != null) {
-                logEntry.put("authType", authInfo.authType);
+            if (finalAuthInfo.authType != null) {
+                logEntry.put("authType", finalAuthInfo.authType);
             }
-            if (authInfo.authPolicy != null) {
-                logEntry.put("authPolicy", authInfo.authPolicy);
+            if (finalAuthInfo.authPolicy != null) {
+                logEntry.put("authPolicy", finalAuthInfo.authPolicy);
             }
-            if (authInfo.authUser != null) {
-                logEntry.put("authUser", authInfo.authUser);
+            if (finalAuthInfo.authUser != null) {
+                logEntry.put("authUser", finalAuthInfo.authUser);
             }
 
             // Request headers
@@ -700,8 +712,15 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
         if (transferEncoding != null && transferEncoding.toLowerCase().contains("chunked")) {
             // Chunked transfer often indicates streaming/large file
             // If also has binary content type hint, treat as download
+            // But exclude text-based application types (json, xml, javascript, etc.)
             if (contentType != null && contentType.getType().equalsIgnoreCase("application")) {
-                return true;
+                String subtype = contentType.getSubtype().toLowerCase();
+                // Whitelist text-based application types
+                if (!subtype.equals("json") && !subtype.equals("xml") && 
+                    !subtype.equals("javascript") && !subtype.equals("x-javascript") &&
+                    !subtype.equals("x-www-form-urlencoded") && !subtype.startsWith("json+")) {
+                    return true;
+                }
             }
         }
 
