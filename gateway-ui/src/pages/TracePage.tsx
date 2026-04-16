@@ -448,7 +448,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
       title: t('trace.path'),
       dataIndex: 'path',
       key: 'path',
-      minWidth: 200,
+      width: 180,
       ellipsis: true,
       render: (path: string, record: RequestTrace) => (
         <Tooltip title={record.uri} placement="topLeft">
@@ -705,9 +705,10 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
           columns={columns}
           rowKey="id"
           pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (total) => `${total} items` }}
-          scroll={{ x: 1200 }}
+          scroll={{ x: 650 }}
           rowClassName={getRowClassName}
           size="small"
+          tableLayout="fixed"
         />
       </Card>
 
