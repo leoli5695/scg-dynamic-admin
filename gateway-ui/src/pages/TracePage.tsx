@@ -1,23 +1,32 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Card, Row, Col, Table, Tag, Space, Button,
-  message, Typography, Badge, Tooltip, Popconfirm, Descriptions, Tabs,
-  Statistic, Drawer, Progress, Alert
+  message, Typography, Badge, Tooltip, Popconfirm,
+  Statistic, Drawer, Progress, Alert, Collapse,
+  Select, DatePicker, Input, Segmented, Dropdown,
+  Modal, Form, Tabs
 } from 'antd';
 import {
   ApiOutlined, ReloadOutlined, PlayCircleOutlined,
   ClockCircleOutlined, CloseCircleOutlined,
   DeleteOutlined, EyeOutlined, FilterOutlined,
-  CheckCircleOutlined, WarningOutlined
+  CheckCircleOutlined, WarningOutlined, CopyOutlined,
+  DownloadOutlined, SettingOutlined, SearchOutlined,
+  ExpandOutlined, CompressOutlined, LinkOutlined
 } from '@ant-design/icons';
+import type { ColumnsType } from 'antd/es/table';
+import dayjs from 'dayjs';
 import api from '../utils/api';
 import { useTranslation } from 'react-i18next';
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Text, Paragraph, Link } = Typography;
+const { RangePicker } = DatePicker;
+const { Panel } = Collapse;
 
 interface RequestTrace {
   id: number;
   traceId: string;
+  instanceId?: string;
   routeId: string;
   method: string;
   uri: string;
@@ -73,9 +82,23 @@ interface TraceStats {
 interface TracePageProps {
   instanceId?: string;
   onNavigateToReplay?: () => void;
+  onNavigateToRoute?: (routeId: string) => void;
 }
 
-const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay }) => {
+// Column visibility settings
+const DEFAULT_VISIBLE_COLUMNS = ['traceId', 'method', 'path', 'statusCode', 'latencyMs', 'traceTime', 'actions'];
+const ALL_COLUMNS = ['traceId', 'method', 'path', 'statusCode', 'latencyMs', 'clientIp', 'traceTime', 'replayCount', 'actions'];
+
+// Time range presets
+const TIME_RANGE_OPTIONS = [
+  { label: '15m', value: 15 },
+  { label: '1h', value: 60 },
+  { label: '6h', value: 360 },
+  { label: '24h', value: 1440 },
+  { label: '7d', value: 10080 },
+];
+
+const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, onNavigateToRoute }) => {
   const [loading, setLoading] = useState(false);
   const [traces, setTraces] = useState<RequestTrace[]>([]);
   const [stats, setStats] = useState<TraceStats | null>(null);
@@ -83,18 +106,67 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay })
   const [detailDrawerVisible, setDetailDrawerVisible] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('errors');
+  const [timeRange, setTimeRange] = useState<number>(60); // minutes
+  const [customTimeRange, setCustomTimeRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null);
+  const [searchFilters, setSearchFilters] = useState({
+    path: '',
+    method: '',
+    statusCode: '',
+    traceId: '',
+  });
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_VISIBLE_COLUMNS);
+  const [detailViewMode, setDetailViewMode] = useState<'formatted' | 'raw'>('formatted');
+  const [requestBodyExpanded, setRequestBodyExpanded] = useState(false);
+  const [responseBodyExpanded, setResponseBodyExpanded] = useState(false);
+
   const { t } = useTranslation();
 
+  // Load traces based on filters
   const loadTraces = async () => {
     try {
       setLoading(true);
-      const params: any = { page: 0, size: 50 };
+      const params: any = { page: 0, size: 100 };
       if (instanceId) params.instanceId = instanceId;
+
+      // Apply time range filter
+      if (customTimeRange) {
+        params.start = customTimeRange[0].format('YYYY-MM-DDTHH:mm:ss');
+        params.end = customTimeRange[1].format('YYYY-MM-DDTHH:mm:ss');
+      }
+
+      const endpoint = activeTab === 'errors' ? '/api/traces/errors' : '/api/traces/slow';
+      if (activeTab === 'slow') params.thresholdMs = 3000;
+
       const [tracesRes, statsRes] = await Promise.all([
-        api.get('/api/traces/errors', { params }),
+        api.get(endpoint, { params }),
         api.get('/api/traces/stats', { params: instanceId ? { instanceId } : {} })
       ]);
-      setTraces(tracesRes.data?.content || []);
+
+      let traceData = tracesRes.data?.content || [];
+
+      // Apply client-side filters
+      if (searchFilters.path) {
+        traceData = traceData.filter((t: RequestTrace) =>
+          t.path?.toLowerCase().includes(searchFilters.path.toLowerCase())
+        );
+      }
+      if (searchFilters.method) {
+        traceData = traceData.filter((t: RequestTrace) =>
+          t.method?.toUpperCase() === searchFilters.method.toUpperCase()
+        );
+      }
+      if (searchFilters.statusCode) {
+        traceData = traceData.filter((t: RequestTrace) =>
+          t.statusCode?.toString() === searchFilters.statusCode
+        );
+      }
+      if (searchFilters.traceId) {
+        traceData = traceData.filter((t: RequestTrace) =>
+          t.traceId?.toLowerCase().includes(searchFilters.traceId.toLowerCase())
+        );
+      }
+
+      setTraces(traceData);
       setStats(statsRes.data || null);
     } catch (e) {
       console.error('Failed to load traces:', e);
@@ -106,29 +178,39 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay })
 
   useEffect(() => {
     loadTraces();
-  }, [instanceId]);
+  }, [instanceId, activeTab, timeRange, customTimeRange]);
 
-  const loadSlowTraces = async () => {
-    try {
-      setLoading(true);
-      const params: any = { page: 0, size: 50, thresholdMs: 3000 };
-      if (instanceId) params.instanceId = instanceId;
-      const res = await api.get('/api/traces/slow', { params });
-      setTraces(res.data?.content || []);
-    } catch (e) {
-      console.error('Failed to load slow traces:', e);
-      message.error(t('trace.load_error'));
-    } finally {
-      setLoading(false);
+  // Filter traces by time range on client side (for preset ranges)
+  const filteredTraces = useMemo(() => {
+    if (!customTimeRange && timeRange) {
+      const cutoff = dayjs().subtract(timeRange, 'minute');
+      return traces.filter(t => {
+        const traceTime = dayjs(t.traceTime);
+        return traceTime.isAfter(cutoff);
+      });
     }
-  };
+    return traces;
+  }, [traces, timeRange, customTimeRange]);
 
   const handleTabChange = (key: string) => {
     setActiveTab(key);
-    if (key === 'errors') {
-      loadTraces();
-    } else if (key === 'slow') {
-      loadSlowTraces();
+    setSearchFilters({ path: '', method: '', statusCode: '', traceId: '' });
+  };
+
+  const handleTimeRangeChange = (value: number | 'custom') => {
+    if (value === 'custom') {
+      // Keep custom range, just mark as custom
+    } else {
+      setTimeRange(value);
+      setCustomTimeRange(null);
+    }
+  };
+
+  const handleCustomTimeRangeChange = (dates: [dayjs.Dayjs | null, dayjs.Dayjs | null] | null) => {
+    if (dates && dates[0] && dates[1]) {
+      setCustomTimeRange([dates[0], dates[1]]);
+    } else {
+      setCustomTimeRange(null);
     }
   };
 
@@ -156,6 +238,41 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay })
       console.error('Failed to delete all traces:', e);
       message.error(t('trace.delete_error'));
     }
+  };
+
+  const handleExport = (format: 'json' | 'csv') => {
+    const data = filteredTraces;
+    if (format === 'json') {
+      const jsonStr = JSON.stringify(data, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `traces-${dayjs().format('YYYY-MM-DD-HHmmss')}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      // CSV export
+      const headers = ['Trace ID', 'Method', 'Path', 'Status', 'Latency(ms)', 'Client IP', 'Time'];
+      const rows = data.map(t => [
+        t.traceId,
+        t.method,
+        t.path,
+        t.statusCode,
+        t.latencyMs,
+        t.clientIp,
+        t.traceTime
+      ]);
+      const csvStr = [headers, ...rows].map(r => r.join(',')).join('\n');
+      const blob = new Blob([csvStr], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `traces-${dayjs().format('YYYY-MM-DD-HHmmss')}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    message.success(`Exported ${data.length} traces as ${format.toUpperCase()}`);
   };
 
   const getMethodColor = (method: string) => {
@@ -195,13 +312,59 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay })
 
   const handleViewDetail = (record: RequestTrace) => {
     setDetailDrawerVisible(true);
+    setRequestBodyExpanded(false);
+    setResponseBodyExpanded(false);
     loadTraceDetail(record);
+  };
+
+  // Copy all request/response data
+  const copyAllRequest = () => {
+    if (!selectedTrace) return;
+    const data = {
+      method: selectedTrace.method,
+      uri: selectedTrace.uri,
+      path: selectedTrace.path,
+      queryString: selectedTrace.queryString,
+      headers: selectedTrace.requestHeaders ? JSON.parse(selectedTrace.requestHeaders) : {},
+      body: selectedTrace.requestBody
+    };
+    navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+    message.success('Request copied to clipboard');
+  };
+
+  const copyAllResponse = () => {
+    if (!selectedTrace) return;
+    const data = {
+      statusCode: selectedTrace.statusCode,
+      headers: selectedTrace.responseHeaders ? JSON.parse(selectedTrace.responseHeaders) : {},
+      body: selectedTrace.responseBody,
+      latencyMs: selectedTrace.latencyMs,
+      errorMessage: selectedTrace.errorMessage
+    };
+    navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+    message.success('Response copied to clipboard');
   };
 
   const getFilterPercentageColor = (percentage: number) => {
     if (percentage >= 50) return '#cf1322';
     if (percentage >= 30) return '#faad14';
     return '#52c41a';
+  };
+
+  // Format JSON with pretty print
+  const formatJson = (str: string | null | undefined): string => {
+    if (!str) return '-';
+    try {
+      const parsed = JSON.parse(str);
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return str;
+    }
+  };
+
+  // Check if body is large (> 500 bytes)
+  const isBodyLarge = (body: string | null | undefined): boolean => {
+    return (body?.length || 0) > 500;
   };
 
   const filterColumns = [
@@ -258,31 +421,38 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay })
     }
   ];
 
-  const columns = [
+  // Dynamic columns based on visibility
+  const columns: ColumnsType<RequestTrace> = [
     {
       title: t('trace.trace_id'),
       dataIndex: 'traceId',
       key: 'traceId',
-      width: 180,
+      width: 170,
       ellipsis: true,
-      render: (text: string) => <Text copyable style={{ fontSize: 12 }}>{text?.substring(0, 16)}...</Text>
+      render: (text: string) => (
+        <Tooltip title={text}>
+          <Text copyable={{ text }} style={{ fontSize: 12 }}>
+            {text?.substring(0, 16)}...
+          </Text>
+        </Tooltip>
+      ),
     },
     {
       title: t('trace.method'),
       dataIndex: 'method',
       key: 'method',
-      width: 90,
+      width: 80,
       render: (method: string) => <Tag color={getMethodColor(method)}>{method}</Tag>
     },
     {
       title: t('trace.path'),
       dataIndex: 'path',
       key: 'path',
-      width: 300,
+      width: 280,
       ellipsis: true,
       render: (path: string, record: RequestTrace) => (
-        <Tooltip title={record.uri}>
-          <Text>{path}</Text>
+        <Tooltip title={record.uri} placement="topLeft">
+          <Text>{path || '-'}</Text>
         </Tooltip>
       )
     },
@@ -290,14 +460,15 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay })
       title: t('trace.status'),
       dataIndex: 'statusCode',
       key: 'statusCode',
-      width: 90,
+      width: 80,
       render: (code: number) => <Badge status={getStatusColor(code)} text={code} />
     },
     {
       title: t('trace.latency'),
       dataIndex: 'latencyMs',
       key: 'latencyMs',
-      width: 100,
+      width: 90,
+      sorter: (a: RequestTrace, b: RequestTrace) => a.latencyMs - b.latencyMs,
       render: (ms: number) => (
         <Text type={ms > 3000 ? 'danger' : undefined}>
           {ms}ms
@@ -308,27 +479,30 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay })
       title: t('trace.client_ip'),
       dataIndex: 'clientIp',
       key: 'clientIp',
-      width: 150,
+      width: 130,
       ellipsis: true,
+      render: (ip: string) => ip || <Text type="secondary">-</Text>
     },
     {
       title: t('trace.time'),
       dataIndex: 'traceTime',
       key: 'traceTime',
-      width: 180,
-      render: (time: string) => time ? new Date(time).toLocaleString() : '-'
+      width: 160,
+      sorter: (a: RequestTrace, b: RequestTrace) => new Date(a.traceTime).getTime() - new Date(b.traceTime).getTime(),
+      render: (time: string) => time ? dayjs(time).format('MM-DD HH:mm:ss') : <Text type="secondary">-</Text>
     },
     {
       title: t('trace.replay_count'),
       dataIndex: 'replayCount',
       key: 'replayCount',
-      width: 110,
+      width: 100,
       render: (count: number) => <Badge count={count} showZero style={{ backgroundColor: '#1890ff' }} />
     },
     {
       title: t('common.actions'),
       key: 'actions',
-      width: 150,
+      width: 120,
+      fixed: 'right' as const,
       render: (_: any, record: RequestTrace) => (
         <Space>
           <Button size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record)}>
@@ -337,7 +511,44 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay })
         </Space>
       )
     }
-  ];
+  ].filter(col => visibleColumns.includes(col.key as string));
+
+  // Row className for error highlighting
+  const getRowClassName = (record: RequestTrace): string => {
+    if (record.statusCode >= 400) {
+      return 'trace-row-error';
+    }
+    return '';
+  };
+
+  // Column settings dropdown
+  const columnSettingsMenu = (
+    <div style={{ padding: 8, background: '#fff', borderRadius: 4 }}>
+      <Text strong style={{ marginBottom: 8, display: 'block' }}>{t('trace.visible_columns')}</Text>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {ALL_COLUMNS.map(col => (
+          <label key={col} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={visibleColumns.includes(col)}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  setVisibleColumns([...visibleColumns, col]);
+                } else if (col !== 'actions') { // Actions column always visible
+                  setVisibleColumns(visibleColumns.filter(c => c !== col));
+                }
+              }}
+              disabled={col === 'actions'}
+            />
+            <Text>{t(`trace.${col}`)}</Text>
+          </label>
+        ))}
+      </div>
+      <Button size="small" style={{ marginTop: 8 }} onClick={() => setVisibleColumns(DEFAULT_VISIBLE_COLUMNS)}>
+        {t('common.reset')}
+      </Button>
+    </div>
+  );
 
   return (
     <div style={{ padding: 24 }}>
@@ -346,36 +557,123 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay })
           <ApiOutlined style={{ marginRight: 8 }} />
           {t('trace.title')}
         </Title>
-        {onNavigateToReplay && (
-          <Button type="primary" icon={<PlayCircleOutlined />} onClick={onNavigateToReplay}>
-            {t('trace.go_to_replay')}
-          </Button>
-        )}
+        <Space>
+          {onNavigateToReplay && (
+            <Button icon={<PlayCircleOutlined />} onClick={onNavigateToReplay}>
+              {t('trace.go_to_replay')}
+            </Button>
+          )}
+          <Dropdown menu={{ items: [
+            { key: 'json', label: 'JSON', icon: <DownloadOutlined />, onClick: () => handleExport('json') },
+            { key: 'csv', label: 'CSV', icon: <DownloadOutlined />, onClick: () => handleExport('csv') }
+          ]}}>
+            <Button icon={<DownloadOutlined />}>
+              {t('trace.export')}
+            </Button>
+          </Dropdown>
+        </Space>
       </div>
 
       {/* Statistics Cards */}
       <Row gutter={16} style={{ marginBottom: 24 }}>
         <Col span={6}>
-          <Card className="tracing-stat-card">
+          <Card className="tracing-stat-card" size="small">
             <Statistic title={t('trace.total')} value={stats?.total || 0} />
           </Card>
         </Col>
         <Col span={6}>
-          <Card className="tracing-stat-card">
+          <Card className="tracing-stat-card" size="small">
             <Statistic title={t('trace.errors_today')} value={stats?.errorsToday || 0} valueStyle={{ color: '#cf1322' }} />
           </Card>
         </Col>
         <Col span={6}>
-          <Card className="tracing-stat-card">
+          <Card className="tracing-stat-card" size="small">
             <Statistic title={t('trace.errors_last_hour')} value={stats?.errorsLastHour || 0} valueStyle={{ color: '#faad14' }} />
           </Card>
         </Col>
         <Col span={6}>
-          <Card className="tracing-stat-card">
-            <Statistic title={t('trace.replay_count')} value={traces.reduce((sum, t) => sum + (t.replayCount || 0), 0)} />
+          <Card className="tracing-stat-card" size="small">
+            <Statistic title={t('trace.replay_count')} value={filteredTraces.reduce((sum, t) => sum + (t.replayCount || 0), 0)} />
           </Card>
         </Col>
       </Row>
+
+      {/* Filters Row */}
+      <Card size="small" style={{ marginBottom: 16 }}>
+        <Row gutter={16} align="middle">
+          <Col>
+            <Segmented
+              options={[
+                ...TIME_RANGE_OPTIONS,
+                { label: 'Custom', value: 'custom' }
+              ]}
+              value={customTimeRange ? 'custom' : timeRange}
+              onChange={(val) => handleTimeRangeChange(val as number | 'custom')}
+            />
+          </Col>
+          {customTimeRange && (
+            <Col>
+              <RangePicker
+                showTime
+                value={customTimeRange}
+                onChange={handleCustomTimeRangeChange}
+                format="YYYY-MM-DD HH:mm"
+              />
+            </Col>
+          )}
+          <Col flex="auto">
+            <Space wrap>
+              <Input
+                placeholder={t('trace.filter_path')}
+                prefix={<SearchOutlined />}
+                value={searchFilters.path}
+                onChange={(e) => setSearchFilters({ ...searchFilters, path: e.target.value })}
+                style={{ width: 150 }}
+                allowClear
+              />
+              <Select
+                placeholder={t('trace.filter_method')}
+                value={searchFilters.method}
+                onChange={(v) => setSearchFilters({ ...searchFilters, method: v || '' })}
+                options={[
+                  { value: '', label: 'All' },
+                  { value: 'GET', label: 'GET' },
+                  { value: 'POST', label: 'POST' },
+                  { value: 'PUT', label: 'PUT' },
+                  { value: 'DELETE', label: 'DELETE' },
+                ]}
+                style={{ width: 100 }}
+                allowClear
+              />
+              <Input
+                placeholder={t('trace.filter_status')}
+                value={searchFilters.statusCode}
+                onChange={(e) => setSearchFilters({ ...searchFilters, statusCode: e.target.value })}
+                style={{ width: 80 }}
+                allowClear
+              />
+              <Input
+                placeholder={t('trace.filter_trace_id')}
+                prefix={<SearchOutlined />}
+                value={searchFilters.traceId}
+                onChange={(e) => setSearchFilters({ ...searchFilters, traceId: e.target.value })}
+                style={{ width: 150 }}
+                allowClear
+              />
+              <Button icon={<SearchOutlined />} onClick={loadTraces}>
+                {t('common.search')}
+              </Button>
+            </Space>
+          </Col>
+          <Col>
+            <Dropdown dropdownRender={() => columnSettingsMenu}>
+              <Button icon={<SettingOutlined />}>
+                {t('trace.columns')}
+              </Button>
+            </Dropdown>
+          </Col>
+        </Row>
+      </Card>
 
       {/* Action Buttons */}
       <Space style={{ marginBottom: 16 }}>
@@ -396,71 +694,232 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay })
 
       {/* Traces Table */}
       <Card>
-        <Tabs activeKey={activeTab} onChange={handleTabChange}>
-          <Tabs.TabPane tab={<span><CloseCircleOutlined /> {t('trace.error_traces')}</span>} key="errors" />
-          <Tabs.TabPane tab={<span><ClockCircleOutlined /> {t('trace.slow_traces')}</span>} key="slow" />
-        </Tabs>
+        <Tabs 
+          activeKey={activeTab} 
+          onChange={handleTabChange}
+          items={[
+            { key: 'errors', label: <span><CloseCircleOutlined /> {t('trace.error_traces')}</span> },
+            { key: 'slow', label: <span><ClockCircleOutlined /> {t('trace.slow_traces')}</span> }
+          ]}
+        />
 
         <Table
           className="tracing-table"
           loading={loading}
-          dataSource={traces}
+          dataSource={filteredTraces}
           columns={columns}
           rowKey="id"
-          pagination={{ pageSize: 20 }}
-          scroll={{ x: 1300 }}
+          pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (total) => `${total} items` }}
+          scroll={{ x: 1200 }}
+          rowClassName={getRowClassName}
+          size="small"
         />
       </Card>
 
-      {/* Detail Drawer */}
+      {/* Detail Drawer - Two Column Layout */}
       <Drawer
-        title={t('trace.detail_title')}
+        title={
+          <Space>
+            <Text>{t('trace.detail_title')}</Text>
+            {selectedTrace && (
+              <Tag color={getStatusColor(selectedTrace.statusCode)}>
+                {selectedTrace.statusCode}
+              </Tag>
+            )}
+          </Space>
+        }
         placement="right"
-        width={800}
+        width={900}
         onClose={() => setDetailDrawerVisible(false)}
         open={detailDrawerVisible}
-        style={{ zIndex: 999 }}
+        styles={{ body: { padding: 16 } }}
+        extra={
+          <Segmented
+            options={[
+              { label: t('trace.formatted'), value: 'formatted' },
+              { label: t('trace.raw'), value: 'raw' }
+            ]}
+            value={detailViewMode}
+            onChange={(v) => setDetailViewMode(v as 'formatted' | 'raw')}
+            size="small"
+          />
+        }
       >
         {selectedTrace && (
           <div>
             {detailLoading && <div style={{ textAlign: 'center', padding: 20 }}>Loading...</div>}
-            <Descriptions bordered column={2} size="small">
-              <Descriptions.Item label={t('trace.trace_id')} span={2}>
-                <Text copyable>{selectedTrace.traceId}</Text>
-              </Descriptions.Item>
-              <Descriptions.Item label={t('trace.method')}>
-                <Tag color={getMethodColor(selectedTrace.method)}>{selectedTrace.method}</Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label={t('trace.status')}>
-                <Badge status={getStatusColor(selectedTrace.statusCode)} text={selectedTrace.statusCode} />
-              </Descriptions.Item>
-              <Descriptions.Item label={t('trace.path')} span={2}>{selectedTrace.path}</Descriptions.Item>
-              <Descriptions.Item label={t('trace.query_string')} span={2}>
-                <Text copyable>{selectedTrace.queryString || '-'}</Text>
-              </Descriptions.Item>
-              <Descriptions.Item label={t('trace.latency')}>{selectedTrace.latencyMs}ms</Descriptions.Item>
-              <Descriptions.Item label={t('trace.client_ip')}>{selectedTrace.clientIp}</Descriptions.Item>
-              <Descriptions.Item label={t('trace.target_instance')} span={2}>{selectedTrace.targetInstance || '-'}</Descriptions.Item>
-              <Descriptions.Item label={t('trace.error_type')} span={2}>
-                {selectedTrace.errorType && <Tag color="error">{selectedTrace.errorType}</Tag>}
-              </Descriptions.Item>
-              <Descriptions.Item label={t('trace.error_message')} span={2}>
-                {selectedTrace.errorMessage && (
-                  <Paragraph type="danger" style={{ marginBottom: 0 }}>{selectedTrace.errorMessage}</Paragraph>
-                )}
-              </Descriptions.Item>
-              <Descriptions.Item label={t('trace.time')}>{new Date(selectedTrace.traceTime).toLocaleString()}</Descriptions.Item>
-              <Descriptions.Item label={t('trace.replay_count')}>{selectedTrace.replayCount}</Descriptions.Item>
-            </Descriptions>
+
+            {/* Summary Bar */}
+            <Card size="small" style={{ marginBottom: 16 }}>
+              <Row gutter={16}>
+                <Col span={4}>
+                  <Statistic title={t('trace.method')} />
+                  <Tag color={getMethodColor(selectedTrace.method)}>{selectedTrace.method}</Tag>
+                </Col>
+                <Col span={4}>
+                  <Statistic title={t('trace.status')} />
+                  <Badge status={getStatusColor(selectedTrace.statusCode)} text={selectedTrace.statusCode} />
+                </Col>
+                <Col span={4}>
+                  <Statistic title={t('trace.latency')} value={selectedTrace.latencyMs} suffix="ms" />
+                </Col>
+                <Col span={4}>
+                  <Statistic title={t('trace.client_ip')} valueStyle={{ fontSize: 12 }}
+                    value={selectedTrace.clientIp || '-'} />
+                </Col>
+                <Col span={8}>
+                  <Statistic title={t('trace.trace_id')} />
+                  <Text copyable style={{ fontSize: 12 }}>{selectedTrace.traceId}</Text>
+                </Col>
+              </Row>
+            </Card>
+
+            {/* Path & Query Info */}
+            <Card size="small" style={{ marginBottom: 16 }}>
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Text strong>{t('trace.path')}: </Text>
+                  <Tooltip title={selectedTrace.uri}>
+                    <Text copyable>{selectedTrace.path || '-'}</Text>
+                  </Tooltip>
+                </Col>
+                <Col span={6}>
+                  <Text strong>{t('trace.route_id')}: </Text>
+                  {onNavigateToRoute ? (
+                    <Link onClick={() => onNavigateToRoute(selectedTrace.routeId)}>
+                      <LinkOutlined /> {selectedTrace.routeId?.substring(0, 8)}...
+                    </Link>
+                  ) : (
+                    <Text copyable>{selectedTrace.routeId?.substring(0, 12)}...</Text>
+                  )}
+                </Col>
+                <Col span={6}>
+                  <Text strong>{t('trace.query_string')}: </Text>
+                  <Text copyable>{selectedTrace.queryString || '-'}</Text>
+                </Col>
+              </Row>
+            </Card>
+
+            {/* Error Info (if error) */}
+            {selectedTrace.statusCode >= 400 && (
+              <Alert
+                type={selectedTrace.statusCode >= 500 ? 'error' : 'warning'}
+                style={{ marginBottom: 16 }}
+                message={
+                  <Space>
+                    {selectedTrace.errorType && <Tag color="error">{selectedTrace.errorType}</Tag>}
+                    <Text>{selectedTrace.errorMessage || t('trace.error_unknown')}</Text>
+                  </Space>
+                }
+              />
+            )}
+
+            {/* Request & Response - Two Column Layout */}
+            <Row gutter={16}>
+              {/* Request Column */}
+              <Col span={12}>
+                <Card
+                  size="small"
+                  title={<Space><Text strong>Request</Text></Space>}
+                  extra={<Button size="small" icon={<CopyOutlined />} onClick={copyAllRequest}>Copy</Button>}
+                  style={{ marginBottom: 16 }}
+                >
+                  <Collapse bordered size="small" defaultActiveKey={['headers', 'body']}>
+                    <Panel header={`Headers (${selectedTrace.requestHeaders ? Object.keys(JSON.parse(selectedTrace.requestHeaders)).length : 0})`} key="headers">
+                      <pre style={{
+                        background: detailViewMode === 'formatted' ? '#f5f5f5' : 'transparent',
+                        padding: 8,
+                        borderRadius: 4,
+                        fontSize: 11,
+                        maxHeight: 200,
+                        overflow: 'auto',
+                        whiteSpace: detailViewMode === 'raw' ? 'pre-wrap' : 'pre'
+                      }}>
+                        {detailViewMode === 'formatted'
+                          ? formatJson(selectedTrace.requestHeaders)
+                          : selectedTrace.requestHeaders || '-'}
+                      </pre>
+                    </Panel>
+                    <Panel
+                      header={`Body (${selectedTrace.requestBody?.length || 0} bytes)`}
+                      key="body"
+                      extra={isBodyLarge(selectedTrace.requestBody) && (
+                        <Button size="small" type="text"
+                          icon={requestBodyExpanded ? <CompressOutlined /> : <ExpandOutlined />}
+                          onClick={(e) => { e.stopPropagation(); setRequestBodyExpanded(!requestBodyExpanded); }}
+                        />
+                      )}
+                    >
+                      <pre style={{
+                        background: '#f5f5f5',
+                        padding: 8,
+                        borderRadius: 4,
+                        fontSize: 11,
+                        maxHeight: requestBodyExpanded ? 500 : 150,
+                        overflow: 'auto'
+                      }}>
+                        {formatJson(selectedTrace.requestBody)}
+                      </pre>
+                    </Panel>
+                  </Collapse>
+                </Card>
+              </Col>
+
+              {/* Response Column */}
+              <Col span={12}>
+                <Card
+                  size="small"
+                  title={<Space><Text strong>Response</Text></Space>}
+                  extra={<Button size="small" icon={<CopyOutlined />} onClick={copyAllResponse}>Copy</Button>}
+                  style={{ marginBottom: 16 }}
+                >
+                  <Collapse bordered size="small" defaultActiveKey={['headers', 'body']}>
+                    <Panel header={`Headers (${selectedTrace.responseHeaders ? Object.keys(JSON.parse(selectedTrace.responseHeaders)).length : 0})`} key="headers">
+                      <pre style={{
+                        background: '#f5f5f5',
+                        padding: 8,
+                        borderRadius: 4,
+                        fontSize: 11,
+                        maxHeight: 200,
+                        overflow: 'auto'
+                      }}>
+                        {formatJson(selectedTrace.responseHeaders)}
+                      </pre>
+                    </Panel>
+                    <Panel
+                      header={`Body (${selectedTrace.responseBody?.length || 0} bytes)`}
+                      key="body"
+                      extra={isBodyLarge(selectedTrace.responseBody) && (
+                        <Button size="small" type="text"
+                          icon={responseBodyExpanded ? <CompressOutlined /> : <ExpandOutlined />}
+                          onClick={(e) => { e.stopPropagation(); setResponseBodyExpanded(!responseBodyExpanded); }}
+                        />
+                      )}
+                    >
+                      <pre style={{
+                        background: '#f5f5f5',
+                        padding: 8,
+                        borderRadius: 4,
+                        fontSize: 11,
+                        maxHeight: responseBodyExpanded ? 500 : 150,
+                        overflow: 'auto'
+                      }}>
+                        {formatJson(selectedTrace.responseBody)}
+                      </pre>
+                    </Panel>
+                  </Collapse>
+                </Card>
+              </Col>
+            </Row>
 
             {/* Filter Chain Execution Section */}
             {selectedTrace.filterChain?.hasFilterData && (
-              <div style={{ marginTop: 24 }}>
-                <Title level={5}>
+              <Card size="small" style={{ marginTop: 16 }}>
+                <Title level={5} style={{ marginBottom: 12 }}>
                   <FilterOutlined style={{ marginRight: 8 }} />
                   {t('trace.filter_chain_execution')}
                 </Title>
-                <Row gutter={16} style={{ marginBottom: 16 }}>
+                <Row gutter={16} style={{ marginBottom: 12 }}>
                   <Col span={4}>
                     <Statistic title={t('trace.filter_count')} value={selectedTrace.filterChain.filterCount} />
                   </Col>
@@ -498,7 +957,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay })
                   <Alert
                     type="warning"
                     message={t('trace.filter_warning')}
-                    style={{ marginBottom: 16 }}
+                    style={{ marginBottom: 12 }}
                   />
                 )}
 
@@ -510,25 +969,42 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay })
                   pagination={false}
                   scroll={{ x: 500 }}
                 />
-              </div>
+              </Card>
             )}
 
-            <Title level={5} style={{ marginTop: 16 }}>{t('trace.request_headers')}</Title>
-            <Paragraph>
-              <pre style={{ background: '#f5f5f5', padding: 12, borderRadius: 4, maxHeight: 200, overflow: 'auto' }}>
-                {selectedTrace.requestHeaders ? JSON.stringify(JSON.parse(selectedTrace.requestHeaders), null, 2) : '-'}
-              </pre>
-            </Paragraph>
-
-            <Title level={5}>{t('trace.request_body')}</Title>
-            <Paragraph>
-              <pre style={{ background: '#f5f5f5', padding: 12, borderRadius: 4, maxHeight: 200, overflow: 'auto' }}>
-                {selectedTrace.requestBody || '-'}
-              </pre>
-            </Paragraph>
+            {/* Meta Info */}
+            <Card size="small" style={{ marginTop: 16 }}>
+              <Row gutter={16}>
+                <Col span={8}>
+                  <Text type="secondary">{t('trace.target_instance')}: </Text>
+                  <Text>{selectedTrace.targetInstance || '-'}</Text>
+                </Col>
+                <Col span={8}>
+                  <Text type="secondary">{t('trace.user_agent')}: </Text>
+                  <Text ellipsis style={{ maxWidth: 200 }}>{selectedTrace.userAgent || '-'}</Text>
+                </Col>
+                <Col span={8}>
+                  <Text type="secondary">{t('trace.time')}: </Text>
+                  <Text>{dayjs(selectedTrace.traceTime).format('YYYY-MM-DD HH:mm:ss')}</Text>
+                </Col>
+              </Row>
+            </Card>
           </div>
         )}
       </Drawer>
+
+      {/* Add CSS for error row highlight */}
+      <style>{`
+        .trace-row-error {
+          background-color: rgba(255, 77, 79, 0.1) !important;
+        }
+        .trace-row-error:hover {
+          background-color: rgba(255, 77, 79, 0.15) !important;
+        }
+        .tracing-table .ant-table-cell {
+          padding: 8px 12px !important;
+        }
+      `}</style>
     </div>
   );
 };

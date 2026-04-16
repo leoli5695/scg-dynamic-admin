@@ -41,6 +41,7 @@ interface AccessLogConfig {
   maxBackupFiles: number;
   logToConsole: boolean;
   includeAuthInfo: boolean;
+  outputTarget?: 'stdout' | 'file' | 'both';  // 日志输出目标
 }
 
 interface DeployMode {
@@ -103,6 +104,8 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [filters, setFilters] = useState<{ method?: string; statusCode?: number; path?: string; traceId?: string }>({});
   const [bodyViewMode, setBodyViewMode] = useState<'raw' | 'formatted'>('formatted');
+  const [outputTarget, setOutputTarget] = useState<'stdout' | 'file' | 'both'>('file');
+  const [showFileConfig, setShowFileConfig] = useState(true);  // 是否显示文件配置项
 
   // Load config
   const loadConfig = async () => {
@@ -113,6 +116,23 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
       if (res.data.code === 200) {
         setConfig(res.data.data);
         form.setFieldsValue(res.data.data);
+
+        // Infer outputTarget from existing config
+        const logToConsole = res.data.data.logToConsole;
+        const logDirectory = res.data.data.logDirectory;
+        let inferredTarget: 'stdout' | 'file' | 'both';
+
+        if (logToConsole && logDirectory) {
+          inferredTarget = 'both';
+        } else if (logToConsole) {
+          inferredTarget = 'stdout';
+        } else {
+          inferredTarget = 'file';
+        }
+
+        setOutputTarget(inferredTarget);
+        setShowFileConfig(inferredTarget !== 'stdout');
+        form.setFieldsValue({ outputTarget: inferredTarget });
       }
     } catch (e) {
       console.error('Failed to load config:', e);
@@ -183,13 +203,64 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
     loadLogStats();
   }, [logPage, logPageSize, selectedDate, filters]);
 
-  // Handle deploy mode change - auto-fill default path but allow customization
+  // Handle deploy mode change - auto-fill default path and set output target recommendation
   const handleDeployModeChange = (mode: string) => {
     const selectedMode = deployModes.find(m => m.mode === mode);
     if (selectedMode) {
-      // Auto-fill default path, but user can still modify it
+      // Auto-fill default path
       form.setFieldsValue({ logDirectory: selectedMode.defaultPath });
     }
+
+    // Auto-set output target based on deployment mode
+    let recommendedTarget: 'stdout' | 'file' | 'both';
+    let showFile = true;
+
+    switch (mode) {
+      case 'K8S':
+        // Kubernetes: recommend stdout (cloud-native best practice)
+        recommendedTarget = 'stdout';
+        showFile = false;  // Hide file config for stdout mode
+        form.setFieldsValue({ logToConsole: true });
+        break;
+      case 'DOCKER':
+        // Docker: recommend both (stdout for collection + file for backup)
+        recommendedTarget = 'both';
+        showFile = true;
+        form.setFieldsValue({ logToConsole: true });
+        break;
+      case 'LOCAL':
+        // Local: recommend file
+        recommendedTarget = 'file';
+        showFile = true;
+        form.setFieldsValue({ logToConsole: false });
+        break;
+      case 'CUSTOM':
+        // Custom: keep current setting, show file config
+        recommendedTarget = outputTarget;
+        showFile = true;
+        break;
+      default:
+        recommendedTarget = 'file';
+        showFile = true;
+    }
+
+    setOutputTarget(recommendedTarget);
+    setShowFileConfig(showFile);
+
+    // Update outputTarget field in form
+    form.setFieldsValue({ outputTarget: recommendedTarget });
+  };
+
+  // Handle output target change
+  const handleOutputTargetChange = (target: 'stdout' | 'file' | 'both') => {
+    setOutputTarget(target);
+
+    // Update logToConsole based on target
+    const logToConsole = target === 'stdout' || target === 'both';
+    form.setFieldsValue({ logToConsole });
+
+    // Show/hide file config
+    setShowFileConfig(target !== 'stdout');
   };
 
   // Save config
@@ -380,24 +451,104 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
                 </Select>
               </Form.Item>
 
+              {/* 日志输出目标选项 */}
               <Form.Item
-                name="logDirectory"
-                label={t('access_log.log_directory') || 'Log Directory'}
-                extra={t('access_log.directory_hint') || 'Default path based on mode, you can customize'}
+                name="outputTarget"
+                label={
+                  <Space>
+                    {t('access_log.output_target') || 'Log Output Target'}
+                    <Tooltip title={t('access_log.output_target_tip') || 'Choose where to output access logs'}>
+                      <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
+                    </Tooltip>
+                  </Space>
+                }
               >
-                <Input
-                  placeholder={t('access_log.directory_placeholder') || 'Enter log directory path'}
-                  prefix={<FolderOutlined />}
-                />
+                <Radio.Group onChange={(e) => handleOutputTargetChange(e.target.value)}>
+                  <Radio.Button value="stdout">
+                    <Space>
+                      <Tag color="green">stdout</Tag>
+                      {t('access_log.stdout_desc') || 'Recommended for Kubernetes'}
+                    </Space>
+                  </Radio.Button>
+                  <Radio.Button value="file">
+                    <Space>
+                      <Tag color="blue">file</Tag>
+                      {t('access_log.file_desc') || 'Recommended for Local'}
+                    </Space>
+                  </Radio.Button>
+                  <Radio.Button value="both">
+                    <Space>
+                      <Tag color="purple">both</Tag>
+                      {t('access_log.both_desc') || 'Double output (stdout + file)'}
+                    </Space>
+                  </Radio.Button>
+                </Radio.Group>
               </Form.Item>
 
-              <Form.Item
-                name="fileNamePattern"
-                label={t('access_log.file_pattern') || 'File Name Pattern'}
-                extra={t('access_log.pattern_extra') || 'Supports {yyyy-MM-dd} placeholder'}
-              >
-                <Input placeholder="access-{yyyy-MM-dd}.log" />
-              </Form.Item>
+              {/* 部署模式帮助提示 */}
+              {config?.deployMode === 'K8S' && outputTarget === 'stdout' && (
+                <Alert
+                  type="success"
+                  showIcon
+                  style={{ marginBottom: 16 }}
+                  message={t('access_log.k8s_stdout_hint') || 'Cloud-Native Best Practice'}
+                  description={
+                    <div>
+                      <p>{t('access_log.k8s_stdout_desc') ||
+                        'Gateway logs to stdout (JSON format), Kubernetes automatically collects to /var/log/containers/*.log'}</p>
+                      <p style={{ marginTop: 8 }}>
+                        <strong>Fluent Bit Config:</strong>
+                        <pre style={{ background: '#f5f5f5', padding: 8, borderRadius: 4, marginTop: 4, fontSize: 12 }}>
+{`[INPUT]
+  Name tail
+  Path /var/log/containers/*gateway*.log
+  Parser json
+
+[OUTPUT]
+  Name http
+  Host gateway-admin-service
+  URI /api/access-log/collect`}
+                        </pre>
+                      </p>
+                    </div>
+                  }
+                />
+              )}
+
+              {config?.deployMode === 'DOCKER' && outputTarget === 'both' && (
+                <Alert
+                  type="info"
+                  showIcon
+                  style={{ marginBottom: 16 }}
+                  message={t('access_log.docker_hint') || 'Docker Deployment Hint'}
+                  description={t('access_log.docker_desc') ||
+                    'Logs output to stdout (for collection) and file (for backup). Ensure volume mount for file persistence.'}
+                />
+              )}
+
+              {/* 文件配置项 - 根据 outputTarget 显示/隐藏 */}
+              {showFileConfig && (
+                <>
+                  <Form.Item
+                    name="logDirectory"
+                    label={t('access_log.log_directory') || 'Log Directory'}
+                    extra={t('access_log.directory_hint') || 'Default path based on mode, you can customize'}
+                  >
+                    <Input
+                      placeholder={t('access_log.directory_placeholder') || 'Enter log directory path'}
+                      prefix={<FolderOutlined />}
+                    />
+                  </Form.Item>
+
+                  <Form.Item
+                    name="fileNamePattern"
+                    label={t('access_log.file_pattern') || 'File Name Pattern'}
+                    extra={t('access_log.pattern_extra') || 'Supports {yyyy-MM-dd} placeholder'}
+                  >
+                    <Input placeholder="access-{yyyy-MM-dd}.log" />
+                  </Form.Item>
+                </>
+              )}
 
               <Form.Item
                 name="logFormat"

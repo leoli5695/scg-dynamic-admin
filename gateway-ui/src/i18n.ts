@@ -687,6 +687,21 @@ const resources = {
       'trace.filter_failure': 'Failures',
       'trace.filter_slowest': 'Slowest Filter',
       'trace.filter_warning': 'Some filters failed during execution',
+      // Trace Page - Enhanced
+      'trace.export': 'Export',
+      'trace.columns': 'Columns',
+      'trace.visible_columns': 'Visible Columns',
+      'trace.formatted': 'Formatted',
+      'trace.raw': 'Raw',
+      'trace.filter_path': 'Filter path...',
+      'trace.filter_method_input': 'Method',
+      'trace.filter_status_input': 'Status',
+      'trace.filter_trace_id': 'Trace ID...',
+      'trace.user_agent': 'User Agent',
+      'trace.route_id': 'Route ID',
+      'trace.error_unknown': 'Unknown error',
+      'trace.response_headers': 'Response Headers',
+      'trace.response_body': 'Response Body',
 
       // Request Replay Page
       'replay.title': 'Request Replay Debugger',
