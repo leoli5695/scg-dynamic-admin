@@ -16,6 +16,7 @@ AI Copilot Features:
 | **Performance Optimizer** | Optimization suggestions based on real-time metrics, supporting JVM/connection pool/rate limiting configuration |
 | **Concept Explainer** | Explain Gateway concepts with project-specific JSON formats |
 | **Tool Calling** | 30+ tools for autonomous invocation, capable of route creation/modification/rollback operations |
+| **Dynamic Prompts** | System prompts stored in database for flexible customization |
 
 ---
 
@@ -26,6 +27,77 @@ AI Copilot Features:
 | **Domestic (China)** | Qwen, DeepSeek | qwen-plus, qwen-turbo, deepseek-chat |
 | **Overseas** | OpenAI, Anthropic, Google | GPT-4, GPT-3.5-turbo, Claude-3, Gemini |
 | **Local** | Ollama | llama2, mistral |
+
+---
+
+## Dynamic Prompts Management
+
+### Overview
+
+AI Copilot prompts are now stored in database instead of hardcoded, enabling:
+
+| Capability | Description |
+|------------|-------------|
+| **Dynamic Updates** | Modify prompts without restarting the application |
+| **Customization** | Add custom prompts for specific use cases |
+| **Versioning** | Track prompt changes with audit logs |
+| **Multi-language** | Support different prompts for different languages |
+
+### Database Schema
+
+```sql
+CREATE TABLE ai_copilot_prompts (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    prompt_key VARCHAR(100) UNIQUE NOT NULL,
+    prompt_type VARCHAR(50) NOT NULL,
+    content TEXT NOT NULL,
+    description VARCHAR(500),
+    enabled BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+```
+
+### Prompt Types
+
+| Type | Description | Example Keys |
+|------|-------------|--------------|
+| `SYSTEM` | System-level prompts for AI behavior | `system_default`, `system_route_gen` |
+| `TASK` | Task-specific prompts | `error_analysis`, `route_generation` |
+| `EXPLANATION` | Concept explanation prompts | `explain_rate_limit`, `explain_circuit_breaker` |
+| `CUSTOM` | User-defined prompts | Custom task prompts |
+
+### Default System Prompts
+
+| Prompt Key | Description |
+|------------|-------------|
+| `system_default` | Default AI behavior and personality |
+| `system_route_gen` | Route generation guidelines |
+| `system_error_analysis` | Error analysis workflow |
+| `system_performance` | Performance optimization suggestions |
+| `system_explanation` | Concept explanation style |
+
+### API Endpoints for Prompts
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/copilot/prompts` | List all prompts |
+| `GET` | `/api/copilot/prompts/{key}` | Get specific prompt |
+| `POST` | `/api/copilot/prompts` | Create new prompt |
+| `PUT` | `/api/copilot/prompts/{key}` | Update prompt |
+| `DELETE` | `/api/copilot/prompts/{key}` | Delete custom prompt |
+
+### Example: Custom Prompt
+
+```json
+{
+  "promptKey": "custom_security_check",
+  "promptType": "TASK",
+  "content": "When analyzing routes, always check:\n1. Authentication requirements\n2. Rate limiting configuration\n3. IP filtering rules\n4. CORS settings",
+  "description": "Security checklist prompt for route analysis",
+  "enabled": true
+}
+```
 
 ---
 
