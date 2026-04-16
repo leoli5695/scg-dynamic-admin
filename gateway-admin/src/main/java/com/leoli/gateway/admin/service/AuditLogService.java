@@ -4,15 +4,19 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.center.ConfigCenterService;
 import com.leoli.gateway.admin.model.AuditLogEntity;
+import com.leoli.gateway.admin.model.AuditLogQuery;
+import com.leoli.gateway.admin.model.AuditLogStats;
 import com.leoli.gateway.admin.model.RouteEntity;
 import com.leoli.gateway.admin.repository.AuditLogRepository;
 import com.leoli.gateway.admin.repository.RouteRepository;
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -84,6 +88,170 @@ public class AuditLogService {
         entity.setNewValue(newValue);
         entity.setIpAddress(ipAddress);
         auditLogRepository.save(entity);
+    }
+
+    /**
+     * Get audit logs using JPA Specification (dynamic query).
+     * This replaces the multiple if-else branch methods.
+     */
+    public Page<AuditLogEntity> findAuditLogs(AuditLogQuery query) {
+        Specification<AuditLogEntity> spec = buildSpecification(query);
+        Pageable pageable = query.toPageable();
+        return auditLogRepository.findAll(spec, pageable);
+    }
+
+    /**
+     * Build JPA Specification from query parameters.
+     * Handles null query and empty string values gracefully.
+     */
+    private Specification<AuditLogEntity> buildSpecification(AuditLogQuery query) {
+        // Handle null query - return empty specification
+        if (query == null) {
+            return (root, cq, cb) -> cb.conjunction();
+        }
+
+        return (root, cq, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+
+            // Instance ID filter (trim whitespace)
+            String instanceId = trimToNull(query.getInstanceId());
+            if (instanceId != null) {
+                predicates.add(cb.equal(root.get("instanceId"), instanceId));
+            }
+
+            // Target type filter
+            String targetType = trimToNull(query.getTargetType());
+            if (targetType != null) {
+                predicates.add(cb.equal(root.get("targetType"), targetType));
+            }
+
+            // Target ID filter
+            String targetId = trimToNull(query.getTargetId());
+            if (targetId != null) {
+                predicates.add(cb.equal(root.get("targetId"), targetId));
+            }
+
+            // Operation type filter
+            String operationType = trimToNull(query.getOperationType());
+            if (operationType != null) {
+                predicates.add(cb.equal(root.get("operationType"), operationType));
+            }
+
+            // Operator filter
+            String operator = trimToNull(query.getOperator());
+            if (operator != null) {
+                predicates.add(cb.equal(root.get("operator"), operator));
+            }
+
+            // Operator type filter
+            String operatorType = trimToNull(query.getOperatorType());
+            if (operatorType != null) {
+                predicates.add(cb.equal(root.get("operatorType"), operatorType));
+            }
+
+            // Target name fuzzy search (case-insensitive)
+            String targetName = trimToNull(query.getTargetName());
+            if (targetName != null) {
+                predicates.add(cb.like(cb.lower(root.get("targetName")), "%" + targetName.toLowerCase() + "%"));
+            }
+
+            // Time range filter
+            if (query.getStartTime() != null && query.getEndTime() != null) {
+                predicates.add(cb.between(root.get("createdAt"), query.getStartTime(), query.getEndTime()));
+            } else if (query.getStartTime() != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), query.getStartTime()));
+            } else if (query.getEndTime() != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), query.getEndTime()));
+            }
+
+            // Return conjunction if no predicates (all records)
+            return predicates.isEmpty() ? cb.conjunction() : cb.and(predicates.toArray(new Predicate[0]));
+        };
+    }
+
+    /**
+     * Helper: Trim string and return null if empty.
+     */
+    private String trimToNull(String str) {
+        if (str == null) return null;
+        String trimmed = str.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    /**
+     * Get audit log statistics (aggregated counts).
+     * Uses database queries instead of fetching all records.
+     */
+    public AuditLogStats getStats(String instanceId) {
+        // Total count
+        long total = countBySpec(buildCountSpec(null, instanceId));
+
+        // Today's count
+        LocalDateTime todayStart = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0);
+        long today = countBySpec(buildTimeSpec(todayStart, null, instanceId));
+
+        // Creates count
+        long creates = countBySpec(buildOperationSpec("CREATE", instanceId));
+
+        // Updates count
+        long updates = countBySpec(buildOperationSpec("UPDATE", instanceId));
+
+        // Deletes count
+        long deletes = countBySpec(buildOperationSpec("DELETE", instanceId));
+
+        // Rollbacks count
+        long rollbacks = countBySpec(buildOperationSpec("ROLLBACK", instanceId));
+
+        return AuditLogStats.of(total, today, creates, updates, deletes, rollbacks);
+    }
+
+    /**
+     * Helper: Count by Specification.
+     */
+    private long countBySpec(Specification<AuditLogEntity> spec) {
+        return auditLogRepository.count(spec);
+    }
+
+    /**
+     * Helper: Build count specification.
+     */
+    private Specification<AuditLogEntity> buildCountSpec(String operationType, String instanceId) {
+        return (root, cq, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (operationType != null) {
+                predicates.add(cb.equal(root.get("operationType"), operationType));
+            }
+            if (instanceId != null && !instanceId.isEmpty()) {
+                predicates.add(cb.equal(root.get("instanceId"), instanceId));
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+    }
+
+    /**
+     * Helper: Build operation type specification.
+     */
+    private Specification<AuditLogEntity> buildOperationSpec(String operationType, String instanceId) {
+        return buildCountSpec(operationType, instanceId);
+    }
+
+    /**
+     * Helper: Build time range specification.
+     */
+    private Specification<AuditLogEntity> buildTimeSpec(LocalDateTime startTime, LocalDateTime endTime, String instanceId) {
+        return (root, cq, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (startTime != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), startTime));
+            }
+            if (endTime != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), endTime));
+            }
+            if (instanceId != null && !instanceId.isEmpty()) {
+                predicates.add(cb.equal(root.get("instanceId"), instanceId));
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
     }
 
     /**
@@ -407,24 +575,26 @@ public class AuditLogService {
 
     /**
      * Clean up audit logs older than specified days.
+     * Optimized: directly delete without count check.
      * @param retentionDays Number of days to retain logs
      * @return Number of deleted logs
      */
     @Transactional(rollbackFor = Exception.class)
     public int cleanOldLogs(int retentionDays) {
         LocalDateTime beforeTime = LocalDateTime.now().minusDays(retentionDays);
-        long count = auditLogRepository.countByCreatedAtBefore(beforeTime);
-        if (count == 0) {
-            log.debug("No audit logs older than {} days to clean", retentionDays);
-            return 0;
-        }
+        // 直接删除，避免额外的 count 查询
         int deleted = auditLogRepository.deleteOldLogs(beforeTime);
-        log.info("Cleaned {} audit logs older than {} days (before {})", deleted, retentionDays, beforeTime);
+        if (deleted > 0) {
+            log.info("Cleaned {} audit logs older than {} days (before {})", deleted, retentionDays, beforeTime);
+        } else {
+            log.debug("No audit logs older than {} days to clean", retentionDays);
+        }
         return deleted;
     }
 
     /**
      * Clean up audit logs older than specified days for a specific instance.
+     * Optimized: directly delete without count check.
      * @param instanceId The instance ID
      * @param retentionDays Number of days to retain logs
      * @return Number of deleted logs
@@ -432,13 +602,13 @@ public class AuditLogService {
     @Transactional(rollbackFor = Exception.class)
     public int cleanOldLogs(String instanceId, int retentionDays) {
         LocalDateTime beforeTime = LocalDateTime.now().minusDays(retentionDays);
-        long count = auditLogRepository.countByInstanceIdAndCreatedAtBefore(instanceId, beforeTime);
-        if (count == 0) {
-            log.debug("No audit logs older than {} days to clean for instance {}", retentionDays, instanceId);
-            return 0;
-        }
+        // 直接删除，避免额外的 count 查询
         int deleted = auditLogRepository.deleteOldLogsByInstanceId(instanceId, beforeTime);
-        log.info("Cleaned {} audit logs older than {} days for instance {} (before {})", deleted, retentionDays, instanceId, beforeTime);
+        if (deleted > 0) {
+            log.info("Cleaned {} audit logs older than {} days for instance {} (before {})", deleted, retentionDays, instanceId, beforeTime);
+        } else {
+            log.debug("No audit logs older than {} days to clean for instance {}", retentionDays, instanceId);
+        }
         return deleted;
     }
 

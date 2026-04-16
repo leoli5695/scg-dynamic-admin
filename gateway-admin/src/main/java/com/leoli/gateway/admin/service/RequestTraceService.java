@@ -66,6 +66,28 @@ public class RequestTraceService {
     }
 
     /**
+     * Search traces by trace ID (fuzzy search)
+     */
+    public List<RequestTrace> searchByTraceId(String traceId, int limit) {
+        if (traceId == null || traceId.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+        Pageable pageable = PageRequest.of(0, limit);
+        return requestTraceRepository.findByTraceIdContaining(traceId.trim(), pageable);
+    }
+
+    /**
+     * Search traces by trace ID for a specific instance (fuzzy search)
+     */
+    public List<RequestTrace> searchByTraceId(String instanceId, String traceId, int limit) {
+        if (traceId == null || traceId.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+        Pageable pageable = PageRequest.of(0, limit);
+        return requestTraceRepository.findByInstanceIdAndTraceIdContaining(instanceId, traceId.trim(), pageable);
+    }
+
+    /**
      * Get recent error traces
      */
     public List<RequestTrace> getRecentErrors(int limit) {
@@ -149,6 +171,38 @@ public class RequestTraceService {
     public Page<RequestTrace> getTracesByTimeRange(String instanceId, LocalDateTime start, LocalDateTime end, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("traceTime").descending());
         return requestTraceRepository.findByInstanceIdAndTimeRange(instanceId, start, end, pageable);
+    }
+
+    /**
+     * Get error traces within time range
+     */
+    public Page<RequestTrace> getErrorTracesByTimeRange(LocalDateTime start, LocalDateTime end, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("traceTime").descending());
+        return requestTraceRepository.findErrorTracesByTimeRange(start, end, pageable);
+    }
+
+    /**
+     * Get error traces within time range for a specific instance
+     */
+    public Page<RequestTrace> getErrorTracesByTimeRange(String instanceId, LocalDateTime start, LocalDateTime end, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("traceTime").descending());
+        return requestTraceRepository.findErrorTracesByInstanceIdAndTimeRange(instanceId, start, end, pageable);
+    }
+
+    /**
+     * Get slow traces within time range
+     */
+    public Page<RequestTrace> getSlowTracesByTimeRange(LocalDateTime start, LocalDateTime end, long thresholdMs, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("traceTime").descending());
+        return requestTraceRepository.findSlowTracesByTimeRange(start, end, thresholdMs, pageable);
+    }
+
+    /**
+     * Get slow traces within time range for a specific instance
+     */
+    public Page<RequestTrace> getSlowTracesByTimeRange(String instanceId, LocalDateTime start, LocalDateTime end, long thresholdMs, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("traceTime").descending());
+        return requestTraceRepository.findSlowTracesByInstanceIdAndTimeRange(instanceId, start, end, thresholdMs, pageable);
     }
 
     /**

@@ -134,19 +134,19 @@ public class ServiceRefresher {
     private void onSingleServiceChange(String serviceId, String content) {
         try {
             if (content == null || content.isBlank()) {
-                // Service deleted or disabled - clear all caches
+                // Service deleted - clear all caches including health records
                 serviceManager.clearServiceCache(serviceId);
                 hybridHealthChecker.clearServiceInstances(serviceId);
-                log.info("🗑️  Service deleted/disabled: {}", serviceId);
+                log.info("🗑️  Service deleted: {}", serviceId);
             } else {
-                // Service created or updated - clear old cache and reload
-                hybridHealthChecker.clearServiceInstances(serviceId);
+                // Service created or updated - reload config but keep health status
+                // Health status reflects actual instance state, should not be cleared on config update
                 JsonNode serviceNode = objectMapper.readTree(content);
                 validateServiceConfig(serviceNode, serviceId);
                 serviceManager.parseAndCacheService(serviceId, serviceNode);
                 log.info("✏️  Service created/updated: {}", serviceId);
 
-                // Trigger health check for all instances
+                // Trigger health check for all instances (will mark as REINIT if needed)
                 triggerHealthCheckForService(serviceId);
             }
 
@@ -279,8 +279,9 @@ public class ServiceRefresher {
             log.info("🗑️  Removed listener for service: {}", serviceId);
         }
 
-        // Clear service cache
+        // Clear service cache and health records
         serviceManager.clearServiceCache(serviceId);
+        hybridHealthChecker.clearServiceInstances(serviceId);
     }
 
     /**

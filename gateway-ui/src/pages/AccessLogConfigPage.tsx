@@ -3,7 +3,7 @@ import {
   Card, Row, Col, Form, Input, Select, Button, Switch, InputNumber,
   Space, message, Spin, Divider, Typography, Tag, Alert, Tooltip,
   Tabs, Table, DatePicker, Statistic, Badge, Tooltip as AntTooltip,
-  Descriptions, Radio
+  Descriptions, Segmented, Radio
 } from 'antd';
 import type { TabsProps } from 'antd';
 import {
@@ -11,7 +11,8 @@ import {
   CloudServerOutlined, DesktopOutlined, ContainerOutlined,
   ReloadOutlined, SaveOutlined, InfoCircleOutlined,
   EyeOutlined, BarChartOutlined, FilterOutlined,
-  SearchOutlined, ClockCircleOutlined
+  SearchOutlined, ClockCircleOutlined, CopyOutlined,
+  CheckCircleOutlined, CodeOutlined, FileOutlined
 } from '@ant-design/icons';
 import api from '../utils/api';
 import { useTranslation } from 'react-i18next';
@@ -101,11 +102,135 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
   const [logPage, setLogPage] = useState(0);
   const [logPageSize, setLogPageSize] = useState(20);
   const [logStats, setLogStats] = useState<LogStats | null>(null);
-  const [selectedDate, setSelectedDate] = useState<string>('');
-  const [filters, setFilters] = useState<{ method?: string; statusCode?: number; path?: string; traceId?: string }>({});
+  const [filters, setFilters] = useState<{ 
+    method?: string; 
+    statusCode?: number; 
+    path?: string; 
+    traceId?: string;
+    startTime?: string;
+    endTime?: string;
+  }>({});
   const [bodyViewMode, setBodyViewMode] = useState<'raw' | 'formatted'>('formatted');
   const [outputTarget, setOutputTarget] = useState<'stdout' | 'file' | 'both'>('file');
   const [showFileConfig, setShowFileConfig] = useState(true);  // 是否显示文件配置项
+
+  // Fluent Bit 配置模板常量
+  const fluentBitK8sConfig = `# Fluent Bit DaemonSet 配置示例
+[SERVICE]
+    Flush         5
+    Log_Level     info
+    Parsers_File  parsers.conf
+
+[INPUT]
+    Name              tail
+    Path              /var/log/containers/*gateway*.log
+    Parser            json
+    Tag               gateway.access
+    Mem_Buf_Limit     50MB
+
+[FILTER]
+    Name              kubernetes
+    Match             gateway.*
+    Kube_URL          https://kubernetes.default.svc:443
+    Kube_Tag_Prefix   gateway.access.
+
+[OUTPUT]
+    Name              http
+    Match             gateway.*
+    Host              gateway-admin-service
+    Port              8080
+    URI               /api/access-log/collect
+    Format            json`;
+
+  const fluentBitDockerConfig = `# Docker Compose sidecar 示例
+services:
+  gateway:
+    volumes:
+      - access-logs:/app/logs/access
+
+  fluent-bit:
+    image: fluent/fluent-bit:latest
+    volumes:
+      - access-logs:/app/logs/access
+    config:
+      [INPUT]
+        Name    tail
+        Path    /app/logs/access/access-*.log
+        Parser  json
+
+      [OUTPUT]
+        Name    http
+        Host    gateway-admin
+        Port    8080`;
+
+  const fluentBitLocalConfig = `# Fluent Bit 本地采集配置
+[INPUT]
+    Name    tail
+    Path    ./logs/access/access-*.log
+    Parser  json
+    Tag     gateway.access
+
+[OUTPUT]
+    Name    http
+    Host    localhost
+    Port    8080
+    URI     /api/access-log/collect`;
+
+  const fluentBitCustomConfig = `# Fluent Bit 自定义路径配置
+[INPUT]
+    Name    tail
+    Path    /your/custom/path/access-*.log
+    Parser  json
+
+[OUTPUT]
+    Name    http
+    Host    gateway-admin
+    Port    8080`;
+
+  // Kubernetes ConfigMap 格式（对运维同学非常友好）
+  const fluentBitK8sConfigMap = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-config
+  namespace: gateway
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush         5
+        Log_Level     info
+        Parsers_File  parsers.conf
+
+    [INPUT]
+        Name              tail
+        Path              /var/log/containers/*gateway*.log
+        Parser            json
+        Tag               gateway.access
+        Mem_Buf_Limit     50MB
+
+    [FILTER]
+        Name              kubernetes
+        Match             gateway.*
+        Kube_URL          https://kubernetes.default.svc:443
+        Kube_Tag_Prefix   gateway.access.
+
+    [OUTPUT]
+        Name              http
+        Match             gateway.*
+        Host              gateway-admin-service
+        Port              8080
+        URI               /api/access-log/collect
+        Format            json
+
+  parsers.conf: |
+    [PARSER]
+        Name   json
+        Format json`;
+
+  // 一键复制配置模板
+  const handleCopyConfig = (configText: string) => {
+    navigator.clipboard.writeText(configText);
+    message.success('配置已复制到剪贴板');
+  };
 
   // Load config
   const loadConfig = async () => {
@@ -159,7 +284,8 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
     try {
       setLogLoading(true);
       const params = new URLSearchParams();
-      if (selectedDate) params.append('date', selectedDate);
+      if (filters.startTime) params.append('startTime', filters.startTime);
+      if (filters.endTime) params.append('endTime', filters.endTime);
       params.append('page', logPage.toString());
       params.append('size', logPageSize.toString());
       if (filters.method) params.append('method', filters.method);
@@ -183,8 +309,11 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
   // Load log stats
   const loadLogStats = async () => {
     try {
-      const params = selectedDate ? `?date=${selectedDate}` : '';
-      const res = await api.get(`/api/access-log/stats${params}`);
+      const params = new URLSearchParams();
+      if (filters.startTime) params.append('startTime', filters.startTime);
+      if (filters.endTime) params.append('endTime', filters.endTime);
+      const queryString = params.toString() ? `?${params.toString()}` : '';
+      const res = await api.get(`/api/access-log/stats${queryString}`);
       if (res.data.code === 200) {
         setLogStats(res.data.data);
       }
@@ -201,7 +330,7 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
   useEffect(() => {
     loadLogEntries();
     loadLogStats();
-  }, [logPage, logPageSize, selectedDate, filters]);
+  }, [logPage, logPageSize, filters.startTime, filters.endTime, filters.method, filters.statusCode, filters.path, filters.traceId]);
 
   // Handle deploy mode change - auto-fill default path and set output target recommendation
   const handleDeployModeChange = (mode: string) => {
@@ -217,10 +346,12 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
 
     switch (mode) {
       case 'K8S':
-        // Kubernetes: recommend stdout (cloud-native best practice)
+        // Kubernetes: 强制使用 stdout (cloud-native best practice)
+        // file 和 both 选项会被禁用
         recommendedTarget = 'stdout';
-        showFile = false;  // Hide file config for stdout mode
+        showFile = false;
         form.setFieldsValue({ logToConsole: true });
+        message.info('Kubernetes 模式已自动切换到 stdout 输出，这是云原生最佳实践');
         break;
       case 'DOCKER':
         // Docker: recommend both (stdout for collection + file for backup)
@@ -451,9 +582,8 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
                 </Select>
               </Form.Item>
 
-              {/* 日志输出目标选项 */}
+              {/* 日志输出目标选项 - 使用 Segmented 控件 */}
               <Form.Item
-                name="outputTarget"
                 label={
                   <Space>
                     {t('access_log.output_target') || 'Log Output Target'}
@@ -463,66 +593,123 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
                   </Space>
                 }
               >
-                <Radio.Group onChange={(e) => handleOutputTargetChange(e.target.value)}>
-                  <Radio.Button value="stdout">
-                    <Space>
-                      <Tag color="green">stdout</Tag>
-                      {t('access_log.stdout_desc') || 'Recommended for Kubernetes'}
-                    </Space>
-                  </Radio.Button>
-                  <Radio.Button value="file">
-                    <Space>
-                      <Tag color="blue">file</Tag>
-                      {t('access_log.file_desc') || 'Recommended for Local'}
-                    </Space>
-                  </Radio.Button>
-                  <Radio.Button value="both">
-                    <Space>
-                      <Tag color="purple">both</Tag>
-                      {t('access_log.both_desc') || 'Double output (stdout + file)'}
-                    </Space>
-                  </Radio.Button>
-                </Radio.Group>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <Segmented
+                    value={outputTarget}
+                    onChange={(value) => handleOutputTargetChange(value as 'stdout' | 'file' | 'both')}
+                    block
+                    options={[
+                      {
+                        value: 'stdout',
+                        label: (
+                          <Space>
+                            <CodeOutlined />
+                            <span>stdout</span>
+                            {config?.deployMode === 'K8S' && (
+                              <Badge status="success" text={<Text style={{ fontSize: 11, color: '#52c41a' }}>推荐</Text>} />
+                            )}
+                          </Space>
+                        ),
+                      },
+                      {
+                        value: 'file',
+                        label: (
+                          <Space>
+                            <FileOutlined />
+                            <span>file</span>
+                            {config?.deployMode === 'LOCAL' && (
+                              <Badge status="success" text={<Text style={{ fontSize: 11, color: '#52c41a' }}>推荐</Text>} />
+                            )}
+                          </Space>
+                        ),
+                        disabled: config?.deployMode === 'K8S',
+                      },
+                      {
+                        value: 'both',
+                        label: (
+                          <Space>
+                            <FileTextOutlined />
+                            <span>both</span>
+                            {config?.deployMode === 'DOCKER' && (
+                              <Badge status="processing" text={<Text style={{ fontSize: 11, color: '#1890ff' }}>推荐</Text>} />
+                            )}
+                          </Space>
+                        ),
+                        disabled: config?.deployMode === 'K8S',
+                      },
+                    ]}
+                  />
+                  {/* K8S 模式下提示为什么 file/both 被禁用 */}
+                  {config?.deployMode === 'K8S' && (
+                    <Alert
+                      type="warning"
+                      showIcon
+                      style={{ marginTop: 8, padding: '8px 12px' }}
+                      message={
+                        <Text style={{ fontSize: 12 }}>
+                          <strong>file/both 已禁用：</strong>Kubernetes 模式下推荐仅使用 stdout，文件输出会增加不必要的 I/O 开销且难以跨节点聚合。
+                        </Text>
+                      }
+                    />
+                  )}
+                </div>
               </Form.Item>
 
-              {/* 部署模式帮助提示 */}
-              {config?.deployMode === 'K8S' && outputTarget === 'stdout' && (
+              {/* 醒目的部署模式帮助提示 */}
+              {config?.deployMode === 'K8S' && (
                 <Alert
                   type="success"
                   showIcon
-                  style={{ marginBottom: 16 }}
-                  message={t('access_log.k8s_stdout_hint') || 'Cloud-Native Best Practice'}
+                  icon={<CheckCircleOutlined />}
+                  style={{ marginBottom: 16, borderLeft: '4px solid #52c41a' }}
+                  message={<Text strong>{t('access_log.k8s_stdout_hint') || '云原生最佳实践'}</Text>}
                   description={
                     <div>
-                      <p>{t('access_log.k8s_stdout_desc') ||
-                        'Gateway logs to stdout (JSON format), Kubernetes automatically collects to /var/log/containers/*.log'}</p>
-                      <p style={{ marginTop: 8 }}>
-                        <strong>Fluent Bit Config:</strong>
-                        <pre style={{ background: '#f5f5f5', padding: 8, borderRadius: 4, marginTop: 4, fontSize: 12 }}>
-{`[INPUT]
-  Name tail
-  Path /var/log/containers/*gateway*.log
-  Parser json
-
-[OUTPUT]
-  Name http
-  Host gateway-admin-service
-  URI /api/access-log/collect`}
-                        </pre>
+                      <p style={{ marginBottom: 8 }}>
+                        Gateway 输出 JSON 格式日志到 stdout，Kubernetes 自动重定向到 <code style={{ background: '#f5f5f5', padding: '2px 6px', borderRadius: 4 }}>/var/log/containers/*.log</code>
+                      </p>
+                      <p style={{ color: '#52c41a', fontWeight: 500 }}>
+                        Fluent Bit DaemonSet 可直接采集，无需额外配置文件路径！
                       </p>
                     </div>
                   }
                 />
               )}
 
-              {config?.deployMode === 'DOCKER' && outputTarget === 'both' && (
+              {config?.deployMode === 'DOCKER' && (
+                <Alert
+                  type="info"
+                  showIcon
+                  style={{ marginBottom: 16, borderLeft: '4px solid #1890ff' }}
+                  message={<Text strong>{t('access_log.docker_hint') || 'Docker 部署提示'}</Text>}
+                  description={
+                    <div>
+                      <p>推荐使用 <code style={{ background: '#f5f5f5', padding: '2px 6px', borderRadius: 4 }}>both</code> 模式：stdout 用于采集，file 用于备份。</p>
+                      <p style={{ color: '#1890ff', fontWeight: 500 }}>
+                        请确保 docker run 或 compose 中配置了 volume 挂载！
+                      </p>
+                    </div>
+                  }
+                />
+              )}
+
+              {config?.deployMode === 'LOCAL' && (
                 <Alert
                   type="info"
                   showIcon
                   style={{ marginBottom: 16 }}
-                  message={t('access_log.docker_hint') || 'Docker Deployment Hint'}
-                  description={t('access_log.docker_desc') ||
-                    'Logs output to stdout (for collection) and file (for backup). Ensure volume mount for file persistence.'}
+                  message="本地部署建议"
+                  description="使用 file 模式，日志写入本地目录。可通过 Fluent Bit 或 Filebeat 直接 tail 采集。"
+                />
+              )}
+
+              {config?.deployMode === 'CUSTOM' && (
+                <Alert
+                  type="warning"
+                  showIcon
+                  style={{ marginBottom: 16 }}
+                  message="自定义路径配置"
+                  description="请确保指定的路径存在且 Gateway 有写入权限。采集 Agent 需要能访问该路径。"
                 />
               )}
 
@@ -648,7 +835,7 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
               <Form.Item
                 name="samplingRate"
                 label={t('access_log.sampling_rate') || 'Sampling Rate (%)'}
-                extra={t('access_log.sampling_extra') || '100 means log all requests'}
+                extra={t('access_log.sampling_extra') || '采样率 100% 表示记录所有请求。生产环境建议设置为 10~30% 以平衡存储与可观测性。'}
               >
                 <InputNumber min={1} max={100} style={{ width: '100%' }} />
               </Form.Item>
@@ -656,40 +843,170 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
           </Col>
         </Row>
 
-        {/* File Settings */}
+        {/* File Settings - only show when file output is enabled */}
+        {showFileConfig && (
+          <Card
+            title={<Space><FolderOutlined />{t('access_log.file_settings') || 'File Settings'}</Space>}
+            className="config-card"
+            style={{ marginTop: 16 }}
+          >
+            <Row gutter={24}>
+              <Col span={8}>
+                <Form.Item
+                  name="maxFileSizeMb"
+                  label={t('access_log.max_file_size') || 'Max File Size (MB)'}
+                >
+                  <InputNumber min={1} max={1000} style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item
+                  name="maxBackupFiles"
+                  label={t('access_log.max_backup_files') || 'Max Backup Files'}
+                >
+                  <InputNumber min={0} max={100} style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+            </Row>
+          </Card>
+        )}
+
+        {/* Log Collection Config Reference - Fluent Bit Templates */}
         <Card
-          title={<Space><FolderOutlined />{t('access_log.file_settings') || 'File Settings'}</Space>}
+          title={<Space><InfoCircleOutlined />{t('access_log.collection_guide') || 'Log Collection Guide (Fluent Bit)'}</Space>}
           className="config-card"
           style={{ marginTop: 16 }}
         >
-          <Row gutter={24}>
-            <Col span={8}>
-              <Form.Item
-                name="maxFileSizeMb"
-                label={t('access_log.max_file_size') || 'Max File Size (MB)'}
-              >
-                <InputNumber min={1} max={1000} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item
-                name="maxBackupFiles"
-                label={t('access_log.max_backup_files') || 'Max Backup Files'}
-              >
-                <InputNumber min={0} max={100} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item
-                name="logToConsole"
-                label={t('access_log.log_to_console') || 'Log to Console'}
-                valuePropName="checked"
-                extra={t('access_log.console_extra') || 'Also output to console'}
-              >
-                <Switch />
-              </Form.Item>
-            </Col>
-          </Row>
+          <Tabs defaultActiveKey={config?.deployMode || 'K8S'} items={[
+            {
+              key: 'K8S',
+              label: <Space><CloudServerOutlined />Kubernetes DaemonSet</Space>,
+              children: (
+                <div>
+                  <Alert
+                    type="success"
+                    showIcon
+                    icon={<CheckCircleOutlined />}
+                    message="云原生最佳实践：stdout + Fluent Bit DaemonSet"
+                    description="Gateway 输出到 stdout，K8s 自动重定向到 /var/log/containers/*.log，每个节点部署一个 Fluent Bit Agent 自动采集。"
+                    style={{ marginBottom: 12 }}
+                  />
+                  {/* 两个复制按钮 */}
+                  <div style={{ marginBottom: 8 }}>
+                    <Space>
+                      <Button
+                        size="small"
+                        type="primary"
+                        icon={<CopyOutlined />}
+                        onClick={() => handleCopyConfig(fluentBitK8sConfig)}
+                      >
+                        复制 fluent-bit.conf
+                      </Button>
+                      <Button
+                        size="small"
+                        icon={<CopyOutlined />}
+                        onClick={() => handleCopyConfig(fluentBitK8sConfigMap)}
+                      >
+                        复制为 ConfigMap (推荐)
+                      </Button>
+                    </Space>
+                  </div>
+                  <div style={{ background: '#1e1e1e', padding: 12, borderRadius: 4 }}>
+                    <pre style={{ color: '#d4d4d4', fontSize: 12, margin: 0, whiteSpace: 'pre-wrap' }}>{fluentBitK8sConfig}</pre>
+                  </div>
+                </div>
+              ),
+            },
+            {
+              key: 'DOCKER',
+              label: <Space><ContainerOutlined />Docker Sidecar / Host Agent</Space>,
+              children: (
+                <div>
+                  <Alert
+                    type="info"
+                    showIcon
+                    message="推荐两种方案"
+                    description={
+                      <ul style={{ margin: 0, paddingLeft: 20 }}>
+                        <li><strong>Sidecar模式：</strong>Fluent Bit 作为 sidecar 容器，共享 volume，最干净</li>
+                        <li><strong>宿主机Agent：</strong>宿主机运行 Fluent Bit，监控挂载的 volume 路径</li>
+                      </ul>
+                    }
+                    style={{ marginBottom: 12 }}
+                  />
+                  <div style={{ position: 'relative' }}>
+                    <Button
+                      size="small"
+                      icon={<CopyOutlined />}
+                      style={{ position: 'absolute', top: 8, right: 8 }}
+                      onClick={() => handleCopyConfig(fluentBitDockerConfig)}
+                    >
+                      复制配置
+                    </Button>
+                    <div style={{ background: '#1e1e1e', padding: 12, borderRadius: 4, paddingRight: 100 }}>
+                      <pre style={{ color: '#d4d4d4', fontSize: 12, margin: 0, whiteSpace: 'pre-wrap' }}>{fluentBitDockerConfig}</pre>
+                    </div>
+                  </div>
+                </div>
+              ),
+            },
+            {
+              key: 'LOCAL',
+              label: <Space><DesktopOutlined />Local File Tailing</Space>,
+              children: (
+                <div>
+                  <Alert
+                    type="info"
+                    showIcon
+                    message="直接采集本地文件"
+                    description="宿主机运行 Fluent Bit 或 Filebeat，tail 配置的日志目录（支持通配符）。"
+                    style={{ marginBottom: 12 }}
+                  />
+                  <div style={{ position: 'relative' }}>
+                    <Button
+                      size="small"
+                      icon={<CopyOutlined />}
+                      style={{ position: 'absolute', top: 8, right: 8 }}
+                      onClick={() => handleCopyConfig(fluentBitLocalConfig)}
+                    >
+                      复制配置
+                    </Button>
+                    <div style={{ background: '#1e1e1e', padding: 12, borderRadius: 4, paddingRight: 100 }}>
+                      <pre style={{ color: '#d4d4d4', fontSize: 12, margin: 0, whiteSpace: 'pre-wrap' }}>{fluentBitLocalConfig}</pre>
+                    </div>
+                  </div>
+                </div>
+              ),
+            },
+            {
+              key: 'CUSTOM',
+              label: <Space><FolderOutlined />Custom Path (注意权限)</Space>,
+              children: (
+                <div>
+                  <Alert
+                    type="warning"
+                    showIcon
+                    message="自定义路径配置"
+                    description="请确保路径正确，Fluent Bit 需要有权限访问该路径。可使用通配符如 /custom/path/access-*.log"
+                    style={{ marginBottom: 12 }}
+                  />
+                  <div style={{ position: 'relative' }}>
+                    <Button
+                      size="small"
+                      icon={<CopyOutlined />}
+                      style={{ position: 'absolute', top: 8, right: 8 }}
+                      onClick={() => handleCopyConfig(fluentBitCustomConfig)}
+                    >
+                      复制配置
+                    </Button>
+                    <div style={{ background: '#1e1e1e', padding: 12, borderRadius: 4, paddingRight: 100 }}>
+                      <pre style={{ color: '#d4d4d4', fontSize: 12, margin: 0, whiteSpace: 'pre-wrap' }}>{fluentBitCustomConfig}</pre>
+                    </div>
+                  </div>
+                </div>
+              ),
+            },
+          ]} />
         </Card>
       </Form>
     </div>
@@ -739,10 +1056,26 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
       {/* Filters */}
       <Card size="small" style={{ marginBottom: 16 }}>
         <Space wrap>
-          <DatePicker
-            placeholder="Select Date"
-            onChange={(date) => setSelectedDate(date ? date.format('YYYY-MM-DD') : '')}
+          <RangePicker
+            showTime
+            placeholder={['Start Time', 'End Time']}
+            format="YYYY-MM-DD HH:mm"
+            onChange={(dates) => {
+              if (dates && dates[0] && dates[1]) {
+                setFilters({ 
+                  ...filters, 
+                  startTime: dates[0].toISOString(),
+                  endTime: dates[1].toISOString()
+                });
+              } else {
+                const { startTime, endTime, ...restFilters } = filters;
+                setFilters(restFilters);
+              }
+            }}
             allowClear
+            getPopupContainer={(triggerNode) => document.body}
+            placement="bottomLeft"
+            popupStyle={{ zIndex: 9999 }}
           />
           <Input
             placeholder="Path contains..."
@@ -822,22 +1155,22 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
               }
             };
 
-            // Formatted JSON with syntax highlighting (compact 1-space indent)
+            // Formatted JSON with syntax highlighting - Postman style
             const renderFormattedJson = (str: string | undefined) => {
               if (!str) return null;
               try {
                 const parsed = JSON.parse(str);
-                const formatted = JSON.stringify(parsed, null, 1);  // 只用1个空格缩进，更紧凑
-                // Apply syntax highlighting colors
+                const formatted = JSON.stringify(parsed, null, 2);
                 return formatted
-                  .replace(/"([^"]+)":/g, '<span style="color: #4ec9b0">"$1"</span>:')
-                  .replace(/: "([^"]*)"/g, ': <span style="color: #ce9178">"$1"</span>')
-                  .replace(/: (\d+\.?\d*)/g, ': <span style="color: #b5cea8">$1</span>')
-                  .replace(/: (true|false|null)/g, ': <span style="color: #569cd6">$1</span>')
-                  .replace(/\{/g, '<span style="color: #ffd700">{</span>')
-                  .replace(/\}/g, '<span style="color: #ffd700">}</span>')
-                  .replace(/\[/g, '<span style="color: #ffd700">[</span>')
-                  .replace(/\]/g, '<span style="color: #ffd700">]</span>');
+                  .replace(/&/g, '&amp;')
+                  .replace(/</g, '&lt;')
+                  .replace(/>/g, '&gt;')
+                  .replace(/"([^"]+)":/g, '<span class="json-key">"$1"</span><span class="json-colon">:</span>')
+                  .replace(/: "([^"]*)"/g, ': <span class="json-string">"$1"</span>')
+                  .replace(/: (\d+\.?\d*)/g, ': <span class="json-number">$1</span>')
+                  .replace(/: (true|false)/g, ': <span class="json-boolean">$1</span>')
+                  .replace(/: (null)/g, ': <span class="json-null">$1</span>')
+                  .replace(/([{}\[\]])/g, '<span class="json-bracket">$1</span>');
               } catch {
                 return str;
               }
@@ -848,12 +1181,12 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
             const contentType = record.requestHeaders?.['content-type'] || record.requestHeaders?.['Content-Type'] || '-';
 
             return (
-              <div style={{ padding: 16, background: '#fafafa', borderRadius: 4 }}>
+              <div style={{ padding: 16, background: 'var(--bg-secondary)', borderRadius: 4 }}>
                 {/* 第一行：基本信息 */}
                 <Descriptions 
                   size="small" 
                   column={4}
-                  labelStyle={{ width: 80, color: '#666' }}
+                  labelStyle={{ width: 80, color: 'var(--text-secondary)' }}
                   style={{ marginBottom: 8 }}
                 >
                   <Descriptions.Item label="时间">{formatTime(record['@timestamp'])}</Descriptions.Item>
@@ -872,7 +1205,7 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
                 <Descriptions 
                   size="small" 
                   column={3}
-                  labelStyle={{ width: 80, color: '#666' }}
+                  labelStyle={{ width: 80, color: 'var(--text-secondary)' }}
                   style={{ marginBottom: 8 }}
                 >
                   <Descriptions.Item label="方法">
@@ -892,14 +1225,20 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
                 <Descriptions 
                   size="small" 
                   column={4}
-                  labelStyle={{ width: 80, color: '#666' }}
+                  labelStyle={{ width: 80, color: 'var(--text-secondary)' }}
                   style={{ marginBottom: 8 }}
                 >
                   <Descriptions.Item label="请求ID">
                     <Text copyable code style={{ fontSize: 11 }}>{record.requestId}</Text>
                   </Descriptions.Item>
                   <Descriptions.Item label="Trace ID">
-                    {record.traceId ? <Text copyable code style={{ fontSize: 11 }}>{record.traceId}</Text> : '-'}
+                    {record.traceId ? (
+                      <Tooltip title={record.traceId}>
+                        <Text copyable code style={{ fontSize: 11 }}>
+                          {record.traceId.length > 20 ? `${record.traceId.substring(0, 10)}...${record.traceId.substring(record.traceId.length - 8)}` : record.traceId}
+                        </Text>
+                      </Tooltip>
+                    ) : '-'}
                   </Descriptions.Item>
                   <Descriptions.Item label="请求大小">{reqSize}</Descriptions.Item>
                   <Descriptions.Item label="响应大小">{resSize}</Descriptions.Item>
@@ -910,7 +1249,7 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
                   <Descriptions 
                     size="small" 
                     column={3}
-                    labelStyle={{ width: 80, color: '#666' }}
+                    labelStyle={{ width: 80, color: 'var(--text-secondary)' }}
                     style={{ marginBottom: 8 }}
                   >
                     {record.authType && <Descriptions.Item label="认证"><Tag color="purple">{record.authType}</Tag></Descriptions.Item>}
@@ -924,7 +1263,7 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
                   <Descriptions 
                     size="small" 
                     column={2}
-                    labelStyle={{ width: 80, color: '#666' }}
+                    labelStyle={{ width: 80, color: 'var(--text-secondary)' }}
                     style={{ marginBottom: 8 }}
                   >
                     {record.routeId && <Descriptions.Item label="路由ID">
@@ -938,96 +1277,51 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
 
                 {/* 请求体 */}
                 <div style={{ marginTop: 12 }}>
-                  <div style={{ 
-                    padding: '6px 12px', 
-                    background: '#e6f7ff', 
-                    border: '1px solid #91d5ff',
-                    borderRadius: '4px 4px 0 0',
-                    fontWeight: 500,
-                    fontSize: 13,
-                    color: '#1890ff'
-                  }}>
-                    📤 请求体 (Request Body) {record.requestBody && <span style={{ fontWeight: 400, color: '#666' }}>({record.requestBody.length} bytes)</span>}
-                    <Radio.Group 
-                      size="small" 
-                      value={bodyViewMode} 
-                      onChange={(e) => setBodyViewMode(e.target.value)}
-                      style={{ marginLeft: 16 }}
-                    >
-                      <Radio.Button value="formatted">格式化</Radio.Button>
-                      <Radio.Button value="raw">原始</Radio.Button>
-                    </Radio.Group>
-                  </div>
-                  <div style={{ 
-                    padding: 12, 
-                    background: '#1e1e1e', 
-                    borderRadius: '0 0 4px 4px',
-                    maxHeight: 250,
-                    overflow: 'auto'
-                  }}>
-                    {record.requestBody ? (
-                      bodyViewMode === 'formatted' ? (
-                        <pre 
-                          style={{ 
-                            margin: 0, 
-                            fontSize: 12, 
-                            color: '#d4d4d4',
-                            whiteSpace: 'pre',
-                            fontFamily: 'Consolas, Monaco, "Courier New", monospace',
-                            lineHeight: 1.5,
-                            padding: 0
-                          }}
-                          dangerouslySetInnerHTML={{ __html: renderFormattedJson(record.requestBody) || '' }}
-                        />
-                      ) : (
-                        <Text style={{ color: '#ce9178', fontSize: 12, fontFamily: 'Consolas, Monaco, "Courier New", monospace', wordBreak: 'break-all' }}>
-                          {renderRawJson(record.requestBody)}
-                        </Text>
-                      )
-                    ) : <Text style={{ color: '#666' }}>未记录</Text>}
+                  <div className="json-container">
+                    <div className="json-header">
+                      <span>📤 请求体 (Request Body)</span>
+                      {record.requestBody && <span className="json-size">{record.requestBody.length} bytes</span>}
+                      <Radio.Group 
+                        size="small" 
+                        value={bodyViewMode} 
+                        onChange={(e) => setBodyViewMode(e.target.value)}
+                      >
+                        <Radio.Button value="formatted">格式化</Radio.Button>
+                        <Radio.Button value="raw">原始</Radio.Button>
+                      </Radio.Group>
+                    </div>
+                    <div className="json-content">
+                      {record.requestBody ? (
+                        bodyViewMode === 'formatted' ? (
+                          <pre className="json-viewer" dangerouslySetInnerHTML={{ __html: renderFormattedJson(record.requestBody) || '' }} />
+                        ) : (
+                          <div style={{ padding: 16, color: 'var(--text-primary)', fontSize: 13, fontFamily: 'Consolas, Monaco, monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                            {renderRawJson(record.requestBody)}
+                          </div>
+                        )
+                      ) : <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-secondary)' }}>未记录</div>}
+                    </div>
                   </div>
                 </div>
 
                 {/* 响应体 */}
                 <div style={{ marginTop: 12 }}>
-                  <div style={{ 
-                    padding: '6px 12px', 
-                    background: '#f6ffed', 
-                    border: '1px solid #b7eb8f',
-                    borderRadius: '4px 4px 0 0',
-                    fontWeight: 500,
-                    fontSize: 13,
-                    color: '#52c41a'
-                  }}>
-                    📥 响应体 (Response Body) {record.responseBody && <span style={{ fontWeight: 400, color: '#666' }}>({record.responseBody.length} bytes)</span>}
-                  </div>
-                  <div style={{ 
-                    padding: 12, 
-                    background: '#1e1e1e', 
-                    borderRadius: '0 0 4px 4px',
-                    maxHeight: 300,
-                    overflow: 'auto'
-                  }}>
-                    {record.responseBody ? (
-                      bodyViewMode === 'formatted' ? (
-                        <pre 
-                          style={{ 
-                            margin: 0, 
-                            fontSize: 12, 
-                            color: '#d4d4d4',
-                            whiteSpace: 'pre',
-                            fontFamily: 'Consolas, Monaco, "Courier New", monospace',
-                            lineHeight: 1.5,
-                            padding: 0
-                          }}
-                          dangerouslySetInnerHTML={{ __html: renderFormattedJson(record.responseBody) || '' }}
-                        />
-                      ) : (
-                        <Text style={{ color: '#ce9178', fontSize: 12, fontFamily: 'Consolas, Monaco, "Courier New", monospace', wordBreak: 'break-all' }}>
-                          {renderRawJson(record.responseBody)}
-                        </Text>
-                      )
-                    ) : <Text style={{ color: '#666' }}>未记录</Text>}
+                  <div className="json-container">
+                    <div className="json-header" style={{ color: 'var(--success-color, #52c41a)' }}>
+                      <span>📥 响应体 (Response Body)</span>
+                      {record.responseBody && <span className="json-size">{record.responseBody.length} bytes</span>}
+                    </div>
+                    <div className="json-content">
+                      {record.responseBody ? (
+                        bodyViewMode === 'formatted' ? (
+                          <pre className="json-viewer" dangerouslySetInnerHTML={{ __html: renderFormattedJson(record.responseBody) || '' }} />
+                        ) : (
+                          <div style={{ padding: 16, color: 'var(--text-primary)', fontSize: 13, fontFamily: 'Consolas, Monaco, monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                            {renderRawJson(record.responseBody)}
+                          </div>
+                        )
+                      ) : <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-secondary)' }}>未记录</div>}
+                    </div>
                   </div>
                 </div>
 

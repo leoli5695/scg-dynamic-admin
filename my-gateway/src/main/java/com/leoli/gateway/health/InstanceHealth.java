@@ -40,35 +40,28 @@ public class InstanceHealth {
     private Long degradedModeEnteredTime;
 
     /**
+     * Total consecutive healthy check count (for stable check frequency).
+     * Used to determine if a healthy instance can be checked less frequently.
+     */
+    private int totalHealthyChecks;
+
+    /**
+     * Whether this instance is in stable check mode (lowest frequency).
+     * Stable mode: instance has been consistently healthy for many checks.
+     */
+    private boolean stableCheckMode;
+
+    /**
+     * Last time when stable mode was entered (for logging/debugging).
+     */
+    private Long stableModeEnteredTime;
+
+    /**
      * Build unique key - use only ip:port
      * Same instance should have same health status across all services
      */
     public static String buildKey(String serviceId, String ip, int port) {
         // Only use ip:port as key to ensure consistent health across services
         return ip + ":" + port;
-    }
-
-    /**
-     * Parse from key
-     */
-    public static InstanceHealth fromKey(String key) {
-        String[] parts = key.split(":");
-        if (parts.length != 2) {
-            throw new IllegalArgumentException("Invalid key format: " + key);
-        }
-        return new InstanceHealth(
-                null,  // serviceId not stored in key
-                parts[0],
-                Integer.parseInt(parts[1]),
-                true,
-                0,
-                System.currentTimeMillis(),
-                null,
-                "PASSIVE",
-                null,
-                0,    // totalUnhealthyChecks
-                false, // degradedCheckMode
-                null  // degradedModeEnteredTime
-        );
     }
 }

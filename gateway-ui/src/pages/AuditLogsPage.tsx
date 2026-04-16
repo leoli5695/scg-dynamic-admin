@@ -3,7 +3,7 @@ import {
   Card, Table, Button, Space, Tag, Select, DatePicker, Input,
   Typography, message, Modal, Descriptions, Spin, Popconfirm, Badge,
   Row, Col, Statistic, Tooltip, Radio, Timeline, Empty, Collapse,
-  Alert, Divider,
+  Alert, Divider, Drawer, Dropdown,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -11,6 +11,7 @@ import {
   DeleteOutlined, EditOutlined, PlusOutlined, SearchOutlined,
   ClockCircleOutlined, UserOutlined, CheckCircleOutlined, StopOutlined,
   TableOutlined, UnorderedListOutlined, ExclamationCircleOutlined,
+  CloseOutlined, EyeOutlined, DownloadOutlined, FileTextOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import api from '../utils/api';
@@ -221,19 +222,16 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
   const loadStats = async () => {
     try {
       const params = new URLSearchParams();
-      params.append('size', '1000');
       if (instanceId) params.append('instanceId', instanceId);
-      const res = await api.get(`/api/audit-logs?${params.toString()}`);
+      // 使用新的 stats API，避免拉取大量数据到前端计算
+      const res = await api.get(`/api/audit-logs/stats?${params.toString()}`);
       if (res.data.code === 200) {
-        const allLogs: AuditLog[] = res.data.data.logs;
-        const today = dayjs().startOf('day');
-        const todayLogs = allLogs.filter(l => dayjs(l.createdAt).isAfter(today));
-
+        const data = res.data.data;
         setStats({
-          total: res.data.data.total,
-          today: todayLogs.length,
-          creates: allLogs.filter(l => l.operationType === 'CREATE').length,
-          updates: allLogs.filter(l => l.operationType === 'UPDATE').length,
+          total: data.total,
+          today: data.today,
+          creates: data.creates,
+          updates: data.updates,
         });
       }
     } catch (e) {
@@ -253,6 +251,77 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
     setDateRange(null);
     setPage(0);
     loadLogs();
+  };
+
+  // Export functions
+  const [exportLoading, setExportLoading] = useState(false);
+
+  const buildExportParams = () => {
+    const params = new URLSearchParams();
+    if (instanceId) params.append('instanceId', instanceId);
+    if (targetType) params.append('targetType', targetType);
+    if (operationType) params.append('operationType', operationType);
+    if (targetId) params.append('targetId', targetId);
+    if (dateRange) {
+      params.append('startTime', dateRange[0].toISOString());
+      params.append('endTime', dateRange[1].toISOString());
+    }
+    params.append('limit', '10000');
+    return params.toString();
+  };
+
+  const handleExportCsv = async () => {
+    setExportLoading(true);
+    try {
+      const params = buildExportParams();
+      const response = await api.get(`/api/audit-logs/export/csv?${params}`, {
+        responseType: 'blob',
+      });
+
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `audit_logs_${dayjs().format('YYYYMMDD_HHmmss')}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      message.success(t('audit.export_success') || '导出成功');
+    } catch (e) {
+      console.error('Export CSV failed:', e);
+      message.error(t('audit.export_failed') || '导出失败');
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  const handleExportJson = async () => {
+    setExportLoading(true);
+    try {
+      const params = buildExportParams();
+      const response = await api.get(`/api/audit-logs/export/json?${params}`, {
+        responseType: 'blob',
+      });
+
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `audit_logs_${dayjs().format('YYYYMMDD_HHmmss')}.json`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      message.success(t('audit.export_success') || '导出成功');
+    } catch (e) {
+      console.error('Export JSON failed:', e);
+      message.error(t('audit.export_failed') || '导出失败');
+    } finally {
+      setExportLoading(false);
+    }
   };
 
   const showDiff = async (logId: number) => {
@@ -427,19 +496,23 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
   // ===================== Shared Helpers =====================
 
   const getOperationTag = (type: string) => {
-    const map: Record<string, { color: string; labelKey: string }> = {
-      CREATE: { color: 'green', labelKey: 'audit.op_create' },
-      UPDATE: { color: 'blue', labelKey: 'audit.op_update' },
-      DELETE: { color: 'red', labelKey: 'audit.op_delete' },
-      ROLLBACK: { color: 'orange', labelKey: 'audit.op_rollback' },
-      ENABLE: { color: 'cyan', labelKey: 'audit.op_enable' },
-      DISABLE: { color: 'volcano', labelKey: 'audit.op_disable' },
+    const map: Record<string, { color: string; labelKey: string; icon?: React.ReactNode }> = {
+      CREATE: { color: 'success', labelKey: 'audit.op_create', icon: <PlusOutlined /> },
+      UPDATE: { color: 'processing', labelKey: 'audit.op_update', icon: <EditOutlined /> },
+      DELETE: { color: 'error', labelKey: 'audit.op_delete', icon: <DeleteOutlined /> },
+      ROLLBACK: { color: 'warning', labelKey: 'audit.op_rollback', icon: <RollbackOutlined /> },
+      ENABLE: { color: 'cyan', labelKey: 'audit.op_enable', icon: <CheckCircleOutlined /> },
+      DISABLE: { color: 'orange', labelKey: 'audit.op_disable', icon: <StopOutlined /> },
       ADD_INSTANCE: { color: 'lime', labelKey: 'audit.op_add_instance' },
       REMOVE_INSTANCE: { color: 'magenta', labelKey: 'audit.op_remove_instance' },
       UPDATE_INSTANCE: { color: 'gold', labelKey: 'audit.op_update_instance' },
     };
     const config = map[type] || { color: 'default', labelKey: type };
-    return <Tag color={config.color}>{t(config.labelKey) || config.labelKey}</Tag>;
+    return (
+      <Tag color={config.color} icon={config.icon}>
+        {t(config.labelKey) || config.labelKey}
+      </Tag>
+    );
   };
 
   const getTargetTypeTag = (type: string) => {
@@ -451,6 +524,20 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
     };
     const config = map[type] || { color: 'default', labelKey: type };
     return <Tag color={config.color}>{t(config.labelKey) || type}</Tag>;
+  };
+
+  // 行样式高亮（根据操作类型）
+  const getRowClassName = (record: AuditLog) => {
+    switch (record.operationType) {
+      case 'DELETE':
+        return 'audit-row-delete';
+      case 'CREATE':
+        return 'audit-row-create';
+      case 'ROLLBACK':
+        return 'audit-row-rollback';
+      default:
+        return '';
+    }
   };
 
   const formatIpAddress = (ip: string) => {
@@ -622,19 +709,85 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
 
   // ===================== Diff Modal =====================
 
+  // Helper: Render JSON value with collapse for large content
+  const renderJsonValue = (value: any, maxHeight: number = 200) => {
+    const jsonStr = value ? JSON.stringify(value, null, 2) : null;
+    if (!jsonStr) return <Text type="secondary">{t('common.none') || '无'}</Text>;
+
+    const isLarge = jsonStr.length > 500;
+
+    return (
+      <Collapse ghost size="small" items={[
+        {
+          key: '1',
+          label: <Text type="secondary">{t('audit.view_details') || '展开详情'} ({jsonStr.length} chars)</Text>,
+          children: (
+            <pre style={{ margin: 0, fontSize: 11, maxHeight: maxHeight, overflow: 'auto', padding: 8, borderRadius: 4 }}>
+              {jsonStr}
+            </pre>
+          ),
+        }
+      ]} defaultActiveKey={isLarge ? [] : ['1']} />
+    );
+  };
+
+  // Helper: Get target detail link
+  const getTargetLink = (targetType: string, targetId: string) => {
+    switch (targetType) {
+      case 'ROUTE':
+        return `/routes/${targetId}`;
+      case 'SERVICE':
+        return `/services/${targetId}`;
+      case 'STRATEGY':
+        return `/strategies/${targetId}`;
+      case 'AUTH_POLICY':
+        return `/auth-policies/${targetId}`;
+      default:
+        return null;
+    }
+  };
+
   const renderDiffContent = () => {
     if (diffLoading) return <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>;
     if (!diffData) return null;
 
+    const targetLink = getTargetLink(diffData.targetType, diffData.targetId);
+
     return (
       <div>
-        <Descriptions size="small" column={4} style={{ marginBottom: 16 }}>
-          <Descriptions.Item label={t('audit.operation_type') || '操作类型'}>{getOperationTag(diffData.operationType)}</Descriptions.Item>
-          <Descriptions.Item label={t('audit.target_type') || '目标类型'}>{getTargetTypeTag(diffData.targetType)}</Descriptions.Item>
-          <Descriptions.Item label={t('audit.target_id') || '目标ID'}><Text copyable style={{ fontSize: 11 }}>{diffData.targetId}</Text></Descriptions.Item>
-          <Descriptions.Item label={t('audit.operator') || '操作人'}>{diffData.operator}</Descriptions.Item>
+        {/* Basic Info */}
+        <Descriptions size="small" column={2} bordered style={{ marginBottom: 16 }}>
+          <Descriptions.Item label={t('audit.operation_type') || '操作类型'}>
+            {getOperationTag(diffData.operationType)}
+          </Descriptions.Item>
+          <Descriptions.Item label={t('audit.target_type') || '目标类型'}>
+            {getTargetTypeTag(diffData.targetType)}
+          </Descriptions.Item>
+          <Descriptions.Item label={t('audit.target_id') || '目标ID'}>
+            <Space>
+              <Text copyable style={{ fontSize: 11 }}>{diffData.targetId}</Text>
+              {targetLink && (
+                <Tooltip title={t('audit.view_target_detail') || '查看目标详情'}>
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<EyeOutlined />}
+                    href={targetLink}
+                    target="_blank"
+                  />
+                </Tooltip>
+              )}
+            </Space>
+          </Descriptions.Item>
+          <Descriptions.Item label={t('audit.operator') || '操作人'}>
+            <Space><UserOutlined /><Text>{diffData.operator}</Text></Space>
+          </Descriptions.Item>
+          <Descriptions.Item label={t('audit.created_at') || '操作时间'} span={2}>
+            <Space><ClockCircleOutlined /><Text>{dayjs(diffData.createdAt).format('YYYY-MM-DD HH:mm:ss')}</Text></Space>
+          </Descriptions.Item>
         </Descriptions>
 
+        {/* Changes Table */}
         {diffData.changes && diffData.changes.length > 0 && (
           <Card size="small" title={t('audit.change_details') || '变更详情'} style={{ marginBottom: 16 }}>
             <Table
@@ -663,22 +816,23 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
           </Card>
         )}
 
-        <Row gutter={16}>
-          <Col span={12}>
-            <Card size="small" title={<Text type="danger">{t('audit.old_value') || '旧值'} (Old Value)</Text>}>
-              <pre style={{ margin: 0, fontSize: 11, maxHeight: 200, overflow: 'auto', background: '#fff1f0', padding: 8, borderRadius: 4 }}>
-                {diffData.oldValue ? JSON.stringify(diffData.oldValue, null, 2) : t('common.none') || '无'}
-              </pre>
-            </Card>
-          </Col>
-          <Col span={12}>
-            <Card size="small" title={<Text type="success">{t('audit.new_value') || '新值'} (New Value)</Text>}>
-              <pre style={{ margin: 0, fontSize: 11, maxHeight: 200, overflow: 'auto', background: '#f6ffed', padding: 8, borderRadius: 4 }}>
-                {diffData.newValue ? JSON.stringify(diffData.newValue, null, 2) : t('common.none') || '无'}
-              </pre>
-            </Card>
-          </Col>
-        </Row>
+        {/* Old/New Value Comparison */}
+        <Card size="small" title={t('audit.value_comparison') || '值对比'}>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Alert type="error" message={t('audit.old_value') || '旧值'} style={{ marginBottom: 8 }} />
+              <div style={{ background: '#fff1f0', padding: 8, borderRadius: 4, maxHeight: 300, overflow: 'auto' }}>
+                {renderJsonValue(diffData.oldValue, 280)}
+              </div>
+            </Col>
+            <Col span={12}>
+              <Alert type="success" message={t('audit.new_value') || '新值'} style={{ marginBottom: 8 }} />
+              <div style={{ background: '#f6ffed', padding: 8, borderRadius: 4, maxHeight: 300, overflow: 'auto' }}>
+                {renderJsonValue(diffData.newValue, 280)}
+              </div>
+            </Col>
+          </Row>
+        </Card>
       </div>
     );
   };
@@ -765,10 +919,35 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
             onChange={(e) => setTargetId(e.target.value)}
             allowClear
           />
+          {/* 时间范围快捷筛选 */}
+          <Space.Compact>
+            <Button
+              size="small"
+              type={dateRange && dateRange[1].diff(dateRange[0], 'hour') <= 24 && dateRange[0].isAfter(dayjs().subtract(1, 'day')) ? 'primary' : 'default'}
+              onClick={() => setDateRange([dayjs().subtract(1, 'day').startOf('day'), dayjs().endOf('day')])}
+            >
+              {t('audit.today') || '今天'}
+            </Button>
+            <Button
+              size="small"
+              type={dateRange && dateRange[1].diff(dateRange[0], 'day') <= 7 ? 'primary' : 'default'}
+              onClick={() => setDateRange([dayjs().subtract(7, 'day').startOf('day'), dayjs().endOf('day')])}
+            >
+              {t('audit.last_7d') || '近7天'}
+            </Button>
+            <Button
+              size="small"
+              type={dateRange && dateRange[1].diff(dateRange[0], 'day') <= 30 ? 'primary' : 'default'}
+              onClick={() => setDateRange([dayjs().subtract(30, 'day').startOf('day'), dayjs().endOf('day')])}
+            >
+              {t('audit.last_30d') || '近30天'}
+            </Button>
+          </Space.Compact>
           <RangePicker
             value={dateRange}
             onChange={(dates) => setDateRange(dates as [dayjs.Dayjs, dayjs.Dayjs] | null)}
             showTime
+            style={{ width: 280 }}
           />
           <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
             {t('common.search') || '搜索'}
@@ -776,25 +955,84 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
           <Button onClick={handleReset}>
             {t('common.reset') || '重置'}
           </Button>
-          <Button icon={<ReloadOutlined />} onClick={loadLogs}>
+          <Button icon={<ReloadOutlined />} onClick={loadLogs} loading={loading}>
             {t('common.refresh') || '刷新'}
           </Button>
+          <Dropdown
+            menu={{
+              items: [
+                {
+                  key: 'csv',
+                  label: (
+                    <Space>
+                      <FileTextOutlined />
+                      {t('audit.export_csv') || '导出 CSV'}
+                    </Space>
+                  ),
+                  onClick: () => handleExportCsv(),
+                },
+                {
+                  key: 'json',
+                  label: (
+                    <Space>
+                      <FileTextOutlined />
+                      {t('audit.export_json') || '导出 JSON'}
+                    </Space>
+                  ),
+                  onClick: () => handleExportJson(),
+                },
+              ],
+            }}
+            trigger={['click']}
+          >
+            <Button icon={<DownloadOutlined />} loading={exportLoading}>
+              {t('audit.export') || '导出'}
+            </Button>
+          </Dropdown>
         </Space>
       </Card>
 
       {/* Table */}
       <Card>
+        <style>{`
+          .audit-row-delete { background-color: #fff1f0 !important; }
+          .audit-row-create { background-color: #f6ffed !important; }
+          .audit-row-rollback { background-color: #fffbe6 !important; }
+          .audit-row-delete:hover { background-color: #ffe7e6 !important; }
+          .audit-row-create:hover { background-color: #e6f7e6 !important; }
+          .audit-row-rollback:hover { background-color: #fff1cc !important; }
+        `}</style>
         <Table
           columns={columns}
           dataSource={logs}
           rowKey="id"
           loading={loading}
           scroll={{ x: 1200 }}
+          rowClassName={getRowClassName}
+          locale={{
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={
+                  <span>
+                    {t('audit.no_logs') || '暂无审计日志'}
+                    <br />
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      {t('audit.no_logs_hint') || '当发生路由、服务、策略等配置变更时，将自动记录审计日志'}
+                    </Text>
+                  </span>
+                }
+              />
+            ),
+          }}
           pagination={{
             current: page + 1,
             pageSize,
             total,
             showSizeChanger: true,
+            pageSizeOptions: ['10', '20', '50', '100'],
+            defaultPageSize: 20,
+            showQuickJumper: true,
             showTotal: (total) => `${t('common.total') || '共'} ${total} ${t('audit.records') || '条'}`,
             onChange: (p, ps) => {
               setPage(p - 1);
@@ -934,16 +1172,43 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
 
       {viewMode === 'table' ? renderTableView() : renderTimelineView()}
 
-      {/* Diff Modal */}
-      <Modal
-        title={<><DiffOutlined /> {t('audit.diff_title') || '差异对比'}</>}
+      {/* Diff Drawer - 右侧详情面板 */}
+      <Drawer
+        title={
+          <Space>
+            <DiffOutlined />
+            {t('audit.diff_title') || '变更详情'}
+          </Space>
+        }
+        placement="right"
+        width={600}
         open={diffModalVisible}
-        onCancel={() => setDiffModalVisible(false)}
-        footer={null}
-        width={900}
+        onClose={() => setDiffModalVisible(false)}
+        closeIcon={<CloseOutlined />}
+        extra={
+          diffData && (
+            <Space>
+              <Tooltip title={t('audit.rollback') || '回滚'}>
+                <Popconfirm
+                  title={t('audit.rollback_confirm') || '确定回滚到此版本？'}
+                  onConfirm={() => {
+                    handleRollback(diffData.id);
+                    setDiffModalVisible(false);
+                  }}
+                  okText={t('common.confirm') || '确定'}
+                  cancelText={t('common.cancel') || '取消'}
+                >
+                  <Button size="small" icon={<RollbackOutlined />} danger>
+                    {t('audit.rollback') || '回滚'}
+                  </Button>
+                </Popconfirm>
+              </Tooltip>
+            </Space>
+          )
+        }
       >
         {renderDiffContent()}
-      </Modal>
+      </Drawer>
 
       {/* Conflict Modal */}
       {renderConflictModal()}

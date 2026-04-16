@@ -29,9 +29,9 @@ import static com.leoli.gateway.constants.GatewayConfigConstants.*;
 @Component
 public class StrategyRefresher {
 
+    private final ObjectMapper objectMapper;
     private final StrategyManager strategyManager;
     private final ConfigCenterService configService;
-    private final ObjectMapper objectMapper;
 
     // Track active listeners: strategyId -> listener
     private final Map<String, ConfigCenterService.ConfigListener> activeListeners = new ConcurrentHashMap<>();

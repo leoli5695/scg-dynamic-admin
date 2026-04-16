@@ -134,6 +134,11 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
         params.end = customTimeRange[1].format('YYYY-MM-DDTHH:mm:ss');
       }
 
+      // Apply traceId filter (backend fuzzy search)
+      if (searchFilters.traceId && searchFilters.traceId.trim()) {
+        params.traceId = searchFilters.traceId.trim();
+      }
+
       const endpoint = activeTab === 'errors' ? '/api/traces/errors' : '/api/traces/slow';
       if (activeTab === 'slow') params.thresholdMs = 3000;
 
@@ -144,7 +149,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
 
       let traceData = tracesRes.data?.content || [];
 
-      // Apply client-side filters
+      // Apply client-side filters (path, method, statusCode)
       if (searchFilters.path) {
         traceData = traceData.filter((t: RequestTrace) =>
           t.path?.toLowerCase().includes(searchFilters.path.toLowerCase())
@@ -158,11 +163,6 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
       if (searchFilters.statusCode) {
         traceData = traceData.filter((t: RequestTrace) =>
           t.statusCode?.toString() === searchFilters.statusCode
-        );
-      }
-      if (searchFilters.traceId) {
-        traceData = traceData.filter((t: RequestTrace) =>
-          t.traceId?.toLowerCase().includes(searchFilters.traceId.toLowerCase())
         );
       }
 
@@ -199,7 +199,8 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
 
   const handleTimeRangeChange = (value: number | 'custom') => {
     if (value === 'custom') {
-      // Keep custom range, just mark as custom
+      // 初始化默认时间范围（最近1小时）
+      setCustomTimeRange([dayjs().subtract(1, 'hour'), dayjs()]);
     } else {
       setTimeRange(value);
       setCustomTimeRange(null);
@@ -448,6 +449,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
       title: t('trace.path'),
       dataIndex: 'path',
       key: 'path',
+      width: 150,
       ellipsis: true,
       render: (path: string, record: RequestTrace) => (
         <Tooltip title={record.uri} placement="topLeft">
@@ -612,6 +614,10 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                 value={customTimeRange}
                 onChange={handleCustomTimeRangeChange}
                 format="YYYY-MM-DD HH:mm"
+                getPopupContainer={(triggerNode) => triggerNode.parentNode as HTMLElement}
+                placement="bottomLeft"
+                popupStyle={{ zIndex: 9999 }}
+                style={{ width: 280 }}
               />
             </Col>
           )}
@@ -706,6 +712,8 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
           pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (total) => `${total} items` }}
           rowClassName={getRowClassName}
           size="small"
+          scroll={{ x: 500 }}
+          tableLayout="fixed"
         />
       </Card>
 
@@ -986,7 +994,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
         )}
       </Drawer>
 
-      {/* Add CSS for error row highlight */}
+      {/* Add CSS for error row highlight and DatePicker fix */}
       <style>{`
         .trace-row-error {
           background-color: rgba(255, 77, 79, 0.1) !important;
@@ -996,6 +1004,14 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
         }
         .tracing-table .ant-table-cell {
           padding: 8px 12px !important;
+        }
+        /* DatePicker 弹出层修复 - 强制显示在下方 */
+        .ant-picker-dropdown {
+          z-index: 9999 !important;
+        }
+        /* 确保 Filters Card 不阻挡弹出层 */
+        .ant-card-body {
+          overflow: visible !important;
         }
       `}</style>
     </div>

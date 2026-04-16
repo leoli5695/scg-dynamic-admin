@@ -1,8 +1,7 @@
 package com.leoli.gateway.ssl;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -18,26 +17,14 @@ import java.util.Map;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class SslCertificateLoader {
 
     private final RestTemplate restTemplate;
-    private final DynamicSslContextManager sslContextManager;
     private final SslServerConfig sslServerConfig;
-    private final ObjectMapper objectMapper;
-
+    private final DynamicSslContextManager sslContextManager;
     @Value("${gateway.admin.url:http://localhost:9090}")
     private String adminUrl;
-
-    @Autowired
-    public SslCertificateLoader(RestTemplate restTemplate,
-                                DynamicSslContextManager sslContextManager,
-                                SslServerConfig sslServerConfig,
-                                ObjectMapper objectMapper) {
-        this.restTemplate = restTemplate;
-        this.sslContextManager = sslContextManager;
-        this.sslServerConfig = sslServerConfig;
-        this.objectMapper = objectMapper;
-    }
 
     /**
      * Load certificates on application ready and start HTTPS server

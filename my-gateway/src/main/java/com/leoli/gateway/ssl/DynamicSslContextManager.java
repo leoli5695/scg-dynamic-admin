@@ -33,8 +33,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class DynamicSslContextManager {
 
-    private final ConfigCenterService configCenterService;
     private final ObjectMapper objectMapper;
+    private final ConfigCenterService configCenterService;
 
     // Cache of domain -> SSL context
     private final Map<String, SslContext> sslContextCache = new ConcurrentHashMap<>();

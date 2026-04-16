@@ -276,6 +276,229 @@ public class AccessLogConfigController {
         return ResponseEntity.ok(result);
     }
 
+    /**
+     * Get Fluent Bit configuration templates for different deployment modes.
+     * Provides ready-to-use configuration snippets for log collection.
+     */
+    @GetMapping("/fluent-bit-templates")
+    public ResponseEntity<Map<String, Object>> getFluentBitTemplates() {
+        Map<String, Object> result = new HashMap<>();
+
+        try {
+            Map<String, Map<String, String>> templates = new LinkedHashMap<>();
+
+            // K8S DaemonSet template (stdout mode)
+            Map<String, String> k8sTemplate = new LinkedHashMap<>();
+            k8sTemplate.put("name", "Kubernetes DaemonSet (stdout)");
+            k8sTemplate.put("description", "Cloud-native best practice: stdout + Fluent Bit DaemonSet");
+            k8sTemplate.put("config", """
+# Fluent Bit DaemonSet 配置示例
+[SERVICE]
+    Flush         5
+    Log_Level     info
+    Parsers_File  parsers.conf
+
+[INPUT]
+    Name              tail
+    Path              /var/log/containers/*gateway*.log
+    Parser            json
+    Tag               gateway.access
+    Mem_Buf_Limit     50MB
+
+[FILTER]
+    Name              kubernetes
+    Match             gateway.*
+    Kube_URL          https://kubernetes.default.svc:443
+    Kube_Tag_Prefix   gateway.access.
+
+[OUTPUT]
+    Name              http
+    Match             gateway.*
+    Host              gateway-admin-service
+    Port              8080
+    URI               /api/access-log/collect
+    Format            json
+""");
+            k8sTemplate.put("configMap", """
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-config
+  namespace: gateway
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush         5
+        Log_Level     info
+        Parsers_File  parsers.conf
+
+    [INPUT]
+        Name              tail
+        Path              /var/log/containers/*gateway*.log
+        Parser            json
+        Tag               gateway.access
+        Mem_Buf_Limit     50MB
+
+    [FILTER]
+        Name              kubernetes
+        Match             gateway.*
+        Kube_URL          https://kubernetes.default.svc:443
+        Kube_Tag_Prefix   gateway.access.
+
+    [OUTPUT]
+        Name              http
+        Match             gateway.*
+        Host              gateway-admin-service
+        Port              8080
+        URI               /api/access-log/collect
+        Format            json
+
+  parsers.conf: |
+    [PARSER]
+        Name   json
+        Format json
+""");
+            templates.put("K8S", k8sTemplate);
+
+            // Docker sidecar template
+            Map<String, String> dockerTemplate = new LinkedHashMap<>();
+            dockerTemplate.put("name", "Docker Sidecar / Host Agent");
+            dockerTemplate.put("description", "Two options: sidecar container or host agent");
+            dockerTemplate.put("config", """
+# Docker Compose sidecar 示例
+services:
+  gateway:
+    volumes:
+      - access-logs:/app/logs/access
+
+  fluent-bit:
+    image: fluent/fluent-bit:latest
+    volumes:
+      - access-logs:/app/logs/access
+    config:
+      [INPUT]
+        Name    tail
+        Path    /app/logs/access/access-*.log
+        Parser  json
+
+      [OUTPUT]
+        Name    http
+        Host    gateway-admin
+        Port    8080
+""");
+            templates.put("DOCKER", dockerTemplate);
+
+            // Local file tailing template
+            Map<String, String> localTemplate = new LinkedHashMap<>();
+            localTemplate.put("name", "Local File Tailing");
+            localTemplate.put("description", "Direct file tailing on host machine");
+            localTemplate.put("config", """
+# Fluent Bit 本地采集配置
+[INPUT]
+    Name    tail
+    Path    ./logs/access/access-*.log
+    Parser  json
+    Tag     gateway.access
+
+[OUTPUT]
+    Name    http
+    Host    localhost
+    Port    8080
+    URI     /api/access-log/collect
+""");
+            templates.put("LOCAL", localTemplate);
+
+            // Custom path template
+            Map<String, String> customTemplate = new LinkedHashMap<>();
+            customTemplate.put("name", "Custom Path (注意权限)");
+            customTemplate.put("description", "User-defined path with wildcard support");
+            customTemplate.put("config", """
+# Fluent Bit 自定义路径配置
+[INPUT]
+    Name    tail
+    Path    /your/custom/path/access-*.log
+    Parser  json
+
+[OUTPUT]
+    Name    http
+    Host    gateway-admin
+    Port    8080
+""");
+            templates.put("CUSTOM", customTemplate);
+
+            result.put("code", 200);
+            result.put("message", "success");
+            result.put("data", templates);
+
+        } catch (Exception e) {
+            log.error("Failed to get Fluent Bit templates", e);
+            result.put("code", 500);
+            result.put("message", "Failed to get templates: " + e.getMessage());
+        }
+
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Get output target recommendation based on deployment mode.
+     * Helps frontend determine the best output mode for each deployment.
+     */
+    @GetMapping("/output-target-recommendation")
+    public ResponseEntity<Map<String, Object>> getOutputTargetRecommendation(
+            @RequestParam String deployMode) {
+        Map<String, Object> result = new HashMap<>();
+
+        try {
+            String recommendedTarget;
+            String reason;
+            boolean disableFileOptions = false;
+
+            switch (deployMode) {
+                case "K8S":
+                    recommendedTarget = "stdout";
+                    reason = "Kubernetes automatically collects stdout logs to /var/log/containers/*.log. Fluent Bit DaemonSet can directly collect without file I/O overhead.";
+                    disableFileOptions = true;
+                    break;
+                case "DOCKER":
+                    recommendedTarget = "both";
+                    reason = "Docker environment benefits from both stdout (for collection) and file (for backup). Ensure volume mount for file persistence.";
+                    disableFileOptions = false;
+                    break;
+                case "LOCAL":
+                    recommendedTarget = "file";
+                    reason = "Local deployment writes logs to file. Fluent Bit or Filebeat can tail the file directory.";
+                    disableFileOptions = false;
+                    break;
+                case "CUSTOM":
+                    recommendedTarget = "file";
+                    reason = "Custom path requires file output. Ensure the path exists and Gateway has write permissions.";
+                    disableFileOptions = false;
+                    break;
+                default:
+                    recommendedTarget = "file";
+                    reason = "Default recommendation for unknown deployment mode.";
+                    disableFileOptions = false;
+            }
+
+            Map<String, Object> recommendation = new LinkedHashMap<>();
+            recommendation.put("target", recommendedTarget);
+            recommendation.put("reason", reason);
+            recommendation.put("disableFileOptions", disableFileOptions);
+            recommendation.put("deployMode", deployMode);
+
+            result.put("code", 200);
+            result.put("message", "success");
+            result.put("data", recommendation);
+
+        } catch (Exception e) {
+            log.error("Failed to get output target recommendation", e);
+            result.put("code", 500);
+            result.put("message", "Failed to get recommendation: " + e.getMessage());
+        }
+
+        return ResponseEntity.ok(result);
+    }
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**

@@ -1,13 +1,13 @@
 package com.leoli.gateway.filter.security;
 
-import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.auth.AuthProcessManager;
+import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.manager.AuthBindingManager;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.AuthConfig;
 import com.leoli.gateway.util.RouteUtils;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
@@ -21,13 +21,12 @@ import reactor.core.publisher.Mono;
 
 import java.util.Base64;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 
 /**
  * Authentication Global Filter.
  * Delegates authentication to appropriate AuthProcessor based on authType.
- *
+ * <p>
  * Authentication Flow:
  * 1. Extract credentials from request (username/password, apiKey, accessKey, clientId, etc.)
  * 2. Find matching policyId by credentials via AuthBindingManager
@@ -39,16 +38,12 @@ import java.util.Set;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
 
-    @Autowired
-    private StrategyManager strategyManager;
-
-    @Autowired
-    private AuthBindingManager authBindingManager;
-
-    @Autowired
-    private AuthProcessManager authProcessManager;
+    private final StrategyManager strategyManager;
+    private final AuthBindingManager authBindingManager;
+    private final AuthProcessManager authProcessManager;
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
@@ -160,7 +155,7 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
      * After successful authentication, check route authorization.
      */
     private Mono<Void> authenticateWithPolicy(ServerWebExchange exchange, GatewayFilterChain chain,
-                                               String routeId, String policyId) {
+                                              String routeId, String policyId) {
         AuthConfig config = authBindingManager.getAuthConfig(policyId);
 
         if (config == null) {

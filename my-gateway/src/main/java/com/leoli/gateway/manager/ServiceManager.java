@@ -159,6 +159,35 @@ public class ServiceManager {
     }
 
     /**
+     * Check if an instance (ip:port) is used by any other service.
+     * Used for shared health status cleanup - only clear when no other service references it.
+     *
+     * @param ip              Instance IP
+     * @param port            Instance port
+     * @param excludeServiceId Service ID to exclude from check (the one being deleted)
+     * @return true if the instance is referenced by other services
+     */
+    public boolean isInstanceUsedByOtherServices(String ip, int port, String excludeServiceId) {
+        for (Map.Entry<String, List<ServiceInstance>> entry : instanceCache.entrySet()) {
+            String serviceId = entry.getKey();
+            if (serviceId.equals(excludeServiceId)) {
+                continue;  // Skip the service being deleted
+            }
+
+            List<ServiceInstance> instances = entry.getValue();
+            if (instances == null) continue;
+
+            for (ServiceInstance inst : instances) {
+                if (inst.getIp().equals(ip) && inst.getPort() == port) {
+                    log.debug("Instance {}:{} is also used by service: {}", ip, port, serviceId);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * Get service endpoint by ID.
      */
     public ServiceEndpoint getServiceEndpoint(String serviceId) {

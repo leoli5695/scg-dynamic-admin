@@ -29,14 +29,13 @@ import static com.leoli.gateway.constants.GatewayConfigConstants.*;
 @Component
 public class RouteRefresher {
 
+    private final ObjectMapper objectMapper;
     private final RouteManager routeManager;
     private final ConfigCenterService configService;
     private final DynamicRouteDefinitionLocator routeLocator;
-    private final ObjectMapper objectMapper;
 
     // Currently listening route IDs
     private final Set<String> listeningRouteIds = ConcurrentHashMap.newKeySet();
-
     // Route listeners cache: <routeId, listener>
     private final ConcurrentHashMap<String, ConfigCenterService.ConfigListener> routeListeners = new ConcurrentHashMap<>();
 

@@ -257,12 +257,37 @@
   border-color: rgba(148, 163, 184, 0.25) !important;
 }
 
+/* Time picker panel background */
+.ant-picker-time-panel {
+  background: #1a2338 !important;
+}
+
+.ant-picker-time-panel-column {
+  background: #1a2338 !important;
+}
+
 .ant-picker-time-panel-column > li {
   color: #f1f5f9 !important;
+  background: #1a2338 !important;
 }
 
 .ant-picker-time-panel-column > li:hover {
   background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.ant-picker-time-panel-column > li.ant-picker-time-panel-cell-selected {
+  background: rgba(59, 130, 246, 0.2) !important;
+}
+
+/* Time input fields in time picker */
+.ant-picker-time-panel-input {
+  background: #1a2338 !important;
+  color: #f1f5f9 !important;
+  border: none !important;
+}
+
+.ant-picker-time-panel-input::placeholder {
+  color: rgba(148, 163, 184, 0.5) !important;
 }
 
 /* Table dropdowns */

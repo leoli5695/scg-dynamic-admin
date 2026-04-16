@@ -128,8 +128,11 @@ public class DiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
     private Mono<Void> executeWithRetry(ServerWebExchange exchange, GatewayFilterChain chain,
                                         String serviceId, ServiceInstance instance,
                                         java.util.Set<String> triedInstances) {
+        // Get all instances and filter out disabled ones
+        // Disabled instances must be excluded (user's explicit choice)
         List<ServiceInstance> allInstances = staticDiscoveryService.getInstances(serviceId);
-        return retryExecutor.execute(exchange, chain, serviceId, instance, allInstances, triedInstances);
+        List<ServiceInstance> enabledInstances = instanceFilter.filterEnabled(allInstances);
+        return retryExecutor.execute(exchange, chain, serviceId, instance, enabledInstances, triedInstances);
     }
 
     @Override

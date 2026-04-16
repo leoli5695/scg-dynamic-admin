@@ -1,11 +1,11 @@
 package com.leoli.gateway.filter.security;
 
-import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.config.TrustedProxyProperties;
+import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.util.RouteUtils;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
@@ -30,13 +30,11 @@ import java.util.Map;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class IPFilterGlobalFilter implements GlobalFilter, Ordered {
 
-    @Autowired
-    private StrategyManager strategyManager;
-
-    @Autowired
-    private TrustedProxyProperties trustedProxyProperties;
+    private final StrategyManager strategyManager;
+    private final TrustedProxyProperties trustedProxyProperties;
 
     /**
      * Check if IP is in the list (supports CIDR notation)

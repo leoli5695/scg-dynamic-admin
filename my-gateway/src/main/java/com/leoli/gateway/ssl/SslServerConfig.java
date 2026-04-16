@@ -32,23 +32,18 @@ import java.util.function.BiFunction;
 @Configuration
 public class SslServerConfig {
 
+    @Value("${gateway.ssl.enabled:true}")
+    private boolean sslEnabled;
+    @Value("${gateway.ssl.port:8443}")
+    private int sslPort;
+    @Value("${server.port:80}")
+    private int httpPort;
+    private HttpClient httpClient;
+    private DisposableServer httpsServer;
     @Autowired(required = false)
     private DynamicSslContextManager sslContextManager;
 
-    @Value("${gateway.ssl.enabled:true}")
-    private boolean sslEnabled;
-
-    @Value("${gateway.ssl.port:8443}")
-    private int sslPort;
-
-    @Value("${server.port:80}")
-    private int httpPort;
-
-    private DisposableServer httpsServer;
-    private HttpClient httpClient;
-
     private final AtomicBoolean serverStarted = new AtomicBoolean(false);
-
     // Cache of domain -> SSL context
     private final Map<String, SslContext> sslContextCache = new ConcurrentHashMap<>();
 
@@ -282,10 +277,10 @@ public class SslServerConfig {
                 "        <p>No SSL certificate is configured for:</p>\n" +
                 "        <div class=\"domain\">" + escapeHtml(domain) + "</div>\n" +
                 (availableDomains.isEmpty() ? "" :
-                "        <div class=\"available\">\n" +
-                "            <strong>Available domains:</strong>\n" +
-                "            <ul>" + domainList + "</ul>\n" +
-                "        </div>\n") +
+                        "        <div class=\"available\">\n" +
+                                "            <strong>Available domains:</strong>\n" +
+                                "            <ul>" + domainList + "</ul>\n" +
+                                "        </div>\n") +
                 "    </div>\n" +
                 "</body>\n" +
                 "</html>";

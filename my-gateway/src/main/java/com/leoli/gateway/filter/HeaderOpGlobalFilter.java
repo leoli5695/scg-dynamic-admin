@@ -3,8 +3,8 @@ package com.leoli.gateway.filter;
 import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.util.RouteUtils;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
@@ -28,10 +28,10 @@ import java.util.UUID;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class HeaderOpGlobalFilter implements GlobalFilter, Ordered {
 
-    @Autowired
-    private StrategyManager strategyManager;
+    private final StrategyManager strategyManager;
 
     private static final String TRACE_ID_ATTR = "traceId";
 

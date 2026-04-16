@@ -34,27 +34,25 @@ import static com.leoli.gateway.constants.GatewayConfigConstants.*;
 @Component
 public class AuthPolicyRefresher {
 
-    private final AuthBindingManager authBindingManager;
-    private final ConfigCenterService configService;
     private final ObjectMapper objectMapper;
+    private final ConfigCenterService configService;
+    private final AuthBindingManager authBindingManager;
 
+    private ConfigCenterService.ConfigListener indexListener;
     // Currently listening policy IDs
     private final Set<String> listeningPolicyIds = ConcurrentHashMap.newKeySet();
-
     // Policy listeners cache: policyId -> listener
     private final ConcurrentHashMap<String, ConfigCenterService.ConfigListener> policyListeners = new ConcurrentHashMap<>();
     // Routes listeners cache: policyId -> listener
     private final ConcurrentHashMap<String, ConfigCenterService.ConfigListener> routesListeners = new ConcurrentHashMap<>();
 
-    private ConfigCenterService.ConfigListener indexListener;
-
     @Autowired
     public AuthPolicyRefresher(AuthBindingManager authBindingManager,
                                ConfigCenterService configService,
                                ObjectMapper objectMapper) {
-        this.authBindingManager = authBindingManager;
-        this.configService = configService;
         this.objectMapper = objectMapper;
+        this.configService = configService;
+        this.authBindingManager = authBindingManager;
         log.info("AuthPolicyRefresher initialized");
     }
 

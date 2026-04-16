@@ -13,7 +13,29 @@ import java.time.LocalDateTime;
  */
 @Data
 @Entity(name = "audit_logs")
-@Table(name = "audit_logs")
+@Table(name = "audit_logs", indexes = {
+    // 1. 分页查询主索引：时间优先（ORDER BY created_at DESC）
+    // 注意：JPA @Index 不支持 DESC，数据库默认 ASC，但 MySQL 可用降序索引
+    @Index(name = "idx_audit_time_instance", columnList = "created_at, instance_id"),
+
+    // 2. 按实例 + 时间（带条件筛选的分页）
+    @Index(name = "idx_audit_instance_time", columnList = "instance_id, created_at"),
+
+    // 3. 按目标类型 + 时间
+    @Index(name = "idx_audit_target_type_time", columnList = "target_type, created_at"),
+
+    // 4. 按操作类型 + 时间
+    @Index(name = "idx_audit_operation_time", columnList = "operation_type, created_at"),
+
+    // 5. 按目标查询（查看特定路由/服务的变更历史）
+    @Index(name = "idx_audit_target", columnList = "target_type, target_id, created_at"),
+
+    // 6. 复合索引：实例 + 目标类型 + 操作类型（高级筛选）
+    @Index(name = "idx_audit_instance_target_op", columnList = "instance_id, target_type, operation_type, created_at"),
+
+    // 7. 单字段时间索引（时间范围查询、清理过期日志）
+    @Index(name = "idx_audit_created_at", columnList = "created_at")
+})
 public class AuditLogEntity {
 
     @Id

@@ -3,6 +3,7 @@ package com.leoli.gateway.filter.loadbalancer;
 import com.leoli.gateway.health.ActiveHealthChecker;
 import com.leoli.gateway.health.HybridHealthChecker;
 import com.leoli.gateway.health.InstanceHealth;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.stereotype.Component;
@@ -31,15 +32,11 @@ import java.util.Map;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class InstanceFilter {
 
     private final HybridHealthChecker healthChecker;
     private final ActiveHealthChecker activeHealthChecker;
-
-    public InstanceFilter(HybridHealthChecker healthChecker, ActiveHealthChecker activeHealthChecker) {
-        this.healthChecker = healthChecker;
-        this.activeHealthChecker = activeHealthChecker;
-    }
 
     /**
      * Filter instances: exclude disabled, prefer healthy.
@@ -137,14 +134,26 @@ public class InstanceFilter {
     }
 
     /**
-     * Check if instance is enabled from metadata.
+     * Filter instances to exclude only disabled ones.
+     * Returns all enabled instances (both healthy and unhealthy).
+     * Used for retry mechanism to find alternative instances.
      */
-    public boolean isEnabled(ServiceInstance instance) {
-        Map<String, String> metadata = instance.getMetadata();
-        if (metadata == null) return true;
-        String enabledStr = metadata.get("enabled");
-        if (enabledStr == null) return true;
-        return Boolean.parseBoolean(enabledStr);
+    public List<ServiceInstance> filterEnabled(List<ServiceInstance> instances) {
+        if (instances.isEmpty()) return instances;
+
+        String serviceId = instances.get(0).getServiceId();
+        List<ServiceInstance> enabled = new ArrayList<>();
+
+        for (ServiceInstance inst : instances) {
+            if (!isEnabled(inst)) {
+                log.debug("Skipping DISABLED instance {}:{} for service {}",
+                        inst.getHost(), inst.getPort(), serviceId);
+                continue;
+            }
+            enabled.add(inst);
+        }
+
+        return enabled;
     }
 
     /**
@@ -199,5 +208,16 @@ public class InstanceFilter {
         }
 
         return null;
+    }
+
+    /**
+     * Check if instance is enabled from metadata.
+     */
+    public boolean isEnabled(ServiceInstance instance) {
+        Map<String, String> metadata = instance.getMetadata();
+        if (metadata == null) return true;
+        String enabledStr = metadata.get("enabled");
+        if (enabledStr == null) return true;
+        return Boolean.parseBoolean(enabledStr);
     }
 }

@@ -1,12 +1,10 @@
 package com.leoli.gateway.filter.security;
 
 import com.leoli.gateway.constants.FilterOrderConstants;
-
 import com.leoli.gateway.manager.StrategyManager;
-import com.leoli.gateway.model.StrategyDefinition;
 import com.leoli.gateway.util.RouteUtils;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
@@ -23,7 +21,10 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -35,10 +36,10 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class SecurityGlobalFilter implements GlobalFilter, Ordered {
 
-    @Autowired
-    private StrategyManager strategyManager;
+    private final StrategyManager strategyManager;
 
     // SQL Injection patterns
     private static final List<Pattern> SQL_INJECTION_PATTERNS = Arrays.asList(
@@ -190,8 +191,8 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
      * Check request body for threats.
      */
     private Mono<Void> checkRequestBody(ServerWebExchange exchange, GatewayFilterChain chain,
-                                          Map<String, Object> config, List<String> existingThreats,
-                                          String mode, boolean enableSqlInjection, boolean enableXss) {
+                                        Map<String, Object> config, List<String> existingThreats,
+                                        String mode, boolean enableSqlInjection, boolean enableXss) {
         ServerHttpRequest request = exchange.getRequest();
 
         return DataBufferUtils.join(request.getBody())

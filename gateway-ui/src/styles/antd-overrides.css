@@ -461,6 +461,57 @@
 
 .ant-picker-panel { border: none; }
 
+/* Range picker separator */
+.ant-picker-range .ant-picker-separator {
+  color: var(--text-secondary) !important;
+}
+
+/* Time picker dark theme */
+.ant-picker-time-panel {
+  background: var(--bg-card) !important;
+}
+
+.ant-picker-time-panel-column {
+  background: var(--bg-card) !important;
+}
+
+.ant-picker-time-panel-column > li {
+  color: var(--text-primary) !important;
+  background: var(--bg-card) !important;
+}
+
+.ant-picker-time-panel-column > li:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.ant-picker-time-panel-column > li.ant-picker-time-panel-cell-selected {
+  background: rgba(59, 130, 246, 0.2) !important;
+}
+
+/* Time cell inner - the white blocks */
+.ant-picker-time-panel-cell-inner {
+  background: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-picker-time-panel-cell-inner:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.ant-picker-time-panel-cell-selected .ant-picker-time-panel-cell-inner {
+  background: rgba(59, 130, 246, 0.2) !important;
+}
+
+/* Time input fields */
+.ant-picker-time-panel-input {
+  background: transparent !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-picker-time-panel-input::placeholder {
+  color: rgba(148, 163, 184, 0.5) !important;
+}
+
 /* ==================== Message & Notification ==================== */
 .ant-message-notice-content {
   background: var(--bg-card);
@@ -481,6 +532,108 @@
   font-weight: var(--weight-medium);
 }
 
+/* ==================== JSON Display ==================== */
+.json-viewer {
+  margin: 0 !important;
+  padding: 16px !important;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', monospace !important;
+  font-size: 13px !important;
+  line-height: 1.6 !important;
+  background: transparent !important;
+  overflow-x: auto !important;
+  text-align: left !important;
+  white-space: pre !important;
+}
+
+.json-viewer .json-key {
+  color: #9cdcfe !important;
+  font-weight: 400;
+}
+
+.json-viewer .json-string {
+  color: #ce9178 !important;
+}
+
+.json-viewer .json-number {
+  color: #b5cea8 !important;
+}
+
+.json-viewer .json-boolean {
+  color: #569cd6 !important;
+  font-weight: 500;
+}
+
+.json-viewer .json-null {
+  color: #569cd6 !important;
+  font-style: italic;
+}
+
+.json-viewer .json-bracket {
+  color: #ffd700 !important;
+}
+
+.json-viewer .json-colon {
+  color: #808080 !important;
+  margin: 0 2px;
+}
+
+/* JSON container styles */
+.json-container {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 6px !important;
+  margin-top: 8px !important;
+  overflow: hidden !important;
+  text-align: left !important;
+}
+
+.json-header {
+  display: flex !important;
+  align-items: center !important;
+  padding: 8px 12px !important;
+  background: var(--bg-card) !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  color: var(--text-primary) !important;
+  gap: 8px !important;
+  text-align: left !important;
+}
+
+.json-header .json-size {
+  color: var(--text-secondary) !important;
+  font-weight: 400 !important;
+  font-size: 11px !important;
+}
+
+.json-content {
+  padding: 0 !important;
+  max-height: 300px !important;
+  overflow: auto !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: var(--border-subtle) transparent !important;
+  text-align: left !important;
+}
+
+.json-content::-webkit-scrollbar {
+  width: 8px !important;
+  height: 8px !important;
+}
+
+.json-content::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+.json-content::-webkit-scrollbar-thumb {
+  background: var(--border-subtle) !important;
+  border-radius: 4px !important;
+}
+
+.json-content::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong) !important;
+}
+
+/* ==================== Descriptions ==================== */
 .ant-descriptions-item-label {
   color: var(--text-secondary);
   font-size: var(--text-sm);

@@ -23,7 +23,6 @@ import java.util.UUID;
 public class TraceIdGlobalFilter implements GlobalFilter, Ordered {
 
     private static final String TRACE_ID_HEADER = "X-Trace-Id";
-
     /**
      * Attribute key for storing trace ID in exchange attributes.
      * Other filters can use this to get the trace ID without parsing headers.

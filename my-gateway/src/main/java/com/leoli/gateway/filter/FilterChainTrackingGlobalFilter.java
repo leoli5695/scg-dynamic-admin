@@ -1,6 +1,5 @@
 package com.leoli.gateway.filter;
 
-import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.monitor.FilterChainTracker;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,11 +14,11 @@ import reactor.core.publisher.Mono;
 /**
  * Filter Chain Tracking Global Filter.
  * Tracks the overall execution time of the entire filter chain.
- *
+ * <p>
  * Note: Individual filter tracking is handled by TrackedGlobalFilter wrapper
  * via GlobalFilterTrackingPostProcessor. This filter only tracks the complete
  * chain duration for comparison purposes.
- *
+ * <p>
  * This filter uses HIGHEST_PRECEDENCE order to:
  * 1. Run before all other filters to capture start time
  * 2. Measure total chain execution time
@@ -30,16 +29,14 @@ import reactor.core.publisher.Mono;
 @Component
 public class FilterChainTrackingGlobalFilter implements GlobalFilter, Ordered {
 
+    @Autowired(required = false)
+    private FilterChainTracker tracker;
+    @Value("${gateway.filter-chain.slow-threshold-ms:1000}")
+    private long slowThresholdMs;
     /**
      * Attribute key for storing chain start time.
      */
     public static final String CHAIN_START_TIME_ATTR = "chainStartTimeNanos";
-
-    @Autowired(required = false)
-    private FilterChainTracker tracker;
-
-    @Value("${gateway.filter-chain.slow-threshold-ms:1000}")
-    private long slowThresholdMs;
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {

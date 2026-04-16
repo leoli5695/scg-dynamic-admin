@@ -6,6 +6,7 @@ import com.leoli.gateway.admin.service.RequestTraceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -193,12 +194,38 @@ public class RequestTraceController {
     /**
      * Get error traces with pagination
      * @param instanceId Optional instance ID
+     * @param traceId Optional trace ID for fuzzy search
+     * @param start Optional start time for time range filter
+     * @param end Optional end time for time range filter
      */
     @GetMapping("/errors")
-    public ResponseEntity<Page<RequestTrace>> getErrorTraces(
+    public ResponseEntity<?> getErrorTraces(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) String instanceId) {
+            @RequestParam(defaultValue = "100") int size,
+            @RequestParam(required = false) String instanceId,
+            @RequestParam(required = false) String traceId,
+            @RequestParam(required = false) String start,
+            @RequestParam(required = false) String end) {
+
+        // If traceId provided, use fuzzy search
+        if (traceId != null && !traceId.trim().isEmpty()) {
+            List<RequestTrace> traces = instanceId != null && !instanceId.isEmpty()
+                    ? requestTraceService.searchByTraceId(instanceId, traceId, size)
+                    : requestTraceService.searchByTraceId(traceId, size);
+            return ResponseEntity.ok(new PageImpl<>(traces));
+        }
+
+        // If time range provided, use time range query
+        if (start != null && end != null) {
+            LocalDateTime startTime = LocalDateTime.parse(start);
+            LocalDateTime endTime = LocalDateTime.parse(end);
+            if (instanceId != null && !instanceId.isEmpty()) {
+                return ResponseEntity.ok(requestTraceService.getErrorTracesByTimeRange(instanceId, startTime, endTime, page, size));
+            }
+            return ResponseEntity.ok(requestTraceService.getErrorTracesByTimeRange(startTime, endTime, page, size));
+        }
+
+        // Default: get all error traces
         if (instanceId != null && !instanceId.isEmpty()) {
             return ResponseEntity.ok(requestTraceService.getErrorTraces(instanceId, page, size));
         }
@@ -208,13 +235,39 @@ public class RequestTraceController {
     /**
      * Get slow request traces
      * @param instanceId Optional instance ID
+     * @param traceId Optional trace ID for fuzzy search
+     * @param start Optional start time for time range filter
+     * @param end Optional end time for time range filter
      */
     @GetMapping("/slow")
-    public ResponseEntity<Page<RequestTrace>> getSlowTraces(
+    public ResponseEntity<?> getSlowTraces(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "100") int size,
             @RequestParam(defaultValue = "3000") long thresholdMs,
-            @RequestParam(required = false) String instanceId) {
+            @RequestParam(required = false) String instanceId,
+            @RequestParam(required = false) String traceId,
+            @RequestParam(required = false) String start,
+            @RequestParam(required = false) String end) {
+
+        // If traceId provided, use fuzzy search
+        if (traceId != null && !traceId.trim().isEmpty()) {
+            List<RequestTrace> traces = instanceId != null && !instanceId.isEmpty()
+                    ? requestTraceService.searchByTraceId(instanceId, traceId, size)
+                    : requestTraceService.searchByTraceId(traceId, size);
+            return ResponseEntity.ok(new PageImpl<>(traces));
+        }
+
+        // If time range provided, use time range query
+        if (start != null && end != null) {
+            LocalDateTime startTime = LocalDateTime.parse(start);
+            LocalDateTime endTime = LocalDateTime.parse(end);
+            if (instanceId != null && !instanceId.isEmpty()) {
+                return ResponseEntity.ok(requestTraceService.getSlowTracesByTimeRange(instanceId, startTime, endTime, thresholdMs, page, size));
+            }
+            return ResponseEntity.ok(requestTraceService.getSlowTracesByTimeRange(startTime, endTime, thresholdMs, page, size));
+        }
+
+        // Default: get all slow traces
         if (instanceId != null && !instanceId.isEmpty()) {
             return ResponseEntity.ok(requestTraceService.getSlowTraces(instanceId, page, size, thresholdMs));
         }

@@ -6,7 +6,15 @@
     <!-- 应用名称 -->
     <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="my-gateway"/>
 
-    <!-- 控制台输出（同步 Appender） -->
+    <!-- ========== Access Log 配置参数（从 application.yml 或环境变量读取） ========== -->
+    <springProperty scope="context" name="ACCESS_LOG_ENABLED" source="gateway.access-log.enabled" defaultValue="false"/>
+    <springProperty scope="context" name="ACCESS_LOG_DIRECTORY" source="gateway.access-log.log-directory" defaultValue="./logs/access"/>
+    <springProperty scope="context" name="ACCESS_LOG_FILE_PATTERN" source="gateway.access-log.file-name-pattern" defaultValue="access-%d{yyyy-MM-dd}.%i.log"/>
+    <springProperty scope="context" name="ACCESS_LOG_MAX_FILE_SIZE_MB" source="gateway.access-log.max-file-size-mb" defaultValue="100"/>
+    <springProperty scope="context" name="ACCESS_LOG_MAX_BACKUP_FILES" source="gateway.access-log.max-backup-files" defaultValue="30"/>
+    <springProperty scope="context" name="ACCESS_LOG_TO_CONSOLE" source="gateway.access-log.log-to-console" defaultValue="true"/>
+
+    <!-- ========== 控制台输出（同步 Appender） ========== -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight(%5level) %magenta(${PID:-}) --- [%15.15t] %cyan(%logger{39}): %msg%n</pattern>
@@ -14,7 +22,52 @@
         </encoder>
     </appender>
 
-    <!-- 异步 Appender - 高性能日志输出 -->
+    <!-- ========== Access Log 文件输出（RollingFileAppender） ========== -->
+    <!-- 日期 + 大小双维度滚动策略 -->
+    <appender name="ACCESS_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <!-- 当前写入的文件 -->
+        <file>${ACCESS_LOG_DIRECTORY}/access.log</file>
+
+        <!-- 滚动策略：时间 + 大小 -->
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <!-- 滚动后的文件名模式 -->
+            <fileNamePattern>${ACCESS_LOG_DIRECTORY}/${ACCESS_LOG_FILE_PATTERN}</fileNamePattern>
+            <!-- 单文件最大大小 -->
+            <maxFileSize>${ACCESS_LOG_MAX_FILE_SIZE_MB}MB</maxFileSize>
+            <!-- 最大保留文件数（历史文件） -->
+            <maxHistory>${ACCESS_LOG_MAX_BACKUP_FILES}</maxHistory>
+            <!-- 总大小上限（超过则删除最旧文件） -->
+            <totalSizeCap>10GB</totalSizeCap>
+            <!-- 启动时清理过期文件 -->
+            <cleanHistoryOnStart>true</cleanHistoryOnStart>
+        </rollingPolicy>
+
+        <!-- JSON 格式输出（纯 JSON，不带时间戳前缀） -->
+        <encoder>
+            <pattern>%msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- ========== Access Log 控制台输出（stdout，供 K8S/Fluent Bit 采集） ========== -->
+    <appender name="ACCESS_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <!-- 纯 JSON 输出，便于 Fluent Bit 解析 -->
+        <encoder>
+            <pattern>%msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- ========== Access Log 异步写入（高性能） ========== -->
+    <appender name="ACCESS_FILE_ASYNC" class="ch.qos.logback.classic.AsyncAppender">
+        <queueSize>1024</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <neverBlock>true</neverBlock>
+        <includeCallerData>false</includeCallerData>
+        <appender-ref ref="ACCESS_FILE"/>
+    </appender>
+
+    <!-- ========== 异步 Appender - 高性能日志输出 ========== -->
     <!--
         性能优化说明：
         - queueSize: 队列大小，默认256，增大可减少阻塞
@@ -29,6 +82,13 @@
         <includeCallerData>false</includeCallerData>
         <appender-ref ref="CONSOLE"/>
     </appender>
+
+    <!-- ========== Access Log Logger（专用） ========== -->
+    <!-- 只输出纯 JSON，不继承 Root 的 Appender -->
+    <logger name="ACCESS_LOG" level="INFO" additivity="false">
+        <!-- 根据配置动态启用不同的 Appender -->
+        <!-- Spring Profile 机制可以动态切换，这里暂时全部配置，由代码控制输出 -->
+    </logger>
 
     <!-- 抑制 Spring Boot 自动配置日志 -->
     <logger name="org.springframework.boot.autoconfigure" level="WARN"/>
@@ -48,11 +108,11 @@
     <!-- 健康检查模块日志（可调为 DEBUG） -->
     <logger name="com.example.gateway.health" level="INFO"/>
     <logger name="com.example.gateway.filter" level="INFO"/>
-    
+
     <!-- Nacos 和 Consul 日志 -->
     <logger name="com.alibaba.nacos" level="INFO"/>
     <logger name="com.ecwid.consul" level="INFO"/>
-    
+
     <!-- Spring Cloud Gateway 日志 -->
     <logger name="org.springframework.cloud.gateway" level="INFO"/>
 

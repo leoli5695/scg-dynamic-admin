@@ -3,10 +3,9 @@ package com.leoli.gateway.filter;
 import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.filter.loadbalancer.MultiServiceLoadBalancerFilter;
 import com.leoli.gateway.manager.StrategyManager;
-import com.leoli.gateway.model.StrategyDefinition;
 import com.leoli.gateway.util.RouteUtils;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
@@ -18,7 +17,6 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.net.URI;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -33,10 +31,10 @@ import java.util.Map;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class ApiVersionGlobalFilter implements GlobalFilter, Ordered {
 
-    @Autowired
-    private StrategyManager strategyManager;
+    private final StrategyManager strategyManager;
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {

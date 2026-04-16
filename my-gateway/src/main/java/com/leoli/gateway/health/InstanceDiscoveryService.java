@@ -47,8 +47,9 @@ public class InstanceDiscoveryService {
     private final Set<String> knownInstances = ConcurrentHashMap.newKeySet();
 
     /**
-     * Get instances needing regular frequency health check (NOT in degraded mode).
-     * Includes: healthy instances, newly unhealthy instances, idle instances.
+     * Get instances needing regular frequency health check (NOT in degraded or stable mode).
+     * Includes: healthy instances (not stable), newly unhealthy instances, idle instances.
+     * Excludes: degraded mode instances, stable mode instances.
      */
     public List<InstanceKey> findInstancesForRegularCheck() {
         Set<InstanceKey> needingCheckSet = new java.util.HashSet<>();
@@ -82,12 +83,19 @@ public class InstanceDiscoveryService {
                         triggerImmediateHealthCheck(serviceId, instance.getHost(), instance.getPort());
                     }
 
-                    // Check if instance is in degraded mode - skip if so
                     InstanceHealth health = hybridHealthChecker.getHealth(
                             serviceId, instance.getHost(), instance.getPort());
 
+                    // Skip if in degraded mode
                     if (health != null && health.isDegradedCheckMode()) {
                         log.debug("Instance {}:{} is in degraded mode, skipping regular check",
+                                instance.getHost(), instance.getPort());
+                        continue;
+                    }
+
+                    // Skip if in stable mode (checked separately at lower frequency)
+                    if (health != null && health.isStableCheckMode()) {
+                        log.debug("Instance {}:{} is in stable mode, skipping regular check",
                                 instance.getHost(), instance.getPort());
                         continue;
                     }
@@ -104,8 +112,8 @@ public class InstanceDiscoveryService {
             log.error("Failed to discover instances for regular check", e);
         }
 
-        // Add instances from health cache that are NOT in degraded mode
-        addHealthCacheInstancesNotDegraded(needingCheckSet, needingCheck);
+        // Add instances from health cache that are NOT in degraded or stable mode
+        addHealthCacheInstancesNotDegradedOrStable(needingCheckSet, needingCheck);
 
         log.debug("Found {} instances for regular frequency check", needingCheck.size());
         return needingCheck;
@@ -160,6 +168,53 @@ public class InstanceDiscoveryService {
     }
 
     /**
+     * Get instances needing stable frequency health check (IN stable mode).
+     * These instances have been consistently healthy for many consecutive checks.
+     * They are checked at lowest frequency to reduce system load.
+     */
+    public List<InstanceKey> findInstancesForStableCheck() {
+        Set<InstanceKey> needingCheckSet = new java.util.HashSet<>();
+        List<InstanceKey> needingCheck = new ArrayList<>();
+
+        try {
+            // Get all configured services
+            java.util.Set<String> configuredServices = serviceManager.getAllConfiguredServiceIds();
+
+            for (String serviceId : configuredServices) {
+                List<ServiceInstance> staticInstances = staticDiscoveryService.getInstances(serviceId);
+
+                if (staticInstances == null || staticInstances.isEmpty()) {
+                    continue;
+                }
+
+                for (ServiceInstance instance : staticInstances) {
+                    InstanceHealth health = hybridHealthChecker.getHealth(
+                            serviceId, instance.getHost(), instance.getPort());
+
+                    // Only include instances in stable mode (and still healthy)
+                    if (health != null && health.isStableCheckMode() && health.isHealthy()) {
+                        InstanceKey checkKey = new InstanceKey(serviceId, instance.getHost(), instance.getPort());
+                        if (needingCheckSet.add(checkKey)) {
+                            needingCheck.add(checkKey);
+                            log.debug("Instance {}:{} in stable mode, added to stable check",
+                                    instance.getHost(), instance.getPort());
+                        }
+                    }
+                }
+            }
+
+        } catch (Exception e) {
+            log.error("Failed to discover instances for stable check", e);
+        }
+
+        // Add instances from health cache that ARE in stable mode
+        addHealthCacheInstancesInStableMode(needingCheckSet, needingCheck);
+
+        log.debug("Found {} instances for stable frequency check", needingCheck.size());
+        return needingCheck;
+    }
+
+    /**
      * Add unhealthy instances NOT in degraded mode for a service.
      */
     private void addUnhealthyInstancesNotDegraded(String serviceId,
@@ -196,15 +251,20 @@ public class InstanceDiscoveryService {
     }
 
     /**
-     * Add instances from health cache that are NOT in degraded mode.
+     * Add instances from health cache that are NOT in degraded or stable mode.
      */
-    private void addHealthCacheInstancesNotDegraded(Set<InstanceKey> needingCheckSet,
-                                                     List<InstanceKey> needingCheck) {
+    private void addHealthCacheInstancesNotDegradedOrStable(Set<InstanceKey> needingCheckSet,
+                                                            List<InstanceKey> needingCheck) {
         List<InstanceHealth> allHealth = hybridHealthChecker.getAllHealthStatus();
 
         for (InstanceHealth health : allHealth) {
             // Skip if in degraded mode
             if (health.isDegradedCheckMode()) {
+                continue;
+            }
+
+            // Skip if in stable mode (checked separately)
+            if (health.isStableCheckMode()) {
                 continue;
             }
 
@@ -229,6 +289,28 @@ public class InstanceDiscoveryService {
                             idleTime, health.getIp(), health.getPort());
                     needingCheck.add(key);
                 }
+            }
+        }
+    }
+
+    /**
+     * Add instances from health cache that ARE in stable mode.
+     */
+    private void addHealthCacheInstancesInStableMode(Set<InstanceKey> needingCheckSet,
+                                                     List<InstanceKey> needingCheck) {
+        List<InstanceHealth> stableInstances = hybridHealthChecker.getStableInstances();
+
+        for (InstanceHealth health : stableInstances) {
+            // Only include if still healthy
+            if (!health.isHealthy()) {
+                continue;
+            }
+
+            InstanceKey key = new InstanceKey(health.getServiceId(), health.getIp(), health.getPort());
+
+            if (needingCheckSet.add(key)) {
+                needingCheck.add(key);
+                log.debug("Stable mode instance needs check: {}:{}", health.getIp(), health.getPort());
             }
         }
     }

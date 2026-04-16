@@ -2,6 +2,7 @@ package com.leoli.gateway.health;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.leoli.gateway.manager.ServiceManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,27 +27,30 @@ public class HybridHealthChecker {
 
     @Autowired
     private RestTemplate restTemplate;
-
+    @Autowired
+    private ServiceManager serviceManager;
     @Autowired
     private AdminServiceDiscovery adminServiceDiscovery;
 
-    @Value("${gateway.admin.url:http://localhost:9090}")
-    private String fallbackAdminUrl;
-
-    @Value("${gateway.instance-id:gateway-1}")
+    @Value("${gateway.instance-id:}")
     private String instanceId;
-
     @Value("${gateway.health.batch-size:50}")
     private int batchSize;
-
+    @Value("${gateway.admin.url:http://localhost:9090}")
+    private String fallbackAdminUrl;
+    // Configuration thresholds
+    @Value("${gateway.health.failure-threshold:3}")
+    private int failureThreshold;
     @Value("${gateway.health.network-flap-threshold:10}")
     private int networkFlapThreshold; // Network flap threshold (default: 10 nodes changing at once)
-
     @Value("${gateway.health.degraded-check-threshold:5}")
     private int degradedCheckThreshold; // Threshold for entering degraded check mode (default: 5 consecutive unhealthy checks)
-
     @Value("${gateway.health.degraded-check-interval-ms:180000}")
     private long degradedCheckIntervalMs; // Degraded check interval (default: 3 minutes)
+    @Value("${gateway.health.stable-check-threshold:10}")
+    private int stableCheckThreshold; // Threshold for entering stable check mode (default: 10 consecutive healthy checks)
+    @Value("${gateway.health.stable-check-interval-ms:120000}")
+    private long stableCheckIntervalMs; // Stable check interval (default: 2 minutes)
 
     // Local cache (high performance)
     private final Cache<String, InstanceHealth> healthCache = Caffeine.newBuilder()
@@ -55,18 +59,14 @@ public class HybridHealthChecker {
             .recordStats()
             .build();
 
-    // Configuration thresholds
-    @Value("${gateway.health.failure-threshold:3}")
-    private int failureThreshold;
-
-    @Value("${gateway.health.recovery-time:30000}")
-    private long recoveryTimeMs;
-
-    @Value("${gateway.health.idle-threshold:300000}")
-    private long idleThresholdMs;
-
     /**
      * Record request success (passive check).
+     * This is called when an actual request succeeds, potentially indicating
+     * an unhealthy instance has recovered.
+     * <p>
+     * Actions:
+     * 1. Update memory health status to healthy
+     * 2. If state changed (unhealthy -> healthy), push to gateway-admin for UI visibility
      */
     public void recordSuccess(String serviceId, String ip, int port) {
         String key = InstanceHealth.buildKey(serviceId, ip, port);
@@ -74,14 +74,37 @@ public class HybridHealthChecker {
         InstanceHealth health = healthCache.getIfPresent(key);
         if (health == null) {
             health = createHealthy(serviceId, ip, port);
+            healthCache.put(key, health);
+            // New instance, no need to push (will be confirmed by active check)
+            return;
         }
 
-        // Reset failure count
+        boolean wasHealthy = health.isHealthy();
+        boolean wasDegraded = health.isDegradedCheckMode();
+
+        // Reset failure count and mark as healthy
         health.setConsecutiveFailures(0);
         health.setLastRequestTime(System.currentTimeMillis());
         health.setHealthy(true);
+        health.setUnhealthyReason(null);
+        health.setCheckType("PASSIVE");
+
+        // Reset degraded mode counters when instance recovers
+        if (wasDegraded) {
+            health.setTotalUnhealthyChecks(0);
+            health.setDegradedCheckMode(false);
+            health.setDegradedModeEnteredTime(null);
+            log.info("Instance {}:{} exited DEGRADED check mode after successful request", ip, port);
+        }
 
         healthCache.put(key, health);
+
+        // If state changed (unhealthy -> healthy), push to admin
+        // This ensures user sees recovery immediately in UI
+        if (!wasHealthy) {
+            log.info("Instance {}:{} recovered to HEALTHY via successful request (state changed: false->true)", ip, port);
+            queueForBatchPush(serviceId, ip, port, true);
+        }
     }
 
     /**
@@ -170,7 +193,7 @@ public class HybridHealthChecker {
 
     /**
      * Mark as healthy (active check call).
-     * Resets total unhealthy checks and exits degraded mode.
+     * Resets total unhealthy checks, increments healthy checks, and manages stable mode.
      */
     public void markHealthy(String serviceId, String ip, int port, String checkType) {
         String key = InstanceHealth.buildKey(serviceId, ip, port);
@@ -184,10 +207,11 @@ public class HybridHealthChecker {
 
         boolean wasHealthy = health.isHealthy();
         boolean wasDegraded = health.isDegradedCheckMode();
+        boolean wasStable = health.isStableCheckMode();
         String previousCheckType = health.getCheckType();
 
-        log.debug("markHealthy called for {}:{}:{} - wasHealthy={}, previousCheckType={}",
-                serviceId, ip, port, wasHealthy, previousCheckType);
+        log.debug("markHealthy called for {}:{} - wasHealthy={}, wasStable={}, previousCheckType={}",
+                ip, port, wasHealthy, wasStable, previousCheckType);
 
         health.setHealthy(true);
         health.setConsecutiveFailures(0);
@@ -199,7 +223,19 @@ public class HybridHealthChecker {
         if (wasDegraded) {
             health.setDegradedCheckMode(false);
             health.setDegradedModeEnteredTime(null);
-            log.info("Instance {}:{}:{} exited DEGRADED check mode after recovery", serviceId, ip, port);
+            log.info("Instance {}:{} exited DEGRADED check mode after recovery", ip, port);
+        }
+
+        // Increment healthy check count and check for stable mode
+        int newHealthyChecks = health.getTotalHealthyChecks() + 1;
+        health.setTotalHealthyChecks(newHealthyChecks);
+
+        // Enter stable mode if threshold reached
+        if (!health.isStableCheckMode() && newHealthyChecks >= stableCheckThreshold) {
+            health.setStableCheckMode(true);
+            health.setStableModeEnteredTime(System.currentTimeMillis());
+            log.info("Instance {}:{} entered STABLE check mode after {} consecutive healthy checks. Check frequency reduced to every {}ms",
+                    ip, port, newHealthyChecks, stableCheckIntervalMs);
         }
 
         healthCache.put(key, health);
@@ -212,9 +248,9 @@ public class HybridHealthChecker {
 
         if (stateChanged || isFirstCheckAfterInit) {
             if (stateChanged) {
-                log.info("Instance {}:{}:{} recovered to HEALTHY (state changed: false->true)", serviceId, ip, port);
+                log.info("Instance {}:{} recovered to HEALTHY (state changed: false->true)", ip, port);
             } else if (isFirstCheckAfterInit) {
-                log.info("Instance {}:{}:{} confirmed HEALTHY after initialization (first check)", serviceId, ip, port);
+                log.info("Instance {}:{} confirmed HEALTHY after initialization (first check)", ip, port);
             }
 
             // Check for network flap (sudden mass recovery) - only for state changes
@@ -224,10 +260,10 @@ public class HybridHealthChecker {
                 return; // Don't add to queue
             }
 
-            log.debug("Adding {}:{}:{} to push queue with healthy=true", serviceId, ip, port);
+            log.debug("Adding {}:{} to push queue with healthy=true", ip, port);
             queueForBatchPush(serviceId, ip, port, true);
         } else {
-            log.debug("Instance {}:{}:{} remains HEALTHY (no state change)", serviceId, ip, port);
+            log.debug("Instance {}:{} remains HEALTHY (no state change, totalHealthyChecks={})", ip, port, newHealthyChecks);
         }
     }
 
@@ -314,6 +350,7 @@ public class HybridHealthChecker {
     /**
      * Mark as unhealthy (active check call).
      * Also tracks total unhealthy checks for degraded mode decision.
+     * Exits stable mode since instance is now unhealthy.
      */
     public void markUnhealthy(String serviceId, String ip, int port, String reason, String checkType) {
         String key = InstanceHealth.buildKey(serviceId, ip, port);
@@ -324,14 +361,25 @@ public class HybridHealthChecker {
         }
 
         boolean wasHealthy = health.isHealthy();
+        boolean wasStable = health.isStableCheckMode();
 
-        log.debug("markUnhealthy called for {}:{}:{} - wasHealthy={}, reason={}",
-                serviceId, ip, port, wasHealthy, reason);
+        log.debug("markUnhealthy called for {}:{} - wasHealthy={}, wasStable={}, reason={}",
+                ip, port, wasHealthy, wasStable, reason);
 
         health.setHealthy(false);
         health.setUnhealthyReason(reason);
         health.setLastActiveCheckTime(System.currentTimeMillis());
         health.setCheckType(checkType);
+
+        // Reset healthy check count - instance is no longer healthy
+        health.setTotalHealthyChecks(0);
+
+        // Exit stable mode if was stable
+        if (wasStable) {
+            health.setStableCheckMode(false);
+            health.setStableModeEnteredTime(null);
+            log.info("Instance {}:{} exited STABLE check mode due to health check failure", ip, port);
+        }
 
         // Increment total unhealthy checks counter
         int newTotalUnhealthyChecks = health.getTotalUnhealthyChecks() + 1;
@@ -342,8 +390,8 @@ public class HybridHealthChecker {
             health.setDegradedCheckMode(true);
             health.setDegradedModeEnteredTime(System.currentTimeMillis());
             log.warn("Instance {}:{}:{} entered DEGRADED check mode after {} consecutive unhealthy checks. " +
-                     "Check frequency will be reduced to every {}ms",
-                     serviceId, ip, port, newTotalUnhealthyChecks, degradedCheckIntervalMs);
+                            "Check frequency will be reduced to every {}ms",
+                    serviceId, ip, port, newTotalUnhealthyChecks, degradedCheckIntervalMs);
         }
 
         healthCache.put(key, health);
@@ -351,7 +399,7 @@ public class HybridHealthChecker {
         // Queue for batch push ONLY when state changes (true -> false)
         if (wasHealthy) {
             log.warn("Instance {}:{}:{} became UNHEALTHY: {} (state changed: true->false, totalChecks={})",
-                     serviceId, ip, port, reason, newTotalUnhealthyChecks);
+                    serviceId, ip, port, reason, newTotalUnhealthyChecks);
 
             // Check for network flap (sudden mass failure)
             if (isPotentialNetworkFlap(false)) {
@@ -364,7 +412,7 @@ public class HybridHealthChecker {
             queueForBatchPush(serviceId, ip, port, false);
         } else {
             log.debug("Instance {}:{}:{} remains UNHEALTHY: {} (no state change, totalChecks={}, degraded={})",
-                     serviceId, ip, port, reason, newTotalUnhealthyChecks, health.isDegradedCheckMode());
+                    serviceId, ip, port, reason, newTotalUnhealthyChecks, health.isDegradedCheckMode());
         }
     }
 
@@ -421,30 +469,13 @@ public class HybridHealthChecker {
 
     /**
      * Get instance health status.
-     * Returns null if instance has not been checked yet (caller should handle this case).
+     * Returns null if instance has not been checked yet.
      */
     public InstanceHealth getHealth(String serviceId, String ip, int port) {
         String key = InstanceHealth.buildKey(serviceId, ip, port);
-        InstanceHealth health = healthCache.getIfPresent(key);
-
-        if (health == null) {
-            // Instance not in cache - return null to indicate "unknown" status
-            // Caller should handle this case (e.g., trigger health check or treat as unhealthy)
-            return null;
-        }
-
-        // Check if should auto-recover
-        if (!health.isHealthy() && shouldRecover(health)) {
-            health.setHealthy(true);
-            health.setConsecutiveFailures(0);
-            health.setUnhealthyReason(null);
-            healthCache.put(key, health);
-            log.info("Instance {}:{} auto-recovered", ip, port);
-        }
-
-        return health;
+        return healthCache.getIfPresent(key);
     }
-    
+
     /**
      * Check if instance has been health-checked before.
      */
@@ -500,11 +531,24 @@ public class HybridHealthChecker {
     }
 
     /**
-     * Get instances that need regular frequency check (not in degraded mode).
+     * Get instances in stable check mode (need lowest frequency check).
+     * These instances have been consistently healthy for many checks.
+     */
+    public List<InstanceHealth> getStableInstances() {
+        List<InstanceHealth> stable = healthCache.asMap().values().stream()
+                .filter(h -> h.isStableCheckMode())
+                .collect(java.util.stream.Collectors.toList());
+
+        log.debug("Found {} instances in stable check mode", stable.size());
+        return stable;
+    }
+
+    /**
+     * Get instances that need regular frequency check (not in degraded or stable mode).
      */
     public List<InstanceHealth> getRegularCheckInstances() {
         List<InstanceHealth> regular = healthCache.asMap().values().stream()
-                .filter(h -> !h.isDegradedCheckMode())
+                .filter(h -> !h.isDegradedCheckMode() && !h.isStableCheckMode())
                 .collect(java.util.stream.Collectors.toList());
 
         log.debug("Found {} instances needing regular frequency check", regular.size());
@@ -526,15 +570,17 @@ public class HybridHealthChecker {
     }
 
     /**
-     * Check if should attempt recovery.
+     * Get stable check threshold.
      */
-    private boolean shouldRecover(InstanceHealth health) {
-        Long lastRequestTime = health.getLastRequestTime();
-        if (lastRequestTime == null) {
-            return false;
-        }
+    public int getStableCheckThreshold() {
+        return stableCheckThreshold;
+    }
 
-        return System.currentTimeMillis() - lastRequestTime > recoveryTimeMs;
+    /**
+     * Get stable check interval in milliseconds.
+     */
+    public long getStableCheckIntervalMs() {
+        return stableCheckIntervalMs;
     }
 
     /**
@@ -550,6 +596,9 @@ public class HybridHealthChecker {
         health.setTotalUnhealthyChecks(0);
         health.setDegradedCheckMode(false);
         health.setDegradedModeEnteredTime(null);
+        health.setTotalHealthyChecks(0);
+        health.setStableCheckMode(false);
+        health.setStableModeEnteredTime(null);
         health.setLastRequestTime(System.currentTimeMillis());
         health.setCheckType("PASSIVE");
         return health;
@@ -593,25 +642,49 @@ public class HybridHealthChecker {
     }
 
     /**
-     * Clear all health records for a service.
+     * Clear health records for a service.
      * Called when service configuration is updated or deleted.
+     * <p>
+     * IMPORTANT: Since health status is shared by ip:port across services,
+     * only clear records that are NOT referenced by other services.
+     * This prevents clearing health status that other services depend on.
      */
     public void clearServiceInstances(String serviceId) {
         List<String> keysToRemove = new ArrayList<>();
-        
+        List<String> keysToKeep = new ArrayList<>();
+
         for (java.util.Map.Entry<String, InstanceHealth> entry : healthCache.asMap().entrySet()) {
             InstanceHealth health = entry.getValue();
-            if (serviceId.equals(health.getServiceId())) {
-                keysToRemove.add(entry.getKey());
+            String key = entry.getKey();  // key is "ip:port"
+
+            // Check if this instance's health record matches the service being cleared
+            // Note: Due to shared health status, health.getServiceId() may be from a different service
+            // We check by ip:port instead
+
+            // Parse ip:port from key
+            String[] parts = key.split(":");
+            if (parts.length != 2) continue;
+
+            String ip = parts[0];
+            int port = Integer.parseInt(parts[1]);
+
+            // Check if this instance is still used by other services
+            if (serviceManager.isInstanceUsedByOtherServices(ip, port, serviceId)) {
+                keysToKeep.add(key);
+                log.debug("Keeping health record for {}:{} - still used by other services", ip, port);
+            } else {
+                keysToRemove.add(key);
             }
         }
 
+        // Only remove health records that have no other references
         for (String key : keysToRemove) {
             healthCache.invalidate(key);
         }
 
-        if (!keysToRemove.isEmpty()) {
-            log.info("Cleared {} health records for service: {}", keysToRemove.size(), serviceId);
+        if (!keysToRemove.isEmpty() || !keysToKeep.isEmpty()) {
+            log.info("ClearServiceInstances for {}: removed {} health records (no other refs), kept {} (shared with other services)",
+                    serviceId, keysToRemove.size(), keysToKeep.size());
         }
     }
 }

@@ -1,12 +1,12 @@
 package com.leoli.gateway.filter;
 
-import com.leoli.gateway.constants.FilterOrderConstants;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.util.RouteUtils;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
@@ -33,10 +33,10 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class CacheGlobalFilter implements GlobalFilter, Ordered {
 
-    @Autowired
-    private StrategyManager strategyManager;
+    private final StrategyManager strategyManager;
 
     // Cache instances per route: routeId -> cache
     private final Map<String, Cache<String, CachedResponse>> routeCaches = new java.util.concurrent.ConcurrentHashMap<>();

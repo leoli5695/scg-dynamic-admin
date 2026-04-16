@@ -21,6 +21,42 @@ public interface RequestTraceRepository extends JpaRepository<RequestTrace, Long
     Optional<RequestTrace> findByTraceId(String traceId);
 
     /**
+     * Find traces by trace ID containing (fuzzy search)
+     */
+    @Query("SELECT t FROM RequestTrace t WHERE LOWER(t.traceId) LIKE LOWER(CONCAT('%', :traceId, '%')) ORDER BY t.traceTime DESC")
+    List<RequestTrace> findByTraceIdContaining(String traceId, Pageable pageable);
+
+    /**
+     * Find traces by instanceId and trace ID containing (fuzzy search)
+     */
+    @Query("SELECT t FROM RequestTrace t WHERE t.instanceId = :instanceId AND LOWER(t.traceId) LIKE LOWER(CONCAT('%', :traceId, '%')) ORDER BY t.traceTime DESC")
+    List<RequestTrace> findByInstanceIdAndTraceIdContaining(String instanceId, String traceId, Pageable pageable);
+
+    /**
+     * Find error traces within time range (statusCode >= 400)
+     */
+    @Query("SELECT t FROM RequestTrace t WHERE t.statusCode >= 400 AND t.traceTime BETWEEN :startTime AND :endTime ORDER BY t.traceTime DESC")
+    Page<RequestTrace> findErrorTracesByTimeRange(LocalDateTime startTime, LocalDateTime endTime, Pageable pageable);
+
+    /**
+     * Find error traces by instanceId within time range
+     */
+    @Query("SELECT t FROM RequestTrace t WHERE t.instanceId = :instanceId AND t.statusCode >= 400 AND t.traceTime BETWEEN :startTime AND :endTime ORDER BY t.traceTime DESC")
+    Page<RequestTrace> findErrorTracesByInstanceIdAndTimeRange(String instanceId, LocalDateTime startTime, LocalDateTime endTime, Pageable pageable);
+
+    /**
+     * Find slow traces within time range (latencyMs > threshold)
+     */
+    @Query("SELECT t FROM RequestTrace t WHERE t.latencyMs > :thresholdMs AND t.traceTime BETWEEN :startTime AND :endTime ORDER BY t.traceTime DESC")
+    Page<RequestTrace> findSlowTracesByTimeRange(LocalDateTime startTime, LocalDateTime endTime, Long thresholdMs, Pageable pageable);
+
+    /**
+     * Find slow traces by instanceId within time range
+     */
+    @Query("SELECT t FROM RequestTrace t WHERE t.instanceId = :instanceId AND t.latencyMs > :thresholdMs AND t.traceTime BETWEEN :startTime AND :endTime ORDER BY t.traceTime DESC")
+    Page<RequestTrace> findSlowTracesByInstanceIdAndTimeRange(String instanceId, LocalDateTime startTime, LocalDateTime endTime, Long thresholdMs, Pageable pageable);
+
+    /**
      * Find all traces by instanceId
      */
     List<RequestTrace> findByInstanceId(String instanceId);
