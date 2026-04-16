@@ -250,7 +250,10 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
             trace.put("traceType", traceType);
             trace.put("replayType", replayType);
             trace.put("replayable", replayable);
-            trace.put("traceTime", new java.util.Date(startTime).toInstant().toString());
+            // Use local time for traceTime to match topology query time range
+            trace.put("traceTime", java.time.LocalDateTime.ofInstant(
+                    java.time.Instant.ofEpochMilli(startTime),
+                    java.time.ZoneId.systemDefault()).toString());
 
             // Capture headers (filter sensitive ones)
             Map<String, String> headers = new HashMap<>();

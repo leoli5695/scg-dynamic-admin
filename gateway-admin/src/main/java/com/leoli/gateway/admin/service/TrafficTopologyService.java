@@ -274,7 +274,15 @@ public class TrafficTopologyService {
         try {
             // Get client IP distribution - use local time to match database storage
             LocalDateTime since = LocalDateTime.now().minusMinutes(minutesAgo);
-            
+
+            log.info("Building client topology for instanceId={}, querying traces since {} ({} minutes ago)",
+                    instanceId, since, minutesAgo);
+
+            // Debug: check total traces for this instance
+            String countSql = "SELECT COUNT(*) FROM request_trace WHERE instance_id = ?";
+            Long totalTraces = jdbcTemplate.queryForObject(countSql, Long.class, instanceId);
+            log.info("Total traces in database for instanceId={}: {}", instanceId, totalTraces);
+
             String sql = "SELECT client_ip, COUNT(*) as request_count, " +
                     "SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) as error_count, " +
                     "AVG(latency_ms) as avg_latency " +
@@ -283,6 +291,8 @@ public class TrafficTopologyService {
                     "GROUP BY client_ip ORDER BY request_count DESC LIMIT 20";
 
             List<Map<String, Object>> clientStats = jdbcTemplate.queryForList(sql, instanceId, since);
+
+            log.info("Found {} distinct client IPs for instanceId={}", clientStats.size(), instanceId);
 
             for (Map<String, Object> stat : clientStats) {
                 String clientIp = (String) stat.get("client_ip");
