@@ -421,18 +421,18 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
     }
   ];
 
-  // Dynamic columns based on visibility
+  // Dynamic columns based on visibility - optimized widths for compact display
   const columns: ColumnsType<RequestTrace> = [
     {
       title: t('trace.trace_id'),
       dataIndex: 'traceId',
       key: 'traceId',
-      width: 170,
+      width: 140,
       ellipsis: true,
       render: (text: string) => (
         <Tooltip title={text}>
           <Text copyable={{ text }} style={{ fontSize: 12 }}>
-            {text?.substring(0, 16)}...
+            {text?.substring(0, 12)}...
           </Text>
         </Tooltip>
       ),
@@ -441,18 +441,18 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
       title: t('trace.method'),
       dataIndex: 'method',
       key: 'method',
-      width: 80,
-      render: (method: string) => <Tag color={getMethodColor(method)}>{method}</Tag>
+      width: 60,
+      render: (method: string) => <Tag color={getMethodColor(method)} style={{ margin: 0 }}>{method}</Tag>
     },
     {
       title: t('trace.path'),
       dataIndex: 'path',
       key: 'path',
-      width: 280,
+      minWidth: 200,
       ellipsis: true,
       render: (path: string, record: RequestTrace) => (
         <Tooltip title={record.uri} placement="topLeft">
-          <Text>{path || '-'}</Text>
+          <Text style={{ fontSize: 12 }}>{path || '-'}</Text>
         </Tooltip>
       )
     },
@@ -460,55 +460,50 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
       title: t('trace.status'),
       dataIndex: 'statusCode',
       key: 'statusCode',
-      width: 80,
-      render: (code: number) => <Badge status={getStatusColor(code)} text={code} />
+      width: 55,
+      render: (code: number) => <Badge status={getStatusColor(code)} text={code} style={{ fontSize: 12 }} />
     },
     {
       title: t('trace.latency'),
       dataIndex: 'latencyMs',
       key: 'latencyMs',
-      width: 90,
+      width: 65,
       sorter: (a: RequestTrace, b: RequestTrace) => a.latencyMs - b.latencyMs,
-      render: (ms: number) => (
-        <Text type={ms > 3000 ? 'danger' : undefined}>
-          {ms}ms
-        </Text>
-      )
+      render: (ms: number) => {
+        const color = ms > 3000 ? '#cf1322' : ms > 1000 ? '#faad14' : undefined;
+        return <Text style={{ color, fontSize: 12 }}>{ms}ms</Text>;
+      }
     },
     {
       title: t('trace.client_ip'),
       dataIndex: 'clientIp',
       key: 'clientIp',
-      width: 130,
+      width: 100,
       ellipsis: true,
-      render: (ip: string) => ip || <Text type="secondary">-</Text>
+      render: (ip: string) => <Text style={{ fontSize: 12 }}>{ip || '-'}</Text>
     },
     {
       title: t('trace.time'),
       dataIndex: 'traceTime',
       key: 'traceTime',
-      width: 160,
+      width: 120,
       sorter: (a: RequestTrace, b: RequestTrace) => new Date(a.traceTime).getTime() - new Date(b.traceTime).getTime(),
-      render: (time: string) => time ? dayjs(time).format('MM-DD HH:mm:ss') : <Text type="secondary">-</Text>
+      render: (time: string) => <Text style={{ fontSize: 12 }}>{time ? dayjs(time).format('MM-DD HH:mm:ss') : '-'}</Text>
     },
     {
       title: t('trace.replay_count'),
       dataIndex: 'replayCount',
       key: 'replayCount',
-      width: 100,
-      render: (count: number) => <Badge count={count} showZero style={{ backgroundColor: '#1890ff' }} />
+      width: 70,
+      render: (count: number) => <Badge count={count} showZero style={{ backgroundColor: '#1890ff', fontSize: 12 }} />
     },
     {
       title: t('common.actions'),
       key: 'actions',
-      width: 120,
+      width: 70,
       fixed: 'right' as const,
       render: (_: any, record: RequestTrace) => (
-        <Space>
-          <Button size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record)}>
-            {t('common.detail')}
-          </Button>
-        </Space>
+        <Button size="small" type="link" icon={<EyeOutlined />} onClick={() => handleViewDetail(record)} />
       )
     }
   ].filter(col => visibleColumns.includes(col.key as string));
