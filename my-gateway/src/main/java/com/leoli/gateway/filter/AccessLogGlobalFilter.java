@@ -1,5 +1,9 @@
 package com.leoli.gateway.filter;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.core.Appender;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.center.spi.ConfigCenterService;
@@ -14,6 +18,7 @@ import jakarta.annotation.PreDestroy;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
@@ -34,32 +39,25 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static com.leoli.gateway.constants.BinaryContentConstants.*;
 import static com.leoli.gateway.constants.GatewayConfigConstants.ACCESS_LOG_CONFIG;
 import static com.leoli.gateway.constants.GatewayConfigConstants.GROUP;
 
 /**
- * Access log global filter with file output support.
+ * Access log global filter using Logback RollingFileAppender.
  * <p>
  * Features:
  * - Global configuration (not bound to specific route)
- * - Output to file directory (configurable path)
+ * - Logback handles file rolling (date + size based)
  * - JSON format for log aggregation
- * - Supports LOCAL/DOCKER/K8S deployment modes
+ * - Supports stdout/file/both output modes
  * - Includes auth info when available
  * <p>
  * Config Key: config.gateway.access-log
@@ -75,6 +73,9 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
     private static final String RESPONSE_BODY_ATTR = "accessLogResponseBody";
     private static final String IS_FILE_UPLOAD_ATTR = "accessLogIsFileUpload";
     private static final String IS_FILE_DOWNLOAD_ATTR = "accessLogIsFileDownload";
+
+    // Dedicated logger for access logs (configured in logback-spring.xml)
+    private static final Logger ACCESS_LOG_LOGGER = (Logger) LoggerFactory.getLogger("ACCESS_LOG");
 
     @Autowired
     private ConfigCenterService configCenterService;
@@ -92,13 +93,9 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
     public AccessLogGlobalFilter(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
-    private final DateTimeFormatter fileDateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     // Current config
     private volatile AccessLogConfig config = new AccessLogConfig();
-
-    // File writer state (atomic for thread-safe file operations)
-    private final AtomicReference<LogFileState> logFileState = new AtomicReference<>(new LogFileState(null, null));
 
     // Config listener
     private ConfigCenterService.ConfigListener configListener;
@@ -109,9 +106,11 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
         configListener = (dataId, group, content) -> {
             log.info("🔥 Access log config changed");
             loadConfig();
+            updateLogbackAppenders();
         };
         configCenterService.addListener(ACCESS_LOG_CONFIG, GROUP, configListener);
         log.info("✅ AccessLogGlobalFilter initialized, enabled: {}", config.isEnabled());
+        updateLogbackAppenders();
     }
 
     @PreDestroy
@@ -128,28 +127,70 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
                 config = objectMapper.readValue(content, AccessLogConfig.class);
                 log.info("✅ Loaded access log config: enabled={}, mode={}, format={}",
                         config.enabled, config.deployMode, config.logFormat);
-
-                // Ensure log directory exists
-                ensureLogDirectory();
             }
         } catch (Exception e) {
             log.warn("Failed to load access log config, using defaults: {}", e.getMessage());
         }
     }
 
-    private void ensureLogDirectory() {
-        String logDir = config.getLogDirectory();
-        if (logDir != null && !logDir.isEmpty()) {
-            try {
-                Path path = Paths.get(logDir);
-                if (!Files.exists(path)) {
-                    Files.createDirectories(path);
-                    log.info("Created log directory: {}", logDir);
-                }
-            } catch (Exception e) {
-                log.error("Failed to create log directory: {}", logDir, e);
+    /**
+     * Dynamically configure Logback appenders based on current config.
+     * This enables/disables file and console output as needed.
+     */
+    @SuppressWarnings("unchecked")
+    private void updateLogbackAppenders() {
+        LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
+        Logger accessLogger = loggerContext.getLogger("ACCESS_LOG");
+        Logger rootLogger = loggerContext.getLogger(Logger.ROOT_LOGGER_NAME);
+
+        // Clear existing appenders
+        accessLogger.detachAndStopAllAppenders();
+
+        if (!config.isEnabled()) {
+            accessLogger.setLevel(Level.OFF);
+            log.info("Access log disabled, logger set to OFF");
+            return;
+        }
+
+        // Determine output mode based on config
+        String logDirectory = config.getLogDirectory();
+        boolean toConsole = config.isLogToConsole();
+        boolean toFile = logDirectory != null && !logDirectory.isEmpty();
+
+        // Add file appender if needed
+        // Note: Appenders are defined in logback-spring.xml and attached to root logger
+        // We get them from root logger and attach to ACCESS_LOG logger
+        if (toFile) {
+            Appender<ch.qos.logback.classic.spi.ILoggingEvent> fileAppender =
+                    (Appender<ch.qos.logback.classic.spi.ILoggingEvent>) rootLogger.getAppender("ACCESS_FILE_ASYNC");
+            if (fileAppender != null) {
+                accessLogger.addAppender(fileAppender);
+                log.info("Access log file output enabled, directory: {}", logDirectory);
+
+                // Update Logback context properties for dynamic configuration
+                loggerContext.putProperty("ACCESS_LOG_DIRECTORY", logDirectory);
+            } else {
+                log.warn("ACCESS_FILE_ASYNC appender not found in logback-spring.xml");
             }
         }
+
+        // Add console appender if needed (stdout for K8S/Fluent Bit)
+        if (toConsole) {
+            Appender<ch.qos.logback.classic.spi.ILoggingEvent> consoleAppender =
+                    (Appender<ch.qos.logback.classic.spi.ILoggingEvent>) rootLogger.getAppender("ACCESS_CONSOLE");
+            if (consoleAppender != null) {
+                accessLogger.addAppender(consoleAppender);
+                log.info("Access log console output enabled (stdout)");
+            } else {
+                log.warn("ACCESS_CONSOLE appender not found in logback-spring.xml");
+            }
+        }
+
+        // Set logger level
+        accessLogger.setLevel(Level.INFO);
+        accessLogger.setAdditive(false);  // Don't inherit root appenders
+
+        log.info("Access log appenders configured: file={}, console={}", toFile, toConsole);
     }
 
     @Override
@@ -395,72 +436,13 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
                 logEntry.put("responseBody", "[BINARY_FILE_DOWNLOAD]");
             }
 
-            // Write to file and/or console
+            // Output JSON log via Logback (automatically handles file rolling and stdout)
+            // Logback appenders are dynamically configured based on logToConsole and logDirectory
             String jsonLine = objectMapper.writeValueAsString(logEntry);
-            writeToFile(jsonLine);
-
-            if (config.isLogToConsole()) {
-                log.info("ACCESS_LOG: {}", jsonLine);
-            }
+            ACCESS_LOG_LOGGER.info(jsonLine);
 
         } catch (Exception e) {
             log.error("Failed to write access log: {}", e.getMessage());
-        }
-    }
-
-    private void writeToFile(String line) {
-        if (!config.isEnabled() || config.getLogDirectory() == null || config.getLogDirectory().isEmpty()) {
-            return;
-        }
-
-        // Capture current state for async operation
-        final String logDirectory = config.getLogDirectory();
-        final String fileNamePattern = config.getFileNamePattern();
-
-        // Execute file I/O on boundedElastic scheduler to avoid blocking EventLoop
-        // This is "fire and forget" - we don't wait for the write to complete
-        Mono.fromRunnable(() -> writeToFileAsync(line, logDirectory, fileNamePattern))
-                .subscribeOn(Schedulers.boundedElastic())
-                .subscribe(
-                        v -> {
-                        }, // onSuccess - do nothing
-                        error -> log.error("Failed to write log to file: {}", error.getMessage())
-                );
-    }
-
-    /**
-     * Actual file write operation, executed on boundedElastic scheduler.
-     * This method performs blocking I/O and should NOT be called on EventLoop thread.
-     */
-    private void writeToFileAsync(String line, String logDirectory, String fileNamePattern) {
-        try {
-            String today = LocalDateTime.now().format(fileDateFormatter);
-
-            // Use CAS to atomically update file path if date changed
-            LogFileState currentState = logFileState.get();
-            Path logPath = currentState.logPath;
-
-            // Check if need to rollover to new file
-            if (!today.equals(currentState.currentDate) || logPath == null) {
-                String fileName = fileNamePattern
-                        .replace("{yyyy-MM-dd}", today)
-                        .replace("{date}", today);
-                Path newPath = Paths.get(logDirectory, fileName);
-                LogFileState newState = new LogFileState(newPath, today);
-
-                // CAS update - if another thread already updated, use their path
-                if (!logFileState.compareAndSet(currentState, newState)) {
-                    logPath = logFileState.get().logPath;
-                } else {
-                    logPath = newPath;
-                }
-            }
-
-            // Write line to file (blocking I/O, but on boundedElastic thread)
-            Files.writeString(logPath, line + "\n",
-                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-        } catch (Exception e) {
-            log.error("Failed to write log to file: {}", e.getMessage());
         }
     }
 
@@ -716,9 +698,9 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
             if (contentType != null && contentType.getType().equalsIgnoreCase("application")) {
                 String subtype = contentType.getSubtype().toLowerCase();
                 // Whitelist text-based application types
-                if (!subtype.equals("json") && !subtype.equals("xml") && 
-                    !subtype.equals("javascript") && !subtype.equals("x-javascript") &&
-                    !subtype.equals("x-www-form-urlencoded") && !subtype.startsWith("json+")) {
+                if (!subtype.equals("json") && !subtype.equals("xml") &&
+                        !subtype.equals("javascript") && !subtype.equals("x-javascript") &&
+                        !subtype.equals("x-www-form-urlencoded") && !subtype.startsWith("json+")) {
                     return true;
                 }
             }
@@ -818,14 +800,37 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
         // e.g., [".xyz", ".custom"]
         private List<String> customBinaryExtensions = new ArrayList<>();
 
+        /**
+         * Get log directory based on deploy mode and user configuration.
+         * Returns null if stdout mode is enabled or no valid directory is configured.
+         */
         public String getLogDirectory() {
+            // If stdout mode (logToConsole=true and no explicit directory), return null
+            // This prevents file writes when user only wants stdout output
+            if (logToConsole && (logDirectory == null || logDirectory.isEmpty())) {
+                return null;  // stdout mode - no file needed
+            }
+
+            // If user explicitly set a directory, use it (highest priority)
+            if (logDirectory != null && !logDirectory.isEmpty()) {
+                return logDirectory;
+            }
+
+            // CUSTOM mode: user MUST provide a path, otherwise don't write to file
+            if ("CUSTOM".equals(deployMode)) {
+                // No path provided for CUSTOM mode, skip file output
+                log.warn("CUSTOM deploy mode requires user-defined logDirectory, but none provided. Skipping file output.");
+                return null;
+            }
+
+            // Otherwise, use default based on deploy mode
             switch (deployMode) {
                 case "DOCKER":
                     return "/app/logs/access";
                 case "K8S":
+                    // K8S default path, but only if file output is explicitly needed
                     return "/var/log/gateway/access";
-                case "CUSTOM":
-                    return logDirectory;
+                case "LOCAL":
                 default:
                     return "./logs/access";
             }
@@ -837,21 +842,6 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
         String authType;
         String authPolicy;
         String authUser;
-    }
-
-    /**
-     * Immutable state for log file (path + date).
-     * Used with AtomicReference for thread-safe file operations.
-     */
-    @Data
-    private static class LogFileState {
-        final Path logPath;
-        final String currentDate;
-
-        LogFileState(Path logPath, String currentDate) {
-            this.logPath = logPath;
-            this.currentDate = currentDate;
-        }
     }
 
 }
