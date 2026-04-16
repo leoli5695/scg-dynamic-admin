@@ -231,35 +231,6 @@ Uses sliding window for precise rate limiting:
 
 ---
 
-## Non-Blocking Lock Optimization
-
-Local rate limiter uses CAS + tryLock strategy to avoid blocking EventLoop:
-
-```java
-// Fast path: CAS for low contention
-if (currentCount.compareAndSet(count, count + 1)) {
-    return true;  // Success without blocking
-}
-
-// Slow path: tryLock for high contention (never blocks!)
-if (lock.tryLock()) {
-    try {
-        if (count < maxRequests) {
-            currentCount.incrementAndGet();
-            return true;
-        }
-        return false;
-    } finally {
-        lock.unlock();
-    }
-}
-
-// tryLock failed - immediately reject
-return false;  // Prevents EventLoop thread starvation
-```
-
----
-
 ## Error Response
 
 Returned when rate limit is triggered:

@@ -314,19 +314,6 @@ Sort by **selfTime** average, accurately identify filters that need optimization
 
 ---
 
-## Performance Optimizations
-
-Implementation uses multiple optimizations:
-
-| Optimization | Description |
-|--------------|-------------|
-| **ConcurrentLinkedDeque** | High-concurrency queue for storing records |
-| **Atomic Counters** | Atomic counters reduce lock contention |
-| **Sliding Window** | Sliding window percentile calculation, avoiding full sorting |
-| **Rolling Window** | Keep up to 1000 records, automatically evict old records |
-
----
-
 ## AI Copilot Integration
 
 AI Copilot can call the following tools to analyze Filter Chain:

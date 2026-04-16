@@ -23,6 +23,12 @@ import java.util.concurrent.atomic.AtomicLong;
  * - Reduces route lookup latency by caching compiled Route objects
  * - Avoids repeated predicate/filter parsing for each request
  * - Provides route hit/miss statistics for monitoring
+ * 
+ * Cache Refresh Strategy:
+ * - Uses INCREMENTAL update to avoid cache empty window
+ * - First put all new routes (no gap in availability)
+ * - Then remove routes that no longer exist
+ * - Brief memory increase during update (acceptable trade-off)
  *
  * @author leoli
  */
@@ -44,6 +50,9 @@ public class CompiledRouteCache implements ApplicationListener<RefreshRoutesEven
     private final AtomicLong cacheMisses = new AtomicLong(0);
     private final AtomicLong lastRefreshTime = new AtomicLong(0);
     private final AtomicLong refreshCount = new AtomicLong(0);
+    private final AtomicLong lastAddedCount = new AtomicLong(0);
+    private final AtomicLong lastRemovedCount = new AtomicLong(0);
+    private final AtomicLong lastUpdatedCount = new AtomicLong(0);
 
     public CompiledRouteCache(RouteDefinitionLocator routeDefinitionLocator, 
                                RouteLocator routeLocator) {
@@ -97,8 +106,13 @@ public class CompiledRouteCache implements ApplicationListener<RefreshRoutesEven
     }
 
     /**
-     * Refresh the compiled route cache.
-     * Compiles all RouteDefinitions to Routes and stores in cache.
+     * Refresh the compiled route cache using INCREMENTAL update.
+     * 
+     * Strategy: Put new routes first, then remove old routes.
+     * This ensures NO EMPTY WINDOW during refresh - routes are always available.
+     * 
+     * Trade-off: Brief memory increase (old + new routes coexist temporarily)
+     * Benefit: No cache miss spike, continuous route availability
      */
     public void refreshCache() {
         long startTime = System.currentTimeMillis();
@@ -107,20 +121,20 @@ public class CompiledRouteCache implements ApplicationListener<RefreshRoutesEven
             // Get all routes from RouteLocator (already compiled by SCG)
             Flux<Route> routes = routeLocator.getRoutes();
             
-            // Collect routes into cache
+            // Collect routes and perform incremental update
             routes.collectList().subscribe(routeList -> {
-                compiledRouteCache.clear();
-                
-                for (Route route : routeList) {
-                    compiledRouteCache.put(route.getId(), route);
-                }
+                IncrementalUpdateResult result = performIncrementalUpdate(routeList);
                 
                 long elapsed = System.currentTimeMillis() - startTime;
                 lastRefreshTime.set(System.currentTimeMillis());
                 refreshCount.incrementAndGet();
+                lastAddedCount.set(result.added);
+                lastRemovedCount.set(result.removed);
+                lastUpdatedCount.set(result.updated);
                 
-                log.info("CompiledRouteCache refreshed: {} routes cached in {}ms", 
-                         routeList.size(), elapsed);
+                log.info("CompiledRouteCache incremental refresh completed in {}ms: " +
+                         "total={}, added={}, removed={}, updated={}",
+                         elapsed, routeList.size(), result.added, result.removed, result.updated);
             }, error -> {
                 log.error("Failed to refresh compiled route cache", error);
             });
@@ -131,19 +145,96 @@ public class CompiledRouteCache implements ApplicationListener<RefreshRoutesEven
     }
 
     /**
-     * Manually trigger cache refresh.
+     * Perform incremental update on the cache.
+     * 
+     * Step 1: Put all new routes (add or update)
+     * Step 2: Remove routes that no longer exist in new list
+     * 
+     * @param newRoutes List of routes from RouteLocator
+     * @return Update statistics (added, removed, updated)
+     */
+    private IncrementalUpdateResult performIncrementalUpdate(List<Route> newRoutes) {
+        int added = 0;
+        int updated = 0;
+        int removed = 0;
+        
+        // Build set of new route IDs for efficient lookup
+        Set<String> newRouteIds = new HashSet<>();
+        for (Route route : newRoutes) {
+            newRouteIds.add(route.getId());
+        }
+        
+        // Step 1: Put all new routes (add new or update existing)
+        for (Route route : newRoutes) {
+            Route existing = compiledRouteCache.get(route.getId());
+            if (existing == null) {
+                // New route - add to cache
+                compiledRouteCache.put(route.getId(), route);
+                added++;
+            } else if (!routesEqual(existing, route)) {
+                // Route content changed - update cache
+                compiledRouteCache.put(route.getId(), route);
+                updated++;
+            }
+        }
+        
+        // Step 2: Remove routes that no longer exist in new list
+        // Use iterator to safely remove while iterating
+        Iterator<Map.Entry<String, Route>> iterator = compiledRouteCache.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, Route> entry = iterator.next();
+            if (!newRouteIds.contains(entry.getKey())) {
+                iterator.remove();
+                removed++;
+            }
+        }
+        
+        return new IncrementalUpdateResult(added, removed, updated);
+    }
+
+    /**
+     * Check if two routes are equal (by comparing key attributes).
+     * Route.equals() may not work as expected due to predicate/filter complexity.
+     */
+    private boolean routesEqual(Route r1, Route r2) {
+        if (r1 == r2) return true;
+        if (r1 == null || r2 == null) return false;
+        
+        // Compare URI and predicates (most important for routing)
+        return Objects.equals(r1.getUri(), r2.getUri()) &&
+               Objects.equals(r1.getPredicates(), r2.getPredicates());
+    }
+
+    /**
+     * Result of incremental update operation.
+     */
+    private static class IncrementalUpdateResult {
+        final int added;
+        final int removed;
+        final int updated;
+        
+        IncrementalUpdateResult(int added, int removed, int updated) {
+            this.added = added;
+            this.removed = removed;
+            this.updated = updated;
+        }
+    }
+
+    /**
+     * Manually trigger incremental cache refresh.
      */
     public Mono<Void> refreshCacheAsync() {
         return routeLocator.getRoutes()
                 .collectList()
                 .doOnNext(routeList -> {
-                    compiledRouteCache.clear();
-                    for (Route route : routeList) {
-                        compiledRouteCache.put(route.getId(), route);
-                    }
+                    IncrementalUpdateResult result = performIncrementalUpdate(routeList);
                     lastRefreshTime.set(System.currentTimeMillis());
                     refreshCount.incrementAndGet();
-                    log.info("Async cache refresh completed: {} routes cached", routeList.size());
+                    lastAddedCount.set(result.added);
+                    lastRemovedCount.set(result.removed);
+                    lastUpdatedCount.set(result.updated);
+                    log.info("Async incremental refresh completed: total={}, added={}, removed={}, updated={}",
+                             routeList.size(), result.added, result.removed, result.updated);
                 })
                 .then();
     }

@@ -190,8 +190,7 @@ Then define instances in `gateway-services.json`:
 Instances: [A(weight=1), B(weight=2), C(weight=1)]
 
 Algorithm:
-  AtomicInteger counter
-  int index = counter.getAndIncrement() % totalWeight(4)
+  index = counter++ % totalWeight(4)
   
   // index 0 -> A
   // index 1,2 -> B
@@ -199,6 +198,8 @@ Algorithm:
 
 Result: A -> B -> B -> C -> A -> B -> B -> C -> ...
 ```
+
+> Implementation uses atomic counter for thread-safe operation. See [Performance Optimization](performance-optimization.md) for details.
 
 ### Consistent Hash
 
