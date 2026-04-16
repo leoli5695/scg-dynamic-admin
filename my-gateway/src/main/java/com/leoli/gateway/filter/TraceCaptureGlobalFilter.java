@@ -52,7 +52,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
     private static final String START_TIME_ATTR = "traceStartTime";
     private static final String REQUEST_BODY_ATTR = "traceRequestBody";
 
-    @Value("${gateway.admin-url:http://localhost:9090}")
+    @Value("${gateway.admin.url:http://127.0.0.1:9090}")
     private String adminUrl;
 
     @Value("${gateway.instance-id:${GATEWAY_INSTANCE_ID:gateway-1}}")
