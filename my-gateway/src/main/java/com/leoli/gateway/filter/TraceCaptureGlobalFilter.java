@@ -191,9 +191,13 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
         // Sampling logic
         int random = ThreadLocalRandom.current().nextInt(100);
 
+        log.info("Trace check: traceId={}, statusCode={}, duration={}ms, isError={}, isSlow={}, captureAll={}, samplingRate={}, random={}",
+                traceId, statusCode, duration, isError, isSlow, captureAll, samplingRate, random);
+
         // Error requests: use samplingRateForErrors (default 100%)
         if (captureErrors && isError) {
             if (samplingRateForErrors >= 100 || random < samplingRateForErrors) {
+                log.info("Capturing ERROR trace: traceId={}", traceId);
                 captureTrace(exchange, startTime, traceId, requestBody, duration, statusCode,
                         true, false, replayType, replayable, "ERROR");
             }
@@ -202,6 +206,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
 
         // Slow requests: capture all if captureSlow is enabled
         if (captureSlow && isSlow) {
+            log.info("Capturing SLOW trace: traceId={}, duration={}ms > threshold={}ms", traceId, duration, slowThresholdMs);
             captureTrace(exchange, startTime, traceId, requestBody, duration, statusCode,
                     false, true, replayType, replayable, "SLOW");
             return;
@@ -210,8 +215,11 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
         // Normal requests: use captureAll and samplingRate
         if (captureAll) {
             if (samplingRate >= 100 || random < samplingRate) {
+                log.info("Capturing ALL trace: traceId={}, samplingRate={}, random={}", traceId, samplingRate, random);
                 captureTrace(exchange, startTime, traceId, requestBody, duration, statusCode,
                         false, false, replayType, replayable, "ALL");
+            } else {
+                log.info("Skipping trace due to sampling: traceId={}, samplingRate={}, random={}", traceId, samplingRate, random);
             }
         }
     }
@@ -351,6 +359,11 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
         try {
             String traceId = (String) trace.get("traceId");
             String instanceId = (String) trace.get("instanceId");
+            String clientIp = (String) trace.get("clientIp");
+            String routeId = (String) trace.get("routeId");
+
+            log.info("Sending trace to admin: traceId={}, instanceId={}, clientIp={}, routeId={}, adminUrl={}",
+                    traceId, instanceId, clientIp, routeId, adminUrl);
 
             // Send trace data
             webClient
@@ -361,8 +374,8 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
                     .retrieve()
                     .bodyToMono(String.class)
                     .subscribe(
-                            response -> log.debug("Trace saved: {}", traceId),
-                            error -> log.error("Failed to send trace to admin: {}", error.getMessage())
+                            response -> log.info("Trace saved successfully: traceId={}, response={}", traceId, response),
+                            error -> log.error("Failed to send trace to admin: traceId={}, error={}", traceId, error.getMessage())
                     );
 
             // Send filter execution data separately for database persistence

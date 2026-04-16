@@ -317,6 +317,9 @@ public class RequestTraceController {
     @PostMapping("/internal")
     public ResponseEntity<RequestTrace> receiveTrace(@RequestBody Map<String, Object> traceData) {
         try {
+            log.info("Received trace from gateway: traceId={}, instanceId={}, clientIp={}, routeId={}",
+                    traceData.get("traceId"), traceData.get("instanceId"), traceData.get("clientIp"), traceData.get("routeId"));
+
             RequestTrace trace = new RequestTrace();
             trace.setTraceId((String) traceData.get("traceId"));
             trace.setInstanceId((String) traceData.get("instanceId"));
@@ -365,9 +368,10 @@ public class RequestTraceController {
             }
 
             RequestTrace saved = requestTraceService.saveTrace(trace);
+            log.info("Trace saved successfully: id={}, traceId={}, clientIp={}", saved.getId(), saved.getTraceId(), saved.getClientIp());
             return ResponseEntity.ok(saved);
         } catch (Exception e) {
-            log.error("Failed to save trace", e);
+            log.error("Failed to save trace: traceId={}, error={}", traceData.get("traceId"), e.getMessage(), e);
             return ResponseEntity.badRequest().build();
         }
     }

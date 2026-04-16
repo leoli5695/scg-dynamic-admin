@@ -182,11 +182,11 @@ logging:
     org.springframework.cloud.gateway: ${LOG_LEVEL_GATEWAY:INFO}
     com.alibaba.nacos: ${LOG_LEVEL_NACOS:INFO}
     com.ecwid.consul: ${LOG_LEVEL_CONSUL:INFO}
-    
+
     # 健康检查相关日志（开发时可调为 DEBUG）
-    com.example.gateway.health: INFO
-    com.example.gateway.filter: INFO
-    
+    com.leoli.gateway.health: INFO
+    com.leoli.gateway.filter: INFO
+
     # 【已禁用】告警服务日志 - 避免噪音
     com.leoli.gateway.monitor: WARN
     
