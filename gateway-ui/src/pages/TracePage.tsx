@@ -421,18 +421,18 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
     }
   ];
 
-  // Dynamic columns based on visibility - optimized widths for compact display
+  // Dynamic columns based on visibility - compact layout
   const columns: ColumnsType<RequestTrace> = [
     {
       title: t('trace.trace_id'),
       dataIndex: 'traceId',
       key: 'traceId',
-      width: 140,
+      width: 130,
       ellipsis: true,
       render: (text: string) => (
         <Tooltip title={text}>
-          <Text copyable={{ text }} style={{ fontSize: 12 }}>
-            {text?.substring(0, 12)}...
+          <Text copyable={{ text, tooltips: false }} style={{ fontSize: 12 }}>
+            {text?.substring(0, 8)}...
           </Text>
         </Tooltip>
       ),
@@ -441,14 +441,13 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
       title: t('trace.method'),
       dataIndex: 'method',
       key: 'method',
-      width: 60,
-      render: (method: string) => <Tag color={getMethodColor(method)} style={{ margin: 0 }}>{method}</Tag>
+      width: 50,
+      render: (method: string) => <Tag color={getMethodColor(method)} style={{ margin: 0, padding: '0 4px' }}>{method}</Tag>
     },
     {
       title: t('trace.path'),
       dataIndex: 'path',
       key: 'path',
-      width: 180,
       ellipsis: true,
       render: (path: string, record: RequestTrace) => (
         <Tooltip title={record.uri} placement="topLeft">
@@ -460,14 +459,14 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
       title: t('trace.status'),
       dataIndex: 'statusCode',
       key: 'statusCode',
-      width: 55,
-      render: (code: number) => <Badge status={getStatusColor(code)} text={code} style={{ fontSize: 12 }} />
+      width: 50,
+      render: (code: number) => <Badge status={getStatusColor(code)} text={<span style={{ fontSize: 12 }}>{code}</span>} />
     },
     {
       title: t('trace.latency'),
       dataIndex: 'latencyMs',
       key: 'latencyMs',
-      width: 65,
+      width: 55,
       sorter: (a: RequestTrace, b: RequestTrace) => a.latencyMs - b.latencyMs,
       render: (ms: number) => {
         const color = ms > 3000 ? '#cf1322' : ms > 1000 ? '#faad14' : undefined;
@@ -478,7 +477,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
       title: t('trace.client_ip'),
       dataIndex: 'clientIp',
       key: 'clientIp',
-      width: 100,
+      width: 90,
       ellipsis: true,
       render: (ip: string) => <Text style={{ fontSize: 12 }}>{ip || '-'}</Text>
     },
@@ -486,7 +485,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
       title: t('trace.time'),
       dataIndex: 'traceTime',
       key: 'traceTime',
-      width: 120,
+      width: 110,
       sorter: (a: RequestTrace, b: RequestTrace) => new Date(a.traceTime).getTime() - new Date(b.traceTime).getTime(),
       render: (time: string) => <Text style={{ fontSize: 12 }}>{time ? dayjs(time).format('MM-DD HH:mm:ss') : '-'}</Text>
     },
@@ -494,16 +493,16 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
       title: t('trace.replay_count'),
       dataIndex: 'replayCount',
       key: 'replayCount',
-      width: 70,
-      render: (count: number) => <Badge count={count} showZero style={{ backgroundColor: '#1890ff', fontSize: 12 }} />
+      width: 60,
+      render: (count: number) => <Badge count={count} showZero style={{ backgroundColor: '#1890ff' }} />
     },
     {
-      title: t('common.actions'),
+      title: '',
       key: 'actions',
-      width: 70,
+      width: 40,
       fixed: 'right' as const,
       render: (_: any, record: RequestTrace) => (
-        <Button size="small" type="link" icon={<EyeOutlined />} onClick={() => handleViewDetail(record)} />
+        <Button size="small" type="link" icon={<EyeOutlined />} onClick={() => handleViewDetail(record)} style={{ padding: 0 }} />
       )
     }
   ].filter(col => visibleColumns.includes(col.key as string));
@@ -705,10 +704,8 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
           columns={columns}
           rowKey="id"
           pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (total) => `${total} items` }}
-          scroll={{ x: 650 }}
           rowClassName={getRowClassName}
           size="small"
-          tableLayout="fixed"
         />
       </Card>
 
