@@ -4,10 +4,12 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.core.Appender;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.center.spi.ConfigCenterService;
 import com.leoli.gateway.constants.FilterOrderConstants;
+import com.leoli.gateway.filter.accesslog.config.AccessLogConfig;
+import com.leoli.gateway.filter.accesslog.detector.BinaryContentDetector;
+import com.leoli.gateway.filter.accesslog.sanitizer.SensitiveDataSanitizer;
 import com.leoli.gateway.manager.AuthBindingManager;
 import com.leoli.gateway.manager.RouteManager;
 import com.leoli.gateway.model.AuthConfig;
@@ -42,11 +44,9 @@ import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
-import static com.leoli.gateway.constants.BinaryContentConstants.*;
 import static com.leoli.gateway.constants.GatewayConfigConstants.ACCESS_LOG_CONFIG;
 import static com.leoli.gateway.constants.GatewayConfigConstants.GROUP;
 import static com.leoli.gateway.filter.accesslog.constants.AccessLogConstants.*;
@@ -61,6 +61,11 @@ import static com.leoli.gateway.filter.accesslog.constants.AccessLogConstants.*;
  * - Supports stdout/file/both output modes
  * - Includes auth info when available
  * <p>
+ * Components:
+ * - AccessLogConfig: Configuration model (external class)
+ * - BinaryContentDetector: Binary content detection (injected)
+ * - SensitiveDataSanitizer: Sensitive data masking (injected)
+ * <p>
  * Config Key: config.gateway.access-log
  *
  * @author leoli
@@ -70,7 +75,6 @@ import static com.leoli.gateway.filter.accesslog.constants.AccessLogConstants.*;
 public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
 
     // Dedicated logger for access logs (configured in logback-spring.xml)
-    // Logger name from AccessLogConstants.ACCESS_LOG_LOGGER_NAME
     private static final Logger ACCESS_LOG_LOGGER = (Logger) LoggerFactory.getLogger(ACCESS_LOG_LOGGER_NAME);
 
     @Autowired
@@ -82,15 +86,20 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
     @Autowired
     private AuthBindingManager authBindingManager;
 
+    @Autowired
+    private BinaryContentDetector binaryContentDetector;
+
+    @Autowired
+    private SensitiveDataSanitizer sensitiveDataSanitizer;
+
     private final ObjectMapper objectMapper;
-    private final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
 
     @Autowired
     public AccessLogGlobalFilter(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
 
-    // Current config
+    // Current config - uses external AccessLogConfig class
     private volatile AccessLogConfig config = new AccessLogConfig();
 
     // Config listener
@@ -100,12 +109,12 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
     public void init() {
         loadConfig();
         configListener = (dataId, group, content) -> {
-            log.info("🔥 Access log config changed");
+            log.info("Access log config changed");
             loadConfig();
             updateLogbackAppenders();
         };
         configCenterService.addListener(ACCESS_LOG_CONFIG, GROUP, configListener);
-        log.info("✅ AccessLogGlobalFilter initialized, enabled: {}", config.isEnabled());
+        log.info("AccessLogGlobalFilter initialized, enabled: {}", config.isEnabled());
         updateLogbackAppenders();
     }
 
@@ -121,8 +130,8 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
             String content = configCenterService.getConfig(ACCESS_LOG_CONFIG, GROUP);
             if (content != null && !content.isEmpty()) {
                 config = objectMapper.readValue(content, AccessLogConfig.class);
-                log.info("✅ Loaded access log config: enabled={}, mode={}, format={}",
-                        config.enabled, config.deployMode, config.logFormat);
+                log.info("Loaded access log config: enabled={}, mode={}, format={}",
+                        config.isEnabled(), config.getDeployMode(), config.getLogFormat());
             }
         } catch (Exception e) {
             log.warn("Failed to load access log config, using defaults: {}", e.getMessage());
@@ -131,12 +140,11 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
 
     /**
      * Dynamically configure Logback appenders based on current config.
-     * This enables/disables file and console output as needed.
      */
     @SuppressWarnings("unchecked")
     private void updateLogbackAppenders() {
         LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
-        Logger accessLogger = loggerContext.getLogger("ACCESS_LOG");
+        Logger accessLogger = loggerContext.getLogger(ACCESS_LOG_LOGGER_NAME);
         Logger rootLogger = loggerContext.getLogger(Logger.ROOT_LOGGER_NAME);
 
         // Clear existing appenders
@@ -148,29 +156,22 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
             return;
         }
 
-        // Determine output mode based on config
         String logDirectory = config.getLogDirectory();
         boolean toConsole = config.isLogToConsole();
         boolean toFile = logDirectory != null && !logDirectory.isEmpty();
 
-        // Add file appender if needed
-        // Note: Appenders are defined in logback-spring.xml and attached to root logger
-        // We get them from root logger and attach to ACCESS_LOG logger
         if (toFile) {
             Appender<ch.qos.logback.classic.spi.ILoggingEvent> fileAppender =
                     (Appender<ch.qos.logback.classic.spi.ILoggingEvent>) rootLogger.getAppender("ACCESS_FILE_ASYNC");
             if (fileAppender != null) {
                 accessLogger.addAppender(fileAppender);
                 log.info("Access log file output enabled, directory: {}", logDirectory);
-
-                // Update Logback context properties for dynamic configuration
                 loggerContext.putProperty("ACCESS_LOG_DIRECTORY", logDirectory);
             } else {
                 log.warn("ACCESS_FILE_ASYNC appender not found in logback-spring.xml");
             }
         }
 
-        // Add console appender if needed (stdout for K8S/Fluent Bit)
         if (toConsole) {
             Appender<ch.qos.logback.classic.spi.ILoggingEvent> consoleAppender =
                     (Appender<ch.qos.logback.classic.spi.ILoggingEvent>) rootLogger.getAppender("ACCESS_CONSOLE");
@@ -182,9 +183,8 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
             }
         }
 
-        // Set logger level
         accessLogger.setLevel(Level.INFO);
-        accessLogger.setAdditive(false);  // Don't inherit root appenders
+        accessLogger.setAdditive(false);
 
         log.info("Access log appenders configured: file={}, console={}", toFile, toConsole);
     }
@@ -221,37 +221,32 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
         final String serviceId = getServiceId(routeId);
         final AuthInfo authInfo = getAuthInfo(exchange, routeId);
 
-        // Determine if we need to cache request/response body
-        boolean needRequestBody = config.isLogRequestBody() && shouldCacheBody(request);
+        // Determine if we need to cache request/response body using BinaryContentDetector
+        boolean needRequestBody = config.isLogRequestBody() &&
+                binaryContentDetector.shouldCacheRequestBody(request, config);
         boolean needResponseBody = config.isLogResponseBody();
-        boolean isFileUpload = isFileUpload(request);
+        boolean isFileUpload = binaryContentDetector.isFileUpload(request, config);
 
         // Mark file upload status for logging
         if (isFileUpload) {
             exchange.getAttributes().put(IS_FILE_UPLOAD_ATTR, true);
         }
 
-        // Skip response body caching for WebSocket upgrade requests
-        // WebSocket uses a streaming connection after upgrade, response body is not applicable
-        if (needResponseBody && isWebSocketUpgrade(exchange)) {
-            log.debug("Skipping response body logging for WebSocket upgrade, routeId: {}", routeId);
+        // Skip response body caching for WebSocket/SSE using BinaryContentDetector
+        if (needResponseBody && !binaryContentDetector.shouldCacheResponseBody(exchange, exchange.getResponse(), config)) {
             needResponseBody = false;
         }
 
-        // Use final variable for lambda capture
         final boolean shouldLogResponseBody = needResponseBody;
 
-        // Wrap exchange for response body caching if needed
         ServerWebExchange wrappedExchange = shouldLogResponseBody ?
                 wrapExchangeForResponseBody(exchange, routeId) : exchange;
 
-        // Check if need to cache request body
         if (needRequestBody) {
             return cacheRequestBodyAndContinue(wrappedExchange, chain, traceId, requestId, routeId, serviceId,
                     authInfo, method, path, query, clientIp, userAgent, contentType, startTime, shouldLogResponseBody);
         }
 
-        // Continue without caching request body
         return chain.filter(wrappedExchange).then(Mono.fromRunnable(() -> {
             String responseBody = shouldLogResponseBody ?
                     exchange.getAttribute(RESPONSE_BODY_ATTR) : null;
@@ -267,20 +262,13 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
         ServerHttpResponseDecorator decoratedResponse = new ServerHttpResponseDecorator(originalResponse) {
             @Override
             public Mono<Void> writeWith(Publisher<? extends DataBuffer> body) {
-                // Skip SSE (Server-Sent Events) responses - SSE requires streaming response
-                if (isSseResponse(getHeaders().getContentType())) {
-                    log.debug("Skipping response body logging for SSE response, routeId: {}", routeId);
-                    return super.writeWith(body);
-                }
-
-                // Check if response is file download and mark it
-                if (isFileDownload(getDelegate())) {
+                // Check if file download using BinaryContentDetector
+                if (binaryContentDetector.isFileDownload(getDelegate(), config)) {
                     log.debug("Skipping response body logging for file download, routeId: {}", routeId);
                     exchange.getAttributes().put(IS_FILE_DOWNLOAD_ATTR, true);
                     return super.writeWith(body);
                 }
 
-                // Convert any Publisher to Flux for uniform handling
                 return Flux.from(body)
                         .collectList()
                         .flatMap(buffers -> {
@@ -288,7 +276,6 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
                                 return super.writeWith(Flux.empty());
                             }
 
-                            // Combine all buffers into one
                             int totalSize = buffers.stream().mapToInt(DataBuffer::readableByteCount).sum();
                             byte[] allBytes = new byte[totalSize];
                             int offset = 0;
@@ -299,11 +286,14 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
                                 DataBufferUtils.release(buffer);
                             }
 
-                            // Store response body for logging
-                            String bodyContent = truncate(new String(allBytes, StandardCharsets.UTF_8), config.getMaxBodyLength());
-                            exchange.getAttributes().put(RESPONSE_BODY_ATTR, maskSensitiveFields(bodyContent));
+                            // Use SensitiveDataSanitizer for masking and truncation
+                            String bodyContent = sensitiveDataSanitizer.sanitizeBody(
+                                    new String(allBytes, StandardCharsets.UTF_8),
+                                    getHeaders().getContentType() != null ?
+                                            getHeaders().getContentType().toString() : null,
+                                    config);
+                            exchange.getAttributes().put(RESPONSE_BODY_ATTR, bodyContent);
 
-                            // Write the buffer and return Mono<Void>
                             return super.writeWith(Flux.just(bufferFactory.wrap(allBytes)));
                         });
             }
@@ -327,8 +317,11 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
                     dataBuffer.read(bytes);
                     DataBufferUtils.release(dataBuffer);
 
-                    String bodyStr = truncate(new String(bytes, StandardCharsets.UTF_8), config.getMaxBodyLength());
-                    final String requestBody = maskSensitiveFields(bodyStr);
+                    // Use SensitiveDataSanitizer for masking and truncation
+                    final String requestBody = sensitiveDataSanitizer.sanitizeBody(
+                            new String(bytes, StandardCharsets.UTF_8),
+                            contentType,
+                            config);
 
                     ServerHttpRequest newRequest = new ServerHttpRequestDecorator(request) {
                         @Override
@@ -337,7 +330,6 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
                         }
                     };
 
-                    // Preserve the response decorator by keeping the same response
                     ServerWebExchange mutatedExchange = exchange.mutate()
                             .request(newRequest)
                             .response(exchange.getResponse())
@@ -363,13 +355,11 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
             int statusCode = exchange.getResponse().getStatusCode() != null ?
                     exchange.getResponse().getStatusCode().value() : 0;
 
-            // Get traceId from final request headers (may be added by TraceIdGlobalFilter after this filter started)
             String finalTraceId = traceId;
             if (finalTraceId == null) {
                 finalTraceId = exchange.getRequest().getHeaders().getFirst("X-Trace-Id");
             }
 
-            // Get authInfo from final exchange attributes (may be set by AuthenticationGlobalFilter after this filter started)
             AuthInfo finalAuthInfo = authInfo;
             if (finalAuthInfo.authType == null && finalAuthInfo.authUser == null) {
                 finalAuthInfo = getAuthInfo(exchange, routeId);
@@ -389,7 +379,6 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
             logEntry.put("statusCode", statusCode);
             logEntry.put("durationMs", duration);
 
-            // Auth info
             if (finalAuthInfo.authType != null) {
                 logEntry.put("authType", finalAuthInfo.authType);
             }
@@ -400,46 +389,50 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
                 logEntry.put("authUser", finalAuthInfo.authUser);
             }
 
-            // Request headers
+            // Use SensitiveDataSanitizer for header filtering
             if (config.isLogRequestHeaders()) {
-                logEntry.put("requestHeaders", filterHeaders(exchange.getRequest().getHeaders()));
+                logEntry.put("requestHeaders", convertHeadersToMap(
+                        sensitiveDataSanitizer.filterHeaders(exchange.getRequest().getHeaders(), config)));
             }
 
-            // Request body
             if (requestBody != null && !requestBody.isEmpty() && config.isLogRequestBody()) {
                 logEntry.put("requestBody", requestBody);
             }
 
-            // Mark file upload if detected (body not cached but logging enabled)
             Boolean isFileUpload = exchange.getAttribute(IS_FILE_UPLOAD_ATTR);
             if (isFileUpload != null && isFileUpload && config.isLogRequestBody()) {
                 logEntry.put("requestBody", "[BINARY_FILE_UPLOAD]");
             }
 
-            // Response headers
             if (config.isLogResponseHeaders()) {
-                logEntry.put("responseHeaders", filterHeaders(exchange.getResponse().getHeaders()));
+                logEntry.put("responseHeaders", convertHeadersToMap(
+                        sensitiveDataSanitizer.filterHeaders(exchange.getResponse().getHeaders(), config)));
             }
 
-            // Response body
             if (responseBody != null && !responseBody.isEmpty() && config.isLogResponseBody()) {
                 logEntry.put("responseBody", responseBody);
             }
 
-            // Mark file download if detected (body not cached but logging enabled)
             Boolean isFileDownload = exchange.getAttribute(IS_FILE_DOWNLOAD_ATTR);
             if (isFileDownload != null && isFileDownload && config.isLogResponseBody()) {
                 logEntry.put("responseBody", "[BINARY_FILE_DOWNLOAD]");
             }
 
-            // Output JSON log via Logback (automatically handles file rolling and stdout)
-            // Logback appenders are dynamically configured based on logToConsole and logDirectory
             String jsonLine = objectMapper.writeValueAsString(logEntry);
             ACCESS_LOG_LOGGER.info(jsonLine);
 
         } catch (Exception e) {
             log.error("Failed to write access log: {}", e.getMessage());
         }
+    }
+
+    /**
+     * Convert HttpHeaders to Map for JSON serialization.
+     */
+    private Map<String, String> convertHeadersToMap(HttpHeaders headers) {
+        Map<String, String> result = new LinkedHashMap<>();
+        headers.forEach((key, values) -> result.put(key, String.join(", ", values)));
+        return result;
     }
 
     private String getServiceId(String routeId) {
@@ -507,60 +500,6 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
         return info;
     }
 
-    private Map<String, String> filterHeaders(HttpHeaders headers) {
-        Map<String, String> result = new LinkedHashMap<>();
-        headers.forEach((key, values) -> {
-            if (!isSensitiveHeader(key)) {
-                result.put(key, String.join(", ", values));
-            } else {
-                result.put(key, "******");
-            }
-        });
-        return result;
-    }
-
-    private boolean isSensitiveHeader(String header) {
-        String lower = header.toLowerCase();
-        return lower.contains("authorization") ||
-                lower.contains("cookie") ||
-                lower.contains("api-key") ||
-                lower.contains("x-api-key") ||
-                lower.contains("token");
-    }
-
-    private String maskSensitiveFields(String body) {
-        if (body == null || body.isEmpty() || config.getSensitiveFields() == null) {
-            return body;
-        }
-        String result = body;
-        for (String field : config.getSensitiveFields()) {
-            result = result.replaceAll("(?i)\"" + field + "\"\\s*:\\s*\"[^\"]*\"",
-                    "\"" + field + "\":\"******\"");
-        }
-        return result;
-    }
-
-    private String truncate(String s, int maxLen) {
-        if (s == null || s.length() <= maxLen) return s;
-        return s.substring(0, maxLen) + "...(truncated)";
-    }
-
-    private boolean shouldCacheBody(ServerHttpRequest request) {
-        String method = request.getMethod().name();
-        if (HttpMethod.GET.name().equals(method) || HttpMethod.HEAD.name().equals(method)) {
-            return false;
-        }
-        // Skip file uploads - binary content should not be cached as text
-        if (isFileUpload(request)) {
-            return false;
-        }
-        MediaType contentType = request.getHeaders().getContentType();
-        if (contentType == null) return false;
-        return contentType.includes(MediaType.APPLICATION_JSON) ||
-                contentType.includes(MediaType.APPLICATION_FORM_URLENCODED) ||
-                contentType.includes(MediaType.TEXT_PLAIN);
-    }
-
     private String getClientIp(ServerHttpRequest request) {
         String ip = request.getHeaders().getFirst("X-Forwarded-For");
         if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
@@ -575,269 +514,18 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
                 request.getRemoteAddress().getAddress().getHostAddress() : "unknown";
     }
 
-    /**
-     * Check if request is a WebSocket upgrade request.
-     * WebSocket requires a streaming connection and should not have response body cached.
-     */
-    private boolean isWebSocketUpgrade(ServerWebExchange exchange) {
-        String upgrade = exchange.getRequest().getHeaders().getFirst("Upgrade");
-        return "websocket".equalsIgnoreCase(upgrade);
-    }
-
-    /**
-     * Check if response is SSE (Server-Sent Events).
-     * SSE uses text/event-stream content type and requires streaming response.
-     */
-    private boolean isSseResponse(MediaType contentType) {
-        if (contentType == null) {
-            return false;
-        }
-        String mimeType = contentType.getType() + "/" + contentType.getSubtype();
-        return "text/event-stream".equalsIgnoreCase(mimeType);
-    }
-
-    /**
-     * Check if request is a file upload.
-     * Detects multipart/form-data, binary content types, Content-Disposition with filename,
-     * or URL path with binary file extension.
-     */
-    private boolean isFileUpload(ServerHttpRequest request) {
-        MediaType contentType = request.getHeaders().getContentType();
-
-        // 1. multipart/form-data is typically used for file uploads
-        if (contentType != null && contentType.includes(MediaType.MULTIPART_FORM_DATA)) {
-            return true;
-        }
-
-        // 2. Check Content-Disposition header for file attachment
-        String contentDisposition = request.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION);
-        if (contentDisposition != null) {
-            String lower = contentDisposition.toLowerCase();
-            if (lower.contains("filename") || lower.contains("attachment")) {
-                return true;
-            }
-        }
-
-        // 3. Check for binary content types (PUT/POST with binary data)
-        if (contentType != null) {
-            String mimeType = contentType.getType() + "/" + contentType.getSubtype();
-            if (BINARY_CONTENT_TYPES.contains(mimeType.toLowerCase()) ||
-                    isCustomBinaryContentType(mimeType)) {
-                return true;
-            }
-            // Check type prefixes (image/*, video/*, audio/*, font/*, model/*)
-            if (BINARY_TYPE_PREFIXES.contains(contentType.getType().toLowerCase())) {
-                return true;
-            }
-            // application/* with subtype containing binary indicators
-            String subtype = contentType.getSubtype().toLowerCase();
-            if (contentType.getType().equalsIgnoreCase("application") &&
-                    containsBinaryKeyword(subtype)) {
-                return true;
-            }
-        }
-
-        // 4. Check URL path for binary file extension (e.g., PUT /files/report.pdf)
-        String path = request.getURI().getPath();
-        if (path != null && hasBinaryExtension(path)) {
-            // Only treat as file upload for PUT/POST methods
-            String method = request.getMethod().name();
-            if (HttpMethod.PUT.name().equals(method) || HttpMethod.POST.name().equals(method)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Check if response is a file download.
-     * Detects Content-Disposition: attachment, binary content types,
-     * or URL path with binary file extension.
-     */
-    private boolean isFileDownload(ServerHttpResponse response) {
-        // 1. Check Content-Disposition header for attachment
-        String contentDisposition = response.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION);
-        if (contentDisposition != null) {
-            String lower = contentDisposition.toLowerCase();
-            if (lower.contains("attachment") || lower.contains("filename")) {
-                return true;
-            }
-        }
-
-        // 2. Check for binary content types
-        MediaType contentType = response.getHeaders().getContentType();
-        if (contentType != null) {
-            String mimeType = contentType.getType() + "/" + contentType.getSubtype();
-            if (BINARY_CONTENT_TYPES.contains(mimeType.toLowerCase()) ||
-                    isCustomBinaryContentType(mimeType)) {
-                return true;
-            }
-            // Check type prefixes (image/*, video/*, audio/*, font/*, model/*)
-            if (BINARY_TYPE_PREFIXES.contains(contentType.getType().toLowerCase())) {
-                return true;
-            }
-            // application/* with subtype containing binary indicators
-            String subtype = contentType.getSubtype().toLowerCase();
-            if (contentType.getType().equalsIgnoreCase("application") &&
-                    containsBinaryKeyword(subtype)) {
-                return true;
-            }
-        }
-
-        // 3. Check transfer encoding for chunked large file transfers
-        String transferEncoding = response.getHeaders().getFirst(HttpHeaders.TRANSFER_ENCODING);
-        if (transferEncoding != null && transferEncoding.toLowerCase().contains("chunked")) {
-            // Chunked transfer often indicates streaming/large file
-            // If also has binary content type hint, treat as download
-            // But exclude text-based application types (json, xml, javascript, etc.)
-            if (contentType != null && contentType.getType().equalsIgnoreCase("application")) {
-                String subtype = contentType.getSubtype().toLowerCase();
-                // Whitelist text-based application types
-                if (!subtype.equals("json") && !subtype.equals("xml") &&
-                        !subtype.equals("javascript") && !subtype.equals("x-javascript") &&
-                        !subtype.equals("x-www-form-urlencoded") && !subtype.startsWith("json+")) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Check if URL path ends with a binary file extension.
-     */
-    private boolean hasBinaryExtension(String path) {
-        if (path == null || path.isEmpty()) {
-            return false;
-        }
-        String lowerPath = path.toLowerCase();
-        // Check default binary extensions
-        for (String ext : BINARY_EXTENSIONS) {
-            if (lowerPath.endsWith(ext)) {
-                return true;
-            }
-        }
-        // Check custom binary extensions from config
-        List<String> customExtensions = config.getCustomBinaryExtensions();
-        if (customExtensions != null) {
-            for (String ext : customExtensions) {
-                if (lowerPath.endsWith(ext.toLowerCase())) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Check if Content-Type matches custom binary types from config.
-     */
-    private boolean isCustomBinaryContentType(String mimeType) {
-        List<String> customTypes = config.getCustomBinaryContentTypes();
-        if (customTypes == null || customTypes.isEmpty()) {
-            return false;
-        }
-        String lowerMimeType = mimeType.toLowerCase();
-        for (String customType : customTypes) {
-            if (lowerMimeType.equals(customType.toLowerCase()) ||
-                    lowerMimeType.contains(customType.toLowerCase())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Check if subtype contains any binary keyword.
-     * Used for fuzzy matching of unknown binary content types.
-     */
-    private boolean containsBinaryKeyword(String subtype) {
-        for (String keyword : BINARY_SUBTYPE_KEYWORDS) {
-            if (subtype.contains(keyword)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     @Override
     public int getOrder() {
         return FilterOrderConstants.ACCESS_LOG;
     }
 
-    @Data
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class AccessLogConfig {
-        private boolean enabled = false;
-        private String deployMode = "LOCAL";
-        private String logDirectory = "./logs/access";
-        private String fileNamePattern = "access-{yyyy-MM-dd}.log";
-        private String logFormat = "JSON";
-        private String logLevel = "NORMAL";  // MINIMAL, NORMAL, VERBOSE
-        private boolean logRequestHeaders = true;
-        private boolean logResponseHeaders = true;
-        private boolean logRequestBody = false;
-        private boolean logResponseBody = false;
-        private int maxBodyLength = 2048;
-        private int samplingRate = 100;
-        private List<String> sensitiveFields = Arrays.asList("password", "token", "secret", "apiKey");
-        private boolean logToConsole = true;
-        private boolean includeAuthInfo = true;
-        private int maxFileSizeMb = 100;
-        private int maxBackupFiles = 30;
-
-        // Custom binary content types to skip body logging
-        // e.g., ["application/x-custom-binary", "application/my-archive"]
-        private List<String> customBinaryContentTypes = new ArrayList<>();
-
-        // Custom binary file extensions to skip body logging
-        // e.g., [".xyz", ".custom"]
-        private List<String> customBinaryExtensions = new ArrayList<>();
-
-        /**
-         * Get log directory based on deploy mode and user configuration.
-         * Returns null if stdout mode is enabled or no valid directory is configured.
-         */
-        public String getLogDirectory() {
-            // If stdout mode (logToConsole=true and no explicit directory), return null
-            // This prevents file writes when user only wants stdout output
-            if (logToConsole && (logDirectory == null || logDirectory.isEmpty())) {
-                return null;  // stdout mode - no file needed
-            }
-
-            // If user explicitly set a directory, use it (highest priority)
-            if (logDirectory != null && !logDirectory.isEmpty()) {
-                return logDirectory;
-            }
-
-            // CUSTOM mode: user MUST provide a path, otherwise don't write to file
-            if ("CUSTOM".equals(deployMode)) {
-                // No path provided for CUSTOM mode, skip file output
-                log.warn("CUSTOM deploy mode requires user-defined logDirectory, but none provided. Skipping file output.");
-                return null;
-            }
-
-            // Otherwise, use default based on deploy mode
-            switch (deployMode) {
-                case "DOCKER":
-                    return "/app/logs/access";
-                case "K8S":
-                    // K8S default path, but only if file output is explicitly needed
-                    return "/var/log/gateway/access";
-                case "LOCAL":
-                default:
-                    return "./logs/access";
-            }
-        }
-    }
-
+    /**
+     * Auth info holder class.
+     */
     @Data
     private static class AuthInfo {
         String authType;
         String authPolicy;
         String authUser;
     }
-
 }
