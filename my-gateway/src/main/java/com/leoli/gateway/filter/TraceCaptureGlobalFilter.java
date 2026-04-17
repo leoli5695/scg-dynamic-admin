@@ -191,8 +191,11 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
         // Sampling logic
         int random = ThreadLocalRandom.current().nextInt(100);
 
-        log.info("Trace check: traceId={}, statusCode={}, duration={}ms, isError={}, isSlow={}, captureAll={}, samplingRate={}, random={}",
-                traceId, statusCode, duration, isError, isSlow, captureAll, samplingRate, random);
+        // Log trace check details (DEBUG level to avoid high-frequency logging)
+        if (log.isDebugEnabled()) {
+            log.debug("Trace check: traceId={}, statusCode={}, duration={}ms, isError={}, isSlow={}, captureAll={}, samplingRate={}, random={}",
+                    traceId, statusCode, duration, isError, isSlow, captureAll, samplingRate, random);
+        }
 
         // Error requests: use samplingRateForErrors (default 100%)
         if (captureErrors && isError) {

@@ -121,8 +121,11 @@ public class InstanceFilter {
         // Step 4: Return based on availability
         // Priority: healthy > unhealthy (but still return unhealthy if no healthy)
         if (!healthy.isEmpty()) {
-            log.info("Instance filter result for {}: {} enabled, {} healthy returned, {} unhealthy excluded",
-                    serviceId, enabled.size(), healthy.size(), unhealthy.size());
+            // Log filter result (DEBUG level to avoid high-frequency logging)
+            if (log.isDebugEnabled()) {
+                log.debug("Instance filter result for {}: {} enabled, {} healthy returned, {} unhealthy excluded",
+                        serviceId, enabled.size(), healthy.size(), unhealthy.size());
+            }
             return healthy;
         }
 

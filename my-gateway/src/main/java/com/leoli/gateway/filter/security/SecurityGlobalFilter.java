@@ -100,7 +100,10 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
         // Get security config
         Map<String, Object> config = strategyManager.getSecurityConfig(routeId);
 
-        log.info("SecurityGlobalFilter - routeId: {}, hasConfig: {}", routeId, config != null);
+        // Log config status (DEBUG level to avoid high-frequency logging)
+        if (log.isDebugEnabled()) {
+            log.debug("SecurityGlobalFilter - routeId: {}, hasConfig: {}", routeId, config != null);
+        }
 
         if (config == null) {
             log.debug("No security config for route: {}, skipping", routeId);
@@ -133,8 +136,11 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
         boolean enableXss = getBoolValue(config, "enableXssProtection", true);
         String mode = getStringValue(config, "mode", "BLOCK");
 
-        log.info("Security check enabled - SQL: {}, XSS: {}, mode: {}, checkBody: {}",
-                enableSqlInjection, enableXss, mode, checkBody);
+        // Log security settings (DEBUG level to avoid high-frequency logging)
+        if (log.isDebugEnabled()) {
+            log.debug("Security check enabled - SQL: {}, XSS: {}, mode: {}, checkBody: {}",
+                    enableSqlInjection, enableXss, mode, checkBody);
+        }
 
         List<String> threats = new ArrayList<>();
 

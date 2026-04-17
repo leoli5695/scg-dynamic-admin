@@ -100,8 +100,10 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
 
         String routeId = route.getId();
 
-        // Log route metadata for debugging
-        log.info("MultiServiceLoadBalancerFilter - routeId: {}, metadata: {}", routeId, route.getMetadata());
+        // Log route metadata for debugging (DEBUG level to avoid high-frequency logging)
+        if (log.isDebugEnabled()) {
+            log.debug("MultiServiceLoadBalancerFilter - routeId: {}, metadata: {}", routeId, route.getMetadata());
+        }
 
         // Try to get multi-service config from route metadata
         MultiServiceConfig config = extractMultiServiceConfig(route);
@@ -240,8 +242,11 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
         // Step 6: Transform URI based on service type
         transformUriForServiceType(exchange, targetServiceId, serviceType);
 
-        log.info("Multi-service routing: route={}, service={}, version={}, type={}, weight={}",
-                routeId, targetServiceId, targetVersion, serviceType, selectedBinding.getWeight());
+        // Log routing result (DEBUG level to avoid high-frequency logging)
+        if (log.isDebugEnabled()) {
+            log.debug("Multi-service routing: route={}, service={}, version={}, type={}, weight={}",
+                    routeId, targetServiceId, targetVersion, serviceType, selectedBinding.getWeight());
+        }
 
         return chain.filter(exchange);
     }

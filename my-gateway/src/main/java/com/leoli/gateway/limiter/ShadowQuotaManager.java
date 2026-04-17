@@ -1,5 +1,7 @@
 package com.leoli.gateway.limiter;
 
+import com.leoli.gateway.constants.RateLimitConstants;
+import com.leoli.gateway.constants.ScheduleConstants;
 import jakarta.annotation.PostConstruct;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -69,10 +71,10 @@ public class ShadowQuotaManager implements ApplicationListener<HeartbeatEvent> {
     private int fallbackNodeCount;
 
     /**
-     * Threshold for fallback query (1 hour).
+     * Threshold for fallback query.
      * If no listener update received for this duration, trigger fallback query.
      */
-    private static final long FALLBACK_THRESHOLD_MS = 3600000; // 1 hour
+    private static final long FALLBACK_THRESHOLD_MS = ScheduleConstants.QUOTA_FALLBACK_THRESHOLD_MS;
 
     /**
      * Global QPS snapshot per route (updated every second when Redis healthy)
@@ -115,14 +117,14 @@ public class ShadowQuotaManager implements ApplicationListener<HeartbeatEvent> {
     private final AtomicLong recoveryStartTime = new AtomicLong(0);
 
     /**
-     * Recovery duration in milliseconds (10 seconds for full recovery)
+     * Recovery duration for gradual traffic shifting when Redis recovers.
      */
-    private static final long RECOVERY_DURATION_MS = 10000;
+    private static final long RECOVERY_DURATION_MS = ScheduleConstants.QUOTA_RECOVERY_DURATION_MS;
 
     /**
-     * Percentage of traffic to shift per second during recovery
+     * Percentage of traffic to shift per second during recovery.
      */
-    private static final int RECOVERY_STEP_PERCENT = 10;
+    private static final int RECOVERY_STEP_PERCENT = ScheduleConstants.QUOTA_RECOVERY_STEP_PERCENT;
 
     /**
      * Initialize on startup - get initial node count.
@@ -269,7 +271,7 @@ public class ShadowQuotaManager implements ApplicationListener<HeartbeatEvent> {
                 long totalQps = 0;
 
                 // Use SCAN (non-blocking) instead of KEYS (blocking)
-                String pattern = "rate_limit:*:" + routeId + "*";
+                String pattern = RateLimitConstants.RATE_LIMIT_KEY_SCAN_PATTERN + routeId + "*";
                 ScanOptions scanOptions = ScanOptions.scanOptions()
                     .match(pattern)
                     .count(100)
@@ -290,7 +292,7 @@ public class ShadowQuotaManager implements ApplicationListener<HeartbeatEvent> {
                 }
 
                 // Also try the direct route key pattern
-                String directKey = "rate_limit:route:" + routeId;
+                String directKey = RateLimitConstants.RATE_LIMIT_KEY_PREFIX_ROUTE + routeId;
                 try {
                     Long directCount = redisTemplate.opsForZSet().zCard(directKey);
                     if (directCount != null && directCount > 0) {

@@ -69,18 +69,43 @@ spring:
 
   # Redis Configuration (for distributed rate limiting)
   # Redis is optional - set REDIS_ENABLED=true or REDIS_HOST to enable
+  # Supports three deployment modes: single (default), sentinel, cluster
   redis:
-    enabled: ${REDIS_ENABLED:false}
-    host: ${REDIS_HOST:127.0.0.1}
-    port: ${REDIS_PORT:6379}
+    # Deployment mode: single, sentinel, cluster
+    # Default: single (standalone instance)
+    mode: ${REDIS_MODE:single}
+
+    # --- Common Configuration ---
     password: ${REDIS_PASSWORD:}
     database: ${REDIS_DATABASE:0}
     timeout: ${REDIS_TIMEOUT:2000}
+
+    # --- Single Node Configuration (mode=single) ---
+    host: ${REDIS_HOST:127.0.0.1}
+    port: ${REDIS_PORT:6379}
+
+    # --- Sentinel Configuration (mode=sentinel) ---
+    # Uncomment below for sentinel mode
+    # sentinel:
+    #   master: ${REDIS_SENTINEL_MASTER:mymaster}
+    #   # Comma-separated list of sentinel hosts (host:port,host:port,...)
+    #   nodes: ${REDIS_SENTINEL_NODES:}
+    #   # Password for sentinel (if required)
+    #   password: ${REDIS_SENTINEL_PASSWORD:}
+
+    # --- Cluster Configuration (mode=cluster) ---
+    # Uncomment below for cluster mode
+    # cluster:
+    #   # Comma-separated list of cluster nodes (host:port,host:port,...)
+    #   nodes: ${REDIS_CLUSTER_NODES:}
+    #   max-redirects: ${REDIS_CLUSTER_MAX_REDIRECTS:3}
+
+    # Connection pool configuration
     lettuce:
       pool:
-        max-active: 8
-        max-idle: 8
-        min-idle: 0
+        max-active: ${REDIS_POOL_MAX_ACTIVE:8}
+        max-idle: ${REDIS_POOL_MAX_IDLE:8}
+        min-idle: ${REDIS_POOL_MIN_IDLE:0}
 
 # Gateway Center Configuration
 # Set type to 'nacos' (default) or 'consul' to switch between config centers

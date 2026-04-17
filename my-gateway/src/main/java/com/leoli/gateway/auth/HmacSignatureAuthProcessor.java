@@ -1,5 +1,6 @@
 package com.leoli.gateway.auth;
 
+import com.leoli.gateway.constants.AuthConstants;
 import com.leoli.gateway.enums.AuthType;
 import com.leoli.gateway.model.AuthConfig;
 import lombok.extern.slf4j.Slf4j;
@@ -35,19 +36,19 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
 
-    // Standard headers for signature
-    private static final String X_ACCESS_KEY = "X-Access-Key";
-    private static final String X_SIGNATURE = "X-Signature";
-    private static final String X_TIMESTAMP = "X-Timestamp";
-    private static final String X_NONCE = "X-Nonce";
+    // Standard headers for signature (using AuthConstants for consistency)
+    private static final String X_ACCESS_KEY = AuthConstants.ACCESS_KEY_HEADER;
+    private static final String X_SIGNATURE = AuthConstants.SIGNATURE_HEADER;
+    private static final String X_TIMESTAMP = AuthConstants.TIMESTAMP_HEADER;
+    private static final String X_NONCE = AuthConstants.NONCE_HEADER;
     private static final String X_CONTENT_MD5 = "X-Content-MD5";
 
-    // Default clock skew tolerance in minutes
-    private static final int DEFAULT_CLOCK_SKEW_MINUTES = 5;
+    // Default clock skew tolerance (uses AuthConstants for gateway-wide consistency)
+    private static final int DEFAULT_CLOCK_SKEW_MINUTES = AuthConstants.DEFAULT_CLOCK_SKEW_MINUTES;
 
     // In-memory nonce cache for replay attack prevention
     private final Map<String, Long> nonceCache = new ConcurrentHashMap<>();
-    private static final long NONCE_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
+    private static final long NONCE_EXPIRY_MS = AuthConstants.DEFAULT_NONCE_EXPIRY_MS;
 
     @Override
     public AuthType getAuthType() {

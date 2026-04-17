@@ -1,6 +1,8 @@
 package com.leoli.gateway.filter.ratelimit;
 
 import com.leoli.gateway.constants.FilterOrderConstants;
+import com.leoli.gateway.constants.RateLimitConstants;
+import com.leoli.gateway.constants.CacheConstants;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.leoli.gateway.limiter.RateLimitResult;
@@ -70,10 +72,11 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
 
     /**
      * Rate limiter cache: key = rateLimitKey, value = RateLimiterWindow
+     * Configuration uses constants for consistency across gateway.
      */
     private final Cache<String, RateLimiterWindow> rateLimiterCache = Caffeine.newBuilder()
-            .maximumSize(10000)
-            .expireAfterWrite(1, TimeUnit.HOURS)
+            .maximumSize(CacheConstants.RATE_LIMITER_CACHE_MAX_SIZE)
+            .expireAfterWrite(CacheConstants.RATE_LIMITER_CACHE_EXPIRE_HOURS, TimeUnit.HOURS)
             .build();
 
     @Override
@@ -198,13 +201,13 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
         RateLimitConfig config = new RateLimitConfig();
         // If config exists, enable by default (strategy itself is already enabled)
         config.enabled = ConfigValueExtractor.getBoolean(configMap, "enabled", true);
-        config.qps = ConfigValueExtractor.getInt(configMap, "qps", 100);
-        config.burstCapacity = ConfigValueExtractor.getInt(configMap, "burstCapacity", config.qps * 2);
-        config.windowSizeMs = ConfigValueExtractor.getWindowSizeMs(configMap, "timeUnit", 1000L);
-        config.keyResolver = ConfigValueExtractor.getString(configMap, "keyResolver", "ip");
-        config.keyType = ConfigValueExtractor.getString(configMap, "keyType", "combined");
+        config.qps = ConfigValueExtractor.getInt(configMap, "qps", RateLimitConstants.DEFAULT_QPS);
+        config.burstCapacity = ConfigValueExtractor.getInt(configMap, "burstCapacity", RateLimitConstants.calculateBurstCapacity(config.qps));
+        config.windowSizeMs = ConfigValueExtractor.getWindowSizeMs(configMap, "timeUnit", RateLimitConstants.DEFAULT_WINDOW_SIZE_MS);
+        config.keyResolver = ConfigValueExtractor.getString(configMap, "keyResolver", RateLimitConstants.KEY_RESOLVER_IP);
+        config.keyType = ConfigValueExtractor.getString(configMap, "keyType", RateLimitConstants.KEY_TYPE_COMBINED);
         config.headerName = ConfigValueExtractor.getString(configMap, "headerName", null);
-        config.keyPrefix = ConfigValueExtractor.getString(configMap, "keyPrefix", "rate_limit:");
+        config.keyPrefix = ConfigValueExtractor.getString(configMap, "keyPrefix", RateLimitConstants.RATE_LIMIT_KEY_PREFIX);
 
         if (log.isDebugEnabled()) {
             log.debug("Parsed rate limiter config: enabled={}, qps={}, burstCapacity={}", config.enabled, config.qps, config.burstCapacity);
@@ -238,21 +241,21 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
         StringBuilder key = new StringBuilder(config.keyPrefix);
 
         switch (config.keyType) {
-            case "route":
+            case RateLimitConstants.KEY_TYPE_ROUTE:
                 key.append("route:").append(routeId);
                 break;
-            case "ip":
+            case RateLimitConstants.KEY_TYPE_IP:
                 key.append("ip:").append(clientId);
                 break;
-            case "user":
+            case RateLimitConstants.KEY_TYPE_USER:
                 // User-based key (requires authentication context)
                 key.append("user:").append(clientId);
                 break;
-            case "header":
+            case RateLimitConstants.KEY_TYPE_HEADER:
                 // Header-based key
                 key.append("header:").append(clientId);
                 break;
-            case "combined":
+            case RateLimitConstants.KEY_TYPE_COMBINED:
             default:
                 key.append("combined:").append(routeId).append(":").append(clientId);
                 break;
@@ -266,20 +269,20 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
      */
     private String extractClientId(ServerWebExchange exchange, RateLimitConfig config) {
         switch (config.keyResolver) {
-            case "ip":
+            case RateLimitConstants.KEY_RESOLVER_IP:
                 return IpAddressExtractor.extractClientIp(exchange);
-            case "user":
+            case RateLimitConstants.KEY_RESOLVER_USER:
                 // Extract from authentication context
                 String user = exchange.getRequest().getHeaders().getFirst("X-User-Id");
                 return user != null ? user : IpAddressExtractor.extractClientIp(exchange);
-            case "header":
+            case RateLimitConstants.KEY_RESOLVER_HEADER:
                 // Extract from specific header
                 if (config.headerName != null) {
                     String headerValue = exchange.getRequest().getHeaders().getFirst(config.headerName);
                     return headerValue != null ? headerValue : IpAddressExtractor.extractClientIp(exchange);
                 }
                 return IpAddressExtractor.extractClientIp(exchange);
-            case "global":
+            case RateLimitConstants.KEY_RESOLVER_GLOBAL:
                 return "global";
             default:
                 return IpAddressExtractor.extractClientIp(exchange);

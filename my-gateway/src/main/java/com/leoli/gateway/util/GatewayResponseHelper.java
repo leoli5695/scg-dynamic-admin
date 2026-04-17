@@ -108,28 +108,32 @@ public final class GatewayResponseHelper {
      * Write 400 Bad Request response.
      */
     public static Mono<Void> writeBadRequest(ServerHttpResponse response, String message) {
-        return writeErrorResponse(response, HttpStatus.BAD_REQUEST, 40001, message);
+        return writeErrorResponse(response, ErrorCode.BAD_REQUEST.getStatus(), 
+                ErrorCode.BAD_REQUEST.getCode(), message);
     }
 
     /**
      * Write 401 Unauthorized response.
      */
     public static Mono<Void> writeUnauthorized(ServerHttpResponse response, String message) {
-        return writeErrorResponse(response, HttpStatus.UNAUTHORIZED, 40101, message);
+        return writeErrorResponse(response, ErrorCode.UNAUTHORIZED.getStatus(), 
+                ErrorCode.UNAUTHORIZED.getCode(), message);
     }
 
     /**
      * Write 403 Forbidden response.
      */
     public static Mono<Void> writeForbidden(ServerHttpResponse response, String message) {
-        return writeErrorResponse(response, HttpStatus.FORBIDDEN, 40301, message);
+        return writeErrorResponse(response, ErrorCode.FORBIDDEN.getStatus(), 
+                ErrorCode.FORBIDDEN.getCode(), message);
     }
 
     /**
      * Write 404 Not Found response.
      */
     public static Mono<Void> writeNotFound(ServerHttpResponse response, String message) {
-        return writeErrorResponse(response, HttpStatus.NOT_FOUND, 40401, message);
+        return writeErrorResponse(response, ErrorCode.NOT_FOUND.getStatus(), 
+                ErrorCode.NOT_FOUND.getCode(), message);
     }
 
     /**
@@ -152,8 +156,8 @@ public final class GatewayResponseHelper {
 
         // Keep "error" field for frontend compatibility
         String body = String.format(
-                "{\"code\":52901,\"error\":\"Too Many Requests\",\"message\":\"Rate limit exceeded. Limit: %d requests per %dms\",\"data\":null,\"retryAfter\":%d}",
-                limit, windowMs, retryAfter
+                "{\"code\":%d,\"error\":\"Too Many Requests\",\"message\":\"Rate limit exceeded. Limit: %d requests per %dms\",\"data\":null,\"retryAfter\":%d}",
+                ErrorCode.RATE_LIMIT_EXCEEDED.getCode(), limit, windowMs, retryAfter
         );
 
         return response.writeWith(
@@ -173,8 +177,8 @@ public final class GatewayResponseHelper {
 
         // Keep "error" field for frontend compatibility
         String body = String.format(
-                "{\"code\":55301,\"error\":\"Service Unavailable\",\"message\":\"Circuit breaker is open, please try again later\",\"data\":null,\"routeId\":\"%s\"}",
-                escapeJson(routeId)
+                "{\"code\":%d,\"error\":\"Service Unavailable\",\"message\":\"Circuit breaker is open, please try again later\",\"data\":null,\"routeId\":\"%s\"}",
+                ErrorCode.CIRCUIT_BREAKER_OPEN.getCode(), escapeJson(routeId)
         );
 
         return response.writeWith(
@@ -197,7 +201,8 @@ public final class GatewayResponseHelper {
             return OBJECT_MAPPER.writeValueAsString(obj);
         } catch (JsonProcessingException e) {
             log.warn("Failed to serialize object to JSON: {}", e.getMessage());
-            return "{\"code\":50003,\"message\":\"Serialization error\",\"data\":null}";
+            return String.format("{\"code\":%d,\"message\":\"Serialization error\",\"data\":null}", 
+                    ErrorCode.SERIALIZATION_ERROR.getCode());
         }
     }
 

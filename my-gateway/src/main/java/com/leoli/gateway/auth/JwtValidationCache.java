@@ -1,5 +1,7 @@
 package com.leoli.gateway.auth;
 
+import com.leoli.gateway.constants.AuthConstants;
+import com.leoli.gateway.constants.CacheConstants;
 import io.jsonwebtoken.Claims;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -36,9 +38,9 @@ public class JwtValidationCache {
         CachedEntry(Claims claims, String policyId) {
             this.claims = claims;
             this.policyId = policyId;
-            // Use JWT expiration or default to 5 minutes if not set
+            // Use JWT expiration or default to configured expiry time if not set
             Date exp = claims.getExpiration();
-            this.expiresAtMillis = exp != null ? exp.getTime() : System.currentTimeMillis() + 300_000;
+            this.expiresAtMillis = exp != null ? exp.getTime() : System.currentTimeMillis() + AuthConstants.DEFAULT_JWT_EXPIRY_MS;
         }
 
         boolean isExpired() {
@@ -76,8 +78,8 @@ public class JwtValidationCache {
     // Cache storage
     private final Map<CacheKey, CachedEntry> cache = new ConcurrentHashMap<>();
 
-    // Maximum cache size to prevent memory issues
-    private static final int MAX_CACHE_SIZE = 10000;
+    // Maximum cache size (uses constant for consistency across gateway)
+    private static final int MAX_CACHE_SIZE = CacheConstants.JWT_CACHE_MAX_SIZE;
 
     /**
      * Get cached claims if available and not expired.
@@ -167,9 +169,9 @@ public class JwtValidationCache {
 
     /**
      * Scheduled cleanup of expired entries.
-     * Runs every minute.
+     * Runs at configured cleanup interval.
      */
-    @Scheduled(fixedRate = 60000)
+    @Scheduled(fixedRate = CacheConstants.JWT_CACHE_CLEANUP_INTERVAL_MS)
     public void cleanupExpired() {
         int removed = 0;
         for (Map.Entry<CacheKey, CachedEntry> entry : cache.entrySet()) {
@@ -196,10 +198,11 @@ public class JwtValidationCache {
     }
 
     /**
-     * Evict oldest 20% of entries when cache is full.
+     * Evict oldest entries when cache is full.
+     * Eviction percentage is defined in CacheConstants.
      */
     private void evictOldestEntries() {
-        int toRemove = MAX_CACHE_SIZE / 5;
+        int toRemove = MAX_CACHE_SIZE * CacheConstants.JWT_CACHE_EVICT_PERCENTAGE / 100;
         cache.entrySet().stream()
                 .sorted((e1, e2) -> Long.compare(e1.getValue().expiresAtMillis, e2.getValue().expiresAtMillis))
                 .limit(toRemove)
