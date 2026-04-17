@@ -49,6 +49,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import static com.leoli.gateway.constants.BinaryContentConstants.*;
 import static com.leoli.gateway.constants.GatewayConfigConstants.ACCESS_LOG_CONFIG;
 import static com.leoli.gateway.constants.GatewayConfigConstants.GROUP;
+import static com.leoli.gateway.filter.accesslog.constants.AccessLogConstants.*;
 
 /**
  * Access log global filter using Logback RollingFileAppender.
@@ -68,14 +69,9 @@ import static com.leoli.gateway.constants.GatewayConfigConstants.GROUP;
 @Component
 public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
 
-    private static final String START_TIME_ATTR = "accessLogStartTime";
-    private static final String REQUEST_ID_ATTR = "requestId";
-    private static final String RESPONSE_BODY_ATTR = "accessLogResponseBody";
-    private static final String IS_FILE_UPLOAD_ATTR = "accessLogIsFileUpload";
-    private static final String IS_FILE_DOWNLOAD_ATTR = "accessLogIsFileDownload";
-
     // Dedicated logger for access logs (configured in logback-spring.xml)
-    private static final Logger ACCESS_LOG_LOGGER = (Logger) LoggerFactory.getLogger("ACCESS_LOG");
+    // Logger name from AccessLogConstants.ACCESS_LOG_LOGGER_NAME
+    private static final Logger ACCESS_LOG_LOGGER = (Logger) LoggerFactory.getLogger(ACCESS_LOG_LOGGER_NAME);
 
     @Autowired
     private ConfigCenterService configCenterService;
