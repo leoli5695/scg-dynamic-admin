@@ -58,7 +58,22 @@ public class RateLimitException extends GatewayException {
         java.util.Map<String, Object> map = super.toErrorMap();
         map.put("limit", limit);
         map.put("remaining", remaining);
-        map.put("retryAfter", retryAfterSeconds);
+        map.put("retryAfter", formatRetryAfter(retryAfterSeconds));
         return map;
+    }
+
+    /**
+     * Format retry after seconds to human-readable string with unit.
+     */
+    private String formatRetryAfter(long seconds) {
+        if (seconds < 60) {
+            return seconds + "s";
+        } else if (seconds < 3600) {
+            long minutes = seconds / 60;
+            return minutes + "min";
+        } else {
+            long hours = seconds / 3600;
+            return hours + "h";
+        }
     }
 }

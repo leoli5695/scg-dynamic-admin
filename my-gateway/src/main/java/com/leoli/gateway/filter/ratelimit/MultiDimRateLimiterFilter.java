@@ -207,6 +207,7 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
                 result.setAllowed(false);
                 result.setExceededLevel(dimKey.getLevel());
                 result.setExceededKey(dimKey.getKey());
+                result.setExceededQuota(dimKey.getQuotaConfig());
 
                 if ("FIRST_HIT".equals(rejectStrategy)) {
                     // Return immediately on first failure
@@ -233,7 +234,7 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
                 && distributedRateLimiter != null) {
 
             RateLimitResult redisResult = distributedRateLimiter.tryAcquireWithFallback(
-                    dimKey.getKey(), quota.getQps(), quota.getWindowSizeMs());
+                    dimKey.getKey(), quota.getQps(), quota.getBurstCapacity(), quota.getWindowSizeMs());
 
             if (redisResult.isAllowed()) {
                 result.setAllowed(true);
@@ -259,10 +260,17 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
 
     /**
      * Extract tenant ID from request.
+     * Uses keySource as the primary source indicator, falls back to tenantIdSource if not set.
      */
     private String extractTenantId(ServerWebExchange exchange, MultiDimRateLimiterConfig config) {
         Map<String, Object> attrs = exchange.getAttributes();
-        String source = config.getTenantIdSource();
+
+        // keySource takes precedence over tenantIdSource for determining extraction strategy
+        // This allows simpler configuration when using header-based tenant identification
+        String source = config.getKeySource();
+        if (source == null || source.isEmpty() || "combined".equals(source)) {
+            source = config.getTenantIdSource();
+        }
 
         switch (source) {
             case "api_key_metadata":
@@ -357,29 +365,126 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
 
     /**
      * Reject request with 429 response.
+     * Uses unified response format with httpStatus, retryAfter, and level fields.
      */
     private Mono<Void> rejectRequest(ServerWebExchange exchange, RateCheckResult result) {
+        MultiDimRateLimiterConfig.QuotaConfig exceededQuota = result.getExceededQuota();
+        int burstCapacity = exceededQuota != null ? exceededQuota.getBurstCapacity() : 100;
+        long windowSizeMs = exceededQuota != null ? exceededQuota.getWindowSizeMs() : 1000;
+
+        // Calculate retryAfter based on window size, minimum 1 second
+        int retryAfterSeconds = Math.max(1, (int) Math.ceil(windowSizeMs / 1000.0));
+
         exchange.getResponse().setStatusCode(HttpStatus.TOO_MANY_REQUESTS);
         exchange.getResponse().getHeaders().add("Content-Type", "application/json;charset=UTF-8");
-        exchange.getResponse().getHeaders().add("X-RateLimit-Limit-Level", result.getExceededLevel());
+        exchange.getResponse().getHeaders().add("X-RateLimit-Limit", String.valueOf(burstCapacity));
         exchange.getResponse().getHeaders().add("X-RateLimit-Remaining", "0");
+        exchange.getResponse().getHeaders().add("X-RateLimit-Limit-Level", result.getExceededLevel());
+        exchange.getResponse().getHeaders().add("Retry-After", String.valueOf(retryAfterSeconds));
 
-        // Keep "error" field for frontend compatibility
-        String body = String.format(
-                "{\"code\":52901,\"error\":\"Too Many Requests\",\"message\":\"Rate limit exceeded at %s level\",\"data\":null,\"level\":\"%s\"}",
-                GatewayResponseHelper.escapeJson(result.getExceededLevel()),
-                GatewayResponseHelper.escapeJson(result.getExceededLevel())
-        );
+        // Build response with unified format
+        java.util.Map<String, Object> body = new java.util.HashMap<>();
+        body.put("httpStatus", HttpStatus.TOO_MANY_REQUESTS.value());
+        body.put("code", 52901);
+        body.put("error", "Too Many Requests");
+        body.put("message", String.format("Rate limit exceeded at %s level. Limit: %d requests per %s",
+                result.getExceededLevel(), burstCapacity, formatWindowSize(windowSizeMs)));
+        body.put("data", null);
+        body.put("level", result.getExceededLevel());
+        body.put("retryAfter", formatRetryAfter(retryAfterSeconds));
 
+        String jsonBody = toJson(body);
         return exchange.getResponse().writeWith(
-                Mono.just(exchange.getResponse().bufferFactory().wrap(body.getBytes()))
+                Mono.just(exchange.getResponse().bufferFactory().wrap(jsonBody.getBytes()))
         );
+    }
+
+    /**
+     * Format window size to human-readable string with space between number and unit.
+     */
+    private String formatWindowSize(long windowMs) {
+        if (windowMs < 1000) {
+            return windowMs + " ms";
+        } else if (windowMs < 60000) {
+            return (windowMs / 1000) + " s";
+        } else if (windowMs < 3600000) {
+            return (windowMs / 60000) + " min";
+        } else {
+            return (windowMs / 3600000) + " h";
+        }
+    }
+
+    /**
+     * Format retry after seconds to human-readable string with space between number and unit.
+     */
+    private String formatRetryAfter(int seconds) {
+        if (seconds < 60) {
+            return seconds + " s";
+        } else if (seconds < 3600) {
+            return (seconds / 60) + " min";
+        } else {
+            return (seconds / 3600) + " h";
+        }
+    }
+
+    /**
+     * Convert map to JSON string.
+     */
+    private String toJson(java.util.Map<String, Object> map) {
+        try {
+            return objectMapper.writeValueAsString(map);
+        } catch (Exception e) {
+            log.error("Failed to serialize rate limit response", e);
+            return "{\"httpStatus\":429,\"code\":52901,\"error\":\"Too Many Requests\",\"message\":\"Rate limit exceeded\",\"data\":null}";
+        }
     }
 
     @Override
     public int getOrder() {
         // After HybridRateLimiterFilter (HIGHEST_PRECEDENCE + 20)
         return FilterOrderConstants.MULTI_DIM_RATE_LIMITER;
+    }
+
+    /**
+     * Invalidate cache entries matching the given key patterns.
+     * Called by RateLimitResetRefresher when strategy is re-enabled.
+     *
+     * @param keyPatterns Set of key patterns to invalidate (e.g., "rate_limit:uuid:*")
+     */
+    public void invalidateCache(java.util.Set<String> keyPatterns) {
+        if (keyPatterns == null || keyPatterns.isEmpty()) {
+            log.info("No key patterns provided, skipping cache invalidation");
+            return;
+        }
+
+        // Get all keys in cache
+        java.util.Map<String, com.leoli.gateway.util.RateLimiterWindow> cacheMap = rateLimiterCache.asMap();
+        int invalidatedCount = 0;
+
+        for (String key : cacheMap.keySet()) {
+            for (String pattern : keyPatterns) {
+                if (matchesPattern(key, pattern)) {
+                    rateLimiterCache.invalidate(key);
+                    invalidatedCount++;
+                    log.debug("Invalidated cache key: {}", key);
+                    break; // Only invalidate once per key
+                }
+            }
+        }
+
+        log.info("MultiDimRateLimiter cache invalidation completed: {} entries cleared", invalidatedCount);
+    }
+
+    /**
+     * Check if a key matches a pattern.
+     * Pattern format: "prefix:*" where * matches any suffix.
+     */
+    private boolean matchesPattern(String key, String pattern) {
+        if (pattern.endsWith("*")) {
+            String prefix = pattern.substring(0, pattern.length() - 1);
+            return key.startsWith(prefix);
+        }
+        return key.equals(pattern);
     }
 
     // ============== Inner Classes ==============
@@ -414,6 +519,7 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
         private boolean allowed;
         private String exceededLevel;
         private String exceededKey;
+        private MultiDimRateLimiterConfig.QuotaConfig exceededQuota;
         private int minRemaining;
         private List<CheckResult> totalResults = new ArrayList<>();
     }

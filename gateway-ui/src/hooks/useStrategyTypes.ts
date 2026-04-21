@@ -19,6 +19,10 @@ interface StrategyTypeSchema {
   fields: StrategyTypeField[];
   subSchemas?: Record<string, { fields: StrategyTypeField[] }>;
   hasSubSchemas?: boolean;
+  // Multi-dimensional rate limiter specific fields
+  multiDimension?: boolean;
+  dimensionOptions?: Array<{ value: string; label: string }>;
+  dimensionLabel?: string;
 }
 
 interface StrategyType {

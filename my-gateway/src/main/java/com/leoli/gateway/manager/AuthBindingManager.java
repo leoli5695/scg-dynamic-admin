@@ -6,6 +6,7 @@ import com.leoli.gateway.auth.JwtValidationCache;
 import com.leoli.gateway.center.spi.ConfigCenterService;
 import com.leoli.gateway.enums.AuthType;
 import com.leoli.gateway.model.AuthConfig;
+import com.leoli.gateway.model.StrategyDefinition;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -52,6 +53,9 @@ public class AuthBindingManager {
     private final Map<String, String> basicAuthIndex = new ConcurrentHashMap<>();     // username -> policyId
     private final Map<String, String> accessKeyIndex = new ConcurrentHashMap<>();     // accessKey -> policyId
     private final Map<String, String> clientIdIndex = new ConcurrentHashMap<>();      // clientId -> policyId
+
+    // Track policies synced from Strategy (to distinguish from AuthPolicy config)
+    private final Set<String> strategySyncedPolicies = ConcurrentHashMap.newKeySet();
 
     @Autowired
     private ConfigCenterService configCenterService;
@@ -539,6 +543,8 @@ public class AuthBindingManager {
         basicAuthIndex.clear();
         accessKeyIndex.clear();
         clientIdIndex.clear();
+        // Clear strategy synced tracking
+        strategySyncedPolicies.clear();
         log.info("Auth binding cache cleared");
     }
 
@@ -556,6 +562,211 @@ public class AuthBindingManager {
         stats.put("basicAuthIndexSize", basicAuthIndex.size());
         stats.put("accessKeyIndexSize", accessKeyIndex.size());
         stats.put("clientIdIndexSize", clientIdIndex.size());
+        stats.put("strategySyncedPoliciesCount", strategySyncedPolicies.size());
         return stats;
+    }
+
+    // ============================================================
+    // Strategy Sync Methods
+    // ============================================================
+
+    /**
+     * Sync authentication configuration from Strategy.
+     * Called by StrategyRefresher when AUTH type strategy is loaded/updated.
+     *
+     * @param strategy Strategy definition with AUTH type
+     */
+    public void syncFromStrategy(StrategyDefinition strategy) {
+        if (strategy == null || !StrategyDefinition.TYPE_AUTH.equals(strategy.getStrategyType())) {
+            return;
+        }
+
+        String policyId = strategy.getStrategyId();
+        log.info("Syncing AUTH strategy to policy: {} (scope={}, routeId={})",
+                policyId, strategy.getScope(), strategy.getRouteId());
+
+        // 1. Convert Strategy.config Map to AuthConfig
+        AuthConfig config = convertToAuthConfig(strategy.getConfig());
+        config.setPolicyId(policyId);
+        if (strategy.isRouteBound()) {
+            config.setRouteId(strategy.getRouteId());
+        }
+
+        // 2. Store policy (this also builds credential indices)
+        putPolicy(policyId, config);
+
+        // 3. Set route binding based on scope
+        if (strategy.isRouteBound() && strategy.getRouteId() != null) {
+            setPolicyRoutes(policyId, Collections.singletonList(strategy.getRouteId()));
+        }
+        // Note: Global strategies are handled separately in AuthenticationGlobalFilter
+
+        // 4. Mark as synced from Strategy
+        strategySyncedPolicies.add(policyId);
+
+        log.info("AUTH strategy synced successfully: {} (authType={})", policyId, config.getAuthType());
+    }
+
+    /**
+     * Convert Strategy config Map to AuthConfig object.
+     *
+     * @param configMap Strategy config map
+     * @return AuthConfig object
+     */
+    private AuthConfig convertToAuthConfig(Map<String, Object> configMap) {
+        if (configMap == null || configMap.isEmpty()) {
+            AuthConfig defaultConfig = new AuthConfig();
+            defaultConfig.setEnabled(true);
+            return defaultConfig;
+        }
+
+        AuthConfig config = new AuthConfig();
+
+        // Basic fields
+        if (configMap.get("authType") != null) {
+            config.setAuthType((String) configMap.get("authType"));
+        }
+        if (configMap.get("enabled") != null) {
+            config.setEnabled((Boolean) configMap.get("enabled"));
+        } else {
+            config.setEnabled(true);
+        }
+        if (configMap.get("secretKey") != null) {
+            config.setSecretKey((String) configMap.get("secretKey"));
+        }
+        if (configMap.get("customConfig") != null) {
+            config.setCustomConfig((String) configMap.get("customConfig"));
+        }
+
+        // JWT configuration
+        if (configMap.get("jwtIssuer") != null) {
+            config.setJwtIssuer((String) configMap.get("jwtIssuer"));
+        }
+        if (configMap.get("jwtAudience") != null) {
+            config.setJwtAudience((String) configMap.get("jwtAudience"));
+        }
+        if (configMap.get("jwtAlgorithm") != null) {
+            config.setJwtAlgorithm((String) configMap.get("jwtAlgorithm"));
+        }
+        if (configMap.get("jwtPublicKey") != null) {
+            config.setJwtPublicKey((String) configMap.get("jwtPublicKey"));
+        }
+        if (configMap.get("jwtClockSkewSeconds") != null) {
+            config.setJwtClockSkewSeconds(((Number) configMap.get("jwtClockSkewSeconds")).intValue());
+        }
+
+        // API Key configuration
+        if (configMap.get("apiKey") != null) {
+            config.setApiKey((String) configMap.get("apiKey"));
+        }
+        if (configMap.get("apiKeyHeader") != null) {
+            config.setApiKeyHeader((String) configMap.get("apiKeyHeader"));
+        }
+        if (configMap.get("apiKeyQueryParam") != null) {
+            config.setApiKeyQueryParam((String) configMap.get("apiKeyQueryParam"));
+        }
+        if (configMap.get("apiKeyPrefix") != null) {
+            config.setApiKeyPrefix((String) configMap.get("apiKeyPrefix"));
+        }
+        if (configMap.get("apiKeys") != null) {
+            @SuppressWarnings("unchecked")
+            Map<String, Map<String, Object>> apiKeys = (Map<String, Map<String, Object>>) configMap.get("apiKeys");
+            config.setApiKeys(apiKeys);
+        }
+
+        // Basic Auth configuration
+        if (configMap.get("basicUsername") != null) {
+            config.setBasicUsername((String) configMap.get("basicUsername"));
+        }
+        if (configMap.get("basicPassword") != null) {
+            config.setBasicPassword((String) configMap.get("basicPassword"));
+        }
+        if (configMap.get("basicUsers") != null) {
+            @SuppressWarnings("unchecked")
+            Map<String, String> basicUsers = (Map<String, String>) configMap.get("basicUsers");
+            config.setBasicUsers(basicUsers);
+        }
+        if (configMap.get("realm") != null) {
+            config.setRealm((String) configMap.get("realm"));
+        }
+        if (configMap.get("passwordHashAlgorithm") != null) {
+            config.setPasswordHashAlgorithm((String) configMap.get("passwordHashAlgorithm"));
+        }
+
+        // HMAC configuration
+        if (configMap.get("accessKey") != null) {
+            config.setAccessKey((String) configMap.get("accessKey"));
+        }
+        if (configMap.get("accessKeySecrets") != null) {
+            @SuppressWarnings("unchecked")
+            Map<String, String> secrets = (Map<String, String>) configMap.get("accessKeySecrets");
+            config.setAccessKeySecrets(secrets);
+        }
+        if (configMap.get("signatureAlgorithm") != null) {
+            config.setSignatureAlgorithm((String) configMap.get("signatureAlgorithm"));
+        }
+        if (configMap.get("clockSkewMinutes") != null) {
+            config.setClockSkewMinutes(((Number) configMap.get("clockSkewMinutes")).intValue());
+        }
+        if (configMap.get("requireNonce") != null) {
+            config.setRequireNonce((Boolean) configMap.get("requireNonce"));
+        }
+        if (configMap.get("validateContentMd5") != null) {
+            config.setValidateContentMd5((Boolean) configMap.get("validateContentMd5"));
+        }
+
+        // OAuth2 configuration
+        if (configMap.get("clientId") != null) {
+            config.setClientId((String) configMap.get("clientId"));
+        }
+        if (configMap.get("clientSecret") != null) {
+            config.setClientSecret((String) configMap.get("clientSecret"));
+        }
+        if (configMap.get("tokenEndpoint") != null) {
+            config.setTokenEndpoint((String) configMap.get("tokenEndpoint"));
+        }
+        if (configMap.get("userInfoEndpoint") != null) {
+            config.setUserInfoEndpoint((String) configMap.get("userInfoEndpoint"));
+        }
+        if (configMap.get("requiredScopes") != null) {
+            config.setRequiredScopes((String) configMap.get("requiredScopes"));
+        }
+        if (configMap.get("tokenCacheTtlSeconds") != null) {
+            config.setTokenCacheTtlSeconds(((Number) configMap.get("tokenCacheTtlSeconds")).intValue());
+        }
+
+        // Whitelist and error response
+        if (configMap.get("whitelistPaths") != null) {
+            Object whitelist = configMap.get("whitelistPaths");
+            if (whitelist instanceof String[]) {
+                config.setWhitelistPaths((String[]) whitelist);
+            } else if (whitelist instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<String> list = (List<String>) whitelist;
+                config.setWhitelistPaths(list.toArray(new String[0]));
+            }
+        }
+        if (configMap.get("errorResponseFormat") != null) {
+            config.setErrorResponseFormat((String) configMap.get("errorResponseFormat"));
+        }
+        if (configMap.get("customErrorTemplate") != null) {
+            config.setCustomErrorTemplate((String) configMap.get("customErrorTemplate"));
+        }
+
+        return config;
+    }
+
+    /**
+     * Check if a policy was synced from Strategy.
+     */
+    public boolean isSyncedFromStrategy(String policyId) {
+        return strategySyncedPolicies.contains(policyId);
+    }
+
+    /**
+     * Remove strategy-synced policy tracking.
+     */
+    public void unmarkStrategySynced(String policyId) {
+        strategySyncedPolicies.remove(policyId);
     }
 }

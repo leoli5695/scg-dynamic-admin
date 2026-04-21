@@ -32,10 +32,13 @@ spring:
     nacos:
       # Direct properties for NacosCenterAutoConfiguration (must be at this level, not under discovery)
       serverAddr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
-      namespace: ${NACOS_NAMESPACE:}
+      # Namespace is REQUIRED - no default value, must be explicitly set for multi-tenant isolation
+      # Gateway instance will fail to start if NACOS_NAMESPACE is not configured
+      namespace: ${NACOS_NAMESPACE}
       discovery:
         server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
-        namespace: ${NACOS_NAMESPACE:}
+        # Namespace is REQUIRED - no default value, must be explicitly set for multi-tenant isolation
+        namespace: ${NACOS_NAMESPACE}
         ip: 127.0.0.1  # Force registration with localhost IP
 
     # Consul Configuration (alternative to Nacos)
@@ -240,6 +243,18 @@ management:
     tags:
       application: ${spring.application.name}
       gateway_instance_id: ${GATEWAY_INSTANCE_ID:unknown}
+  # OpenTelemetry Tracing Configuration
+  tracing:
+    enabled: ${OTEL_TRACING_ENABLED:true}
+    sampling:
+      probability: ${OTEL_SAMPLING_PROBABILITY:1.0}  # 1.0 = 100% sampling
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+    metrics:
+      export:
+        enabled: ${OTEL_METRICS_EXPORT_ENABLED:true}
+        step: ${OTEL_METRICS_EXPORT_STEP:1m}
   health:
     consul:
       enabled: false
@@ -258,17 +273,17 @@ management:
 #     path: /swagger-ui.html
 #   show-actuator: true
 
-# OpenTelemetry SDK Configuration - DISABLED: Actuator removed
-# otel:
-#   sdk:
-#     disabled: ${OTEL_SDK_DISABLED:false}
-#   service:
-#     name: ${spring.application.name:my-gateway}
-#   exporter:
-#     otlp:
-#       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}
-#       protocol: ${OTEL_EXPORTER_OTLP_PROTOCOL:http/protobuf}
-#   traces:
-#     exporter: ${OTEL_TRACES_EXPORTER:otlp}
-#   metrics:
-#     exporter: ${OTEL_METRICS_EXPORTER:otlp}
+# OpenTelemetry SDK Configuration
+otel:
+  sdk:
+    disabled: ${OTEL_SDK_DISABLED:false}
+  service:
+    name: ${spring.application.name:my-gateway}
+  exporter:
+    otlp:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}
+      protocol: ${OTEL_EXPORTER_OTLP_PROTOCOL:http/protobuf}
+  traces:
+    exporter: ${OTEL_TRACES_EXPORTER:otlp}
+  metrics:
+    exporter: ${OTEL_METRICS_EXPORTER:otlp}

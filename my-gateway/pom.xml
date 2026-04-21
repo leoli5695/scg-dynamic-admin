@@ -80,8 +80,7 @@
             <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
 
-        <!-- OpenTelemetry Distributed Tracing - DISABLED: Requires actuator -->
-        <!--
+        <!-- OpenTelemetry Distributed Tracing -->
         <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-tracing-bridge-otel</artifactId>
@@ -90,7 +89,6 @@
             <groupId>io.opentelemetry</groupId>
             <artifactId>opentelemetry-exporter-otlp</artifactId>
         </dependency>
-        -->
 
         <!-- SpringDoc OpenAPI for WebFlux (Swagger UI) - DISABLED: Requires actuator -->
         <!--

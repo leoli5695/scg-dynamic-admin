@@ -15,7 +15,7 @@ import type { MenuProps } from 'antd';
 import api from '../utils/api';
 import { useTranslation } from 'react-i18next';
 import { useStrategyTypes, StrategyType } from '../hooks/useStrategyTypes';
-import DynamicConfigFields, { AuthSubSchemaFields } from '../components/DynamicConfigFields';
+import DynamicConfigFields, { AuthSubSchemaFields, MultiDimRateLimiterFields } from '../components/DynamicConfigFields';
 import './StrategiesPage.premium.css';
 
 const { Text, Title } = Typography;
@@ -200,6 +200,25 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
     return strategyType?.color || '#3b82f6';
   };
 
+  // Map quota field names to user-friendly display names for MULTI_DIM_RATE_LIMITER
+  const getQuotaDisplayName = (key: string, config: Record<string, any>): string => {
+    const quotaNameMap: Record<string, string> = {
+      'globalQuota': '全局限流',
+      'ipQuota': 'IP限流',
+      'userQuota': '用户限流',
+    };
+
+    // Special handling for tenantQuota - depends on keySource
+    if (key === 'tenantQuota') {
+      if (config.keySource === 'header') {
+        return 'Header限流';
+      }
+      return '客户端限流';
+    }
+
+    return quotaNameMap[key] || key;
+  };
+
   const buildConfig = (values: any, strategyType: string) => {
     switch (strategyType) {
       case 'RATE_LIMITER':
@@ -207,10 +226,87 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
           qps: parseInt(values.qps) || 100,
           burstCapacity: parseInt(values.burstCapacity) || 200,
           timeUnit: values.timeUnit || 'second',
-          keyResolver: values.keyResolver || 'ip',
+          keyResolver: 'ip',
           keyType: 'combined',
-          headerName: values.headerName,
         };
+      case 'MULTI_DIM_RATE_LIMITER':
+        // Process dimensions array from Form.List
+        const dimensions = values.dimensions || [];
+
+        // Helper function: convert timeUnit to windowSizeMs
+        const timeUnitToWindowSizeMs = (timeUnit: string): number => {
+          switch (timeUnit) {
+            case 'second': return 1000;
+            case 'minute': return 60000;
+            case 'hour': return 3600000;
+            default: return 1000;
+          }
+        };
+
+        const config: any = {
+          enabled: true,
+          globalQuota: { enabled: false, qps: 10000, burstCapacity: 20000, windowSizeMs: 1000 },
+          tenantQuota: { enabled: false, qps: 1000, burstCapacity: 2000, windowSizeMs: 1000 },
+          userQuota: { enabled: false, qps: 100, burstCapacity: 200, windowSizeMs: 1000 },
+          ipQuota: { enabled: false, qps: 50, burstCapacity: 100, windowSizeMs: 1000 },
+          rejectStrategy: values.rejectStrategy || 'FIRST_HIT',
+          headerNames: {
+            tenantIdHeader: 'X-Tenant-Id',
+            userIdHeader: 'X-User-Id',
+            apiKeyHeader: 'X-Api-Key',
+          },
+          keyPrefix: 'multi_rate:',
+          windowSizeMs: 1000,
+        };
+
+        // Map each dimension to the appropriate quota config
+        dimensions.forEach((dim: any) => {
+          const dimType = dim.type;
+          const qps = parseInt(dim.qps) || 100;
+          const burstCapacity = parseInt(dim.burstCapacity) || 200;
+          const windowSizeMs = timeUnitToWindowSizeMs(dim.timeUnit || 'second');
+
+          switch (dimType) {
+            case 'GLOBAL':
+              config.globalQuota = { enabled: true, qps, burstCapacity, windowSizeMs };
+              break;
+            case 'IP':
+              config.ipQuota = { enabled: true, qps, burstCapacity, windowSizeMs };
+              break;
+            case 'USER':
+              config.userQuota = {
+                enabled: true,
+                qps,
+                burstCapacity,
+                windowSizeMs,
+              };
+              if (dim.userIdSource) {
+                config.userIdSource = dim.userIdSource;
+              }
+              if (dim.userIdHeader) {
+                config.headerNames.userIdHeader = dim.userIdHeader;
+              }
+              break;
+            case 'CLIENT':
+              config.tenantQuota = { enabled: true, qps, burstCapacity, windowSizeMs };
+              if (dim.keySource) {
+                config.keySource = dim.keySource;
+              }
+              if (dim.apiKeyHeader) {
+                config.headerNames.apiKeyHeader = dim.apiKeyHeader;
+              }
+              break;
+            case 'HEADER':
+              config.tenantQuota = { enabled: true, qps, burstCapacity, windowSizeMs };
+              config.keySource = 'header';
+              if (dim.headerName) {
+                config.headerNames.tenantIdHeader = dim.headerName;
+              }
+              break;
+          }
+        });
+
+        return config;
       case 'IP_FILTER':
         return {
           mode: values.mode || 'blacklist',
@@ -323,6 +419,19 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
 
   const handleCreate = async (values: any) => {
     try {
+      // Frontend validation for global strategy uniqueness
+      if (values.scope === 'GLOBAL' && requiresGlobalUniqueness(values.strategyType)) {
+        const checkResult = checkGlobalStrategyExists(values.strategyType);
+        if (checkResult.exists) {
+          message.error(t('strategy.global_strategy_exists_error', {
+            type: getStrategyTypeLabel(values.strategyType),
+            name: checkResult.strategy?.strategyName,
+            defaultValue: `已存在全局${getStrategyTypeLabel(values.strategyType)}策略 "${checkResult.strategy?.strategyName}"，每个类型只允许创建一个全局策略`
+          }));
+          return;
+        }
+      }
+
       const strategy: StrategyDefinition = {
         strategyId: '',
         strategyName: values.strategyName,
@@ -341,6 +450,9 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
         message.success(t('message.create_success'));
         createForm.resetFields();
         setCreateModalVisible(false);
+        setSelectedStrategyType(null);
+        setGlobalStrategyExists(false);
+        setExistingGlobalStrategy(null);
         loadStrategies();
       } else {
         message.error(response.data.message);
@@ -442,7 +554,12 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
 
   const openEditModal = useCallback((strategy: StrategyDefinition) => {
     setSelectedStrategy(strategy);
-    editForm.setFieldsValue({
+    
+    // Reset form first to clear previous data
+    editForm.resetFields();
+
+    // Convert MULTI_DIM_RATE_LIMITER config to dimensions array for form
+    let formValues: any = {
       strategyName: strategy.strategyName,
       scope: strategy.scope,
       routeId: strategy.routeId,
@@ -459,13 +576,132 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
       cacheMethods: strategy.config?.cacheMethods?.join(', '),
       addRequestHeaders: strategy.config?.addRequestHeaders ? JSON.stringify(strategy.config.addRequestHeaders) : '',
       addResponseHeaders: strategy.config?.addResponseHeaders ? JSON.stringify(strategy.config.addResponseHeaders) : '',
-    });
+    };
+
+    // Convert multi-dim rate limiter quotas to dimensions array
+    if (strategy.strategyType === 'MULTI_DIM_RATE_LIMITER') {
+      const dimensions: any[] = [];
+      const config = strategy.config || {};
+
+      // Helper function: convert windowSizeMs to timeUnit
+      const windowSizeMsToTimeUnit = (windowSizeMs: number): string => {
+        if (windowSizeMs >= 3600000) return 'hour';
+        if (windowSizeMs >= 60000) return 'minute';
+        return 'second';
+      };
+
+      // Global quota
+      if (config.globalQuota?.enabled) {
+        dimensions.push({
+          type: 'GLOBAL',
+          qps: config.globalQuota.qps,
+          burstCapacity: config.globalQuota.burstCapacity,
+          timeUnit: windowSizeMsToTimeUnit(config.globalQuota.windowSizeMs || 1000),
+        });
+      }
+
+      // IP quota
+      if (config.ipQuota?.enabled) {
+        dimensions.push({
+          type: 'IP',
+          qps: config.ipQuota.qps,
+          burstCapacity: config.ipQuota.burstCapacity,
+          timeUnit: windowSizeMsToTimeUnit(config.ipQuota.windowSizeMs || 1000),
+        });
+      }
+
+      // User quota
+      if (config.userQuota?.enabled) {
+        dimensions.push({
+          type: 'USER',
+          qps: config.userQuota.qps,
+          burstCapacity: config.userQuota.burstCapacity,
+          timeUnit: windowSizeMsToTimeUnit(config.userQuota.windowSizeMs || 1000),
+          userIdSource: config.userIdSource,
+          userIdHeader: config.headerNames?.userIdHeader,
+        });
+      }
+
+      // Tenant quota (CLIENT or HEADER)
+      if (config.tenantQuota?.enabled) {
+        const timeUnit = windowSizeMsToTimeUnit(config.tenantQuota.windowSizeMs || 1000);
+        if (config.keySource === 'header') {
+          dimensions.push({
+            type: 'HEADER',
+            qps: config.tenantQuota.qps,
+            burstCapacity: config.tenantQuota.burstCapacity,
+            timeUnit,
+            headerName: config.headerNames?.tenantIdHeader,
+          });
+        } else {
+          dimensions.push({
+            type: 'CLIENT',
+            qps: config.tenantQuota.qps,
+            burstCapacity: config.tenantQuota.burstCapacity,
+            timeUnit,
+            keySource: config.keySource,
+            apiKeyHeader: config.headerNames?.apiKeyHeader,
+          });
+        }
+      }
+
+      formValues.dimensions = dimensions;
+      // Remove quota fields to avoid conflicts
+      delete formValues.globalQuota;
+      delete formValues.tenantQuota;
+      delete formValues.userQuota;
+      delete formValues.ipQuota;
+      delete formValues.headerNames;
+      delete formValues.keySource;
+      delete formValues.userIdSource;
+    }
+
+    editForm.setFieldsValue(formValues);
     setEditModalVisible(true);
   }, [editForm]);
 
   // State for strategy type selection modal
   const [typeSelectModalVisible, setTypeSelectModalVisible] = useState(false);
   const [selectedStrategyType, setSelectedStrategyType] = useState<StrategyType | null>(null);
+
+  // State for global strategy existence check
+  const [globalStrategyExists, setGlobalStrategyExists] = useState(false);
+  const [existingGlobalStrategy, setExistingGlobalStrategy] = useState<StrategyDefinition | null>(null);
+
+  // Strategy types that require global uniqueness (only one global instance allowed)
+  const GLOBAL_UNIQUE_STRATEGY_TYPES = [
+    'RATE_LIMITER',
+    'MULTI_DIM_RATE_LIMITER',
+    'IP_FILTER',
+    'TIMEOUT',
+    'CIRCUIT_BREAKER',
+    'AUTH',
+    'RETRY',
+    'CORS',
+    'CACHE',
+    'SECURITY',
+    'API_VERSION',
+  ];
+
+  // Check if strategy type requires global uniqueness
+  const requiresGlobalUniqueness = useCallback((strategyType: string): boolean => {
+    return GLOBAL_UNIQUE_STRATEGY_TYPES.includes(strategyType);
+  }, []);
+
+  // Check if global strategy exists for a type (for uniqueness constraint)
+  const checkGlobalStrategyExists = useCallback((strategyType: string): { exists: boolean; strategy?: StrategyDefinition } => {
+    if (!requiresGlobalUniqueness(strategyType)) {
+      return { exists: false };
+    }
+    const globalStrategies = strategies.filter(s =>
+      s.strategyType === strategyType &&
+      s.scope === 'GLOBAL'
+    );
+    if (globalStrategies.length > 0) {
+      return { exists: true, strategy: globalStrategies[0] };
+    }
+    return { exists: false };
+  }, [strategies, requiresGlobalUniqueness]);
 
   // Render config fields dynamically based on schema
   const renderConfigFields = (strategyType: string, form: any) => {
@@ -506,17 +742,42 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
       );
     }
 
+    // Special handling for MULTI_DIM_RATE_LIMITER with dynamic dimension cards
+    if (strategyType === 'MULTI_DIM_RATE_LIMITER' && schema.multiDimension) {
+      return <MultiDimRateLimiterFields schema={schema} form={form} t={t} />;
+    }
+
     // Default dynamic rendering for other types
     return <DynamicConfigFields schema={schema} form={form} t={t} />;
   };
 
   // Handle strategy type selection
   const handleSelectStrategyType = (type: StrategyType) => {
+    // Check for global strategy uniqueness constraint
+    const checkResult = checkGlobalStrategyExists(type.typeCode);
+    if (checkResult.exists) {
+      setGlobalStrategyExists(true);
+      setExistingGlobalStrategy(checkResult.strategy || null);
+      // Show warning message
+      message.warning(t('strategy.global_strategy_exists_warning', {
+        type: type.typeName,
+        name: checkResult.strategy?.strategyName || 'Unknown',
+        defaultValue: `已存在全局${type.typeName}策略 "${checkResult.strategy?.strategyName}"，只能创建路由级别的策略`
+      }));
+    } else {
+      setGlobalStrategyExists(false);
+      setExistingGlobalStrategy(null);
+    }
+
     setSelectedStrategyType(type);
     setTypeSelectModalVisible(false);
     setCreateModalVisible(true);
     createForm.resetFields();
-    createForm.setFieldsValue({ strategyType: type.typeCode });
+    // If global strategy exists for this type, default to ROUTE scope
+    createForm.setFieldsValue({
+      strategyType: type.typeCode,
+      scope: checkResult.exists ? 'ROUTE' : 'GLOBAL'
+    });
   };
 
   // Handle back to type selection
@@ -571,7 +832,7 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
           <div className="stat-value">{totalStrategies}</div>
           <div className="stat-label">{t('strategy.stats_total')}</div>
         </div>
-        <Divider type="vertical" className="stat-divider" />
+        <Divider orientation="vertical" className="stat-divider" />
         <div
           className={`stat-item ${statusFilter === 'enabled' ? 'stat-item-active' : ''}`}
           onClick={() => setStatusFilter('enabled')}
@@ -580,7 +841,7 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
           <div className="stat-value text-green-600">{enabledStrategies}</div>
           <div className="stat-label">{t('strategy.stats_enabled')}</div>
         </div>
-        <Divider type="vertical" className="stat-divider" />
+        <Divider orientation="vertical" className="stat-divider" />
         <div
           className={`stat-item ${statusFilter === 'disabled' ? 'stat-item-active' : ''}`}
           onClick={() => setStatusFilter('disabled')}
@@ -681,10 +942,28 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
 
                 <div className="strategy-config">
                   {Object.entries(strategy.config || {}).slice(0, 2).map(([key, value]) => {
-                    const displayValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+                    // Use friendly display name for quota fields
+                    const displayKey = strategy.strategyType === 'MULTI_DIM_RATE_LIMITER'
+                      ? getQuotaDisplayName(key, strategy.config)
+                      : key;
+
+                    // For quota objects, show simplified status
+                    let displayValue: string;
+                    if (strategy.strategyType === 'MULTI_DIM_RATE_LIMITER' &&
+                        key.endsWith('Quota') && typeof value === 'object') {
+                      const quota = value as Record<string, any>;
+                      if (quota.enabled) {
+                        displayValue = `${quota.qps || 100} QPS`;
+                      } else {
+                        displayValue = '未启用';
+                      }
+                    } else {
+                      displayValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+                    }
+
                     return (
                       <div key={key} className="config-item">
-                        <Text type="secondary" className="config-key">{key}:</Text>
+                        <Text type="secondary" className="config-key">{displayKey}:</Text>
                         <Text className="config-value" title={displayValue}>{displayValue.substring(0, 25)}{displayValue.length > 25 ? '...' : ''}</Text>
                       </div>
                     );
@@ -853,10 +1132,23 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
                     name="scope"
                     label={t('strategy.scope')}
                     initialValue="GLOBAL"
-                    extra={t('strategy.scope_helper')}
+                    extra={
+                      globalStrategyExists && requiresGlobalUniqueness(selectedStrategyType?.typeCode || '')
+                        ? t('strategy.global_strategy_exists_helper', {
+                            type: selectedStrategyType?.typeName,
+                            name: existingGlobalStrategy?.strategyName,
+                            defaultValue: `已存在全局${selectedStrategyType?.typeName}策略 "${existingGlobalStrategy?.strategyName}"，请选择路由级别`
+                          })
+                        : t('strategy.scope_helper')
+                    }
                   >
                     <Radio.Group size="large">
-                      <Radio.Button value="GLOBAL"><GlobalOutlined /> {t('strategy.scope_global')}</Radio.Button>
+                      <Radio.Button
+                        value="GLOBAL"
+                        disabled={globalStrategyExists && requiresGlobalUniqueness(selectedStrategyType?.typeCode || '')}
+                      >
+                        <GlobalOutlined /> {t('strategy.scope_global')}
+                      </Radio.Button>
                       <Radio.Button value="ROUTE"><ApiOutlined /> {t('strategy.scope_route')}</Radio.Button>
                     </Radio.Group>
                   </Form.Item>

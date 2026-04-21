@@ -15,7 +15,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * <p>
  * Features:
  * - Sliding window rate limiting
- * - Burst capacity for handling traffic spikes
+ * - Burst capacity for handling traffic spikes (累加语义: 总容量 = maxRequests + burstCapacity)
  * - Non-blocking implementation suitable for reactive environments
  * - Automatic window reset with CAS-based coordination
  *
@@ -25,18 +25,18 @@ import java.util.concurrent.locks.ReentrantLock;
 @Slf4j
 public class RateLimiterWindow {
 
-    private final int maxRequests;
-    private final int burstCapacity;
+    private final int maxRequests;          // 稳定流量阈值
+    private final int burstCapacity;        // 突发额外容量（累加语义）
+    private final int totalCapacity;        // 总容量 = maxRequests + burstCapacity
     private final long windowSizeMs;
     private final AtomicInteger currentCount = new AtomicInteger(0);
-    private final AtomicInteger burstTokens = new AtomicInteger(0);
     private final AtomicLong windowStartTime = new AtomicLong(System.currentTimeMillis());
     private final ReentrantLock lock = new ReentrantLock();
 
     /**
      * Create a rate limiter with default burst capacity (2x maxRequests).
      *
-     * @param maxRequests   Maximum requests allowed per window
+     * @param maxRequests   Maximum requests allowed per window (steady state rate)
      * @param windowSizeMs  Window size in milliseconds
      */
     public RateLimiterWindow(int maxRequests, long windowSizeMs) {
@@ -45,26 +45,28 @@ public class RateLimiterWindow {
 
     /**
      * Create a rate limiter with custom burst capacity.
+     * <p>
+     * 累加语义: 总容量 = maxRequests + burstCapacity
+     * 例如: maxRequests=5, burstCapacity=3 → 总容量=8
      *
      * @param maxRequests   Maximum requests allowed per window (steady state rate)
-     * @param burstCapacity Maximum burst capacity
+     * @param burstCapacity Extra burst capacity (累加语义)
      * @param windowSizeMs  Window size in milliseconds
      */
     public RateLimiterWindow(int maxRequests, int burstCapacity, long windowSizeMs) {
         this.maxRequests = maxRequests;
-        this.burstCapacity = Math.max(burstCapacity, maxRequests);
+        this.burstCapacity = Math.max(0, burstCapacity);  // 允许 burstCapacity >= 0
+        this.totalCapacity = maxRequests + this.burstCapacity;
         this.windowSizeMs = windowSizeMs;
-        this.burstTokens.set(this.burstCapacity);
     }
 
     /**
      * Try to acquire a permit from the rate limiter.
      * <p>
-     * Algorithm:
-     * 1. Check if window needs reset (CAS-based, only one thread performs reset)
-     * 2. Fast path: try CAS for low contention scenarios
-     * 3. Slow path: tryLock for high contention (never blocks!)
-     * 4. If tryLock fails, immediately reject to prevent thread starvation
+     * 累加语义逻辑:
+     * 1. currentCount < maxRequests → 稳定流量，允许
+     * 2. currentCount < totalCapacity → 突发流量，允许
+     * 3. currentCount >= totalCapacity → 拒绝
      *
      * @return true if request is allowed, false if rate limit exceeded
      */
@@ -75,13 +77,10 @@ public class RateLimiterWindow {
         // Try to reset window if expired (CAS ensures only one thread performs reset)
         if (now - windowStart >= windowSizeMs) {
             if (windowStartTime.compareAndSet(windowStart, now)) {
-                // This thread won the CAS - responsible for resetting counters
+                // This thread won the CAS - responsible for resetting counter
                 currentCount.set(0);
-                int prevBurst = burstTokens.get();
-                int newBurstTokens = Math.min(burstCapacity, maxRequests + prevBurst);
-                burstTokens.set(newBurstTokens);
                 if (log.isDebugEnabled()) {
-                    log.debug("Window reset: burstTokens restored from {} to {}", prevBurst, newBurstTokens);
+                    log.debug("Window reset: currentCount reset to 0, totalCapacity={}", totalCapacity);
                 }
             }
             // Continue with acquire logic after potential reset
@@ -89,24 +88,14 @@ public class RateLimiterWindow {
 
         // Fast path: try CAS for low contention (optimistic)
         int count = currentCount.get();
-        if (count < maxRequests) {
+        if (count < totalCapacity) {
             if (currentCount.compareAndSet(count, count + 1)) {
                 return true;
             }
             // CAS failed due to contention - fall through to slow path
         } else {
-            // Steady rate exhausted, try burst tokens with CAS
-            int tokens = burstTokens.get();
-            if (tokens > 0) {
-                if (burstTokens.compareAndSet(tokens, tokens - 1)) {
-                    currentCount.incrementAndGet();
-                    return true;
-                }
-                // CAS failed - fall through to slow path
-            } else {
-                // No burst tokens available
-                return false;
-            }
+            // Total capacity exhausted
+            return false;
         }
 
         // Slow path: tryLock for high contention (never blocks!)
@@ -119,21 +108,11 @@ public class RateLimiterWindow {
                 windowStart = windowStartTime.get();
                 if (now - windowStart >= windowSizeMs) {
                     currentCount.set(0);
-                    int prevBurst = burstTokens.get();
-                    int newBurstTokens = Math.min(burstCapacity, maxRequests + prevBurst);
-                    burstTokens.set(newBurstTokens);
                     windowStartTime.set(now);
                     count = 0;
                 }
 
-                if (count < maxRequests) {
-                    currentCount.incrementAndGet();
-                    return true;
-                }
-
-                int tokens = burstTokens.get();
-                if (tokens > 0) {
-                    burstTokens.decrementAndGet();
+                if (count < totalCapacity) {
                     currentCount.incrementAndGet();
                     return true;
                 }
@@ -150,21 +129,12 @@ public class RateLimiterWindow {
     }
 
     /**
-     * Get remaining requests allowed (burst capacity minus current count).
+     * Get remaining requests allowed (total capacity minus current count).
      *
      * @return remaining requests
      */
     public int getRemaining() {
-        return Math.max(0, burstCapacity - currentCount.get());
-    }
-
-    /**
-     * Get remaining burst tokens.
-     *
-     * @return remaining burst tokens
-     */
-    public int getBurstRemaining() {
-        return burstTokens.get();
+        return Math.max(0, totalCapacity - currentCount.get());
     }
 
     /**
@@ -183,5 +153,14 @@ public class RateLimiterWindow {
      */
     public boolean isInBurstMode() {
         return currentCount.get() >= maxRequests;
+    }
+
+    /**
+     * Get total capacity (maxRequests + burstCapacity).
+     *
+     * @return total capacity
+     */
+    public int getTotalCapacity() {
+        return totalCapacity;
     }
 }

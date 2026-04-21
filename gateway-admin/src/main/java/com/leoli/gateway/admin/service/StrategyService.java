@@ -53,6 +53,9 @@ public class StrategyService {
     @Autowired
     private GatewayInstanceRepository gatewayInstanceRepository;
 
+    @Autowired
+    private RateLimitResetService rateLimitResetService;
+
     @PostConstruct
     public void init() {
         loadStrategiesFromDatabase();
@@ -96,9 +99,6 @@ public class StrategyService {
                 configCenterService.publishConfig(strategyDataId, namespace, strategy);
                 log.info("Global strategy published to namespace: {}", namespace);
             }
-            // Also publish to public namespace as backup
-            configCenterService.publishConfig(strategyDataId, null, strategy);
-            log.info("Global strategy published to public namespace");
         } else {
             // Publish only to the specific namespace
             configCenterService.publishConfig(strategyDataId, primaryNamespace, strategy);
@@ -118,9 +118,6 @@ public class StrategyService {
                 configCenterService.removeConfig(strategyDataId, namespace);
                 log.info("Global strategy removed from namespace: {}", namespace);
             }
-            // Also remove from public namespace
-            configCenterService.removeConfig(strategyDataId, null);
-            log.info("Global strategy removed from public namespace");
         } else {
             // Remove only from the specific namespace
             configCenterService.removeConfig(strategyDataId, primaryNamespace);
@@ -174,11 +171,6 @@ public class StrategyService {
                                 log.info("Recovered global strategy in namespace {}: {}", namespace, strategyDataId);
                             }
                         }
-                        // Also check public namespace
-                        if (!configCenterService.configExists(strategyDataId, null)) {
-                            configCenterService.publishConfig(strategyDataId, null, strategy);
-                            log.info("Recovered global strategy in public namespace: {}", strategyDataId);
-                        }
                     } else {
                         // Instance-specific strategy
                         String nacosNamespace = getNacosNamespace(entity.getInstanceId());
@@ -210,8 +202,6 @@ public class StrategyService {
         for (String namespace : namespaces) {
             updateStrategiesIndex(namespace, allEnabledStrategyIds);
         }
-        // Also update public namespace
-        updateStrategiesIndex(null, allEnabledStrategyIds);
     }
 
     /**
@@ -328,6 +318,10 @@ public class StrategyService {
             throw new IllegalArgumentException("Strategy name already exists: " + strategy.getStrategyName());
         }
 
+        // Validate global strategy uniqueness constraint
+        // Only one global strategy is allowed per type for certain strategy types
+        validateGlobalStrategyUniqueness(strategy, instanceId);
+
         // Generate UUID
         String strategyId = UUID.randomUUID().toString();
         strategy.setStrategyId(strategyId);
@@ -349,14 +343,93 @@ public class StrategyService {
             publishStrategyToNacos(strategyDataId, nacosNamespace, strategy, isGlobal);
         }
 
-        // Update strategies index for all relevant namespaces
-        updateStrategiesIndexForStrategy(strategy);
+        // Update strategies index for the specific namespace
+        updateStrategiesIndexForStrategy(strategy, instanceId);
 
         return entity;
     }
 
     /**
+     * Validate that only one global strategy can exist per type for certain strategy types.
+     * This constraint ensures consistent global behavior for configuration-type strategies.
+     * <p>
+     * Strategy types that require global uniqueness:
+     * - RATE_LIMITER: Global rate limiting threshold
+     * - MULTI_DIM_RATE_LIMITER: Multi-dimensional rate limiting
+     * - IP_FILTER: Global IP blacklist/whitelist
+     * - TIMEOUT: Global timeout configuration
+     * - CIRCUIT_BREAKER: Global circuit breaker settings
+     * - AUTH: Global authentication configuration
+     * - RETRY: Global retry policy
+     * - CORS: Global CORS configuration
+     * - CACHE: Global cache settings
+     * - SECURITY: Global security checks
+     * - API_VERSION: Global API version control
+     * <p>
+     * Strategy types that allow multiple global strategies:
+     * - HEADER_OP: Different header operations can coexist
+     * - REQUEST_TRANSFORM: Multiple transformation rules
+     * - RESPONSE_TRANSFORM: Multiple transformation rules
+     * - REQUEST_VALIDATION: Multiple validation rules
+     * - MOCK_RESPONSE: Multiple mock scenarios
+     */
+    private void validateGlobalStrategyUniqueness(StrategyDefinition strategy, String instanceId) {
+        // Only check for GLOBAL scope strategies
+        if (!StrategyDefinition.SCOPE_GLOBAL.equals(strategy.getScope())) {
+            return;
+        }
+
+        String strategyType = strategy.getStrategyType();
+
+        // Check if this strategy type requires global uniqueness
+        if (!requiresGlobalUniqueness(strategyType)) {
+            log.debug("Strategy type {} allows multiple global strategies", strategyType);
+            return;
+        }
+
+        // Check if a global strategy of this type already exists
+        List<StrategyEntity> existingGlobalStrategies;
+        if (instanceId != null && !instanceId.isEmpty()) {
+            existingGlobalStrategies = strategyRepository.findByStrategyTypeAndScopeAndInstanceIdAndEnabledTrue(
+                strategyType, StrategyDefinition.SCOPE_GLOBAL, instanceId);
+        } else {
+            existingGlobalStrategies = strategyRepository.findByStrategyTypeAndScopeAndEnabledTrue(
+                strategyType, StrategyDefinition.SCOPE_GLOBAL);
+        }
+
+        if (!existingGlobalStrategies.isEmpty()) {
+            StrategyEntity existing = existingGlobalStrategies.get(0);
+            throw new IllegalArgumentException(
+                String.format("Global strategy already exists for type '%s': '%s'. " +
+                    "Only one global strategy is allowed for this type. " +
+                    "Please create a ROUTE-level strategy instead, or disable the existing global strategy first.",
+                    strategyType, existing.getStrategyName()));
+        }
+
+        log.debug("Global strategy uniqueness validation passed for type: {}", strategyType);
+    }
+
+    /**
+     * Check if strategy type requires global uniqueness (only one global instance allowed).
+     */
+    private boolean requiresGlobalUniqueness(String strategyType) {
+        // Strategy types that require global uniqueness - configuration types
+        return StrategyDefinition.TYPE_RATE_LIMITER.equals(strategyType)
+            || StrategyDefinition.TYPE_MULTI_DIM_RATE_LIMITER.equals(strategyType)
+            || StrategyDefinition.TYPE_IP_FILTER.equals(strategyType)
+            || StrategyDefinition.TYPE_TIMEOUT.equals(strategyType)
+            || StrategyDefinition.TYPE_CIRCUIT_BREAKER.equals(strategyType)
+            || StrategyDefinition.TYPE_AUTH.equals(strategyType)
+            || StrategyDefinition.TYPE_RETRY.equals(strategyType)
+            || StrategyDefinition.TYPE_CORS.equals(strategyType)
+            || StrategyDefinition.TYPE_CACHE.equals(strategyType)
+            || StrategyDefinition.TYPE_SECURITY.equals(strategyType)
+            || StrategyDefinition.TYPE_API_VERSION.equals(strategyType);
+    }
+
+    /**
      * Update an existing strategy.
+     * For rate limiter strategies, clears counters when config changes to ensure new limits take effect.
      */
     @Transactional(rollbackFor = Exception.class)
     public StrategyEntity updateStrategy(String strategyId, StrategyDefinition strategy) {
@@ -384,6 +457,20 @@ public class StrategyService {
         }
 
         strategy.setStrategyId(strategyId);
+
+        // Check if counters need to be reset for rate limiter strategies
+        // Only reset when config changes require it (not for increases)
+        boolean shouldResetCounters = false;
+        String resetReason = null;
+        StrategyDefinition oldStrategy = toDefinition(entity);
+
+        if (isRateLimiterStrategy(strategy) && strategy.isEnabled()) {
+            resetReason = shouldResetRateLimitCounters(oldStrategy, strategy);
+            if (resetReason != null) {
+                shouldResetCounters = true;
+                log.info("Rate limiter config change requires counter reset: {} for strategy: {}", resetReason, strategyId);
+            }
+        }
 
         // Update entity
         entity.setStrategyName(strategy.getStrategyName());
@@ -414,10 +501,128 @@ public class StrategyService {
             removeStrategyFromNacos(strategyDataId, nacosNamespace, isGlobal);
         }
 
-        // Update strategies index
-        updateStrategiesIndexForStrategy(strategy);
+        // Update strategies index for the specific namespace
+        updateStrategiesIndexForStrategy(strategy, entity.getInstanceId());
+
+        // Reset rate limit counters only when necessary
+        if (shouldResetCounters) {
+            try {
+                rateLimitResetService.resetRateLimitCounters(strategy);
+                log.info("Rate limit counters reset for updated strategy {}: reason={}", strategyId, resetReason);
+            } catch (Exception e) {
+                log.error("Failed to reset rate limit counters for updated strategy {}: {}", strategyId, e.getMessage());
+                // Don't fail the update operation - counters will eventually expire
+            }
+        }
 
         return entity;
+    }
+
+    /**
+     * Determine if rate limit counters should be reset based on config changes.
+     *
+     * RESET NEEDED when:
+     * 1. Dimension disabled (enabled: true → false) - old counters would still block requests
+     * 2. qps reduced - existing count may exceed new limit immediately
+     * 3. burstCapacity reduced - same as above
+     * 4. keySource/keyPrefix changed - key format mismatch, old keys won't be counted
+     * 5. windowSizeMs changed - timing mismatch between old and new windows
+     * 6. headerNames changed - affects tenantId extraction for HEADER dimension
+     *
+     * NO RESET NEEDED when:
+     * 1. qps/burstCapacity increased - new capacity takes effect immediately
+     * 2. New dimension enabled (enabled: false → true) - starts from 0
+     * 3. Only metadata changed (name, description, priority)
+     *
+     * @return reason string if reset needed, null if no reset needed
+     */
+    private String shouldResetRateLimitCounters(StrategyDefinition oldStrategy, StrategyDefinition newStrategy) {
+        Map<String, Object> oldConfig = oldStrategy.getConfig();
+        Map<String, Object> newConfig = newStrategy.getConfig();
+
+        if (oldConfig == null || newConfig == null) {
+            return "config_missing";
+        }
+
+        // Check key format changes (affects all counters - must reset)
+        String oldKeySource = getStringValue(oldConfig, "keySource", "combined");
+        String newKeySource = getStringValue(newConfig, "keySource", "combined");
+        if (!oldKeySource.equals(newKeySource)) {
+            return "keySource_changed (" + oldKeySource + " -> " + newKeySource + ")";
+        }
+
+        String oldKeyPrefix = getStringValue(oldConfig, "keyPrefix", "multi_rate:");
+        String newKeyPrefix = getStringValue(newConfig, "keyPrefix", "multi_rate:");
+        if (!oldKeyPrefix.equals(newKeyPrefix)) {
+            return "keyPrefix_changed (" + oldKeyPrefix + " -> " + newKeyPrefix + ")";
+        }
+
+        // Check header names change (affects key extraction for HEADER dimension)
+        Map<String, Object> oldHeaders = getMapValue(oldConfig, "headerNames");
+        Map<String, Object> newHeaders = getMapValue(newConfig, "headerNames");
+        if (oldHeaders != null && newHeaders != null) {
+            String oldTenantHeader = getStringValue(oldHeaders, "tenantIdHeader", "X-Tenant-Id");
+            String newTenantHeader = getStringValue(newHeaders, "tenantIdHeader", "X-Tenant-Id");
+            if (!oldTenantHeader.equals(newTenantHeader)) {
+                return "tenantIdHeader_changed (" + oldTenantHeader + " -> " + newTenantHeader + ")";
+            }
+        }
+
+        // Check dimension quota changes
+        String[] quotaKeys = {"globalQuota", "tenantQuota", "userQuota", "ipQuota"};
+        for (String quotaKey : quotaKeys) {
+            Map<String, Object> oldQuota = getMapValue(oldConfig, quotaKey);
+            Map<String, Object> newQuota = getMapValue(newConfig, quotaKey);
+
+            boolean oldEnabled = oldQuota != null && getBoolValue(oldQuota, "enabled", false);
+            boolean newEnabled = newQuota != null && getBoolValue(newQuota, "enabled", false);
+
+            // Dimension disabled: must reset to clear old counters
+            if (oldEnabled && !newEnabled) {
+                return quotaKey + "_disabled";
+            }
+
+            // If dimension stays enabled, check for reductions
+            if (oldEnabled && newEnabled) {
+                int oldQps = getIntValue(oldQuota, "qps", 100);
+                int newQps = getIntValue(newQuota, "qps", 100);
+                if (newQps < oldQps) {
+                    return quotaKey + "_qps_reduced (" + oldQps + " -> " + newQps + ")";
+                }
+
+                int oldBurst = getIntValue(oldQuota, "burstCapacity", 200);
+                int newBurst = getIntValue(newQuota, "burstCapacity", 200);
+                if (newBurst < oldBurst) {
+                    return quotaKey + "_burst_reduced (" + oldBurst + " -> " + newBurst + ")";
+                }
+
+                // Window size change affects timing logic
+                long oldWindow = getLongValue(oldQuota, "windowSizeMs", 1000L);
+                long newWindow = getLongValue(newQuota, "windowSizeMs", 1000L);
+                if (oldWindow != newWindow) {
+                    return quotaKey + "_window_changed (" + oldWindow + "ms -> " + newWindow + "ms)";
+                }
+            }
+            // New dimension enabled: NO reset needed (starts from 0)
+        }
+
+        return null; // No reset needed
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> getMapValue(Map<String, Object> map, String key) {
+        Object value = map.get(key);
+        if (value instanceof Map) {
+            return (Map<String, Object>) value;
+        }
+        return null;
+    }
+
+    private boolean getBoolValue(Map<String, Object> map, String key, boolean defaultValue) {
+        Object value = map.get(key);
+        if (value == null) return defaultValue;
+        if (value instanceof Boolean) return (Boolean) value;
+        return defaultValue;
     }
 
     /**
@@ -445,17 +650,31 @@ public class StrategyService {
         strategyRepository.flush();
         log.info("Strategy deleted from database: {}", strategyId);
 
-        // Update strategies index for all namespaces
-        List<String> allEnabledStrategyIds = getAllStrategyIds();
+        // Clear rate-limit-reset command for rate limiter strategies
+        StrategyDefinition strategy = toDefinition(entity);
+        if (isRateLimiterStrategy(strategy)) {
+            try {
+                rateLimitResetService.clearResetCommand(strategy);
+                log.info("Rate-limit-reset command cleared for deleted strategy: {}", strategyId);
+            } catch (Exception e) {
+                log.warn("Failed to clear rate-limit-reset command: {}", e.getMessage());
+            }
+        }
+
+        // Update strategies index for this specific namespace
+        List<String> namespaceStrategyIds = getEnabledStrategyIds(entity.getInstanceId());
         if (isGlobal) {
+            // Global strategy: broadcast to all namespaces
             updateAllStrategiesIndexes(getAllGatewayNamespaces());
         } else {
-            updateStrategiesIndex(nacosNamespace, allEnabledStrategyIds);
+            // Instance-specific: update only the specific namespace
+            updateStrategiesIndex(nacosNamespace, namespaceStrategyIds);
         }
     }
 
     /**
      * Enable a strategy.
+     * When re-enabling a rate limit strategy, counters are reset for a clean start.
      */
     @Transactional(rollbackFor = Exception.class)
     public void enableStrategy(String strategyId) {
@@ -482,13 +701,36 @@ public class StrategyService {
         boolean isGlobal = isGlobalStrategy(strategy);
         publishStrategyToNacos(strategyDataId, nacosNamespace, strategy, isGlobal);
 
-        // Update strategies index (add enabled strategy to index)
-        List<String> allEnabledStrategyIds = getAllStrategyIds();
+        // Update strategies index for this specific namespace
+        List<String> namespaceStrategyIds = getEnabledStrategyIds(entity.getInstanceId());
         if (isGlobal) {
+            // Global strategy: broadcast to all namespaces
             updateAllStrategiesIndexes(getAllGatewayNamespaces());
         } else {
-            updateStrategiesIndex(nacosNamespace, allEnabledStrategyIds);
+            // Instance-specific: update only the specific namespace
+            updateStrategiesIndex(nacosNamespace, namespaceStrategyIds);
         }
+
+        // Reset rate limit counters for rate limiter strategies
+        // This ensures a clean start when re-enabling after being disabled
+        if (isRateLimiterStrategy(strategy)) {
+            try {
+                rateLimitResetService.resetRateLimitCounters(strategy);
+                log.info("Rate limit counters reset for strategy: {}", strategyId);
+            } catch (Exception e) {
+                log.error("Failed to reset rate limit counters for strategy {}: {}", strategyId, e.getMessage());
+                // Don't fail the enable operation - counters will eventually expire
+            }
+        }
+    }
+
+    /**
+     * Check if strategy is a rate limiter type.
+     */
+    private boolean isRateLimiterStrategy(StrategyDefinition strategy) {
+        String type = strategy.getStrategyType();
+        return StrategyDefinition.TYPE_RATE_LIMITER.equals(type)
+                || StrategyDefinition.TYPE_MULTI_DIM_RATE_LIMITER.equals(type);
     }
 
     /**
@@ -519,28 +761,47 @@ public class StrategyService {
         boolean isGlobal = isGlobalStrategy(strategy);
         removeStrategyFromNacos(strategyDataId, nacosNamespace, isGlobal);
 
-        // Update strategies index (remove disabled strategy from index)
-        List<String> allEnabledStrategyIds = getAllStrategyIds();
+        // Update strategies index for this specific namespace
+        List<String> namespaceStrategyIds = getEnabledStrategyIds(entity.getInstanceId());
         if (isGlobal) {
+            // Global strategy: broadcast to all namespaces
             updateAllStrategiesIndexes(getAllGatewayNamespaces());
         } else {
-            updateStrategiesIndex(nacosNamespace, allEnabledStrategyIds);
+            // Instance-specific: update only the specific namespace
+            updateStrategiesIndex(nacosNamespace, namespaceStrategyIds);
         }
     }
 
     /**
      * Update strategies index for a strategy based on its scope.
+     * @param strategy the strategy definition
+     * @param instanceId the instance ID associated with the strategy (for ROUTE scope)
      */
-    private void updateStrategiesIndexForStrategy(StrategyDefinition strategy) {
-        List<String> allEnabledStrategyIds = getAllStrategyIds();
+    private void updateStrategiesIndexForStrategy(StrategyDefinition strategy, String instanceId) {
         boolean isGlobal = isGlobalStrategy(strategy);
         if (isGlobal) {
+            // Global strategy: broadcast index to all gateway namespaces
             updateAllStrategiesIndexes(getAllGatewayNamespaces());
         } else {
-            // For instance-specific strategy, need to find its namespace
-            String nacosNamespace = null; // Default to public
-            updateStrategiesIndex(nacosNamespace, allEnabledStrategyIds);
+            // Instance-specific strategy: update index only in the specific namespace
+            String nacosNamespace = getNacosNamespace(instanceId);
+            // Get enabled strategy IDs for this specific namespace
+            List<String> namespaceStrategyIds = getEnabledStrategyIds(instanceId);
+            updateStrategiesIndex(nacosNamespace, namespaceStrategyIds);
+            log.info("Updated strategies index for namespace {} with {} strategies",
+                    nacosNamespace == null ? "public" : nacosNamespace, namespaceStrategyIds.size());
         }
+    }
+
+    /**
+     * Update strategies index for a strategy based on its scope (legacy method).
+     * @deprecated Use {@link #updateStrategiesIndexForStrategy(StrategyDefinition, String)} instead
+     */
+    private void updateStrategiesIndexForStrategy(StrategyDefinition strategy) {
+        // This method is deprecated - it doesn't have instanceId context
+        // For backward compatibility, treat as global if no instanceId available
+        log.warn("Called deprecated updateStrategiesIndexForStrategy without instanceId - treating as global");
+        updateAllStrategiesIndexes(getAllGatewayNamespaces());
     }
 
     /**

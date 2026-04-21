@@ -68,6 +68,10 @@ gateway:
   # Prometheus configuration for Gateway monitoring
   prometheus:
     url: ${PROMETHEUS_URL:http://127.0.0.1:9091}
+  # Jaeger configuration for distributed tracing
+  jaeger:
+    url: ${JAEGER_URL:http://127.0.0.1:16686}
+    enabled: ${JAEGER_ENABLED:true}
   consul:
     host: ${CONSUL_HOST:consul}
     port: ${CONSUL_PORT:8500}

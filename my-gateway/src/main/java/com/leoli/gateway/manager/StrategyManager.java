@@ -244,10 +244,11 @@ public class StrategyManager {
     /**
      * Get config for route by strategy type (generic method).
      * Returns raw Map for backward compatibility.
+     * Includes strategyId in the returned config for precise key management.
      *
      * @param routeId      Route identifier
      * @param strategyType Strategy type constant from StrategyDefinition
-     * @return Config as Map, or null if not found
+     * @return Config as Map (with strategyId included), or null if not found
      */
     public Map<String, Object> getConfig(String routeId, String strategyType) {
         StrategyDefinition strategy = getStrategyForRoute(routeId, strategyType);
@@ -261,7 +262,11 @@ public class StrategyManager {
             }
             if (Objects.isNull(strategy)) return null;
         }
-        return strategy.getConfig();
+        // Include strategyId and scope in config for rate limiter key management
+        Map<String, Object> configWithId = new HashMap<>(strategy.getConfig());
+        configWithId.put("strategyId", strategy.getStrategyId());
+        configWithId.put("scope", strategy.getScope());
+        return configWithId;
     }
 
     /**

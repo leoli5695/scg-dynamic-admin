@@ -145,4 +145,10 @@ public interface StrategyRepository extends JpaRepository<StrategyEntity, Long> 
      * Count strategies by type and instance.
      */
     long countByStrategyTypeAndInstanceId(String strategyType, String instanceId);
+
+    /**
+     * Find enabled strategies by type, scope, and instance ID.
+     * Used for uniqueness validation of global rate limiter strategies.
+     */
+    List<StrategyEntity> findByStrategyTypeAndScopeAndInstanceIdAndEnabledTrue(String strategyType, String scope, String instanceId);
 }

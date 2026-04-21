@@ -39,8 +39,9 @@ public final class GatewayResponseHelper {
     /**
      * Build a standardized JSON error response.
      * <p>
-     * Response format: {"code": ..., "error": "...", "message": "...", "data": null}
-     * - `code`: Numeric error code for programmatic handling
+     * Response format: {"httpStatus": ..., "code": ..., "error": "...", "message": "...", "data": null}
+     * - `httpStatus`: HTTP status code (e.g., 400, 401, 429, 503)
+     * - `code`: Business error code for programmatic handling
      * - `error`: Short error type (e.g., "Bad Request", "Unauthorized")
      * - `message`: Detailed error message for display
      * - `data`: Always null for error responses
@@ -59,6 +60,7 @@ public final class GatewayResponseHelper {
         response.getHeaders().add("Content-Type", "application/json;charset=UTF-8");
 
         Map<String, Object> body = new HashMap<>();
+        body.put("httpStatus", status.value());
         body.put("code", code);
         body.put("error", status.getReasonPhrase());  // For frontend compatibility
         body.put("message", message != null ? message : status.getReasonPhrase());
@@ -138,6 +140,11 @@ public final class GatewayResponseHelper {
 
     /**
      * Write 429 Too Many Requests response (rate limit).
+     * <p>
+     * Response format includes:
+     * - httpStatus: HTTP status code (429)
+     * - code: Business error code for programmatic handling
+     * - retryAfter: Retry wait time with unit (e.g., "1s", "60s", "2min")
      *
      * @param response   ServerHttpResponse
      * @param limit      Rate limit value
@@ -154,19 +161,78 @@ public final class GatewayResponseHelper {
         response.getHeaders().add("X-RateLimit-Remaining", "0");
         response.getHeaders().add("Retry-After", String.valueOf(retryAfter));
 
-        // Keep "error" field for frontend compatibility
-        String body = String.format(
-                "{\"code\":%d,\"error\":\"Too Many Requests\",\"message\":\"Rate limit exceeded. Limit: %d requests per %dms\",\"data\":null,\"retryAfter\":%d}",
-                ErrorCode.RATE_LIMIT_EXCEEDED.getCode(), limit, windowMs, retryAfter
-        );
+        // Build response with httpStatus field and retryAfter with unit
+        Map<String, Object> body = new HashMap<>();
+        body.put("httpStatus", HttpStatus.TOO_MANY_REQUESTS.value());
+        body.put("code", ErrorCode.RATE_LIMIT_EXCEEDED.getCode());
+        body.put("error", "Too Many Requests");
+        body.put("message", String.format("Rate limit exceeded. Limit: %d requests per %s", limit, formatWindowSize(windowMs)));
+        body.put("data", null);
+        body.put("retryAfter", formatRetryAfter(retryAfter));
 
+        String jsonBody = toJson(body);
         return response.writeWith(
-                Mono.just(response.bufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8)))
+                Mono.just(response.bufferFactory().wrap(jsonBody.getBytes(StandardCharsets.UTF_8)))
         );
     }
 
     /**
+     * Write 429 Too Many Requests response with auto-calculated retryAfter.
+     * <p>
+     * Auto-calculates retryAfter based on window size (windowMs / 1000 seconds).
+     * For sliding window rate limiting, the minimum wait time is 1 second.
+     *
+     * @param response      ServerHttpResponse
+     * @param burstCapacity Total capacity (burst limit)
+     * @param windowMs      Window size in milliseconds
+     */
+    public static Mono<Void> writeRateLimited(ServerHttpResponse response,
+                                               int burstCapacity,
+                                               long windowMs) {
+        // Calculate retryAfter based on window size, minimum 1 second
+        int retryAfterSeconds = Math.max(1, (int) Math.ceil(windowMs / 1000.0));
+        return writeRateLimited(response, burstCapacity, windowMs, retryAfterSeconds);
+    }
+
+    /**
+     * Format retry after seconds to human-readable string with space between number and unit.
+     * Examples: "1 s", "60 s", "2 min", "1 h"
+     */
+    private static String formatRetryAfter(int seconds) {
+        if (seconds < 60) {
+            return seconds + " s";
+        } else if (seconds < 3600) {
+            int minutes = seconds / 60;
+            return minutes + " min";
+        } else {
+            int hours = seconds / 3600;
+            return hours + " h";
+        }
+    }
+
+    /**
+     * Format window size in milliseconds to human-readable string with space between number and unit.
+     * Examples: "100 ms", "1 s", "60 s", "2 min", "1 h"
+     */
+    private static String formatWindowSize(long windowMs) {
+        if (windowMs < 1000) {
+            return windowMs + " ms";
+        } else if (windowMs < 60000) {
+            long seconds = windowMs / 1000;
+            return seconds + " s";
+        } else if (windowMs < 3600000) {
+            long minutes = windowMs / 60000;
+            return minutes + " min";
+        } else {
+            long hours = windowMs / 3600000;
+            return hours + " h";
+        }
+    }
+
+    /**
      * Write 503 Service Unavailable response (circuit breaker open).
+     * <p>
+     * Response format includes httpStatus for clarity.
      *
      * @param response ServerHttpResponse
      * @param routeId  Route ID that triggered circuit breaker
@@ -175,14 +241,17 @@ public final class GatewayResponseHelper {
         response.setStatusCode(HttpStatus.SERVICE_UNAVAILABLE);
         response.getHeaders().add("Content-Type", "application/json;charset=UTF-8");
 
-        // Keep "error" field for frontend compatibility
-        String body = String.format(
-                "{\"code\":%d,\"error\":\"Service Unavailable\",\"message\":\"Circuit breaker is open, please try again later\",\"data\":null,\"routeId\":\"%s\"}",
-                ErrorCode.CIRCUIT_BREAKER_OPEN.getCode(), escapeJson(routeId)
-        );
+        Map<String, Object> body = new HashMap<>();
+        body.put("httpStatus", HttpStatus.SERVICE_UNAVAILABLE.value());
+        body.put("code", ErrorCode.CIRCUIT_BREAKER_OPEN.getCode());
+        body.put("error", "Service Unavailable");
+        body.put("message", "Circuit breaker is open, please try again later");
+        body.put("data", null);
+        body.put("routeId", routeId);
 
+        String jsonBody = toJson(body);
         return response.writeWith(
-                Mono.just(response.bufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8)))
+                Mono.just(response.bufferFactory().wrap(jsonBody.getBytes(StandardCharsets.UTF_8)))
         );
     }
 

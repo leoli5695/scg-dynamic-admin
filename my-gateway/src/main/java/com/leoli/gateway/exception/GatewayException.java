@@ -59,12 +59,15 @@ public class GatewayException extends RuntimeException {
 
     /**
      * Build error response map.
+     * Includes httpStatus for clarity.
      */
     public java.util.Map<String, Object> toErrorMap() {
         java.util.Map<String, Object> map = new java.util.LinkedHashMap<>();
+        map.put("httpStatus", errorCode.getStatus().value());
         map.put("code", errorCode.getCode());
         map.put("error", errorCode.getMessage());
         map.put("message", details != null ? details : errorCode.getDescription());
+        map.put("data", null);
         if (routeId != null) {
             map.put("routeId", routeId);
         }

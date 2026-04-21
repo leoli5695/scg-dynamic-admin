@@ -22,8 +22,7 @@ const LanguageSwitcher: React.FC = () => {
       value={currentLang}
       onChange={handleChange}
       options={languages}
-      prefixCls="language-switcher"
-      dropdownClassName="language-switcher-dropdown"
+      popupClassName="language-switcher-dropdown"
       style={{ width: 120 }}
       suffixIcon={<GlobalOutlined />}
     />

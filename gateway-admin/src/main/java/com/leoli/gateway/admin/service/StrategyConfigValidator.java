@@ -79,14 +79,14 @@ public class StrategyConfigValidator {
             errors.add("qps exceeds maximum limit (100000), got: " + qps);
         }
 
-        // Burst capacity validation (int type, always has value)
+        // Burst capacity validation (累加语义: 总容量 = qps + burstCapacity)
         int burstCapacity = config.getBurstCapacity();
         if (burstCapacity < 0) {
             errors.add("burstCapacity cannot be negative, got: " + burstCapacity);
         }
-        if (burstCapacity < qps) {
-            log.warn("burstCapacity ({}) is less than qps ({}), this may cause immediate rate limiting",
-                    burstCapacity, qps);
+        // 突发容量提示（累加语义）
+        if (burstCapacity == 0) {
+            log.info("burstCapacity=0 means no burst handling, total capacity equals qps={}", qps);
         }
 
         // Time unit validation

@@ -235,32 +235,27 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
 
     /**
      * Build error response body.
+     * Unified format with httpStatus field.
      */
     private Map<String, Object> buildErrorBody(ServerWebExchange exchange, Throwable ex, HttpStatus status) {
         Map<String, Object> body = new LinkedHashMap<>();
 
-        body.put("timestamp", Instant.now().toString());
-        body.put("path", exchange.getRequest().getPath().value());
-
         // Handle GatewayException with structured error info
         if (ex instanceof GatewayException) {
             body.putAll(((GatewayException) ex).toErrorMap());
-            body.put("status", status.value());
+            // httpStatus already included in toErrorMap()
             return body;
         }
 
         // Standard error response for non-GatewayException
-        body.put("status", status.value());
+        body.put("httpStatus", status.value());
+        body.put("code", status.value());  // For non-gateway exceptions, use HTTP status as code
         body.put("error", status.getReasonPhrase());
+        body.put("data", null);
 
         String message = extractMessage(ex);
         if (message != null && !message.isEmpty()) {
             body.put("message", message);
-        }
-
-        String requestId = exchange.getRequest().getHeaders().getFirst("x-request-id");
-        if (requestId != null) {
-            body.put("requestId", requestId);
         }
 
         return body;

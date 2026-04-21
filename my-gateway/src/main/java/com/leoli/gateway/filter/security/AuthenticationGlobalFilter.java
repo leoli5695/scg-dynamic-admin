@@ -5,6 +5,7 @@ import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.manager.AuthBindingManager;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.AuthConfig;
+import com.leoli.gateway.model.StrategyDefinition;
 import com.leoli.gateway.util.RouteUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +21,7 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.util.Base64;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -49,17 +51,44 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String routeId = RouteUtils.getRouteId(exchange);
 
-        // Step 1: Check if route requires authentication (route-triggered auth)
-        if (!authBindingManager.requiresAuth(routeId)) {
+        // Step 1: Check if route requires authentication
+        // 1a: Route-bound policies (via AuthBindingManager)
+        boolean routeRequiresAuth = authBindingManager.requiresAuth(routeId);
+
+        // 1b: Global AUTH strategy (via StrategyManager)
+        StrategyDefinition globalAuthStrategy = strategyManager.getStrategyForRoute(routeId, StrategyDefinition.TYPE_AUTH);
+        boolean globalRequiresAuth = globalAuthStrategy != null
+                && globalAuthStrategy.isEnabled()
+                && globalAuthStrategy.isGlobal();
+
+        if (!routeRequiresAuth && !globalRequiresAuth) {
             log.debug("Route {} does not require authentication", routeId);
             return chain.filter(exchange);
         }
 
-        log.debug("Route {} requires authentication", routeId);
+        log.debug("Route {} requires authentication (route-bound={}, global={})",
+                routeId, routeRequiresAuth, globalRequiresAuth);
 
-        // Step 2: Get policies bound to this route
+        // Step 2: Collect all candidate policies (route-bound + global)
+        Set<String> candidatePolicyIds = new HashSet<>();
+
+        // 2a: Route-bound policies
         Set<String> boundPolicies = authBindingManager.getPoliciesForRoute(routeId);
-        if (boundPolicies.isEmpty()) {
+        candidatePolicyIds.addAll(boundPolicies);
+
+        // 2b: Global strategy (sync to AuthBindingManager if not already synced)
+        if (globalRequiresAuth) {
+            String strategyId = globalAuthStrategy.getStrategyId();
+            candidatePolicyIds.add(strategyId);
+
+            // Ensure global strategy is synced to AuthBindingManager for credential lookup
+            if (authBindingManager.getAuthConfig(strategyId) == null) {
+                authBindingManager.syncFromStrategy(globalAuthStrategy);
+                log.info("Global AUTH strategy {} synced to AuthBindingManager", strategyId);
+            }
+        }
+
+        if (candidatePolicyIds.isEmpty()) {
             log.warn("Route {} marked as requiring auth but no policies bound", routeId);
             return chain.filter(exchange);
         }
@@ -71,8 +100,8 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
             // Step 3.5: Check for Bearer token and try JWT/OAuth2 policies
             String bearerToken = extractBearerToken(exchange.getRequest().getHeaders());
             if (bearerToken != null) {
-                // Find JWT or OAuth2 policy bound to this route
-                for (String pid : boundPolicies) {
+                // Find JWT or OAuth2 policy among candidates
+                for (String pid : candidatePolicyIds) {
                     AuthConfig config = authBindingManager.getAuthConfig(pid);
                     if (config != null && config.isEnabled()) {
                         String authType = config.getAuthType();
@@ -89,9 +118,9 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
             return writeUnauthorizedResponse(exchange, "Authentication required");
         }
 
-        // Step 4: Verify the matched policy is bound to this route
-        if (!boundPolicies.contains(policyId)) {
-            log.warn("Policy {} matched credentials but not bound to route {}", policyId, routeId);
+        // Step 4: Verify the matched policy is in candidate list
+        if (!candidatePolicyIds.contains(policyId)) {
+            log.warn("Policy {} matched credentials but not authorized for route {}", policyId, routeId);
             return writeForbiddenResponse(exchange, "Credential not authorized for this route");
         }
 
@@ -153,6 +182,7 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
     /**
      * Authenticate with a specific policy.
      * After successful authentication, check route authorization.
+     * Global policies (synced from Strategy) bypass route authorization check.
      */
     private Mono<Void> authenticateWithPolicy(ServerWebExchange exchange, GatewayFilterChain chain,
                                               String routeId, String policyId) {
@@ -170,17 +200,21 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
         }
 
         final AuthConfig finalConfig = config;
+        final boolean isGlobalPolicy = authBindingManager.isSyncedFromStrategy(policyId)
+                && strategyManager.getStrategy(policyId) != null
+                && strategyManager.getStrategy(policyId).isGlobal();
 
         return authProcessManager.authenticate(exchange, finalConfig)
                 .then(Mono.defer(() -> {
                     // After successful authentication, check route authorization
-                    if (!authBindingManager.isRouteAuthorized(policyId, routeId)) {
+                    // Global policies bypass route authorization check
+                    if (!isGlobalPolicy && !authBindingManager.isRouteAuthorized(policyId, routeId)) {
                         log.warn("Route {} not authorized for policy {}", routeId, policyId);
                         return writeForbiddenResponse(exchange, "Route not authorized for this credential");
                     }
 
-                    log.debug("Authentication and authorization successful for route: {} with policy: {}",
-                            routeId, policyId);
+                    log.debug("Authentication and authorization successful for route: {} with policy: {} (global={})",
+                            routeId, policyId, isGlobalPolicy);
                     return chain.filter(exchange);
                 }))
                 .onErrorResume(e -> {
@@ -327,122 +361,6 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
                 .replace("\n", "\\n")
                 .replace("\r", "\\r")
                 .replace("\t", "\\t");
-    }
-
-    /**
-     * Load authentication configuration for a route (legacy mode).
-     * Uses StrategyManager to get AUTH type strategy.
-     */
-    private AuthConfig loadAuthConfigFromStrategy(String routeId) {
-        Map<String, Object> configMap = strategyManager.getAuthConfig(routeId);
-        if (configMap == null || configMap.isEmpty()) {
-            return null;
-        }
-
-        AuthConfig config = new AuthConfig();
-        config.setRouteId(routeId);
-
-        if (configMap.get("authType") != null) {
-            config.setAuthType((String) configMap.get("authType"));
-        }
-        if (configMap.get("enabled") != null) {
-            config.setEnabled((Boolean) configMap.get("enabled"));
-        }
-        if (configMap.get("secretKey") != null) {
-            config.setSecretKey((String) configMap.get("secretKey"));
-        }
-        if (configMap.get("apiKey") != null) {
-            config.setApiKey((String) configMap.get("apiKey"));
-        }
-        if (configMap.get("clientId") != null) {
-            config.setClientId((String) configMap.get("clientId"));
-        }
-        if (configMap.get("clientSecret") != null) {
-            config.setClientSecret((String) configMap.get("clientSecret"));
-        }
-        if (configMap.get("tokenEndpoint") != null) {
-            config.setTokenEndpoint((String) configMap.get("tokenEndpoint"));
-        }
-        if (configMap.get("customConfig") != null) {
-            config.setCustomConfig((String) configMap.get("customConfig"));
-        }
-
-        // JWT configuration
-        if (configMap.get("jwtIssuer") != null) {
-            config.setJwtIssuer((String) configMap.get("jwtIssuer"));
-        }
-        if (configMap.get("jwtAudience") != null) {
-            config.setJwtAudience((String) configMap.get("jwtAudience"));
-        }
-        if (configMap.get("jwtAlgorithm") != null) {
-            config.setJwtAlgorithm((String) configMap.get("jwtAlgorithm"));
-        }
-        if (configMap.get("jwtPublicKey") != null) {
-            config.setJwtPublicKey((String) configMap.get("jwtPublicKey"));
-        }
-        if (configMap.get("jwtClockSkewSeconds") != null) {
-            config.setJwtClockSkewSeconds(((Number) configMap.get("jwtClockSkewSeconds")).intValue());
-        }
-
-        // Basic Auth configuration
-        if (configMap.get("basicUsername") != null) {
-            config.setBasicUsername((String) configMap.get("basicUsername"));
-        }
-        if (configMap.get("basicPassword") != null) {
-            config.setBasicPassword((String) configMap.get("basicPassword"));
-        }
-        if (configMap.get("realm") != null) {
-            config.setRealm((String) configMap.get("realm"));
-        }
-        if (configMap.get("passwordHashAlgorithm") != null) {
-            config.setPasswordHashAlgorithm((String) configMap.get("passwordHashAlgorithm"));
-        }
-
-        // API Key configuration
-        if (configMap.get("apiKeyHeader") != null) {
-            config.setApiKeyHeader((String) configMap.get("apiKeyHeader"));
-        }
-        if (configMap.get("apiKeyQueryParam") != null) {
-            config.setApiKeyQueryParam((String) configMap.get("apiKeyQueryParam"));
-        }
-        if (configMap.get("apiKeyPrefix") != null) {
-            config.setApiKeyPrefix((String) configMap.get("apiKeyPrefix"));
-        }
-
-        // HMAC configuration
-        if (configMap.get("accessKey") != null) {
-            config.setAccessKey((String) configMap.get("accessKey"));
-        }
-        if (configMap.get("accessKeySecrets") != null) {
-            @SuppressWarnings("unchecked")
-            Map<String, String> secrets = (Map<String, String>) configMap.get("accessKeySecrets");
-            config.setAccessKeySecrets(secrets);
-        }
-        if (configMap.get("signatureAlgorithm") != null) {
-            config.setSignatureAlgorithm((String) configMap.get("signatureAlgorithm"));
-        }
-        if (configMap.get("clockSkewMinutes") != null) {
-            config.setClockSkewMinutes(((Number) configMap.get("clockSkewMinutes")).intValue());
-        }
-        if (configMap.get("requireNonce") != null) {
-            config.setRequireNonce((Boolean) configMap.get("requireNonce"));
-        }
-        if (configMap.get("validateContentMd5") != null) {
-            config.setValidateContentMd5((Boolean) configMap.get("validateContentMd5"));
-        }
-
-        // OAuth2 configuration
-        if (configMap.get("requiredScopes") != null) {
-            config.setRequiredScopes((String) configMap.get("requiredScopes"));
-        }
-        if (configMap.get("userInfoEndpoint") != null) {
-            config.setUserInfoEndpoint((String) configMap.get("userInfoEndpoint"));
-        }
-        if (configMap.get("tokenCacheTtlSeconds") != null) {
-            config.setTokenCacheTtlSeconds(((Number) configMap.get("tokenCacheTtlSeconds")).intValue());
-        }
-
-        return config;
     }
 
     @Override

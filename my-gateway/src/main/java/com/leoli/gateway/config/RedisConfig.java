@@ -254,6 +254,10 @@ public class RedisConfig {
             local now = tonumber(ARGV[1])
             local windowSize = tonumber(ARGV[2])
             local maxRequests = tonumber(ARGV[3])
+            local burstCapacity = tonumber(ARGV[4])
+            
+            -- Total capacity = steady rate + burst capacity (累加语义)
+            local totalCapacity = maxRequests + burstCapacity
             
             -- Calculate window start time
             local windowStart = now - windowSize
@@ -264,13 +268,20 @@ public class RedisConfig {
             -- Get current request count in window
             local currentCount = redis.call('ZCARD', key)
             
-            -- Check if limit exceeded
+            -- Check if request is allowed
+            -- 优先级: 稳定流量(maxRequests) -> 突发流量(totalCapacity) -> 拒绝
             if currentCount < maxRequests then
-                -- Add new request
+                -- Within steady rate limit - allow request
+                redis.call('ZADD', key, now, now .. '-' .. math.random(100000))
+                redis.call('EXPIRE', key, math.ceil(windowSize / 1000))
+                return 1
+            elseif currentCount < totalCapacity then
+                -- Exceeds steady rate but within burst capacity - allow request
                 redis.call('ZADD', key, now, now .. '-' .. math.random(100000))
                 redis.call('EXPIRE', key, math.ceil(windowSize / 1000))
                 return 1
             else
+                -- Total capacity exhausted - reject
                 return 0
             end
             """;

@@ -114,14 +114,14 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
 
             // 2. Try Redis rate limiting with proper fallback handling
             RateLimitResult result = distributedRateLimiter.tryAcquireWithFallback(
-                    rateLimitKey, config.qps, config.windowSizeMs);
+                    rateLimitKey, config.qps, config.burstCapacity, config.windowSizeMs);
 
             if (result.isAllowed()) {
                 return chain.filter(exchange);
             } else if (!result.isShouldFallback()) {
                 // Rate limit exceeded (Redis working correctly)
-                log.warn("Redis rate limit exceeded for key: {}, QPS: {}", rateLimitKey, config.qps);
-                return GatewayResponseHelper.writeRateLimited(exchange.getResponse(), config.qps, config.windowSizeMs, 1);
+                log.warn("Redis rate limit exceeded for key: {}, QPS: {}, burstCapacity: {}", rateLimitKey, config.qps, config.burstCapacity);
+                return GatewayResponseHelper.writeRateLimited(exchange.getResponse(), config.burstCapacity, config.windowSizeMs);
             }
             // Redis unavailable, fall through to local limiter
             log.info("Redis unavailable for key: {}, falling back to local limiter", rateLimitKey);
@@ -208,9 +208,13 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
         config.keyType = ConfigValueExtractor.getString(configMap, "keyType", RateLimitConstants.KEY_TYPE_COMBINED);
         config.headerName = ConfigValueExtractor.getString(configMap, "headerName", null);
         config.keyPrefix = ConfigValueExtractor.getString(configMap, "keyPrefix", RateLimitConstants.RATE_LIMIT_KEY_PREFIX);
+        // Extract strategyId for precise key management
+        config.strategyId = ConfigValueExtractor.getString(configMap, "strategyId", null);
+        // Extract scope to determine if this is a global strategy
+        config.scope = ConfigValueExtractor.getString(configMap, "scope", "ROUTE");
 
         if (log.isDebugEnabled()) {
-            log.debug("Parsed rate limiter config: enabled={}, qps={}, burstCapacity={}", config.enabled, config.qps, config.burstCapacity);
+            log.debug("Parsed rate limiter config: enabled={}, qps={}, burstCapacity={}, strategyId={}, scope={}", config.enabled, config.qps, config.burstCapacity, config.strategyId, config.scope);
         }
 
         return config;
@@ -235,14 +239,34 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * Build rate limit key based on configuration
+     * Build rate limit key based on configuration.
+     * Key format: rate_limit:{strategyId}:{keyType}:{...}
+     * Including strategyId allows precise key management and reset.
+     * <p>
+     * For GLOBAL scope strategies, keyType is automatically adjusted:
+     * - "combined" → uses "global:{clientId}" to ensure single key across all routes
+     * - "route" → uses "global" for global counting
      */
     private String buildRateLimitKey(String routeId, String clientId, RateLimitConfig config) {
         StringBuilder key = new StringBuilder(config.keyPrefix);
 
+        // Include strategyId in key for precise management
+        if (config.strategyId != null && !config.strategyId.isEmpty()) {
+            key.append(config.strategyId).append(":");
+        }
+
+        // Determine if this is a global strategy based on scope field
+        // Global strategy should use simplified key without routeId to ensure consistent counting
+        boolean isGlobalStrategy = "GLOBAL".equalsIgnoreCase(config.scope);
+
         switch (config.keyType) {
             case RateLimitConstants.KEY_TYPE_ROUTE:
-                key.append("route:").append(routeId);
+                if (isGlobalStrategy) {
+                    // Global strategy: use "global" as key for overall counting
+                    key.append("global");
+                } else {
+                    key.append("route:").append(routeId);
+                }
                 break;
             case RateLimitConstants.KEY_TYPE_IP:
                 key.append("ip:").append(clientId);
@@ -257,7 +281,16 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
                 break;
             case RateLimitConstants.KEY_TYPE_COMBINED:
             default:
-                key.append("combined:").append(routeId).append(":").append(clientId);
+                if (isGlobalStrategy) {
+                    // Global strategy: use "global:{clientId}" instead of route-specific combined key
+                    // This ensures all requests from same client are counted together
+                    key.append("global:").append(clientId);
+                    if (log.isDebugEnabled()) {
+                        log.debug("Global strategy detected, using simplified key: global:{}", clientId);
+                    }
+                } else {
+                    key.append("combined:").append(routeId).append(":").append(clientId);
+                }
                 break;
         }
 
@@ -296,6 +329,48 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
     }
 
     /**
+     * Invalidate cache entries matching the given key patterns.
+     * Called by RateLimitResetRefresher when strategy is re-enabled.
+     *
+     * @param keyPatterns Set of key patterns to invalidate (e.g., "rate_limit:uuid:*")
+     */
+    public void invalidateCache(java.util.Set<String> keyPatterns) {
+        if (keyPatterns == null || keyPatterns.isEmpty()) {
+            log.info("No key patterns provided, skipping cache invalidation");
+            return;
+        }
+
+        // Get all keys in cache
+        java.util.Map<String, RateLimiterWindow> cacheMap = rateLimiterCache.asMap();
+        int invalidatedCount = 0;
+
+        for (String key : cacheMap.keySet()) {
+            for (String pattern : keyPatterns) {
+                if (matchesPattern(key, pattern)) {
+                    rateLimiterCache.invalidate(key);
+                    invalidatedCount++;
+                    log.debug("Invalidated cache key: {}", key);
+                    break; // Only invalidate once per key
+                }
+            }
+        }
+
+        log.info("HybridRateLimiter cache invalidation completed: {} entries cleared", invalidatedCount);
+    }
+
+    /**
+     * Check if a key matches a pattern.
+     * Pattern format: "prefix:*" where * matches any suffix.
+     */
+    private boolean matchesPattern(String key, String pattern) {
+        if (pattern.endsWith("*")) {
+            String prefix = pattern.substring(0, pattern.length() - 1);
+            return key.startsWith(prefix);
+        }
+        return key.equals(pattern);
+    }
+
+    /**
      * Rate limit configuration class
      */
     @Data
@@ -308,5 +383,7 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
         private String keyType = "combined"; // route, ip, combined, user, header
         private String headerName;
         private String keyPrefix = "rate_limit:";
+        private String strategyId;  // Strategy ID for precise key management and reset
+        private String scope;       // Strategy scope: GLOBAL or ROUTE
     }
 }
