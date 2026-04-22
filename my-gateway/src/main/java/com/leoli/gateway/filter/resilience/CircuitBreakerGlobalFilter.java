@@ -9,13 +9,12 @@ import com.leoli.gateway.util.RouteUtils;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
-import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOperator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
-import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
@@ -23,6 +22,7 @@ import reactor.core.publisher.Mono;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -65,14 +65,40 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
         // Create or get circuit breaker from registry
         CircuitBreaker circuitBreaker = getOrCreateCircuitBreaker(routeId, config);
 
-        // Execute the filter chain with circuit breaker
-        // Note: CircuitBreakerOperator automatically handles success/error recording
-        return chain.filter(exchange)
-                .transform(CircuitBreakerOperator.of(circuitBreaker))
-                .onErrorResume(CallNotPermittedException.class, ex -> {
-                    log.warn("Circuit breaker is OPEN for route {}, rejecting request", routeId);
-                    return GatewayResponseHelper.writeCircuitBreakerOpen(exchange.getResponse(), routeId);
-                });
+        // Use Mono.defer to check state at subscription time (not at construction time)
+        return Mono.defer(() -> {
+            // Check if circuit breaker is OPEN - reject immediately before subscribing
+            if (circuitBreaker.getState() == CircuitBreaker.State.OPEN) {
+                log.warn("Circuit breaker is OPEN for route {}, rejecting request", routeId);
+                return GatewayResponseHelper.writeCircuitBreakerOpen(exchange.getResponse(), routeId);
+            }
+
+            // Acquire permission first (this handles HALF_OPEN correctly - only allows one request)
+            try {
+                circuitBreaker.acquirePermission();
+            } catch (CallNotPermittedException e) {
+                log.warn("Circuit breaker rejected request for route {}", routeId);
+                return GatewayResponseHelper.writeCircuitBreakerOpen(exchange.getResponse(), routeId);
+            }
+
+            // Execute the filter chain and record result based on response status
+            final long startTime = System.currentTimeMillis();
+            return chain.filter(exchange)
+                    .doOnTerminate(() -> {
+                        long duration = System.currentTimeMillis() - startTime;
+                        HttpStatusCode statusCode = exchange.getResponse().getStatusCode();
+                        if (statusCode != null && statusCode.is5xxServerError()) {
+                            circuitBreaker.onError(duration, TimeUnit.MILLISECONDS,
+                                    new RuntimeException("Server error: " + statusCode.value()));
+                            log.info("Circuit breaker recorded 5xx error for route {}: status={}, state now={}",
+                                    routeId, statusCode.value(), circuitBreaker.getState());
+                        } else {
+                            circuitBreaker.onSuccess(duration, TimeUnit.MILLISECONDS);
+                            log.debug("Circuit breaker recorded success for route {}: duration={}ms",
+                                    routeId, duration);
+                        }
+                    });
+        });
     }
 
     /**
@@ -143,6 +169,7 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
         long waitDurationInOpenState = ConfigValueExtractor.getLong(config, "waitDurationInOpenState", 30000L);
         int slidingWindowSize = ConfigValueExtractor.getInt(config, "slidingWindowSize", 10);
         int minimumNumberOfCalls = ConfigValueExtractor.getInt(config, "minimumNumberOfCalls", 5);
+        int permittedNumberOfCallsInHalfOpenState = ConfigValueExtractor.getInt(config, "permittedNumberOfCallsInHalfOpenState", 1);
         boolean automaticTransition = ConfigValueExtractor.getBoolean(config, "automaticTransitionFromOpenToHalfOpenEnabled", true);
 
         io.github.resilience4j.circuitbreaker.CircuitBreakerConfig circuitBreakerConfig =
@@ -153,6 +180,7 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
                         .waitDurationInOpenState(Duration.ofMillis(waitDurationInOpenState))
                         .slidingWindowSize(slidingWindowSize)
                         .minimumNumberOfCalls(minimumNumberOfCalls)
+                        .permittedNumberOfCallsInHalfOpenState(permittedNumberOfCallsInHalfOpenState)
                         .automaticTransitionFromOpenToHalfOpenEnabled(automaticTransition)
                         .build();
 

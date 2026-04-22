@@ -51,6 +51,8 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
 
     private static final String START_TIME_ATTR = "traceStartTime";
     private static final String REQUEST_BODY_ATTR = "traceRequestBody";
+    private static final String TRACE_CAPTURED_ATTR = "traceCaptured";
+    public static final String IS_RETRY_REQUEST_ATTR = "isRetryRequest";
 
     @Value("${gateway.admin.url:http://127.0.0.1:9090}")
     private String adminUrl;
@@ -98,6 +100,25 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        // Check if this is an intermediate retry request - skip trace capture for those
+        // Only capture trace for the final result (success or max retries exhausted)
+        Boolean isRetryRequest = exchange.getAttribute(IS_RETRY_REQUEST_ATTR);
+        if (isRetryRequest != null && isRetryRequest) {
+            log.debug("Skipping trace capture for intermediate retry request: traceId={}",
+                    exchange.getAttribute(TraceIdGlobalFilter.TRACE_ID_ATTR));
+            // Clear the retry flag so next attempt can decide if it's final
+            exchange.getAttributes().remove(IS_RETRY_REQUEST_ATTR);
+            return chain.filter(exchange);
+        }
+
+        // Check if trace was already captured for this request (prevents duplicates)
+        Boolean traceCaptured = exchange.getAttribute(TRACE_CAPTURED_ATTR);
+        if (traceCaptured != null && traceCaptured) {
+            log.debug("Trace already captured, skipping: traceId={}",
+                    exchange.getAttribute(TraceIdGlobalFilter.TRACE_ID_ATTR));
+            return chain.filter(exchange);
+        }
+
         // Record start time
         final long startTime = System.currentTimeMillis();
         exchange.getAttributes().put(START_TIME_ATTR, startTime);
@@ -125,6 +146,8 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
 
         // Continue without caching body
         return chain.filter(exchange).then(Mono.fromRunnable(() -> {
+            // Mark trace as captured to prevent duplicates on retries
+            exchange.getAttributes().put(TRACE_CAPTURED_ATTR, true);
             afterRequest(exchange, startTime, finalTraceId, null);
         }));
     }
@@ -162,6 +185,8 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
 
                     return chain.filter(exchange.mutate().request(newRequest).build())
                             .then(Mono.fromRunnable(() -> {
+                                // Mark trace as captured to prevent duplicates on retries
+                                exchange.getAttributes().put(TRACE_CAPTURED_ATTR, true);
                                 afterRequest(exchange, startTime, traceId, requestBody);
                             }));
                 });

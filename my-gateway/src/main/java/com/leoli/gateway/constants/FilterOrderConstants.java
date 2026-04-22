@@ -103,9 +103,11 @@ public interface FilterOrderConstants {
 
     /**
      * Circuit breaker filter - Resilience4j integration.
-     * Execute before actual service call.
+     * Execute before actual service call in pre-phase.
+     * In post-phase, execute AFTER RetryGlobalFilter (-2) to correctly record
+     * final request status (success/failure after retries).
      */
-    int CIRCUIT_BREAKER = -100;
+    int CIRCUIT_BREAKER = -3;
 
     // ============================================================
     // Header & Response Processing Filters
@@ -159,9 +161,10 @@ public interface FilterOrderConstants {
 
     /**
      * Retry filter - Retry failed requests.
-     * Execute before route resolution (RouteToRequestUrlFilter = 10000).
+     * Must execute AFTER NettyWriteResponseFilter (-1) in post-phase to intercept response.
+     * Using order = -2 ensures post-phase runs after NettyWriteResponseFilter's writeWith.
      */
-    int RETRY = 9999;
+    int RETRY = -2;
 
     /**
      * Multi-service load balancer filter.
@@ -210,13 +213,17 @@ public interface FilterOrderConstants {
     // -249     MockResponseFilter              Mock response
     // -200     TimeoutGlobalFilter             Timeout handling
     // -150     ApiVersionGlobalFilter          API version routing
-    // -100     CircuitBreakerGlobalFilter      Circuit breaker
+    //   -3     CircuitBreakerGlobalFilter      Circuit breaker (records final status after retry)
     //  -50     HeaderOpGlobalFilter            Header operations
     //  -45     ResponseTransformFilter         Response transformation
+    //   -2     RetryGlobalFilter               Retry logic (intercepts response after NettyWrite)
+    //   -1     NettyWriteResponseFilter        Write response (SCG built-in)
     //  50      CacheGlobalFilter               Response caching
     //  100     TraceCaptureGlobalFilter        Trace capture
-    // 9999     RetryGlobalFilter               Retry logic
     // 10001    MultiServiceLoadBalancerFilter  Multi-service load balancing (static://)
     // 10150    DiscoveryLoadBalancerFilter     Discovery load balancing (lb://)
+    //
+    // Note: Filters with order < -1 have post-phase AFTER NettyWriteResponseFilter,
+    // allowing them to intercept response status/body before it's written to client.
     //
 }
