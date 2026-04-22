@@ -496,14 +496,17 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
       dataIndex: 'timePercentage',
       key: 'timePercentage',
       width: 150,
-      render: (percentage: number) => (
-        <Progress
-          percent={percentage}
-          size="small"
-          strokeColor={getFilterPercentageColor(percentage)}
-          format={(p) => `${p?.toFixed(1)}%`}
-        />
-      )
+      render: (percentage: number | string) => {
+        const numPercentage = typeof percentage === 'number' ? percentage : Number(percentage) || 0;
+        return (
+          <Progress
+            percent={numPercentage}
+            size="small"
+            strokeColor={getFilterPercentageColor(numPercentage)}
+            format={(p) => `${p?.toFixed(1)}%`}
+          />
+        );
+      }
     },
     {
       title: t('trace.filter_status'),
@@ -1197,7 +1200,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                   size="small"
                   dataSource={selectedTrace.filterChain.executions}
                   columns={filterColumns}
-                  rowKey="filterOrder"
+                  rowKey={(record, index) => `${record.filterName}_${record.filterOrder}_${index}`}
                   pagination={false}
                   scroll={{ x: 500 }}
                 />
