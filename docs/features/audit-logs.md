@@ -61,16 +61,33 @@ public class AuditLogEntity {
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/audit-logs` | List audit logs |
+| `GET` | `/api/audit-logs` | List audit logs with filtering |
+| `GET` | `/api/audit-logs/{id}` | Get single audit log detail |
 | `GET` | `/api/audit-logs/{id}/diff` | Get change diff |
 | `POST` | `/api/audit-logs/{id}/rollback` | Rollback config |
 | `GET` | `/api/audit-logs/timeline/{instanceId}` | Get timeline |
+| `GET` | `/api/audit-logs/stats` | Get audit statistics |
+| `GET` | `/api/audit-logs/export` | Export audit logs (CSV/JSON) |
 
-### List Audit Logs
+### List Audit Logs (Enhanced)
 
 ```bash
-curl "http://localhost:9090/api/audit-logs?targetType=ROUTE&limit=100"
+curl "http://localhost:9090/api/audit-logs?targetType=ROUTE&operationType=UPDATE&startTime=2024-01-01&endTime=2024-01-15&operator=admin&limit=100"
 ```
+
+### Query Parameters
+
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `targetType` | Filter by target type | `ROUTE`, `STRATEGY` |
+| `operationType` | Filter by operation | `CREATE`, `UPDATE`, `DELETE` |
+| `operator` | Filter by operator | `admin` |
+| `startTime` | Start time range | `2024-01-01T00:00:00Z` |
+| `endTime` | End time range | `2024-01-15T23:59:59Z` |
+| `targetId` | Filter by target ID | `route-123` |
+| `targetName` | Filter by target name (partial) | `user-service` |
+| `limit` | Max results | `100` |
+| `offset` | Pagination offset | `0` |
 
 Response:
 ```json
@@ -83,9 +100,13 @@ Response:
       "targetId": "user-route",
       "targetName": "User Service Route",
       "operator": "admin",
-      "createdAt": "2024-01-15T10:30:00Z"
+      "createdAt": "2024-01-15T10:30:00Z",
+      "ipAddress": "192.168.1.100",
+      "summary": "Changed predicates: Path=/api/** to /api/v2/**"
     }
-  ]
+  ],
+  "total": 150,
+  "hasMore": true
 }
 ```
 
@@ -159,3 +180,149 @@ audit:
 - [Route Management](route-management.md) - Route audit
 - [Service Discovery](service-discovery.md) - Service audit
 - [Authentication](authentication.md) - Authentication policy audit
+
+---
+
+## Enhanced Features (New)
+
+### Audit Statistics
+
+```bash
+GET /api/audit-logs/stats?period=7d
+```
+
+Response:
+```json
+{
+  "period": "7d",
+  "totalOperations": 150,
+  "operationsByType": {
+    "CREATE": 20,
+    "UPDATE": 100,
+    "DELETE": 15,
+    "ROLLBACK": 15
+  },
+  "operationsByTarget": {
+    "ROUTE": 80,
+    "STRATEGY": 40,
+    "AUTH_POLICY": 30
+  },
+  "topOperators": [
+    { "operator": "admin", "count": 120 },
+    { "operator": "system", "count": 30 }
+  ],
+  "rollbackRate": "10%",
+  "errorRate": "2%"
+}
+```
+
+### Timeline View
+
+Visual timeline of configuration changes:
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│ CONFIGURATION TIMELINE                                              │
+│                                                                     │
+│ Jan 10 │ Jan 11 │ Jan 12 │ Jan 13 │ Jan 14 │ Jan 15 │ Jan 16       │
+│        │        │        │        │        │        │               │
+│   ●────│────────│────●───│────────│────●───│────────│──●            │
+│   CREATE│       │  UPDATE│       │  UPDATE│       │ DELETE         │
+│  route-A│       │  route-A│      │  route-B│      │ route-C        │
+│                                                                     │
+│ Legend: ● CREATE/UPDATE, ○ DELETE, ◐ ROLLBACK                      │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+### Export Functionality
+
+Export audit logs for external analysis:
+
+```bash
+# Export as JSON
+curl "http://localhost:9090/api/audit-logs/export?format=json&startTime=2024-01-01&endTime=2024-01-15" -o audit-logs.json
+
+# Export as CSV
+curl "http://localhost:9090/api/audit-logs/export?format=csv&startTime=2024-01-01&endTime=2024-01-15" -o audit-logs.csv
+```
+
+### Change Summary
+
+Each audit log now includes an AI-generated summary:
+
+```json
+{
+  "id": 123,
+  "summary": "Changed predicates: Path=/api/** to /api/v2/**, added Method=POST filter",
+  "riskLevel": "LOW",
+  "affectedRoutes": ["user-service", "order-service"],
+  "recommendation": "Verify that all clients support /api/v2/** path"
+}
+```
+
+### Rollback Safety Check
+
+Before rollback, system performs safety validation:
+
+| Check | Description |
+|-------|-------------|
+| **Version Conflict** | Check if config has been modified since audit log |
+| **Dependency Check** | Verify dependent configs still exist |
+| **Validation** | Validate config schema and constraints |
+| **Impact Analysis** | Estimate impact of rollback |
+
+```json
+{
+  "rollbackCheck": {
+    "canRollback": true,
+    "warnings": [
+      "Config has been modified 2 times since this version"
+    ],
+    "recommendations": [
+      "Review current config before rollback"
+    ]
+  }
+}
+```
+
+---
+
+## AI Copilot Integration
+
+AI Copilot can query and analyze audit logs:
+
+| Tool | Capability |
+|------|------------|
+| `audit_query` | Query audit logs with filters |
+| `audit_diff` | Get detailed change comparison |
+| `audit_stats` | Get audit statistics |
+| `suggest_rollback` | AI suggests which version to rollback |
+
+### Example: AI Analysis
+
+```
+User: "What changes were made to user-service route last week?"
+
+AI Response:
+┌─────────────────────────────────────────────────────────────┐
+│ AUDIT ANALYSIS: user-service route                          │
+│                                                             │
+│ Period: Jan 8 - Jan 15, 2024                                │
+│ Total changes: 3                                            │
+│                                                             │
+│ Change 1 (Jan 10):                                          │
+│ - Added Method predicate: GET, POST                         │
+│ - Operator: admin                                           │
+│                                                             │
+│ Change 2 (Jan 12):                                          │
+│ - Modified StripPrefix parts: 1 → 2                         │
+│ - Operator: admin                                           │
+│                                                             │
+│ Change 3 (Jan 14):                                          │
+│ - Added rate limiting: qps=100                              │
+│ - Operator: system                                          │
+│                                                             │
+│ Recommendation: Current config looks stable.                │
+│ No rollback needed.                                         │
+└─────────────────────────────────────────────────────────────┘
+```

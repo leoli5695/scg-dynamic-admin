@@ -368,4 +368,145 @@ Analysis content:
 - [Request Replay](request-replay.md) - Request replay debugging
 - [Monitoring & Alerts](monitoring-alerts.md) - Monitoring
 - [AI Copilot](ai-copilot.md) - AI tool call analysis
+- [Historical Comparison](historical-comparison.md) - Historical data comparison and anomaly detection
 - [ARCHITECTURE.md](../ARCHITECTURE.md) - Filter Chain architecture
+
+---
+
+## Advanced Features (New)
+
+### Filter Circuit Breaker
+
+Automatically protect the system from cascading failures by isolating problematic filters:
+
+| Feature | Description |
+|---------|-------------|
+| **Automatic Detection** | Monitor filter failure rate and response time |
+| **Circuit States** | CLOSED (normal), OPEN (failing), HALF_OPEN (testing) |
+| **Auto Recovery** | Periodically test if filter has recovered |
+| **Configurable Thresholds** | Failure rate threshold, timeout threshold |
+
+```java
+// Circuit breaker configuration
+{
+  "filterName": "ExternalAuthFilter",
+  "failureRateThreshold": 50,    // Open circuit when 50% failures
+  "slowCallThreshold": 2000,     // Consider slow if > 2s
+  "waitDurationInOpenState": 30, // Wait 30s before half-open
+  "permittedCallsInHalfOpen": 5  // Test 5 calls in half-open
+}
+```
+
+### Filter Health Monitor
+
+Continuous health monitoring for each filter:
+
+| Metric | Description |
+|--------|-------------|
+| **Health Score** | 0-100 score based on success rate, latency, error patterns |
+| **Anomaly Detection** | Detect unusual patterns (spikes, trends) |
+| **Alert Integration** | Send alerts when health score drops below threshold |
+
+### Historical Data Tracker
+
+Track and store filter performance metrics over time:
+
+| Capability | Description |
+|------------|-------------|
+| **Time-series Storage** | Store metrics at regular intervals (1min, 5min, 1hour) |
+| **Trend Analysis** | Identify performance trends and degradation patterns |
+| **Period Comparison** | Compare current vs previous period metrics |
+
+### Performance Predictor
+
+Predict future filter performance based on historical patterns:
+
+| Feature | Description |
+|---------|-------------|
+| **Load Forecasting** | Predict performance under expected load |
+| **Capacity Planning** | Estimate when optimization is needed |
+| **Bottleneck Prediction** | Identify filters likely to become bottlenecks |
+
+### AI Anomaly Detector
+
+AI-powered anomaly detection for filter chain:
+
+| Detection Type | Description |
+|----------------|-------------|
+| **Statistical Anomalies** | Detect outliers in response time, error rate |
+| **Pattern Anomalies** | Detect unusual sequences of filter executions |
+| **Trend Anomalies** | Detect sudden changes in performance trends |
+
+### Period Comparison Analyzer
+
+Compare filter performance between different time periods:
+
+| Comparison | Metrics |
+|------------|---------|
+| **Hour-over-Hour** | Compare last hour vs previous hour |
+| **Day-over-Day** | Compare today vs yesterday |
+| **Week-over-Week** | Compare this week vs last week |
+
+Output format:
+```
+┌─────────────────────────────────────────────────────────────┐
+│ PERIOD COMPARISON REPORT                                     │
+│                                                              │
+│ Filter: LoadBalancerFilter                                   │
+│ Current Period: avgSelfTime=45ms, errorRate=2%               │
+│ Previous Period: avgSelfTime=30ms, errorRate=1%              │
+│ Change: +50% slower, +100% error rate                        │
+│ Status: ⚠ NEEDS ATTENTION                                     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Filter Execution Waterfall Chart (New)
+
+Visual representation of filter execution sequence:
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│ WATERFALL CHART - Trace ID: abc-123                                 │
+│ Total Duration: 250ms                                               │
+├────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│ AuthenticationFilter  │███│ 5ms (self)                              │
+│                       │   ├─────────────────────────────────────────│
+│ RouteMatchingFilter   │█│   2ms (self)                              │
+│                       │   ├─────────────────────────────────────────│
+│ LoadBalancerFilter    │████████████████████████│ 45ms (self) ← SLOW │
+│                       │                       ├─────────────────────│
+│ RateLimiterFilter     │██│ 8ms (self)                               │
+│                       │   ├─────────────────────────────────────────│
+│ BackendService        │████████████████████████████████████████████│ │
+│                       │                                              │
+│ (Backend Response)    │████████████████████████████████████████████│ │
+│                       │████████████████████████████████████████████│ │
+│                       │████████████████████████████████████████████│ │
+│                       │████████████████████████████████████████████│ │
+│                       │████████████████████████████████████████████│ │
+│                       │████████████████████████████████████████████│ │
+│                       │████████████████████████████████████████████│ │
+│                       │████████████████████████████████████████████│ │
+│                       │████████████████████████████████████████████│ │
+│                       │████████████████████████████████████████████│ │
+│                       │   195ms (backend response)                   │
+├────────────────────────────────────────────────────────────────────┤
+│ Legend: ████ Filter self-time, Backend response time               │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+### Waterfall Chart API
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/internal/filter-chain/waterfall/{traceId}` | Get waterfall chart data |
+
+### UI Features
+
+- **Interactive Chart**: Click on filter bar to see detailed metrics
+- **Zoom In/Out**: Focus on specific time range
+- **Export**: Export chart as PNG or SVG
+- **Comparison**: Compare multiple traces side by side

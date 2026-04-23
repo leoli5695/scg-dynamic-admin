@@ -15,8 +15,10 @@ AI Copilot Features:
 | **Error Analyzer** | Intelligent error analysis, autonomously querying routes/Nacos instances/diagnostic data |
 | **Performance Optimizer** | Optimization suggestions based on real-time metrics, supporting JVM/connection pool/rate limiting configuration |
 | **Concept Explainer** | Explain Gateway concepts with project-specific JSON formats |
-| **Tool Calling** | 30+ tools for autonomous invocation, capable of route creation/modification/rollback operations |
+| **Tool Calling** | 35+ tools for autonomous invocation, capable of route creation/modification/rollback operations |
 | **Dynamic Prompts** | System prompts stored in database for flexible customization |
+| **Tool Executor** | Unified tool execution framework with structured parameter parsing and result formatting |
+| **Strategy Types** | Dynamic strategy type management for rate limiting, circuit breaker, retry, timeout, etc. |
 
 ---
 
@@ -205,7 +207,15 @@ AI can directly execute the following route operations (requires user confirmati
 
 ## Tool Categories - Complete List
 
-AI Copilot can call 30+ tools:
+AI Copilot can call 35+ tools:
+
+### Strategy Management Tools (3)
+
+| Tool | Description |
+|------|-------------|
+| `list_strategy_types` | List all strategy types: rate limiting, circuit breaker, retry, timeout, authentication, etc. |
+| `get_strategy_type_config` | Get strategy type configuration: parameters, constraints, default values |
+| `create_strategy` | Create strategy instance with type-specific validation |
 
 ### Monitor/Diagnostic Tools (4)
 

@@ -67,8 +67,13 @@
 | **Real-time Monitoring** | JVM, CPU, memory, HTTP metrics with historical charts |
 | **Request Tracing** | Capture error/slow requests with full headers and replay capability |
 | **AI-Powered Analysis** | Integration with GPT, Claude, Qwen for intelligent metrics analysis |
+| **AI Copilot** | 35+ tools for autonomous route creation, error analysis, performance optimization |
+| **Filter Chain Analysis** | Self-time tracking, P50/P95/P99 percentiles, slow request detection |
+| **Historical Comparison** | Period-over-period analysis, trend detection, performance prediction |
+| **Anomaly Detection** | AI-powered detection of performance anomalies and unusual patterns |
 | **Alert System** | Configurable thresholds with email notifications |
 | **SSL Certificate Management** | Upload, monitor expiry, get alerts before certificates expire |
+| **Audit Logs** | Configuration change tracking with diff comparison and rollback |
 
 ### Kubernetes & Multi-Tenancy (New)
 
@@ -103,8 +108,9 @@
 │  │   React UI ──▶ REST API ──▶ MySQL ──▶ Nacos (Config Push)         │   │
 │  │                                                                     │   │
 │  │   Features: Route Mgmt, Service Mgmt, SSL Certs, Alerts,           │   │
-│  │             Request Traces, AI Analysis, K8s Deploy,               │   │
-│  │             Gateway Instance Management                            │   │
+│  │             Request Traces, AI Copilot, Filter Chain Analysis,    │   │
+│  │             Historical Comparison, Audit Logs, K8s Deploy,        │   │
+│  │             Gateway Instance Management, Strategy Types           │   │
 │  └───────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -118,9 +124,10 @@
 │  │   Request ──▶ Filter Chain ──▶ Backend Services                   │   │
 │  │                                                                     │   │
 │  │   Filters: Security ▶ IP Filter ▶ Access Log ▶ CORS ▶ TraceID      │   │
-│  │            ▶ Req Transform ▶ Validation ▶ Auth ▶ Mock              │   │
-│  │            ▶ Timeout ▶ API Ver ▶ CB ▶ HeaderOp ▶ Resp Transform    │   │
-│  │            ▶ Cache ▶ Retry ▶ Multi-Service LB ▶ Discovery LB       │   │
+│  │            ▶ FilterChainTracking ▶ Req Transform ▶ Validation      │   │
+│  │            ▶ Auth ▶ Mock ▶ Timeout ▶ API Ver ▶ CB ▶ HeaderOp       │   │
+│  │            ▶ Resp Transform ▶ Cache ▶ Retry ▶ Multi-Service LB    │   │
+│  │            ▶ Discovery LB                                          │   │
 │  └───────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
