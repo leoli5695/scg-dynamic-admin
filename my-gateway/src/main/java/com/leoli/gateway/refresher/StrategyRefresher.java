@@ -3,7 +3,6 @@ package com.leoli.gateway.refresher;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.center.spi.ConfigCenterService;
-import com.leoli.gateway.manager.AuthBindingManager;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.StrategyDefinition;
 import jakarta.annotation.PostConstruct;
@@ -32,17 +31,14 @@ public class StrategyRefresher {
 
     private final ObjectMapper objectMapper;
     private final StrategyManager strategyManager;
-    private final AuthBindingManager authBindingManager;
     private final ConfigCenterService configService;
 
     // Track active listeners: strategyId -> listener
     private final Map<String, ConfigCenterService.ConfigListener> activeListeners = new ConcurrentHashMap<>();
 
     @Autowired
-    public StrategyRefresher(StrategyManager strategyManager, AuthBindingManager authBindingManager,
-                             ConfigCenterService configService, ObjectMapper objectMapper) {
+    public StrategyRefresher(StrategyManager strategyManager, ConfigCenterService configService, ObjectMapper objectMapper) {
         this.strategyManager = strategyManager;
-        this.authBindingManager = authBindingManager;
         this.configService = configService;
         this.objectMapper = objectMapper;
         log.info("StrategyRefresher initialized for config center: {}", configService.getCenterType());
@@ -106,11 +102,6 @@ public class StrategyRefresher {
                 if (strategy != null && strategy.isEnabled()) {
                     strategyManager.putStrategy(strategyId, strategy);
                     log.debug("Loaded strategy: {} (type={})", strategyId, strategy.getStrategyType());
-
-                    // Sync AUTH type strategy to AuthBindingManager
-                    if (StrategyDefinition.TYPE_AUTH.equals(strategy.getStrategyType())) {
-                        syncAuthStrategy(strategy);
-                    }
                 }
             }
 
@@ -145,49 +136,19 @@ public class StrategyRefresher {
      */
     private void onStrategyChange(String strategyId, String content) {
         try {
-            // Get old strategy before removal (for AUTH cleanup)
-            StrategyDefinition oldStrategy = strategyManager.getStrategy(strategyId);
-
             if (content == null || content.isBlank()) {
                 // Strategy was deleted
                 strategyManager.removeStrategy(strategyId);
                 activeListeners.remove(strategyId);
-
-                // Remove from AuthBindingManager if it was AUTH type
-                if (oldStrategy != null && StrategyDefinition.TYPE_AUTH.equals(oldStrategy.getStrategyType())) {
-                    authBindingManager.removePolicy(strategyId);
-                    authBindingManager.unmarkStrategySynced(strategyId);
-                    log.info("Removed AUTH strategy from AuthBindingManager: {}", strategyId);
-                }
-
                 log.info("Strategy removed: {}", strategyId);
             } else {
                 StrategyDefinition strategy = objectMapper.readValue(content, StrategyDefinition.class);
                 if (strategy != null && strategy.isEnabled()) {
                     strategyManager.putStrategy(strategyId, strategy);
-
-                    // Sync AUTH type strategy to AuthBindingManager
-                    if (StrategyDefinition.TYPE_AUTH.equals(strategy.getStrategyType())) {
-                        syncAuthStrategy(strategy);
-                    } else if (oldStrategy != null && StrategyDefinition.TYPE_AUTH.equals(oldStrategy.getStrategyType())) {
-                        // Type changed from AUTH to something else, cleanup
-                        authBindingManager.removePolicy(strategyId);
-                        authBindingManager.unmarkStrategySynced(strategyId);
-                        log.info("Strategy type changed from AUTH, removed from AuthBindingManager: {}", strategyId);
-                    }
-
                     log.info("Strategy updated: {} (type={})", strategyId, strategy.getStrategyType());
                 } else {
                     // Strategy disabled
                     strategyManager.removeStrategy(strategyId);
-
-                    // Remove from AuthBindingManager if it was AUTH type
-                    if (oldStrategy != null && StrategyDefinition.TYPE_AUTH.equals(oldStrategy.getStrategyType())) {
-                        authBindingManager.removePolicy(strategyId);
-                        authBindingManager.unmarkStrategySynced(strategyId);
-                        log.info("Disabled AUTH strategy, removed from AuthBindingManager: {}", strategyId);
-                    }
-
                     log.info("Strategy disabled: {}", strategyId);
                 }
             }
@@ -225,13 +186,7 @@ public class StrategyRefresher {
     private void onIndexChange(String content) {
         try {
             if (content == null || content.isBlank()) {
-                // All strategies removed - cleanup AUTH synced policies
-                for (String strategyId : authBindingManager.getAllPolicies().keySet()) {
-                    if (authBindingManager.isSyncedFromStrategy(strategyId)) {
-                        authBindingManager.removePolicy(strategyId);
-                        authBindingManager.unmarkStrategySynced(strategyId);
-                    }
-                }
+                // All strategies removed
                 strategyManager.clear();
                 activeListeners.clear();
                 log.info("All strategies cleared");
@@ -248,17 +203,8 @@ public class StrategyRefresher {
 
             // Remove strategies no longer in index
             for (String strategyId : toRemove) {
-                StrategyDefinition oldStrategy = strategyManager.getStrategy(strategyId);
                 strategyManager.removeStrategy(strategyId);
                 activeListeners.remove(strategyId);
-
-                // Remove from AuthBindingManager if it was AUTH type
-                if (oldStrategy != null && StrategyDefinition.TYPE_AUTH.equals(oldStrategy.getStrategyType())) {
-                    authBindingManager.removePolicy(strategyId);
-                    authBindingManager.unmarkStrategySynced(strategyId);
-                    log.info("Removed AUTH strategy from AuthBindingManager: {}", strategyId);
-                }
-
                 log.info("Removed strategy: {}", strategyId);
             }
 
@@ -272,25 +218,6 @@ public class StrategyRefresher {
             log.info("StrategyRefresher: Now have {} strategies", strategyManager.getStrategyCount());
         } catch (Exception e) {
             log.error("Failed to process index change: {}", e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Sync AUTH strategy to AuthBindingManager.
-     * Only syncs route-bound strategies (not global).
-     */
-    private void syncAuthStrategy(StrategyDefinition strategy) {
-        if (strategy == null || !StrategyDefinition.TYPE_AUTH.equals(strategy.getStrategyType())) {
-            return;
-        }
-
-        // Only sync route-bound strategies to AuthBindingManager
-        // Global AUTH strategies are handled directly in AuthenticationGlobalFilter
-        if (strategy.isRouteBound()) {
-            authBindingManager.syncFromStrategy(strategy);
-        } else if (strategy.isGlobal()) {
-            log.debug("Global AUTH strategy {} will be handled directly in AuthenticationGlobalFilter",
-                    strategy.getStrategyId());
         }
     }
 }

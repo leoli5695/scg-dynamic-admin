@@ -89,7 +89,7 @@ public class RouteController extends BaseController {
 
             // Record audit log - CREATE
             String newValue = objectMapper.writeValueAsString(route);
-            auditLogService.recordAuditLog(getOperator(), "CREATE", "ROUTE", entity.getRouteId(),
+            auditLogService.recordAuditLog(instanceId, getOperator(), "CREATE", "ROUTE", entity.getRouteId(),
                     route.getRouteName(), null, newValue, getIpAddress(request));
 
             // Build RouteResponse with UUID
@@ -145,13 +145,14 @@ public class RouteController extends BaseController {
             // Get old value before update
             RouteEntity oldEntity = routeService.getRouteEntityByRouteId(id);
             String oldValue = oldEntity != null ? oldEntity.getMetadata() : null;
+            String instanceId = oldEntity != null ? oldEntity.getInstanceId() : null;
 
             // Use route_id (UUID) for update
             routeService.updateRouteByRouteId(id, route);
 
             // Record audit log - UPDATE
             String newValue = objectMapper.writeValueAsString(route);
-            auditLogService.recordAuditLog(getOperator(), "UPDATE", "ROUTE", id,
+            auditLogService.recordAuditLog(instanceId, getOperator(), "UPDATE", "ROUTE", id,
                     route.getRouteName(), oldValue, newValue, getIpAddress(request));
 
             Map<String, Object> result = new HashMap<>();
@@ -190,12 +191,13 @@ public class RouteController extends BaseController {
             RouteEntity oldEntity = routeService.getRouteEntityByRouteId(id);
             String oldValue = oldEntity != null ? oldEntity.getMetadata() : null;
             String targetName = oldEntity != null ? oldEntity.getRouteName() : id;
+            String instanceId = oldEntity != null ? oldEntity.getInstanceId() : null;
 
             // Delete by route_id
             routeService.deleteRouteByRouteId(id);
 
             // Record audit log - DELETE
-            auditLogService.recordAuditLog(getOperator(), "DELETE", "ROUTE", id,
+            auditLogService.recordAuditLog(instanceId, getOperator(), "DELETE", "ROUTE", id,
                     targetName, oldValue, null, getIpAddress(request));
 
             Map<String, Object> result = new HashMap<>();
@@ -232,6 +234,7 @@ public class RouteController extends BaseController {
             RouteEntity oldEntity = routeService.getRouteEntityByRouteId(id);
             String oldValue = oldEntity != null ? oldEntity.getMetadata() : null;
             String targetName = oldEntity != null ? oldEntity.getRouteName() : id;
+            String instanceId = oldEntity != null ? oldEntity.getInstanceId() : null;
 
             routeService.enableRouteByRouteId(id);
 
@@ -240,7 +243,7 @@ public class RouteController extends BaseController {
             String newValue = newEntity != null ? newEntity.getMetadata() : null;
 
             // Record audit log - ENABLE
-            auditLogService.recordAuditLog(getOperator(), "ENABLE", "ROUTE", id,
+            auditLogService.recordAuditLog(instanceId, getOperator(), "ENABLE", "ROUTE", id,
                     targetName, oldValue, newValue, getIpAddress(request));
 
             Map<String, Object> result = new HashMap<>();
@@ -277,6 +280,7 @@ public class RouteController extends BaseController {
             RouteEntity oldEntity = routeService.getRouteEntityByRouteId(id);
             String oldValue = oldEntity != null ? oldEntity.getMetadata() : null;
             String targetName = oldEntity != null ? oldEntity.getRouteName() : id;
+            String instanceId = oldEntity != null ? oldEntity.getInstanceId() : null;
 
             routeService.disableRouteByRouteId(id);
 
@@ -285,7 +289,7 @@ public class RouteController extends BaseController {
             String newValue = newEntity != null ? newEntity.getMetadata() : null;
 
             // Record audit log - DISABLE
-            auditLogService.recordAuditLog(getOperator(), "DISABLE", "ROUTE", id,
+            auditLogService.recordAuditLog(instanceId, getOperator(), "DISABLE", "ROUTE", id,
                     targetName, oldValue, newValue, getIpAddress(request));
 
             Map<String, Object> result = new HashMap<>();

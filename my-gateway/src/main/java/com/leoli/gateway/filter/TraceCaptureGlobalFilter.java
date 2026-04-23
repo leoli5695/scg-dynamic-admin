@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
+import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferUtils;
@@ -24,12 +25,9 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -105,7 +103,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
         Boolean isRetryRequest = exchange.getAttribute(IS_RETRY_REQUEST_ATTR);
         if (isRetryRequest != null && isRetryRequest) {
             log.debug("Skipping trace capture for intermediate retry request: traceId={}",
-                    exchange.getAttribute(TraceIdGlobalFilter.TRACE_ID_ATTR));
+                    (String) exchange.getAttribute(TraceIdGlobalFilter.TRACE_ID_ATTR));
             // Clear the retry flag so next attempt can decide if it's final
             exchange.getAttributes().remove(IS_RETRY_REQUEST_ATTR);
             return chain.filter(exchange);
@@ -115,7 +113,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
         Boolean traceCaptured = exchange.getAttribute(TRACE_CAPTURED_ATTR);
         if (traceCaptured != null && traceCaptured) {
             log.debug("Trace already captured, skipping: traceId={}",
-                    exchange.getAttribute(TraceIdGlobalFilter.TRACE_ID_ATTR));
+                    (String) exchange.getAttribute(TraceIdGlobalFilter.TRACE_ID_ATTR));
             return chain.filter(exchange);
         }
 
@@ -263,14 +261,33 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
         try {
             ServerHttpRequest request = exchange.getRequest();
 
+            // Get original request URI from GATEWAY_ORIGINAL_REQUEST_URL_ATTR
+            // Spring Cloud Gateway saves the original URL before any modifications (e.g., StripPrefix)
+            // The set may contain multiple URLs (http:// original + static:// internal)
+            // We need to find the first http/https URL - that's the client's actual request
+            URI uriToRecord = request.getURI();
+            LinkedHashSet<URI> originalUrls = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_ORIGINAL_REQUEST_URL_ATTR);
+            if (originalUrls != null && !originalUrls.isEmpty()) {
+                // Find the first URL with http or https scheme (client's original request)
+                // Internal schemes like static://, lb:// are not the client's actual URL
+                for (URI url : originalUrls) {
+                    String scheme = url.getScheme();
+                    if ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) {
+                        uriToRecord = url;
+                        log.debug("Using original request URL from GATEWAY_ORIGINAL_REQUEST_URL_ATTR: {}", uriToRecord);
+                        break;
+                    }
+                }
+            }
+
             Map<String, Object> trace = new HashMap<>();
             trace.put("traceId", traceId);
             trace.put("instanceId", instanceId);
             trace.put("routeId", RouteUtils.getRouteId(exchange));
             trace.put("method", request.getMethod().name());
-            trace.put("uri", request.getURI().toString());
-            trace.put("path", request.getURI().getPath());
-            trace.put("queryString", request.getURI().getQuery());
+            trace.put("uri", uriToRecord.toString());
+            trace.put("path", uriToRecord.getPath());
+            trace.put("queryString", uriToRecord.getQuery());
             trace.put("statusCode", statusCode);
             trace.put("latencyMs", duration);
             trace.put("clientIp", getClientIp(request));
@@ -424,8 +441,8 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
      * Send filter execution data to admin service for database persistence.
      */
     private void sendFilterExecutionsToAdmin(String traceId, String instanceId,
-                                               List<Map<String, Object>> filterExecutions,
-                                               Long totalDurationMs) {
+                                             List<Map<String, Object>> filterExecutions,
+                                             Long totalDurationMs) {
         if (filterExecutions == null || filterExecutions.isEmpty()) {
             return;
         }

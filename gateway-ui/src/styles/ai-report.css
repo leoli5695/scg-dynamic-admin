@@ -1,0 +1,308 @@
+/* AI报告渲染器样式 - 增强版 */
+
+/* 报告容器 */
+.ai-report-container {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* 智能表格样式 */
+.ai-report-smart-table.ant-table {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ai-report-smart-table .ant-table-thead > tr > th {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.95);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  font-weight: 600;
+  padding: 12px 16px;
+}
+
+.ai-report-smart-table .ant-table-tbody > tr > td {
+  background: rgba(255, 255, 255, 0.02);
+  color: rgba(255, 255, 255, 0.85);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 10px 16px;
+  transition: background 0.2s ease;
+}
+
+.ai-report-smart-table .ant-table-tbody > tr:hover > td {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.ai-report-smart-table .ant-table-tbody > tr:last-child > td {
+  border-bottom: none;
+}
+
+/* 迷你条形图样式 */
+.ai-report-smart-table .mini-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 表格内图标对齐 */
+.ai-report-smart-table td .anticon {
+  margin-right: 4px;
+}
+
+.ai-report-smart-table td .ant-tag {
+  margin: 0;
+  font-size: 12px;
+}
+
+/* 数字颜色高亮 */
+.ai-report-smart-table td[data-type="numeric"] {
+  font-weight: 500;
+}
+
+/* Filter名称点击样式 */
+.ai-report-smart-table td[data-type="name"] {
+  cursor: pointer;
+}
+
+.ai-report-smart-table td[data-type="name"]:hover {
+  color: #40a9ff;
+}
+
+/* Markdown原生表格样式（备用） */
+.ai-report-markdown-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ai-report-markdown-table thead {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ai-report-markdown-table th {
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 13px;
+}
+
+.ai-report-markdown-table td {
+  padding: 10px 16px;
+  color: rgba(255, 255, 255, 0.85);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 13px;
+  transition: background 0.2s ease;
+}
+
+.ai-report-markdown-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.ai-report-markdown-table tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* 表格内数字高亮 */
+.ai-report-markdown-table td[data-status="good"] {
+  color: #52c41a;
+  font-weight: 500;
+}
+
+.ai-report-markdown-table td[data-status="warning"] {
+  color: #faad14;
+  font-weight: 500;
+}
+
+.ai-report-markdown-table td[data-status="error"] {
+  color: #ff4d4f;
+  font-weight: 500;
+}
+
+/* 标题样式 */
+.ai-report-container h1 {
+  font-size: 24px;
+  margin: 24px 0 16px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 600;
+}
+
+.ai-report-container h2 {
+  font-size: 20px;
+  margin: 20px 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 600;
+}
+
+.ai-report-container h3 {
+  font-size: 16px;
+  margin: 16px 0 8px 0;
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 600;
+}
+
+.ai-report-container h4 {
+  font-size: 14px;
+  margin: 12px 0 6px 0;
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 600;
+}
+
+/* 段落样式 */
+.ai-report-container p {
+  margin-bottom: 12px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* 列表样式 */
+.ai-report-container ul,
+.ai-report-container ol {
+  padding-left: 20px;
+  margin-bottom: 12px;
+}
+
+.ai-report-container li {
+  margin-bottom: 4px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* 代码块样式 */
+.ai-report-container pre {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 16px;
+  border-radius: 8px;
+  overflow: auto;
+  margin-bottom: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ai-report-container pre code {
+  color: #52c41a;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+}
+
+/* 内联代码样式 */
+.ai-report-container :not(pre) > code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #1890ff;
+  font-size: 13px;
+}
+
+/* 链接样式 */
+.ai-report-container a {
+  color: #1890ff;
+  text-decoration: underline;
+  transition: color 0.2s;
+}
+
+.ai-report-container a:hover {
+  color: #40a9ff;
+}
+
+/* 分隔线样式 */
+.ai-report-container hr {
+  border: none;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 16px 0;
+}
+
+/* 强调文本样式 */
+.ai-report-container strong {
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 600;
+}
+
+.ai-report-container em {
+  color: rgba(255, 255, 255, 0.85);
+  font-style: italic;
+}
+
+/* 引用块样式 */
+.ai-report-container blockquote {
+  margin: 0 0 12px 0;
+  padding: 12px 16px;
+  background: rgba(24, 144, 255, 0.1);
+  border-left: 4px solid #1890ff;
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* 表格内图标对齐 */
+.ai-report-markdown-table td .anticon {
+  margin-right: 4px;
+}
+
+.ai-report-markdown-table td .ant-tag {
+  margin-left: 4px;
+}
+
+/* 折叠面板样式（交互功能） */
+.ai-report-container .ant-collapse {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}
+
+.ai-report-container .ant-collapse-header {
+  color: rgba(255, 255, 255, 0.85) !important;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ai-report-container .ant-collapse-content {
+  background: rgba(255, 255, 255, 0.02);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* 滚动条样式 */
+.ai-report-container ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.ai-report-container ::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+.ai-report-container ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.ai-report-container ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* 动画效果 */
+.ai-report-smart-table tbody tr {
+  transition: all 0.2s ease;
+}
+
+.ai-report-container * {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

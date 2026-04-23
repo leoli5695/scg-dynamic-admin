@@ -429,7 +429,8 @@ public class FilterChainTracker {
                         execMap.put("filter", exec.getFilterName());
                         execMap.put("order", exec.getOrder());
                         execMap.put("totalDurationMs", exec.getDurationMs());  // Cumulative time
-                        execMap.put("selfTimeMs", exec.getSelfTimeMs());        // Filter's own time
+                        execMap.put("selfTimeMs", exec.getSelfTimeMs());        // Filter's own time (ms)
+                        execMap.put("selfTimeMicros", exec.getSelfTimeMicros()); // Filter's own time (μs) for precision
                         execMap.put("downstreamMs", exec.getDownstreamTimeMs()); // Downstream time
                         execMap.put("success", exec.isSuccess());
                         if (exec.getError() != null) {

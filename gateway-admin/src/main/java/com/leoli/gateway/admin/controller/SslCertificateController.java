@@ -82,9 +82,14 @@ public class SslCertificateController {
 
     /**
      * Get certificate statistics
+     * @param instanceId Optional instance ID to filter statistics
      */
     @GetMapping("/stats")
-    public ResponseEntity<Map<String, Object>> getCertificateStats() {
+    public ResponseEntity<Map<String, Object>> getCertificateStats(
+            @RequestParam(required = false) String instanceId) {
+        if (instanceId != null && !instanceId.isEmpty()) {
+            return ResponseEntity.ok(sslCertificateService.getCertificateStats(instanceId));
+        }
         return ResponseEntity.ok(sslCertificateService.getCertificateStats());
     }
 

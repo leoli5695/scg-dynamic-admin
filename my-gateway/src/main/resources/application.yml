@@ -32,13 +32,12 @@ spring:
     nacos:
       # Direct properties for NacosCenterAutoConfiguration (must be at this level, not under discovery)
       serverAddr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
-      # Namespace is REQUIRED - no default value, must be explicitly set for multi-tenant isolation
-      # Gateway instance will fail to start if NACOS_NAMESPACE is not configured
-      namespace: ${NACOS_NAMESPACE}
+      # Namespace - defaults to empty (public namespace) if not set
+      namespace: ${NACOS_NAMESPACE:}
       discovery:
         server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
-        # Namespace is REQUIRED - no default value, must be explicitly set for multi-tenant isolation
-        namespace: ${NACOS_NAMESPACE}
+        # Namespace - defaults to empty (public namespace) if not set
+        namespace: ${NACOS_NAMESPACE:}
         ip: 127.0.0.1  # Force registration with localhost IP
 
     # Consul Configuration (alternative to Nacos)

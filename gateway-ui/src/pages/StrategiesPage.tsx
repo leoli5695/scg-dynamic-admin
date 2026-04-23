@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, memo, useMemo } from 'react';
 import {
   Card, Button, Space, Modal, message, Spin, Tag, Form, Input, Select,
-  Empty, Dropdown, Tooltip, Badge, Divider, Typography, Switch, Radio, InputNumber, Row, Col, Collapse, Popconfirm
+  Empty, Dropdown, Tooltip, Badge, Divider, Typography, Switch, Radio, InputNumber, Row, Col, Collapse, Popconfirm, Alert
 } from 'antd';
+import { WarningOutlined } from '@ant-design/icons';
 import {
   PlusOutlined, DeleteOutlined, EditOutlined, MoreOutlined,
   ThunderboltOutlined, StopOutlined, PlayCircleOutlined, GlobalOutlined,
@@ -15,7 +16,7 @@ import type { MenuProps } from 'antd';
 import api from '../utils/api';
 import { useTranslation } from 'react-i18next';
 import { useStrategyTypes, StrategyType } from '../hooks/useStrategyTypes';
-import DynamicConfigFields, { AuthSubSchemaFields, MultiDimRateLimiterFields } from '../components/DynamicConfigFields';
+import DynamicConfigFields, { AuthSubSchemaFields, MultiDimRateLimiterFields, RequestTransformFields, ResponseTransformFields, MockResponseFields } from '../components/DynamicConfigFields';
 import './StrategiesPage.premium.css';
 
 const { Text, Title } = Typography;
@@ -219,6 +220,40 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
     return quotaNameMap[key] || key;
   };
 
+  // Map rejectStrategy to user-friendly display names
+  const getRejectStrategyDisplayName = (strategy: string): string => {
+    const strategyNameMap: Record<string, string> = {
+      'FIRST_HIT': '首次拒绝',
+      'LATEST_HIT': '最后拒绝',
+      'RANDOM': '随机拒绝',
+      'ALL_HIT': '全部拒绝',
+    };
+    return strategyNameMap[strategy] || strategy;
+  };
+
+  // Format headerNames object to user-friendly display
+  const formatHeaderNames = (headerNames: Record<string, string>): string => {
+    const parts: string[] = [];
+    if (headerNames.tenantIdHeader) {
+      parts.push(`租户Header: ${headerNames.tenantIdHeader}`);
+    }
+    if (headerNames.userIdHeader) {
+      parts.push(`用户Header: ${headerNames.userIdHeader}`);
+    }
+    if (headerNames.apiKeyHeader) {
+      parts.push(`API Key Header: ${headerNames.apiKeyHeader}`);
+    }
+    return parts.join(', ');
+  };
+
+  // Format windowSizeMs to user-friendly display
+  const formatWindowSize = (windowSizeMs: number): string => {
+    if (windowSizeMs >= 1000) {
+      return `${windowSizeMs / 1000}秒`;
+    }
+    return `${windowSizeMs}毫秒`;
+  };
+
   const buildConfig = (values: any, strategyType: string) => {
     switch (strategyType) {
       case 'RATE_LIMITER':
@@ -411,6 +446,84 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
           defaultVersion: values.defaultVersion || 'v1',
           versionHeader: values.versionHeader || 'X-API-Version',
           versionLocation: values.versionLocation || 'HEADER',
+        };
+      case 'REQUEST_TRANSFORM':
+        return {
+          enabled: true,
+          maxBodySize: parseInt(values.maxBodySize) || 1048576,
+          validateAfterTransform: values.validateAfterTransform || false,
+          // Protocol transform
+          protocolTransform: values.protocolTransform || { enabled: false, sourceFormat: 'JSON', targetFormat: 'JSON' },
+          // Field mapping
+          fieldMapping: {
+            enabled: (values.fieldMappingRules?.length || 0) > 0,
+            mappings: values.fieldMappingRules || [],
+            removeFields: [],
+            addFields: {}
+          },
+          // Data masking
+          dataMasking: {
+            enabled: (values.dataMaskingRules?.length || 0) > 0,
+            rules: values.dataMaskingRules || []
+          }
+        };
+      case 'RESPONSE_TRANSFORM':
+        return {
+          enabled: true,
+          maxBodySize: parseInt(values.maxBodySize) || 10485760,
+          errorHandling: values.errorHandling || 'RETURN_ORIGINAL',
+          // Protocol transform
+          protocolTransform: values.protocolTransform || { enabled: false, sourceFormat: 'AUTO', targetFormat: 'JSON' },
+          // Field mapping
+          fieldMapping: {
+            enabled: (values.fieldMappingRules?.length || 0) > 0,
+            mappings: values.fieldMappingRules || [],
+            removeFields: [],
+            addFields: {}
+          },
+          // Data masking
+          dataMasking: {
+            enabled: (values.dataMaskingRules?.length || 0) > 0,
+            rules: values.dataMaskingRules || []
+          }
+        };
+      case 'MOCK_RESPONSE':
+        const mockMode = values.mockMode || 'STATIC';
+        return {
+          enabled: true,
+          mockMode,
+          // Static mock (for STATIC mode)
+          staticMock: mockMode === 'STATIC' ? {
+            statusCode: values.staticMock?.statusCode || 200,
+            contentType: values.staticMock?.contentType || 'application/json',
+            body: values.staticMock?.body || '',
+            bodyFile: values.staticMock?.bodyFile || ''
+          } : { statusCode: 200, contentType: 'application/json' },
+          // Dynamic mock (for DYNAMIC mode)
+          dynamicMock: mockMode === 'DYNAMIC' ? {
+            conditions: values.dynamicMockConditions || [],
+            defaultResponse: { statusCode: 200, body: '{}' }
+          } : { conditions: [], defaultResponse: { statusCode: 200, body: '{}' } },
+          // Template mock (for TEMPLATE mode)
+          templateMock: mockMode === 'TEMPLATE' ? {
+            templateEngine: values.templateMock?.templateEngine || 'HANDLEBARS',
+            template: values.templateMock?.template || '',
+            templateFile: values.templateMock?.templateFile || ''
+          } : { templateEngine: 'HANDLEBARS' },
+          // Delay simulation
+          delay: {
+            enabled: values.delay?.enabled || false,
+            fixedDelayMs: values.delay?.fixedDelayMs || 0,
+            networkConditions: values.delay?.networkConditions || 'FAST'
+          },
+          // Error simulation
+          errorSimulation: {
+            enabled: values.errorSimulation?.enabled || false,
+            errorRate: values.errorSimulation?.errorRate || 0,
+            errorStatusCodes: values.errorSimulation?.errorStatusCodes
+              ? values.errorSimulation.errorStatusCodes.split(',').map((s: string) => parseInt(s.trim()))
+              : [500, 503, 504]
+          }
         };
       default:
         return {};
@@ -656,6 +769,51 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
       delete formValues.userIdSource;
     }
 
+    // REQUEST_TRANSFORM reverse conversion
+    if (strategy.strategyType === 'REQUEST_TRANSFORM') {
+      const config = strategy.config || {};
+      formValues.maxBodySize = config.maxBodySize || 1048576;
+      formValues.validateAfterTransform = config.validateAfterTransform || false;
+      formValues.protocolTransform = config.protocolTransform || { enabled: false, sourceFormat: 'JSON', targetFormat: 'JSON' };
+      formValues.fieldMappingRules = config.fieldMapping?.mappings || [];
+      formValues.dataMaskingRules = config.dataMasking?.rules || [];
+      // Remove nested objects to avoid conflicts
+      delete formValues.fieldMapping;
+      delete formValues.dataMasking;
+    }
+
+    // RESPONSE_TRANSFORM reverse conversion
+    if (strategy.strategyType === 'RESPONSE_TRANSFORM') {
+      const config = strategy.config || {};
+      formValues.maxBodySize = config.maxBodySize || 10485760;
+      formValues.errorHandling = config.errorHandling || 'RETURN_ORIGINAL';
+      formValues.protocolTransform = config.protocolTransform || { enabled: false, sourceFormat: 'AUTO', targetFormat: 'JSON' };
+      formValues.fieldMappingRules = config.fieldMapping?.mappings || [];
+      formValues.dataMaskingRules = config.dataMasking?.rules || [];
+      // Remove nested objects to avoid conflicts
+      delete formValues.fieldMapping;
+      delete formValues.dataMasking;
+    }
+
+    // MOCK_RESPONSE reverse conversion
+    if (strategy.strategyType === 'MOCK_RESPONSE') {
+      const config = strategy.config || {};
+      formValues.mockMode = config.mockMode || 'STATIC';
+      formValues.staticMock = config.staticMock || { statusCode: 200, contentType: 'application/json' };
+      formValues.dynamicMockConditions = config.dynamicMock?.conditions || [];
+      formValues.templateMock = config.templateMock || { templateEngine: 'HANDLEBARS' };
+      formValues.delay = config.delay || { enabled: false };
+      formValues.errorSimulation = config.errorSimulation || { enabled: false };
+      // Convert errorStatusCodes array to string
+      if (formValues.errorSimulation.errorStatusCodes && Array.isArray(formValues.errorSimulation.errorStatusCodes)) {
+        formValues.errorSimulation.errorStatusCodes = formValues.errorSimulation.errorStatusCodes.join(',');
+      }
+      // Remove nested objects to avoid conflicts
+      delete formValues.staticMock;
+      delete formValues.dynamicMock;
+      delete formValues.templateMock;
+    }
+
     editForm.setFieldsValue(formValues);
     setEditModalVisible(true);
   }, [editForm]);
@@ -734,8 +892,8 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
             {({ getFieldValue }) => {
               const authType = getFieldValue('authType') || 'JWT';
               const subSchema = schema.subSchemas?.[authType];
-              if (!subSchema) return null;
-              return <AuthSubSchemaFields schema={{ ...subSchema }} form={form} t={t} />;
+              if (!subSchema || !subSchema.fields) return null;
+              return <AuthSubSchemaFields schema={{ fields: subSchema.fields, subSchemas: schema.subSchemas }} form={form} t={t} />;
             }}
           </Form.Item>
         </>
@@ -745,6 +903,49 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
     // Special handling for MULTI_DIM_RATE_LIMITER with dynamic dimension cards
     if (strategyType === 'MULTI_DIM_RATE_LIMITER' && schema.multiDimension) {
       return <MultiDimRateLimiterFields schema={schema} form={form} t={t} />;
+    }
+
+    // Special handling for REQUEST_TRANSFORM with multiple sections
+    if (strategyType === 'REQUEST_TRANSFORM' && schema.subSchemas) {
+      return <RequestTransformFields schema={schema} form={form} t={t} />;
+    }
+
+    // Special handling for RESPONSE_TRANSFORM with multiple sections
+    if (strategyType === 'RESPONSE_TRANSFORM' && schema.subSchemas) {
+      return <ResponseTransformFields schema={schema} form={form} t={t} />;
+    }
+
+    // Special handling for MOCK_RESPONSE with multiple sections
+    if (strategyType === 'MOCK_RESPONSE' && schema.subSchemas) {
+      return <MockResponseFields schema={schema} form={form} t={t} />;
+    }
+
+    // Special handling for TIMEOUT with low value warning
+    if (strategyType === 'TIMEOUT') {
+      return (
+        <>
+          <Form.Item noStyle shouldUpdate>
+            {({ getFieldValue }) => {
+              const connectTimeout = getFieldValue('connectTimeout');
+              const responseTimeout = getFieldValue('responseTimeout');
+              const hasLowTimeout = (connectTimeout && connectTimeout < 100) || (responseTimeout && responseTimeout < 100);
+              if (hasLowTimeout) {
+                return (
+                  <Alert
+                    message={t('strategy.timeout_low_warning', { defaultValue: '超时时间设置小于100ms可能导致正常请求被误拦截，请确认是否用于测试目的' })}
+                    type="warning"
+                    showIcon
+                    icon={<WarningOutlined />}
+                    style={{ marginBottom: 16 }}
+                  />
+                );
+              }
+              return null;
+            }}
+          </Form.Item>
+          <DynamicConfigFields schema={schema} form={form} t={t} />
+        </>
+      );
     }
 
     // Default dynamic rendering for other types
@@ -969,9 +1170,73 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
                     );
                   })}
                   {Object.keys(strategy.config || {}).length > 2 && (
-                    <Text type="secondary" style={{ fontSize: '11px', marginTop: '2px' }}>
-                      +{Object.keys(strategy.config || {}).length - 2} more
-                    </Text>
+                    <Tooltip
+                      title={
+                        <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                          {Object.entries(strategy.config || {}).slice(2).map(([key, value]) => {
+                            // Get display key name
+                            let displayKey = key;
+                            if (strategy.strategyType === 'MULTI_DIM_RATE_LIMITER') {
+                              displayKey = getQuotaDisplayName(key, strategy.config);
+                              // Additional key name mappings
+                              const keyNameMap: Record<string, string> = {
+                                'rejectStrategy': '拒绝策略',
+                                'headerNames': 'Header配置',
+                                'keyPrefix': '键前缀',
+                                'windowSizeMs': '时间窗口',
+                                'keySource': '键来源',
+                              };
+                              displayKey = keyNameMap[key] || displayKey;
+                            }
+
+                            // Calculate display value with friendly formatting
+                            let displayValue: string;
+                            if (strategy.strategyType === 'MULTI_DIM_RATE_LIMITER') {
+                              // Special handling for MULTI_DIM_RATE_LIMITER fields
+                              if (key.endsWith('Quota') && typeof value === 'object') {
+                                const quota = value as Record<string, any>;
+                                if (quota.enabled) {
+                                  displayValue = `${quota.qps || 100} QPS, burst: ${quota.burstCapacity || 200}`;
+                                } else {
+                                  displayValue = '未启用';
+                                }
+                              } else if (key === 'rejectStrategy') {
+                                displayValue = getRejectStrategyDisplayName(String(value));
+                              } else if (key === 'headerNames' && typeof value === 'object') {
+                                displayValue = formatHeaderNames(value as Record<string, string>);
+                              } else if (key === 'windowSizeMs') {
+                                displayValue = formatWindowSize(Number(value));
+                              } else if (key === 'keySource') {
+                                const keySourceMap: Record<string, string> = {
+                                  'combined': '组合键',
+                                  'ip': 'IP',
+                                  'user': '用户',
+                                  'header': 'Header',
+                                };
+                                displayValue = keySourceMap[String(value)] || String(value);
+                              } else {
+                                displayValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+                              }
+                            } else {
+                              displayValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+                            }
+
+                            return (
+                              <div key={key} style={{ marginBottom: '4px', fontSize: '12px' }}>
+                                <span style={{ color: '#999' }}>{displayKey}: </span>
+                                <span>{displayValue}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      }
+                      placement="top"
+                      mouseEnterDelay={0.3}
+                    >
+                      <Text type="secondary" style={{ fontSize: '11px', marginTop: '2px', cursor: 'pointer' }}>
+                        +{Object.keys(strategy.config || {}).length - 2} more
+                      </Text>
+                    </Tooltip>
                   )}
                 </div>
 

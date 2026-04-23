@@ -226,7 +226,7 @@ public class AuditLogController {
      * Cached for 30 seconds since stats are aggregated data.
      */
     @GetMapping("/stats")
-    @org.springframework.cache.annotation.Cacheable(value = "auditStats", key = "#instanceId ?: 'all'", unless = "#result.get('code') != 200")
+    @org.springframework.cache.annotation.Cacheable(value = "auditStats", key = "#instanceId ?: 'all'", unless = "#result == null || #result.body == null || #result.body.get('code') != 200")
     public ResponseEntity<Map<String, Object>> getStats(
             @RequestParam(required = false) String instanceId) {
 
@@ -309,6 +309,67 @@ public class AuditLogController {
             log.error("Cleanup failed", e);
             result.put("code", 500);
             result.put("message", "Cleanup failed: " + e.getMessage());
+        }
+
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Clear all audit logs (dangerous operation).
+     * Use with caution - this will delete all audit history.
+     */
+    @PostMapping("/clear-all")
+    public ResponseEntity<Map<String, Object>> clearAllLogs() {
+
+        Map<String, Object> result = new HashMap<>();
+
+        try {
+            long totalCount = auditLogRepository.count();
+            auditLogRepository.deleteAll();
+
+            result.put("code", 200);
+            result.put("message", "All audit logs cleared");
+            result.put("data", Map.of(
+                    "deletedCount", totalCount
+            ));
+
+            log.warn("All audit logs cleared: deleted {} logs", totalCount);
+
+        } catch (Exception e) {
+            log.error("Clear all logs failed", e);
+            result.put("code", 500);
+            result.put("message", "Clear all logs failed: " + e.getMessage());
+        }
+
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Delete a single audit log by ID.
+     */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Map<String, Object>> deleteAuditLog(@PathVariable Long id) {
+        Map<String, Object> result = new HashMap<>();
+
+        try {
+            AuditLogEntity auditLogEntry = auditLogRepository.findById(id).orElse(null);
+
+            if (auditLogEntry != null) {
+                auditLogRepository.delete(auditLogEntry);
+                result.put("code", 200);
+                result.put("message", "Audit log deleted");
+                result.put("data", Map.of("id", id));
+
+                log.info("Audit log deleted: id={}", id);
+            } else {
+                result.put("code", 404);
+                result.put("message", "Audit log not found: " + id);
+            }
+
+        } catch (Exception e) {
+            log.error("Failed to delete audit log", e);
+            result.put("code", 500);
+            result.put("message", "Failed to delete audit log: " + e.getMessage());
         }
 
         return ResponseEntity.ok(result);

@@ -265,26 +265,26 @@ public class RequestReplayService {
             traceRepository.incrementReplayCount(request.getTraceId(), "Error: " + errorMsg);
 
         } catch (org.springframework.web.client.HttpClientErrorException e) {
-            String errorMsg = String.format("HTTP %d: %s", e.getStatusCode().value(), 
-                    truncateBody(e.getResponseBodyAsString()));
-            log.error("Client error during replay: {}", errorMsg);
+            String responseBody = truncateBody(e.getResponseBodyAsString());
+            log.error("Client error during replay: HTTP {}", e.getStatusCode().value());
             result.setSuccess(true); // Still a valid response
             result.setStatusCode(e.getStatusCode().value());
-            result.setResponseBody(errorMsg);
+            result.setResponseBody(responseBody);
             result.setLatencyMs(System.currentTimeMillis() - startTime);
             result.setErrorType("CLIENT_ERROR");
-            traceRepository.incrementReplayCount(request.getTraceId(), errorMsg);
+            traceRepository.incrementReplayCount(request.getTraceId(), 
+                    String.format("HTTP %d", e.getStatusCode().value()));
 
         } catch (org.springframework.web.client.HttpServerErrorException e) {
-            String errorMsg = String.format("HTTP %d: %s", e.getStatusCode().value(), 
-                    truncateBody(e.getResponseBodyAsString()));
-            log.error("Server error during replay: {}", errorMsg);
+            String responseBody = truncateBody(e.getResponseBodyAsString());
+            log.error("Server error during replay: HTTP {}", e.getStatusCode().value());
             result.setSuccess(true); // Still a valid response
             result.setStatusCode(e.getStatusCode().value());
-            result.setResponseBody(errorMsg);
+            result.setResponseBody(responseBody);
             result.setLatencyMs(System.currentTimeMillis() - startTime);
             result.setErrorType("SERVER_ERROR");
-            traceRepository.incrementReplayCount(request.getTraceId(), errorMsg);
+            traceRepository.incrementReplayCount(request.getTraceId(), 
+                    String.format("HTTP %d", e.getStatusCode().value()));
 
         } catch (Exception e) {
             log.error("Failed to replay request", e);

@@ -91,7 +91,9 @@ public class TraceIdGlobalFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        // High priority - should run early to capture entire request lifecycle
-        return -300;
+        // HIGHEST_PRECEDENCE (Integer.MIN_VALUE) - must run FIRST before ALL other filters
+        // including RemoveCachedBodyFilter (-2147483648), AdaptCachedBodyGlobalFilter, etc.
+        // This ensures traceId is available for all subsequent filters.
+        return Ordered.HIGHEST_PRECEDENCE;
     }
 }

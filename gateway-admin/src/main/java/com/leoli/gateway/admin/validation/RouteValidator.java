@@ -213,6 +213,16 @@ public class RouteValidator {
             if ("RemoteAddr".equalsIgnoreCase(name)) {
                 validateRemoteAddrArgs(args, errors);
             }
+
+            // Validate Host predicate - SCG expects "patterns" (plural)
+            if ("Host".equalsIgnoreCase(name)) {
+                validateHostArgs(args, errors);
+            }
+
+            // Validate Header predicate - SCG expects "header" + "regexp"
+            if ("Header".equalsIgnoreCase(name)) {
+                validateHeaderArgs(args, errors);
+            }
         }
 
         // Recommend having a Path predicate
@@ -241,6 +251,29 @@ public class RouteValidator {
         if (sources == null || sources.trim().isEmpty()) {
             errors.add("RemoteAddr predicate requires 'sources' argument");
         }
+    }
+
+    private static void validateHostArgs(Map<String, String> args, List<String> errors) {
+        // SCG expects "patterns" (plural) for Host predicate
+        // Support both "patterns" and legacy "pattern" for backward compatibility
+        String patterns = args.get("patterns");
+        if (patterns == null || patterns.trim().isEmpty()) {
+            patterns = args.get("pattern"); // legacy support
+            if (patterns == null || patterns.trim().isEmpty()) {
+                errors.add("Host predicate requires 'patterns' argument (e.g., **.example.com)");
+            } else {
+                log.debug("Host predicate uses legacy 'pattern' key, recommend using 'patterns' instead");
+            }
+        }
+    }
+
+    private static void validateHeaderArgs(Map<String, String> args, List<String> errors) {
+        // SCG Header predicate expects "header" (name) and optional "regexp" (regex pattern)
+        String header = args.get("header");
+        if (header == null || header.trim().isEmpty()) {
+            errors.add("Header predicate requires 'header' argument (header name)");
+        }
+        // regexp is optional - if not provided, matches any value
     }
 
     private static void validateFilters(List<RouteDefinition.FilterDefinition> filters, List<String> errors) {

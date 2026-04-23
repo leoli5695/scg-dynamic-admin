@@ -36,11 +36,89 @@ import {
   WarningOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
-import ReactMarkdown from "react-markdown";
+import AiReportRenderer from "../components/AiReportRenderer";
+import "../styles/ai-report.css";
 import { useTranslation } from "react-i18next";
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
+
+// Route validation error message translations
+// Maps backend English errors to localized messages
+const VALIDATION_ERROR_MAP: Record<string, Record<string, string>> = {
+  zh: {
+    "Route ID is required": "路由ID必填",
+    "Route ID must not exceed 100 characters": "路由ID不能超过100字符",
+    "Route ID must contain only alphanumeric characters, hyphens, and underscores": "路由ID只能包含字母、数字、下划线和中划线",
+    "URI is required": "URI必填",
+    "URI scheme must be one of: http, https, lb, static": "URI协议必须是 http、https、lb 或 static",
+    "Static URI must have a service name (e.g., static://my-service)": "static:// URI 必须包含服务名",
+    "HTTP/HTTPS URI must have a valid host": "HTTP/HTTPS URI 必须包含有效的主机名",
+    "Port must be between 1 and 65535": "端口必须在 1-65535 范围内",
+    "Load balancer URI must have a service name (e.g., lb://my-service)": "lb:// URI 必须包含服务名",
+    "Invalid URI format": "URI格式无效",
+    "Route order should be between -10000 and 10000": "路由优先级应在 -10000 到 10000 之间",
+    "Predicate at index": "第",
+    "is null": "个断言为空",
+    "has no name": "个断言缺少名称",
+    "Predicate '": "断言 '",
+    "' has no arguments": "' 缺少参数",
+    "contains invalid characters": "包含无效字符",
+    "Path pattern must start with '/'": "路径模式必须以 '/' 开头",
+    "RemoteAddr predicate requires 'sources' argument": "RemoteAddr 断言需要 'sources' 参数",
+    "Filter at index": "第",
+    "Filter '": "过滤器 '",
+    "StripPrefix 'parts' must be non-negative": "StripPrefix 'parts' 必须是非负整数",
+    "StripPrefix 'parts' must be a valid integer": "StripPrefix 'parts' 必须是有效整数",
+    "SetStatus 'status' must be a valid HTTP status code (100-599)": "SetStatus 'status' 必须是有效的HTTP状态码 (100-599)",
+    "SetStatus 'status' must be a valid HTTP status code or status name": "SetStatus 'status' 必须是有效的HTTP状态码或状态名",
+  },
+  en: {} // English is already the default
+};
+
+// Translate validation error message
+function translateValidationError(error: string, language: string): string {
+  const langMap = VALIDATION_ERROR_MAP[language] || {};
+  
+  // Try exact match first
+  if (langMap[error]) {
+    return langMap[error];
+  }
+  
+  // Try partial match for errors with dynamic parts
+  for (const [key, translation] of Object.entries(langMap)) {
+    if (error.includes(key)) {
+      // Handle errors like "Predicate at index 0 is null"
+      if (key === "Predicate at index") {
+        const match = error.match(/Predicate at index (\d+) is null/);
+        if (match) {
+          return `第 ${match[1]} 个断言为空`;
+        }
+      }
+      if (key === "has no name") {
+        const match = error.match(/Predicate at index (\d+) has no name/);
+        if (match) {
+          return `第 ${match[1]} 个断言缺少名称`;
+        }
+      }
+      if (key === "Filter at index") {
+        const match = error.match(/Filter at index (\d+) is null/);
+        if (match) {
+          return `第 ${match[1]} 个过滤器为空`;
+        }
+      }
+      if (key === "Filter '") {
+        const match = error.match(/Filter '(.+)' contains invalid characters/);
+        if (match) {
+          return `过滤器 '${match[1]}' 包含无效字符`;
+        }
+      }
+    }
+  }
+  
+  // Return original if no translation found
+  return error;
+}
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -80,7 +158,7 @@ interface Props {
 }
 
 const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -102,8 +180,9 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
   const [routeDescription, setRouteDescription] = useState("");
   const [generatedRoute, setGeneratedRoute] = useState("");
   const [routeLoading, setRouteLoading] = useState(false);
-  // Services for route generator
-  const [services, setServices] = useState<{ serviceId: string; name: string }[]>([]);
+  // Services for route generator - two types
+  const [dbServices, setDbServices] = useState<{ serviceId: string; name: string }[]>([]);
+  const [nacosServices, setNacosServices] = useState<{ serviceName: string; namespace: string; group: string; instanceCount: number; displayName: string }[]>([]);
   const [selectedServiceId, setSelectedServiceId] = useState<string>("");
   // Validation and apply
   const [validationResult, setValidationResult] = useState<{ valid: boolean; errors?: string[] } | null>(null);
@@ -157,14 +236,26 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
     }
   };
 
-  // Load services for route generator
+  // Load services for route generator - both database services and Nacos services
   const loadServices = async () => {
     try {
-      const response = await axios.get(`/api/services?instanceId=${instanceId}`);
-      const serviceList = response.data?.data || [];
-      setServices(serviceList.map((s: any) => ({
+      // Load database services
+      const dbResponse = await axios.get(`/api/services?instanceId=${instanceId}`);
+      const dbServiceList = dbResponse.data?.data || [];
+      setDbServices(dbServiceList.map((s: any) => ({
         serviceId: s.serviceId || s.name,
         name: s.name
+      })));
+
+      // Load Nacos discovery services
+      const nacosResponse = await axios.get("/api/services/nacos-discovery");
+      const nacosServiceList = nacosResponse.data?.data || [];
+      setNacosServices(nacosServiceList.map((s: any) => ({
+        serviceName: s.serviceName,
+        namespace: s.namespace,
+        group: s.group,
+        instanceCount: s.instanceCount,
+        displayName: s.displayName || `${s.serviceName} (${s.namespace || 'public'}/${s.group || 'DEFAULT_GROUP'})`
       })));
     } catch (error) {
       console.error("Failed to load services", error);
@@ -273,7 +364,8 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
       const response = await axios.post("/api/copilot/chat", {
         sessionId,
         message: userMessage.content,
-        context: "gateway",
+        // context 不传递，让后端根据消息内容自动识别意图
+        // context: "gateway",  // 移除固定值，支持 strategyTest 等意图自动识别
         instanceId,
         provider: selectedProvider || undefined,
         model: selectedModel || undefined,
@@ -322,7 +414,7 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
       const response = await axios.post("/api/copilot/chat", {
         sessionId,
         message: `确认执行 ${pendingConfirmation.toolName} 操作`,
-        context: "gateway",
+        // context 不传递，让后端根据消息内容自动识别意图
         instanceId,
         provider: selectedProvider || undefined,
         model: selectedModel || undefined,
@@ -388,11 +480,36 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
       return;
     }
 
+    // Parse service selection - format: "db:uuidServiceId:serviceName" or "nacos:serviceName"
+    let serviceHint = "";
+    if (selectedServiceId) {
+      if (selectedServiceId.startsWith("db:")) {
+        // Database service - use static://serviceId (UUID, NOT serviceName!)
+        // serviceId is the UUID used in Nacos config for static services
+        const parts = selectedServiceId.split(":");
+        const uuidServiceId = parts[1];  // UUID serviceId for static://
+        const serviceName = parts[2];    // Display name only
+        serviceHint = ` (目标服务: ${serviceName}, 服务ID: ${uuidServiceId}, 使用 static://${uuidServiceId})`;
+      } else if (selectedServiceId.startsWith("nacos:")) {
+        // Nacos discovery service - use lb://serviceName with namespace/group
+        const serviceName = selectedServiceId.replace("nacos:", "");
+        // Find the full service info from nacosServices array
+        const nacosService = nacosServices.find(s => s.serviceName === serviceName);
+        if (nacosService) {
+          const namespace = nacosService.namespace || 'public';
+          const group = nacosService.group || 'DEFAULT_GROUP';
+          serviceHint = ` (目标服务: ${serviceName}, namespace: ${namespace}, group: ${group}, 使用 lb://${serviceName})`;
+        } else {
+          serviceHint = ` (目标服务: ${serviceName}, 使用 lb://${serviceName})`;
+        }
+      }
+    }
+
     setRouteLoading(true);
     setValidationResult(null); // Clear previous validation
     try {
       const response = await axios.post("/api/copilot/generate-route", {
-        description: selectedServiceId ? `${routeDescription} (目标服务: ${selectedServiceId})` : routeDescription,
+        description: serviceHint ? `${routeDescription}${serviceHint}` : routeDescription,
         instanceId,
         provider: selectedProvider || undefined,
         model: selectedModel || undefined,
@@ -923,7 +1040,7 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
                   </Text>
                 </div>
                 <div style={{ color: "rgba(255,255,255,0.85)" }}>
-                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  <AiReportRenderer content={msg.content} />
                 </div>
               </div>
             </div>
@@ -996,7 +1113,7 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
             {t("copilot.route_generator_desc")}
           </Paragraph>
 
-          {/* Service Selection */}
+          {/* Service Selection - supports both DB services and Nacos services */}
           <div style={{ marginBottom: "12px" }}>
             <Text style={{ color: "rgba(255,255,255,0.85)", marginRight: "8px" }}>
               {t("copilot.target_service") || "目标服务"}:
@@ -1006,9 +1123,25 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
               onChange={(value) => setSelectedServiceId(value)}
               placeholder={t("copilot.select_service") || "选择服务（可选）"}
               allowClear
-              style={{ width: 200 }}
-              options={services.map((s) => ({ value: s.serviceId, label: s.name }))}
-            />
+              style={{ width: 300 }}
+            >
+              {/* Database Services Group */}
+              <Select.OptGroup label={t("routes.static_services") || "静态服务 (数据库)"}>
+                {dbServices.map((s) => (
+                  <Select.Option key={s.serviceId} value={`db:${s.serviceId}:${s.name}`}>
+                    {s.name}
+                  </Select.Option>
+                ))}
+              </Select.OptGroup>
+              {/* Nacos Discovery Services Group */}
+              <Select.OptGroup label={t("routes.nacos_services") || "Nacos服务发现"}>
+                {nacosServices.map((s) => (
+                  <Select.Option key={`nacos:${s.serviceName}`} value={`nacos:${s.serviceName}`}>
+                    {s.displayName} {s.instanceCount > 0 ? `(${s.instanceCount}实例)` : ''}
+                  </Select.Option>
+                ))}
+              </Select.OptGroup>
+            </Select>
           </div>
 
           {/* Description Input */}
@@ -1099,7 +1232,7 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
                       message={t("copilot.validation_failed") || "配置校验失败"}
                       description={
                         validationResult.errors?.map((err, idx) => (
-                          <div key={idx}>• {err}</div>
+                          <div key={idx}>• {translateValidationError(err, i18n.language)}</div>
                         ))
                       }
                       style={{ marginBottom: "12px" }}
@@ -1160,7 +1293,7 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
             <div style={{ marginTop: "16px" }}>
               <Divider />
               <div style={{ color: "rgba(255,255,255,0.85)" }}>
-                <ReactMarkdown>{errorAnalysis}</ReactMarkdown>
+                <AiReportRenderer content={errorAnalysis} />
               </div>
             </div>
           )}
@@ -1191,7 +1324,7 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
             <div style={{ marginTop: "16px" }}>
               <Divider />
               <div style={{ color: "rgba(255,255,255,0.85)" }}>
-                <ReactMarkdown>{optimizations}</ReactMarkdown>
+                <AiReportRenderer content={optimizations} />
               </div>
             </div>
           )}
@@ -1261,7 +1394,7 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
               {conceptName}
             </Title>
             <div style={{ color: "rgba(255,255,255,0.85)" }}>
-              <ReactMarkdown>{conceptExplanation}</ReactMarkdown>
+              <AiReportRenderer content={conceptExplanation} />
             </div>
           </div>
         )}

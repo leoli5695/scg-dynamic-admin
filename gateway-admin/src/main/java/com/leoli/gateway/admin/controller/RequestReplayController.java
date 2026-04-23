@@ -54,9 +54,18 @@ public class RequestReplayController {
             @RequestBody(required = false) RequestReplayService.ReplayOptions options) {
         log.info("Executing replay for trace: {} on instance: {}", traceId, instanceId);
         
-        RequestReplayService.ReplayResult result = replayService.executeReplay(traceId, instanceId, options);
-        
-        return ResponseEntity.ok(result.toMap());
+        try {
+            RequestReplayService.ReplayResult result = replayService.executeReplay(traceId, instanceId, options);
+            return ResponseEntity.ok(result.toMap());
+        } catch (Exception e) {
+            log.error("Replay execution failed for trace {}: {}", traceId, e.getMessage(), e);
+            return ResponseEntity.ok(Map.of(
+                    "success", false,
+                    "traceId", traceId,
+                    "error", e.getMessage(),
+                    "errorType", "INTERNAL_ERROR"
+            ));
+        }
     }
 
     /**

@@ -9,7 +9,8 @@ import {
 } from '@ant-design/icons';
 import api from '../utils/api';
 import { useTranslation } from 'react-i18next';
-import ReactMarkdown from 'react-markdown';
+import AiReportRenderer from './AiReportRenderer';
+import '../styles/ai-report.css';
 import dayjs, { Dayjs } from 'dayjs';
 
 interface AiProvider {
@@ -358,7 +359,7 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
           
           <div className="ai-result-container">
             <div className="ai-result-content">
-              <ReactMarkdown>{result}</ReactMarkdown>
+              <AiReportRenderer content={result} />
             </div>
           </div>
         </div>

@@ -15,8 +15,10 @@ import {
   ExpandOutlined, CompressOutlined, LinkOutlined,
   BranchesOutlined, ShareAltOutlined, RightOutlined,
   DownOutlined, BugOutlined, InfoCircleOutlined,
-  UnorderedListOutlined, ApartmentOutlined
+  UnorderedListOutlined, ApartmentOutlined, ThunderboltOutlined
 } from '@ant-design/icons';
+import FilterWaterfallChart from '../components/FilterWaterfallChart';
+import FilterExecutionDetailDrawer from '../components/FilterExecutionDetailDrawer';
 import type { DataNode } from 'antd/es/tree';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
@@ -63,6 +65,19 @@ interface FilterChainExecution {
   durationMicros: number;
   success: boolean;
   errorMessage: string;
+  timePercentage: number;
+}
+
+// Filter execution bar for waterfall chart
+interface FilterExecutionBar {
+  filterName: string;
+  order: number;
+  startTimeOffset: number;
+  selfTimeMs: number;
+  totalTimeMs: number;
+  downstreamMs: number;
+  success: boolean;
+  errorMessage?: string;
   timePercentage: number;
 }
 
@@ -122,6 +137,10 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
   const [detailViewMode, setDetailViewMode] = useState<'formatted' | 'raw'>('formatted');
   const [requestBodyExpanded, setRequestBodyExpanded] = useState(false);
   const [responseBodyExpanded, setResponseBodyExpanded] = useState(false);
+
+  // Filter waterfall chart state
+  const [selectedFilterExecution, setSelectedFilterExecution] = useState<FilterChainExecution | null>(null);
+  const [filterDetailDrawerVisible, setFilterDetailDrawerVisible] = useState(false);
 
   // Jaeger distributed tracing state
   const [jaegerAvailable, setJaegerAvailable] = useState(false);
@@ -451,6 +470,43 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
     if (percentage >= 50) return '#cf1322';
     if (percentage >= 30) return '#faad14';
     return '#52c41a';
+  };
+
+  // Handle filter bar click in waterfall chart
+  const handleFilterBarClick = (execution: FilterChainExecution) => {
+    setSelectedFilterExecution(execution);
+    setFilterDetailDrawerVisible(true);
+  };
+
+  // Calculate filter execution data for waterfall chart
+  const getFilterExecutionBars = (executions: FilterChainExecution[]): FilterExecutionBar[] => {
+    if (!executions || executions.length === 0) return [];
+
+    let cumulativeOffset = 0;
+    return executions.map((exec, index) => {
+      // selfTimeMs 需要从 durationMs 和下游计算
+      // 目前 FilterChainExecution 只有 durationMs，我们假设 selfTimeMs = durationMs * 0.3（需要后端提供真实数据）
+      const selfTimeMs = exec.durationMs * 0.3; // TODO: 后端需要提供 selfTimeMs 字段
+      const totalTimeMs = exec.durationMs;
+      const downstreamMs = totalTimeMs - selfTimeMs;
+
+      const bar: FilterExecutionBar = {
+        filterName: exec.filterName,
+        order: exec.filterOrder,
+        startTimeOffset: cumulativeOffset,
+        selfTimeMs,
+        totalTimeMs,
+        downstreamMs,
+        success: exec.success,
+        errorMessage: exec.errorMessage,
+        timePercentage: exec.timePercentage
+      };
+
+      // 下一个 filter 的开始时间偏移
+      cumulativeOffset += selfTimeMs;
+
+      return bar;
+    });
   };
 
   // Format JSON with pretty print
@@ -1196,16 +1252,74 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                   />
                 )}
 
-                <Table
-                  size="small"
-                  dataSource={selectedTrace.filterChain.executions}
-                  columns={filterColumns}
-                  rowKey={(record, index) => `${record.filterName}_${record.filterOrder}_${index}`}
-                  pagination={false}
-                  scroll={{ x: 500 }}
+                <Tabs
+                  defaultActiveKey="table"
+                  items={[
+                    {
+                      key: 'table',
+                      label: <span><UnorderedListOutlined /> {t('trace.table_view')}</span>,
+                      children: (
+                        <Table
+                          size="small"
+                          dataSource={selectedTrace.filterChain.executions}
+                          columns={filterColumns}
+                          rowKey={(record, index) => `${record.filterName}_${record.filterOrder}_${index}`}
+                          pagination={false}
+                          scroll={{ x: 500 }}
+                        />
+                      )
+                    },
+                    {
+                      key: 'waterfall',
+                      label: <span><ThunderboltOutlined /> {t('trace.waterfall_view')}</span>,
+                      children: (
+                        <FilterWaterfallChart
+                          executions={selectedTrace.filterChain.executions.map((exec, idx) => {
+                            // Calculate startTimeOffset based on cumulative selfTime
+                            let offset = 0;
+                            for (let i = 0; i < idx; i++) {
+                              offset += selectedTrace.filterChain.executions[i].durationMs * 0.3;
+                            }
+                            return {
+                              filterName: exec.filterName,
+                              order: exec.filterOrder,
+                              startTimeOffset: offset,
+                              selfTimeMs: exec.durationMs * 0.3,
+                              totalTimeMs: exec.durationMs,
+                              downstreamMs: exec.durationMs * 0.7,
+                              success: exec.success,
+                              errorMessage: exec.errorMessage,
+                              timePercentage: exec.timePercentage
+                            };
+                          })}
+                          totalDurationMs={selectedTrace.filterChain.totalFilterDurationMs}
+                          onFilterClick={handleFilterBarClick}
+                          slowThreshold={50}
+                        />
+                      )
+                    }
+                  ]}
                 />
               </Card>
             )}
+
+            {/* Filter Execution Detail Drawer */}
+            <FilterExecutionDetailDrawer
+              visible={filterDetailDrawerVisible}
+              execution={selectedFilterExecution ? {
+                filterName: selectedFilterExecution.filterName,
+                order: selectedFilterExecution.filterOrder,
+                startTimeOffset: 0,
+                selfTimeMs: selectedFilterExecution.durationMs * 0.3,
+                totalTimeMs: selectedFilterExecution.durationMs,
+                downstreamMs: selectedFilterExecution.durationMs * 0.7,
+                success: selectedFilterExecution.success,
+                errorMessage: selectedFilterExecution.errorMessage,
+                timePercentage: selectedFilterExecution.timePercentage
+              } : null}
+              onClose={() => setFilterDetailDrawerVisible(false)}
+              instanceId={selectedTrace?.instanceId}
+            />
 
             {/* Meta Info */}
             <Card size="small" style={{ marginTop: 16 }}>

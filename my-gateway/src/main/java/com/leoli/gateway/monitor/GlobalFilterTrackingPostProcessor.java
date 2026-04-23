@@ -13,6 +13,9 @@ import java.util.Set;
 /**
  * BeanPostProcessor that wraps all GlobalFilter beans with TrackedGlobalFilter.
  * This enables automatic tracking of each filter's execution time without modifying filter code.
+ * 
+ * Now includes circuit breaker support - filters can be automatically bypassed
+ * when their health score drops below threshold.
  *
  * Excludes:
  * - TrackedGlobalFilter itself (to avoid double wrapping)
@@ -25,19 +28,24 @@ import java.util.Set;
 public class GlobalFilterTrackingPostProcessor implements BeanPostProcessor, Ordered {
 
     private final FilterChainTracker tracker;
+    private final FilterCircuitBreakerManager circuitBreakerManager;
 
     // Filters that should NOT be wrapped (already tracked or special handling needed)
+    // IMPORTANT: All names must be lowercase to match beanName.toLowerCase() check below
     private static final Set<String> EXCLUDED_FILTERS = Set.of(
-            "filterChainTrackingGlobalFilter",  // Legacy whole-chain tracker
-            "trackedGlobalFilter",              // Self-reference check
-            "globalFilterTrackingPostProcessor" // PostProcessor itself
+            "filterchaintrackingglobalfilter",  // Legacy whole-chain tracker
+            "trackedglobalfilter",              // Self-reference check
+            "globalfiltertrackingpostprocessor", // PostProcessor itself
+            "traceidglobalfilter"               // Must run first to set traceId before others
     );
 
     // Track wrapped filters to prevent double wrapping
     private final Set<String> wrappedFilterNames = new HashSet<>();
 
-    public GlobalFilterTrackingPostProcessor(FilterChainTracker tracker) {
+    public GlobalFilterTrackingPostProcessor(FilterChainTracker tracker,
+                                              FilterCircuitBreakerManager circuitBreakerManager) {
         this.tracker = tracker;
+        this.circuitBreakerManager = circuitBreakerManager;
     }
 
     @Override
@@ -49,7 +57,7 @@ public class GlobalFilterTrackingPostProcessor implements BeanPostProcessor, Ord
 
         // Skip excluded filters
         if (EXCLUDED_FILTERS.contains(beanName.toLowerCase())) {
-            log.debug("Skipping excluded filter: {}", beanName);
+            log.info("✅ Skipping excluded filter (not wrapped): {}", beanName);
             return bean;
         }
 
@@ -65,12 +73,12 @@ public class GlobalFilterTrackingPostProcessor implements BeanPostProcessor, Ord
             return bean;
         }
 
-        // Wrap the filter with tracking
+        // Wrap the filter with tracking (now includes circuit breaker)
         GlobalFilter originalFilter = (GlobalFilter) bean;
-        TrackedGlobalFilter trackedFilter = new TrackedGlobalFilter(originalFilter, tracker);
+        TrackedGlobalFilter trackedFilter = new TrackedGlobalFilter(originalFilter, tracker, circuitBreakerManager);
 
         wrappedFilterNames.add(beanName);
-        log.info("Wrapped GlobalFilter '{}' with tracking", beanName);
+        log.info("Wrapped GlobalFilter '{}' with tracking (circuit breaker enabled)", beanName);
 
         return trackedFilter;
     }

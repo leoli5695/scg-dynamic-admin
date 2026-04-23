@@ -19,6 +19,7 @@ import {
   Form,
   Dropdown,
   Avatar,
+  Result,
 } from "antd";
 import type { MenuProps } from "antd";
 import {
@@ -47,11 +48,13 @@ import {
   UserOutlined,
   LogoutOutlined,
   ThunderboltOutlined,
+  HomeOutlined,
 } from "@ant-design/icons";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import axios from "axios";
 import LanguageSwitcher from "../components/LanguageSwitcher";
+import ErrorBoundary from "../components/ErrorBoundary";
 
 // Lazy load sub-pages for better performance
 const ServicesPage = lazy(() => import("./ServicesPage"));
@@ -196,17 +199,15 @@ const InstanceDetailPage: React.FC = () => {
     },
   ];
 
-  // Derive activeTab from URL path
-  const getActiveTabFromPath = (): string => {
+  // Derive activeTab from URL path - use useMemo to cache the result
+  const activeTab = useMemo(() => {
     const pathParts = location.pathname.split('/');
     // Path format: /instances/:instanceId/:tab
     if (pathParts.length > 3 && pathParts[3]) {
       return pathParts[3];
     }
     return 'overview';
-  };
-
-  const activeTab = getActiveTabFromPath();
+  }, [location.pathname]);
 
   // Handle tab change - update URL
   const handleTabChange = (key: string) => {
@@ -493,7 +494,41 @@ const InstanceDetailPage: React.FC = () => {
   ];
 
   const renderTabContent = () => {
-    if (!instance) return null;
+    // Show error state instead of blank page when instance is not available
+    if (!instance) {
+      return (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '400px',
+          padding: '24px',
+        }}>
+          <Result
+            status="warning"
+            title={t("instance.not_found") || "实例信息加载失败"}
+            subTitle="请尝试刷新页面或返回实例列表"
+            extra={[
+              <Button
+                key="reload"
+                type="primary"
+                icon={<ReloadOutlined />}
+                onClick={() => window.location.reload()}
+              >
+                刷新页面
+              </Button>,
+              <Button
+                key="home"
+                icon={<HomeOutlined />}
+                onClick={() => navigate("/instances")}
+              >
+                返回列表
+              </Button>,
+            ]}
+          />
+        </div>
+      );
+    }
 
     switch (activeTab) {
       case "overview":
@@ -575,7 +610,7 @@ const InstanceDetailPage: React.FC = () => {
                     if (!accessUrl) {
                       return <Text type="secondary">-</Text>;
                     }
-                    
+
                     // Determine the source of the URL
                     let source = t("instance.access_url_default") || "默认";
                     if (instance.manualAccessUrl) {
@@ -585,7 +620,7 @@ const InstanceDetailPage: React.FC = () => {
                     } else if (instance.reportedAccessUrl) {
                       source = t("instance.access_url_reported") || "心跳上报";
                     }
-                    
+
                     return (
                       <Space direction="vertical" size={0}>
                         <Tooltip title={t("instance.click_to_open")}>
@@ -633,40 +668,146 @@ const InstanceDetailPage: React.FC = () => {
         );
 
       // Pass instanceId to existing pages for configuration isolation
+      // Wrap each lazy-loaded component with ErrorBoundary for error handling
       case "services":
-        return <Suspense fallback={<TabLoading />}><ServicesPage instanceId={instance.instanceId} /></Suspense>;
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<TabLoading />}>
+              <ServicesPage instanceId={instance.instanceId} />
+            </Suspense>
+          </ErrorBoundary>
+        );
       case "routes":
-        return <Suspense fallback={<TabLoading />}><RoutesPage instanceId={instance.instanceId} /></Suspense>;
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<TabLoading />}>
+              <RoutesPage instanceId={instance.instanceId} />
+            </Suspense>
+          </ErrorBoundary>
+        );
       case "strategies":
-        return <Suspense fallback={<TabLoading />}><StrategiesPage instanceId={instance.instanceId} /></Suspense>;
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<TabLoading />}>
+              <StrategiesPage instanceId={instance.instanceId} />
+            </Suspense>
+          </ErrorBoundary>
+        );
       case "authentication":
-        return <Suspense fallback={<TabLoading />}><AuthPoliciesPage instanceId={instance.instanceId} /></Suspense>;
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<TabLoading />}>
+              <AuthPoliciesPage instanceId={instance.instanceId} />
+            </Suspense>
+          </ErrorBoundary>
+        );
       case "certificates":
-        return <Suspense fallback={<TabLoading />}><CertificatePage instanceId={instance.instanceId} /></Suspense>;
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<TabLoading />}>
+              <CertificatePage instanceId={instance.instanceId} />
+            </Suspense>
+          </ErrorBoundary>
+        );
       case "trace":
-        return <Suspense fallback={<TabLoading />}><TracePage instanceId={instance.instanceId} onNavigateToReplay={() => handleTabChange('request_replay')} /></Suspense>;
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<TabLoading />}>
+              <TracePage instanceId={instance.instanceId} onNavigateToReplay={() => handleTabChange('request_replay')} />
+            </Suspense>
+          </ErrorBoundary>
+        );
       case "monitor":
-        return <Suspense fallback={<TabLoading />}><MonitorPage instanceId={instance.instanceId} /></Suspense>;
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<TabLoading />}>
+              <MonitorPage instanceId={instance.instanceId} />
+            </Suspense>
+          </ErrorBoundary>
+        );
       case "alerts":
-        return <Suspense fallback={<TabLoading />}><AlertPage instanceId={instance.instanceId} /></Suspense>;
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<TabLoading />}>
+              <AlertPage instanceId={instance.instanceId} />
+            </Suspense>
+          </ErrorBoundary>
+        );
       case "access_log":
-        return <Suspense fallback={<TabLoading />}><AccessLogConfigPage instanceId={instance.instanceId} /></Suspense>;
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<TabLoading />}>
+              <AccessLogConfigPage instanceId={instance.instanceId} />
+            </Suspense>
+          </ErrorBoundary>
+        );
       case "audit_logs":
-        return <Suspense fallback={<TabLoading />}><AuditLogsPage instanceId={instance.instanceId} /></Suspense>;
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<TabLoading />}>
+              <AuditLogsPage instanceId={instance.instanceId} />
+            </Suspense>
+          </ErrorBoundary>
+        );
       case "diagnostic":
-        return <Suspense fallback={<TabLoading />}><DiagnosticPage instanceId={instance.instanceId} /></Suspense>;
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<TabLoading />}>
+              <DiagnosticPage instanceId={instance.instanceId} />
+            </Suspense>
+          </ErrorBoundary>
+        );
       case "topology":
-        return <Suspense fallback={<TabLoading />}><TrafficTopologyPage instanceId={instance.instanceId} /></Suspense>;
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<TabLoading />}>
+              <TrafficTopologyPage instanceId={instance.instanceId} />
+            </Suspense>
+          </ErrorBoundary>
+        );
       case "filter_chain":
-        return <Suspense fallback={<TabLoading />}><FilterChainPage instanceId={instance.instanceId} /></Suspense>;
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<TabLoading />}>
+              <FilterChainPage instanceId={instance.instanceId} />
+            </Suspense>
+          </ErrorBoundary>
+        );
       case "request_replay":
-        return <Suspense fallback={<TabLoading />}><RequestReplayPage instanceId={instance.instanceId} /></Suspense>;
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<TabLoading />}>
+              <RequestReplayPage instanceId={instance.instanceId} />
+            </Suspense>
+          </ErrorBoundary>
+        );
       case "copilot":
-        return <Suspense fallback={<TabLoading />}><AiCopilotPage instanceId={instance.instanceId} /></Suspense>;
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<TabLoading />}>
+              <AiCopilotPage instanceId={instance.instanceId} />
+            </Suspense>
+          </ErrorBoundary>
+        );
       case "stress_test":
-        return <Suspense fallback={<TabLoading />}><StressTestPage instanceId={instance.instanceId} /></Suspense>;
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<TabLoading />}>
+              <StressTestPage instanceId={instance.instanceId} />
+            </Suspense>
+          </ErrorBoundary>
+        );
       default:
-        return null;
+        return (
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            minHeight: '300px',
+          }}>
+            <Text type="secondary">未知的标签页: {activeTab}</Text>
+          </div>
+        );
     }
   };
 
@@ -678,8 +819,40 @@ const InstanceDetailPage: React.FC = () => {
     );
   }
 
+  // Show error state instead of blank page when instance is not available
   if (!instance) {
-    return null;
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '400px',
+        padding: '24px',
+      }}>
+        <Result
+          status="warning"
+          title={t("instance.not_found") || "实例不存在"}
+          subTitle="该实例可能已被删除或您没有访问权限"
+          extra={[
+            <Button
+              key="reload"
+              type="primary"
+              icon={<ReloadOutlined />}
+              onClick={() => window.location.reload()}
+            >
+              刷新页面
+            </Button>,
+            <Button
+              key="home"
+              icon={<HomeOutlined />}
+              onClick={() => navigate("/instances")}
+            >
+              返回列表
+            </Button>,
+          ]}
+        />
+      </div>
+    );
   }
 
   return (

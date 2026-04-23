@@ -312,6 +312,19 @@ public class SslCertificateService {
     }
 
     /**
+     * Get certificate statistics for a specific instance
+     */
+    public Map<String, Object> getCertificateStats(String instanceId) {
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("total", sslCertificateRepository.findByInstanceId(instanceId).size());
+        stats.put("valid", sslCertificateRepository.countByInstanceIdAndStatus(instanceId, "VALID"));
+        stats.put("expiringSoon", sslCertificateRepository.countByInstanceIdAndStatus(instanceId, "EXPIRING_SOON"));
+        stats.put("expired", sslCertificateRepository.countByInstanceIdAndStatus(instanceId, "EXPIRED"));
+        stats.put("expiringList", getExpiringCertificates(instanceId, 30));
+        return stats;
+    }
+
+    /**
      * Parse PEM certificate
      */
     private X509Certificate parsePemCertificate(String certContent) {

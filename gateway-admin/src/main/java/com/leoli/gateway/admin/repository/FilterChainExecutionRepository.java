@@ -200,4 +200,41 @@ public interface FilterChainExecutionRepository extends JpaRepository<FilterChai
            "GROUP BY e.trace_id " +
            "ORDER BY total_duration_ms DESC", nativeQuery = true)
     List<Object[]> findTraceFilterSummary(String instanceId, LocalDateTime startTime);
+
+    /**
+     * Filter错误统计（用于AI异常分析）
+     * 返回: filterName, totalCount, errorCount
+     */
+    @Query("SELECT e.filterName, COUNT(e), SUM(CASE WHEN e.success = false THEN 1 ELSE 0 END) " +
+           "FROM FilterChainExecution e " +
+           "WHERE e.instanceId = :instanceId AND e.createdAt >= :startTime AND e.createdAt <= :endTime " +
+           "GROUP BY e.filterName " +
+           "HAVING COUNT(e) > 0")
+    List<Object[]> findFilterErrorStats(String instanceId, LocalDateTime startTime, LocalDateTime endTime);
+
+    /**
+     * Filter按小时统计（用于AI趋势预测）
+     * 返回: hour, totalCount, avgDuration, errorCount
+     */
+    @Query(value = "SELECT DATE_FORMAT(e.created_at, '%Y-%m-%d %H:00:00') as hour, " +
+           "COUNT(*) as total_count, AVG(e.duration_ms) as avg_duration, " +
+           "SUM(CASE WHEN e.success = 0 THEN 1 ELSE 0 END) as error_count " +
+           "FROM filter_chain_execution e " +
+           "WHERE e.instance_id = :instanceId AND e.created_at >= :startTime AND e.created_at <= :endTime " +
+           "GROUP BY DATE_FORMAT(e.created_at, '%Y-%m-%d %H:00:00') " +
+           "ORDER BY hour ASC", nativeQuery = true)
+    List<Object[]> findFilterHourlyStats(String instanceId, LocalDateTime startTime, LocalDateTime endTime);
+
+    /**
+     * Filter历史趋势数据（用于AI预测）
+     * 返回: filterName, totalCount, avgDuration, p95, minDuration, maxDuration
+     */
+    @Query("SELECT e.filterName, COUNT(e), AVG(e.durationMs), " +
+           "PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY e.durationMs), " +
+           "MIN(e.durationMs), MAX(e.durationMs) " +
+           "FROM FilterChainExecution e " +
+           "WHERE e.instanceId = :instanceId AND e.createdAt >= :startTime AND e.createdAt <= :endTime " +
+           "GROUP BY e.filterName " +
+           "HAVING COUNT(e) > 10")
+    List<Object[]> findFilterTrendData(String instanceId, LocalDateTime startTime, LocalDateTime endTime);
 }

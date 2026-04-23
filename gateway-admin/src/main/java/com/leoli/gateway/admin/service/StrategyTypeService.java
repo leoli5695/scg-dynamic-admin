@@ -30,6 +30,15 @@ public class StrategyTypeService {
     // AUTH subSchemas (loaded dynamically when needed)
     private static final Map<String, Object> AUTH_SUB_SCHEMAS = new HashMap<>();
 
+    // REQUEST_TRANSFORM subSchemas (multi-section configuration)
+    private static final Map<String, Object> REQUEST_TRANSFORM_SUB_SCHEMAS = new HashMap<>();
+
+    // RESPONSE_TRANSFORM subSchemas (multi-section configuration)
+    private static final Map<String, Object> RESPONSE_TRANSFORM_SUB_SCHEMAS = new HashMap<>();
+
+    // MOCK_RESPONSE subSchemas (multi-section configuration)
+    private static final Map<String, Object> MOCK_RESPONSE_SUB_SCHEMAS = new HashMap<>();
+
     static {
         // JWT subSchema
         Map<String, Object> jwtSchema = new HashMap<>();
@@ -87,6 +96,193 @@ public class StrategyTypeService {
         AUTH_SUB_SCHEMAS.put("HMAC", hmacSchema);
     }
 
+    // REQUEST_TRANSFORM subSchemas initialization
+    static {
+        // Protocol Transform Section
+        Map<String, Object> protocolTransformSchema = new HashMap<>();
+        protocolTransformSchema.put("sectionLabel", "协议转换配置");
+        protocolTransformSchema.put("fields", List.of(
+                createSwitchField("enabled", "启用协议转换", false),
+                createSelectFieldWithLabels("sourceFormat", "源格式", "JSON",
+                        List.of(Map.of("value", "JSON", "label", "JSON"),
+                                Map.of("value", "XML", "label", "XML"),
+                                Map.of("value", "FORM", "label", "表单(FORM)"))),
+                createSelectFieldWithLabels("targetFormat", "目标格式", "JSON",
+                        List.of(Map.of("value", "JSON", "label", "JSON"),
+                                Map.of("value", "XML", "label", "XML"))),
+                createSwitchField("preserveOriginalContentType", "保留原Content-Type", false),
+                createField("customContentType", "text", "自定义Content-Type", null)
+        ));
+        REQUEST_TRANSFORM_SUB_SCHEMAS.put("protocolTransform", protocolTransformSchema);
+
+        // Field Mapping Section (multiRule pattern)
+        Map<String, Object> fieldMappingSchema = new HashMap<>();
+        fieldMappingSchema.put("sectionLabel", "字段映射配置");
+        fieldMappingSchema.put("multiRule", true);
+        fieldMappingSchema.put("ruleLabel", "映射规则");
+        fieldMappingSchema.put("ruleFields", List.of(
+                createFieldWithPlaceholder("sourcePath", "text", "源字段路径", null, "$.user.name"),
+                createFieldWithPlaceholder("targetPath", "text", "目标字段路径", null, "$.userData.fullName"),
+                createSelectFieldWithLabels("transform", "转换类型", "COPY",
+                        List.of(Map.of("value", "COPY", "label", "复制"),
+                                Map.of("value", "RENAME", "label", "重命名"),
+                                Map.of("value", "REMOVE", "label", "删除"),
+                                Map.of("value", "DEFAULT", "label", "默认值"))),
+                createFieldWithPlaceholder("defaultValue", "text", "默认值", null, "当源字段不存在时使用"),
+                createFieldWithPlaceholder("valueTransform", "text", "值转换表达式", null, "${value.toUpperCase()}")
+        ));
+        REQUEST_TRANSFORM_SUB_SCHEMAS.put("fieldMapping", fieldMappingSchema);
+
+        // Data Masking Section (multiRule pattern)
+        Map<String, Object> dataMaskingSchema = new HashMap<>();
+        dataMaskingSchema.put("sectionLabel", "数据脱敏配置");
+        dataMaskingSchema.put("multiRule", true);
+        dataMaskingSchema.put("ruleLabel", "脱敏规则");
+        dataMaskingSchema.put("ruleFields", List.of(
+                createFieldWithPlaceholder("fieldPath", "text", "字段路径", null, "$.password"),
+                createSelectFieldWithLabels("maskType", "脱敏类型", "FULL",
+                        List.of(Map.of("value", "FULL", "label", "完全脱敏"),
+                                Map.of("value", "PARTIAL", "label", "部分脱敏"),
+                                Map.of("value", "CUSTOM", "label", "自定义正则"))),
+                createFieldWithPlaceholder("pattern", "text", "正则表达式", null, "CUSTOM类型时使用"),
+                createField("replacement", "text", "替换字符串", "***"),
+                createNumberField("keepLength", "保留字符数", 0, 0, 100, null),
+                createSelectFieldWithLabels("keepPosition", "保留位置", "START",
+                        List.of(Map.of("value", "START", "label", "开头"),
+                                Map.of("value", "END", "label", "结尾")))
+        ));
+        REQUEST_TRANSFORM_SUB_SCHEMAS.put("dataMasking", dataMaskingSchema);
+    }
+
+    // RESPONSE_TRANSFORM subSchemas initialization
+    static {
+        // Protocol Transform Section (for response)
+        Map<String, Object> protocolTransformSchema = new HashMap<>();
+        protocolTransformSchema.put("sectionLabel", "协议转换配置");
+        protocolTransformSchema.put("fields", List.of(
+                createSwitchField("enabled", "启用协议转换", false),
+                createSelectFieldWithLabels("sourceFormat", "源格式", "AUTO",
+                        List.of(Map.of("value", "AUTO", "label", "自动检测"),
+                                Map.of("value", "JSON", "label", "JSON"),
+                                Map.of("value", "XML", "label", "XML"))),
+                createSelectFieldWithLabels("targetFormat", "目标格式", "JSON",
+                        List.of(Map.of("value", "JSON", "label", "JSON"),
+                                Map.of("value", "XML", "label", "XML"))),
+                createField("customContentType", "text", "自定义Content-Type", null)
+        ));
+        RESPONSE_TRANSFORM_SUB_SCHEMAS.put("protocolTransform", protocolTransformSchema);
+
+        // Field Mapping Section (multiRule pattern)
+        Map<String, Object> fieldMappingSchema = new HashMap<>();
+        fieldMappingSchema.put("sectionLabel", "字段映射配置");
+        fieldMappingSchema.put("multiRule", true);
+        fieldMappingSchema.put("ruleLabel", "映射规则");
+        fieldMappingSchema.put("ruleFields", List.of(
+                createFieldWithPlaceholder("sourcePath", "text", "源字段路径", null, "$.data.result"),
+                createFieldWithPlaceholder("targetPath", "text", "目标字段路径", null, "$.result"),
+                createSelectFieldWithLabels("transform", "转换类型", "COPY",
+                        List.of(Map.of("value", "COPY", "label", "复制"),
+                                Map.of("value", "RENAME", "label", "重命名"),
+                                Map.of("value", "REMOVE", "label", "删除"),
+                                Map.of("value", "DEFAULT", "label", "默认值"))),
+                createFieldWithPlaceholder("defaultValue", "text", "默认值", null, "当源字段不存在时使用"),
+                createFieldWithPlaceholder("valueTransform", "text", "值转换表达式", null, "${value.toUpperCase()}")
+        ));
+        RESPONSE_TRANSFORM_SUB_SCHEMAS.put("fieldMapping", fieldMappingSchema);
+
+        // Data Masking Section (multiRule pattern)
+        Map<String, Object> dataMaskingSchema = new HashMap<>();
+        dataMaskingSchema.put("sectionLabel", "数据脱敏配置");
+        dataMaskingSchema.put("multiRule", true);
+        dataMaskingSchema.put("ruleLabel", "脱敏规则");
+        dataMaskingSchema.put("ruleFields", List.of(
+                createFieldWithPlaceholder("fieldPath", "text", "字段路径", null, "$.internalId"),
+                createSelectFieldWithLabels("maskType", "脱敏类型", "FULL",
+                        List.of(Map.of("value", "FULL", "label", "完全脱敏"),
+                                Map.of("value", "PARTIAL", "label", "部分脱敏"),
+                                Map.of("value", "CUSTOM", "label", "自定义正则"))),
+                createFieldWithPlaceholder("pattern", "text", "正则表达式", null, "CUSTOM类型时使用"),
+                createField("replacement", "text", "替换字符串", "***"),
+                createNumberField("keepLength", "保留字符数", 0, 0, 100, null),
+                createSelectFieldWithLabels("keepPosition", "保留位置", "START",
+                        List.of(Map.of("value", "START", "label", "开头"),
+                                Map.of("value", "END", "label", "结尾")))
+        ));
+        RESPONSE_TRANSFORM_SUB_SCHEMAS.put("dataMasking", dataMaskingSchema);
+    }
+
+    // MOCK_RESPONSE subSchemas initialization
+    static {
+        // Static Mock Section
+        Map<String, Object> staticMockSchema = new HashMap<>();
+        staticMockSchema.put("sectionLabel", "静态Mock配置");
+        staticMockSchema.put("fields", List.of(
+                createNumberField("statusCode", "HTTP状态码", 200, 100, 599, null),
+                createSelectFieldWithLabels("contentType", "Content-Type", "application/json",
+                        List.of(Map.of("value", "application/json", "label", "JSON"),
+                                Map.of("value", "application/xml", "label", "XML"),
+                                Map.of("value", "text/plain", "label", "纯文本"),
+                                Map.of("value", "text/html", "label", "HTML"))),
+                createField("body", "textarea", "响应Body", null),
+                createField("bodyFile", "text", "Body文件路径", null)
+        ));
+        MOCK_RESPONSE_SUB_SCHEMAS.put("staticMock", staticMockSchema);
+
+        // Dynamic Mock Section
+        Map<String, Object> dynamicMockSchema = new HashMap<>();
+        dynamicMockSchema.put("sectionLabel", "动态Mock配置");
+        dynamicMockSchema.put("multiRule", true);
+        dynamicMockSchema.put("ruleLabel", "条件规则");
+        dynamicMockSchema.put("ruleFields", List.of(
+                createSelectFieldWithLabels("matchType", "匹配类型", "PATH",
+                        List.of(Map.of("value", "PATH", "label", "路径匹配"),
+                                Map.of("value", "HEADER", "label", "Header匹配"),
+                                Map.of("value", "QUERY", "label", "Query参数匹配"),
+                                Map.of("value", "BODY", "label", "Body匹配"))),
+                createFieldWithPlaceholder("pathPattern", "text", "路径模式", null, "/api/users/{id}"),
+                createNumberField("statusCode", "状态码", 200, 100, 599, null),
+                createField("body", "textarea", "响应Body", null)
+        ));
+        MOCK_RESPONSE_SUB_SCHEMAS.put("dynamicMock", dynamicMockSchema);
+
+        // Template Mock Section
+        Map<String, Object> templateMockSchema = new HashMap<>();
+        templateMockSchema.put("sectionLabel", "模板Mock配置");
+        templateMockSchema.put("fields", List.of(
+                createSelectFieldWithLabels("templateEngine", "模板引擎", "HANDLEBARS",
+                        List.of(Map.of("value", "HANDLEBARS", "label", "Handlebars"),
+                                Map.of("value", "JSON_TEMPLATE", "label", "JSON模板"),
+                                Map.of("value", "MUSTACHE", "label", "Mustache"))),
+                createField("template", "textarea", "模板内容", null),
+                createField("templateFile", "text", "模板文件路径", null)
+        ));
+        MOCK_RESPONSE_SUB_SCHEMAS.put("templateMock", templateMockSchema);
+
+        // Delay Simulation Section
+        Map<String, Object> delaySchema = new HashMap<>();
+        delaySchema.put("sectionLabel", "延迟模拟配置");
+        delaySchema.put("fields", List.of(
+                createSwitchField("enabled", "启用延迟", false),
+                createNumberField("fixedDelayMs", "固定延迟(ms)", 0, 0, 60000, "ms"),
+                createSelectFieldWithLabels("networkConditions", "网络条件", "FAST",
+                        List.of(Map.of("value", "FAST", "label", "快速"),
+                                Map.of("value", "4G", "label", "4G网络"),
+                                Map.of("value", "3G", "label", "3G网络"),
+                                Map.of("value", "SLOW_3G", "label", "慢速3G")))
+        ));
+        MOCK_RESPONSE_SUB_SCHEMAS.put("delay", delaySchema);
+
+        // Error Simulation Section
+        Map<String, Object> errorSimulationSchema = new HashMap<>();
+        errorSimulationSchema.put("sectionLabel", "错误模拟配置");
+        errorSimulationSchema.put("fields", List.of(
+                createSwitchField("enabled", "启用错误模拟", false),
+                createNumberField("errorRate", "错误率(%)", 0, 0, 100, "%"),
+                createField("errorStatusCodes", "text", "错误状态码", "500,503,504")
+        ));
+        MOCK_RESPONSE_SUB_SCHEMAS.put("errorSimulation", errorSimulationSchema);
+    }
+
     private static Map<String, Object> createField(String name, String type, String label, Object defaultValue) {
         Map<String, Object> field = new HashMap<>();
         field.put("name", name);
@@ -119,6 +315,20 @@ public class StrategyTypeService {
 
     private static Map<String, Object> createSwitchField(String name, String label, Object defaultValue) {
         Map<String, Object> field = createField(name, "switch", label, defaultValue);
+        return field;
+    }
+
+    private static Map<String, Object> createFieldWithPlaceholder(String name, String type, String label, Object defaultValue, String placeholder) {
+        Map<String, Object> field = createField(name, type, label, defaultValue);
+        if (placeholder != null) {
+            field.put("placeholder", placeholder);
+        }
+        return field;
+    }
+
+    private static Map<String, Object> createSelectFieldWithLabels(String name, String label, Object defaultValue, List<Map<String, String>> options) {
+        Map<String, Object> field = createField(name, "select", label, defaultValue);
+        field.put("options", options);
         return field;
     }
 
@@ -180,6 +390,24 @@ public class StrategyTypeService {
         // For AUTH type, add subSchemas
         if ("AUTH".equals(typeCode) && Boolean.TRUE.equals(schema.get("hasSubSchemas"))) {
             schema.put("subSchemas", AUTH_SUB_SCHEMAS);
+            schema.remove("hasSubSchemas");
+        }
+
+        // For REQUEST_TRANSFORM type, add subSchemas
+        if ("REQUEST_TRANSFORM".equals(typeCode) && Boolean.TRUE.equals(schema.get("hasSubSchemas"))) {
+            schema.put("subSchemas", REQUEST_TRANSFORM_SUB_SCHEMAS);
+            schema.remove("hasSubSchemas");
+        }
+
+        // For RESPONSE_TRANSFORM type, add subSchemas
+        if ("RESPONSE_TRANSFORM".equals(typeCode) && Boolean.TRUE.equals(schema.get("hasSubSchemas"))) {
+            schema.put("subSchemas", RESPONSE_TRANSFORM_SUB_SCHEMAS);
+            schema.remove("hasSubSchemas");
+        }
+
+        // For MOCK_RESPONSE type, add subSchemas
+        if ("MOCK_RESPONSE".equals(typeCode) && Boolean.TRUE.equals(schema.get("hasSubSchemas"))) {
+            schema.put("subSchemas", MOCK_RESPONSE_SUB_SCHEMAS);
             schema.remove("hasSubSchemas");
         }
 

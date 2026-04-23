@@ -163,4 +163,178 @@ public class FilterChainController {
             ));
         }
     }
+
+    /**
+     * Get historical performance data for an instance.
+     */
+    @GetMapping("/{instanceId}/historical")
+    public ResponseEntity<Map<String, Object>> getHistoricalData(
+            @PathVariable String instanceId,
+            @RequestParam(defaultValue = "30") int minutes) {
+        log.info("Getting historical data for instance: {}, minutes: {}", instanceId, minutes);
+        
+        try {
+            String accessUrl = instanceService.getAccessUrl(instanceId);
+            if (accessUrl == null) {
+                return ResponseEntity.ok(Map.of(
+                        "code", 404,
+                        "message", "Instance not found or not running"
+                ));
+            }
+
+            String url = accessUrl + "/internal/filter-chain/historical?minutes=" + minutes;
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> data = restTemplate.getForObject(url, Map.class);
+            
+            return ResponseEntity.ok(Map.of(
+                    "code", 200,
+                    "data", data != null ? data : Map.of()
+            ));
+        } catch (Exception e) {
+            log.error("Failed to get historical data for instance: {}", instanceId, e);
+            return ResponseEntity.ok(Map.of(
+                    "code", 500,
+                    "message", "Failed to get historical data: " + e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * Get AI anomaly analysis for an instance.
+     */
+    @GetMapping("/{instanceId}/ai-analysis")
+    public ResponseEntity<Map<String, Object>> getAIAnalysis(@PathVariable String instanceId) {
+        log.info("Getting AI analysis for instance: {}", instanceId);
+        
+        try {
+            String accessUrl = instanceService.getAccessUrl(instanceId);
+            if (accessUrl == null) {
+                return ResponseEntity.ok(Map.of(
+                        "code", 404,
+                        "message", "Instance not found or not running"
+                ));
+            }
+
+            String url = accessUrl + "/internal/filter-chain/ai-analysis";
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> analysis = restTemplate.getForObject(url, Map.class);
+            
+            return ResponseEntity.ok(Map.of(
+                    "code", 200,
+                    "data", analysis != null ? analysis : Map.of()
+            ));
+        } catch (Exception e) {
+            log.error("Failed to get AI analysis for instance: {}", instanceId, e);
+            return ResponseEntity.ok(Map.of(
+                    "code", 500,
+                    "message", "Failed to get AI analysis: " + e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * Get performance prediction for an instance.
+     */
+    @GetMapping("/{instanceId}/prediction")
+    public ResponseEntity<Map<String, Object>> getPrediction(@PathVariable String instanceId) {
+        log.info("Getting performance prediction for instance: {}", instanceId);
+        
+        try {
+            String accessUrl = instanceService.getAccessUrl(instanceId);
+            if (accessUrl == null) {
+                return ResponseEntity.ok(Map.of(
+                        "code", 404,
+                        "message", "Instance not found or not running"
+                ));
+            }
+
+            String url = accessUrl + "/internal/filter-chain/prediction";
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> prediction = restTemplate.getForObject(url, Map.class);
+            
+            return ResponseEntity.ok(Map.of(
+                    "code", 200,
+                    "data", prediction != null ? prediction : Map.of()
+            ));
+        } catch (Exception e) {
+            log.error("Failed to get prediction for instance: {}", instanceId, e);
+            return ResponseEntity.ok(Map.of(
+                    "code", 500,
+                    "message", "Failed to get prediction: " + e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * Get configuration optimization recommendations for an instance.
+     */
+    @GetMapping("/{instanceId}/optimization")
+    public ResponseEntity<Map<String, Object>> getOptimization(@PathVariable String instanceId) {
+        log.info("Getting optimization recommendations for instance: {}", instanceId);
+        
+        try {
+            String accessUrl = instanceService.getAccessUrl(instanceId);
+            if (accessUrl == null) {
+                return ResponseEntity.ok(Map.of(
+                        "code", 404,
+                        "message", "Instance not found or not running"
+                ));
+            }
+
+            String url = accessUrl + "/internal/filter-chain/optimization";
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> optimization = restTemplate.getForObject(url, Map.class);
+            
+            return ResponseEntity.ok(Map.of(
+                    "code", 200,
+                    "data", optimization != null ? optimization : Map.of()
+            ));
+        } catch (Exception e) {
+            log.error("Failed to get optimization for instance: {}", instanceId, e);
+            return ResponseEntity.ok(Map.of(
+                    "code", 500,
+                    "message", "Failed to get optimization: " + e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * Set slow request threshold for an instance.
+     */
+    @PostMapping("/{instanceId}/threshold")
+    public ResponseEntity<Map<String, Object>> setThreshold(
+            @PathVariable String instanceId,
+            @RequestParam long thresholdMs) {
+        log.info("Setting threshold for instance: {}, thresholdMs: {}", instanceId, thresholdMs);
+        
+        try {
+            String accessUrl = instanceService.getAccessUrl(instanceId);
+            if (accessUrl == null) {
+                return ResponseEntity.ok(Map.of(
+                        "code", 404,
+                        "message", "Instance not found or not running"
+                ));
+            }
+
+            String url = accessUrl + "/internal/filter-chain/threshold?thresholdMs=" + thresholdMs;
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> result = restTemplate.postForObject(url, null, Map.class);
+            
+            return ResponseEntity.ok(Map.of(
+                    "code", 200,
+                    "data", result != null ? result : Map.of("message", "Threshold updated")
+            ));
+        } catch (Exception e) {
+            log.error("Failed to set threshold for instance: {}", instanceId, e);
+            return ResponseEntity.ok(Map.of(
+                    "code", 500,
+                    "message", "Failed to set threshold: " + e.getMessage()
+            ));
+        }
+    }
 }

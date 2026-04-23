@@ -2,19 +2,22 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card, Table, Button, Space, Tag, Modal, Input, Typography, Spin,
   Alert, Row, Col, Statistic, Collapse, Divider, Tooltip, Badge,
-  message, Select, Tabs, Checkbox
+  message, Select, Tabs, Checkbox, DatePicker, Segmented, Popconfirm
 } from 'antd';
 import {
   PlayCircleOutlined, EditOutlined, CodeOutlined, SwapOutlined,
   CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined,
-  FileTextOutlined, ThunderboltOutlined
+  FileTextOutlined, ThunderboltOutlined, DeleteOutlined, ClearOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
+import api from '../utils/api';
 import { useTranslation } from 'react-i18next';
+import dayjs from 'dayjs';
 
 const { Title, Text, Paragraph } = Typography;
 const { Panel } = Collapse;
 const { TextArea } = Input;
+const { RangePicker } = DatePicker;
 
 interface TraceRecord {
   id: number;
@@ -56,6 +59,7 @@ interface ReplayResult {
   responseHeaders: Record<string, string>;
   latencyMs: number;
   error?: string;
+  errorType?: string; // CLIENT_ERROR, SERVER_ERROR, CONNECTION_ERROR
   comparison?: {
     originalStatus: number;
     replayedStatus: number;
@@ -81,7 +85,11 @@ const RequestReplayPage: React.FC<RequestReplayPageProps> = ({ instanceId }) => 
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [resultModalVisible, setResultModalVisible] = useState(false);
   const [replaying, setReplaying] = useState(false);
-  
+
+  // Time range state
+  const [timeRange, setTimeRange] = useState<number>(60); // minutes, default 60
+  const [customTimeRange, setCustomTimeRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null);
+
   // Editable fields
   const [editPath, setEditPath] = useState('');
   const [editQueryString, setEditQueryString] = useState('');
@@ -89,17 +97,37 @@ const RequestReplayPage: React.FC<RequestReplayPageProps> = ({ instanceId }) => 
   const [editBody, setEditBody] = useState('');
   const [newHeaderKey, setNewHeaderKey] = useState('');
   const [newHeaderValue, setNewHeaderValue] = useState('');
-  
+
   const { t } = useTranslation();
+
+  const TIME_RANGE_OPTIONS = [
+    { label: '10m', value: 10 },
+    { label: '30m', value: 30 },
+    { label: '1h', value: 60 },
+    { label: '6h', value: 360 },
+    { label: '24h', value: 1440 },
+  ];
 
   const loadTraces = useCallback(async () => {
     if (!instanceId) return;
 
     setLoading(true);
     try {
-      const response = await axios.get('/api/traces', {
-        params: { instanceId, page: 0, size: 50, sortBy: 'traceTime', sortDir: 'desc' }
-      });
+      const params: any = { instanceId, page: 0, size: 50, sortBy: 'traceTime', sortDir: 'desc' };
+
+      // Add time range parameters
+      if (customTimeRange) {
+        params.start = customTimeRange[0].format('YYYY-MM-DDTHH:mm:ss');
+        params.end = customTimeRange[1].format('YYYY-MM-DDTHH:mm:ss');
+      } else if (timeRange) {
+        // Use time-range endpoint for predefined ranges
+        const endTime = dayjs();
+        const startTime = endTime.subtract(timeRange, 'minute');
+        params.start = startTime.format('YYYY-MM-DDTHH:mm:ss');
+        params.end = endTime.format('YYYY-MM-DDTHH:mm:ss');
+      }
+
+      const response = await api.get('/api/traces/time-range', { params });
 
       // Response is Page<RequestTrace>, extract content
       setTraces(response.data.content || []);
@@ -108,15 +136,56 @@ const RequestReplayPage: React.FC<RequestReplayPageProps> = ({ instanceId }) => 
     } finally {
       setLoading(false);
     }
-  }, [instanceId]);
+  }, [instanceId, timeRange, customTimeRange]);
+
+  // Format response body - try to parse and prettify JSON
+  const formatResponseBody = (body: string | undefined): string => {
+    if (!body) return '';
+    try {
+      const parsed = JSON.parse(body);
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      // Not JSON, return as-is
+      return body;
+    }
+  };
 
   useEffect(() => {
     loadTraces();
   }, [loadTraces]);
 
+  // Handle time range change
+  const handleTimeRangeChange = (value: number | 'custom') => {
+    if (value === 'custom') {
+      setCustomTimeRange([dayjs().subtract(1, 'hour'), dayjs()]);
+    } else {
+      setTimeRange(value);
+      setCustomTimeRange(null);
+    }
+  };
+
+  const handleCustomTimeRangeChange = (dates: [dayjs.Dayjs | null, dayjs.Dayjs | null] | null) => {
+    if (dates && dates[0] && dates[1]) {
+      setCustomTimeRange([dates[0], dates[1]]);
+    } else {
+      setCustomTimeRange(null);
+    }
+  };
+
+  // Clear all traces
+  const handleClearTraces = async () => {
+    try {
+      const response = await api.delete('/api/traces/all');
+      message.success(t('replay.clear_success') || `Cleared ${response.data.deleted} traces`);
+      setTraces([]);
+    } catch (e) {
+      message.error(t('replay.clear_error') || 'Failed to clear traces');
+    }
+  };
+
   const prepareReplay = async (traceId: number) => {
     try {
-      const response = await axios.get(`/api/replay/prepare/${traceId}`);
+      const response = await api.get(`/api/replay/prepare/${traceId}`);
       if (response.data.code === 200) {
         const request = response.data.data as ReplayableRequest;
         setReplayableRequest(request);
@@ -139,7 +208,7 @@ const RequestReplayPage: React.FC<RequestReplayPageProps> = ({ instanceId }) => 
     
     setReplaying(true);
     try {
-      const options = quickReplay ? null : {
+      const options = quickReplay ? {} : {
         modifiedPath: editPath !== replayableRequest?.path ? editPath : undefined,
         modifiedQueryString: editQueryString !== replayableRequest?.queryString ? editQueryString : undefined,
         modifiedHeaders: editHeaders,
@@ -147,9 +216,10 @@ const RequestReplayPage: React.FC<RequestReplayPageProps> = ({ instanceId }) => 
         compareWithOriginal: true
       };
 
-      const response = await axios.post(
+      const response = await api.post(
         `/api/replay/execute/${selectedTrace.id}?instanceId=${instanceId}`,
-        options
+        options,
+        { headers: { 'Content-Type': 'application/json' } }
       );
 
       setReplayResult(response.data as ReplayResult);
@@ -285,9 +355,39 @@ const RequestReplayPage: React.FC<RequestReplayPageProps> = ({ instanceId }) => 
           <PlayCircleOutlined style={{ marginRight: 8 }} />
           {t('replay.title') || '请求回放调试器'}
         </Title>
-        <Button icon={<PlayCircleOutlined />} onClick={loadTraces} loading={loading}>
-          {t('common.refresh') || 'Refresh'}
-        </Button>
+        <Space>
+          <Segmented
+            options={[
+              ...TIME_RANGE_OPTIONS,
+              { label: 'Custom', value: 'custom' }
+            ]}
+            value={customTimeRange ? 'custom' : timeRange}
+            onChange={(val) => handleTimeRangeChange(val as number | 'custom')}
+          />
+          {customTimeRange && (
+            <RangePicker
+              showTime
+              value={customTimeRange}
+              onChange={handleCustomTimeRangeChange}
+              format="YYYY-MM-DD HH:mm"
+              style={{ width: 280 }}
+            />
+          )}
+          <Button icon={<PlayCircleOutlined />} onClick={loadTraces} loading={loading}>
+            {t('common.refresh') || 'Refresh'}
+          </Button>
+          <Popconfirm
+            title={t('replay.clear_confirm') || 'Clear all traces?'}
+            description={t('replay.clear_confirm_desc') || 'This action cannot be undone'}
+            onConfirm={handleClearTraces}
+            okText={t('common.confirm') || 'Yes'}
+            cancelText={t('common.cancel') || 'No'}
+          >
+            <Button danger icon={<DeleteOutlined />}>
+              {t('replay.clear_all') || 'Clear All'}
+            </Button>
+          </Popconfirm>
+        </Space>
       </div>
 
       <Card title={t('replay.recent_traces') || 'Recent Traces'}>
@@ -590,15 +690,40 @@ const RequestReplayPage: React.FC<RequestReplayPageProps> = ({ instanceId }) => 
 
             {/* Response Body */}
             <Divider>{t('replay.response_body')}</Divider>
+
+            {/* Error Type Badge */}
+            {replayResult.errorType && (
+              <div style={{ marginBottom: 8 }}>
+                <Space>
+                  <Tag color={
+                    replayResult.errorType === 'CLIENT_ERROR' ? 'orange' :
+                    replayResult.errorType === 'SERVER_ERROR' ? 'red' :
+                    replayResult.errorType === 'CONNECTION_ERROR' ? 'volcano' : 'default'
+                  }>
+                    {replayResult.errorType}
+                  </Tag>
+                  {replayResult.statusCode >= 400 && (
+                    <Text type="secondary">
+                      {replayResult.errorType === 'CLIENT_ERROR' 
+                        ? (t('replay.client_error_hint') || 'Client error - check request parameters')
+                        : replayResult.errorType === 'SERVER_ERROR'
+                        ? (t('replay.server_error_hint') || 'Server error - upstream service issue')
+                        : ''}
+                    </Text>
+                  )}
+                </Space>
+              </div>
+            )}
+
             <div style={{
-              background: 'rgba(0,0,0,0.3)',
+              background: replayResult.statusCode >= 400 ? 'rgba(255,77,79,0.1)' : 'rgba(0,0,0,0.3)',
               padding: 12,
               borderRadius: 4,
-              maxHeight: 300,
+              maxHeight: 400,
               overflow: 'auto'
             }}>
-              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                {replayResult.responseBody || t('replay.empty_body')}
+              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'monospace', fontSize: 13 }}>
+                {formatResponseBody(replayResult.responseBody) || t('replay.empty_body')}
               </pre>
             </div>
           </div>

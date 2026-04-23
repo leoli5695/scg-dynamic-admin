@@ -245,7 +245,8 @@ public class AiCopilotService {
 
             // === 工具调用循环 ===
             // 构建 messages 数组（Function Calling 格式）
-            List<Map<String, Object>> messages = buildMessagesForTools(history, systemPrompt, userMessage);
+            // 注入当前实例信息到消息中，让AI知道可以直接使用这个instanceId
+            List<Map<String, Object>> messages = buildMessagesForTools(history, systemPrompt, userMessage, instanceId);
 
             // 获取工具定义
             List<Map<String, Object>> tools = toolRegistry.getOpenAITools();
@@ -482,16 +483,30 @@ public class AiCopilotService {
 
     /**
      * 构建 Function Calling 格式的 messages 数组
+     * 添加 instanceId 信息，让 AI 知道可以直接使用这个实例 ID 调用工具。
      */
     private List<Map<String, Object>> buildMessagesForTools(List<ChatMessage> history,
                                                             String systemPrompt,
-                                                            String userMessage) {
+                                                            String userMessage,
+                                                            String instanceId) {
         List<Map<String, Object>> messages = new ArrayList<>();
 
         // 1. System prompt
         messages.add(Map.of("role", "system", "content", systemPrompt));
 
-        // 2. 历史对话（不包含 tool 相关消息，因为格式不同）
+        // 2. 注入当前上下文信息（实例ID）
+        if (instanceId != null && !instanceId.isEmpty()) {
+            String contextInfo = String.format(
+                "\n\n【当前上下文】\n- 当前选择的网关实例ID: %s\n- 你可以直接使用这个 instanceId 调用工具（如 get_filter_chain_stats、get_slowest_filters），无需先调用 list_instances 获取实例列表。",
+                instanceId
+            );
+            // 将上下文信息添加到第一条消息的 content 中
+            Map<String, Object> firstMsg = messages.get(0);
+            String enhancedSystemPrompt = firstMsg.get("content") + contextInfo;
+            messages.set(0, Map.of("role", "system", "content", enhancedSystemPrompt));
+        }
+
+        // 3. 历史对话（不包含 tool 相关消息，因为格式不同）
         for (ChatMessage msg : history) {
             // 只添加普通 user/assistant 消息
             if ("user".equals(msg.role) || "assistant".equals(msg.role)) {
@@ -499,7 +514,7 @@ public class AiCopilotService {
             }
         }
 
-        // 3. 当前用户消息
+        // 4. 当前用户消息
         messages.add(Map.of("role", "user", "content", userMessage));
 
         return messages;

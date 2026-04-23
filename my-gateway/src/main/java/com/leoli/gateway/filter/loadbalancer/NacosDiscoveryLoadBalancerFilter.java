@@ -12,6 +12,7 @@ import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
@@ -104,16 +105,22 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
                 namespace != null ? namespace : "default",
                 group != null ? group : "DEFAULT_GROUP");
 
+        // IMPORTANT: switchIfEmpty must be BEFORE flatMap, not after!
+        // Reason: chain.filter(exchange) returns Mono<Void> which doesn't emit any element.
+        // If switchIfEmpty is after flatMap, it will incorrectly trigger even when instance is found.
         return chooseInstance(serviceName, namespace, group)
+                // No instances found → 503 SERVICE_UNAVAILABLE (before flatMap)
+                .switchIfEmpty(Mono.defer(() -> {
+                    log.warn("No available instances for service: {}, namespace: {}, group: {}",
+                            serviceName, namespace, group);
+                    return Mono.error(new ResponseStatusException(
+                            HttpStatus.SERVICE_UNAVAILABLE,
+                            "No available instances for service: " + serviceName +
+                            " (namespace: " + (namespace != null ? namespace : "default") +
+                            ", group: " + (group != null ? group : "DEFAULT_GROUP") + ")"));
+                }))
                 .flatMap(instance -> {
-                    if (instance == null) {
-                        log.warn("No available instances found for service: {}, namespace: {}, group: {}",
-                                serviceName, namespace, group);
-                        exchange.getResponse().setStatusCode(HttpStatus.SERVICE_UNAVAILABLE);
-                        return exchange.getResponse().setComplete();
-                    }
-
-                    // Build new URI with the selected instance
+                    // Instance found - build URI and continue
                     URI newUri = buildUri(instance, url);
                     exchange.getAttributes().put(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR, newUri);
 
@@ -121,14 +128,8 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
                             instance.getHost(), instance.getPort(), instance.getMetadata().get("weight"),
                             serviceName, namespace, group);
 
-                    // Continue with the modified URI (skip native lb filter)
+                    // Continue with the modified URI - downstream errors go to global handler
                     return chain.filter(exchange);
-                })
-                .onErrorResume(e -> {
-                    log.error("Error discovering instances for service: {}, namespace: {}, group: {}",
-                            serviceName, namespace, group, e);
-                    exchange.getResponse().setStatusCode(HttpStatus.SERVICE_UNAVAILABLE);
-                    return exchange.getResponse().setComplete();
                 });
     }
 

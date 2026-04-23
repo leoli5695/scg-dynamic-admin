@@ -7,8 +7,14 @@ import com.leoli.gateway.admin.model.AuditLogEntity;
 import com.leoli.gateway.admin.model.AuditLogQuery;
 import com.leoli.gateway.admin.model.AuditLogStats;
 import com.leoli.gateway.admin.model.RouteEntity;
+import com.leoli.gateway.admin.model.GatewayInstanceEntity;
+import com.leoli.gateway.admin.model.StrategyEntity;
+import com.leoli.gateway.admin.model.AuthPolicyEntity;
 import com.leoli.gateway.admin.repository.AuditLogRepository;
 import com.leoli.gateway.admin.repository.RouteRepository;
+import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
+import com.leoli.gateway.admin.repository.StrategyRepository;
+import com.leoli.gateway.admin.repository.AuthPolicyRepository;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +45,11 @@ public class AuditLogService {
     private final RouteRepository routeRepository;
     private final AuditLogRepository auditLogRepository;
     private final ConfigCenterService configCenterService;
+    private final RouteService routeService;
+    private final StrategyService strategyService;
+    private final GatewayInstanceRepository gatewayInstanceRepository;
+    private final StrategyRepository strategyRepository;
+    private final AuthPolicyRepository authPolicyRepository;
 
     /**
      * Record an audit log entry.
@@ -421,36 +432,19 @@ public class AuditLogService {
         String targetId = auditLog.getTargetId();
 
         try {
-            // Get current state before rollback (for new audit log)
-            String currentValue = getCurrentValue(targetType, targetId);
-
-            // Perform rollback based on target type
+            // Perform rollback based on target type and operation type
             boolean rolledBack = performRollback(targetType, targetId, auditLog.getOldValue(), operationType);
 
             if (!rolledBack) {
                 return Map.of("success", false, "message", "Rollback failed for type: " + targetType);
             }
 
-            // Create audit log for rollback operation
-            AuditLogEntity rollbackLog = new AuditLogEntity();
-            rollbackLog.setOperator(operator);
-            rollbackLog.setOperatorType("AI_COPILOT");  // 标记操作来源
-            rollbackLog.setOperationType("ROLLBACK");
-            rollbackLog.setTargetType(targetType);
-            rollbackLog.setTargetId(targetId);
-            rollbackLog.setTargetName(auditLog.getTargetName());
-            rollbackLog.setOldValue(currentValue);
-            rollbackLog.setNewValue(auditLog.getOldValue());
-            rollbackLog.setIpAddress("system");
-            rollbackLog = auditLogRepository.save(rollbackLog);
-
-            log.info("Configuration rolled back: type={}, id={}, from log {}, rollbackLogId={}",
-                     targetType, targetId, logId, rollbackLog.getId());
+            log.info("Configuration rolled back: type={}, id={}, operation={}, from log {}",
+                     targetType, targetId, operationType, logId);
 
             return Map.of(
                     "success", true,
                     "message", "Rollback successful",
-                    "auditLogId", rollbackLog.getId(),
                     "targetType", targetType,
                     "targetId", targetId,
                     "rolledBackFromLogId", logId
@@ -464,14 +458,72 @@ public class AuditLogService {
 
     /**
      * Perform the actual rollback with operation type awareness.
+     * 根据目标类型和操作类型调用对应的服务方法。
+     * ENABLE → disable，DISABLE → enable，CREATE → delete，UPDATE → restore oldValue
      */
     private boolean performRollback(String targetType, String targetId, String oldValue, String operationType) {
         try {
-            // For CREATE operations, rollback means delete
-            if ("CREATE".equals(operationType)) {
-                return performDeleteRollback(targetType, targetId);
+            // 根据操作类型进行回滚
+            switch (operationType) {
+                case "CREATE":
+                    // CREATE 回滚 = DELETE
+                    return performDeleteRollback(targetType, targetId);
+                case "ENABLE":
+                    // ENABLE 回滚 = disable
+                    return performEnableRollback(targetType, targetId, false);
+                case "DISABLE":
+                    // DISABLE 回滚 = enable
+                    return performEnableRollback(targetType, targetId, true);
+                case "UPDATE":
+                    // UPDATE 回滚 = restore oldValue
+                    return performUpdateRollback(targetType, targetId, oldValue);
+                default:
+                    log.warn("Unknown operation type for rollback: {}", operationType);
+                    return false;
             }
-            // For other operations, restore old value
+        } catch (Exception e) {
+            log.error("Rollback failed for {} {} {}", targetType, targetId, operationType, e);
+            return false;
+        }
+    }
+
+    /**
+     * Perform enable/disable rollback for ROUTE and STRATEGY.
+     */
+    private boolean performEnableRollback(String targetType, String targetId, boolean enable) {
+        try {
+            switch (targetType) {
+                case "ROUTE":
+                    if (enable) {
+                        routeService.enableRouteByRouteId(targetId);
+                    } else {
+                        routeService.disableRouteByRouteId(targetId);
+                    }
+                    log.info("Route {} {} as rollback", targetId, enable ? "enabled" : "disabled");
+                    return true;
+                case "STRATEGY":
+                    if (enable) {
+                        strategyService.enableStrategy(targetId);
+                    } else {
+                        strategyService.disableStrategy(targetId);
+                    }
+                    log.info("Strategy {} {} as rollback", targetId, enable ? "enabled" : "disabled");
+                    return true;
+                default:
+                    log.warn("Enable rollback not supported for type: {}", targetType);
+                    return false;
+            }
+        } catch (Exception e) {
+            log.error("Enable rollback failed for {} {}", targetType, targetId, e);
+            return false;
+        }
+    }
+
+    /**
+     * Perform update rollback - restore old configuration value.
+     */
+    private boolean performUpdateRollback(String targetType, String targetId, String oldValue) {
+        try {
             switch (targetType) {
                 case "ROUTE":
                     return rollbackRoute(targetId, oldValue);
@@ -482,11 +534,11 @@ public class AuditLogService {
                 case "AUTH_POLICY":
                     return rollbackAuthPolicy(targetId, oldValue);
                 default:
-                    log.warn("Unknown target type for rollback: {}", targetType);
+                    log.warn("Update rollback not supported for type: {}", targetType);
                     return false;
             }
         } catch (Exception e) {
-            log.error("Rollback failed for {} {}", targetType, targetId, e);
+            log.error("Update rollback failed for {} {}", targetType, targetId, e);
             return false;
         }
     }
@@ -519,24 +571,6 @@ public class AuditLogService {
         }
     }
 
-    /**
-     * Get current value for a target.
-     */
-    private String getCurrentValue(String targetType, String targetId) {
-        try {
-            switch (targetType) {
-                case "ROUTE":
-                    Optional<RouteEntity> routeOpt = routeRepository.findById(targetId);
-                    return routeOpt.map(r -> r.getMetadata()).orElse(null);
-                default:
-                    return null;
-            }
-        } catch (Exception e) {
-            log.error("Failed to get current value", e);
-            return null;
-        }
-    }
-
     private boolean rollbackRoute(String routeId, String oldValue) {
         Optional<RouteEntity> routeOpt = routeRepository.findById(routeId);
         if (routeOpt.isEmpty()) {
@@ -546,13 +580,47 @@ public class AuditLogService {
 
         RouteEntity route = routeOpt.get();
         route.setMetadata(oldValue);
+
+        // Parse enabled status from JSON and update the entity
+        JsonNode jsonNode = null;
+        try {
+            jsonNode = objectMapper.readTree(oldValue);
+            if (jsonNode.has("enabled")) {
+                boolean enabled = jsonNode.get("enabled").asBoolean();
+                route.setEnabled(enabled);
+                log.info("Route rollback: setting enabled={} from JSON", enabled);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to parse enabled from JSON, keeping current value: {}", e.getMessage());
+        }
+
         routeRepository.save(route);
 
-        // Push to Nacos
+        // Get namespace from instance
+        String nacosNamespace = getNacosNamespace(route.getInstanceId());
+
+        // Push to Nacos with correct namespace - use JsonNode to avoid double serialization
         String dataId = "config.gateway.route-" + routeId;
-        configCenterService.publishConfig(dataId, oldValue);
+        if (jsonNode != null) {
+            configCenterService.publishConfig(dataId, nacosNamespace, jsonNode);
+        } else {
+            // Fallback: publish as string if parsing failed
+            configCenterService.publishConfig(dataId, nacosNamespace, oldValue);
+        }
+        log.info("Route rollback: pushed config to Nacos, dataId={}, namespace={}", dataId, nacosNamespace);
 
         return true;
+    }
+
+    /**
+     * Get Nacos namespace from gateway instance.
+     */
+    private String getNacosNamespace(String instanceId) {
+        if (instanceId == null || instanceId.isEmpty()) {
+            return null;
+        }
+        Optional<GatewayInstanceEntity> instance = gatewayInstanceRepository.findByInstanceId(instanceId);
+        return instance.map(GatewayInstanceEntity::getNacosNamespace).orElse(null);
     }
 
     private boolean rollbackService(String serviceId, String oldValue) {
@@ -562,14 +630,69 @@ public class AuditLogService {
     }
 
     private boolean rollbackStrategy(String strategyId, String oldValue) {
+        StrategyEntity strategy = strategyRepository.findByStrategyId(strategyId);
+        if (strategy == null) {
+            log.warn("Strategy not found for rollback: {}", strategyId);
+            return false;
+        }
+
+        strategy.setMetadata(oldValue);
+        strategyRepository.save(strategy);
+
+        // Get namespace from instance
+        String nacosNamespace = getNacosNamespace(strategy.getInstanceId());
+
+        // Parse oldValue to JsonNode to avoid double serialization
+        JsonNode jsonNode = null;
+        try {
+            jsonNode = objectMapper.readTree(oldValue);
+        } catch (Exception e) {
+            log.warn("Failed to parse strategy oldValue as JSON: {}", e.getMessage());
+        }
+
+        // Push to Nacos with correct namespace
         String dataId = "config.gateway.strategy-" + strategyId;
-        configCenterService.publishConfig(dataId, oldValue);
+        if (jsonNode != null) {
+            configCenterService.publishConfig(dataId, nacosNamespace, jsonNode);
+        } else {
+            configCenterService.publishConfig(dataId, nacosNamespace, oldValue);
+        }
+        log.info("Strategy rollback: pushed config to Nacos, dataId={}, namespace={}", dataId, nacosNamespace);
+
         return true;
     }
 
     private boolean rollbackAuthPolicy(String policyId, String oldValue) {
+        Optional<AuthPolicyEntity> policyOpt = authPolicyRepository.findByPolicyId(policyId);
+        if (policyOpt.isEmpty()) {
+            log.warn("Auth policy not found for rollback: {}", policyId);
+            return false;
+        }
+
+        AuthPolicyEntity policy = policyOpt.get();
+        policy.setConfig(oldValue);
+        authPolicyRepository.save(policy);
+
+        // Get namespace from instance
+        String nacosNamespace = getNacosNamespace(policy.getInstanceId());
+
+        // Parse oldValue to JsonNode to avoid double serialization
+        JsonNode jsonNode = null;
+        try {
+            jsonNode = objectMapper.readTree(oldValue);
+        } catch (Exception e) {
+            log.warn("Failed to parse auth policy oldValue as JSON: {}", e.getMessage());
+        }
+
+        // Push to Nacos with correct namespace
         String dataId = "config.gateway.auth-policy-" + policyId;
-        configCenterService.publishConfig(dataId, oldValue);
+        if (jsonNode != null) {
+            configCenterService.publishConfig(dataId, nacosNamespace, jsonNode);
+        } else {
+            configCenterService.publishConfig(dataId, nacosNamespace, oldValue);
+        }
+        log.info("Auth policy rollback: pushed config to Nacos, dataId={}, namespace={}", dataId, nacosNamespace);
+
         return true;
     }
 

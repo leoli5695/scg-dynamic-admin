@@ -6,7 +6,8 @@ import {
 import {
   PlusOutlined, DeleteOutlined, EditOutlined, MoreOutlined,
   StopOutlined, PlayCircleOutlined, KeyOutlined, ApiOutlined,
-  SafetyOutlined, LinkOutlined, CopyOutlined, EyeOutlined, EyeInvisibleOutlined
+  SafetyOutlined, LinkOutlined, CopyOutlined, EyeOutlined, EyeInvisibleOutlined,
+  QuestionCircleOutlined, CodeOutlined
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import api from '../utils/api';
@@ -58,15 +59,17 @@ interface AuthPolicyActionDropdownProps {
   policy: AuthPolicy;
   onEdit: (policy: AuthPolicy) => void;
   onBind: (policy: AuthPolicy) => void;
+  onUsageExample: (policy: AuthPolicy) => void;
   onToggle: (policy: AuthPolicy) => void;
   onDelete: (policy: AuthPolicy) => void;
 }
 
-const AuthPolicyActionDropdown = memo(({ policy, onEdit, onBind, onToggle, onDelete }: AuthPolicyActionDropdownProps) => {
+const AuthPolicyActionDropdown = memo(({ policy, onEdit, onBind, onUsageExample, onToggle, onDelete }: AuthPolicyActionDropdownProps) => {
   const { t } = useTranslation();
 
   const handleEdit = useCallback(() => onEdit(policy), [onEdit, policy]);
   const handleBind = useCallback(() => onBind(policy), [onBind, policy]);
+  const handleUsageExample = useCallback(() => onUsageExample(policy), [onUsageExample, policy]);
   const handleToggle = useCallback(() => onToggle(policy), [onToggle, policy]);
   const handleDelete = useCallback(() => onDelete(policy), [onDelete, policy]);
 
@@ -74,6 +77,9 @@ const AuthPolicyActionDropdown = memo(({ policy, onEdit, onBind, onToggle, onDel
     <Space>
       <Tooltip title={t('common.edit')}>
         <Button type="text" size="small" icon={<EditOutlined />} className="action-btn" onClick={handleEdit} />
+      </Tooltip>
+      <Tooltip title={t('auth_policy.usage_example')}>
+        <Button type="text" size="small" icon={<QuestionCircleOutlined />} className="action-btn" onClick={handleUsageExample} />
       </Tooltip>
       <Tooltip title={t('auth_policy.bind_routes')}>
         <Button type="text" size="small" icon={<LinkOutlined />} className="action-btn" onClick={handleBind} />
@@ -108,6 +114,9 @@ const AuthPoliciesPage: React.FC<AuthPoliciesPageProps> = ({ instanceId }) => {
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [bindingModalVisible, setBindingModalVisible] = useState(false);
+  const [usageExampleModalVisible, setUsageExampleModalVisible] = useState(false);
+  const [usageExample, setUsageExample] = useState<any>(null);
+  const [usageExampleLoading, setUsageExampleLoading] = useState(false);
   const [selectedPolicy, setSelectedPolicy] = useState<AuthPolicy | null>(null);
   const [filterType, setFilterType] = useState<string>('all');
   const [createForm] = Form.useForm();
@@ -166,6 +175,18 @@ const AuthPoliciesPage: React.FC<AuthPoliciesPageProps> = ({ instanceId }) => {
       'HMAC': '#ef4444',
     };
     return colors[type] || '#6b7280';
+  };
+
+  // Get auth type description for tooltip
+  const getAuthTypeDescription = (type: string) => {
+    const descriptions: Record<string, string> = {
+      'JWT': 'JWT认证：使用JSON Web Token进行身份验证。客户端需在请求头中携带有效的JWT Token（Bearer Token）。支持HS256、HS512、RS256等算法，可配置Issuer、Audience验证。',
+      'API_KEY': 'API Key认证：使用预共享密钥进行身份验证。客户端需在请求头（如X-API-Key）中携带API Key。可配置自定义Header名称和Key前缀。',
+      'OAUTH2': 'OAuth2认证：使用OAuth2协议进行身份验证。客户端需先从Token Endpoint获取Access Token，然后在请求头中携带Bearer Token。支持Scope验证。',
+      'BASIC': 'Basic认证：使用HTTP Basic Authentication进行身份验证。客户端需在请求头中携带Base64编码的用户名密码（Authorization: Basic xxx）。',
+      'HMAC': 'HMAC认证：使用签名算法进行身份验证。客户端需对请求内容进行签名，并在请求头中携带签名信息。支持HMAC-SHA256、HMAC-SHA512算法。',
+    };
+    return descriptions[type] || '';
   };
 
   const getBindingsForPolicy = (policyId: string) => {
@@ -262,18 +283,47 @@ const AuthPoliciesPage: React.FC<AuthPoliciesPageProps> = ({ instanceId }) => {
 
   const handleBind = async (values: any) => {
     if (!selectedPolicy) return;
+    
+    const routeIds = Array.isArray(values.routeIds) ? values.routeIds : (values.routeIds ? [values.routeIds] : []);
+    
+    // If no routes selected, just close the modal (user may have just unbound routes)
+    if (routeIds.length === 0) {
+      setBindingModalVisible(false);
+      setSelectedPolicy(null);
+      return;
+    }
+    
     try {
       const params = instanceId ? { instanceId } : {};
-      const response = await api.post('/api/auth/bindings', {
-        policyId: selectedPolicy.policyId,
-        routeId: values.routeId,
-        priority: values.priority || 100,
-      }, { params });
-      if (response.data.code === 200) {
-        message.success(t('auth_policy.binding_created'));
+
+      // Batch create bindings for multiple routes
+      const results = await Promise.all(
+        routeIds.map((routeId: string) =>
+          api.post('/api/auth/bindings', {
+            policyId: selectedPolicy.policyId,
+            routeId,
+            priority: values.priority || 100,
+          }, { params })
+        )
+      );
+
+      // Check results
+      const successCount = results.filter(r => r.data.code === 200).length;
+      const failCount = results.length - successCount;
+
+      if (successCount > 0) {
+        message.success(t('auth_policy.binding_created') + ` (${successCount})`);
+        bindingForm.resetFields(['routeIds']);
         loadData();
-      } else {
-        message.error(response.data.message);
+      }
+      if (failCount > 0) {
+        message.error(t('auth_policy.binding_failed') + ` (${failCount})`);
+      }
+
+      // Close modal if all succeeded
+      if (failCount === 0) {
+        setBindingModalVisible(false);
+        setSelectedPolicy(null);
       }
     } catch (error: any) {
       message.error(error.response?.data?.message || t('auth_policy.binding_failed'));
@@ -304,6 +354,212 @@ const AuthPoliciesPage: React.FC<AuthPoliciesPageProps> = ({ instanceId }) => {
     bindingForm.resetFields();
     setBindingModalVisible(true);
   }, [bindingForm]);
+
+  const openUsageExampleModal = useCallback(async (policy: AuthPolicy) => {
+    setSelectedPolicy(policy);
+    setUsageExample(null);
+    setUsageExampleModalVisible(true);
+    setUsageExampleLoading(true);
+
+    try {
+      const response = await api.get(`/api/auth/policies/${policy.policyId}/usage-example`);
+      if (response.data.code === 200) {
+        setUsageExample(response.data.data);
+      } else {
+        message.error(response.data.message);
+      }
+    } catch (error: any) {
+      message.error(t('auth_policy.usage_example_failed'));
+    } finally {
+      setUsageExampleLoading(false);
+    }
+  }, [t]);
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    message.success(t('message.copy_success'));
+  };
+
+  const renderUsageExampleContent = () => {
+    if (!usageExample) return null;
+
+    const { authType, error } = usageExample;
+    if (error) {
+      return <Text type="danger">{error}</Text>;
+    }
+
+    switch (authType?.toUpperCase()) {
+      case 'JWT':
+        return (
+          <div>
+            <div style={{ marginBottom: 16 }}>
+              <Text type="secondary">{t('auth_policy.jwt_header_format')}</Text>
+              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Input value={usageExample.headerValue} readOnly style={{ flex: 1 }} />
+                <Button icon={<CopyOutlined />} onClick={() => copyToClipboard(usageExample.headerValue)} />
+              </div>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <Text type="secondary">{t('auth_policy.curl_example')}</Text>
+              <div style={{ marginTop: 8 }}>
+                <Input.TextArea value={usageExample.curlExample} readOnly autoSize={{ minRows: 6, maxRows: 15 }} style={{ fontFamily: 'monospace', fontSize: 13 }} />
+                <Button icon={<CopyOutlined />} style={{ marginTop: 8 }} onClick={() => copyToClipboard(usageExample.curlExample)}>
+                  {t('common.copy')}
+                </Button>
+              </div>
+            </div>
+            {usageExample.tokenExpiresIn && (
+              <div style={{ marginBottom: 8 }}>
+                <Tag color="green">{t('auth_policy.token_expires')}: {usageExample.tokenExpiresIn}</Tag>
+                <Tag color="blue">{t('auth_policy.algorithm')}: {usageExample.algorithm}</Tag>
+              </div>
+            )}
+          </div>
+        );
+
+      case 'API_KEY':
+        return (
+          <div>
+            <div style={{ marginBottom: 16 }}>
+              <Text type="secondary">{t('auth_policy.api_key_header_format')}</Text>
+              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Input addonBefore={usageExample.headerName + ': '} value={usageExample.headerValue} readOnly style={{ flex: 1 }} />
+                <Button icon={<CopyOutlined />} onClick={() => copyToClipboard(usageExample.headerValue)} />
+              </div>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <Text type="secondary">{t('auth_policy.curl_example')}</Text>
+              <div style={{ marginTop: 8 }}>
+                <Input.TextArea value={usageExample.curlExample} readOnly autoSize={{ minRows: 6, maxRows: 15 }} style={{ fontFamily: 'monospace', fontSize: 13 }} />
+                <Button icon={<CopyOutlined />} style={{ marginTop: 8 }} onClick={() => copyToClipboard(usageExample.curlExample)}>
+                  {t('common.copy')}
+                </Button>
+              </div>
+            </div>
+            {usageExample.prefixNote && (
+              <Tag color="orange">{usageExample.prefixNote}</Tag>
+            )}
+          </div>
+        );
+
+      case 'BASIC':
+        return (
+          <div>
+            <div style={{ marginBottom: 16 }}>
+              <Text type="secondary">{t('auth_policy.basic_header_format')}</Text>
+              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Input value={usageExample.headerValue} readOnly style={{ flex: 1 }} />
+                <Button icon={<CopyOutlined />} onClick={() => copyToClipboard(usageExample.headerValue)} />
+              </div>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <Text type="secondary">{t('auth_policy.credentials')}</Text>
+              <div style={{ marginTop: 8 }}>
+                <Text code>{usageExample.credentialsFormat}</Text>
+                <Text type="secondary" style={{ marginLeft: 8 }}>(Base64: {usageExample.credentialsEncoded})</Text>
+              </div>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <Text type="secondary">{t('auth_policy.curl_example')}</Text>
+              <div style={{ marginTop: 8 }}>
+                <Input.TextArea value={usageExample.curlExample} readOnly autoSize={{ minRows: 6, maxRows: 15 }} style={{ fontFamily: 'monospace', fontSize: 13 }} />
+                <Button icon={<CopyOutlined />} style={{ marginTop: 8 }} onClick={() => copyToClipboard(usageExample.curlExample)}>
+                  {t('common.copy')}
+                </Button>
+              </div>
+            </div>
+            {usageExample.curlWithAuthFlag && (
+              <div style={{ marginBottom: 16 }}>
+                <Text type="secondary">{t('auth_policy.curl_alternative')}</Text>
+                <div style={{ marginTop: 8 }}>
+                  <Input.TextArea value={usageExample.curlWithAuthFlag} readOnly autoSize={{ minRows: 6, maxRows: 15 }} style={{ fontFamily: 'monospace', fontSize: 13 }} />
+                  <Button icon={<CopyOutlined />} style={{ marginTop: 8 }} onClick={() => copyToClipboard(usageExample.curlWithAuthFlag)}>
+                    {t('common.copy')}
+                  </Button>
+                </div>
+              </div>
+            )}
+            {usageExample.realm && (
+              <Tag color="purple">{t('auth_policy.realm')}: {usageExample.realm}</Tag>
+            )}
+          </div>
+        );
+
+      case 'OAUTH2':
+        return (
+          <div>
+            <div style={{ marginBottom: 16 }}>
+              <Text type="secondary">{t('auth_policy.oauth2_get_token')}</Text>
+              <div style={{ marginTop: 8 }}>
+                <Input.TextArea value={usageExample.getTokenCurl} readOnly autoSize={{ minRows: 6, maxRows: 15 }} style={{ fontFamily: 'monospace', fontSize: 13 }} />
+                <Button icon={<CopyOutlined />} style={{ marginTop: 8 }} onClick={() => copyToClipboard(usageExample.getTokenCurl)}>
+                  {t('common.copy')}
+                </Button>
+              </div>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <Text type="secondary">{t('auth_policy.oauth2_use_token')}</Text>
+              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Input value={usageExample.headerValue} readOnly style={{ flex: 1 }} />
+                <Button icon={<CopyOutlined />} onClick={() => copyToClipboard(usageExample.headerValue)} />
+              </div>
+            </div>
+            <div style={{ marginBottom: 8 }}>
+              <Tag color="blue">Client ID: {usageExample.clientId}</Tag>
+              <Tag color="green">Token Endpoint: {usageExample.tokenEndpoint}</Tag>
+            </div>
+            {usageExample.requiredScopes && (
+              <Tag color="orange">{t('auth_policy.required_scopes')}: {usageExample.requiredScopes}</Tag>
+            )}
+            {usageExample.note && (
+              <Text type="secondary" style={{ marginTop: 16 }}>{usageExample.note}</Text>
+            )}
+          </div>
+        );
+
+      case 'HMAC':
+        return (
+          <div>
+            <div style={{ marginBottom: 16 }}>
+              <Text type="secondary">{t('auth_policy.hmac_required_headers')}</Text>
+              <div style={{ marginTop: 8 }}>
+                {usageExample.requiredHeaders?.map((h: any, i: number) => (
+                  <Tag key={i} color="blue">{h.name}: {h.value}</Tag>
+                ))}
+              </div>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <Text type="secondary">{t('auth_policy.hmac_signature_calc')}</Text>
+              <div style={{ marginTop: 8 }}>
+                <Text code>{usageExample.signatureCalculation}</Text>
+              </div>
+              <div style={{ marginTop: 4 }}>
+                <Text type="secondary">{usageExample.stringToSignFormat}</Text>
+              </div>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <Text type="secondary">{t('auth_policy.curl_example')}</Text>
+              <div style={{ marginTop: 8 }}>
+                <Input.TextArea value={usageExample.curlExample} readOnly autoSize={{ minRows: 6, maxRows: 15 }} style={{ fontFamily: 'monospace', fontSize: 13 }} />
+                <Button icon={<CopyOutlined />} style={{ marginTop: 8 }} onClick={() => copyToClipboard(usageExample.curlExample)}>
+                  {t('common.copy')}
+                </Button>
+              </div>
+            </div>
+            <div style={{ marginBottom: 8 }}>
+              <Tag color="purple">{t('auth_policy.signature_algorithm')}: {usageExample.signatureAlgorithm}</Tag>
+              <Tag color="orange">{t('auth_policy.access_key')}: {usageExample.accessKey}</Tag>
+            </div>
+            {usageExample.note && (
+              <Text type="secondary" style={{ marginTop: 16 }}>{usageExample.note}</Text>
+            )}
+          </div>
+        );
+
+      default:
+        return <Text type="secondary">{t('auth_policy.no_example_available')}</Text>;
+    }
+  };
 
   const renderAuthConfigFields = (formInstance: typeof createForm, authType: string) => {
     switch (authType) {
@@ -464,6 +720,7 @@ const AuthPoliciesPage: React.FC<AuthPoliciesPageProps> = ({ instanceId }) => {
                       policy={policy}
                       onEdit={openEditModal}
                       onBind={openBindingModal}
+                      onUsageExample={openUsageExampleModal}
                       onToggle={handleTogglePolicy}
                       onDelete={handleDeletePolicy}
                     />
@@ -474,6 +731,14 @@ const AuthPoliciesPage: React.FC<AuthPoliciesPageProps> = ({ instanceId }) => {
                       {t('auth_policy.auth_type')}
                     </Text>
                     <Tag color={getAuthTypeColor(policy.authType)}>{getAuthTypeLabel(policy.authType)}</Tag>
+                    <Tooltip 
+                      title={getAuthTypeDescription(policy.authType)} 
+                      placement="bottom"
+                      overlayStyle={{ maxWidth: '350px' }}
+                      align={{ offset: [8, 0] }}
+                    >
+                      <QuestionCircleOutlined style={{ marginLeft: 4, color: '#6b7280', cursor: 'pointer' }} />
+                    </Tooltip>
                   </div>
 
                   <div className="strategy-section">
@@ -664,13 +929,29 @@ const AuthPoliciesPage: React.FC<AuthPoliciesPageProps> = ({ instanceId }) => {
             <span className="section-title">{t('auth_policy.add_binding')}</span>
           </div>
           <Form form={bindingForm} layout="vertical" onFinish={handleBind}>
-            <Form.Item name="routeId" label={t('auth_policy.select_route')} rules={[{ required: true }]}>
-              <Select showSearch optionFilterProp="children">
-                {routes.map(route => (
-                  <Select.Option key={route.id} value={route.id}>
-                    {route.routeName || route.id}
-                  </Select.Option>
-                ))}
+            <Form.Item name="routeIds" label={t('auth_policy.select_routes')}>
+              <Select
+                mode="multiple"
+                showSearch
+                optionFilterProp="children"
+                placeholder={t('auth_policy.select_routes_placeholder')}
+                style={{ width: '100%' }}
+                notFoundContent={selectedPolicy && routes.length > 0 && routes.length === getBindingsForPolicy(selectedPolicy.policyId).length 
+                  ? <span style={{ color: '#999' }}>{t('auth_policy.all_routes_bound')}</span>
+                  : <span style={{ color: '#999' }}>{t('auth_policy.no_routes_available')}</span>}
+              >
+                {routes
+                  .filter(route => {
+                    // Exclude already bound routes
+                    if (!selectedPolicy) return true;
+                    const boundRouteIds = getBindingsForPolicy(selectedPolicy.policyId).map(b => b.routeId);
+                    return !boundRouteIds.includes(route.id);
+                  })
+                  .map(route => (
+                    <Select.Option key={route.id} value={route.id}>
+                      {route.routeName || route.id}
+                    </Select.Option>
+                  ))}
               </Select>
             </Form.Item>
             <Form.Item name="priority" label={t('auth_policy.binding_priority')}>
@@ -678,10 +959,33 @@ const AuthPoliciesPage: React.FC<AuthPoliciesPageProps> = ({ instanceId }) => {
             </Form.Item>
             <div className="modal-footer-modern">
               <Button onClick={() => setBindingModalVisible(false)}>{t('common.cancel')}</Button>
-              <Button type="primary" htmlType="submit">{t('auth_policy.add_binding')}</Button>
+              <Button type="primary" htmlType="submit">{t('common.confirm')}</Button>
             </div>
           </Form>
         </div>
+      </Modal>
+
+      {/* Usage Example Modal */}
+      <Modal
+        title={
+          <div className="modal-header-modern">
+            <div className="modal-icon-wrapper" style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
+              <QuestionCircleOutlined />
+            </div>
+            <div className="modal-title-text">
+              <div className="modal-title">{t('auth_policy.usage_example')}</div>
+              <div className="modal-subtitle">{selectedPolicy?.policyName} ({selectedPolicy?.authType})</div>
+            </div>
+          </div>
+        }
+        open={usageExampleModalVisible}
+        onCancel={() => { setUsageExampleModalVisible(false); setUsageExample(null); setSelectedPolicy(null); }}
+        footer={<Button onClick={() => setUsageExampleModalVisible(false)}>{t('common.close')}</Button>}
+        width={700}
+      >
+        <Spin spinning={usageExampleLoading}>
+          {renderUsageExampleContent()}
+        </Spin>
       </Modal>
     </div>
   );

@@ -372,15 +372,18 @@ public class AuthPolicyService {
         AuthPolicyEntity entity = optEntity.get();
         log.info("Deleting auth policy: {} (ID: {})", entity.getPolicyName(), policyId);
 
+        // Get namespace for this instance
+        String namespace = getNacosNamespace(entity.getInstanceId());
+
         // Remove policy config from Nacos
         String policyDataId = AUTH_POLICY_PREFIX + policyId;
-        configCenterService.removeConfig(policyDataId);
-        log.info("Auth policy removed from Nacos: {}", policyDataId);
+        configCenterService.removeConfig(policyDataId, namespace);
+        log.info("Auth policy removed from Nacos: {} (namespace: {})", policyDataId, namespace);
 
         // Remove routes list from Nacos
         String routesDataId = AUTH_ROUTES_PREFIX + policyId;
-        configCenterService.removeConfig(routesDataId);
-        log.info("Auth routes removed from Nacos: {}", routesDataId);
+        configCenterService.removeConfig(routesDataId, namespace);
+        log.info("Auth routes removed from Nacos: {} (namespace: {})", routesDataId, namespace);
 
         // Delete all bindings for this policy
         routeAuthBindingRepository.deleteByPolicyId(policyId);
@@ -759,5 +762,290 @@ public class AuthPolicyService {
         log.info("Publishing raw config to Nacos: dataId={}, namespace={}, content has apiKey: {}",
                  dataId, namespace, content.contains("apiKey"));
         return configCenterService.publishRawConfig(dataId, namespace, content);
+    }
+
+    // ==================== Usage Example Generation ====================
+
+    /**
+     * Generate usage example for an auth policy.
+     * Returns headers, curl commands, and calculated values for testing.
+     *
+     * @param policyId Policy ID
+     * @return Map containing usage example details
+     */
+    public Map<String, Object> generateUsageExample(String policyId) {
+        AuthPolicyDefinition policy = getPolicy(policyId);
+        if (policy == null) {
+            throw new IllegalArgumentException("Policy not found: " + policyId);
+        }
+
+        String authType = policy.getAuthType();
+        Map<String, Object> example = new HashMap<>();
+        example.put("policyId", policyId);
+        example.put("policyName", policy.getPolicyName());
+        example.put("authType", authType);
+
+        switch (authType.toUpperCase()) {
+            case "JWT":
+                generateJwtExample(policy, example);
+                break;
+            case "API_KEY":
+                generateApiKeyExample(policy, example);
+                break;
+            case "BASIC":
+                generateBasicExample(policy, example);
+                break;
+            case "OAUTH2":
+                generateOAuth2Example(policy, example);
+                break;
+            case "HMAC":
+                generateHmacExample(policy, example);
+                break;
+            default:
+                example.put("error", "Unknown auth type: " + authType);
+        }
+
+        return example;
+    }
+
+    /**
+     * Generate JWT usage example.
+     */
+    private void generateJwtExample(AuthPolicyDefinition policy, Map<String, Object> example) {
+        String secretKey = policy.getSecretKey();
+        if (secretKey == null || secretKey.isEmpty()) {
+            example.put("error", "Secret key not configured");
+            return;
+        }
+
+        // Generate a test JWT token
+        String algorithm = policy.getJwtAlgorithm() != null ? policy.getJwtAlgorithm() : "HS256";
+        String issuer = policy.getJwtIssuer();
+        String audience = policy.getJwtAudience();
+
+        try {
+            // Create a simple JWT token for testing
+            long now = System.currentTimeMillis() / 1000;
+            long exp = now + 3600; // 1 hour expiration
+
+            // Build JWT payload
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("iat", now);
+            payload.put("exp", exp);
+            if (issuer != null) payload.put("iss", issuer);
+            if (audience != null) payload.put("aud", audience);
+            payload.put("sub", "test-user");
+
+            // Generate token using io.jsonwebtoken (JJwt)
+            String token = generateTestJwtToken(secretKey, algorithm, payload);
+
+            // Header format
+            example.put("headerName", "Authorization");
+            example.put("headerValue", "Bearer " + token);
+            example.put("headerFormat", "Authorization: Bearer <token>");
+
+            // Curl example
+            String curlExample = String.format("curl -H \"Authorization: Bearer %s\" http://your-api-endpoint", token);
+            example.put("curlExample", curlExample);
+
+            // Token info
+            example.put("tokenExpiresIn", "1 hour");
+            example.put("algorithm", algorithm);
+            if (issuer != null) example.put("issuer", issuer);
+            if (audience != null) example.put("audience", audience);
+
+        } catch (Exception e) {
+            log.error("Failed to generate JWT token", e);
+            example.put("error", "Failed to generate test token: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Generate a test JWT token using JJwt.
+     * Handles short secret keys by padding with zeros (for demo purposes only).
+     */
+    private String generateTestJwtToken(String secretKey, String algorithm, Map<String, Object> payload) {
+        // Use io.jsonwebtoken library
+        io.jsonwebtoken.JwtBuilder builder = io.jsonwebtoken.Jwts.builder();
+
+        // Set claims
+        for (Map.Entry<String, Object> entry : payload.entrySet()) {
+            builder.claim(entry.getKey(), entry.getValue());
+        }
+
+        // Determine algorithm
+        String jwtAlg = algorithm.startsWith("HS") ? algorithm : "HS256";
+        
+        // HS256 requires at least 256 bits (32 bytes), HS512 requires 512 bits (64 bytes)
+        byte[] keyBytes = secretKey.getBytes();
+        int requiredLength = jwtAlg.equals("HS512") ? 64 : 32;
+        
+        if (keyBytes.length < requiredLength) {
+            // Pad the key with zeros to meet minimum length requirement
+            // This is only for demo purposes - in production, use properly generated keys
+            byte[] paddedKey = new byte[requiredLength];
+            System.arraycopy(keyBytes, 0, paddedKey, 0, keyBytes.length);
+            keyBytes = paddedKey;
+        }
+
+        // Sign with secret
+        builder.signWith(io.jsonwebtoken.SignatureAlgorithm.valueOf(jwtAlg), keyBytes);
+
+        return builder.compact();
+    }
+
+    /**
+     * Generate API Key usage example.
+     */
+    private void generateApiKeyExample(AuthPolicyDefinition policy, Map<String, Object> example) {
+        String apiKey = policy.getApiKey();
+        if (apiKey == null || apiKey.isEmpty()) {
+            example.put("error", "API key not configured");
+            return;
+        }
+
+        String headerName = policy.getApiKeyHeader() != null ? policy.getApiKeyHeader() : "X-API-Key";
+        String prefix = policy.getApiKeyPrefix() != null ? policy.getApiKeyPrefix() : "";
+        String fullValue = prefix + apiKey;
+
+        // Header format
+        example.put("headerName", headerName);
+        example.put("headerValue", fullValue);
+        example.put("headerFormat", headerName + ": <prefix><apiKey>");
+        if (!prefix.isEmpty()) {
+            example.put("prefixNote", "Key prefix: " + prefix);
+        }
+
+        // Curl example
+        String curlExample = String.format("curl -H \"%s: %s\" http://your-api-endpoint", headerName, fullValue);
+        example.put("curlExample", curlExample);
+
+        // Raw key info (for admin reference)
+        example.put("apiKeyRaw", apiKey);
+    }
+
+    /**
+     * Generate Basic Auth usage example.
+     */
+    private void generateBasicExample(AuthPolicyDefinition policy, Map<String, Object> example) {
+        String username = policy.getBasicUsername();
+        String password = policy.getBasicPassword();
+
+        if (username == null || password == null) {
+            example.put("error", "Username or password not configured");
+            return;
+        }
+
+        // Calculate Base64 encoded credentials
+        String credentials = username + ":" + password;
+        String encoded = Base64.getEncoder().encodeToString(credentials.getBytes());
+        String headerValue = "Basic " + encoded;
+
+        // Header format
+        example.put("headerName", "Authorization");
+        example.put("headerValue", headerValue);
+        example.put("headerFormat", "Authorization: Basic <base64(username:password)>");
+        example.put("credentialsEncoded", encoded);
+
+        // Show raw credentials (for admin reference)
+        example.put("usernameRaw", username);
+        example.put("credentialsFormat", username + ":" + password);
+
+        // Curl example
+        String curlExample = String.format("curl -H \"Authorization: Basic %s\" http://your-api-endpoint", encoded);
+        example.put("curlExample", curlExample);
+
+        // Alternative curl with -u flag
+        String curlWithU = String.format("curl -u \"%s:%s\" http://your-api-endpoint", username, password);
+        example.put("curlWithAuthFlag", curlWithU);
+
+        // Realm info
+        String realm = policy.getRealm();
+        if (realm != null) {
+            example.put("realm", realm);
+        }
+    }
+
+    /**
+     * Generate OAuth2 usage example.
+     */
+    private void generateOAuth2Example(AuthPolicyDefinition policy, Map<String, Object> example) {
+        String clientId = policy.getClientId();
+        String clientSecret = policy.getClientSecret();
+        String tokenEndpoint = policy.getTokenEndpoint();
+
+        if (clientId == null || clientSecret == null || tokenEndpoint == null) {
+            example.put("error", "OAuth2 credentials not fully configured");
+            return;
+        }
+
+        // Header format (once you have the token)
+        example.put("headerName", "Authorization");
+        example.put("headerValue", "Bearer <access_token>");
+        example.put("headerFormat", "Authorization: Bearer <access_token>");
+
+        // Curl to get token
+        String getTokenCurl = String.format(
+            "curl -X POST \"%s\" -H \"Content-Type: application/x-www-form-urlencoded\" " +
+            "-d \"grant_type=client_credentials&client_id=%s&client_secret=%s\"",
+            tokenEndpoint, clientId, clientSecret
+        );
+        example.put("getTokenCurl", getTokenCurl);
+
+        // Client info
+        example.put("clientId", clientId);
+        example.put("tokenEndpoint", tokenEndpoint);
+        if (policy.getRequiredScopes() != null) {
+            example.put("requiredScopes", policy.getRequiredScopes());
+        }
+
+        // Note about getting token first
+        example.put("note", "OAuth2 requires obtaining an access token first via the token endpoint");
+    }
+
+    /**
+     * Generate HMAC usage example.
+     */
+    private void generateHmacExample(AuthPolicyDefinition policy, Map<String, Object> example) {
+        String accessKey = policy.getAccessKey();
+        String signatureAlgorithm = policy.getSignatureAlgorithm();
+
+        if (accessKey == null) {
+            example.put("error", "Access key not configured");
+            return;
+        }
+
+        // HMAC requires multiple headers
+        example.put("headerFormatNote", "HMAC authentication requires multiple headers");
+
+        // Required headers list
+        List<Map<String, String>> headers = new ArrayList<>();
+        headers.add(Map.of("name", "X-Access-Key", "value", accessKey));
+        headers.add(Map.of("name", "X-Signature", "value", "<calculated_signature>"));
+        headers.add(Map.of("name", "X-Timestamp", "value", "<current_timestamp>"));
+        if (policy.isRequireNonce()) {
+            headers.add(Map.of("name", "X-Nonce", "value", "<random_string>"));
+        }
+        example.put("requiredHeaders", headers);
+
+        // Signature calculation info
+        example.put("signatureAlgorithm", signatureAlgorithm != null ? signatureAlgorithm : "HMAC-SHA256");
+        example.put("signatureCalculation", "signature = HMAC-SHA256(secretKey, stringToSign)");
+        example.put("stringToSignFormat", "Method + Path + Timestamp + Nonce + BodyHash");
+
+        // Access key info
+        example.put("accessKey", accessKey);
+        example.put("clockSkewMinutes", policy.getClockSkewMinutes());
+
+        // Note about complexity
+        example.put("note", "HMAC signature calculation is complex. Consider using a client SDK or providing signature calculation endpoint.");
+
+        // Curl example (with placeholder signature)
+        String curlExample = String.format(
+            "curl -H \"X-Access-Key: %s\" -H \"X-Signature: <calculated>\" " +
+            "-H \"X-Timestamp: <timestamp>\" http://your-api-endpoint",
+            accessKey
+        );
+        example.put("curlExample", curlExample);
     }
 }

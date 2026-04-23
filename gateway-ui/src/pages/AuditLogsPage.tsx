@@ -166,20 +166,66 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
   const handleCleanup = async () => {
     setCleanupLoading(true);
     try {
+      console.log('Calling cleanup API...');
       const res = await api.post('/api/audit-logs/cleanup');
+      console.log('Cleanup response:', res.data);
       if (res.data.code === 200) {
-        message.success(`${t('audit.cleanup_done') || '清理完成'}，${t('audit.deleted_count') || '删除了'} ${res.data.data.deletedCount} ${t('audit.records') || '条日志'}`);
+        message.success(`${t('audit.cleanup_done') || '清理完成'}，${t('audit.deleted_count') || '删除了'} ${res.data.data?.deletedCount || 0} ${t('audit.records') || '条日志'}`, 5);
         loadLogs();
         loadStats();
         loadCleanupStats();
       } else {
-        message.error(res.data.message || t('audit.cleanup_failed') || '清理失败');
+        console.error('Cleanup failed with code:', res.data.code, 'message:', res.data.message);
+        message.error(`${t('audit.cleanup_failed') || '清理失败'}: ${res.data.message || '未知错误'}`, 5);
       }
-    } catch (e) {
-      console.error('Cleanup failed:', e);
-      message.error(t('audit.cleanup_failed') || '清理失败');
+    } catch (e: any) {
+      console.error('Cleanup exception:', e);
+      const errorMsg = e.response?.data?.message || e.message || '网络错误';
+      message.error(`${t('audit.cleanup_failed') || '清理失败'}: ${errorMsg}`, 5);
     } finally {
       setCleanupLoading(false);
+    }
+  };
+
+  const handleClearAll = async () => {
+    setCleanupLoading(true);
+    try {
+      console.log('Calling clear-all API...');
+      const res = await api.post('/api/audit-logs/clear-all');
+      console.log('Clear-all response:', res.data);
+      if (res.data.code === 200) {
+        message.success(`${t('audit.clear_done') || '清空完成'}，${t('audit.deleted_count') || '删除了'} ${res.data.data?.deletedCount || 0} ${t('audit.records') || '条日志'}`, 5);
+        loadLogs();
+        loadStats();
+        loadCleanupStats();
+      } else {
+        console.error('Clear-all failed with code:', res.data.code, 'message:', res.data.message);
+        message.error(`${t('audit.clear_failed') || '清空失败'}: ${res.data.message || '未知错误'}`, 5);
+      }
+    } catch (e: any) {
+      console.error('Clear-all exception:', e);
+      const errorMsg = e.response?.data?.message || e.message || '网络错误';
+      message.error(`${t('audit.clear_failed') || '清空失败'}: ${errorMsg}`, 5);
+    } finally {
+      setCleanupLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    try {
+      const res = await api.delete(`/api/audit-logs/${id}`);
+      if (res.data.code === 200) {
+        message.success(t('audit.delete_done') || '删除成功');
+        loadLogs();
+        loadStats();
+        loadCleanupStats();
+      } else {
+        message.error(`${t('audit.delete_failed') || '删除失败'}: ${res.data.message || '未知错误'}`);
+      }
+    } catch (e: any) {
+      console.error('Delete exception:', e);
+      const errorMsg = e.response?.data?.message || e.message || '网络错误';
+      message.error(`${t('audit.delete_failed') || '删除失败'}: ${errorMsg}`);
     }
   };
 
@@ -696,12 +742,26 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
               onConfirm={() => handleRollback(record.id)}
               okText={t('common.confirm') || '确定'}
               cancelText={t('common.cancel') || '取消'}
+              getPopupContainer={() => document.body}
             >
               <Tooltip title={t('audit.rollback') || '回滚'}>
                 <Button type="link" size="small" icon={<RollbackOutlined />} danger />
               </Tooltip>
             </Popconfirm>
           )}
+          <Popconfirm
+            title={t('audit.delete_confirm') || '确定删除此日志？'}
+            description={t('audit.delete_warning') || '删除后无法恢复'}
+            onConfirm={() => handleDelete(record.id)}
+            okText={t('common.confirm') || '确定'}
+            cancelText={t('common.cancel') || '取消'}
+            okButtonProps={{ danger: true }}
+            getPopupContainer={() => document.body}
+          >
+            <Tooltip title={t('audit.delete') || '删除'}>
+              <Button type="link" size="small" icon={<DeleteOutlined />} />
+            </Tooltip>
+          </Popconfirm>
         </Space>
       ),
     },
@@ -872,9 +932,23 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
                 onConfirm={handleCleanup}
                 okText={t('common.confirm') || '确定'}
                 cancelText={t('common.cancel') || '取消'}
+                getPopupContainer={() => document.body}
               >
                 <Button type="primary" danger size="small" loading={cleanupLoading} icon={<DeleteOutlined />}>
                   {t('audit.cleanup') || '清理日志'}
+                </Button>
+              </Popconfirm>
+              <Popconfirm
+                title={t('audit.clear_all_confirm') || '确定清空所有日志？'}
+                description={t('audit.clear_all_warning') || '此操作将删除所有审计日志，无法恢复！'}
+                onConfirm={handleClearAll}
+                okText={t('common.confirm') || '确定'}
+                cancelText={t('common.cancel') || '取消'}
+                okButtonProps={{ danger: true }}
+                getPopupContainer={() => document.body}
+              >
+                <Button danger size="small" loading={cleanupLoading} icon={<DeleteOutlined />} style={{ marginLeft: 8 }}>
+                  {t('audit.clear_all') || '清空所有'}
                 </Button>
               </Popconfirm>
             </div>
@@ -984,6 +1058,7 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
               ],
             }}
             trigger={['click']}
+            getPopupContainer={() => document.body}
           >
             <Button icon={<DownloadOutlined />} loading={exportLoading}>
               {t('audit.export') || '导出'}
@@ -1197,6 +1272,7 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
                   }}
                   okText={t('common.confirm') || '确定'}
                   cancelText={t('common.cancel') || '取消'}
+                  getPopupContainer={() => document.body}
                 >
                   <Button size="small" icon={<RollbackOutlined />} danger>
                     {t('audit.rollback') || '回滚'}

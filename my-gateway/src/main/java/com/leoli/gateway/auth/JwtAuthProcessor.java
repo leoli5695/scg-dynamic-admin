@@ -174,18 +174,25 @@ public class JwtAuthProcessor extends AbstractAuthProcessor {
 
     /**
      * Get signing key from secret string for HMAC algorithms.
+     * Uses byte padding (0x00) to match token generation in gateway-admin.
      */
     private SecretKey getSigningKey(String secret, String algorithm) {
         if (secret == null || secret.isEmpty()) {
             throw new IllegalArgumentException("JWT secret key cannot be empty");
         }
 
-        // Ensure minimum key length for the algorithm
+        // Ensure minimum key length for the algorithm using byte padding
+        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
         int minLength = "HS512".equals(algorithm) ? 64 : 32;
-        String paddedSecret = secret.length() < minLength ?
-                secret + "0".repeat(minLength - secret.length()) : secret;
 
-        return Keys.hmacShaKeyFor(paddedSecret.getBytes(StandardCharsets.UTF_8));
+        if (keyBytes.length < minLength) {
+            // Pad with zero bytes (0x00) - same as gateway-admin token generation
+            byte[] paddedKey = new byte[minLength];
+            System.arraycopy(keyBytes, 0, paddedKey, 0, keyBytes.length);
+            keyBytes = paddedKey;
+        }
+
+        return Keys.hmacShaKeyFor(keyBytes);
     }
 
     /**

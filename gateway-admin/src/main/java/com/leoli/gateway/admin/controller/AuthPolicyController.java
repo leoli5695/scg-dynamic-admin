@@ -163,6 +163,27 @@ public class AuthPolicyController {
     }
 
     /**
+     * Get usage example for an auth policy.
+     * Returns example headers, curl commands, and calculated values for testing.
+     *
+     * @param policyId Policy ID
+     */
+    @GetMapping("/policies/{policyId}/usage-example")
+    public ResponseEntity<Map<String, Object>> getUsageExample(@PathVariable String policyId) {
+        try {
+            log.info("Getting usage example for auth policy: {}", policyId);
+            Map<String, Object> example = authPolicyService.generateUsageExample(policyId);
+            return ok(example);
+        } catch (IllegalArgumentException e) {
+            log.warn("Failed to get usage example: {}", e.getMessage());
+            return notFound(e.getMessage());
+        } catch (Exception e) {
+            log.error("Failed to get usage example", e);
+            return error("Failed to get usage example: " + e.getMessage());
+        }
+    }
+
+    /**
      * Disable an auth policy.
      */
     @PostMapping("/policies/{policyId}/disable")

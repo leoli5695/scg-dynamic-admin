@@ -38,6 +38,8 @@ public class CacheConfig {
     public static final String CACHE_STRATEGIES = "strategies";
     public static final String CACHE_INSTANCES = "instances";
     public static final String CACHE_NAMESPACES = "namespaces";
+    public static final String CACHE_AUDIT_STATS = "auditStats";
+    public static final String CACHE_AUDIT_OPTIONS = "auditOptions";
 
     @Value("${spring.cache.caffeine.spec:maximumSize=500,expireAfterWrite=5m}")
     private String cacheSpec;
@@ -50,7 +52,8 @@ public class CacheConfig {
     public CacheManager cacheManager() {
         CaffeineCacheManager cacheManager = new CaffeineCacheManager(
                 CACHE_ROUTES, CACHE_SERVICES, CACHE_STRATEGIES, 
-                CACHE_INSTANCES, CACHE_NAMESPACES
+                CACHE_INSTANCES, CACHE_NAMESPACES,
+                CACHE_AUDIT_STATS, CACHE_AUDIT_OPTIONS
         );
         
         // Parse cache spec and configure Caffeine

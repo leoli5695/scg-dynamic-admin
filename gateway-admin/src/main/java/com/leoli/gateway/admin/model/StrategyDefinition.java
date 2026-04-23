@@ -1,5 +1,6 @@
 package com.leoli.gateway.admin.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 
@@ -57,7 +58,7 @@ public class StrategyDefinition {
     private Map<String, Object> config = new HashMap<>();
 
     /**
-     * Description (only for UI display, NOT pushed to Nacos)
+     * Description (only for UI display and database storage, NOT pushed to Nacos)
      */
     private transient String description;
 
@@ -93,14 +94,18 @@ public class StrategyDefinition {
 
     /**
      * Check if this is a global strategy.
+     * @JsonIgnore to prevent serialization (use scope field instead)
      */
+    @JsonIgnore
     public boolean isGlobal() {
         return SCOPE_GLOBAL.equals(scope);
     }
 
     /**
      * Check if this is a route-bound strategy.
+     * @JsonIgnore to prevent serialization (use scope + routeId fields instead)
      */
+    @JsonIgnore
     public boolean isRouteBound() {
         return SCOPE_ROUTE.equals(scope) && routeId != null && !routeId.isEmpty();
     }

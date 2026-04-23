@@ -17,12 +17,22 @@ interface StrategyTypeField {
 
 interface StrategyTypeSchema {
   fields: StrategyTypeField[];
-  subSchemas?: Record<string, { fields: StrategyTypeField[] }>;
+  subSchemas?: Record<string, StrategyTypeSubSchema>;
   hasSubSchemas?: boolean;
   // Multi-dimensional rate limiter specific fields
   multiDimension?: boolean;
   dimensionOptions?: Array<{ value: string; label: string }>;
   dimensionLabel?: string;
+}
+
+// Sub-schema for dynamic sections (AUTH types, Transform sections, etc.)
+interface StrategyTypeSubSchema {
+  fields?: StrategyTypeField[];
+  sectionLabel?: string;
+  // Multi-rule pattern (for fieldMapping, dataMasking)
+  multiRule?: boolean;
+  ruleLabel?: string;
+  ruleFields?: StrategyTypeField[];
 }
 
 interface StrategyType {
@@ -94,4 +104,4 @@ export function useStrategyTypes(): UseStrategyTypesResult {
   };
 }
 
-export type { StrategyType, StrategyTypeSchema, StrategyTypeField };
+export type { StrategyType, StrategyTypeSchema, StrategyTypeField, StrategyTypeSubSchema };

@@ -181,10 +181,13 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
 
     /**
      * Check if request has a body.
+     * Note: GET requests can have body (not recommended by HTTP spec but allowed),
+     * and attackers may exploit this to bypass security checks.
      */
     private boolean hasBody(ServerHttpRequest request) {
+        // Only skip HEAD method (GET and DELETE can have body for security check)
         String method = request.getMethod().name();
-        if ("GET".equals(method) || "HEAD".equals(method) || "DELETE".equals(method)) {
+        if ("HEAD".equals(method)) {
             return false;
         }
         MediaType contentType = request.getHeaders().getContentType();

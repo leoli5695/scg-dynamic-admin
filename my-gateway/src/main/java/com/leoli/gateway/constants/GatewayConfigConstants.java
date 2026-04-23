@@ -100,8 +100,8 @@ public interface GatewayConfigConstants {
 
     /**
      * Auth routes binding data ID prefix.
-     * Full data ID: config.gateway.auth-routes-{routeId}
-     * Contains array of policy IDs bound to a route.
+     * Full data ID: config.gateway.auth-routes-{policyId}
+     * Contains array of route IDs bound to a policy (credential).
      */
     String AUTH_ROUTES_PREFIX = "config.gateway.auth-routes-";
 

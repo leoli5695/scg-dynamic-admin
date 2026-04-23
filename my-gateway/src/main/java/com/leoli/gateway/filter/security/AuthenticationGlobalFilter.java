@@ -21,7 +21,6 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.util.Base64;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -29,12 +28,18 @@ import java.util.Set;
  * Authentication Global Filter.
  * Delegates authentication to appropriate AuthProcessor based on authType.
  * <p>
+ * Design Philosophy:
+ * - Strategy (Auth Policy): "Switch" - defines whether route requires auth and authType
+ * - Credential (AuthPolicy): "Key" - contains authentication details (secretKey, apiKey, etc.)
+ * <p>
  * Authentication Flow:
- * 1. Extract credentials from request (username/password, apiKey, accessKey, clientId, etc.)
- * 2. Find matching policyId by credentials via AuthBindingManager
- * 3. Verify credentials using AuthProcessManager
- * 4. Check if routeId is in policy's bound routes
- * 5. Return 401 for auth failure, 403 for route not authorized
+ * 1. Check if route requires authentication (StrategyManager)
+ * 2. Get required authType from Strategy config
+ * 3. Find credentials bound to this route (AuthBindingManager)
+ * 4. Check if credential is authorized for this route
+ * 5. Check if credential type matches required authType
+ * 6. Execute authentication with AuthProcessManager
+ * 7. Return 401 for auth failure, 403 for route not authorized
  *
  * @author leoli
  */
@@ -51,81 +56,91 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String routeId = RouteUtils.getRouteId(exchange);
 
-        // Step 1: Check if route requires authentication
-        // 1a: Route-bound policies (via AuthBindingManager)
-        boolean routeRequiresAuth = authBindingManager.requiresAuth(routeId);
-
-        // 1b: Global AUTH strategy (via StrategyManager)
-        StrategyDefinition globalAuthStrategy = strategyManager.getStrategyForRoute(routeId, StrategyDefinition.TYPE_AUTH);
-        boolean globalRequiresAuth = globalAuthStrategy != null
-                && globalAuthStrategy.isEnabled()
-                && globalAuthStrategy.isGlobal();
-
-        if (!routeRequiresAuth && !globalRequiresAuth) {
+        // Step 1: Check if route requires authentication via Strategy
+        StrategyDefinition authStrategy = strategyManager.getStrategyForRoute(routeId, StrategyDefinition.TYPE_AUTH);
+        if (authStrategy == null || !authStrategy.isEnabled()) {
             log.debug("Route {} does not require authentication", routeId);
             return chain.filter(exchange);
         }
 
-        log.debug("Route {} requires authentication (route-bound={}, global={})",
-                routeId, routeRequiresAuth, globalRequiresAuth);
+        log.debug("Route {} requires authentication (strategy={})", routeId, authStrategy.getStrategyId());
 
-        // Step 2: Collect all candidate policies (route-bound + global)
-        Set<String> candidatePolicyIds = new HashSet<>();
-
-        // 2a: Route-bound policies
-        Set<String> boundPolicies = authBindingManager.getPoliciesForRoute(routeId);
-        candidatePolicyIds.addAll(boundPolicies);
-
-        // 2b: Global strategy (sync to AuthBindingManager if not already synced)
-        if (globalRequiresAuth) {
-            String strategyId = globalAuthStrategy.getStrategyId();
-            candidatePolicyIds.add(strategyId);
-
-            // Ensure global strategy is synced to AuthBindingManager for credential lookup
-            if (authBindingManager.getAuthConfig(strategyId) == null) {
-                authBindingManager.syncFromStrategy(globalAuthStrategy);
-                log.info("Global AUTH strategy {} synced to AuthBindingManager", strategyId);
-            }
-        }
-
-        if (candidatePolicyIds.isEmpty()) {
-            log.warn("Route {} marked as requiring auth but no policies bound", routeId);
+        // Step 2: Get required authType from Strategy config
+        String requiredAuthType = getAuthTypeFromStrategy(authStrategy);
+        if (requiredAuthType == null || requiredAuthType.isEmpty()) {
+            log.warn("Auth strategy {} has no authType configured", authStrategy.getStrategyId());
             return chain.filter(exchange);
         }
 
-        // Step 3: Find matching policy by credentials
+        log.debug("Route {} requires authType: {}", routeId, requiredAuthType);
+
+        // Step 3: Get credentials (policies) bound to this route
+        Set<String> boundPolicies = authBindingManager.getPoliciesForRoute(routeId);
+        if (boundPolicies.isEmpty()) {
+            log.warn("Route {} requires auth but no credentials bound", routeId);
+            // Check if user provided credentials that are valid but not authorized for this route
+            String validCredential = findValidCredentialInRequest(exchange, requiredAuthType);
+            if (validCredential != null) {
+                log.warn("Valid credential {} found but not authorized for route {}", validCredential, routeId);
+                return writeForbiddenResponse(exchange, "Credential not authorized for this route");
+            }
+            return writeUnauthorizedResponse(exchange, "Authentication required");
+        }
+
+        // Step 4: Find matching credential by credentials in request
         String policyId = findMatchingPolicy(exchange);
 
         if (policyId == null) {
-            // Step 3.5: Check for Bearer token and try JWT/OAuth2 policies
+            // Step 4.5: Check for Bearer token and try JWT/OAuth2 credentials
             String bearerToken = extractBearerToken(exchange.getRequest().getHeaders());
             if (bearerToken != null) {
-                // Find JWT or OAuth2 policy among candidates
-                for (String pid : candidatePolicyIds) {
+                // Find JWT or OAuth2 credential among bound policies with matching authType
+                for (String pid : boundPolicies) {
                     AuthConfig config = authBindingManager.getAuthConfig(pid);
                     if (config != null && config.isEnabled()) {
-                        String authType = config.getAuthType();
-                        if ("JWT".equals(authType) || "OAUTH2".equals(authType)) {
-                            log.debug("Found {} policy {} for Bearer token", authType, pid);
-                            return authenticateWithPolicy(exchange, chain, routeId, pid);
+                        String credentialAuthType = config.getAuthType();
+                        // Check type match
+                        if (!requiredAuthType.equals(credentialAuthType)) {
+                            log.debug("Credential {} type {} does not match required {}",
+                                    pid, credentialAuthType, requiredAuthType);
+                            continue;
+                        }
+                        if ("JWT".equals(credentialAuthType) || "OAUTH2".equals(credentialAuthType)) {
+                            log.debug("Found {} credential {} for Bearer token", credentialAuthType, pid);
+                            return authenticateWithPolicy(exchange, chain, routeId, pid, requiredAuthType);
                         }
                     }
                 }
             }
 
-            // No credentials provided or no matching policy
-            log.warn("No matching policy found for route {}", routeId);
+            // No credentials provided or no matching credential
+            log.warn("No matching credential found for route {}", routeId);
             return writeUnauthorizedResponse(exchange, "Authentication required");
         }
 
-        // Step 4: Verify the matched policy is in candidate list
-        if (!candidatePolicyIds.contains(policyId)) {
-            log.warn("Policy {} matched credentials but not authorized for route {}", policyId, routeId);
+        // Step 5: Check if credential is authorized for this route
+        if (!boundPolicies.contains(policyId)) {
+            log.warn("Credential {} is not authorized for route {}", policyId, routeId);
             return writeForbiddenResponse(exchange, "Credential not authorized for this route");
         }
 
-        // Step 5: Authenticate with the matched policy
-        return authenticateWithPolicy(exchange, chain, routeId, policyId);
+        // Step 6: Authenticate with the matched credential
+        return authenticateWithPolicy(exchange, chain, routeId, policyId, requiredAuthType);
+    }
+
+    /**
+     * Get authType from Strategy config.
+     */
+    private String getAuthTypeFromStrategy(StrategyDefinition strategy) {
+        Map<String, Object> config = strategy.getConfig();
+        if (config == null || config.isEmpty()) {
+            return null;
+        }
+        Object authTypeObj = config.get("authType");
+        if (authTypeObj instanceof String) {
+            return (String) authTypeObj;
+        }
+        return null;
     }
 
     /**
@@ -180,45 +195,152 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
     }
 
     /**
+     * Find a valid credential in the request (not necessarily bound to current route).
+     * This is used to distinguish between "no credentials provided" and "valid credential not authorized for route".
+     *
+     * @param exchange the server exchange
+     * @param requiredAuthType the required auth type
+     * @return policyId if a valid credential is found, null otherwise
+     */
+    private String findValidCredentialInRequest(ServerWebExchange exchange, String requiredAuthType) {
+        ServerHttpRequest request = exchange.getRequest();
+        HttpHeaders headers = request.getHeaders();
+
+        // 1. Try API Key
+        String apiKey = extractApiKey(headers);
+        if (apiKey != null) {
+            String policyId = authBindingManager.findPolicyByApiKey(apiKey);
+            if (policyId != null) {
+                return policyId;
+            }
+        }
+
+        // 2. Try Basic Auth
+        String[] basicCredentials = extractBasicAuth(headers);
+        if (basicCredentials != null) {
+            String policyId = authBindingManager.findPolicyByBasicAuth(basicCredentials[0], basicCredentials[1]);
+            if (policyId != null) {
+                return policyId;
+            }
+        }
+
+        // 3. Try HMAC (Access Key)
+        String accessKey = extractAccessKey(headers);
+        if (accessKey != null) {
+            String policyId = authBindingManager.findPolicyByAccessKey(accessKey);
+            if (policyId != null) {
+                return policyId;
+            }
+        }
+
+        // 4. Try Bearer Token (JWT/OAuth2) - only if authType is JWT or OAUTH2
+        String bearerToken = extractBearerToken(headers);
+        if (bearerToken != null) {
+            return findPolicyByBearerToken(bearerToken, requiredAuthType);
+        }
+
+        return null;
+    }
+
+    /**
+     * Find policy by validating Bearer token against all credentials of matching auth type.
+     */
+    private String findPolicyByBearerToken(String token, String requiredAuthType) {
+        if (!"JWT".equals(requiredAuthType) && !"OAUTH2".equals(requiredAuthType)) {
+            return null;
+        }
+
+        // Get all policies of the required type and try to validate the token
+        java.util.List<String> policies = authBindingManager.getPoliciesByType(requiredAuthType);
+        for (String policyId : policies) {
+            AuthConfig config = authBindingManager.getAuthConfig(policyId);
+            if (config != null && config.isEnabled()) {
+                // Try to validate JWT token with this credential's secret
+                if ("JWT".equals(requiredAuthType) && validateJwtToken(token, config)) {
+                    return policyId;
+                }
+                // For OAuth2, could add similar validation logic
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Validate JWT token with the given config.
+     */
+    private boolean validateJwtToken(String token, AuthConfig config) {
+        try {
+            String secretKey = config.getSecretKey();
+            if (secretKey == null || secretKey.isEmpty()) {
+                return false;
+            }
+            // Simple validation - try to parse the token (JJWT 0.12.x API)
+            io.jsonwebtoken.Jwts.parser()
+                    .verifyWith(io.jsonwebtoken.security.Keys.hmacShaKeyFor(
+                            padKeyToRequiredLength(secretKey.getBytes(), config.getJwtAlgorithm())))
+                    .build().parseSignedClaims(token);
+            return true;
+        } catch (Exception e) {
+            log.debug("JWT validation failed for policy {}: {}", config.getPolicyId(), e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Pad key to required length for JWT algorithm.
+     */
+    private byte[] padKeyToRequiredLength(byte[] keyBytes, String jwtAlg) {
+        int requiredLength = 32; // HS256 default
+        if ("HS384".equals(jwtAlg)) {
+            requiredLength = 48;
+        } else if ("HS512".equals(jwtAlg)) {
+            requiredLength = 64;
+        }
+        if (keyBytes.length < requiredLength) {
+            byte[] paddedKey = new byte[requiredLength];
+            System.arraycopy(keyBytes, 0, paddedKey, 0, keyBytes.length);
+            return paddedKey;
+        }
+        return keyBytes;
+    }
+
+    /**
      * Authenticate with a specific policy.
-     * After successful authentication, check route authorization.
-     * Global policies (synced from Strategy) bypass route authorization check.
+     * Check credential type matches required authType before authentication.
      */
     private Mono<Void> authenticateWithPolicy(ServerWebExchange exchange, GatewayFilterChain chain,
-                                              String routeId, String policyId) {
+                                              String routeId, String policyId, String requiredAuthType) {
         AuthConfig config = authBindingManager.getAuthConfig(policyId);
 
         if (config == null) {
-            log.warn("Policy config not found for policyId: {}", policyId);
+            log.warn("Credential config not found for policyId: {}", policyId);
             // Try to load from Nacos
             authBindingManager.loadPolicyWithRoutes(policyId);
             config = authBindingManager.getAuthConfig(policyId);
             if (config == null) {
-                log.error("Failed to load policy config for policyId: {}", policyId);
-                return writeUnauthorizedResponse(exchange, "Invalid authentication policy");
+                log.error("Failed to load credential config for policyId: {}", policyId);
+                return writeUnauthorizedResponse(exchange, "Invalid authentication credential");
             }
         }
 
+        // Check credential type matches required authType
+        String credentialAuthType = config.getAuthType();
+        if (!requiredAuthType.equals(credentialAuthType)) {
+            log.warn("Credential {} type {} does not match required authType {} for route {}",
+                    policyId, credentialAuthType, requiredAuthType, routeId);
+            return writeForbiddenResponse(exchange, "Credential type mismatch");
+        }
+
         final AuthConfig finalConfig = config;
-        final boolean isGlobalPolicy = authBindingManager.isSyncedFromStrategy(policyId)
-                && strategyManager.getStrategy(policyId) != null
-                && strategyManager.getStrategy(policyId).isGlobal();
 
         return authProcessManager.authenticate(exchange, finalConfig)
                 .then(Mono.defer(() -> {
-                    // After successful authentication, check route authorization
-                    // Global policies bypass route authorization check
-                    if (!isGlobalPolicy && !authBindingManager.isRouteAuthorized(policyId, routeId)) {
-                        log.warn("Route {} not authorized for policy {}", routeId, policyId);
-                        return writeForbiddenResponse(exchange, "Route not authorized for this credential");
-                    }
-
-                    log.debug("Authentication and authorization successful for route: {} with policy: {} (global={})",
-                            routeId, policyId, isGlobalPolicy);
+                    log.debug("Authentication successful for route: {} with credential: {}",
+                            routeId, policyId);
                     return chain.filter(exchange);
                 }))
                 .onErrorResume(e -> {
-                    log.warn("Authentication failed for route {} with policy {}: {}",
+                    log.warn("Authentication failed for route {} with credential {}: {}",
                             routeId, policyId, e.getMessage());
                     return writeUnauthorizedResponse(exchange, "Authentication failed: " + e.getMessage());
                 });

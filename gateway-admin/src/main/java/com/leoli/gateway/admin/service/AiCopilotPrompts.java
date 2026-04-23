@@ -736,6 +736,72 @@ public class AiCopilotPrompts {
             - [ ] 重写Filter正则是否预编译
             - [ ] Filter顺序是否符合最佳实践
             - [ ] 是否有冗余Filter可移除
+
+            ### AI 增强 Filter 分析能力
+
+            本系统提供两个 AI 增强的 Filter 分析工具：
+
+            **1. analyze_filter_anomaly - 异常检测分析**
+
+            该工具使用 AI 算法检测 Filter 性能异常，包括：
+            - **耗时突变检测**: 当某 Filter 平均耗时突增超过50%时自动识别
+            - **错误率异常检测**: 当某 Filter 错误率超过5%时自动识别
+            - **执行频率异常**: 当某 Filter 执行频率过高且耗时较长时预警
+
+            分析模式:
+            | 模式 | 时间范围 | 适用场景 |
+            |------|----------|----------|
+            | quick | 最近1小时 | 快速诊断，日常检查 |
+            | deep | 最近24小时 | 深度分析，问题排查 |
+            | realtime | 最近30分钟 | 实时异常，紧急响应 |
+
+            异常严重程度:
+            - **CRITICAL**: 需立即处理，耗时突增超过300%或错误率超过20%
+            - **WARNING**: 需关注，耗时突增超过50%或错误率超过5%
+
+            **2. predict_filter_performance - 性能趋势预测**
+
+            该工具基于历史数据预测 Filter 未来性能：
+            - **平均耗时预测**: 预测各 Filter 的执行耗时趋势
+            - **错误率预测**: 预测错误率变化趋势
+            - **吞吐量预测**: 预测请求处理能力
+            - **瓶颈识别**: 提前识别可能成为瓶颈的 Filter
+
+            预测窗口:
+            | 窗口 | 预测时长 | 建议用途 |
+            |------|----------|----------|
+            | 1h | 1小时 | 短期预警，实时调度 |
+            | 6h | 6小时 | 中期规划，容量准备 |
+            | 24h | 24小时 | 日级规划，资源调配 |
+            | 7d | 7天 | 周级规划，架构优化 |
+
+            风险等级:
+            - **HIGH**: 存在较高风险，需立即优化
+            - **MEDIUM**: 存在中等风险，需提前准备
+            - **LOW**: 风险较低，保持监控即可
+
+            ### Filter 异常根因分析指南
+
+            当检测到异常时，按以下流程分析根因：
+
+            | 异常类型 | 可能根因 | 排查步骤 |
+            |----------|----------|----------|
+            | 认证Filter耗时突增 | token验证服务慢、JWT解析负载高、缓存失效 | 1)检查认证服务响应 2)查看JWT解析耗时 3)检查缓存命中率 |
+            | 限流Filter耗时突增 | 限流算法计算负载增加、分布式锁竞争、规则复杂化 | 1)检查限流算法类型 2)分析锁竞争情况 3)简化限流规则 |
+            | 日志Filter耗时突增 | 日志量激增、异步队列阻塞、格式化开销增加 | 1)检查日志队列状态 2)分析日志量变化 3)精简日志内容 |
+            | 负载均衡Filter错误率高 | 无可用实例、实例健康检查失败 | 1)检查实例列表 2)验证健康检查结果 3)增加实例数量 |
+            | 熔断器Filter错误率高 | 下游服务故障、熔断阈值配置过严 | 1)检查下游服务状态 2)调整熔断阈值 3)增加降级策略 |
+
+            ### Filter 性能优化最佳实践
+
+            基于预测结果优化 Filter 的建议：
+
+            1. **预防性优化**: 在预测到瓶颈前提前优化高风险 Filter
+            2. **异步化处理**: 将耗时 Filter 异步化，减少主链阻塞
+            3. **缓存策略**: 合理使用缓存减少 Filter 计算开销
+            4. **熔断保护**: 启用 Filter 级熔断，防止异常传播
+            5. **顺序调整**: 根据预测结果调整 Filter 执行顺序
+            6. **资源预留**: 根据吞吐量预测预留计算资源
             """;
 
     // ===================== 领域详细提示词（按意图动态加载）=====================
@@ -780,7 +846,7 @@ public class AiCopilotPrompts {
                 | Method | HTTP方法 | `{"name":"Method","args":{"methods":"GET,POST"}}` |
                 | Header | 请求头匹配 | `{"name":"Header","args":{"header":"X-Request-Id","regexp":"\\d+"}}` |
                 | Query | 查询参数 | `{"name":"Query","args":{"param":"userId","regexp":"\\d+"}}` |
-                | Host | 主机名匹配 | `{"name":"Host","args":{"pattern":"**.example.com"}}` |
+                | Host | 主机名匹配 | `{"name":"Host","args":{"patterns":"**.example.com"}}` |
                 | After/Before/Between | 时间窗口 | 用于限流时段控制 |
                             
                 ### Filter 过滤器类型
@@ -1665,6 +1731,17 @@ public class AiCopilotPrompts {
         // ========== 性能优化详解 ==========
         prompts.put("performance", """
                 ## 性能优化指南
+                
+                ### ⚠️ 重要：工具调用决策规则
+                
+                **如果用户问题包含 Filter/过滤器关键词，直接调用这些工具：**
+                - `get_filter_chain_stats(instanceId)` - 获取Filter链统计
+                - `get_slowest_filters(instanceId, limit)` - 获取最慢Filter排名
+                
+                **不要先调用 list_instances 或 get_gateway_metrics！**
+                用户已指定实例或系统有默认实例ID，可直接使用。
+                
+                ---
                             
                 ### 优化方向
                             
@@ -1832,9 +1909,9 @@ public class AiCopilotPrompts {
                 |------|-------------|---------|
                 | Path | Path matching | {"name":"Path","args":{"pattern":"/api/users/**"}} |
                 | Method | HTTP method | {"name":"Method","args":{"methods":"GET,POST"}} |
-                | Header | Header matching | {"name":"Header","args":{"header":"X-Request-Id"}} |
+                | Header | Header matching | {"name":"Header","args":{"header":"X-Request-Id","regexp":"\\d+"}} |
                 | Query | Query param | {"name":"Query","args":{"param":"userId"}} |
-                | Host | Hostname | {"name":"Host","args":{"pattern":"**.example.com"}} |
+                | Host | Hostname | {"name":"Host","args":{"patterns":"**.example.com"}} |
                             
                 ### Gray Release Rules
                 - HEADER: Route by header value
@@ -2068,7 +2145,18 @@ public class AiCopilotPrompts {
 
         prompts.put("performance", """
                 ## Performance Optimization
-                            
+                
+                ### ⚠️ IMPORTANT: Tool Call Decision
+                
+                **If user asks about Filter performance, call these tools DIRECTLY:**
+                - `get_filter_chain_stats(instanceId)` - Get Filter chain statistics
+                - `get_slowest_filters(instanceId, limit)` - Get slowest Filter ranking
+                
+                **DO NOT call list_instances or get_gateway_metrics first!**
+                User has specified instance or system has default instanceId.
+                
+                ---
+                
                 ### HTTP Client Pool
                             
                 ```yaml
@@ -2270,6 +2358,18 @@ public class AiCopilotPrompts {
         KEYWORD_WEIGHTS.add(new KeywordWeight("ip黑名单", "strategy", 5));
         KEYWORD_WEIGHTS.add(new KeywordWeight("ip白名单", "strategy", 5));
 
+        // 策略测试相关（指向strategyTest意图）
+        KEYWORD_WEIGHTS.add(new KeywordWeight("SQL注入", "strategyTest", 8));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("XSS攻击", "strategyTest", 8));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("sql injection", "strategyTest", 8));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("xss", "strategyTest", 8));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("安全防护", "strategyTest", 6));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("security", "strategyTest", 6));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("请求验证", "strategyTest", 6));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("request validation", "strategyTest", 6));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("Mock响应", "strategyTest", 6));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("mock", "strategyTest", 6));
+
         // 调试相关
         KEYWORD_WEIGHTS.add(new KeywordWeight("错误", "debug", 5));
         KEYWORD_WEIGHTS.add(new KeywordWeight("error", "debug", 5));
@@ -2293,6 +2393,22 @@ public class AiCopilotPrompts {
         KEYWORD_WEIGHTS.add(new KeywordWeight("tuning", "performance", 5));
         KEYWORD_WEIGHTS.add(new KeywordWeight("响应时间", "performance", 5));
         KEYWORD_WEIGHTS.add(new KeywordWeight("response time", "performance", 5));
+        
+        // Filter性能分析（高权重关键词）
+        KEYWORD_WEIGHTS.add(new KeywordWeight("Filter链", "performance", 15));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("过滤器链", "performance", 15));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("filter chain", "performance", 15));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("Filter耗时", "performance", 15));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("过滤器耗时", "performance", 15));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("filter duration", "performance", 15));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("最慢的Filter", "performance", 15));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("slowest filter", "performance", 15));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("哪个Filter", "performance", 12));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("Filter性能", "performance", 12));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("filter performance", "performance", 12));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("耗时分析", "performance", 8));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("性能分析", "performance", 8));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("performance analysis", "performance", 8));
 
         // 监控相关
         KEYWORD_WEIGHTS.add(new KeywordWeight("cpu", "monitor", 5));
@@ -2365,6 +2481,19 @@ public class AiCopilotPrompts {
         COMBO_RULES.add(new ComboRule(List.of("慢", "服务"), "performance", 20));
         COMBO_RULES.add(new ComboRule(List.of("performance", "route"), "performance", 20));
 
+        // Filter性能分析（高优先级组合规则）
+        COMBO_RULES.add(new ComboRule(List.of("Filter", "分析"), "performance", 25));
+        COMBO_RULES.add(new ComboRule(List.of("Filter", "耗时"), "performance", 25));
+        COMBO_RULES.add(new ComboRule(List.of("Filter", "慢"), "performance", 25));
+        COMBO_RULES.add(new ComboRule(List.of("过滤器", "分析"), "performance", 25));
+        COMBO_RULES.add(new ComboRule(List.of("过滤器", "耗时"), "performance", 25));
+        COMBO_RULES.add(new ComboRule(List.of("filter", "analysis"), "performance", 25));
+        COMBO_RULES.add(new ComboRule(List.of("filter", "duration"), "performance", 25));
+        COMBO_RULES.add(new ComboRule(List.of("filter", "slow"), "performance", 25));
+        COMBO_RULES.add(new ComboRule(List.of("分析", "数据"), "performance", 15));
+        COMBO_RULES.add(new ComboRule(List.of("分析", "统计"), "performance", 15));
+        COMBO_RULES.add(new ComboRule(List.of("analyze", "data"), "performance", 15));
+
         // 压测相关
         COMBO_RULES.add(new ComboRule(List.of("压测", "分析"), "performance", 25));
         COMBO_RULES.add(new ComboRule(List.of("压力测试", "结果"), "performance", 25));
@@ -2393,6 +2522,57 @@ public class AiCopilotPrompts {
         COMBO_RULES.add(new ComboRule(List.of("普罗米修斯", "优化"), "monitor", 20));
         COMBO_RULES.add(new ComboRule(List.of("prometheus", "optimize"), "monitor", 20));
         COMBO_RULES.add(new ComboRule(List.of("诊断", "报告"), "monitor", 15));
+
+        // === 策略测试指南（strategyTest）===
+        // 测试 + 策略类型 → strategyTest
+        COMBO_RULES.add(new ComboRule(List.of("测试", "限流"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("测试", "熔断"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("测试", "超时"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("测试", "重试"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("测试", "认证"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("测试", "安全"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("测试", "跨域"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("测试", "缓存"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("测试", "IP"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("测试", "Mock"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("测试", "策略"), "strategyTest", 20));
+
+        // 验证 + 策略类型 → strategyTest
+        COMBO_RULES.add(new ComboRule(List.of("验证", "限流"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("验证", "熔断"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("验证", "认证"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("验证", "安全"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("验证", "策略"), "strategyTest", 20));
+
+        // test + strategy keywords → strategyTest (英文)
+        COMBO_RULES.add(new ComboRule(List.of("test", "rate limit"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("test", "circuit breaker"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("test", "timeout"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("test", "retry"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("test", "auth"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("test", "security"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("test", "cors"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("test", "cache"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("test", "strategy"), "strategyTest", 20));
+
+        // verify + strategy keywords → strategyTest (英文)
+        COMBO_RULES.add(new ComboRule(List.of("verify", "rate limit"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("verify", "circuit breaker"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("verify", "auth"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("verify", "security"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("verify", "strategy"), "strategyTest", 20));
+
+        // 如何测试 + 策略类型
+        COMBO_RULES.add(new ComboRule(List.of("如何测试", "限流"), "strategyTest", 30));
+        COMBO_RULES.add(new ComboRule(List.of("如何测试", "熔断"), "strategyTest", 30));
+        COMBO_RULES.add(new ComboRule(List.of("如何测试", "安全防护"), "strategyTest", 30));
+        COMBO_RULES.add(new ComboRule(List.of("如何验证", "策略"), "strategyTest", 25));
+        COMBO_RULES.add(new ComboRule(List.of("怎么测试", "策略"), "strategyTest", 25));
+
+        // SQL注入/XSS测试
+        COMBO_RULES.add(new ComboRule(List.of("SQL注入", "测试"), "strategyTest", 30));
+        COMBO_RULES.add(new ComboRule(List.of("XSS", "测试"), "strategyTest", 30));
+        COMBO_RULES.add(new ComboRule(List.of("注入测试"), "strategyTest", 30));
     }
 
     /**
@@ -2515,6 +2695,7 @@ public class AiCopilotPrompts {
                     - route: 路由配置相关
                     - service: 服务配置相关
                     - strategy: 策略配置（限流/熔断/超时）相关
+                    - strategyTest: 策略测试指南（如何测试/验证某个策略）
                     - auth: 认证配置（JWT/API Key/OAuth2）相关
                     - monitor: 监控/指标/Prometheus/Diagnostic相关
                     - alert: 告警配置相关
@@ -2535,6 +2716,7 @@ public class AiCopilotPrompts {
                     - route: Route configuration
                     - service: Service configuration
                     - strategy: Strategy (rate limiting/circuit breaker/timeout)
+                    - strategyTest: Strategy testing guide (how to test/verify a strategy)
                     - auth: Authentication (JWT/API Key/OAuth2)
                     - monitor: Monitoring/metrics/Prometheus/Diagnostic
                     - alert: Alert configuration
@@ -2552,14 +2734,22 @@ public class AiCopilotPrompts {
      * 验证意图是否有效
      */
     public boolean isValidIntent(String intent) {
-        return DOMAIN_PROMPTS_ZH.containsKey(intent) || "general".equals(intent) || "config".equals(intent);
+        return DOMAIN_PROMPTS_ZH.containsKey(intent) 
+                || DOMAIN_PROMPTS_EN.containsKey(intent)
+                || "strategyTest".equals(intent)  // 策略测试指南（数据库加载）
+                || "general".equals(intent) 
+                || "config".equals(intent);
     }
 
     /**
      * 获取所有支持的意图类型
      */
     public List<String> getSupportedIntents() {
-        return new ArrayList<>(DOMAIN_PROMPTS_ZH.keySet());
+        Set<String> intents = new HashSet<>(DOMAIN_PROMPTS_ZH.keySet());
+        intents.add("strategyTest");  // 添加策略测试指南
+        intents.add("general");
+        intents.add("config");
+        return new ArrayList<>(intents);
     }
 
     /**

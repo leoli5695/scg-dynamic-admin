@@ -138,19 +138,50 @@ const PredicateItem: React.FC<{
   t: any;
   onRemove: (index: number) => void;
 }> = ({ form, restField, name, t, onRemove }) => {
-  const [predicateType, setPredicateType] = useState<string>('');
+  // Read predicate type from form data (not local state) to support edit mode
+  const predicateType = Form.useWatch(['predicates', name, 'name'], form) || '';
+
+  // Helper to extract methods from indexed keys format or legacy format
+  const extractMethods = (args: any): string[] => {
+    if (!args) return [];
+    if (Array.isArray(args.methods)) return args.methods;
+    if (typeof args.methods === 'string') return args.methods.split(',').map((m: string) => m.trim());
+    // Extract from indexed keys (methods.0, methods.1, etc.)
+    const methodKeys = Object.keys(args).filter(k => k.startsWith('methods.'));
+    if (methodKeys.length > 0) {
+      return methodKeys
+        .sort((a, b) => parseInt(a.split('.')[1]) - parseInt(b.split('.')[1]))
+        .map(k => args[k]);
+    }
+    // Legacy: args might be a string like "GET,POST"
+    if (typeof args === 'string') return args.split(',').map((m: string) => m.trim());
+    return [];
+  };
+
+  // Helper to build indexed keys format from method array
+  const buildMethodArgs = (methods: string[]): any => {
+    if (!methods || methods.length === 0) return {};
+    const args: any = {};
+    methods.forEach((m, i) => {
+      args[`methods.${i}`] = m;
+    });
+    return args;
+  };
 
   return (
     <div key={name} className="form-item-row">
       <Form.Item {...restField} name={[name, 'name']} noStyle>
         <Select
           placeholder={t('routes.predicate_type')}
-          style={{ 
+          style={{
             width: 150,
             backgroundColor: 'rgba(0, 0, 0, 0.3)',
             border: '1px solid rgba(148, 163, 184, 0.15)'
           }}
-          onChange={(value) => setPredicateType(value)}
+          onChange={(value) => {
+            // Reset args when predicate type changes
+            form.setFieldValue(['predicates', name, 'args'], value === 'Method' ? {} : '');
+          }}
           suffixIcon={<span style={{ color: '#94a3b8', fontSize: '12px' }}>▼</span>}
         >
           <Select.Option value="Path">Path</Select.Option>
@@ -159,15 +190,25 @@ const PredicateItem: React.FC<{
           <Select.Option value="Header">Header</Select.Option>
         </Select>
       </Form.Item>
-      <Form.Item {...restField} name={[name, 'args']} noStyle>
-        {predicateType === 'Method' ? (
-          <Select 
-            placeholder={t('routes.arguments')} 
-            style={{ 
+
+      {/* Args field wrapped with Form.Item for proper form binding */}
+      {predicateType === 'Method' ? (
+        <Form.Item
+          {...restField}
+          name={[name, 'args']}
+          noStyle
+          getValueProps={(value) => ({
+            value: extractMethods(value)
+          })}
+          normalize={(value) => buildMethodArgs(value)}
+        >
+          <Select
+            placeholder={t('routes.arguments')}
+            style={{
               width: 300,
               backgroundColor: 'rgba(0, 0, 0, 0.3)',
               border: '1px solid rgba(148, 163, 184, 0.15)'
-            }} 
+            }}
             mode="multiple"
             suffixIcon={<span style={{ color: '#94a3b8', fontSize: '12px' }}>▼</span>}
           >
@@ -179,55 +220,87 @@ const PredicateItem: React.FC<{
             <Select.Option value="HEAD">HEAD</Select.Option>
             <Select.Option value="OPTIONS">OPTIONS</Select.Option>
           </Select>
-        ) : predicateType === 'Header' ? (
-          <Space.Compact style={{ width: 300 }}>
-            <Input
-              placeholder="Header Name"
-              style={{ 
-                width: '45%',
-                backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                border: '1px solid rgba(148, 163, 184, 0.15)',
-                color: '#e2e8f0'
-              }}
-              onChange={(e) => {
-                const currentValue = form.getFieldValue(['predicates', name, 'args']);
-                const newValue = `${e.target.value}:${currentValue?.split(':')[1] || ''}`;
-                form.setFieldValue(['predicates', name, 'args'], newValue);
-              }}
-            />
-            <Input
-              placeholder="Header Value"
-              style={{ 
-                width: '55%',
-                backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                border: '1px solid rgba(148, 163, 184, 0.15)',
-                color: '#e2e8f0'
-              }}
-              onChange={(e) => {
-                const currentValue = form.getFieldValue(['predicates', name, 'args']);
-                const newValue = `${currentValue?.split(':')[0] || ''}:${e.target.value}`;
-                form.setFieldValue(['predicates', name, 'args'], newValue);
-              }}
-            />
-          </Space.Compact>
-        ) : (
-          <Input 
-            placeholder={t('routes.arguments')} 
-            style={{ 
+        </Form.Item>
+      ) : predicateType === 'Header' ? (
+        <Form.Item shouldUpdate noStyle>
+          {({ getFieldValue, setFieldValue }) => {
+            const currentArgs = getFieldValue(['predicates', name, 'args']) || '';
+            let headerName = '';
+            let headerRegexp = '';
+            if (typeof currentArgs === 'string') {
+              const colonIndex = currentArgs.indexOf(':');
+              headerName = colonIndex === -1 ? currentArgs : currentArgs.substring(0, colonIndex);
+              headerRegexp = colonIndex === -1 ? '' : currentArgs.substring(colonIndex + 1);
+            } else if (currentArgs && typeof currentArgs === 'object') {
+              headerName = currentArgs.header || currentArgs.name || '';
+              headerRegexp = currentArgs.regexp || '';
+            }
+
+            return (
+              <Space.Compact style={{ width: 300 }}>
+                <Input
+                  placeholder="Header Name"
+                  value={headerName}
+                  style={{
+                    width: '45%',
+                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                    border: '1px solid rgba(148, 163, 184, 0.15)',
+                    color: '#e2e8f0'
+                  }}
+                  onChange={(e) => {
+                    setFieldValue(['predicates', name, 'args'], `${e.target.value}:${headerRegexp}`);
+                  }}
+                />
+                <Input
+                  placeholder="Regexp"
+                  value={headerRegexp}
+                  style={{
+                    width: '55%',
+                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                    border: '1px solid rgba(148, 163, 184, 0.15)',
+                    color: '#e2e8f0'
+                  }}
+                  onChange={(e) => {
+                    setFieldValue(['predicates', name, 'args'], `${headerName}:${e.target.value}`);
+                  }}
+                />
+              </Space.Compact>
+            );
+          }}
+        </Form.Item>
+      ) : (
+        // Path, Host - use Input with proper Form.Item binding
+        <Form.Item
+          {...restField}
+          name={[name, 'args']}
+          noStyle
+          getValueProps={(value) => {
+            // Handle object format from backend: { pattern: "/**" }
+            if (value && typeof value === 'object') {
+              return { value: value.pattern || value.patterns || '' };
+            }
+            return { value: value || '' };
+          }}
+          normalize={(value) => value || ''}
+        >
+          <Input
+            placeholder={t('routes.arguments')}
+            style={{
               width: 300,
               backgroundColor: 'rgba(0, 0, 0, 0.3)',
               border: '1px solid rgba(148, 163, 184, 0.15)',
               color: '#e2e8f0'
-            }} 
+            }}
           />
-        )}
-      </Form.Item>
+        </Form.Item>
+      )}
+
       <Tooltip title={t('common.delete')}>
-        <Button 
-          type="text" 
-          onClick={() => onRemove(name)} 
+        <Button
+          type="text"
+          onClick={() => onRemove(name)}
           icon={<DeleteOutlined />}
-          style={{ 
+          style={{
             color: '#ef4444',
             opacity: 0.8,
             padding: '4px 8px',
@@ -251,7 +324,16 @@ const FilterItem: React.FC<{
   t: any;
   onRemove: (index: number) => void;
 }> = ({ form, restField, name, t, onRemove }) => {
+  // 使用 Form.useWatch 监听 filter type 变化，确保编辑时能正确回显
+  const filterName = Form.useWatch(['filters', name, 'name'], form);
   const [filterType, setFilterType] = useState<string>('');
+
+  // 当 filterName 变化时同步 filterType（解决编辑回显问题）
+  useEffect(() => {
+    if (filterName && filterName !== filterType) {
+      setFilterType(filterName);
+    }
+  }, [filterName]);
 
   // Filters that need name:value input (colon separated)
   const needsKeyValueInput = [
@@ -275,11 +357,11 @@ const FilterItem: React.FC<{
 
   return (
     <div key={name} className="form-item-row">
-      <Tooltip 
-        title={filterType ? t(`plugin.${filterType}.detail`) : ''} 
-        placement="topLeft" 
+      <Tooltip
+        title={filterType ? t(`plugin.${filterType}.detail`) : ''}
+        placement="topLeft"
         mouseEnterDelay={0}
-        overlayInnerStyle={{ 
+        overlayInnerStyle={{
           maxWidth: '350px',
           fontSize: '13px',
           lineHeight: '1.6',
@@ -290,12 +372,16 @@ const FilterItem: React.FC<{
           <Select
             placeholder={t('routes.filter_type')}
             className="plugin-type-select"
-            style={{ 
+            style={{
               width: 160,
               backgroundColor: 'rgba(0, 0, 0, 0.3)',
               border: '1px solid rgba(148, 163, 184, 0.15)'
             }}
-            onChange={(value) => setFilterType(value)}
+            onChange={(value) => {
+              setFilterType(value);
+              // Reset args when filter type changes to avoid stale data
+              form.setFieldValue(['filters', name, 'args'], '');
+            }}
             suffixIcon={<span style={{ color: '#94a3b8', fontSize: '12px' }}>▼</span>}
           >
             <Select.OptGroup label={t('plugin.category.request_headers')}>
@@ -331,153 +417,201 @@ const FilterItem: React.FC<{
           </Select>
         </Form.Item>
       </Tooltip>
-      <Form.Item {...restField} name={[name, 'args']} noStyle>
-        {needsKeyValueInput.includes(filterType) ? (
-          // name:value format (colon separated) - 分开显示
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+
+      {/* Hidden Form.Item to register the args field */}
+      <Form.Item {...restField} name={[name, 'args']} noStyle hidden>
+        <Input />
+      </Form.Item>
+
+      {/* Visible Form.Item with shouldUpdate to render controlled inputs */}
+      <Form.Item shouldUpdate={(prev, cur) => {
+        // Re-render when args changes or when filterType changes (via force update)
+        const prevArgs = prev.filters?.[name]?.args;
+        const curArgs = cur.filters?.[name]?.args;
+        return prevArgs !== curArgs;
+      }} noStyle>
+        {({ getFieldValue, setFieldValue }) => {
+          const currentArgs = getFieldValue(['filters', name, 'args']) || '';
+
+          if (needsKeyValueInput.includes(filterType)) {
+            // name:value format (colon separated) - split at first colon only
+            const colonIndex = currentArgs.indexOf(':');
+            const nameValue = colonIndex === -1 ? currentArgs : currentArgs.substring(0, colonIndex);
+            const valueValue = colonIndex === -1 ? '' : currentArgs.substring(colonIndex + 1);
+
+            return (
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <Input
+                  placeholder="Name"
+                  value={nameValue}
+                  style={{
+                    width: 110,
+                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                    border: '1px solid rgba(148, 163, 184, 0.15)',
+                    color: '#e2e8f0'
+                  }}
+                  onChange={(e) => {
+                    const newValue = `${e.target.value}:${valueValue}`;
+                    setFieldValue(['filters', name, 'args'], newValue);
+                  }}
+                />
+                <span style={{ color: '#64748b' }}>:</span>
+                <Input
+                  placeholder="Value"
+                  value={valueValue}
+                  style={{
+                    width: 110,
+                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                    border: '1px solid rgba(148, 163, 184, 0.15)',
+                    color: '#e2e8f0'
+                  }}
+                  onChange={(e) => {
+                    const newValue = `${nameValue}:${e.target.value}`;
+                    setFieldValue(['filters', name, 'args'], newValue);
+                  }}
+                />
+              </div>
+            );
+          }
+
+          if (needsNameOnly.includes(filterType)) {
+            return (
+              <Input
+                placeholder="Header/Parameter Name"
+                value={currentArgs}
+                style={{
+                  width: 240,
+                  backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                  border: '1px solid rgba(148, 163, 184, 0.15)',
+                  color: '#e2e8f0'
+                }}
+                onChange={(e) => setFieldValue(['filters', name, 'args'], e.target.value)}
+              />
+            );
+          }
+
+          if (isRewritePath) {
+            const commaIndex = currentArgs.indexOf(',');
+            const regexpValue = commaIndex === -1 ? currentArgs : currentArgs.substring(0, commaIndex);
+            const replacementValue = commaIndex === -1 ? '' : currentArgs.substring(commaIndex + 1);
+
+            return (
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <Input
+                  placeholder="Regexp"
+                  value={regexpValue}
+                  style={{
+                    width: 110,
+                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                    border: '1px solid rgba(148, 163, 184, 0.15)',
+                    color: '#e2e8f0'
+                  }}
+                  onChange={(e) => {
+                    const newValue = `${e.target.value},${replacementValue}`;
+                    setFieldValue(['filters', name, 'args'], newValue);
+                  }}
+                />
+                <span style={{ color: '#64748b' }}>→</span>
+                <Input
+                  placeholder="Replacement"
+                  value={replacementValue}
+                  style={{
+                    width: 110,
+                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                    border: '1px solid rgba(148, 163, 184, 0.15)',
+                    color: '#e2e8f0'
+                  }}
+                  onChange={(e) => {
+                    const newValue = `${regexpValue},${e.target.value}`;
+                    setFieldValue(['filters', name, 'args'], newValue);
+                  }}
+                />
+              </div>
+            );
+          }
+
+          if (isRedirectTo) {
+            const commaIndex = currentArgs.indexOf(',');
+            const statusValue = commaIndex === -1 ? '' : currentArgs.substring(0, commaIndex);
+            const urlValue = commaIndex === -1 ? '' : currentArgs.substring(commaIndex + 1);
+
+            return (
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <Select
+                  placeholder="Status"
+                  value={statusValue || undefined}
+                  style={{
+                    width: 80,
+                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                    border: '1px solid rgba(148, 163, 184, 0.15)'
+                  }}
+                  onChange={(value) => {
+                    const newValue = `${value},${urlValue}`;
+                    setFieldValue(['filters', name, 'args'], newValue);
+                  }}
+                  suffixIcon={<span style={{ color: '#94a3b8', fontSize: '12px' }}>▼</span>}
+                >
+                  <Select.Option value="301">301</Select.Option>
+                  <Select.Option value="302">302</Select.Option>
+                  <Select.Option value="303">303</Select.Option>
+                  <Select.Option value="307">307</Select.Option>
+                  <Select.Option value="308">308</Select.Option>
+                </Select>
+                <Input
+                  placeholder="URL"
+                  value={urlValue}
+                  style={{
+                    width: 150,
+                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                    border: '1px solid rgba(148, 163, 184, 0.15)',
+                    color: '#e2e8f0'
+                  }}
+                  onChange={(e) => {
+                    const newValue = `${statusValue},${e.target.value}`;
+                    setFieldValue(['filters', name, 'args'], newValue);
+                  }}
+                />
+              </div>
+            );
+          }
+
+          if (noParamsNeeded) {
+            return (
+              <Input
+                placeholder="(No parameters required)"
+                style={{
+                  width: 240,
+                  backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                  border: '1px solid rgba(148, 163, 184, 0.15)',
+                  color: '#e2e8f0'
+                }}
+                disabled
+              />
+            );
+          }
+
+          // Default: single input (StripPrefix, PrefixPath, SetPath, SetStatus, RequestSize)
+          return (
             <Input
-              placeholder="Name"
-              style={{ 
-                width: 110,
+              placeholder={t('routes.arguments')}
+              value={currentArgs}
+              style={{
+                width: 240,
                 backgroundColor: 'rgba(0, 0, 0, 0.3)',
                 border: '1px solid rgba(148, 163, 184, 0.15)',
                 color: '#e2e8f0'
               }}
-              onChange={(e) => {
-                const currentValue = form.getFieldValue(['filters', name, 'args']);
-                const newValue = `${e.target.value}:${currentValue?.split(':')[1] || ''}`;
-                form.setFieldValue(['filters', name, 'args'], newValue);
-              }}
+              onChange={(e) => setFieldValue(['filters', name, 'args'], e.target.value)}
             />
-            <span style={{ color: '#64748b' }}>:</span>
-            <Input
-              placeholder="Value"
-              style={{ 
-                width: 110,
-                backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                border: '1px solid rgba(148, 163, 184, 0.15)',
-                color: '#e2e8f0'
-              }}
-              onChange={(e) => {
-                const currentValue = form.getFieldValue(['filters', name, 'args']);
-                const newValue = `${currentValue?.split(':')[0] || ''}:${e.target.value}`;
-                form.setFieldValue(['filters', name, 'args'], newValue);
-              }}
-            />
-          </div>
-        ) : needsNameOnly.includes(filterType) ? (
-          // Single name input only
-          <Input 
-            placeholder="Header/Parameter Name" 
-            style={{ 
-              width: 240,
-              backgroundColor: 'rgba(0, 0, 0, 0.3)',
-              border: '1px solid rgba(148, 163, 184, 0.15)',
-              color: '#e2e8f0'
-            }} 
-          />
-        ) : isRewritePath ? (
-          // regexp,replacement format (comma separated) - SCG standard
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <Input
-              placeholder="Regexp"
-              style={{ 
-                width: 110,
-                backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                border: '1px solid rgba(148, 163, 184, 0.15)',
-                color: '#e2e8f0'
-              }}
-              onChange={(e) => {
-                const currentValue = form.getFieldValue(['filters', name, 'args']);
-                const newValue = `${e.target.value},${currentValue?.split(',')[1] || ''}`;
-                form.setFieldValue(['filters', name, 'args'], newValue);
-              }}
-            />
-            <span style={{ color: '#64748b' }}>→</span>
-            <Input
-              placeholder="Replacement"
-              style={{ 
-                width: 110,
-                backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                border: '1px solid rgba(148, 163, 184, 0.15)',
-                color: '#e2e8f0'
-              }}
-              onChange={(e) => {
-                const currentValue = form.getFieldValue(['filters', name, 'args']);
-                const newValue = `${currentValue?.split(',')[0] || ''},${e.target.value}`;
-                form.setFieldValue(['filters', name, 'args'], newValue);
-              }}
-            />
-          </div>
-        ) : isRedirectTo ? (
-          // status,url format (comma separated) - SCG standard
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <Select
-              placeholder="Status"
-              style={{ 
-                width: 80,
-                backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                border: '1px solid rgba(148, 163, 184, 0.15)'
-              }}
-              onChange={(value) => {
-                const currentValue = form.getFieldValue(['filters', name, 'args']);
-                const newValue = `${value},${currentValue?.split(',')[1] || ''}`;
-                form.setFieldValue(['filters', name, 'args'], newValue);
-              }}
-              suffixIcon={<span style={{ color: '#94a3b8', fontSize: '12px' }}>▼</span>}
-            >
-              <Select.Option value="301">301</Select.Option>
-              <Select.Option value="302">302</Select.Option>
-              <Select.Option value="303">303</Select.Option>
-              <Select.Option value="307">307</Select.Option>
-              <Select.Option value="308">308</Select.Option>
-            </Select>
-            <Input
-              placeholder="URL"
-              style={{ 
-                width: 150,
-                backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                border: '1px solid rgba(148, 163, 184, 0.15)',
-                color: '#e2e8f0'
-              }}
-              onChange={(e) => {
-                const currentValue = form.getFieldValue(['filters', name, 'args']);
-                const newValue = `${currentValue?.split(',')[0] || ''},${e.target.value}`;
-                form.setFieldValue(['filters', name, 'args'], newValue);
-              }}
-            />
-          </div>
-        ) : noParamsNeeded ? (
-          // No parameters needed
-          <Input 
-            placeholder="(No parameters required)" 
-            style={{ 
-              width: 240,
-              backgroundColor: 'rgba(0, 0, 0, 0.3)',
-              border: '1px solid rgba(148, 163, 184, 0.15)',
-              color: '#e2e8f0'
-            }} 
-            disabled 
-          />
-        ) : (
-          <Input 
-            placeholder={t('routes.arguments')} 
-            style={{ 
-              width: 240,
-              backgroundColor: 'rgba(0, 0, 0, 0.3)',
-              border: '1px solid rgba(148, 163, 184, 0.15)',
-              color: '#e2e8f0'
-            }} 
-            disabled={!filterType} 
-          />
-        )}
+          );
+        }}
       </Form.Item>
       {filterType && (
-        <Tooltip 
-          title={t(`plugin.${filterType}.detail`)} 
-          placement="top" 
+        <Tooltip
+          title={t(`plugin.${filterType}.detail`)}
+          placement="top"
           mouseEnterDelay={0}
-          overlayInnerStyle={{ 
+          overlayInnerStyle={{
             maxWidth: '350px',
             fontSize: '13px',
             lineHeight: '1.6',
@@ -485,17 +619,17 @@ const FilterItem: React.FC<{
           }}
           className="plugin-tooltip"
         >
-          <QuestionCircleOutlined 
+          <QuestionCircleOutlined
             className="plugin-help-icon"
           />
         </Tooltip>
       )}
       <Tooltip title={t('common.delete')}>
-        <Button 
-          type="text" 
-          onClick={() => onRemove(name)} 
+        <Button
+          type="text"
+          onClick={() => onRemove(name)}
           icon={<DeleteOutlined />}
-          style={{ 
+          style={{
             color: '#ef4444',
             opacity: 0.8,
             padding: '4px 8px',
@@ -925,23 +1059,92 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
       });
   };
 
-  const parsePredicateArgs = (type: string, args: string) => {
+  const parsePredicateArgs = (type: string, args: any) => {
+    // Defensive check: args may be undefined or null
+    if (!args || args === 'undefined' || args === 'null') {
+      switch (type) {
+        case 'Path':
+          return { pattern: '/**' };
+        case 'Host':
+          return { patterns: '' };  // SCG expects "patterns" (plural)
+        case 'Method':
+          return { 'methods.0': 'GET' };  // Indexed key for GATHER_LIST
+        case 'Header':
+          return { header: '', regexp: '.*' };
+        default:
+          return { value: '' };
+      }
+    }
+
+    // If args is already an object (from form components like Method Select), use it directly
+    if (typeof args === 'object' && !Array.isArray(args)) {
+      return args;
+    }
+
+    // args is a string, parse it to object format
+    const argsStr = String(args);
+
     switch (type) {
       case 'Path':
-        return { pattern: args || '/**' };
+        return { pattern: argsStr || '/**' };
       case 'Host':
-        return { pattern: args };
+        // SCG expects "patterns" (plural) for Host predicate
+        // Support both single pattern and comma-separated patterns
+        return { patterns: argsStr };
       case 'Method':
-        return { methods: args ? args.split(',') : ['GET'] };
+        // Split by comma and use indexed keys for GATHER_LIST mode
+        // Spring Cloud Gateway expects: {"methods.0": "GET", "methods.1": "POST"}
+        const methods = argsStr.split(',').map(m => m.trim()).filter(m => m);
+        const methodArgs: any = {};
+        methods.forEach((m, i) => {
+          methodArgs[`methods.${i}`] = m;
+        });
+        return methodArgs;
       case 'Header':
-        const parts = args.split(':');
-        return { name: parts[0], regexp: parts[1] || '.*' };
+        // Use indexOf to handle regexp containing colons
+        const colonIndex = argsStr.indexOf(':');
+        if (colonIndex === -1) {
+          return { header: argsStr, regexp: '.*' };
+        }
+        return { header: argsStr.substring(0, colonIndex), regexp: argsStr.substring(colonIndex + 1) || '.*' };
       default:
-        return { value: args };
+        return { value: argsStr };
     }
   };
 
   const parseFilterArgs = (type: string, args: string) => {
+    // Defensive check: args may be undefined or null
+    if (!args || args === 'undefined' || args === 'null') {
+      switch (type) {
+        case 'StripPrefix':
+          return { parts: 1 };
+        case 'PrefixPath':
+          return { prefix: '' };
+        case 'AddRequestHeader':
+        case 'SetRequestHeader':
+        case 'AddResponseHeader':
+        case 'SetResponseHeader':
+        case 'AddRequestParameter':
+          return { name: '', value: '' };
+        case 'RemoveRequestHeader':
+        case 'RemoveResponseHeader':
+        case 'RemoveRequestParameter':
+          return { name: '' };
+        case 'SetPath':
+          return { template: '' };
+        case 'RewritePath':
+          return { regexp: '', replacement: '' };
+        case 'SetStatus':
+          return { status: '' };
+        case 'RequestSize':
+          return { maxSize: '' };
+        case 'RedirectTo':
+          return { status: '302', url: '' };
+        default:
+          return { value: '' };
+      }
+    }
+
     switch (type) {
       case 'StripPrefix':
         return { parts: parseInt(args) || 1 };
@@ -951,28 +1154,44 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
       case 'SetRequestHeader':
       case 'AddResponseHeader':
       case 'SetResponseHeader':
-        const headerParts = args.split(':');
-        return { name: headerParts[0] || '', value: headerParts[1] || '' };
+        // Use indexOf to handle values containing colons (e.g., "name:value:with:colons")
+        const colonIndex = args.indexOf(':');
+        if (colonIndex === -1) {
+          return { name: args, value: '' };
+        }
+        return { name: args.substring(0, colonIndex), value: args.substring(colonIndex + 1) };
       case 'RemoveRequestHeader':
       case 'RemoveResponseHeader':
         return { name: args };
       case 'AddRequestParameter':
-        const paramParts = args.split(':');
-        return { name: paramParts[0] || '', value: paramParts[1] || '' };
+        // Use indexOf to handle values containing colons
+        const paramColonIndex = args.indexOf(':');
+        if (paramColonIndex === -1) {
+          return { name: args, value: '' };
+        }
+        return { name: args.substring(0, paramColonIndex), value: args.substring(paramColonIndex + 1) };
       case 'RemoveRequestParameter':
         return { name: args };
       case 'SetPath':
         return { template: args };
       case 'RewritePath':
-        const rewriteParts = args.split(',');
-        return { regexp: rewriteParts[0] || '', replacement: rewriteParts[1] || '' };
+        // Use indexOf to handle replacements containing commas
+        const commaIndex = args.indexOf(',');
+        if (commaIndex === -1) {
+          return { regexp: args, replacement: '' };
+        }
+        return { regexp: args.substring(0, commaIndex), replacement: args.substring(commaIndex + 1) };
       case 'SetStatus':
         return { status: args };
       case 'RequestSize':
         return { maxSize: args };
       case 'RedirectTo':
-        const redirectParts = args.split(',');
-        return { status: redirectParts[0] || '302', url: redirectParts[1] || '' };
+        // Use indexOf to handle URLs containing commas
+        const redirectCommaIndex = args.indexOf(',');
+        if (redirectCommaIndex === -1) {
+          return { status: args, url: '' };
+        }
+        return { status: args.substring(0, redirectCommaIndex), url: args.substring(redirectCommaIndex + 1) };
       default:
         return { value: args };
     }
@@ -984,11 +1203,29 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
       case 'Path':
         return args.pattern || '/**';
       case 'Host':
-        return args.pattern || '';
+        // SCG uses "patterns" (plural) - also support legacy "pattern" for backward compatibility
+        return args.patterns || args.pattern || '';
       case 'Method':
-        return Array.isArray(args.methods) ? args.methods.join(',') : '';
+        // Handle indexed keys format: methods.0=GET, methods.1=POST
+        // Also handle legacy format: methods=["GET","POST"] or methods="GET,POST"
+        if (Array.isArray(args.methods)) {
+          return args.methods.join(', ');
+        }
+        if (typeof args.methods === 'string') {
+          return args.methods;
+        }
+        // Extract from indexed keys (methods.0, methods.1, etc.)
+        const methodKeys = Object.keys(args).filter(k => k.startsWith('methods.'));
+        if (methodKeys.length > 0) {
+          const methods = methodKeys
+            .sort((a, b) => parseInt(a.split('.')[1]) - parseInt(b.split('.')[1]))
+            .map(k => args[k]);
+          return methods.join(', ');
+        }
+        return '';
       case 'Header':
-        return `${args.name || ''}:${args.regexp || ''}`;
+        // SCG uses "header" + "regexp" parameter names (not "name")
+        return `${args.header || args.name || ''}:${args.regexp || '.*'}`;
       default:
         return args.value || '';
     }
@@ -1074,6 +1311,8 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
       description: record.description,
       routingMode: record.mode || 'SINGLE',
       serviceId: serviceIdForForm || undefined,
+      serviceNamespace: record.serviceNamespace || '',
+      serviceGroup: record.serviceGroup || 'DEFAULT_GROUP',
       services: editServices,
       predicates: editPredicates,
       filters: editFilters,
@@ -1175,9 +1414,26 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
     const name = predicate.name;
     let value = '';
     if (name === 'Path') value = predicate.args?.pattern || '/**';
-    else if (name === 'Host') value = predicate.args?.pattern || '';
-    else if (name === 'Method') value = Array.isArray(predicate.args?.methods) ? predicate.args.methods.join(', ') : '';
-    else if (name === 'Header') value = predicate.args?.name || '';
+    else if (name === 'Host') value = predicate.args?.patterns || predicate.args?.pattern || '';
+    else if (name === 'Method') {
+      // Handle indexed keys format: methods.0=GET, methods.1=POST
+      const args = predicate.args || {};
+      if (Array.isArray(args.methods)) {
+        value = args.methods.join(', ');
+      } else if (typeof args.methods === 'string') {
+        value = args.methods;
+      } else {
+        // Extract from indexed keys (methods.0, methods.1, etc.)
+        const methodKeys = Object.keys(args).filter(k => k.startsWith('methods.'));
+        if (methodKeys.length > 0) {
+          const methods = methodKeys
+            .sort((a, b) => parseInt(a.split('.')[1]) - parseInt(b.split('.')[1]))
+            .map(k => args[k]);
+          value = methods.join(', ');
+        }
+      }
+    }
+    else if (name === 'Header') value = predicate.args?.header || predicate.args?.name || '';
     else value = JSON.stringify(predicate.args);
 
     const desc = t(`predicate.${name}.detail`, { defaultValue: '' });

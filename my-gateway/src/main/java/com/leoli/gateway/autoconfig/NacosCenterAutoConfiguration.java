@@ -42,16 +42,18 @@ public class NacosCenterAutoConfiguration {
         Properties props = new Properties();
         props.setProperty("serverAddr", serverAddr != null ? serverAddr : "127.0.0.1:8848");
 
-        // namespace is REQUIRED - gateway instance must have its own namespace for config isolation
-        if (namespace == null || namespace.isEmpty()) {
-            throw new IllegalStateException("Nacos namespace is REQUIRED for gateway instance. " +
-                    "Please set NACOS_NAMESPACE environment variable or spring.cloud.nacos.namespace property. " +
-                    "Gateway cannot start without namespace isolation.");
+        // namespace: empty/null means public namespace (default)
+        // For production, it's recommended to set a specific namespace for isolation
+        if (namespace != null && !namespace.isEmpty()) {
+            props.setProperty("namespace", namespace);
+            log.info("Initializing Nacos ConfigService with server: {} namespace: {}",
+                    props.getProperty("serverAddr"), namespace);
+        } else {
+            log.info("Initializing Nacos ConfigService with server: {} namespace: public (default)",
+                    props.getProperty("serverAddr"));
+            log.warn("No namespace configured - using public namespace. For production, " +
+                    "set NACOS_NAMESPACE for proper isolation.");
         }
-        props.setProperty("namespace", namespace);
-
-        log.info("Initializing Nacos ConfigService with server: {} namespace: {}",
-                props.getProperty("serverAddr"), namespace);
 
         this.configService = NacosFactory.createConfigService(props);
         log.info("Nacos ConfigService initialized successfully");
@@ -67,15 +69,16 @@ public class NacosCenterAutoConfiguration {
         Properties props = new Properties();
         props.setProperty("serverAddr", actualServerAddr);
 
-        // namespace is REQUIRED - gateway instance must have its own namespace for service discovery isolation
-        if (namespace == null || namespace.isEmpty()) {
-            throw new IllegalStateException("Nacos namespace is REQUIRED for gateway instance. " +
-                    "Please set NACOS_NAMESPACE environment variable or spring.cloud.nacos.namespace property. " +
-                    "Gateway cannot start without namespace isolation.");
+        // namespace: empty/null means public namespace (default)
+        // For production, it's recommended to set a specific namespace for isolation
+        if (namespace != null && !namespace.isEmpty()) {
+            props.setProperty("namespace", namespace);
+            log.info("Initializing Nacos NamingService with server: {} namespace: {}", actualServerAddr, namespace);
+        } else {
+            log.info("Initializing Nacos NamingService with server: {} namespace: public (default)", actualServerAddr);
+            log.warn("No namespace configured - using public namespace. For production, " +
+                    "set NACOS_NAMESPACE for proper isolation.");
         }
-        props.setProperty("namespace", namespace);
-
-        log.info("Initializing Nacos NamingService with server: {} namespace: {}", actualServerAddr, namespace);
 
         try {
             this.namingService = NacosFactory.createNamingService(props);
@@ -83,7 +86,7 @@ public class NacosCenterAutoConfiguration {
             return this.namingService;
         } catch (Exception e) {
             log.error("Failed to create Nacos NamingService. ServerAddr: {}, Namespace: {}. Error: {}",
-                    actualServerAddr, namespace, e.getMessage(), e);
+                    actualServerAddr, namespace != null ? namespace : "public", e.getMessage(), e);
             throw e;
         }
     }

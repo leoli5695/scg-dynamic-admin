@@ -34,6 +34,7 @@ public class ToolRegistry {
         registerFilterChainTools();
         registerAuditTools();
         registerPerformanceTools();
+        registerAiFilterAnalysisTools();
 
         log.info("ToolRegistry initialized with {} tools: {}", tools.size(), tools.keySet());
     }
@@ -627,6 +628,63 @@ public class ToolRegistry {
             "filter-chain",
             false,  // 写操作
             true    // 需要确认
+        ));
+    }
+
+    // ===================== AI 增强 Filter 分析工具 =====================
+
+    private void registerAiFilterAnalysisTools() {
+        // analyze_filter_anomaly - 使用AI异常检测算法分析Filter链性能异常
+        tools.put("analyze_filter_anomaly", ToolDefinition.create(
+            "analyze_filter_anomaly",
+            "使用 AI 异常检测算法分析 Filter 链性能异常。综合分析执行耗时突变、错误率异常、健康评分变化，识别异常 Filter 并给出根本原因分析和修复建议。",
+            Map.of(
+                "instanceId", Map.of(
+                    "type", "string",
+                    "description", "网关实例ID。"
+                ),
+                "analysisMode", Map.of(
+                    "type", "string",
+                    "description", "分析模式：quick(快速诊断，最近1小时)、deep(深度分析，最近24小时)、realtime(实时异常检测)。",
+                    "default", "quick",
+                    "enum", List.of("quick", "deep", "realtime")
+                ),
+                "focusFilters", Map.of(
+                    "type", "array",
+                    "description", "重点关注特定Filter列表（可选）。",
+                    "items", Map.of("type", "string")
+                )
+            ),
+            List.of("instanceId"),
+            "ai-filter-analysis",
+            true
+        ));
+
+        // predict_filter_performance - 预测Filter链未来性能趋势
+        tools.put("predict_filter_performance", ToolDefinition.create(
+            "predict_filter_performance",
+            "基于历史数据和 AI 模型预测 Filter 未来性能趋势。分析执行耗时、错误率、吞吐量的历史变化规律，预测未来性能瓶颈和潜在风险，给出预防性优化建议。",
+            Map.of(
+                "instanceId", Map.of(
+                    "type", "string",
+                    "description", "网关实例ID。"
+                ),
+                "predictionWindow", Map.of(
+                    "type", "string",
+                    "description", "预测窗口：1h(1小时)、6h(6小时)、24h(24小时)、7d(7天)。",
+                    "default", "1h",
+                    "enum", List.of("1h", "6h", "24h", "7d")
+                ),
+                "metricsToPredict", Map.of(
+                    "type", "array",
+                    "description", "预测指标列表（可选）：avgDuration(平均耗时)、errorRate(错误率)、throughput(吞吐量)。",
+                    "default", List.of("avgDuration", "errorRate"),
+                    "items", Map.of("type", "string")
+                )
+            ),
+            List.of("instanceId"),
+            "ai-filter-analysis",
+            true
         ));
     }
 

@@ -26,7 +26,7 @@ public class DistributedRateLimiter {
     @Autowired(required = false)
     private StringRedisTemplate redisTemplate;
 
-    @Autowired
+    @Autowired(required = false)
     private DefaultRedisScript<Long> rateLimitScript;
 
     /**
@@ -44,9 +44,9 @@ public class DistributedRateLimiter {
      * @return RateLimitResult with detailed status
      */
     public RateLimitResult tryAcquireWithFallback(String key, int maxRequests, int burstCapacity, long windowSizeMs) {
-        if (redisTemplate == null) {
-            log.debug("Redis template not available, should fallback to local limiter");
-            return RateLimitResult.fallback("Redis template not configured");
+        if (redisTemplate == null || rateLimitScript == null) {
+            log.debug("Redis not fully configured, should fallback to local limiter");
+            return RateLimitResult.fallback("Redis not configured");
         }
 
         try {
@@ -100,7 +100,7 @@ public class DistributedRateLimiter {
      * Check if Redis is available.
      */
     public boolean isRedisAvailable() {
-        if (redisTemplate == null) {
+        if (redisTemplate == null || rateLimitScript == null) {
             return false;
         }
 

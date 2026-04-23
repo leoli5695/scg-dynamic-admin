@@ -34,7 +34,8 @@ import {
   CloseCircleOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
-import ReactMarkdown from "react-markdown";
+import AiReportRenderer from "../components/AiReportRenderer";
+import "../styles/ai-report.css";
 import { useTranslation } from "react-i18next";
 
 const { Title, Text, Paragraph } = Typography;
@@ -633,7 +634,7 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
       <Spin spinning={analysisLoading}>
         {analysisResult ? (
           <div style={{ color: "rgba(255,255,255,0.85)" }}>
-            <ReactMarkdown>{analysisResult}</ReactMarkdown>
+            <AiReportRenderer content={analysisResult} />
           </div>
         ) : (
           <Alert type="info" message={t("stress_test.waiting_analysis")} showIcon />

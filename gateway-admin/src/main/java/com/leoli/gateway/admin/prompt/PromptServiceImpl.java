@@ -338,9 +338,12 @@ public class PromptServiceImpl implements PromptService {
 
     @Override
     public boolean isValidIntent(String intent) {
-        // Check against domain prompts
+        // Check against domain prompts (including strategyTest from database)
         return getPromptsByCategory("domain", null).keySet().stream()
-            .anyMatch(k -> k.contains(intent)) || "general".equals(intent) || "config".equals(intent);
+            .anyMatch(k -> k.contains(intent))
+            || "strategyTest".equals(intent)  // 策略测试指南（数据库动态加载）
+            || "general".equals(intent)
+            || "config".equals(intent);
     }
 
     @Override
@@ -354,6 +357,7 @@ public class PromptServiceImpl implements PromptService {
                 intents.add(parts[1]);
             }
         }
+        intents.add("strategyTest");  // 策略测试指南（数据库动态加载）
         intents.add("general");
         intents.add("config");
         return new ArrayList<>(intents);
