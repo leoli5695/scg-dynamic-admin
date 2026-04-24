@@ -138,6 +138,9 @@ public class GatewayInstanceEntity {
     @Column(name = "service_name", length = 255)
     private String serviceName;  // K8s Service name
 
+    @Column(name = "service_type", length = 20)
+    private String serviceType;  // K8s Service type: NodePort, LoadBalancer, ClusterIP
+
     @Column(name = "node_port")
     private Integer nodePort;  // K8s NodePort
 
@@ -193,7 +196,7 @@ public class GatewayInstanceEntity {
 
     /**
      * Get the effective access URL with priority.
-     * Priority: manualAccessUrl > discoveredAccessUrl > reportedAccessUrl > nodeIp:nodePort
+     * Priority: manualAccessUrl > discoveredAccessUrl > service-type-based URL > reportedAccessUrl
      *
      * @return the effective access URL for this gateway instance
      */
@@ -206,13 +209,21 @@ public class GatewayInstanceEntity {
         if (discoveredAccessUrl != null && !discoveredAccessUrl.isEmpty()) {
             return discoveredAccessUrl;
         }
-        // 3. Heartbeat reported (local dev, ECS direct)
+        // 3. Service-type-based URL
+        if (serviceType != null && nodeIp != null && !nodeIp.isEmpty()) {
+            if ("NodePort".equals(serviceType) && nodePort != null) {
+                return "http://" + nodeIp + ":" + nodePort;
+            }
+            if ("LoadBalancer".equals(serviceType)) {
+                // LoadBalancer IP should be in discoveredAccessUrl, fallback to nodePort
+                if (nodePort != null) {
+                    return "http://" + nodeIp + ":" + nodePort;
+                }
+            }
+        }
+        // 4. Heartbeat reported (Pod internal IP, lowest priority)
         if (reportedAccessUrl != null && !reportedAccessUrl.isEmpty()) {
             return reportedAccessUrl;
-        }
-        // 4. Default: nodeIp:nodePort (for NodePort service access)
-        if (nodeIp != null && !nodeIp.isEmpty() && nodePort != null) {
-            return "http://" + nodeIp + ":" + nodePort;
         }
         return null;
     }

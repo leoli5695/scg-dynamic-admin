@@ -284,6 +284,33 @@ public class GatewayInstanceService {
     }
 
     /**
+     * Delete Nacos namespace.
+     */
+    private void deleteNacosNamespace(String namespaceId) {
+        if (namespaceId == null || namespaceId.isEmpty()) {
+            log.info("No Nacos namespace to delete");
+            return;
+        }
+
+        try {
+            String nacosApiUrl = nacosServerAddr;
+            if (nacosApiUrl == null || nacosApiUrl.isEmpty()) {
+                nacosApiUrl = "localhost:8848";
+            }
+
+            String url = String.format("http://%s/nacos/v1/console/namespaces?namespaceId=%s",
+                    nacosApiUrl,
+                    URLEncoder.encode(namespaceId, StandardCharsets.UTF_8));
+
+            log.info("Deleting Nacos namespace: {}", namespaceId);
+            restTemplate.delete(url);
+            log.info("Nacos namespace {} deleted successfully", namespaceId);
+        } catch (Exception e) {
+            log.warn("Failed to delete Nacos namespace {}: {}", namespaceId, e.getMessage());
+        }
+    }
+
+    /**
      * Get all instances.
      */
     public List<GatewayInstanceEntity> getAllInstances() {
@@ -308,7 +335,7 @@ public class GatewayInstanceService {
     }
 
     /**
-     * Refresh service info (nodePort, nodeIp) from Kubernetes.
+     * Refresh service info (serviceType, nodePort, nodeIp) from Kubernetes.
      * Falls back to database values if K8s query fails.
      */
     private void refreshServiceInfoFromK8s(GatewayInstanceEntity instance) {
@@ -331,10 +358,16 @@ public class GatewayInstanceService {
                     instance.getNamespace()
             ).execute();
 
-            if (service != null && service.getSpec() != null && service.getSpec().getPorts() != null) {
-                Integer nodePort = service.getSpec().getPorts().get(0).getNodePort();
-                if (nodePort != null) {
-                    instance.setNodePort(nodePort);
+            if (service != null && service.getSpec() != null) {
+                String serviceType = service.getSpec().getType();
+                if (serviceType != null) {
+                    instance.setServiceType(serviceType);
+                }
+                if (service.getSpec().getPorts() != null) {
+                    Integer nodePort = service.getSpec().getPorts().get(0).getNodePort();
+                    if (nodePort != null) {
+                        instance.setNodePort(nodePort);
+                    }
                 }
             }
 
@@ -344,8 +377,8 @@ public class GatewayInstanceService {
                 instance.setNodeIp(nodeIp);
             }
 
-            log.debug("Refreshed service info for instance {}: nodePort={}, nodeIp={}",
-                    instance.getInstanceId(), instance.getNodePort(), instance.getNodeIp());
+            log.debug("Refreshed service info for instance {}: serviceType={}, nodePort={}, nodeIp={}",
+                    instance.getInstanceId(), instance.getServiceType(), instance.getNodePort(), instance.getNodeIp());
 
         } catch (Exception e) {
             // K8s query failed, keep database values
@@ -551,10 +584,14 @@ public class GatewayInstanceService {
             V1Service createdService = coreApi.createNamespacedService(namespace, service).execute();
             log.info("Created service: {}", createdService.getMetadata().getName());
 
-            // Get NodePort
-            if (createdService.getSpec() != null && createdService.getSpec().getPorts() != null) {
-                Integer nodePort = createdService.getSpec().getPorts().get(0).getNodePort();
-                instance.setNodePort(nodePort);
+            // Get Service type and NodePort
+            if (createdService.getSpec() != null) {
+                String serviceType = createdService.getSpec().getType();
+                instance.setServiceType(serviceType);
+                if (createdService.getSpec().getPorts() != null) {
+                    Integer nodePort = createdService.getSpec().getPorts().get(0).getNodePort();
+                    instance.setNodePort(nodePort);
+                }
             }
 
             // Get Node IP for external access URL
@@ -760,6 +797,9 @@ public class GatewayInstanceService {
 
         // 2. Delete all configs from Nacos namespace
         deleteConfigsFromNacos(nacosNamespace);
+
+        // 2.1 Delete Nacos namespace itself
+        deleteNacosNamespace(nacosNamespace);
 
         // 3. Delete from Kubernetes
         try {
