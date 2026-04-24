@@ -1,6 +1,6 @@
 # Gateway Error Codes
 
-> Gateway 统一响应格式与错误码规范
+> Gateway unified response format and error code specification
 
 ---
 
@@ -8,14 +8,14 @@
 
 ### Standard Error Response
 
-所有网关错误响应采用统一 JSON 格式：
+All gateway error responses use a unified JSON format:
 
 ```json
 {
     "httpStatus": 429,
     "code": 52901,
     "error": "Rate Limit Exceeded",
-    "message": "请求频率超限",
+    "message": "Request rate limit exceeded",
     "data": null
 }
 ```
@@ -24,18 +24,18 @@
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `httpStatus` | int | HTTP 状态码（如 400, 401, 429, 503） |
-| `code` | int | 业务错误码，用于程序化处理 |
-| `error` | string | 错误类型（英文简短描述） |
-| `message` | string | 详细错误信息（中文描述） |
-| `data` | null | 错误响应始终为 null |
+| `httpStatus` | int | HTTP status code (e.g., 400, 401, 429, 503) |
+| `code` | int | Business error code for programmatic handling |
+| `error` | string | Error type (short English description) |
+| `message` | string | Detailed error message |
+| `data` | null | Error response always null |
 
 ### Extended Fields (Context-specific)
 
-某些错误会包含额外字段：
+Some errors include additional fields:
 
 ```json
-// Rate Limit 错误
+// Rate Limit error
 {
     "httpStatus": 429,
     "code": 52901,
@@ -47,7 +47,7 @@
     "retryAfter": "1s"
 }
 
-// Circuit Breaker 错误
+// Circuit Breaker error
 {
     "httpStatus": 503,
     "code": 55301,
@@ -58,23 +58,23 @@
 }
 ```
 
-**retryAfter 格式说明：**
-- `"1s"` - 1秒
-- `"60s"` - 60秒
-- `"2min"` - 2分钟
-- `"1h"` - 1小时
+**retryAfter format explanation:**
+- `"1s"` - 1 second
+- `"60s"` - 60 seconds
+- `"2min"` - 2 minutes
+- `"1h"` - 1 hour
 
 ---
 
 ## Error Code Format
 
-业务错误码格式：`GW{Category}{Sequence}`
+Business error code format: `GW{Category}{Sequence}`
 
-- **Category**: 错误类别
+- **Category**: Error category
   - `1` = Client Error (4xx)
   - `2` = Server Error (5xx)
   - `3` = Gateway Error (5xx)
-- **Sequence**: 序号 001-999
+- **Sequence**: Sequence number 001-999
 
 ---
 
@@ -84,53 +84,53 @@
 
 | Code | Error | Description |
 |------|-------|-------------|
-| 40001 | Bad Request | 请求参数错误 |
-| 40002 | Invalid Parameter | 参数校验失败 |
-| 40003 | Missing Parameter | 缺少必要参数 |
+| 40001 | Bad Request | Invalid request parameters |
+| 40002 | Invalid Parameter | Parameter validation failed |
+| 40003 | Missing Parameter | Required parameter missing |
 
 ### 401 - Unauthorized
 
 | Code | Error | Description |
 |------|-------|-------------|
-| 40101 | Unauthorized | 未授权访问 |
-| 40102 | Invalid Token | 无效的令牌 |
-| 40103 | Token Expired | 令牌已过期 |
-| 40104 | Invalid Credentials | 认证凭据无效 |
-| 40105 | Invalid API Key | API密钥无效 |
-| 40106 | Invalid Signature | 签名验证失败（HMAC） |
+| 40101 | Unauthorized | Unauthorized access |
+| 40102 | Invalid Token | Invalid token |
+| 40103 | Token Expired | Token has expired |
+| 40104 | Invalid Credentials | Invalid authentication credentials |
+| 40105 | Invalid API Key | Invalid API key |
+| 40106 | Invalid Signature | Signature verification failed (HMAC) |
 
 ### 403 - Forbidden
 
 | Code | Error | Description |
 |------|-------|-------------|
-| 40301 | Forbidden | 禁止访问 |
-| 40302 | Access Denied | 权限不足 |
-| 40303 | IP Blocked | IP地址被禁止访问 |
-| 40304 | Rate Limited | 请求过于频繁 |
+| 40301 | Forbidden | Access forbidden |
+| 40302 | Access Denied | Insufficient permissions |
+| 40303 | IP Blocked | IP address blocked |
+| 40304 | Rate Limited | Too many requests |
 
 ### 404 - Not Found
 
 | Code | Error | Description |
 |------|-------|-------------|
-| 40401 | Not Found | 资源不存在 |
-| 40402 | Route Not Found | 路由不存在 |
-| 40403 | Service Not Found | 服务不存在 |
+| 40401 | Not Found | Resource not found |
+| 40402 | Route Not Found | Route not found |
+| 40403 | Service Not Found | Service not found |
 
 ### 405 - Method Not Allowed
 
 | Code | Error | Description |
 |------|-------|-------------|
-| 40501 | Method Not Allowed | 请求方法不允许 |
+| 40501 | Method Not Allowed | Request method not allowed |
 
 ### 422 - Unprocessable Entity
 
 | Code | Error | Description |
 |------|-------|-------------|
-| 42201 | Validation Failed | 数据校验失败 |
-| 42202 | Invalid Request Body | 请求体格式错误 |
-| 42203 | Schema Validation Failed | Schema校验失败 |
-| 42204 | XSS Attack Detected | 检测到XSS攻击 |
-| 42205 | SQL Injection Detected | 检测到SQL注入攻击 |
+| 42201 | Validation Failed | Data validation failed |
+| 42202 | Invalid Request Body | Invalid request body format |
+| 42203 | Schema Validation Failed | Schema validation failed |
+| 42204 | XSS Attack Detected | XSS attack detected |
+| 42205 | SQL Injection Detected | SQL injection attack detected |
 
 ---
 
@@ -140,31 +140,31 @@
 
 | Code | Error | Description |
 |------|-------|-------------|
-| 50001 | Internal Server Error | 服务器内部错误 |
-| 50002 | Configuration Error | 配置错误 |
-| 50003 | Serialization Error | 序列化错误 |
+| 50001 | Internal Server Error | Internal server error |
+| 50002 | Configuration Error | Configuration error |
+| 50003 | Serialization Error | Serialization error |
 
 ### 502 - Bad Gateway
 
 | Code | Error | Description |
 |------|-------|-------------|
-| 50201 | Upstream Error | 上游服务错误 |
+| 50201 | Upstream Error | Upstream service error |
 
 ### 503 - Service Unavailable
 
 | Code | Error | Description |
 |------|-------|-------------|
-| 50301 | Service Unavailable | 服务不可用 |
-| 50302 | No Healthy Instances | 无可用服务实例 |
-| 50303 | Connection Refused | 连接被拒绝 |
-| 55301 | Circuit Breaker Open | 熔断器已开启 |
+| 50301 | Service Unavailable | Service unavailable |
+| 50302 | No Healthy Instances | No available service instances |
+| 50303 | Connection Refused | Connection refused |
+| 55301 | Circuit Breaker Open | Circuit breaker is open |
 
 ### 504 - Gateway Timeout
 
 | Code | Error | Description |
 |------|-------|-------------|
-| 50401 | Gateway Timeout | 网关超时 |
-| 50402 | Upstream Timeout | 上游服务超时 |
+| 50401 | Gateway Timeout | Gateway timeout |
+| 50402 | Upstream Timeout | Upstream service timeout |
 
 ---
 
@@ -174,46 +174,46 @@
 
 | Code | HTTP Status | Error | Description | Extra Fields |
 |------|-------------|-------|-------------|--------------|
-| 52901 | 429 | Rate Limit Exceeded | 请求频率超限 | `limit`, `remaining`, `retryAfter` |
-| 52902 | 429 | Burst Limit Exceeded | 突发流量超限 | `limit`, `remaining`, `retryAfter` |
+| 52901 | 429 | Rate Limit Exceeded | Request rate limit exceeded | `limit`, `remaining`, `retryAfter` |
+| 52902 | 429 | Burst Limit Exceeded | Burst traffic limit exceeded | `limit`, `remaining`, `retryAfter` |
 
 ### Circuit Breaker (553xx)
 
 | Code | HTTP Status | Error | Description | Extra Fields |
 |------|-------------|-------|-------------|--------------|
-| 55301 | 503 | Circuit Breaker Open | 熔断器已开启 | `routeId` |
+| 55301 | 503 | Circuit Breaker Open | Circuit breaker is open | `routeId` |
 
 ### Transform Errors (550xx)
 
 | Code | HTTP Status | Error | Description |
 |------|-------------|-------|-------------|
-| 55001 | 500 | Request Transform Error | 请求转换失败 |
-| 55002 | 500 | Response Transform Error | 响应转换失败 |
+| 55001 | 500 | Request Transform Error | Request transformation failed |
+| 55002 | 500 | Response Transform Error | Response transformation failed |
 
 ### Cache Errors (550xx)
 
 | Code | HTTP Status | Error | Description |
 |------|-------------|-------|-------------|
-| 55003 | 500 | Cache Error | 缓存错误 |
+| 55003 | 500 | Cache Error | Cache error |
 
 ### SSL/TLS Errors (550xx)
 
 | Code | HTTP Status | Error | Description |
 |------|-------------|-------|-------------|
-| 55004 | 500 | SSL Error | SSL证书错误 |
-| 55005 | 500 | Certificate Expired | 证书已过期 |
+| 55004 | 500 | SSL Error | SSL certificate error |
+| 55005 | 500 | Certificate Expired | Certificate has expired |
 
 ---
 
 ## Rate Limit Response Headers
 
-限流响应包含以下标准 HTTP 头：
+Rate limit responses include standard HTTP headers:
 
 | Header | Description |
 |--------|-------------|
-| `X-RateLimit-Limit` | 限流阈值（请求数） |
-| `X-RateLimit-Remaining` | 剩余可用请求数 |
-| `Retry-After` | 重试等待时间（秒） |
+| `X-RateLimit-Limit` | Rate limit threshold (request count) |
+| `X-RateLimit-Remaining` | Remaining available requests |
+| `Retry-After` | Retry wait time (seconds) |
 
 ---
 
@@ -265,8 +265,8 @@ switch (error) {
 
 | File | Description |
 |------|-------------|
-| `ErrorCode.java` | 错误码枚举定义 |
-| `GatewayException.java` | 网关异常基类 |
-| `RateLimitException.java` | 限流异常 |
-| `GatewayResponseHelper.java` | 响应构建工具 |
-| `ScgGlobalExceptionHandler.java` | 全局异常处理器 |
+| `ErrorCode.java` | Error code enum definition |
+| `GatewayException.java` | Gateway exception base class |
+| `RateLimitException.java` | Rate limit exception |
+| `GatewayResponseHelper.java` | Response builder utility |
+| `ScgGlobalExceptionHandler.java` | Global exception handler |

@@ -76,13 +76,13 @@ Gateway reads instance attributes directly from Nacos, allowing users to control
 
 | Attribute | Nacos Console | Gateway Behavior |
 |-----------|---------------|------------------|
-| **enabled** | 下线按钮 / Instance enabled checkbox | Disabled instances are excluded from load balancing |
+| **enabled** | Offline button / Instance enabled checkbox | Disabled instances are excluded from load balancing |
 | **healthy** | Health check status (auto) | Unhealthy instances filtered by Nacos, not returned to Gateway |
-| **weight** | 权重输入框 (0-100) | Used for weighted round-robin load balancing |
+| **weight** | Weight input (0-100) | Used for weighted round-robin load balancing |
 
 **Use Cases:**
 
-1. **Emergency Instance Removal**: Click "下线" in Nacos Console → Instance immediately excluded from routing
+1. **Emergency Instance Removal**: Click "Offline" in Nacos Console → Instance immediately excluded from routing
 2. **Traffic Weight Adjustment**: Adjust weight (e.g., 1 → 10) → More traffic routed to that instance
 3. **Gradual Rollout**: Set new instance weight to 1, gradually increase to 100
 

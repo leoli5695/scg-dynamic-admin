@@ -137,7 +137,7 @@ Response includes:
     "latencyChange": 50,
     "heapUsageChange": 5
   },
-  "summary": "系统健康度较上次下降 5 分，需关注"
+  "summary": "System health score decreased by 5 points from last check, needs attention"
 }
 ```
 
