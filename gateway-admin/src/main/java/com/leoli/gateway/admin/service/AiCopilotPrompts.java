@@ -2330,6 +2330,18 @@ public class AiCopilotPrompts {
         KEYWORD_WEIGHTS.add(new KeywordWeight("benchmark", "performance", 10));
         KEYWORD_WEIGHTS.add(new KeywordWeight("性能测试", "performance", 10));
 
+        // 压测历史相关（指向test意图，触发压测历史查询工具）
+        KEYWORD_WEIGHTS.add(new KeywordWeight("压测历史", "test", 10));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("压测记录", "test", 10));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("压测结果", "test", 10));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("最近压测", "test", 10));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("stress test history", "test", 10));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("load test history", "test", 10));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("压测数据", "test", 8));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("压测报告", "test", 8));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("压测分析", "test", 8));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("stress test result", "test", 8));
+
         // === 中权重关键词（权重=5）===
         // 路由相关
         KEYWORD_WEIGHTS.add(new KeywordWeight("路由", "route", 5));

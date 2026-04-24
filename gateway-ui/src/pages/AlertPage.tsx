@@ -321,14 +321,18 @@ const AlertPage: React.FC<AlertPageProps> = ({ instanceId }) => {
   const handleClearHistory = async () => {
     try {
       const params = instanceId ? `?instanceId=${instanceId}` : '';
+      console.log('Clearing alert history with params:', params, 'instanceId:', instanceId);
       const res = await api.delete(`/api/alerts/history${params}`);
+      console.log('Clear history response:', res.data);
       if (res.data.code === 200) {
         message.success(res.data.message || 'History cleared');
+        setHistory([]);
         loadHistory();
       } else {
         message.error(res.data.message || 'Failed to clear history');
       }
     } catch (e: any) {
+      console.error('Clear history error:', e);
       message.error(e.message || 'Failed to clear history');
     }
   };

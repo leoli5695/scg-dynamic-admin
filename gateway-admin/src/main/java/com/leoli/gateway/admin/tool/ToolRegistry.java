@@ -526,6 +526,50 @@ public class ToolRegistry {
             "test",
             true
         ));
+
+        // list_stress_test_history - 查询压测历史记录列表
+        tools.put("list_stress_test_history", ToolDefinition.create(
+            "list_stress_test_history",
+            "查询压力测试历史记录列表，包含测试ID、名称、状态、目标URL、并发数、总请求数、实际请求数、响应时间、错误率、开始/结束时间等。用于对比历次压测表现、排查性能问题趋势。当用户提到'压测历史'、'压测记录'、'压测结果'、'最近压测'等关键词时应调用此工具。",
+            Map.of(
+                "instanceId", Map.of(
+                    "type", "string",
+                    "description", "网关实例ID（可选）。不提供时返回所有实例的压测记录。"
+                ),
+                "status", Map.of(
+                    "type", "string",
+                    "description", "状态过滤（可选）：RUNNING(运行中)、COMPLETED(已完成)、STOPPED(已停止)。不提供时返回所有状态。",
+                    "enum", List.of("RUNNING", "COMPLETED", "STOPPED")
+                ),
+                "limit", Map.of(
+                    "type", "integer",
+                    "description", "返回记录数量（默认10条，最多50条）。",
+                    "default", 10
+                ),
+                "minRequests", Map.of(
+                    "type", "integer",
+                    "description", "最小请求数过滤（可选）。用于过滤有意义的压测记录，忽略测试性小规模压测。"
+                )
+            ),
+            List.of(),
+            "test",
+            true
+        ));
+
+        // get_stress_test_detail - 获取单个压测详细结果
+        tools.put("get_stress_test_detail", ToolDefinition.create(
+            "get_stress_test_detail",
+            "获取单个压力测试的详细结果，包括完整的配置参数、响应时间分布、错误分布、时间线数据等。用于深入分析特定压测的表现。",
+            Map.of(
+                "testId", Map.of(
+                    "type", "integer",
+                    "description", "压力测试ID。"
+                )
+            ),
+            List.of("testId"),
+            "test",
+            true
+        ));
     }
 
     // ===================== Filter Chain 分析类工具 =====================

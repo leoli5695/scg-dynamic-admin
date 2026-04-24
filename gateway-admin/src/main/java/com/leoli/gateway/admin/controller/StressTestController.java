@@ -4,9 +4,12 @@ import com.leoli.gateway.admin.model.StressTest;
 import com.leoli.gateway.admin.service.StressTestService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -182,6 +185,109 @@ public class StressTestController {
                     "success", true,
                     "testId", test.getId(),
                     "status", test.getStatus()
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * Export stress test report as Markdown.
+     */
+    @GetMapping("/{testId}/export")
+    public ResponseEntity<byte[]> exportReport(
+            @PathVariable Long testId,
+            @RequestParam(defaultValue = "markdown") String format) {
+
+        log.info("Exporting stress test report: testId={}, format={}", testId, format);
+
+        try {
+            String content = stressTestService.exportAsMarkdown(testId);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.TEXT_MARKDOWN);
+            headers.setContentDispositionFormData("attachment", 
+                    "stress-test-report-" + testId + ".md");
+
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(content.getBytes(StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            log.error("Export failed", e);
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    /**
+     * Create a share link for the stress test report.
+     */
+    @PostMapping("/{testId}/share")
+    public ResponseEntity<Map<String, Object>> createShareLink(
+            @PathVariable Long testId,
+            @RequestParam(required = false) Integer expiresIn) {
+
+        log.info("Creating share link for test: {}", testId);
+
+        try {
+            String shareId = stressTestService.createShareLink(testId, expiresIn);
+
+            String shareUrl = "/api/stress-test/share/" + shareId;
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "shareId", shareId,
+                    "shareUrl", shareUrl,
+                    "expiresIn", expiresIn != null ? expiresIn + " hours" : "permanent"
+            ));
+        } catch (Exception e) {
+            log.error("Failed to create share link", e);
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * Get shared stress test report.
+     */
+    @GetMapping("/share/{shareId}")
+    public ResponseEntity<Map<String, Object>> getSharedReport(@PathVariable String shareId) {
+        log.info("Accessing shared report: {}", shareId);
+
+        try {
+            StressTest test = stressTestService.getSharedReport(shareId);
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "test", test,
+                    "markdown", stressTestService.exportAsMarkdown(test.getId())
+            ));
+        } catch (Exception e) {
+            log.error("Failed to get shared report", e);
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * Delete a share link.
+     */
+    @DeleteMapping("/share/{shareId}")
+    public ResponseEntity<Map<String, Object>> deleteShareLink(@PathVariable String shareId) {
+        log.info("Deleting share link: {}", shareId);
+
+        try {
+            stressTestService.deleteShareLink(shareId);
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Share link deleted"
             ));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of(

@@ -16,4 +16,6 @@ public interface StressTestRepository extends JpaRepository<StressTest, Long> {
     List<StressTest> findByStatus(String status);
 
     List<StressTest> findByInstanceIdAndStatus(String instanceId, String status);
+
+    List<StressTest> findAllByOrderByCreatedAtDesc();
 }

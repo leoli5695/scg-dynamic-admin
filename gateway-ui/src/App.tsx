@@ -31,6 +31,7 @@ const InstancesPage = lazy(() => import("./pages/InstancesPage"));
 const InstanceCreatePage = lazy(() => import("./pages/InstanceCreatePage"));
 const InstanceDetailPage = lazy(() => import("./pages/InstanceDetailPage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
+const StressTestSharePage = lazy(() => import("./pages/StressTestSharePage"));
 
 // Loading fallback component
 const PageLoadingFallback = () => (
@@ -163,6 +164,24 @@ const App: React.FC = () => {
 
   // Check if we're in instance detail page
   const isInstanceDetail = location.pathname.startsWith("/instances/") && location.pathname !== "/instances";
+
+  // Check if we're in share page (no login required)
+  const isSharePage = location.pathname.startsWith("/share/");
+
+  // Share page - no login required, no sidebar
+  if (isSharePage) {
+    const shareId = location.pathname.replace("/share/", "");
+    return (
+      <ConfigProvider
+        theme={customTheme}
+        locale={i18n.language?.startsWith("zh") ? zhCN : enUS}
+      >
+        <Suspense fallback={<PageLoadingFallback />}>
+          <StressTestSharePage shareId={shareId} />
+        </Suspense>
+      </ConfigProvider>
+    );
+  }
 
   return (
     <ConfigProvider

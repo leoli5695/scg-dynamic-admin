@@ -6,7 +6,7 @@ import {
 import {
   DashboardOutlined, CloudServerOutlined, ApiOutlined,
   ClockCircleOutlined, WarningOutlined, CheckCircleOutlined, CloseCircleOutlined,
-  DashboardFilled, FundOutlined, LineChartOutlined, RobotOutlined
+  DashboardFilled, FundOutlined, LineChartOutlined, RobotOutlined, DatabaseOutlined
 } from '@ant-design/icons';
 import api, { createCancelToken, isCancel } from '../utils/api';
 import { useTranslation } from 'react-i18next';
@@ -22,10 +22,23 @@ interface MetricsData {
   httpRequests: { requestsPerSecond: number; avgResponseTimeMs: number; errorRate: number; };
   cpu: { systemUsage: number; processUsage: number; availableProcessors: number; };
   gateway: { activeConnections: number; routeCount: number; };
+  connectionPool: {
+    activeConnections: number;
+    idleConnections: number;
+    pendingThreads: number;
+    maxConnections: number;
+    minConnections: number;
+    usagePercent: number;
+    healthStatus: string;
+  };
 }
 interface HistoryPoint { timestamp: number; value: number; }
 interface HistoryData {
-  heapMemory: HistoryPoint[]; cpuUsage: HistoryPoint[]; requestRate: HistoryPoint[];
+  heapMemory: HistoryPoint[]; 
+  systemCpuUsage: HistoryPoint[]; 
+  processCpuUsage: HistoryPoint[]; 
+  cpuUsage: HistoryPoint[];
+  requestRate: HistoryPoint[];
   responseTime: HistoryPoint[]; gcTime: HistoryPoint[]; threadCount: HistoryPoint[];
 }
 
@@ -355,6 +368,63 @@ const MonitorPage: React.FC<MonitorPageProps> = ({ instanceId }) => {
             <Statistic title={t('monitor.available_processors')} value={metrics?.cpu?.availableProcessors || 0} valueStyle={{ fontSize: 16 }} />
           </Card>
         </Col>
+        <Col xs={24} sm={12} lg={8}>
+          <Card title={<Space><DatabaseOutlined />{t('monitor.connection_pool')}</Space>} className="metric-card">
+            <div style={{ marginBottom: 16 }}>
+              <Text type="secondary">{t('monitor.pool_usage')}</Text>
+              <Progress 
+                percent={metrics?.connectionPool?.usagePercent || 0} 
+                status={(metrics?.connectionPool?.usagePercent || 0) > 80 ? 'exception' : 'normal'} 
+                format={p => `${p?.toFixed(1)}%`}
+              />
+            </div>
+            <Row gutter={16}>
+              <Col span={8}>
+                <Statistic
+                  title={t('monitor.active_connections')}
+                  value={metrics?.connectionPool?.activeConnections || 0}
+                  valueStyle={{ fontSize: 16, color: '#1890ff' }}
+                />
+              </Col>
+              <Col span={8}>
+                <Statistic
+                  title={t('monitor.idle_connections')}
+                  value={metrics?.connectionPool?.idleConnections || 0}
+                  valueStyle={{ fontSize: 16, color: '#52c41a' }}
+                />
+              </Col>
+              <Col span={8}>
+                <Statistic
+                  title={t('monitor.pending_threads')}
+                  value={metrics?.connectionPool?.pendingThreads || 0}
+                  valueStyle={{ fontSize: 16, color: (metrics?.connectionPool?.pendingThreads || 0) > 5 ? '#ff4d4f' : '#52c41a' }}
+                />
+              </Col>
+            </Row>
+            <Divider style={{ margin: '12px 0' }} />
+            <Row gutter={16}>
+              <Col span={12}>
+                <Statistic
+                  title={t('monitor.max_connections')}
+                  value={metrics?.connectionPool?.maxConnections || 0}
+                  valueStyle={{ fontSize: 16 }}
+                />
+              </Col>
+              <Col span={12}>
+                <Space>
+                  <Text type="secondary">{t('monitor.pool_status')}:</Text>
+                  <Tag color={
+                    metrics?.connectionPool?.healthStatus === 'HEALTHY' ? 'success' :
+                    metrics?.connectionPool?.healthStatus === 'WARNING' ? 'warning' :
+                    'error'
+                  }>
+                    {metrics?.connectionPool?.healthStatus || 'UNKNOWN'}
+                  </Tag>
+                </Space>
+              </Col>
+            </Row>
+          </Card>
+        </Col>
       </Row>
       <Card title={<Space><LineChartOutlined />{t('monitor.history_trends') || 'History Trends'}</Space>} extra={<Select value={historyHours} onChange={setHistoryHours} style={{ width: 120 }} getPopupContainer={trigger => trigger.parentNode} dropdownStyle={{ zIndex: 1100 }} options={[
         { value: 1, label: t('monitor.last_1h') || 'Last 1 hour' }, { value: 6, label: t('monitor.last_6h') || 'Last 6 hours' },
@@ -373,11 +443,12 @@ const MonitorPage: React.FC<MonitorPageProps> = ({ instanceId }) => {
         ) : (
           <Row gutter={[16, 16]}>
             <Col xs={24} lg={12}><MetricChart title={t('monitor.heap_memory_history') || 'Heap Memory History'} data={historyData?.heapMemory || []} colorKey="blue" unit=" MB" yAxisLabel="MB" valueTransform={(v) => v / (1024 * 1024)} /></Col>
-            <Col xs={24} lg={12}><MetricChart title={t('monitor.cpu_usage_history') || 'CPU Usage History'} data={historyData?.cpuUsage || []} colorKey="green" unit="%" yAxisLabel="%" valueTransform={(v) => v * 100} /></Col>
+            <Col xs={24} lg={12}><MetricChart title={t('monitor.process_cpu_history') || 'Process CPU History (Gateway)'} data={historyData?.processCpuUsage || []} colorKey="green" unit="%" yAxisLabel="%" valueTransform={(v) => v * 100} /></Col>
+            <Col xs={24} lg={12}><MetricChart title={t('monitor.system_cpu_history') || 'System CPU History (Overall)'} data={historyData?.systemCpuUsage || []} colorKey="cyan" unit="%" yAxisLabel="%" valueTransform={(v) => v * 100} /></Col>
             <Col xs={24} lg={12}><MetricChart title={t('monitor.request_rate_history') || 'Request Rate History'} data={historyData?.requestRate || []} colorKey="purple" unit="/s" yAxisLabel="/s" /></Col>
             <Col xs={24} lg={12}><MetricChart title={t('monitor.response_time_history') || 'Response Time History'} data={historyData?.responseTime || []} colorKey="orange" unit="ms" yAxisLabel="ms" valueTransform={(v) => v * 1000} /></Col>
             <Col xs={24} lg={12}><MetricChart title={t('monitor.gc_time_history') || 'GC Time History'} data={historyData?.gcTime || []} colorKey="magenta" unit="ms/s" yAxisLabel="ms/s" valueTransform={(v) => v * 1000} /></Col>
-            <Col xs={24} lg={12}><MetricChart title={t('monitor.thread_count_history') || 'Thread Count History'} data={historyData?.threadCount || []} colorKey="cyan" unit="" yAxisLabel="" /></Col>
+            <Col xs={24} lg={12}><MetricChart title={t('monitor.thread_count_history') || 'Thread Count History'} data={historyData?.threadCount || []} colorKey="orange" unit="" yAxisLabel="" /></Col>
           </Row>
         )}
       </Card>

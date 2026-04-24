@@ -562,7 +562,7 @@ public class AiAnalysisService {
     }
 
     /**
-     * 收集时间段内的指标数据
+     * 收集时间段内的指标数据（增强版：包含压测前/后对比）
      */
     private String collectTimeRangeMetricsData(long startTime, long endTime) {
         StringBuilder sb = new StringBuilder();
@@ -573,40 +573,112 @@ public class AiAnalysisService {
             String endTimeStr = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date(endTime * 1000));
             long durationMinutes = (endTime - startTime) / 60;
 
+            // 计算压测前/后时间段（各5分钟）
+            long baselineStartTime = startTime - 300; // 压测前5分钟
+            long recoveryEndTime = endTime + 300;     // 压测后5分钟
+
             sb.append("【分析时间段】\n");
-            sb.append("开始时间: ").append(startTimeStr).append("\n");
-            sb.append("结束时间: ").append(endTimeStr).append("\n");
-            sb.append("持续时间: ").append(durationMinutes).append(" 分钟\n\n");
+            sb.append("压测开始: ").append(startTimeStr).append("\n");
+            sb.append("压测结束: ").append(endTimeStr).append("\n");
+            sb.append("压测持续时间: ").append(durationMinutes).append(" 分钟\n");
+            sb.append("基准数据时段: 压测前5分钟\n");
+            sb.append("恢复数据时段: 压测后5分钟\n\n");
 
             // 查询时间范围内的指标
             String step = durationMinutes <= 5 ? "15s" : durationMinutes <= 30 ? "1m" : "5m";
 
-            // CPU使用率峰值和平均值
-            List<Map<String, Object>> cpuData = prometheusService.queryRange(
-                    "system_cpu_usage{application=\"my-gateway\"}", startTime, endTime, step);
-            if (cpuData != null && !cpuData.isEmpty()) {
-                sb.append("【CPU使用率分析】\n");
-                double maxCpu = 0, sumCpu = 0;
-                int countCpu = 0;
-                for (Map<String, Object> point : cpuData) {
+            // ========== CPU使用率分析（含压测前/后对比）==========
+            sb.append("【CPU使用率分析】\n");
+
+            // 进程CPU使用率（process_cpu_usage）- 这是网关进程的CPU使用率
+            double baselineProcessCpu = getMetricAverage(
+                    "process_cpu_usage{application=\"my-gateway\"}", baselineStartTime, startTime, "15s");
+            sb.append("进程CPU压测前基准: ").append(String.format("%.1f%%", baselineProcessCpu * 100)).append("\n");
+
+            // 压测期间进程CPU
+            List<Map<String, Object>> processCpuData = prometheusService.queryRange(
+                    "process_cpu_usage{application=\"my-gateway\"}", startTime, endTime, step);
+            double maxProcessCpu = 0, avgProcessCpu = 0;
+            if (processCpuData != null && !processCpuData.isEmpty()) {
+                double sumProcessCpu = 0;
+                int countProcessCpu = 0;
+                for (Map<String, Object> point : processCpuData) {
                     Object valObj = point.get("value");
                     if (valObj instanceof Number) {
                         double val = ((Number) valObj).doubleValue() * 100;
-                        maxCpu = Math.max(maxCpu, val);
-                        sumCpu += val;
-                        countCpu++;
+                        maxProcessCpu = Math.max(maxProcessCpu, val);
+                        sumProcessCpu += val;
+                        countProcessCpu++;
                     }
                 }
-                sb.append("CPU峰值: ").append(String.format("%.1f%%", maxCpu)).append("\n");
-                sb.append("CPU平均: ").append(countCpu > 0 ? String.format("%.1f%%", sumCpu / countCpu) : "N/A").append("\n\n");
+                avgProcessCpu = countProcessCpu > 0 ? sumProcessCpu / countProcessCpu : 0;
+                sb.append("进程CPU压测期间峰值: ").append(String.format("%.1f%%", maxProcessCpu)).append("\n");
+                sb.append("进程CPU压测期间平均: ").append(String.format("%.1f%%", avgProcessCpu)).append("\n");
             }
 
-            // JVM堆内存使用
+            // 压测后进程CPU恢复
+            double recoveryProcessCpu = getMetricAverage(
+                    "process_cpu_usage{application=\"my-gateway\"}", endTime, recoveryEndTime, "15s");
+            sb.append("进程CPU压测后恢复: ").append(String.format("%.1f%%", recoveryProcessCpu * 100)).append("\n");
+
+            // 系统CPU使用率（system_cpu_usage）- 这是整个系统的CPU使用率
+            double baselineSystemCpu = getMetricAverage(
+                    "system_cpu_usage{application=\"my-gateway\"}", baselineStartTime, startTime, "15s");
+            sb.append("系统CPU压测前基准: ").append(String.format("%.1f%%", baselineSystemCpu * 100)).append("\n");
+
+            // 压测期间系统CPU
+            List<Map<String, Object>> systemCpuData = prometheusService.queryRange(
+                    "system_cpu_usage{application=\"my-gateway\"}", startTime, endTime, step);
+            double maxSystemCpu = 0, avgSystemCpu = 0;
+            if (systemCpuData != null && !systemCpuData.isEmpty()) {
+                double sumSystemCpu = 0;
+                int countSystemCpu = 0;
+                for (Map<String, Object> point : systemCpuData) {
+                    Object valObj = point.get("value");
+                    if (valObj instanceof Number) {
+                        double val = ((Number) valObj).doubleValue() * 100;
+                        maxSystemCpu = Math.max(maxSystemCpu, val);
+                        sumSystemCpu += val;
+                        countSystemCpu++;
+                    }
+                }
+                avgSystemCpu = countSystemCpu > 0 ? sumSystemCpu / countSystemCpu : 0;
+                sb.append("系统CPU压测期间峰值: ").append(String.format("%.1f%%", maxSystemCpu)).append("\n");
+                sb.append("系统CPU压测期间平均: ").append(String.format("%.1f%%", avgSystemCpu)).append("\n");
+            }
+
+            // 压测后系统CPU恢复
+            double recoverySystemCpu = getMetricAverage(
+                    "system_cpu_usage{application=\"my-gateway\"}", endTime, recoveryEndTime, "15s");
+            sb.append("系统CPU压测后恢复: ").append(String.format("%.1f%%", recoverySystemCpu * 100)).append("\n");
+
+            // CPU判定（使用进程CPU，因为这才是网关进程的CPU使用率）
+            sb.append("\n**CPU判定说明**：\n");
+            sb.append("- 进程CPU（process_cpu_usage）：网关进程本身的CPU使用率，压测期间峰值 ").append(String.format("%.1f%%", maxProcessCpu)).append("\n");
+            sb.append("- 系统CPU（system_cpu_usage）：整个系统的CPU使用率，包含所有进程\n");
+            if (maxProcessCpu > 95) {
+                sb.append("- CPU判定: ❌ 进程CPU满载（>95%），网关进程是性能瓶颈\n");
+            } else if (maxProcessCpu > 80) {
+                sb.append("- CPU判定: ⚠️ 进程CPU高负载（>80%），接近瓶颈\n");
+            } else {
+                sb.append("- CPU判定: ✅ 进程CPU正常（<80%），无瓶颈\n");
+            }
+            sb.append("CPU是否恢复: ").append(recoveryProcessCpu <= baselineProcessCpu * 1.5 ? "✅ 已恢复" : "⚠️ 未完全恢复").append("\n\n");
+
+            // ========== JVM堆内存分析（含压测前/后对比）==========
+            sb.append("【JVM堆内存分析】\n");
+
+            // 压测前基准
+            double baselineHeap = getMetricAverage(
+                    "sum(jvm_memory_used_bytes{application=\"my-gateway\",area=\"heap\"})", baselineStartTime, startTime, "15s");
+            sb.append("压测前基准: ").append(formatBytes(baselineHeap)).append("\n");
+
+            // 压测期间
             List<Map<String, Object>> heapData = prometheusService.queryRange(
                     "sum(jvm_memory_used_bytes{application=\"my-gateway\",area=\"heap\"})", startTime, endTime, step);
+            double maxHeap = 0;
             if (heapData != null && !heapData.isEmpty()) {
-                sb.append("【JVM堆内存分析】\n");
-                double maxHeap = 0, sumHeap = 0;
+                double sumHeap = 0;
                 int countHeap = 0;
                 for (Map<String, Object> point : heapData) {
                     Object valObj = point.get("value");
@@ -617,11 +689,28 @@ public class AiAnalysisService {
                         countHeap++;
                     }
                 }
-                sb.append("堆内存峰值: ").append(formatBytes(maxHeap)).append("\n");
-                sb.append("堆内存平均: ").append(countHeap > 0 ? formatBytes(sumHeap / countHeap) : "N/A").append("\n\n");
+                sb.append("压测期间峰值: ").append(formatBytes(maxHeap)).append("\n");
+                sb.append("压测期间平均: ").append(countHeap > 0 ? formatBytes(sumHeap / countHeap) : "N/A").append("\n");
             }
 
-            // HTTP请求速率
+            // 压测后恢复
+            double recoveryHeap = getMetricAverage(
+                    "sum(jvm_memory_used_bytes{application=\"my-gateway\",area=\"heap\"})", endTime, recoveryEndTime, "15s");
+            sb.append("压测后恢复: ").append(formatBytes(recoveryHeap)).append("\n");
+
+            // 内存泄漏判定
+            double heapIncreasePercent = (recoveryHeap - baselineHeap) / baselineHeap * 100;
+            sb.append("内存变化率: ").append(String.format("%.1f%%", heapIncreasePercent)).append("\n");
+            if (heapIncreasePercent > 30) {
+                sb.append("内存泄漏判定: ❌ 高度疑似内存泄漏（压测后内存比压测前高出30%+）\n");
+            } else if (heapIncreasePercent > 10) {
+                sb.append("内存泄漏判定: ⚠️ 可能存在对象未释放（压测后内存比压测前高出10%-30%）\n");
+            } else {
+                sb.append("内存泄漏判定: ✅ 正常（压测后内存已回落到基准水平）\n");
+            }
+            sb.append("\n");
+
+            // ========== HTTP请求分析 ==========
             List<Map<String, Object>> reqData = prometheusService.queryRange(
                     "sum(rate(http_server_requests_seconds_count{application=\"my-gateway\"}[1m]))", startTime, endTime, step);
             if (reqData != null && !reqData.isEmpty()) {
@@ -641,32 +730,80 @@ public class AiAnalysisService {
                 sb.append("请求平均: ").append(countReq > 0 ? String.format("%.2f", sumReq / countReq) : "N/A").append(" req/s\n\n");
             }
 
-            // 响应时间
+            // ========== 响应时间分析（含压测前/后对比）==========
+            sb.append("【响应时间分析】\n");
+
+            // 压测前基准
+            double baselineResp = getMetricAverage(
+                    "sum(rate(http_server_requests_seconds_sum{application=\"my-gateway\"}[1m])) / sum(rate(http_server_requests_seconds_count{application=\"my-gateway\"}[1m]))",
+                    baselineStartTime, startTime, "15s");
+            sb.append("压测前基准: ").append(String.format("%.2f ms", baselineResp * 1000)).append("\n");
+
+            // 压测期间
             List<Map<String, Object>> respData = prometheusService.queryRange(
                     "sum(rate(http_server_requests_seconds_sum{application=\"my-gateway\"}[1m])) / sum(rate(http_server_requests_seconds_count{application=\"my-gateway\"}[1m]))",
                     startTime, endTime, step);
+            double maxResp = 0;
             if (respData != null && !respData.isEmpty()) {
-                sb.append("【响应时间分析】\n");
-                double maxResp = 0, sumResp = 0;
+                double sumResp = 0;
                 int countResp = 0;
                 for (Map<String, Object> point : respData) {
                     Object valObj = point.get("value");
                     if (valObj instanceof Number) {
-                        double val = ((Number) valObj).doubleValue() * 1000; // 转换为ms
+                        double val = ((Number) valObj).doubleValue() * 1000;
                         maxResp = Math.max(maxResp, val);
                         sumResp += val;
                         countResp++;
                     }
                 }
-                sb.append("响应时间峰值: ").append(String.format("%.2f", maxResp)).append(" ms\n");
-                sb.append("响应时间平均: ").append(countResp > 0 ? String.format("%.2f", sumResp / countResp) : "N/A").append(" ms\n\n");
+                sb.append("压测期间峰值: ").append(String.format("%.2f", maxResp)).append(" ms\n");
+                sb.append("压测期间平均: ").append(countResp > 0 ? String.format("%.2f", sumResp / countResp) : "N/A").append(" ms\n");
             }
 
-            // GC统计
+            // 压测后恢复
+            double recoveryResp = getMetricAverage(
+                    "sum(rate(http_server_requests_seconds_sum{application=\"my-gateway\"}[1m])) / sum(rate(http_server_requests_seconds_count{application=\"my-gateway\"}[1m]))",
+                    endTime, recoveryEndTime, "15s");
+            sb.append("压测后恢复: ").append(String.format("%.2f ms", recoveryResp * 1000)).append("\n");
+            sb.append("响应时间是否恢复: ").append(recoveryResp <= baselineResp * 1.5 ? "✅ 已恢复" : "⚠️ 未完全恢复").append("\n\n");
+
+            // ========== GC统计（增强版）==========
+            sb.append("【GC详细统计】\n");
+
+            // Young GC
+            double youngGcCountBefore = getMetricSum(
+                    "sum(increase(jvm_gc_pause_seconds_count{application=\"my-gateway\",action=\"end of minor GC\"}[5m]))",
+                    baselineStartTime, startTime, "1m");
+            double youngGcCountDuring = getMetricSum(
+                    "sum(increase(jvm_gc_pause_seconds_count{application=\"my-gateway\",action=\"end of minor GC\"}[5m]))",
+                    startTime, endTime, step);
+            double youngGcCountAfter = getMetricSum(
+                    "sum(increase(jvm_gc_pause_seconds_count{application=\"my-gateway\",action=\"end of minor GC\"}[5m]))",
+                    endTime, recoveryEndTime, "1m");
+
+            sb.append("Young GC次数（压测前5分钟）: ").append(String.format("%.0f", youngGcCountBefore)).append("\n");
+            sb.append("Young GC次数（压测期间）: ").append(String.format("%.0f", youngGcCountDuring)).append("\n");
+            sb.append("Young GC次数（压测后5分钟）: ").append(String.format("%.0f", youngGcCountAfter)).append("\n");
+
+            // Full GC
+            double fullGcCountBefore = getMetricSum(
+                    "sum(increase(jvm_gc_pause_seconds_count{application=\"my-gateway\",action=\"end of major GC\"}[5m]))",
+                    baselineStartTime, startTime, "1m");
+            double fullGcCountDuring = getMetricSum(
+                    "sum(increase(jvm_gc_pause_seconds_count{application=\"my-gateway\",action=\"end of major GC\"}[5m]))",
+                    startTime, endTime, step);
+            double fullGcCountAfter = getMetricSum(
+                    "sum(increase(jvm_gc_pause_seconds_count{application=\"my-gateway\",action=\"end of major GC\"}[5m]))",
+                    endTime, recoveryEndTime, "1m");
+
+            sb.append("Full GC次数（压测前5分钟）: ").append(String.format("%.0f", fullGcCountBefore)).append("\n");
+            sb.append("Full GC次数（压测期间）: ").append(String.format("%.0f", fullGcCountDuring)).append("\n");
+            sb.append("Full GC次数（压测后5分钟）: ").append(String.format("%.0f", fullGcCountAfter)).append("\n");
+
+            // GC总耗时
             List<Map<String, Object>> gcTimeData = prometheusService.queryRange(
                     "sum(increase(jvm_gc_pause_seconds_sum{application=\"my-gateway\"}[5m]))", startTime, endTime, step);
             if (gcTimeData != null && !gcTimeData.isEmpty()) {
-                sb.append("【GC统计】\n");
                 double totalGcTime = 0;
                 for (Map<String, Object> point : gcTimeData) {
                     Object valObj = point.get("value");
@@ -674,11 +811,19 @@ public class AiAnalysisService {
                         totalGcTime += ((Number) valObj).doubleValue();
                     }
                 }
-                sb.append("GC总耗时: ").append(String.format("%.2f", totalGcTime)).append(" 秒\n");
-                sb.append("GC频率: ").append(durationMinutes > 0 ? String.format("%.2f", totalGcTime / durationMinutes) : "N/A").append(" 秒/分钟\n\n");
+                sb.append("GC总耗时（压测期间）: ").append(String.format("%.2f", totalGcTime)).append(" 秒\n");
+                sb.append("GC频率: ").append(durationMinutes > 0 ? String.format("%.2f", totalGcTime / durationMinutes) : "N/A").append(" 秒/分钟\n");
             }
 
-            // 线程数
+            // GC异常判定
+            if (fullGcCountDuring > 3) {
+                sb.append("GC判定: ⚠️ Full GC频繁（压测期间发生").append(String.format("%.0f", fullGcCountDuring)).append("次），可能存在内存压力\n");
+            } else {
+                sb.append("GC判定: ✅ 正常\n");
+            }
+            sb.append("\n");
+
+            // ========== 线程数分析 ==========
             List<Map<String, Object>> threadData = prometheusService.queryRange(
                     "jvm_threads_live_threads{application=\"my-gateway\"}", startTime, endTime, step);
             if (threadData != null && !threadData.isEmpty()) {
@@ -694,8 +839,64 @@ public class AiAnalysisService {
                     }
                 }
                 sb.append("线程数峰值: ").append(maxThreads).append("\n");
-                sb.append("线程数平均: ").append(countThreads > 0 ? String.format("%.1f", (double) sumThreads / countThreads) : "N/A").append("\n");
+                sb.append("线程数平均: ").append(countThreads > 0 ? String.format("%.1f", (double) sumThreads / countThreads) : "N/A").append("\n\n");
             }
+
+            // ========== 连接池状态（新增）==========
+            sb.append("【连接池状态】\n");
+
+            // HttpClient 连接池（如果有指标）
+            List<Map<String, Object>> httpPoolData = prometheusService.queryRange(
+                    "httpclient_pool_connections_active{application=\"my-gateway\"}", startTime, endTime, step);
+            if (httpPoolData != null && !httpPoolData.isEmpty()) {
+                int maxConn = 0;
+                for (Map<String, Object> point : httpPoolData) {
+                    Object valObj = point.get("value");
+                    if (valObj instanceof Number) {
+                        maxConn = Math.max(maxConn, ((Number) valObj).intValue());
+                    }
+                }
+                sb.append("HttpClient活跃连接峰值: ").append(maxConn).append("\n");
+            } else {
+                sb.append("HttpClient连接池: 数据不可用（需启用micrometer-observation）\n");
+            }
+
+            // Redis 连接（如果有指标）
+            List<Map<String, Object>> redisConnData = prometheusService.queryRange(
+                    "lettuce_connections_active{application=\"my-gateway\"}", startTime, endTime, step);
+            if (redisConnData != null && !redisConnData.isEmpty()) {
+                int maxRedisConn = 0;
+                for (Map<String, Object> point : redisConnData) {
+                    Object valObj = point.get("value");
+                    if (valObj instanceof Number) {
+                        maxRedisConn = Math.max(maxRedisConn, ((Number) valObj).intValue());
+                    }
+                }
+                sb.append("Redis活跃连接峰值: ").append(maxRedisConn).append("\n");
+            } else {
+                sb.append("Redis连接池: 数据不可用\n");
+            }
+            sb.append("\n");
+
+            // ========== 汇总对比表 ==========
+            sb.append("【压测前后对比汇总】\n");
+            sb.append("| 指标 | 压测前基准 | 压测峰值 | 压测后恢复 | 变化率 |\n");
+            sb.append("|------|-----------|---------|-----------|-------|\n");
+            sb.append(String.format("| 进程CPU | %.1f%% | %.1f%% | %.1f%% | %.1f%% |\n",
+                    baselineProcessCpu * 100, maxProcessCpu, recoveryProcessCpu * 100,
+                    baselineProcessCpu > 0 ? (recoveryProcessCpu - baselineProcessCpu) / baselineProcessCpu * 100 : 0));
+            sb.append(String.format("| 系统CPU | %.1f%% | %.1f%% | %.1f%% | %.1f%% |\n",
+                    baselineSystemCpu * 100, maxSystemCpu, recoverySystemCpu * 100,
+                    baselineSystemCpu > 0 ? (recoverySystemCpu - baselineSystemCpu) / baselineSystemCpu * 100 : 0));
+            sb.append(String.format("| 内存 | %s | %s | %s | %.1f%% |\n",
+                    formatBytes(baselineHeap), formatBytes(maxHeap > 0 ? maxHeap : baselineHeap), formatBytes(recoveryHeap), heapIncreasePercent));
+            sb.append(String.format("| 响应时间 | %.2fms | %.2fms | %.2fms | %.1f%% |\n",
+                    baselineResp * 1000, maxResp, recoveryResp * 1000,
+                    baselineResp > 0 ? (recoveryResp - baselineResp) / baselineResp * 100 : 0));
+            sb.append(String.format("| Young GC | %.0f次 | %.0f次 | %.0f次 | - |\n",
+                    youngGcCountBefore, youngGcCountDuring, youngGcCountAfter));
+            sb.append(String.format("| Full GC | %.0f次 | %.0f次 | %.0f次 | - |\n",
+                    fullGcCountBefore, fullGcCountDuring, fullGcCountAfter));
 
         } catch (Exception e) {
             log.error("Failed to collect time range metrics data", e);
@@ -703,6 +904,52 @@ public class AiAnalysisService {
         }
 
         return sb.toString();
+    }
+
+    /**
+     * 获取指标在时间段内的平均值
+     */
+    private double getMetricAverage(String query, long startTime, long endTime, String step) {
+        try {
+            List<Map<String, Object>> data = prometheusService.queryRange(query, startTime, endTime, step);
+            if (data == null || data.isEmpty()) return 0;
+
+            double sum = 0;
+            int count = 0;
+            for (Map<String, Object> point : data) {
+                Object valObj = point.get("value");
+                if (valObj instanceof Number) {
+                    sum += ((Number) valObj).doubleValue();
+                    count++;
+                }
+            }
+            return count > 0 ? sum / count : 0;
+        } catch (Exception e) {
+            log.warn("Failed to get metric average for query: {}", query);
+            return 0;
+        }
+    }
+
+    /**
+     * 获取指标在时间段内的累计值
+     */
+    private double getMetricSum(String query, long startTime, long endTime, String step) {
+        try {
+            List<Map<String, Object>> data = prometheusService.queryRange(query, startTime, endTime, step);
+            if (data == null || data.isEmpty()) return 0;
+
+            double sum = 0;
+            for (Map<String, Object> point : data) {
+                Object valObj = point.get("value");
+                if (valObj instanceof Number) {
+                    sum += ((Number) valObj).doubleValue();
+                }
+            }
+            return sum;
+        } catch (Exception e) {
+            log.warn("Failed to get metric sum for query: {}", query);
+            return 0;
+        }
     }
 
     /**
@@ -753,11 +1000,11 @@ public class AiAnalysisService {
     /**
      * 分析压力测试结果，结合压测数据和 Prometheus 监控数据。
      *
-     * @param provider        AI提供商
-     * @param stressTestData  压测结果摘要（由 StressTestService.buildAnalysisData 构建）
-     * @param startTime       测试开始时间（时间戳，秒）
-     * @param endTime         测试结束时间（时间戳，秒）
-     * @param language        语言
+     * @param provider       AI提供商
+     * @param stressTestData 压测结果摘要（由 StressTestService.buildAnalysisData 构建）
+     * @param startTime      测试开始时间（时间戳，秒）
+     * @param endTime        测试结束时间（时间戳，秒）
+     * @param language       语言
      * @return AI分析结果
      */
     public String analyzeStressTest(String provider, String stressTestData, long startTime, long endTime, String language) {
@@ -785,67 +1032,202 @@ public class AiAnalysisService {
         // 尝试从 PromptService 获取模板
         String templateKey = "task.stressTestAnalysis." + language;
         String template = promptService.getPrompt(templateKey);
-        
+
         if (template != null && !template.isEmpty()) {
             // 使用动态模板
             String langName = "zh".equals(language) ? "中文" : "English";
             return template
-                .replace("{langName}", langName)
-                .replace("{stressTestData}", stressTestData)
-                .replace("{metricsData}", metricsData.isEmpty() ? "【服务器监控数据】\n暂无 Prometheus 监控数据" : metricsData);
+                    .replace("{langName}", langName)
+                    .replace("{stressTestData}", stressTestData)
+                    .replace("{metricsData}", metricsData.isEmpty() ? "【服务器监控数据】\n暂无 Prometheus 监控数据" : metricsData);
         }
-        
-        // 默认内联提示词（兜底）
+
+        // 默认内联提示词（兜底）- 与数据库模板保持完全一致
         String langName = "zh".equals(language) ? "中文" : "English";
 
         return String.format("""
-                你是一个专业的性能测试工程师和Java应用运维专家。请根据以下压力测试结果和服务器监控数据，给出全面的性能分析报告。
-                
-                请用%s回答。
-                
-                %s
-                
-                %s
-                
-                请输出详细的分析报告，包含：
-                
-                ## 1. 测试概览
-                - 测试配置和基本结果摘要
-                - 成功率和错误率评估
-                
-                ## 2. 响应时间分析
-                - 平均响应时间、P50/P90/P95/P99 分布分析
-                - 响应时间是否在合理范围内
-                - 是否存在长尾延迟问题
-                
-                ## 3. 吞吐量分析
-                - 实际 QPS 与并发用户数的关系
-                - 吞吐量是否达到预期
-                - 是否存在吞吐量瓶颈
-                
-                ## 4. 服务器资源分析
-                - CPU、内存、GC、线程等资源在压测期间的表现
-                - 资源使用率是否合理
-                - 是否存在资源瓶颈（CPU饱和、内存泄漏、GC频繁等）
-                
-                ## 5. 问题诊断
-                - 发现的性能问题和异常
-                - 可能的根本原因分析
-                - 错误请求的可能原因
-                
-                ## 6. 性能评估
-                - 系统整体性能评分（1-10分）
-                - 当前配置下的承载能力评估
-                - 与行业基准的对比
-                
-                ## 7. 优化建议
-                - 针对发现的性能瓶颈提出具体优化建议
-                - JVM调优建议
-                - 网关配置优化建议
-                - 扩容或架构调整建议
-                
-                请用Markdown格式输出，分析要专业、详细、有数据支撑。如果某些监控数据缺失，请基于已有数据进行分析并标注。
-                """, langName, stressTestData, metricsData.isEmpty() ? "【服务器监控数据】\n暂无 Prometheus 监控数据" : metricsData);
+                                你是一个专业的性能测试工程师和Java应用运维专家。请根据以下压力测试结果和服务器监控数据，给出**严格、深入**的性能分析报告。
+                                
+                                请用%s回答。
+                                
+                                %s
+                                
+                                %s
+                                
+                                ---
+                                
+                                ## ⚠️ 分析要求（强制执行）
+
+                                **【依赖项说明 - 重要】**
+                                分析时必须区分核心性能和扩展功能性能：
+                                - **数据库**：仅用于 gateway-admin 配置存储，**不影响网关运行时性能**。网关从 Nacos/Consul 获取配置，数据库问题只影响管理后台。
+                                - **Redis**：仅用于分布式限流，如未配置或不可用，网关自动使用本地限流，**不影响核心路由转发**。
+                                - **Nacos/Consul**：服务发现和配置中心，是网关核心依赖，如不可用会影响路由。
+                                
+                                **分析原则**：
+                                - 网关核心性能 = 路由转发 + 过滤器链 + 负载均衡
+                                - 数据库/Redis 问题属于"扩展功能性能"，不应作为核心瓶颈判定依据
+                                
+                                **【CPU 指标说明 - 重要】**
+                                监控数据包含两种 CPU 指标，必须正确理解：
+                                - **进程CPU（process_cpu_usage）**：网关进程本身的 CPU 使用率，这才是判断网关性能瓶颈的关键指标
+                                - **系统CPU（system_cpu_usage）**：整个操作系统的 CPU 使用率，包含所有进程
+                                
+                                **CPU 满载判定规则**（使用进程CPU）：
+                                - 进程CPU > 95% → ❌ 网关进程满载，是性能瓶颈
+                                - 进程CPU > 80% → ⚠️ 网关进程高负载，接近瓶颈
+                                - 进程CPU < 80% → ✅ 网关进程正常，无瓶颈
+                                
+                                **注意**：不要混淆进程CPU和系统CPU！如果进程CPU很低但系统CPU很高，说明瓶颈在其他进程而非网关。
+                                
+                                **【内存泄漏检测 - 最高优先级】**
+                                必须对比压测前、压测中、压测后的内存变化：
+                                1. 压测前内存基准值（取压测开始前5分钟的平均值）
+                                2. 压测期间内存峰值
+                                3. **压测结束后内存值**（取压测结束后5分钟的平均值）
+                                
+                                **判定规则**：
+                                - ✅ 正常：压测后内存回落到压测前水平 ±10%
+                                - ⚠️ 警告：压测后内存比压测前高出 10%-30%，可能存在对象未及时释放
+                                - ❌ 严重：压测后内存比压测前高出 30%+，**高度疑似内存泄漏**
+                                
+                                如果发现内存未回落，必须：
+                                - 明确指出"内存泄漏风险"
+                                - 建议进行堆转储分析（jmap -histo:live）
+                                - 建议检查连接池、缓存、ThreadLocal 是否正确关闭
+                                
+                                **【响应时间异常检测】**
+                                对比压测前后的响应时间：
+                                - 如果压测后响应时间明显高于压测前，说明系统未完全恢复
+                                - 分析是否存在请求排队、连接池耗尽等问题
+                                
+                                ---
+                                
+                                ## 输出格式（严格遵循）
+                                
+                                ### 1. 压测核心指标对比表
+                                
+                                | 指标 | 压测前 | 压测峰值 | 压测后 | 评价 |
+                                |------|--------|----------|--------|------|
+                                | 进程CPU | X%% | Y%% | Z%% | 是否满载 |
+                                | 系统CPU | X%% | Y%% | Z%% | 整体负载 |
+                                | 内存 | X GB | Y GB | Z GB | **是否泄漏** |
+                                | 响应时间 | X ms | Y ms | Z ms | 是否恢复 |
+                                | 错误率 | 0%% | Y%% | Z%% | 是否有错误 |
+                                
+                                ### 2. 进程CPU专项分析（必填 - 最高优先级）
+
+                **进程CPU变化趋势**：
+                - 压测前基准：X%
+                - 压测峰值：Y%
+                - 压测后恢复：Z%
+
+                **进程CPU判定**（必须明确输出以下结论之一）：
+                - [ ] 进程CPU < 80% → ✅ **网关进程正常，无瓶颈**
+                - [ ] 进程CPU 80%-95% → ⚠️ **网关进程高负载，接近瓶颈**
+                - [ ] 进程CPU > 95% → ❌ **网关进程满载，是性能瓶颈**
+
+                **重要**：如果进程CPU < 80%，必须明确结论"网关不是性能瓶颈"！
+
+                ### 3. 系统CPU分析
+
+                **系统CPU变化趋势**：
+                - 压测前基准：X%
+                - 压测峰值：Y%
+                - 压测后恢复：Z%
+
+                **系统CPU判定**：
+                - 如果系统CPU > 95% 但进程CPU < 80% → ⚠️ **系统整体负载高，但瓶颈不在网关，可能在其他进程（如压测客户端、数据库、Redis等）**
+
+                ### 4. 内存专项分析（必填）
+                                
+                                **内存变化趋势**：
+                                - 压测前基准：X GB
+                                - 压测峰值：Y GB（上升 Z%%）
+                                - 压测后状态：W GB
+                                
+                                **内存泄漏判定**：
+                                - [ ] 压测后内存已回落到基准水平 ✅
+                                - [ ] 压测后内存仍高于基准 10%%+ ⚠️ 需关注
+                                - [ ] 压测后内存仍高于基准 30%%+ ❌ **疑似内存泄漏**
+                                
+                                **如果疑似泄漏，列出可能原因**：
+                                1. 连接池未正确关闭（HttpClient、Redis、DB）
+                                2. 大对象缓存未清理
+                                3. ThreadLocal 未 remove
+                                4. 响应体未完全消费
+                                
+                                ### 5. 响应时间分布分析
+                                
+                                分析 P50/P90/P95/P99 是否合理：
+                                - P99 > 3×P50 → 存在长尾延迟问题
+                                - 最大响应时间 > 5×P99 → 存在极端慢请求
+                                
+                                ### 6. 吞吐量瓶颈分析
+                                
+                                计算系统承载能力：
+                                - 当前配置下最大 QPS = 实测QPS × 安全系数(0.8)
+                                - CPU 满载时理论 QPS 上限
+                                - 是否需要扩容
+                                
+                                ### 7. 问题诊断（按严重程度排序）
+                                
+                                | 问题 | 严重程度 | 可能原因 | 建议措施 |
+                                |------|----------|----------|----------|
+                                | 进程CPU满载 | HIGH/MEDIUM/LOW | ... | ... |
+                                | 内存未回落 | ... | ... | ... |
+                                | 响应时间长尾 | ... | ... | ... |
+                                
+                                ### 8. 性能评分（严格扣分）
+                                
+                                **评分规则**：
+                                - 基准分：100
+                                - 进程CPU满载（>95%%持续）：-20 分
+                                - 内存泄漏（压测后 > 压测前 30%%）：-30 分
+                                - 内存未完全回落（10%%-30%%）：-15 分
+                                - 错误率 > 0.1%%：-10 分
+                                - 响应时间 P99 > 500ms：-10 分
+                                - Redis/DB 延迟 WARNING：-5 分
+                                
+                                **最终评分**：X/100 分
+                                
+                                **评分解读**：
+                                - 90-100：优秀，系统健康
+                                - 70-89：良好，有小问题需关注
+                                - 50-69：一般，存在明显问题需优化
+                                - <50：差，存在严重问题需立即处理
+                                
+                                ### 7. 优化建议（按优先级）
+                                
+                                **高优先级（立即处理）**：
+                                1. [如果有内存泄漏] 执行堆分析，定位泄漏对象
+                                2. [如果CPU满载] 扩容或优化代码
+                                
+                                **中优先级（一周内）**：
+                                1. 调整 JVM 参数（如有 GC 问题）
+                                2. 优化连接池配置
+                                
+                                **低优先级（持续优化）**：
+                                1. 监控告警阈值调整
+                                2. 性能基线建立
+                                
+                                ---
+                                
+                                ## 📋 健康状态总结
+                                
+                                | 组件 | 状态 | 说明 |
+                                |------|------|------|
+                                | 内存 | ✅/⚠️/❌ | 是否泄漏/是否回落 |
+                                | CPU | ✅/⚠️/❌ | 是否满载 |
+                                | 响应时间 | ✅/⚠️/❌ | 是否恢复 |
+                                | 错误率 | ✅/⚠️/❌ | 是否有错误 |
+                                
+                                **总体结论**：系统在压测后 [已完全恢复 / 存在遗留问题需关注 / 存在严重问题需立即处理]
+                                
+                                ---
+                                
+                                请用 Markdown 格式输出，分析要**严格、有数据支撑、不回避问题**。如果某些监控数据缺失，请明确标注"数据缺失"并基于已有数据进行分析。
+                                """, langName, stressTestData, metricsData.isEmpty() ? "【服务器监控数据】\n暂无 Prometheus 监控数据" : metricsData);
     }
 
     // ===================== Function Calling / Tool Calling 支持 =====================

@@ -55,6 +55,48 @@
   font-weight: var(--weight-medium);
 }
 
+/* Dark Select Dropdown for Modal */
+.dark-select .ant-select-selector {
+  background: #1e293b !important;
+  border: 1px solid rgba(148, 163, 184, 0.3) !important;
+  color: #f1f5f9 !important;
+}
+
+.dark-select:hover .ant-select-selector {
+  border-color: rgba(59, 130, 246, 0.5) !important;
+}
+
+.dark-select .ant-select-selection-item {
+  color: #f1f5f9 !important;
+}
+
+.dark-select .ant-select-arrow {
+  color: #94a3b8 !important;
+}
+
+.dark-select-dropdown {
+  background: #1e293b !important;
+  border: 1px solid rgba(148, 163, 184, 0.2) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+}
+
+.dark-select-dropdown .ant-select-item {
+  color: #f1f5f9 !important;
+  padding: var(--space-2) var(--space-3) !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+.dark-select-dropdown .ant-select-item-option-active {
+  background: rgba(59, 130, 246, 0.15) !important;
+}
+
+.dark-select-dropdown .ant-select-item-option-selected {
+  background: rgba(59, 130, 246, 0.2) !important;
+  color: #60a5fa !important;
+  font-weight: var(--weight-medium) !important;
+}
+
 /* ==================== Input ==================== */
 .ant-input,
 .ant-input-affix-wrapper {
@@ -252,12 +294,23 @@
 }
 
 /* ==================== Tooltip & Popover ==================== */
+.ant-tooltip {
+  z-index: 9999 !important;
+}
+
 .ant-tooltip-inner {
-  background: var(--bg-elevated);
-  color: var(--text-primary);
+  background: #27272a;
+  color: #fafafa;
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  max-width: 350px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ant-tooltip-arrow-content {
+  background: #27272a;
 }
 
 .ant-popover-inner {

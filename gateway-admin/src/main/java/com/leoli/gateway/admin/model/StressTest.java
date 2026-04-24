@@ -109,6 +109,9 @@ public class StressTest {
     @Column(name = "error_distribution", columnDefinition = "TEXT")
     private String errorDistribution;  // JSON error breakdown
 
+    @Column(name = "ai_analysis_result", columnDefinition = "TEXT")
+    private String aiAnalysisResult;  // AI analysis result (markdown)
+
     @Column(name = "created_by", length = 100)
     private String createdBy;
 

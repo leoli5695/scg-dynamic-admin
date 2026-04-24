@@ -39,6 +39,16 @@ import {
   RocketOutlined,
   ExperimentOutlined,
   InfoCircleOutlined,
+  AlertOutlined,
+  FieldTimeOutlined,
+  ApiOutlined,
+  SafetyOutlined,
+  SyncOutlined,
+  DatabaseOutlined,
+  DownloadOutlined,
+  ShareAltOutlined,
+  LinkOutlined,
+  CopyOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import AiReportRenderer from "../components/AiReportRenderer";
@@ -54,9 +64,10 @@ const { Panel } = Collapse;
 const TEST_TEMPLATES = [
   {
     key: "smoke",
-    name: "Smoke Test",
+    nameKey: "stress_test.template_smoke",
     icon: <ExperimentOutlined />,
-    description: "Quick validation test",
+    descriptionKey: "stress_test.template_smoke_desc",
+    scenarioKey: "stress_test.template_smoke_scenario",
     config: {
       concurrentUsers: 5,
       totalRequests: 100,
@@ -68,9 +79,10 @@ const TEST_TEMPLATES = [
   },
   {
     key: "load",
-    name: "Load Test",
+    nameKey: "stress_test.template_load",
     icon: <DashboardOutlined />,
-    description: "Standard performance test",
+    descriptionKey: "stress_test.template_load_desc",
+    scenarioKey: "stress_test.template_load_scenario",
     config: {
       concurrentUsers: 50,
       totalRequests: undefined,
@@ -82,9 +94,10 @@ const TEST_TEMPLATES = [
   },
   {
     key: "stress",
-    name: "Stress Test",
+    nameKey: "stress_test.template_stress",
     icon: <ThunderboltOutlined />,
-    description: "High load极限测试",
+    descriptionKey: "stress_test.template_stress_desc",
+    scenarioKey: "stress_test.template_stress_scenario",
     config: {
       concurrentUsers: 200,
       totalRequests: undefined,
@@ -96,15 +109,121 @@ const TEST_TEMPLATES = [
   },
   {
     key: "spike",
-    name: "Spike Test",
+    nameKey: "stress_test.template_spike",
     icon: <RocketOutlined />,
-    description: "Sudden traffic burst",
+    descriptionKey: "stress_test.template_spike_desc",
+    scenarioKey: "stress_test.template_spike_scenario",
     config: {
       concurrentUsers: 500,
       totalRequests: undefined,
       durationSeconds: 120,
       rampUpSeconds: 10,
       targetQps: 5000,
+      requestTimeoutSeconds: 30,
+    },
+  },
+  {
+    key: "soak",
+    nameKey: "stress_test.template_soak",
+    icon: <ClockCircleOutlined />,
+    descriptionKey: "stress_test.template_soak_desc",
+    scenarioKey: "stress_test.template_soak_scenario",
+    config: {
+      concurrentUsers: 30,
+      totalRequests: undefined,
+      durationSeconds: 1800,
+      rampUpSeconds: 60,
+      targetQps: 300,
+      requestTimeoutSeconds: 30,
+    },
+  },
+  {
+    key: "breakpoint",
+    nameKey: "stress_test.template_breakpoint",
+    icon: <AlertOutlined />,
+    descriptionKey: "stress_test.template_breakpoint_desc",
+    scenarioKey: "stress_test.template_breakpoint_scenario",
+    config: {
+      concurrentUsers: 100,
+      totalRequests: undefined,
+      durationSeconds: 600,
+      rampUpSeconds: 120,
+      targetQps: undefined,
+      requestTimeoutSeconds: 60,
+    },
+  },
+  {
+    key: "latency",
+    nameKey: "stress_test.template_latency",
+    icon: <FieldTimeOutlined />,
+    descriptionKey: "stress_test.template_latency_desc",
+    scenarioKey: "stress_test.template_latency_scenario",
+    config: {
+      concurrentUsers: 20,
+      totalRequests: undefined,
+      durationSeconds: 300,
+      rampUpSeconds: 30,
+      targetQps: 100,
+      requestTimeoutSeconds: 30,
+    },
+  },
+  {
+    key: "api_benchmark",
+    nameKey: "stress_test.template_api_benchmark",
+    icon: <ApiOutlined />,
+    descriptionKey: "stress_test.template_api_benchmark_desc",
+    scenarioKey: "stress_test.template_api_benchmark_scenario",
+    config: {
+      concurrentUsers: 10,
+      totalRequests: 10000,
+      durationSeconds: undefined,
+      rampUpSeconds: 10,
+      targetQps: 1000,
+      requestTimeoutSeconds: 30,
+    },
+  },
+  {
+    key: "capacity",
+    nameKey: "stress_test.template_capacity",
+    icon: <DatabaseOutlined />,
+    descriptionKey: "stress_test.template_capacity_desc",
+    scenarioKey: "stress_test.template_capacity_scenario",
+    config: {
+      concurrentUsers: 150,
+      totalRequests: undefined,
+      durationSeconds: 900,
+      rampUpSeconds: 90,
+      targetQps: 1500,
+      requestTimeoutSeconds: 45,
+    },
+  },
+  {
+    key: "stability",
+    nameKey: "stress_test.template_stability",
+    icon: <SafetyOutlined />,
+    descriptionKey: "stress_test.template_stability_desc",
+    scenarioKey: "stress_test.template_stability_scenario",
+    config: {
+      concurrentUsers: 40,
+      totalRequests: undefined,
+      durationSeconds: 3600,
+      rampUpSeconds: 120,
+      targetQps: 400,
+      requestTimeoutSeconds: 30,
+    },
+  },
+  {
+    key: "gradual",
+    nameKey: "stress_test.template_gradual",
+    icon: <SyncOutlined />,
+    descriptionKey: "stress_test.template_gradual_desc",
+    scenarioKey: "stress_test.template_gradual_scenario",
+    config: {
+      concurrentUsers: 80,
+      totalRequests: undefined,
+      durationSeconds: 480,
+      rampUpSeconds: 240,
+      targetQps: 800,
       requestTimeoutSeconds: 30,
     },
   },
@@ -312,11 +431,24 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
 
   const handleCreateTest = async (values: any) => {
     setCreating(true);
+    
+    const submitData = {
+      ...values,
+      headers: values.headers ? JSON.parse(values.headers) : null,
+    };
+    
+    if (submitData.durationSeconds && submitData.totalRequests) {
+      if (submitData.durationSeconds > 0) {
+        submitData.totalRequests = null;
+      } else {
+        submitData.durationSeconds = null;
+      }
+    }
+    
+    console.log("Submit data:", JSON.stringify(submitData, null, 2));
+    
     try {
-      const response = await axios.post("/api/stress-test/start", {
-        ...values,
-        headers: values.headers ? JSON.parse(values.headers) : null,
-      }, {
+      const response = await axios.post("/api/stress-test/start", submitData, {
         params: { instanceId },
       });
 
@@ -411,6 +543,97 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
     } finally {
       setAnalysisLoading(false);
     }
+  };
+
+  const handleExportReport = async (testId: number) => {
+    try {
+      const response = await axios.get(`/api/stress-test/${testId}/export`, {
+        responseType: "blob",
+      });
+
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `stress-test-report-${testId}.md`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      message.success(t("stress_test.export_success"));
+    } catch (error: any) {
+      message.error(error.response?.data?.error || t("stress_test.export_failed"));
+    }
+  };
+
+  const handleShareReport = async (testId: number, expiresIn: number | null) => {
+    try {
+      const params = expiresIn ? { expiresIn } : {};
+      const response = await axios.post(`/api/stress-test/${testId}/share`, null, { params });
+
+      if (response.data.success) {
+        const shareUrl = `${window.location.origin}/share/${response.data.shareId}`;
+        
+        Modal.success({
+          title: t("stress_test.share_created"),
+          content: (
+            <div>
+              <Paragraph>{t("stress_test.share_url_label")}</Paragraph>
+              <Input 
+                value={shareUrl} 
+                readOnly 
+                addonAfter={
+                  <CopyOutlined 
+                    onClick={() => {
+                      navigator.clipboard.writeText(shareUrl);
+                      message.success(t("stress_test.copied"));
+                    }}
+                  />
+                }
+              />
+              <Paragraph type="secondary" style={{ marginTop: 8 }}>
+                {t("stress_test.expires_in")}: {response.data.expiresIn}
+              </Paragraph>
+            </div>
+          ),
+        });
+      } else {
+        message.error(response.data.error || t("stress_test.share_failed"));
+      }
+    } catch (error: any) {
+      message.error(error.response?.data?.error || t("stress_test.share_failed"));
+    }
+  };
+
+  const showShareModal = (testId: number) => {
+    let selectedValue = 24;
+    
+    Modal.confirm({
+      title: t("stress_test.create_share_link"),
+      content: (
+        <div>
+          <Paragraph style={{ color: "#fff" }}>{t("stress_test.select_expiration")}</Paragraph>
+          <Select
+            style={{ width: "100%" }}
+            className="dark-select"
+            defaultValue={24}
+            popupClassName="dark-select-dropdown"
+            options={[
+              { value: 1, label: t("stress_test.expires_1h") },
+              { value: 24, label: t("stress_test.expires_24h") },
+              { value: 168, label: t("stress_test.expires_7d") },
+              { value: 0, label: t("stress_test.expires_permanent") },
+            ]}
+            onChange={(value) => {
+              selectedValue = value;
+            }}
+          />
+        </div>
+      ),
+      onOk: () => handleShareReport(testId, selectedValue === 0 ? null : selectedValue),
+      okText: t("common.confirm"),
+      cancelText: t("common.cancel"),
+    });
   };
 
   const getStatusColor = (status: string) => {
@@ -540,9 +763,17 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
       extra={
         <Space>
           {test.status === "COMPLETED" && (
-            <Button icon={<RobotOutlined />} onClick={() => handleAnalyzeTest(test.id)}>
-              {t("stress_test.ai_analysis")}
-            </Button>
+            <>
+              <Button icon={<RobotOutlined />} onClick={() => handleAnalyzeTest(test.id)}>
+                {t("stress_test.ai_analysis")}
+              </Button>
+              <Button icon={<DownloadOutlined />} onClick={() => handleExportReport(test.id)}>
+                {t("stress_test.export")}
+              </Button>
+              <Button icon={<ShareAltOutlined />} onClick={() => showShareModal(test.id)}>
+                {t("stress_test.share")}
+              </Button>
+            </>
           )}
           {test.status !== "RUNNING" && (
             <Button danger icon={<DeleteOutlined />} onClick={() => handleDeleteTest(test.id)}>
@@ -557,7 +788,7 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
           <Statistic
             title={t("stress_test.total_requests")}
             value={test.actualRequests}
-            suffix={`/ ${test.totalRequests}`}
+            suffix={test.totalRequests ? `/ ${test.totalRequests}` : ""}
             valueStyle={{ color: "#fff" }}
           />
           <Space style={{ marginTop: "8px" }}>
@@ -651,10 +882,10 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
   const renderCreateTab = () => (
     <Space direction="vertical" size="large" style={{ width: "100%" }}>
       {/* Preset Templates */}
-      <Card title={<Space><RocketOutlined />Quick Start Templates</Space>} style={{ background: "rgba(255,255,255,0.05)" }}>
+      <Card title={<Space><RocketOutlined />{t("stress_test.quick_start_templates")}</Space>} style={{ background: "rgba(255,255,255,0.05)" }}>
         <Row gutter={[16, 16]}>
           {TEST_TEMPLATES.map((template) => (
-            <Col xs={24} sm={12} md={6} key={template.key}>
+            <Col xs={24} sm={12} md={6} lg={4} key={template.key}>
               <Card
                 hoverable
                 size="small"
@@ -662,17 +893,20 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
                   createForm.setFieldsValue({
                     ...template.config,
                   });
-                  message.success(`Applied ${template.name} template`);
+                  message.success(`${t("stress_test.template_applied")}: ${t(template.nameKey)}`);
                 }}
                 style={{ background: "rgba(255,255,255,0.08)", borderColor: "#165DFF" }}
               >
-                <Space direction="vertical" style={{ width: "100%" }}>
+                <Space direction="vertical" style={{ width: "100%" }} size="small">
                   <Space>
                     {template.icon}
-                    <Text strong style={{ color: "#fff" }}>{template.name}</Text>
+                    <Text strong style={{ color: "#fff" }}>{t(template.nameKey)}</Text>
                   </Space>
-                  <Text type="secondary" style={{ fontSize: 12 }}>{template.description}</Text>
-                  <Tag color="blue">{template.config.concurrentUsers} users</Tag>
+                  <Text type="secondary" style={{ fontSize: 12 }}>{t(template.descriptionKey)}</Text>
+                  <Tooltip title={t(template.scenarioKey)}>
+                    <Tag color="green" style={{ cursor: "help" }}>{t("stress_test.scenario")}</Tag>
+                  </Tooltip>
+                  <Tag color="blue">{template.config.concurrentUsers} {t("stress_test.users")}</Tag>
                 </Space>
               </Card>
             </Col>
@@ -682,43 +916,42 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
 
       {/* Test Configuration Form */}
       <Card 
-        title={<Space><SettingOutlined />Test Configuration</Space>} 
+        title={<Space><SettingOutlined />{t("stress_test.test_configuration")}</Space>} 
         style={{ background: "rgba(255,255,255,0.05)" }}
         extra={
           <Button icon={<ReloadOutlined />} onClick={() => createForm.resetFields()}>
-            Reset
+            {t("stress_test.reset")}
           </Button>
         }
       >
         <Form form={createForm} layout="vertical" onFinish={handleCreateTest}>
-          {/* Basic Settings */}
           <Collapse defaultActiveKey={["basic"]} ghost>
-            <Panel header={<Space><InfoCircleOutlined />Basic Settings</Space>} key="basic">
+            <Panel header={<Space><InfoCircleOutlined />{t("stress_test.basic_settings")}</Space>} key="basic">
               <Form.Item 
                 name="testName" 
                 label={t("stress_test.test_name")}
-                rules={[{ required: true, message: "Please enter test name" }]}
+                rules={[{ required: true, message: t("stress_test.test_name_required") || "Please enter test name" }]}
               >
-                <Input placeholder="e.g., API Gateway Load Test" />
+                <Input placeholder={t("stress_test.test_placeholder")} />
               </Form.Item>
 
               <Form.Item 
                 name="targetUrl" 
                 label={t("stress_test.target_url")} 
                 rules={[
-                  { required: true, message: "Please enter target URL" },
-                  { pattern: /^https?:\/\/.+/, message: "URL must start with http:// or https://" }
+                  { required: true, message: t("stress_test.target_url_required") || "Please enter target URL" },
+                  { pattern: /^https?:\/\/.+/, message: t("stress_test.url_format_error") || "URL must start with http:// or https://" }
                 ]}
-                help="The base URL of your gateway instance"
+                help={t("stress_test.target_url_help")}
               >
                 <Input placeholder="http://localhost:8080" />
               </Form.Item>
 
               <Form.Item 
                 name="path" 
-                label="Test Path"
-                rules={[{ required: true, message: "Please enter test path" }]}
-                help="API endpoint to test (e.g., /api/users)"
+                label={t("stress_test.test_path")}
+                rules={[{ required: true, message: t("stress_test.test_path_required") || "Please enter test path" }]}
+                help={t("stress_test.test_path_help")}
               >
                 <Input placeholder="/api/test" />
               </Form.Item>
@@ -738,7 +971,7 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
                 <Col span={12}>
                   <Form.Item 
                     name="requestTimeoutSeconds" 
-                    label="Request Timeout (seconds)"
+                    label={t("stress_test.request_timeout")}
                     initialValue={30}
                     rules={[{ required: true }]}
                   >
@@ -749,7 +982,15 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
             </Panel>
           </Collapse>
 
-          <Divider style={{ textAlign: 'left' }}>Load Parameters</Divider>
+          <Divider style={{ textAlign: 'left' }}>{t("stress_test.load_parameters")}</Divider>
+
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message={t("stress_test.mode_hint_title") || "Test Mode Selection"}
+            description={t("stress_test.mode_hint_desc") || "Duration mode and Request count mode are mutually exclusive. Fill in 'Duration' to run for a specified time, or fill in 'Total Requests' to run until reaching the request count. If both are filled, the test will stop when either condition is met."}
+          />
 
           <Row gutter={[16, 0]}>
             <Col xs={24} sm={12} md={8}>
@@ -758,13 +999,13 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
                 label={
                   <Space>
                     {t("stress_test.concurrent_users")}
-                    <Tooltip title="Number of simulated concurrent users">
+                    <Tooltip title={t("stress_test.concurrent_users_tooltip") || "Number of simulated concurrent users"}>
                       <InfoCircleOutlined style={{ color: "rgba(255,255,255,0.45)" }} />
                     </Tooltip>
                   </Space>
                 }
                 initialValue={10}
-                rules={[{ required: true, message: "Please enter concurrent users" }]}
+                rules={[{ required: true, message: t("stress_test.concurrent_users_required") || "Please enter concurrent users" }]}
               >
                 <InputNumber min={1} max={500} style={{ width: "100%" }} />
               </Form.Item>
@@ -774,14 +1015,24 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
                 name="totalRequests"
                 label={
                   <Space>
-                    Total Requests
-                    <Tooltip title="Leave empty if using duration-based test">
+                    {t("stress_test.total_requests")}
+                    <Tooltip title={t("stress_test.total_requests_tooltip") || "Leave empty if using duration-based test"}>
                       <InfoCircleOutlined style={{ color: "rgba(255,255,255,0.45)" }} />
                     </Tooltip>
                   </Space>
                 }
               >
-                <InputNumber min={1} max={1000000} placeholder="Unlimited" style={{ width: "100%" }} />
+                <InputNumber 
+                  min={1} 
+                  max={1000000} 
+                  placeholder={t("stress_test.unlimited") || "Unlimited"} 
+                  style={{ width: "100%" }}
+                  onChange={(value) => {
+                    if (value !== null && value !== undefined) {
+                      createForm.setFieldValue("durationSeconds", undefined);
+                    }
+                  }}
+                />
               </Form.Item>
             </Col>
             <Col xs={24} sm={12} md={8}>
@@ -789,14 +1040,24 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
                 name="durationSeconds"
                 label={
                   <Space>
-                    Duration (seconds)
-                    <Tooltip title="Test duration. Leave empty for request-count based test">
+                    {t("stress_test.duration_seconds")}
+                    <Tooltip title={t("stress_test.duration_tooltip") || "Test duration. Leave empty for request-count based test"}>
                       <InfoCircleOutlined style={{ color: "rgba(255,255,255,0.45)" }} />
                     </Tooltip>
                   </Space>
                 }
               >
-                <InputNumber min={1} max={3600} placeholder="Unlimited" style={{ width: "100%" }} />
+                <InputNumber 
+                  min={1} 
+                  max={3600} 
+                  placeholder={t("stress_test.unlimited") || "Unlimited"} 
+                  style={{ width: "100%" }}
+                  onChange={(value) => {
+                    if (value !== null && value !== undefined) {
+                      createForm.setFieldValue("totalRequests", undefined);
+                    }
+                  }}
+                />
               </Form.Item>
             </Col>
           </Row>
@@ -807,14 +1068,14 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
                 name="targetQps" 
                 label={
                   <Space>
-                    Target QPS
-                    <Tooltip title="Queries per second limit. Leave empty for maximum speed">
+                    {t("stress_test.target_qps")}
+                    <Tooltip title={t("stress_test.target_qps_tooltip") || "Queries per second limit. Leave empty for maximum speed"}>
                       <InfoCircleOutlined style={{ color: "rgba(255,255,255,0.45)" }} />
                     </Tooltip>
                   </Space>
                 }
               >
-                <InputNumber min={1} max={10000} placeholder="No limit" style={{ width: "100%" }} />
+                <InputNumber min={1} max={10000} placeholder={t("stress_test.no_limit") || "No limit"} style={{ width: "100%" }} />
               </Form.Item>
             </Col>
             <Col xs={24} sm={12} md={8}>
@@ -822,8 +1083,8 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
                 name="rampUpSeconds" 
                 label={
                   <Space>
-                    Ramp-up Time (seconds)
-                    <Tooltip title="Time to gradually increase from 1 to target concurrency">
+                    {t("stress_test.ramp_up")}
+                    <Tooltip title={t("stress_test.ramp_up_tooltip") || "Time to gradually increase from 1 to target concurrency"}>
                       <InfoCircleOutlined style={{ color: "rgba(255,255,255,0.45)" }} />
                     </Tooltip>
                   </Space>
@@ -836,12 +1097,12 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
           </Row>
 
           <Collapse ghost style={{ marginTop: 16 }}>
-            <Panel header={<Space><SettingOutlined />Advanced Options (Headers & Body)</Space>} key="advanced">
-              <Form.Item name="headers" label={t("stress_test.headers")} help="Custom HTTP headers in JSON format">
+            <Panel header={<Space><SettingOutlined />{t("stress_test.advanced_options")}</Space>} key="advanced">
+              <Form.Item name="headers" label={t("stress_test.headers")} help={t("stress_test.headers_help_json")}>
                 <TextArea rows={3} placeholder='{"Authorization": "Bearer token", "Content-Type": "application/json"}' />
               </Form.Item>
 
-              <Form.Item name="body" label={t("stress_test.request_body")} help="Request body for POST/PUT requests">
+              <Form.Item name="body" label={t("stress_test.request_body")} help={t("stress_test.body_help")}>
                 <TextArea rows={4} placeholder='{"key": "value"}' />
               </Form.Item>
             </Panel>

@@ -4,8 +4,10 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.model.GatewayInstanceEntity;
 import com.leoli.gateway.admin.model.StressTest;
+import com.leoli.gateway.admin.model.StressTestShare;
 import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
 import com.leoli.gateway.admin.repository.StressTestRepository;
+import com.leoli.gateway.admin.repository.StressTestShareRepository;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
@@ -37,6 +39,7 @@ public class StressTestService {
     private final StressTestRepository stressTestRepository;
     private final GatewayInstanceRepository instanceRepository;
     private final AiAnalysisService aiAnalysisService;
+    private final StressTestShareRepository shareRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     // HttpClient and its executor
@@ -51,10 +54,12 @@ public class StressTestService {
 
     public StressTestService(StressTestRepository stressTestRepository,
                              GatewayInstanceRepository instanceRepository,
-                             AiAnalysisService aiAnalysisService) {
+                             AiAnalysisService aiAnalysisService,
+                             StressTestShareRepository shareRepository) {
         this.stressTestRepository = stressTestRepository;
         this.instanceRepository = instanceRepository;
         this.aiAnalysisService = aiAnalysisService;
+        this.shareRepository = shareRepository;
     }
 
     @PostConstruct
@@ -127,8 +132,18 @@ public class StressTestService {
         test.setHeaders(config.getHeaders() != null ? toJson(config.getHeaders()) : null);
         test.setBody(config.getBody());
         test.setConcurrentUsers(config.getConcurrentUsers() != null ? config.getConcurrentUsers() : 10);
-        test.setTotalRequests(config.getTotalRequests() != null ? config.getTotalRequests() : 1000);
-        test.setDurationSeconds(config.getDurationSeconds());
+
+        if (config.getDurationSeconds() != null && config.getDurationSeconds() > 0) {
+            test.setDurationSeconds(config.getDurationSeconds());
+            test.setTotalRequests(null);
+        } else if (config.getTotalRequests() != null && config.getTotalRequests() > 0) {
+            test.setDurationSeconds(null);
+            test.setTotalRequests(config.getTotalRequests());
+        } else {
+            test.setDurationSeconds(null);
+            test.setTotalRequests(1000);
+        }
+
         test.setRampUpSeconds(config.getRampUpSeconds() != null ? config.getRampUpSeconds() : 0);
         test.setStatus("CREATED");
 
@@ -157,6 +172,13 @@ public class StressTestService {
     }
 
     /**
+     * Get all stress tests across all instances.
+     */
+    public List<StressTest> getAllTests() {
+        return stressTestRepository.findAllByOrderByCreatedAtDesc();
+    }
+
+    /**
      * Get test status.
      */
     public StressTestStatus getTestStatus(Long testId) {
@@ -182,6 +204,9 @@ public class StressTestService {
             status.setActualRequests(session.totalCompleted.get());
             status.setSuccessfulRequests(session.totalCompleted.get() - session.totalFailed.get());
             status.setFailedRequests(session.totalFailed.get());
+            status.setAvgResponseTimeMs(session.stats.getSummary().getAvgResponseTime());
+            status.setRequestsPerSecond(session.getLiveRps());
+            status.setErrorRate(session.stats.getSummary().getErrorRate());
         }
 
         return status;
@@ -259,6 +284,11 @@ public class StressTestService {
             throw new RuntimeException("Test must be completed before analysis");
         }
 
+        // Check if analysis already exists
+        if (test.getAiAnalysisResult() != null && !test.getAiAnalysisResult().isEmpty()) {
+            return test.getAiAnalysisResult();
+        }
+
         // 构建压测结果数据
         String stressTestData = buildAnalysisData(test);
 
@@ -269,7 +299,13 @@ public class StressTestService {
                 test.getEndTime().atZone(java.time.ZoneId.systemDefault()).toEpochSecond() : 0;
 
         // 结合压测数据 + Prometheus 监控数据进行 AI 分析
-        return aiAnalysisService.analyzeStressTest(provider, stressTestData, startTime, endTime, language);
+        String analysisResult = aiAnalysisService.analyzeStressTest(provider, stressTestData, startTime, endTime, language);
+
+        // Store the analysis result
+        test.setAiAnalysisResult(analysisResult);
+        stressTestRepository.save(test);
+
+        return analysisResult;
     }
 
     /**
@@ -289,20 +325,28 @@ public class StressTestService {
     // ============== Private Methods ==============
 
     private String buildTargetUrl(GatewayInstanceEntity instance, StressTestConfig config) {
+        String baseUrl;
+
         if (config.getTargetUrl() != null) {
-            return config.getTargetUrl();
-        }
+            baseUrl = config.getTargetUrl();
+        } else {
+            baseUrl = instance.getManualAccessUrl() != null ? instance.getManualAccessUrl() :
+                    instance.getDiscoveredAccessUrl() != null ? instance.getDiscoveredAccessUrl() :
+                            instance.getReportedAccessUrl();
 
-        String baseUrl = instance.getManualAccessUrl() != null ? instance.getManualAccessUrl() :
-                instance.getDiscoveredAccessUrl() != null ? instance.getDiscoveredAccessUrl() :
-                instance.getReportedAccessUrl();
-
-        if (baseUrl == null) {
-            throw new RuntimeException("No access URL available for instance");
+            if (baseUrl == null) {
+                throw new RuntimeException("No access URL available for instance");
+            }
         }
 
         if (config.getPath() != null) {
-            return baseUrl + config.getPath();
+            String path = config.getPath();
+            if (baseUrl.endsWith("/") && path.startsWith("/")) {
+                return baseUrl + path.substring(1);
+            } else if (!baseUrl.endsWith("/") && !path.startsWith("/")) {
+                return baseUrl + "/" + path;
+            }
+            return baseUrl + path;
         }
 
         return baseUrl;
@@ -417,8 +461,15 @@ public class StressTestService {
         stressTestRepository.save(test);
 
         // Create session
-        int totalRequests = test.getTotalRequests() != null ? test.getTotalRequests() : 1000;
+        int totalRequests;
         Integer durationSeconds = test.getDurationSeconds();
+
+        if (durationSeconds != null) {
+            totalRequests = test.getTotalRequests() != null ? test.getTotalRequests() : Integer.MAX_VALUE;
+        } else {
+            totalRequests = test.getTotalRequests() != null ? test.getTotalRequests() : 1000;
+        }
+
         int concurrentUsers = test.getConcurrentUsers();
         int rampUpSeconds = test.getRampUpSeconds() != null ? test.getRampUpSeconds() : 0;
 
@@ -449,10 +500,12 @@ public class StressTestService {
 
                 // Check termination conditions
                 boolean requestLimitReached = durationSeconds == null
+                        && totalRequests > 0
                         && submittedCount.get() >= totalRequests;
                 boolean durationReached = durationSeconds != null
                         && elapsedMs >= durationSeconds * 1000L;
                 boolean bothSet = durationSeconds != null
+                        && totalRequests > 0
                         && submittedCount.get() >= totalRequests;
 
                 if (requestLimitReached || durationReached || bothSet) {
@@ -654,7 +707,7 @@ public class StressTestService {
     }
 
     @Transactional
-    private void markTestFailed(Long testId, String error) {
+    public void markTestFailed(Long testId, String error) {
         StressTest test = stressTestRepository.findById(testId).orElse(null);
         if (test != null) {
             test.setStatus("FAILED");
@@ -669,7 +722,8 @@ public class StressTestService {
             return new HashMap<>();
         }
         try {
-            return objectMapper.readValue(headersJson, new TypeReference<Map<String, String>>() {});
+            return objectMapper.readValue(headersJson, new TypeReference<Map<String, String>>() {
+            });
         } catch (Exception e) {
             log.warn("Failed to parse headers", e);
             return new HashMap<>();
@@ -687,37 +741,37 @@ public class StressTestService {
 
     private String buildAnalysisData(StressTest test) {
         return String.format("""
-                【压力测试结果分析】
+                        【压力测试结果分析】
 
-                测试名称: %s
-                目标URL: %s
-                测试方法: %s
+                        测试名称: %s
+                        目标URL: %s
+                        测试方法: %s
 
-                【测试配置】
-                并发用户数: %d
-                总请求数: %d
-                请求方法: %s
+                        【测试配置】
+                        并发用户数: %d
+                        总请求数: %d
+                        请求方法: %s
 
-                【测试结果】
-                实际完成请求: %d
-                成功请求: %d
-                失败请求: %d
-                错误率: %.2f%%
+                        【测试结果】
+                        实际完成请求: %d
+                        成功请求: %d
+                        失败请求: %d
+                        错误率: %.2f%%
 
-                【响应时间统计】
-                最小响应时间: %.2f ms
-                最大响应时间: %.2f ms
-                平均响应时间: %.2f ms
-                P50: %.2f ms
-                P90: %.2f ms
-                P95: %.2f ms
-                P99: %.2f ms
+                        【响应时间统计】
+                        最小响应时间: %.2f ms
+                        最大响应时间: %.2f ms
+                        平均响应时间: %.2f ms
+                        P50: %.2f ms
+                        P90: %.2f ms
+                        P95: %.2f ms
+                        P99: %.2f ms
 
-                【吞吐量】
-                请求速率: %.2f req/s
-                数据吞吐: %.2f KB/s
+                        【吞吐量】
+                        请求速率: %.2f req/s
+                        数据吞吐: %.2f KB/s
 
-                """,
+                        """,
                 test.getTestName(), test.getTargetUrl(), test.getMethod(),
                 test.getConcurrentUsers(), test.getTotalRequests(), test.getMethod(),
                 test.getActualRequests(), test.getSuccessfulRequests(), test.getFailedRequests(),
@@ -732,6 +786,126 @@ public class StressTestService {
                 test.getRequestsPerSecond() != null ? test.getRequestsPerSecond() : 0,
                 test.getThroughputKbps() != null ? test.getThroughputKbps() : 0
         );
+    }
+
+    /**
+     * Export stress test report as Markdown.
+     */
+    public String exportAsMarkdown(Long testId) {
+        StressTest test = getTest(testId);
+        return buildMarkdownReport(test);
+    }
+
+    /**
+     * Create a share link for the stress test report.
+     *
+     * @param testId    Test ID
+     * @param expiresIn Expiration time in hours (null = permanent)
+     * @return Share ID
+     */
+    @Transactional
+    public String createShareLink(Long testId, Integer expiresIn) {
+        StressTest test = getTest(testId);
+
+        if (!"COMPLETED".equals(test.getStatus())) {
+            throw new RuntimeException("Test must be completed before sharing");
+        }
+
+        String shareId = UUID.randomUUID().toString();
+
+        StressTestShare share = new StressTestShare();
+        share.setShareId(shareId);
+        share.setTestId(testId);
+
+        if (expiresIn != null && expiresIn > 0) {
+            share.setExpiresAt(LocalDateTime.now().plusHours(expiresIn));
+        }
+
+        shareRepository.save(share);
+
+        return shareId;
+    }
+
+    /**
+     * Get shared stress test report by share ID.
+     */
+    public StressTest getSharedReport(String shareId) {
+        StressTestShare share = shareRepository.findByShareId(shareId)
+                .orElseThrow(() -> new RuntimeException("Share link not found"));
+
+        if (share.isExpired()) {
+            throw new RuntimeException("Share link has expired");
+        }
+
+        // Increment view count
+        share.setViewCount(share.getViewCount() + 1);
+        shareRepository.save(share);
+
+        return getTest(share.getTestId());
+    }
+
+    /**
+     * Delete a share link.
+     */
+    @Transactional
+    public void deleteShareLink(String shareId) {
+        shareRepository.deleteByShareId(shareId);
+    }
+
+    /**
+     * Build Markdown report for export.
+     */
+    private String buildMarkdownReport(StressTest test) {
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("# Stress Test Report\n\n");
+        sb.append("**Test Name**: ").append(test.getTestName() != null ? test.getTestName() : "N/A").append("\n");
+        sb.append("**Target URL**: ").append(test.getTargetUrl()).append("\n");
+        sb.append("**Method**: ").append(test.getMethod()).append("\n");
+        sb.append("**Status**: ").append(test.getStatus()).append("\n");
+        sb.append("**Start Time**: ").append(test.getStartTime() != null ? test.getStartTime().toString() : "N/A").append("\n");
+        sb.append("**End Time**: ").append(test.getEndTime() != null ? test.getEndTime().toString() : "N/A").append("\n\n");
+
+        sb.append("## Test Configuration\n\n");
+        sb.append("| Parameter | Value |\n");
+        sb.append("|-----------|-------|\n");
+        sb.append("| Concurrent Users | ").append(test.getConcurrentUsers()).append(" |\n");
+        sb.append("| Total Requests | ").append(test.getTotalRequests() != null ? test.getTotalRequests() : "Duration-based").append(" |\n");
+        sb.append("| Duration (seconds) | ").append(test.getDurationSeconds() != null ? test.getDurationSeconds() : "Request-based").append(" |\n");
+        sb.append("| Ramp Up (seconds) | ").append(test.getRampUpSeconds()).append(" |\n");
+        sb.append("| Target QPS | ").append(test.getTargetQps() != null ? test.getTargetQps() : "Unlimited").append(" |\n");
+        sb.append("| Request Timeout (seconds) | ").append(test.getRequestTimeoutSeconds()).append(" |\n\n");
+
+        sb.append("## Test Results\n\n");
+        sb.append("| Metric | Value |\n");
+        sb.append("|--------|-------|\n");
+        sb.append("| Total Requests | ").append(test.getActualRequests()).append(" |\n");
+        sb.append("| Successful Requests | ").append(test.getSuccessfulRequests()).append(" |\n");
+        sb.append("| Failed Requests | ").append(test.getFailedRequests()).append(" |\n");
+        sb.append("| Error Rate | ").append(test.getErrorRate()).append("% |\n");
+        sb.append("| Requests/Second | ").append(test.getRequestsPerSecond()).append(" |\n");
+        sb.append("| Throughput | ").append(test.getThroughputKbps()).append(" KB/s |\n\n");
+
+        sb.append("## Response Time Distribution\n\n");
+        sb.append("| Metric | Value (ms) |\n");
+        sb.append("|--------|------------|\n");
+        sb.append("| Min | ").append(test.getMinResponseTimeMs()).append(" |\n");
+        sb.append("| Max | ").append(test.getMaxResponseTimeMs()).append(" |\n");
+        sb.append("| Avg | ").append(test.getAvgResponseTimeMs()).append(" |\n");
+        sb.append("| P50 | ").append(test.getP50ResponseTimeMs()).append(" |\n");
+        sb.append("| P90 | ").append(test.getP90ResponseTimeMs()).append(" |\n");
+        sb.append("| P95 | ").append(test.getP95ResponseTimeMs()).append(" |\n");
+        sb.append("| P99 | ").append(test.getP99ResponseTimeMs()).append(" |\n\n");
+
+        if (test.getAiAnalysisResult() != null && !test.getAiAnalysisResult().isEmpty()) {
+            sb.append("## AI Analysis\n\n");
+            sb.append(test.getAiAnalysisResult()).append("\n");
+        }
+
+        sb.append("\n---\n");
+        sb.append("*Generated by Gateway Admin at ").append(LocalDateTime.now()).append("*\n");
+
+        return sb.toString();
     }
 
     // ============== Data Classes ==============
@@ -751,30 +925,101 @@ public class StressTestService {
         private Integer requestTimeoutSeconds;
 
         // Getters and setters
-        public String getTestName() { return testName; }
-        public void setTestName(String testName) { this.testName = testName; }
-        public String getTargetUrl() { return targetUrl; }
-        public void setTargetUrl(String targetUrl) { this.targetUrl = targetUrl; }
-        public String getPath() { return path; }
-        public void setPath(String path) { this.path = path; }
-        public String getMethod() { return method; }
-        public void setMethod(String method) { this.method = method; }
-        public Map<String, String> getHeaders() { return headers; }
-        public void setHeaders(Map<String, String> headers) { this.headers = headers; }
-        public String getBody() { return body; }
-        public void setBody(String body) { this.body = body; }
-        public Integer getConcurrentUsers() { return concurrentUsers; }
-        public void setConcurrentUsers(Integer concurrentUsers) { this.concurrentUsers = concurrentUsers; }
-        public Integer getTotalRequests() { return totalRequests; }
-        public void setTotalRequests(Integer totalRequests) { this.totalRequests = totalRequests; }
-        public Integer getDurationSeconds() { return durationSeconds; }
-        public void setDurationSeconds(Integer durationSeconds) { this.durationSeconds = durationSeconds; }
-        public Integer getRampUpSeconds() { return rampUpSeconds; }
-        public void setRampUpSeconds(Integer rampUpSeconds) { this.rampUpSeconds = rampUpSeconds; }
-        public Integer getTargetQps() { return targetQps; }
-        public void setTargetQps(Integer targetQps) { this.targetQps = targetQps; }
-        public Integer getRequestTimeoutSeconds() { return requestTimeoutSeconds; }
-        public void setRequestTimeoutSeconds(Integer requestTimeoutSeconds) { this.requestTimeoutSeconds = requestTimeoutSeconds; }
+        public String getTestName() {
+            return testName;
+        }
+
+        public void setTestName(String testName) {
+            this.testName = testName;
+        }
+
+        public String getTargetUrl() {
+            return targetUrl;
+        }
+
+        public void setTargetUrl(String targetUrl) {
+            this.targetUrl = targetUrl;
+        }
+
+        public String getPath() {
+            return path;
+        }
+
+        public void setPath(String path) {
+            this.path = path;
+        }
+
+        public String getMethod() {
+            return method;
+        }
+
+        public void setMethod(String method) {
+            this.method = method;
+        }
+
+        public Map<String, String> getHeaders() {
+            return headers;
+        }
+
+        public void setHeaders(Map<String, String> headers) {
+            this.headers = headers;
+        }
+
+        public String getBody() {
+            return body;
+        }
+
+        public void setBody(String body) {
+            this.body = body;
+        }
+
+        public Integer getConcurrentUsers() {
+            return concurrentUsers;
+        }
+
+        public void setConcurrentUsers(Integer concurrentUsers) {
+            this.concurrentUsers = concurrentUsers;
+        }
+
+        public Integer getTotalRequests() {
+            return totalRequests;
+        }
+
+        public void setTotalRequests(Integer totalRequests) {
+            this.totalRequests = totalRequests;
+        }
+
+        public Integer getDurationSeconds() {
+            return durationSeconds;
+        }
+
+        public void setDurationSeconds(Integer durationSeconds) {
+            this.durationSeconds = durationSeconds;
+        }
+
+        public Integer getRampUpSeconds() {
+            return rampUpSeconds;
+        }
+
+        public void setRampUpSeconds(Integer rampUpSeconds) {
+            this.rampUpSeconds = rampUpSeconds;
+        }
+
+        public Integer getTargetQps() {
+            return targetQps;
+        }
+
+        public void setTargetQps(Integer targetQps) {
+            this.targetQps = targetQps;
+        }
+
+        public Integer getRequestTimeoutSeconds() {
+            return requestTimeoutSeconds;
+        }
+
+        public void setRequestTimeoutSeconds(Integer requestTimeoutSeconds) {
+            this.requestTimeoutSeconds = requestTimeoutSeconds;
+        }
     }
 
     public static class StressTestStatus {
@@ -792,48 +1037,119 @@ public class StressTestService {
         private Double liveRps;
 
         // Getters and setters
-        public Long getTestId() { return testId; }
-        public void setTestId(Long testId) { this.testId = testId; }
-        public String getStatus() { return status; }
-        public void setStatus(String status) { this.status = status; }
-        public LocalDateTime getStartTime() { return startTime; }
-        public void setStartTime(LocalDateTime startTime) { this.startTime = startTime; }
-        public LocalDateTime getEndTime() { return endTime; }
-        public void setEndTime(LocalDateTime endTime) { this.endTime = endTime; }
-        public Integer getActualRequests() { return actualRequests; }
-        public void setActualRequests(Integer actualRequests) { this.actualRequests = actualRequests; }
-        public Integer getSuccessfulRequests() { return successfulRequests; }
-        public void setSuccessfulRequests(Integer successfulRequests) { this.successfulRequests = successfulRequests; }
-        public Integer getFailedRequests() { return failedRequests; }
-        public void setFailedRequests(Integer failedRequests) { this.failedRequests = failedRequests; }
-        public Double getAvgResponseTimeMs() { return avgResponseTimeMs; }
-        public void setAvgResponseTimeMs(Double avgResponseTimeMs) { this.avgResponseTimeMs = avgResponseTimeMs; }
-        public Double getRequestsPerSecond() { return requestsPerSecond; }
-        public void setRequestsPerSecond(Double requestsPerSecond) { this.requestsPerSecond = requestsPerSecond; }
-        public Double getErrorRate() { return errorRate; }
-        public void setErrorRate(Double errorRate) { this.errorRate = errorRate; }
-        public Double getProgress() { return progress; }
-        public void setProgress(Double progress) { this.progress = progress; }
-        public Double getLiveRps() { return liveRps; }
-        public void setLiveRps(Double liveRps) { this.liveRps = liveRps; }
+        public Long getTestId() {
+            return testId;
+        }
+
+        public void setTestId(Long testId) {
+            this.testId = testId;
+        }
+
+        public String getStatus() {
+            return status;
+        }
+
+        public void setStatus(String status) {
+            this.status = status;
+        }
+
+        public LocalDateTime getStartTime() {
+            return startTime;
+        }
+
+        public void setStartTime(LocalDateTime startTime) {
+            this.startTime = startTime;
+        }
+
+        public LocalDateTime getEndTime() {
+            return endTime;
+        }
+
+        public void setEndTime(LocalDateTime endTime) {
+            this.endTime = endTime;
+        }
+
+        public Integer getActualRequests() {
+            return actualRequests;
+        }
+
+        public void setActualRequests(Integer actualRequests) {
+            this.actualRequests = actualRequests;
+        }
+
+        public Integer getSuccessfulRequests() {
+            return successfulRequests;
+        }
+
+        public void setSuccessfulRequests(Integer successfulRequests) {
+            this.successfulRequests = successfulRequests;
+        }
+
+        public Integer getFailedRequests() {
+            return failedRequests;
+        }
+
+        public void setFailedRequests(Integer failedRequests) {
+            this.failedRequests = failedRequests;
+        }
+
+        public Double getAvgResponseTimeMs() {
+            return avgResponseTimeMs;
+        }
+
+        public void setAvgResponseTimeMs(Double avgResponseTimeMs) {
+            this.avgResponseTimeMs = avgResponseTimeMs;
+        }
+
+        public Double getRequestsPerSecond() {
+            return requestsPerSecond;
+        }
+
+        public void setRequestsPerSecond(Double requestsPerSecond) {
+            this.requestsPerSecond = requestsPerSecond;
+        }
+
+        public Double getErrorRate() {
+            return errorRate;
+        }
+
+        public void setErrorRate(Double errorRate) {
+            this.errorRate = errorRate;
+        }
+
+        public Double getProgress() {
+            return progress;
+        }
+
+        public void setProgress(Double progress) {
+            this.progress = progress;
+        }
+
+        public Double getLiveRps() {
+            return liveRps;
+        }
+
+        public void setLiveRps(Double liveRps) {
+            this.liveRps = liveRps;
+        }
     }
 
     /**
      * Tracks live metrics during test execution for real-time chart visualization.
      */
     private static class LiveMetricsTracker {
-        private final List<com.leoli.gateway.admin.model.StressTestMetrics.MetricDataPoint> timeline = 
-            Collections.synchronizedList(new ArrayList<>());
-        private volatile com.leoli.gateway.admin.model.StressTestMetrics.SummaryMetrics summary = 
-            new com.leoli.gateway.admin.model.StressTestMetrics.SummaryMetrics();
-        
+        private final List<com.leoli.gateway.admin.model.StressTestMetrics.MetricDataPoint> timeline =
+                Collections.synchronizedList(new ArrayList<>());
+        private volatile com.leoli.gateway.admin.model.StressTestMetrics.SummaryMetrics summary =
+                new com.leoli.gateway.admin.model.StressTestMetrics.SummaryMetrics();
+
         // Keep recent response times for percentile calculations
         private final List<Long> recentResponseTimes = Collections.synchronizedList(new ArrayList<>());
         private static final int MAX_RESPONSE_TIMES = 1000; // Keep last 1000 samples
-        
+
         private long lastSnapshotTime = 0;
         private static final long SNAPSHOT_INTERVAL_MS = 2000; // Snapshot every 2 seconds
-        
+
         void recordResult(TestResult result, int totalCompleted, int totalFailed) {
             // Track response time for percentile calculations
             synchronized (recentResponseTimes) {
@@ -842,10 +1158,10 @@ public class StressTestService {
                     recentResponseTimes.remove(0);
                 }
             }
-            
+
             // Update running summary
             updateSummary(result, totalCompleted, totalFailed);
-            
+
             // Take periodic snapshot for timeline
             long now = System.currentTimeMillis();
             if (now - lastSnapshotTime >= SNAPSHOT_INTERVAL_MS) {
@@ -853,20 +1169,20 @@ public class StressTestService {
                 lastSnapshotTime = now;
             }
         }
-        
+
         private synchronized void updateSummary(TestResult result, int totalCompleted, int totalFailed) {
             // Calculate running statistics
             double avgRt = summary.getAvgResponseTime();
             long count = summary.getTotalRequests();
-            
+
             // Running average calculation
             double newAvgRt = ((avgRt * count) + result.responseTime) / (count + 1);
-            
+
             summary.setTotalRequests(count + 1);
             summary.setSuccessRequests(summary.getSuccessRequests() + (result.success ? 1 : 0));
             summary.setFailedRequests(summary.getFailedRequests() + (result.success ? 0 : 1));
             summary.setAvgResponseTime(newAvgRt);
-            
+
             // Min/Max tracking
             if (summary.getMinResponseTime() == 0 || result.responseTime < summary.getMinResponseTime()) {
                 summary.setMinResponseTime(result.responseTime);
@@ -874,47 +1190,47 @@ public class StressTestService {
             if (result.responseTime > summary.getMaxResponseTime()) {
                 summary.setMaxResponseTime(result.responseTime);
             }
-            
+
             // Error rate
             if (summary.getTotalRequests() > 0) {
                 summary.setErrorRate((summary.getFailedRequests() * 100.0) / summary.getTotalRequests());
             }
-            
+
             // RPS calculation
             long elapsedMs = System.currentTimeMillis() - (lastSnapshotTime > 0 ? lastSnapshotTime : System.currentTimeMillis() - 1000);
             if (elapsedMs > 0) {
                 summary.setRequestsPerSecond((summary.getTotalRequests() * 1000.0) / elapsedMs);
             }
-            
+
             // Update percentiles from recent samples
             updatePercentiles();
         }
-        
+
         private void updatePercentiles() {
             synchronized (recentResponseTimes) {
                 if (recentResponseTimes.isEmpty()) return;
-                
+
                 List<Long> sorted = new ArrayList<>(recentResponseTimes);
                 Collections.sort(sorted);
-                
+
                 summary.setP50ResponseTime(getPercentileValue(sorted, 50));
                 summary.setP90ResponseTime(getPercentileValue(sorted, 90));
                 summary.setP95ResponseTime(getPercentileValue(sorted, 95));
                 summary.setP99ResponseTime(getPercentileValue(sorted, 99));
             }
         }
-        
+
         private double getPercentileValue(List<Long> sortedValues, int percentile) {
             if (sortedValues.isEmpty()) return 0;
             int index = (int) Math.ceil(percentile / 100.0 * sortedValues.size()) - 1;
             index = Math.max(0, Math.min(index, sortedValues.size() - 1));
             return sortedValues.get(index);
         }
-        
+
         private void takeSnapshot(int totalCompleted, int totalFailed) {
-            com.leoli.gateway.admin.model.StressTestMetrics.MetricDataPoint point = 
-                new com.leoli.gateway.admin.model.StressTestMetrics.MetricDataPoint();
-            
+            com.leoli.gateway.admin.model.StressTestMetrics.MetricDataPoint point =
+                    new com.leoli.gateway.admin.model.StressTestMetrics.MetricDataPoint();
+
             point.setTimestamp(System.currentTimeMillis());
             point.setTotalRequests(summary.getTotalRequests());
             point.setSuccessRequests(summary.getSuccessRequests());
@@ -923,7 +1239,7 @@ public class StressTestService {
             point.setP95ResponseTime(summary.getP95ResponseTime());
             point.setP99ResponseTime(summary.getP99ResponseTime());
             point.setErrorRate(summary.getErrorRate());
-            
+
             // Calculate current RPS from recent activity
             if (timeline.size() >= 2) {
                 var lastPoint = timeline.get(timeline.size() - 1);
@@ -935,19 +1251,19 @@ public class StressTestService {
             } else {
                 point.setRps(summary.getRequestsPerSecond());
             }
-            
+
             timeline.add(point);
-            
+
             // Keep only last 300 data points (10 minutes at 2s intervals)
             while (timeline.size() > 300) {
                 timeline.remove(0);
             }
         }
-        
+
         List<com.leoli.gateway.admin.model.StressTestMetrics.MetricDataPoint> getTimeline() {
             return new ArrayList<>(timeline);
         }
-        
+
         com.leoli.gateway.admin.model.StressTestMetrics.SummaryMetrics getSummary() {
             return summary;
         }
@@ -967,7 +1283,7 @@ public class StressTestService {
 
         private final int totalRequests;
         private final Integer durationSeconds;
-        
+
         // Real-time metrics tracker
         final LiveMetricsTracker stats = new LiveMetricsTracker();
 
@@ -999,7 +1315,7 @@ public class StressTestService {
             while (recentResults.size() > 100) {
                 recentResults.remove(0);
             }
-            
+
             // Update live metrics
             stats.recordResult(result, totalCompleted.get(), totalFailed.get());
         }

@@ -76,6 +76,7 @@ public class PrometheusService {
                 metrics.put("process", getProcessInfo(instanceId));
                 metrics.put("disk", getDiskInfo(instanceId));
                 metrics.put("gateway", getGatewaySpecificMetrics(instanceId));
+                metrics.put("connectionPool", getConnectionPoolMetrics(instanceId));
             }
 
         } catch (Exception e) {
@@ -256,6 +257,32 @@ public class PrometheusService {
         Map<String, Object> gateway = new HashMap<>();
         gateway.put("routeCount", simpleMetrics.getOrDefault("spring_cloud_gateway_routes_count", 0.0));
         metrics.put("gateway", gateway);
+
+        // Connection Pool (HikariCP)
+        Map<String, Object> connectionPool = new HashMap<>();
+        double activeConn = simpleMetrics.getOrDefault("hikaricp_connections_active", 0.0);
+        double idleConn = simpleMetrics.getOrDefault("hikaricp_connections_idle", 0.0);
+        double pendingConn = simpleMetrics.getOrDefault("hikaricp_connections_pending", 0.0);
+        double maxConn = simpleMetrics.getOrDefault("hikaricp_connections_max", 0.0);
+        double minConn = simpleMetrics.getOrDefault("hikaricp_connections_min", 0.0);
+        connectionPool.put("activeConnections", activeConn);
+        connectionPool.put("idleConnections", idleConn);
+        connectionPool.put("pendingThreads", pendingConn);
+        connectionPool.put("maxConnections", maxConn);
+        connectionPool.put("minConnections", minConn);
+        if (maxConn > 0) {
+            connectionPool.put("usagePercent", Math.round(activeConn / maxConn * 10000) / 100.0);
+        } else {
+            connectionPool.put("usagePercent", 0.0);
+        }
+        if (pendingConn > 10) {
+            connectionPool.put("healthStatus", "CRITICAL");
+        } else if (pendingConn > 5) {
+            connectionPool.put("healthStatus", "WARNING");
+        } else {
+            connectionPool.put("healthStatus", "HEALTHY");
+        }
+        metrics.put("connectionPool", connectionPool);
     }
 
     /**
@@ -473,6 +500,76 @@ public class PrometheusService {
         }
 
         return gateway;
+    }
+
+    /**
+     * Get HikariCP connection pool metrics.
+     * @param instanceId Optional instance ID to filter for a specific instance
+     */
+    private Map<String, Object> getConnectionPoolMetrics(String instanceId) {
+        Map<String, Object> pool = new HashMap<>();
+        String instanceFilter = buildInstanceFilter(instanceId);
+
+        try {
+            // Active connections
+            String activeQuery = "hikaricp_connections_active{application=\"my-gateway\"" + instanceFilter + "}";
+            String activeResult = queryPrometheus(activeQuery);
+            pool.put("activeConnections", extractValue(activeResult, 0));
+
+            // Idle connections
+            String idleQuery = "hikaricp_connections_idle{application=\"my-gateway\"" + instanceFilter + "}";
+            String idleResult = queryPrometheus(idleQuery);
+            pool.put("idleConnections", extractValue(idleResult, 0));
+
+            // Pending threads waiting for connection
+            String pendingQuery = "hikaricp_connections_pending{application=\"my-gateway\"" + instanceFilter + "}";
+            String pendingResult = queryPrometheus(pendingQuery);
+            pool.put("pendingThreads", extractValue(pendingResult, 0));
+
+            // Max connections
+            String maxQuery = "hikaricp_connections_max{application=\"my-gateway\"" + instanceFilter + "}";
+            String maxResult = queryPrometheus(maxQuery);
+            pool.put("maxConnections", extractValue(maxResult, 0));
+
+            // Min connections
+            String minQuery = "hikaricp_connections_min{application=\"my-gateway\"" + instanceFilter + "}";
+            String minResult = queryPrometheus(minQuery);
+            pool.put("minConnections", extractValue(minResult, 0));
+
+            // Connection creation time (milliseconds)
+            String creationTimeQuery = "hikaricp_connections_creation_seconds_sum{application=\"my-gateway\"" + instanceFilter + "} * 1000";
+            String creationTimeResult = queryPrometheus(creationTimeQuery);
+            pool.put("connectionCreationTimeMs", extractValue(creationTimeResult, 0));
+
+            // Connection usage time
+            String usageTimeQuery = "hikaricp_connections_usage_seconds_sum{application=\"my-gateway\"" + instanceFilter + "} * 1000";
+            String usageTimeResult = queryPrometheus(usageTimeQuery);
+            pool.put("connectionUsageTimeMs", extractValue(usageTimeResult, 0));
+
+            // Calculate usage percentage
+            double active = extractValue(activeResult, 0);
+            double max = extractValue(maxResult, 0);
+            if (max > 0) {
+                pool.put("usagePercent", Math.round(active / max * 10000) / 100.0);
+            } else {
+                pool.put("usagePercent", 0.0);
+            }
+
+            // Health status based on pending threads
+            double pending = extractValue(pendingResult, 0);
+            if (pending > 10) {
+                pool.put("healthStatus", "CRITICAL");
+            } else if (pending > 5) {
+                pool.put("healthStatus", "WARNING");
+            } else {
+                pool.put("healthStatus", "HEALTHY");
+            }
+
+        } catch (Exception e) {
+            log.warn("Failed to get connection pool metrics: {}", e.getMessage());
+        }
+
+        return pool;
     }
 
     /**
@@ -814,10 +911,18 @@ public class PrometheusService {
                     "sum(jvm_memory_used_bytes{application=\"my-gateway\"" + instanceFilter + ",area=\"heap\"})",
                     start, end, step));
             
-            // CPU Usage History
-            history.put("cpuUsage", queryRange(
+            // System CPU Usage History (整体系统CPU)
+            history.put("systemCpuUsage", queryRange(
                     "system_cpu_usage{application=\"my-gateway\"" + instanceFilter + "}",
                     start, end, step));
+            
+            // Process CPU Usage History (网关进程CPU - 关键指标)
+            history.put("processCpuUsage", queryRange(
+                    "process_cpu_usage{application=\"my-gateway\"" + instanceFilter + "}",
+                    start, end, step));
+            
+            // 兼容旧接口，保留 cpuUsage 字段（指向 systemCpuUsage）
+            history.put("cpuUsage", history.get("systemCpuUsage"));
             
             // HTTP Requests Rate History
             history.put("requestRate", queryRange(
