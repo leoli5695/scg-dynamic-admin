@@ -1,4 +1,4 @@
-﻿# Features Documentation
+# Features Documentation
 
 > Complete guide to all gateway features with detailed configuration examples.
 
@@ -69,7 +69,7 @@
 |---------|-------------|----------|
 | **Request Replay Debugger** | Modify and replay captured requests | [request-replay.md](features/request-replay.md) |
 | **AI Copilot Assistant** | Intelligent configuration assistant | [ai-copilot.md](features/ai-copilot.md) |
-| **Stress Test Tool** | Concurrent load testing with AI analysis | [stress-test.md](features/stress-test.md) |
+| **Stress Test Tool** | Concurrent load testing with AI analysis, export (PDF/Excel/JSON/Markdown), and shareable reports | [stress-test.md](features/stress-test.md) |
 
 ---
 

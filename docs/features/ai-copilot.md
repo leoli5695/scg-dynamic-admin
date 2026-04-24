@@ -289,12 +289,14 @@ AI Copilot can call 35+ tools:
 | `audit_query` | Audit log query: filter by operation type, target type, time range |
 | `audit_diff` | Change comparison: beforeValue/afterValue detailed comparison |
 
-### Stress Test Tools (2)
+### Stress Test Tools (4)
 
 | Tool | Description |
 |------|-------------|
 | `get_stress_test_status` | Stress test status: progress, real-time RPS, response time, error rate |
 | `analyze_test_results` | AI analysis of stress test results: bottleneck analysis, optimization suggestions |
+| `export_stress_test_report` | Export test results to PDF, Excel, JSON, or Markdown format |
+| `share_stress_test_results` | Generate shareable link for test results with configurable expiration |
 
 ---
 

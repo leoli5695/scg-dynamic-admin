@@ -74,6 +74,7 @@
 | **Alert System** | Configurable thresholds with email notifications |
 | **SSL Certificate Management** | Upload, monitor expiry, get alerts before certificates expire |
 | **Audit Logs** | Configuration change tracking with diff comparison and rollback |
+| **Stress Test Tool** | Concurrent load testing with AI analysis, export reports (PDF/Excel/JSON/Markdown), and shareable links |
 
 ### Kubernetes & Multi-Tenancy (New)
 
