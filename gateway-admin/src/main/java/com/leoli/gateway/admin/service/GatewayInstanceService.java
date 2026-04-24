@@ -949,31 +949,6 @@ public class GatewayInstanceService {
     }
 
     /**
-     * Delete Nacos namespace via HTTP API.
-     */
-    private void deleteNacosNamespace(String namespaceId) {
-        if (namespaceId == null || namespaceId.isEmpty()) {
-            return;
-        }
-
-        try {
-            String nacosApiUrl = nacosServerAddr;
-            if (nacosApiUrl == null || nacosApiUrl.isEmpty()) {
-                nacosApiUrl = "localhost:8848";
-            }
-
-            String url = String.format("http://%s/nacos/v1/console/namespaces?namespaceId=%s",
-                    nacosApiUrl, URLEncoder.encode(namespaceId, StandardCharsets.UTF_8));
-
-            log.info("Deleting Nacos namespace: {}", namespaceId);
-            restTemplate.delete(url);
-            log.info("Nacos namespace {} deleted successfully", namespaceId);
-        } catch (Exception e) {
-            log.warn("Failed to delete Nacos namespace {}: {}", namespaceId, e.getMessage());
-        }
-    }
-
-    /**
      * Delete deployment from Kubernetes.
      */
     private void deleteFromKubernetes(GatewayInstanceEntity instance, KubernetesCluster cluster) {
