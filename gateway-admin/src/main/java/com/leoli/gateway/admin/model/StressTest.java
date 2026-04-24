@@ -40,14 +40,20 @@ public class StressTest {
     @Column(name = "concurrent_users", nullable = false)
     private Integer concurrentUsers = 10;
 
-    @Column(name = "total_requests", nullable = false)
-    private Integer totalRequests = 1000;
+    @Column(name = "total_requests")
+    private Integer totalRequests;  // Can be null if duration-based test
 
     @Column(name = "duration_seconds")
     private Integer durationSeconds;  // Alternative to total_requests
 
     @Column(name = "ramp_up_seconds")
     private Integer rampUpSeconds = 0;
+
+    @Column(name = "request_timeout_seconds")
+    private Integer requestTimeoutSeconds = 30;
+
+    @Column(name = "target_qps")
+    private Integer targetQps;  // Can be null for unlimited QPS
 
     @Column(name = "status", length = 20)
     private String status = "CREATED";  // CREATED, RUNNING, COMPLETED, STOPPED, FAILED
@@ -67,35 +73,35 @@ public class StressTest {
     @Column(name = "failed_requests")
     private Integer failedRequests = 0;
 
+    @Column(name = "error_rate")
+    private Double errorRate = 0.0;
+
     @Column(name = "min_response_time_ms")
-    private Double minResponseTimeMs;
+    private Double minResponseTimeMs = 0.0;
 
     @Column(name = "max_response_time_ms")
-    private Double maxResponseTimeMs;
+    private Double maxResponseTimeMs = 0.0;
 
     @Column(name = "avg_response_time_ms")
-    private Double avgResponseTimeMs;
+    private Double avgResponseTimeMs = 0.0;
 
     @Column(name = "p50_response_time_ms")
-    private Double p50ResponseTimeMs;
+    private Double p50ResponseTimeMs = 0.0;
 
     @Column(name = "p90_response_time_ms")
-    private Double p90ResponseTimeMs;
+    private Double p90ResponseTimeMs = 0.0;
 
     @Column(name = "p95_response_time_ms")
-    private Double p95ResponseTimeMs;
+    private Double p95ResponseTimeMs = 0.0;
 
     @Column(name = "p99_response_time_ms")
-    private Double p99ResponseTimeMs;
+    private Double p99ResponseTimeMs = 0.0;
 
     @Column(name = "requests_per_second")
-    private Double requestsPerSecond;
-
-    @Column(name = "error_rate")
-    private Double errorRate;
+    private Double requestsPerSecond = 0.0;
 
     @Column(name = "throughput_kbps")
-    private Double throughputKbps;
+    private Double throughputKbps = 0.0;
 
     @Column(name = "response_time_distribution", columnDefinition = "TEXT")
     private String responseTimeDistribution;  // JSON histogram data

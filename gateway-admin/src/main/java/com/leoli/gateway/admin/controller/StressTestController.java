@@ -77,6 +77,14 @@ public class StressTestController {
     }
 
     /**
+     * Get real-time metrics for chart visualization.
+     */
+    @GetMapping("/{testId}/metrics")
+    public ResponseEntity<com.leoli.gateway.admin.model.StressTestMetrics> getTestMetrics(@PathVariable Long testId) {
+        return ResponseEntity.ok(stressTestService.getTestMetrics(testId));
+    }
+
+    /**
      * Stop a running test.
      */
     @PostMapping("/{testId}/stop")

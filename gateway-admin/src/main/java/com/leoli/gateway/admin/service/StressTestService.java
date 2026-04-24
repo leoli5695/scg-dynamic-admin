@@ -188,6 +188,44 @@ public class StressTestService {
     }
 
     /**
+     * Get real-time metrics for chart visualization.
+     */
+    public com.leoli.gateway.admin.model.StressTestMetrics getTestMetrics(Long testId) {
+        StressTest test = getTest(testId);
+        com.leoli.gateway.admin.model.StressTestMetrics metrics = new com.leoli.gateway.admin.model.StressTestMetrics();
+        metrics.setTestId(testId);
+        metrics.setStatus(test.getStatus());
+
+        // If test is running, get live metrics from session
+        if ("RUNNING".equals(test.getStatus()) && runningTests.containsKey(testId)) {
+            StressTestSession session = runningTests.get(testId);
+            metrics.setProgress(session.getProgress());
+            metrics.setTimeline(session.stats.getTimeline());
+            metrics.setSummary(session.stats.getSummary());
+        } else {
+            // For completed tests, build metrics from stored data
+            metrics.setProgress(1.0);
+            com.leoli.gateway.admin.model.StressTestMetrics.SummaryMetrics summary = new com.leoli.gateway.admin.model.StressTestMetrics.SummaryMetrics();
+            summary.setTotalRequests(test.getActualRequests() != null ? test.getActualRequests().longValue() : 0);
+            summary.setSuccessRequests(test.getSuccessfulRequests() != null ? test.getSuccessfulRequests().longValue() : 0);
+            summary.setFailedRequests(test.getFailedRequests() != null ? test.getFailedRequests().longValue() : 0);
+            summary.setAvgResponseTime(test.getAvgResponseTimeMs() != null ? test.getAvgResponseTimeMs() : 0.0);
+            summary.setMinResponseTime(test.getMinResponseTimeMs() != null ? test.getMinResponseTimeMs() : 0.0);
+            summary.setMaxResponseTime(test.getMaxResponseTimeMs() != null ? test.getMaxResponseTimeMs() : 0.0);
+            summary.setP50ResponseTime(test.getP50ResponseTimeMs() != null ? test.getP50ResponseTimeMs() : 0.0);
+            summary.setP90ResponseTime(test.getP90ResponseTimeMs() != null ? test.getP90ResponseTimeMs() : 0.0);
+            summary.setP95ResponseTime(test.getP95ResponseTimeMs() != null ? test.getP95ResponseTimeMs() : 0.0);
+            summary.setP99ResponseTime(test.getP99ResponseTimeMs() != null ? test.getP99ResponseTimeMs() : 0.0);
+            summary.setRequestsPerSecond(test.getRequestsPerSecond() != null ? test.getRequestsPerSecond() : 0.0);
+            summary.setErrorRate(test.getErrorRate() != null ? test.getErrorRate() : 0.0);
+            summary.setThroughputKbps(test.getThroughputKbps() != null ? test.getThroughputKbps() : 0.0);
+            metrics.setSummary(summary);
+        }
+
+        return metrics;
+    }
+
+    /**
      * Stop a running test.
      */
     @Transactional
@@ -781,6 +819,141 @@ public class StressTestService {
     }
 
     /**
+     * Tracks live metrics during test execution for real-time chart visualization.
+     */
+    private static class LiveMetricsTracker {
+        private final List<com.leoli.gateway.admin.model.StressTestMetrics.MetricDataPoint> timeline = 
+            Collections.synchronizedList(new ArrayList<>());
+        private volatile com.leoli.gateway.admin.model.StressTestMetrics.SummaryMetrics summary = 
+            new com.leoli.gateway.admin.model.StressTestMetrics.SummaryMetrics();
+        
+        // Keep recent response times for percentile calculations
+        private final List<Long> recentResponseTimes = Collections.synchronizedList(new ArrayList<>());
+        private static final int MAX_RESPONSE_TIMES = 1000; // Keep last 1000 samples
+        
+        private long lastSnapshotTime = 0;
+        private static final long SNAPSHOT_INTERVAL_MS = 2000; // Snapshot every 2 seconds
+        
+        void recordResult(TestResult result, int totalCompleted, int totalFailed) {
+            // Track response time for percentile calculations
+            synchronized (recentResponseTimes) {
+                recentResponseTimes.add(result.responseTime);
+                while (recentResponseTimes.size() > MAX_RESPONSE_TIMES) {
+                    recentResponseTimes.remove(0);
+                }
+            }
+            
+            // Update running summary
+            updateSummary(result, totalCompleted, totalFailed);
+            
+            // Take periodic snapshot for timeline
+            long now = System.currentTimeMillis();
+            if (now - lastSnapshotTime >= SNAPSHOT_INTERVAL_MS) {
+                takeSnapshot(totalCompleted, totalFailed);
+                lastSnapshotTime = now;
+            }
+        }
+        
+        private synchronized void updateSummary(TestResult result, int totalCompleted, int totalFailed) {
+            // Calculate running statistics
+            double avgRt = summary.getAvgResponseTime();
+            long count = summary.getTotalRequests();
+            
+            // Running average calculation
+            double newAvgRt = ((avgRt * count) + result.responseTime) / (count + 1);
+            
+            summary.setTotalRequests(count + 1);
+            summary.setSuccessRequests(summary.getSuccessRequests() + (result.success ? 1 : 0));
+            summary.setFailedRequests(summary.getFailedRequests() + (result.success ? 0 : 1));
+            summary.setAvgResponseTime(newAvgRt);
+            
+            // Min/Max tracking
+            if (summary.getMinResponseTime() == 0 || result.responseTime < summary.getMinResponseTime()) {
+                summary.setMinResponseTime(result.responseTime);
+            }
+            if (result.responseTime > summary.getMaxResponseTime()) {
+                summary.setMaxResponseTime(result.responseTime);
+            }
+            
+            // Error rate
+            if (summary.getTotalRequests() > 0) {
+                summary.setErrorRate((summary.getFailedRequests() * 100.0) / summary.getTotalRequests());
+            }
+            
+            // RPS calculation
+            long elapsedMs = System.currentTimeMillis() - (lastSnapshotTime > 0 ? lastSnapshotTime : System.currentTimeMillis() - 1000);
+            if (elapsedMs > 0) {
+                summary.setRequestsPerSecond((summary.getTotalRequests() * 1000.0) / elapsedMs);
+            }
+            
+            // Update percentiles from recent samples
+            updatePercentiles();
+        }
+        
+        private void updatePercentiles() {
+            synchronized (recentResponseTimes) {
+                if (recentResponseTimes.isEmpty()) return;
+                
+                List<Long> sorted = new ArrayList<>(recentResponseTimes);
+                Collections.sort(sorted);
+                
+                summary.setP50ResponseTime(getPercentileValue(sorted, 50));
+                summary.setP90ResponseTime(getPercentileValue(sorted, 90));
+                summary.setP95ResponseTime(getPercentileValue(sorted, 95));
+                summary.setP99ResponseTime(getPercentileValue(sorted, 99));
+            }
+        }
+        
+        private double getPercentileValue(List<Long> sortedValues, int percentile) {
+            if (sortedValues.isEmpty()) return 0;
+            int index = (int) Math.ceil(percentile / 100.0 * sortedValues.size()) - 1;
+            index = Math.max(0, Math.min(index, sortedValues.size() - 1));
+            return sortedValues.get(index);
+        }
+        
+        private void takeSnapshot(int totalCompleted, int totalFailed) {
+            com.leoli.gateway.admin.model.StressTestMetrics.MetricDataPoint point = 
+                new com.leoli.gateway.admin.model.StressTestMetrics.MetricDataPoint();
+            
+            point.setTimestamp(System.currentTimeMillis());
+            point.setTotalRequests(summary.getTotalRequests());
+            point.setSuccessRequests(summary.getSuccessRequests());
+            point.setFailedRequests(summary.getFailedRequests());
+            point.setAvgResponseTime(summary.getAvgResponseTime());
+            point.setP95ResponseTime(summary.getP95ResponseTime());
+            point.setP99ResponseTime(summary.getP99ResponseTime());
+            point.setErrorRate(summary.getErrorRate());
+            
+            // Calculate current RPS from recent activity
+            if (timeline.size() >= 2) {
+                var lastPoint = timeline.get(timeline.size() - 1);
+                long timeDiff = point.getTimestamp() - lastPoint.getTimestamp();
+                long reqDiff = point.getTotalRequests() - lastPoint.getTotalRequests();
+                if (timeDiff > 0) {
+                    point.setRps((reqDiff * 1000.0) / timeDiff);
+                }
+            } else {
+                point.setRps(summary.getRequestsPerSecond());
+            }
+            
+            timeline.add(point);
+            
+            // Keep only last 300 data points (10 minutes at 2s intervals)
+            while (timeline.size() > 300) {
+                timeline.remove(0);
+            }
+        }
+        
+        List<com.leoli.gateway.admin.model.StressTestMetrics.MetricDataPoint> getTimeline() {
+            return new ArrayList<>(timeline);
+        }
+        
+        com.leoli.gateway.admin.model.StressTestMetrics.SummaryMetrics getSummary() {
+            return summary;
+        }
+    }
+
+    /**
      * Tracks a running stress test session with real-time statistics.
      */
     private static class StressTestSession {
@@ -794,6 +967,9 @@ public class StressTestService {
 
         private final int totalRequests;
         private final Integer durationSeconds;
+        
+        // Real-time metrics tracker
+        final LiveMetricsTracker stats = new LiveMetricsTracker();
 
         StressTestSession(int totalRequests, Integer durationSeconds) {
             this.totalRequests = totalRequests;
@@ -823,6 +999,9 @@ public class StressTestService {
             while (recentResults.size() > 100) {
                 recentResults.remove(0);
             }
+            
+            // Update live metrics
+            stats.recordResult(result, totalCompleted.get(), totalFailed.get());
         }
 
         double getProgress() {

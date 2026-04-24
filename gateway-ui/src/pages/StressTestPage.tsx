@@ -19,6 +19,9 @@ import {
   Divider,
   Tabs,
   Alert,
+  Select,
+  Tooltip,
+  Collapse,
 } from "antd";
 import {
   ThunderboltOutlined,
@@ -32,14 +35,80 @@ import {
   ClockCircleOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
+  SettingOutlined,
+  RocketOutlined,
+  ExperimentOutlined,
+  InfoCircleOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import AiReportRenderer from "../components/AiReportRenderer";
+import StressTestCharts from "../components/StressTestCharts";
 import "../styles/ai-report.css";
 import { useTranslation } from "react-i18next";
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
+const { Panel } = Collapse;
+
+// Preset test templates for common scenarios
+const TEST_TEMPLATES = [
+  {
+    key: "smoke",
+    name: "Smoke Test",
+    icon: <ExperimentOutlined />,
+    description: "Quick validation test",
+    config: {
+      concurrentUsers: 5,
+      totalRequests: 100,
+      durationSeconds: undefined,
+      rampUpSeconds: 5,
+      targetQps: undefined,
+      requestTimeoutSeconds: 30,
+    },
+  },
+  {
+    key: "load",
+    name: "Load Test",
+    icon: <DashboardOutlined />,
+    description: "Standard performance test",
+    config: {
+      concurrentUsers: 50,
+      totalRequests: undefined,
+      durationSeconds: 300,
+      rampUpSeconds: 30,
+      targetQps: 500,
+      requestTimeoutSeconds: 30,
+    },
+  },
+  {
+    key: "stress",
+    name: "Stress Test",
+    icon: <ThunderboltOutlined />,
+    description: "High load极限测试",
+    config: {
+      concurrentUsers: 200,
+      totalRequests: undefined,
+      durationSeconds: 600,
+      rampUpSeconds: 60,
+      targetQps: 2000,
+      requestTimeoutSeconds: 60,
+    },
+  },
+  {
+    key: "spike",
+    name: "Spike Test",
+    icon: <RocketOutlined />,
+    description: "Sudden traffic burst",
+    config: {
+      concurrentUsers: 500,
+      totalRequests: undefined,
+      durationSeconds: 120,
+      rampUpSeconds: 10,
+      targetQps: 5000,
+      requestTimeoutSeconds: 30,
+    },
+  },
+];
 
 interface StressTest {
   id: number;
@@ -49,6 +118,10 @@ interface StressTest {
   method: string;
   concurrentUsers: number;
   totalRequests: number;
+  durationSeconds: number;
+  rampUpSeconds: number;
+  requestTimeoutSeconds: number;
+  targetQps: number;
   status: string;
   startTime: string;
   endTime: string;
@@ -65,7 +138,45 @@ interface StressTest {
   requestsPerSecond: number;
   errorRate: number;
   throughputKbps: number;
+  responseTimeDistribution: string;
+  errorDistribution: string;
   createdAt: string;
+}
+
+interface MetricDataPoint {
+  timestamp: number;
+  rps: number;
+  avgResponseTime: number;
+  p95ResponseTime: number;
+  p99ResponseTime: number;
+  errorRate: number;
+  totalRequests: number;
+  successRequests: number;
+  failedRequests: number;
+}
+
+interface SummaryMetrics {
+  totalRequests: number;
+  successRequests: number;
+  failedRequests: number;
+  avgResponseTime: number;
+  minResponseTime: number;
+  maxResponseTime: number;
+  p50ResponseTime: number;
+  p90ResponseTime: number;
+  p95ResponseTime: number;
+  p99ResponseTime: number;
+  requestsPerSecond: number;
+  errorRate: number;
+  throughputKbps: number;
+}
+
+interface StressTestMetrics {
+  testId: number;
+  status: string;
+  progress: number;
+  timeline: MetricDataPoint[];
+  summary: SummaryMetrics;
 }
 
 interface TestStatus {
@@ -79,6 +190,7 @@ interface TestStatus {
   errorRate: number;
   progress: number;
   liveRps: number;
+  timeline?: MetricDataPoint[];
 }
 
 interface Props {
@@ -100,6 +212,7 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
   const [runningTestId, setRunningTestId] = useState<number | null>(null);
   const [runningStatus, setRunningStatus] = useState<TestStatus | null>(null);
   const [statusLoading, setStatusLoading] = useState(false);
+  const [testMetrics, setTestMetrics] = useState<StressTestMetrics | null>(null);
 
   // Quick test modal
   const [quickModalVisible, setQuickModalVisible] = useState(false);
@@ -148,12 +261,46 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
   const fetchTestStatus = async (testId: number) => {
     setStatusLoading(true);
     try {
-      const response = await axios.get(`/api/stress-test/${testId}/status`);
-      setRunningStatus(response.data);
+      // Fetch both status and metrics in parallel
+      const [statusResponse, metricsResponse] = await Promise.all([
+        axios.get(`/api/stress-test/${testId}/status`),
+        axios.get(`/api/stress-test/${testId}/metrics`).catch(() => null)
+      ]);
 
-      if (response.data.status !== "RUNNING") {
+      setRunningStatus(statusResponse.data);
+
+      // Update test metrics for charts if available
+      if (metricsResponse?.data && metricsResponse.data.timeline?.length > 0) {
+        setTestMetrics(metricsResponse.data);
+      } else if (statusResponse.data.timeline && statusResponse.data.timeline.length > 0) {
+        // Fallback to timeline data from status if metrics endpoint doesn't have data
+        setTestMetrics({
+          testId: statusResponse.data.testId,
+          status: statusResponse.data.status,
+          progress: statusResponse.data.progress,
+          timeline: statusResponse.data.timeline,
+          summary: {
+            totalRequests: statusResponse.data.actualRequests || 0,
+            successRequests: statusResponse.data.successfulRequests || 0,
+            failedRequests: statusResponse.data.failedRequests || 0,
+            avgResponseTime: statusResponse.data.avgResponseTimeMs || 0,
+            minResponseTime: 0,
+            maxResponseTime: 0,
+            p50ResponseTime: 0,
+            p90ResponseTime: 0,
+            p95ResponseTime: 0,
+            p99ResponseTime: 0,
+            requestsPerSecond: statusResponse.data.requestsPerSecond || 0,
+            errorRate: statusResponse.data.errorRate || 0,
+            throughputKbps: 0,
+          }
+        });
+      }
+
+      if (statusResponse.data.status !== "RUNNING") {
         setRunningTestId(null);
         setRunningStatus(null);
+        setTestMetrics(null);
         loadTests();
       }
     } catch (error) {
@@ -300,74 +447,79 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
     if (!runningTestId || !runningStatus) return null;
 
     return (
-      <Card
-        title={
-          <Space>
-            <ThunderboltOutlined style={{ color: "#165DFF" }} />
-            <Title level={5} style={{ margin: 0, color: "#fff" }}>
-              Test #{runningTestId} {t("stress_test.running")}
-            </Title>
-            <Tag color="blue">RUNNING</Tag>
-          </Space>
-        }
-        style={{ background: "rgba(255,255,255,0.05)", marginBottom: "24px" }}
-        extra={
-          <Button danger icon={<StopOutlined />} onClick={() => handleStopTest(runningTestId)}>
-            {t("stress_test.stop_test")}
-          </Button>
-        }
-      >
-        <Spin spinning={statusLoading}>
-          <Row gutter={[24, 24]}>
-            <Col span={24}>
-              <Progress
-                percent={Math.round(runningStatus.progress * 100)}
-                status="active"
-                strokeColor={{ from: "#165DFF", to: "#52c41a" }}
-              />
-            </Col>
+      <div>
+        <Card
+          title={
+            <Space>
+              <ThunderboltOutlined style={{ color: "#165DFF" }} />
+              <Title level={5} style={{ margin: 0, color: "#fff" }}>
+                Test #{runningTestId} {t("stress_test.running")}
+              </Title>
+              <Tag color="blue">RUNNING</Tag>
+            </Space>
+          }
+          style={{ background: "rgba(255,255,255,0.05)", marginBottom: "24px" }}
+          extra={
+            <Button danger icon={<StopOutlined />} onClick={() => handleStopTest(runningTestId)}>
+              {t("stress_test.stop_test")}
+            </Button>
+          }
+        >
+          <Spin spinning={statusLoading}>
+            <Row gutter={[24, 24]}>
+              <Col span={24}>
+                <Progress
+                  percent={Math.round(runningStatus.progress * 100)}
+                  status="active"
+                  strokeColor={{ from: "#165DFF", to: "#52c41a" }}
+                />
+              </Col>
 
-            <Col xs={12} sm={6}>
-              <Statistic
-                title={t("stress_test.requests_sent")}
-                value={runningStatus.actualRequests || 0}
-                prefix={<ThunderboltOutlined />}
-                valueStyle={{ color: "#165DFF" }}
-              />
-            </Col>
+              <Col xs={12} sm={6}>
+                <Statistic
+                  title={t("stress_test.requests_sent")}
+                  value={runningStatus.actualRequests || 0}
+                  prefix={<ThunderboltOutlined />}
+                  valueStyle={{ color: "#165DFF" }}
+                />
+              </Col>
 
-            <Col xs={12} sm={6}>
-              <Statistic
-                title={t("stress_test.live_rps")}
-                value={runningStatus.liveRps?.toFixed(2) || "0"}
-                suffix="req/s"
-                prefix={<DashboardOutlined />}
-                valueStyle={{ color: "#52c41a" }}
-              />
-            </Col>
+              <Col xs={12} sm={6}>
+                <Statistic
+                  title={t("stress_test.live_rps")}
+                  value={runningStatus.liveRps?.toFixed(2) || "0"}
+                  suffix="req/s"
+                  prefix={<DashboardOutlined />}
+                  valueStyle={{ color: "#52c41a" }}
+                />
+              </Col>
 
-            <Col xs={12} sm={6}>
-              <Statistic
-                title={t("stress_test.avg_response_time")}
-                value={runningStatus.avgResponseTimeMs?.toFixed(2) || "0"}
-                suffix="ms"
-                prefix={<ClockCircleOutlined />}
-                valueStyle={{ color: "#fff" }}
-              />
-            </Col>
+              <Col xs={12} sm={6}>
+                <Statistic
+                  title={t("stress_test.avg_response_time")}
+                  value={runningStatus.avgResponseTimeMs?.toFixed(2) || "0"}
+                  suffix="ms"
+                  prefix={<ClockCircleOutlined />}
+                  valueStyle={{ color: "#fff" }}
+                />
+              </Col>
 
-            <Col xs={12} sm={6}>
-              <Statistic
-                title={t("stress_test.error_rate")}
-                value={runningStatus.errorRate?.toFixed(2) || "0"}
-                suffix="%"
-                prefix={<CloseCircleOutlined />}
-                valueStyle={{ color: runningStatus.errorRate > 5 ? "#f5222d" : "#52c41a" }}
-              />
-            </Col>
-          </Row>
-        </Spin>
-      </Card>
+              <Col xs={12} sm={6}>
+                <Statistic
+                  title={t("stress_test.error_rate")}
+                  value={runningStatus.errorRate?.toFixed(2) || "0"}
+                  suffix="%"
+                  prefix={<CloseCircleOutlined />}
+                  valueStyle={{ color: runningStatus.errorRate > 5 ? "#f5222d" : "#52c41a" }}
+                />
+              </Col>
+            </Row>
+          </Spin>
+        </Card>
+
+        {/* Real-time monitoring charts */}
+        <StressTestCharts metrics={testMetrics} loading={statusLoading} />
+      </div>
     );
   };
 
@@ -497,80 +649,219 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
   );
 
   const renderCreateTab = () => (
-    <Card style={{ background: "rgba(255,255,255,0.05)" }}>
-      <Form form={createForm} layout="vertical" onFinish={handleCreateTest}>
-        <Form.Item name="testName" label={t("stress_test.test_name")}>
-          <Input placeholder="e.g., API Gateway Load Test" />
-        </Form.Item>
-
-        <Form.Item name="targetUrl" label={t("stress_test.target_url")} help={t("stress_test.target_url_help")}>
-          <Input placeholder="e.g., http://gateway.example.com/api/test" />
-        </Form.Item>
-
-        <Form.Item name="path" label={t("stress_test.path")} help={t("stress_test.path_help")}>
-          <Input placeholder="e.g., /api/users" />
-        </Form.Item>
-
-        <Form.Item name="method" label={t("stress_test.http_method")} initialValue="GET">
-          <Radio.Group optionType="button" buttonStyle="solid">
-            <Radio.Button value="GET">GET</Radio.Button>
-            <Radio.Button value="POST">POST</Radio.Button>
-            <Radio.Button value="PUT">PUT</Radio.Button>
-            <Radio.Button value="DELETE">DELETE</Radio.Button>
-          </Radio.Group>
-        </Form.Item>
-
-        <Form.Item name="headers" label={t("stress_test.headers")} help={t("stress_test.headers_help")}>
-          <TextArea rows={3} placeholder='{"Authorization": "Bearer token"}' />
-        </Form.Item>
-
-        <Form.Item name="body" label={t("stress_test.request_body")}>
-          <TextArea rows={4} placeholder="Request body for POST/PUT requests" />
-        </Form.Item>
-
-        <Row gutter={16}>
-          <Col span={6}>
-            <Form.Item
-              name="concurrentUsers"
-              label={t("stress_test.concurrent_users")}
-              initialValue={10}
-              rules={[{ required: true }]}
-            >
-              <InputNumber min={1} max={100} style={{ width: "100%" }} />
-            </Form.Item>
-          </Col>
-          <Col span={6}>
-            <Form.Item
-              name="totalRequests"
-              label={t("stress_test.total_requests")}
-              initialValue={1000}
-              rules={[{ required: true }]}
-            >
-              <InputNumber min={1} max={100000} style={{ width: "100%" }} />
-            </Form.Item>
-          </Col>
-          <Col span={6}>
-            <Form.Item name="targetQps" label={t("stress_test.target_qps")}>
-              <InputNumber min={1} max={50000} placeholder="No limit" style={{ width: "100%" }} />
-            </Form.Item>
-          </Col>
-          <Col span={6}>
-            <Form.Item name="rampUpSeconds" label={t("stress_test.ramp_up")} initialValue={0}>
-              <InputNumber min={0} max={60} style={{ width: "100%" }} />
-            </Form.Item>
-          </Col>
+    <Space direction="vertical" size="large" style={{ width: "100%" }}>
+      {/* Preset Templates */}
+      <Card title={<Space><RocketOutlined />Quick Start Templates</Space>} style={{ background: "rgba(255,255,255,0.05)" }}>
+        <Row gutter={[16, 16]}>
+          {TEST_TEMPLATES.map((template) => (
+            <Col xs={24} sm={12} md={6} key={template.key}>
+              <Card
+                hoverable
+                size="small"
+                onClick={() => {
+                  createForm.setFieldsValue({
+                    ...template.config,
+                  });
+                  message.success(`Applied ${template.name} template`);
+                }}
+                style={{ background: "rgba(255,255,255,0.08)", borderColor: "#165DFF" }}
+              >
+                <Space direction="vertical" style={{ width: "100%" }}>
+                  <Space>
+                    {template.icon}
+                    <Text strong style={{ color: "#fff" }}>{template.name}</Text>
+                  </Space>
+                  <Text type="secondary" style={{ fontSize: 12 }}>{template.description}</Text>
+                  <Tag color="blue">{template.config.concurrentUsers} users</Tag>
+                </Space>
+              </Card>
+            </Col>
+          ))}
         </Row>
+      </Card>
 
-        <Form.Item>
-          <Space>
-            <Button type="primary" htmlType="submit" icon={<PlayCircleOutlined />} loading={creating}>
-              {t("stress_test.start_test")}
-            </Button>
-            <Button onClick={() => createForm.resetFields()}>{t("common.reset")}</Button>
-          </Space>
-        </Form.Item>
-      </Form>
-    </Card>
+      {/* Test Configuration Form */}
+      <Card 
+        title={<Space><SettingOutlined />Test Configuration</Space>} 
+        style={{ background: "rgba(255,255,255,0.05)" }}
+        extra={
+          <Button icon={<ReloadOutlined />} onClick={() => createForm.resetFields()}>
+            Reset
+          </Button>
+        }
+      >
+        <Form form={createForm} layout="vertical" onFinish={handleCreateTest}>
+          {/* Basic Settings */}
+          <Collapse defaultActiveKey={["basic"]} ghost>
+            <Panel header={<Space><InfoCircleOutlined />Basic Settings</Space>} key="basic">
+              <Form.Item 
+                name="testName" 
+                label={t("stress_test.test_name")}
+                rules={[{ required: true, message: "Please enter test name" }]}
+              >
+                <Input placeholder="e.g., API Gateway Load Test" />
+              </Form.Item>
+
+              <Form.Item 
+                name="targetUrl" 
+                label={t("stress_test.target_url")} 
+                rules={[
+                  { required: true, message: "Please enter target URL" },
+                  { pattern: /^https?:\/\/.+/, message: "URL must start with http:// or https://" }
+                ]}
+                help="The base URL of your gateway instance"
+              >
+                <Input placeholder="http://localhost:8080" />
+              </Form.Item>
+
+              <Form.Item 
+                name="path" 
+                label="Test Path"
+                rules={[{ required: true, message: "Please enter test path" }]}
+                help="API endpoint to test (e.g., /api/users)"
+              >
+                <Input placeholder="/api/test" />
+              </Form.Item>
+
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item name="method" label={t("stress_test.http_method")} initialValue="GET">
+                    <Select>
+                      <Select.Option value="GET">GET</Select.Option>
+                      <Select.Option value="POST">POST</Select.Option>
+                      <Select.Option value="PUT">PUT</Select.Option>
+                      <Select.Option value="DELETE">DELETE</Select.Option>
+                      <Select.Option value="PATCH">PATCH</Select.Option>
+                    </Select>
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item 
+                    name="requestTimeoutSeconds" 
+                    label="Request Timeout (seconds)"
+                    initialValue={30}
+                    rules={[{ required: true }]}
+                  >
+                    <InputNumber min={1} max={300} style={{ width: "100%" }} />
+                  </Form.Item>
+                </Col>
+              </Row>
+            </Panel>
+          </Collapse>
+
+          <Divider style={{ textAlign: 'left' }}>Load Parameters</Divider>
+
+          <Row gutter={[16, 0]}>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item
+                name="concurrentUsers"
+                label={
+                  <Space>
+                    {t("stress_test.concurrent_users")}
+                    <Tooltip title="Number of simulated concurrent users">
+                      <InfoCircleOutlined style={{ color: "rgba(255,255,255,0.45)" }} />
+                    </Tooltip>
+                  </Space>
+                }
+                initialValue={10}
+                rules={[{ required: true, message: "Please enter concurrent users" }]}
+              >
+                <InputNumber min={1} max={500} style={{ width: "100%" }} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item
+                name="totalRequests"
+                label={
+                  <Space>
+                    Total Requests
+                    <Tooltip title="Leave empty if using duration-based test">
+                      <InfoCircleOutlined style={{ color: "rgba(255,255,255,0.45)" }} />
+                    </Tooltip>
+                  </Space>
+                }
+              >
+                <InputNumber min={1} max={1000000} placeholder="Unlimited" style={{ width: "100%" }} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item
+                name="durationSeconds"
+                label={
+                  <Space>
+                    Duration (seconds)
+                    <Tooltip title="Test duration. Leave empty for request-count based test">
+                      <InfoCircleOutlined style={{ color: "rgba(255,255,255,0.45)" }} />
+                    </Tooltip>
+                  </Space>
+                }
+              >
+                <InputNumber min={1} max={3600} placeholder="Unlimited" style={{ width: "100%" }} />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={[16, 0]}>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item 
+                name="targetQps" 
+                label={
+                  <Space>
+                    Target QPS
+                    <Tooltip title="Queries per second limit. Leave empty for maximum speed">
+                      <InfoCircleOutlined style={{ color: "rgba(255,255,255,0.45)" }} />
+                    </Tooltip>
+                  </Space>
+                }
+              >
+                <InputNumber min={1} max={10000} placeholder="No limit" style={{ width: "100%" }} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item 
+                name="rampUpSeconds" 
+                label={
+                  <Space>
+                    Ramp-up Time (seconds)
+                    <Tooltip title="Time to gradually increase from 1 to target concurrency">
+                      <InfoCircleOutlined style={{ color: "rgba(255,255,255,0.45)" }} />
+                    </Tooltip>
+                  </Space>
+                } 
+                initialValue={0}
+              >
+                <InputNumber min={0} max={300} style={{ width: "100%" }} />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Collapse ghost style={{ marginTop: 16 }}>
+            <Panel header={<Space><SettingOutlined />Advanced Options (Headers & Body)</Space>} key="advanced">
+              <Form.Item name="headers" label={t("stress_test.headers")} help="Custom HTTP headers in JSON format">
+                <TextArea rows={3} placeholder='{"Authorization": "Bearer token", "Content-Type": "application/json"}' />
+              </Form.Item>
+
+              <Form.Item name="body" label={t("stress_test.request_body")} help="Request body for POST/PUT requests">
+                <TextArea rows={4} placeholder='{"key": "value"}' />
+              </Form.Item>
+            </Panel>
+          </Collapse>
+
+          <Divider />
+
+          <Form.Item>
+            <Space>
+              <Button type="primary" htmlType="submit" icon={<PlayCircleOutlined />} loading={creating} size="large">
+                {t("stress_test.start_test")}
+              </Button>
+              <Button onClick={() => createForm.resetFields()} size="large">
+                Reset
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Card>
+    </Space>
   );
 
   const renderQuickTestModal = () => (

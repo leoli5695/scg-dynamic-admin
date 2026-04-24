@@ -54,8 +54,8 @@ bin/
 *.iml
 *.ipr
 
-# Qoder
-.qoder/
+# AI Coding Tools
+.trae/
 
 # Logs
 *.log
