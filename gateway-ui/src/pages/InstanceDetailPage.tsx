@@ -113,24 +113,21 @@ interface GatewayInstance {
   manualAccessUrl?: string;
   discoveredAccessUrl?: string;
   reportedAccessUrl?: string;
+  effectiveAccessUrl?: string;
   enabled: boolean;
   description: string;
   createdAt: string;
   updatedAt: string;
 }
 
-// Helper function to get effective access URL with priority
+// Helper function to get effective access URL - use backend computed value if available
 const getEffectiveAccessUrl = (inst: GatewayInstance): string | null => {
-  // 1. Manual configured (highest priority, for SLB/custom domain)
+  // Use backend computed effectiveAccessUrl if available
+  if (inst.effectiveAccessUrl) return inst.effectiveAccessUrl;
+  // Fallback to local computation
   if (inst.manualAccessUrl) return inst.manualAccessUrl;
-  // 2. K8s discovered (LoadBalancer IP or NodePort)
   if (inst.discoveredAccessUrl) return inst.discoveredAccessUrl;
-  // 3. Heartbeat reported (local dev, ECS direct)
   if (inst.reportedAccessUrl) return inst.reportedAccessUrl;
-  // 4. Default: nodeIp:serverPort
-  if (inst.nodeIp && inst.serverPort) {
-    return `http://${inst.nodeIp}:${inst.serverPort}`;
-  }
   if (inst.nodeIp && inst.nodePort) {
     return `http://${inst.nodeIp}:${inst.nodePort}`;
   }
