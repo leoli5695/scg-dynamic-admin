@@ -1,7 +1,7 @@
 package com.leoli.gateway.admin.service;
 
-import com.leoli.gateway.admin.center.ConfigCenterService;
 import com.leoli.gateway.admin.cache.InstanceNamespaceCache;
+import com.leoli.gateway.admin.center.ConfigCenterService;
 import com.leoli.gateway.admin.dto.InstanceCreateRequest;
 import com.leoli.gateway.admin.model.GatewayInstanceEntity;
 import com.leoli.gateway.admin.model.InstanceSpec;
@@ -21,6 +21,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
 
 import java.io.IOException;
 import java.io.StringReader;
@@ -28,9 +29,10 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
-import java.util.*;
-
-import org.springframework.web.client.RestTemplate;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Gateway Instance Service.
@@ -127,6 +129,30 @@ public class GatewayInstanceService {
     @Value("${redis.k8s-port:6379}")
     private Integer redisK8sPort;
 
+    @Value("${gateway.jaeger.k8s-server-addr:}")
+    private String jaegerK8sServerAddr;
+
+    @Value("${gateway.jaeger.k8s-namespace:test}")
+    private String jaegerK8sNamespace;
+
+    @Value("${gateway.jaeger.k8s-service-name:jaeger}")
+    private String jaegerK8sServiceName;
+
+    @Value("${gateway.jaeger.k8s-port:4317}")
+    private Integer jaegerK8sPort;
+
+    @Value("${gateway.prometheus.k8s-server-addr:}")
+    private String prometheusK8sServerAddr;
+
+    @Value("${gateway.prometheus.k8s-namespace:test}")
+    private String prometheusK8sNamespace;
+
+    @Value("${gateway.prometheus.k8s-service-name:prometheus}")
+    private String prometheusK8sServiceName;
+
+    @Value("${gateway.prometheus.k8s-port:9090}")
+    private Integer prometheusK8sPort;
+
     @Value("${gateway.admin.url:http://localhost:9090}")
     private String gatewayAdminUrl;
 
@@ -142,7 +168,7 @@ public class GatewayInstanceService {
     @Value("${gateway.instance.port:9090}")
     private Integer gatewayInstancePort;
 
-    @Value("${gateway.instance.server-port:9090}")
+    @Value("${gateway.instance.server-port:80}")
     private Integer defaultServerPort;
 
     @Value("${gateway.instance.management-port:9091}")
@@ -166,15 +192,14 @@ public class GatewayInstanceService {
             return nacosK8sServerAddr;
         }
         // 3. Build K8s internal DNS: {service-name}.{namespace}.svc.cluster.local:{port}
-        return String.format("%s.%s.svc.cluster.local:%d", 
+        return String.format("%s.%s.svc.cluster.local:%d",
             nacosK8sServiceName, nacosK8sNamespace, nacosK8sPort);
     }
 
     /**
      * Get Redis server address for K8s internal access.
      * Redis is optional - returns null if not configured, gateway will use local rate limiting.
-     * Priority: 1. Instance custom address  2. Global k8s-server-addr
-     * Note: We don't auto-build Redis address because Redis may not exist in the cluster.
+     * Priority: 1. Instance custom address  2. Global k8s-server-addr  3. Auto-built from namespace/service/port
      */
     private String getRedisK8sAddress(GatewayInstanceEntity instance) {
         // 1. If instance has a custom Redis address, use it (for cross-cluster scenarios)
@@ -185,8 +210,47 @@ public class GatewayInstanceService {
         if (redisK8sServerAddr != null && !redisK8sServerAddr.isEmpty()) {
             return redisK8sServerAddr;
         }
-        // 3. Redis not configured - return null, gateway will use local rate limiting
-        return null;
+        // 3. Build K8s internal DNS: {service-name}.{namespace}.svc.cluster.local:{port}
+        return String.format("%s.%s.svc.cluster.local:%d",
+                redisK8sServiceName, redisK8sNamespace, redisK8sPort);
+    }
+
+    /**
+     * Get Jaeger OTLP server address for K8s internal access.
+     * Jaeger is optional - returns null if not configured, gateway will disable distributed tracing.
+     * Priority: 1. Instance custom address  2. Global k8s-server-addr  3. Auto-built from namespace/service/port
+     */
+    private String getJaegerK8sAddress(GatewayInstanceEntity instance) {
+        // 1. If instance has a custom Jaeger address, use it (for cross-cluster scenarios)
+        if (instance != null && instance.getJaegerServerAddr() != null && !instance.getJaegerServerAddr().isEmpty()) {
+            return instance.getJaegerServerAddr();
+        }
+        // 2. If global k8s-server-addr is explicitly set, use it
+        if (jaegerK8sServerAddr != null && !jaegerK8sServerAddr.isEmpty()) {
+            return jaegerK8sServerAddr;
+        }
+        // 3. Build K8s internal DNS: {service-name}.{namespace}.svc.cluster.local:{port}
+        return String.format("%s.%s.svc.cluster.local:%d",
+                jaegerK8sServiceName, jaegerK8sNamespace, jaegerK8sPort);
+    }
+
+    /**
+     * Get Prometheus server address for K8s internal access.
+     * Prometheus is optional - returns null if not configured.
+     * Priority: 1. Instance custom address  2. Global k8s-server-addr  3. Auto-built from namespace/service/port
+     */
+    private String getPrometheusK8sAddress(GatewayInstanceEntity instance) {
+        // 1. If instance has a custom Prometheus address, use it (for cross-cluster scenarios)
+        if (instance != null && instance.getPrometheusServerAddr() != null && !instance.getPrometheusServerAddr().isEmpty()) {
+            return instance.getPrometheusServerAddr();
+        }
+        // 2. If global k8s-server-addr is explicitly set, use it
+        if (prometheusK8sServerAddr != null && !prometheusK8sServerAddr.isEmpty()) {
+            return prometheusK8sServerAddr;
+        }
+        // 3. Build K8s internal DNS: {service-name}.{namespace}.svc.cluster.local:{port}
+        return String.format("%s.%s.svc.cluster.local:%d",
+                prometheusK8sServiceName, prometheusK8sNamespace, prometheusK8sPort);
     }
 
     /**
@@ -239,6 +303,7 @@ public class GatewayInstanceService {
                 .orElseThrow(() -> new IllegalArgumentException("Instance not found: " + id));
         // Refresh service info from K8s
         refreshServiceInfoFromK8s(instance);
+        fillDefaultNacosAddr(instance);
         return instance;
     }
 
@@ -293,8 +358,19 @@ public class GatewayInstanceService {
      * Get instance by instance ID (UUID).
      */
     public GatewayInstanceEntity getInstanceByInstanceId(String instanceId) {
-        return instanceRepository.findByInstanceId(instanceId)
+        GatewayInstanceEntity instance = instanceRepository.findByInstanceId(instanceId)
                 .orElseThrow(() -> new IllegalArgumentException("Instance not found: " + instanceId));
+        fillDefaultNacosAddr(instance);
+        return instance;
+    }
+
+    /**
+     * Fill default Nacos address if instance doesn't have one.
+     */
+    private void fillDefaultNacosAddr(GatewayInstanceEntity instance) {
+        if (instance.getNacosServerAddr() == null || instance.getNacosServerAddr().isEmpty()) {
+            instance.setNacosServerAddr(nacosServerAddr);
+        }
     }
 
     /**
@@ -398,6 +474,8 @@ public class GatewayInstanceService {
         entity.setManagementPort(managementPort);
         entity.setNacosServerAddr(request.getNacosServerAddr());  // Custom Nacos address (optional)
         entity.setRedisServerAddr(request.getRedisServerAddr());  // Custom Redis address (optional)
+        entity.setJaegerServerAddr(request.getJaegerServerAddr());  // Custom Jaeger address (optional)
+        entity.setPrometheusServerAddr(request.getPrometheusServerAddr());  // Custom Prometheus address (optional)
         entity.setStatus(InstanceStatus.STARTING.getDescription());
         entity.setStatusCode(InstanceStatus.STARTING.getCode());
         entity.setDeploymentName(deploymentName);
@@ -485,7 +563,7 @@ public class GatewayInstanceService {
             log.info("Set nodeIp for instance {}: {}", instance.getInstanceId(), nodeIp);
 
         } catch (ApiException e) {
-            log.error("Kubernetes API error: code={}, message={}, body={}", 
+            log.error("Kubernetes API error: code={}, message={}, body={}",
                     e.getCode(), e.getMessage(), e.getResponseBody());
             throw new RuntimeException("Kubernetes deployment failed: " + e.getMessage());
         }
@@ -519,8 +597,8 @@ public class GatewayInstanceService {
         V1Container container = new V1Container();
         container.setName("gateway");
         container.setImage(instance.getImage());
-        // Use provided pullPolicy, default to IfNotPresent if null
-        container.setImagePullPolicy(pullPolicy != null ? pullPolicy : "IfNotPresent");
+        // Use provided pullPolicy, default to Never if null
+        container.setImagePullPolicy(pullPolicy != null ? pullPolicy : "Never");
 
         // Container ports - use serverPort for HTTP traffic
         List<V1ContainerPort> ports = new ArrayList<>();
@@ -546,6 +624,17 @@ public class GatewayInstanceService {
         if (redisAddr != null && !redisAddr.isEmpty()) {
             envVars.add(new V1EnvVar().name("REDIS_HOST").value(redisAddr.split(":")[0]));
             envVars.add(new V1EnvVar().name("REDIS_PORT").value(redisAddr.contains(":") ? redisAddr.split(":")[1] : "6379"));
+        }
+        // Jaeger OTLP address for distributed tracing
+        String jaegerAddr = getJaegerK8sAddress(instance);
+        if (jaegerAddr != null && !jaegerAddr.isEmpty()) {
+            envVars.add(new V1EnvVar().name("OTEL_EXPORTER_OTLP_ENDPOINT").value("http://" + jaegerAddr));
+            envVars.add(new V1EnvVar().name("OTEL_TRACING_ENABLED").value("true"));
+        }
+        // Prometheus address for metrics push
+        String prometheusAddr = getPrometheusK8sAddress(instance);
+        if (prometheusAddr != null && !prometheusAddr.isEmpty()) {
+            envVars.add(new V1EnvVar().name("PROMETHEUS_PUSH_URL").value("http://" + prometheusAddr));
         }
         // Add port environment variables for gateway to use
         envVars.add(new V1EnvVar().name("SERVER_PORT").value(String.valueOf(serverPort)));
@@ -781,9 +870,9 @@ public class GatewayInstanceService {
     private void deleteAllConfigsInNamespace(String nacosNamespace) {
         // Delete route configs
         List<String> routeIds = routeRepository.findByInstanceId(
-            instanceRepository.findByInstanceId(nacosNamespace)
-                .map(GatewayInstanceEntity::getInstanceId)
-                .orElse(nacosNamespace)
+                instanceRepository.findByInstanceId(nacosNamespace)
+                        .map(GatewayInstanceEntity::getInstanceId)
+                        .orElse(nacosNamespace)
         ).stream().map(r -> r.getRouteId()).toList();
 
         for (String routeId : routeIds) {
@@ -792,9 +881,9 @@ public class GatewayInstanceService {
 
         // Delete service configs
         List<String> serviceIds = serviceRepository.findByInstanceId(
-            instanceRepository.findByInstanceId(nacosNamespace)
-                .map(GatewayInstanceEntity::getInstanceId)
-                .orElse(nacosNamespace)
+                instanceRepository.findByInstanceId(nacosNamespace)
+                        .map(GatewayInstanceEntity::getInstanceId)
+                        .orElse(nacosNamespace)
         ).stream().map(s -> s.getServiceId()).toList();
 
         for (String serviceId : serviceIds) {
@@ -803,9 +892,9 @@ public class GatewayInstanceService {
 
         // Delete strategy configs
         List<String> strategyIds = strategyRepository.findByInstanceId(
-            instanceRepository.findByInstanceId(nacosNamespace)
-                .map(GatewayInstanceEntity::getInstanceId)
-                .orElse(nacosNamespace)
+                instanceRepository.findByInstanceId(nacosNamespace)
+                        .map(GatewayInstanceEntity::getInstanceId)
+                        .orElse(nacosNamespace)
         ).stream().map(s -> s.getStrategyId()).toList();
 
         for (String strategyId : strategyIds) {
@@ -813,7 +902,7 @@ public class GatewayInstanceService {
         }
 
         log.info("Deleted {} routes, {} services, {} strategies from Nacos",
-            routeIds.size(), serviceIds.size(), strategyIds.size());
+                routeIds.size(), serviceIds.size(), strategyIds.size());
 
         // Delete the Nacos namespace itself
         deleteNacosNamespace(nacosNamespace);
@@ -885,26 +974,26 @@ public class GatewayInstanceService {
     @Transactional
     public GatewayInstanceEntity startInstance(Long id) {
         GatewayInstanceEntity instance = getInstanceById(id);
-        
+
         // Can only start from STOPPED state
-        if (instance.getStatusCode() != null && 
-            instance.getStatusCode() != InstanceStatus.STOPPED.getCode() &&
-            instance.getStatusCode() != InstanceStatus.ERROR.getCode()) {
-            throw new IllegalStateException("Cannot start instance in current state: " + 
-                InstanceStatus.fromCode(instance.getStatusCode()).getDescription());
+        if (instance.getStatusCode() != null &&
+                instance.getStatusCode() != InstanceStatus.STOPPED.getCode() &&
+                instance.getStatusCode() != InstanceStatus.ERROR.getCode()) {
+            throw new IllegalStateException("Cannot start instance in current state: " +
+                    InstanceStatus.fromCode(instance.getStatusCode()).getDescription());
         }
-        
+
         if (instance.getReplicas() == null || instance.getReplicas() <= 0) {
             instance.setReplicas(1);
         }
-        
+
         // Set status to STARTING
         instance.setStatus(InstanceStatus.STARTING.getDescription());
         instance.setStatusCode(InstanceStatus.STARTING.getCode());
         instance.setStatusMessage("Starting instance");
         instance.setMissedHeartbeats(0);
         instanceRepository.save(instance);
-        
+
         return scaleInstance(instance, instance.getReplicas());
     }
 
@@ -914,22 +1003,22 @@ public class GatewayInstanceService {
     @Transactional
     public GatewayInstanceEntity stopInstance(Long id) {
         GatewayInstanceEntity instance = getInstanceById(id);
-        
+
         // Can only stop from RUNNING or ERROR state
-        if (instance.getStatusCode() != null && 
-            instance.getStatusCode() != InstanceStatus.RUNNING.getCode() &&
-            instance.getStatusCode() != InstanceStatus.ERROR.getCode() &&
-            instance.getStatusCode() != InstanceStatus.STARTING.getCode()) {
-            throw new IllegalStateException("Cannot stop instance in current state: " + 
-                InstanceStatus.fromCode(instance.getStatusCode()).getDescription());
+        if (instance.getStatusCode() != null &&
+                instance.getStatusCode() != InstanceStatus.RUNNING.getCode() &&
+                instance.getStatusCode() != InstanceStatus.ERROR.getCode() &&
+                instance.getStatusCode() != InstanceStatus.STARTING.getCode()) {
+            throw new IllegalStateException("Cannot stop instance in current state: " +
+                    InstanceStatus.fromCode(instance.getStatusCode()).getDescription());
         }
-        
+
         // Set status to STOPPING
         instance.setStatus(InstanceStatus.STOPPING.getDescription());
         instance.setStatusCode(InstanceStatus.STOPPING.getCode());
         instance.setStatusMessage("Stopping instance");
         instanceRepository.save(instance);
-        
+
         return scaleInstance(instance, 0);
     }
 
@@ -945,7 +1034,7 @@ public class GatewayInstanceService {
 
         try {
             V1Deployment deployment = appsApi.readNamespacedDeployment(
-                    instance.getDeploymentName(), 
+                    instance.getDeploymentName(),
                     instance.getNamespace()
             ).execute();
 
@@ -1063,34 +1152,34 @@ public class GatewayInstanceService {
     /**
      * Handle heartbeat from gateway instance.
      * This is called by the InstanceHealthController.
-     * 
-     * @param instanceId The instance ID
-     * @param metrics Optional metrics from the gateway
-     * @param accessUrl The access URL reported by gateway (for local dev, ECS direct)
-     * @param serverPort The server port reported by gateway
+     *
+     * @param instanceId     The instance ID
+     * @param metrics        Optional metrics from the gateway
+     * @param accessUrl      The access URL reported by gateway (for local dev, ECS direct)
+     * @param serverPort     The server port reported by gateway
      * @param managementPort The management port reported by gateway
      */
     @Transactional
-    public void handleHeartbeat(String instanceId, Map<String, Object> metrics, 
-            String accessUrl, Integer serverPort, Integer managementPort) {
+    public void handleHeartbeat(String instanceId, Map<String, Object> metrics,
+                                String accessUrl, Integer serverPort, Integer managementPort) {
         GatewayInstanceEntity instance = instanceRepository.findByInstanceId(instanceId)
                 .orElse(null);
-        
+
         if (instance == null) {
             log.warn("Heartbeat received for unknown instance: {}", instanceId);
             return;
         }
-        
+
         // Update heartbeat time (all states)
         instance.setLastHeartbeatTime(LocalDateTime.now());
         instance.setMissedHeartbeats(0);
-        
+
         // Update reported access URL if provided
         if (accessUrl != null && !accessUrl.isEmpty()) {
             instance.setReportedAccessUrl(accessUrl);
             log.debug("Instance {} reported access URL: {}", instanceId, accessUrl);
         }
-        
+
         // Update ports if provided
         if (serverPort != null) {
             instance.setServerPort(serverPort);
@@ -1098,20 +1187,20 @@ public class GatewayInstanceService {
         if (managementPort != null) {
             instance.setManagementPort(managementPort);
         }
-        
+
         // Only update status from STARTING or ERROR to RUNNING
         Integer currentStatus = instance.getStatusCode();
-        if (currentStatus == null || 
-            currentStatus == InstanceStatus.STARTING.getCode() || 
-            currentStatus == InstanceStatus.ERROR.getCode()) {
+        if (currentStatus == null ||
+                currentStatus == InstanceStatus.STARTING.getCode() ||
+                currentStatus == InstanceStatus.ERROR.getCode()) {
             instance.setStatus(InstanceStatus.RUNNING.getDescription());
             instance.setStatusCode(InstanceStatus.RUNNING.getCode());
             instance.setStatusMessage(null);
             log.info("Instance {} status changed to RUNNING", instanceId);
         }
-        
+
         // RUNNING state: only update heartbeat time, don't change status
-        
+
         instanceRepository.save(instance);
         log.debug("Heartbeat received from instance: {}", instanceId);
     }
@@ -1122,37 +1211,37 @@ public class GatewayInstanceService {
     @Transactional
     public GatewayInstanceEntity updateReplicas(Long id, Integer replicas) {
         GatewayInstanceEntity instance = getInstanceById(id);
-        
+
         if (replicas == null || replicas < 1 || replicas > 10) {
             throw new IllegalArgumentException("Replicas must be between 1 and 10");
         }
-        
+
         // Only allow update when running
         if (instance.getStatusCode() != InstanceStatus.RUNNING.getCode()) {
             throw new IllegalStateException("Can only update replicas when instance is running");
         }
-        
+
         instance.setReplicas(replicas);
-        
+
         KubernetesCluster cluster = clusterRepository.findById(instance.getClusterId())
                 .orElseThrow(() -> new IllegalArgumentException("Cluster not found"));
-        
+
         ApiClient client = getApiClient(cluster.getId(), cluster.getKubeconfig());
         AppsV1Api appsApi = new AppsV1Api(client);
-        
+
         try {
             V1Deployment deployment = appsApi.readNamespacedDeployment(
                     instance.getDeploymentName(),
                     instance.getNamespace()
             ).execute();
-            
+
             deployment.getSpec().setReplicas(replicas);
             appsApi.replaceNamespacedDeployment(
                     instance.getDeploymentName(),
                     instance.getNamespace(),
                     deployment
             ).execute();
-            
+
             return instanceRepository.save(instance);
         } catch (ApiException e) {
             log.error("Failed to update replicas: {}", e.getMessage());
@@ -1166,72 +1255,72 @@ public class GatewayInstanceService {
     @Transactional
     public GatewayInstanceEntity updateSpec(Long id, String specType, Double cpuCores, Integer memoryMB) {
         GatewayInstanceEntity instance = getInstanceById(id);
-        
+
         // Only allow update when running or stopped
         Integer currentStatus = instance.getStatusCode();
-        if (currentStatus != InstanceStatus.RUNNING.getCode() && 
-            currentStatus != InstanceStatus.STOPPED.getCode()) {
+        if (currentStatus != InstanceStatus.RUNNING.getCode() &&
+                currentStatus != InstanceStatus.STOPPED.getCode()) {
             throw new IllegalStateException("Can only update spec when instance is running or stopped");
         }
-        
+
         // Determine spec values
         InstanceSpec spec = InstanceSpec.fromType(specType != null ? specType : "custom");
         if (!spec.isCustom()) {
             cpuCores = spec.getCpuCores();
             memoryMB = spec.getMemoryMB();
         }
-        
+
         if (cpuCores == null || memoryMB == null) {
             throw new IllegalArgumentException("CPU and memory must be specified");
         }
-        
+
         instance.setSpecType(specType != null ? specType : "custom");
         instance.setCpuCores(cpuCores);
         instance.setMemoryMB(memoryMB);
-        
+
         KubernetesCluster cluster = clusterRepository.findById(instance.getClusterId())
                 .orElseThrow(() -> new IllegalArgumentException("Cluster not found"));
-        
+
         ApiClient client = getApiClient(cluster.getId(), cluster.getKubeconfig());
         AppsV1Api appsApi = new AppsV1Api(client);
-        
+
         try {
             V1Deployment deployment = appsApi.readNamespacedDeployment(
                     instance.getDeploymentName(),
                     instance.getNamespace()
             ).execute();
-            
+
             // Update container resources
             V1Container container = deployment.getSpec().getTemplate().getSpec().getContainers().get(0);
             V1ResourceRequirements resources = container.getResources();
             if (resources == null) {
                 resources = new V1ResourceRequirements();
             }
-            
+
             Map<String, Quantity> limits = new HashMap<>();
             Map<String, Quantity> requests = new HashMap<>();
             limits.put("cpu", new Quantity(cpuCores.toString()));
             limits.put("memory", new Quantity(memoryMB + "Mi"));
             requests.put("cpu", new Quantity((cpuCores / 2) + ""));
             requests.put("memory", new Quantity((memoryMB / 2) + "Mi"));
-            
+
             resources.setLimits(limits);
             resources.setRequests(requests);
             container.setResources(resources);
-            
+
             appsApi.replaceNamespacedDeployment(
                     instance.getDeploymentName(),
                     instance.getNamespace(),
                     deployment
             ).execute();
-            
+
             // Pods will restart automatically due to deployment update
             if (currentStatus == InstanceStatus.RUNNING.getCode()) {
                 instance.setStatus(InstanceStatus.STARTING.getDescription());
                 instance.setStatusCode(InstanceStatus.STARTING.getCode());
                 instance.setStatusMessage("Spec updated, waiting for pods to restart");
             }
-            
+
             return instanceRepository.save(instance);
         } catch (ApiException e) {
             log.error("Failed to update spec: {}", e.getMessage());
@@ -1245,34 +1334,34 @@ public class GatewayInstanceService {
     @Transactional
     public GatewayInstanceEntity updateImage(Long id, String image) {
         GatewayInstanceEntity instance = getInstanceById(id);
-        
+
         // Only allow update when running
         if (instance.getStatusCode() != InstanceStatus.RUNNING.getCode()) {
             throw new IllegalStateException("Can only update image when instance is running");
         }
-        
+
         if (image == null || image.isEmpty()) {
             throw new IllegalArgumentException("Image must be specified");
         }
-        
+
         instance.setImage(image);
-        
+
         KubernetesCluster cluster = clusterRepository.findById(instance.getClusterId())
                 .orElseThrow(() -> new IllegalArgumentException("Cluster not found"));
-        
+
         ApiClient client = getApiClient(cluster.getId(), cluster.getKubeconfig());
         AppsV1Api appsApi = new AppsV1Api(client);
-        
+
         try {
             V1Deployment deployment = appsApi.readNamespacedDeployment(
                     instance.getDeploymentName(),
                     instance.getNamespace()
             ).execute();
-            
+
             // Update image
             V1Container container = deployment.getSpec().getTemplate().getSpec().getContainers().get(0);
             container.setImage(image);
-            
+
             // For multi-replica, K8s will do rolling update automatically
             // For single replica, it will restart the pod
             appsApi.replaceNamespacedDeployment(
@@ -1280,7 +1369,7 @@ public class GatewayInstanceService {
                     instance.getNamespace(),
                     deployment
             ).execute();
-            
+
             int replicas = instance.getReplicas() != null ? instance.getReplicas() : 1;
             if (replicas == 1) {
                 // Single replica: will have brief downtime
@@ -1291,7 +1380,7 @@ public class GatewayInstanceService {
                 // Multi-replica: rolling update, status stays RUNNING
                 instance.setStatusMessage("Image updated, rolling update in progress");
             }
-            
+
             return instanceRepository.save(instance);
         } catch (ApiException e) {
             log.error("Failed to update image: {}", e.getMessage());
@@ -1308,16 +1397,16 @@ public class GatewayInstanceService {
         if (cluster == null) {
             return 0;
         }
-        
+
         ApiClient client = getApiClient(cluster.getId(), cluster.getKubeconfig());
         CoreV1Api coreApi = new CoreV1Api(client);
-        
+
         try {
             String labelSelector = "gateway-instance-id=" + instance.getInstanceId();
             V1PodList pods = coreApi.listNamespacedPod(instance.getNamespace())
                     .labelSelector(labelSelector)
                     .execute();
-            
+
             int runningCount = 0;
             for (V1Pod pod : pods.getItems()) {
                 if ("Running".equals(pod.getStatus().getPhase())) {
@@ -1417,8 +1506,8 @@ public class GatewayInstanceService {
             if (osImage != null) {
                 String osImageLower = osImage.toLowerCase();
                 if (osImageLower.contains("rancher desktop") ||
-                    osImageLower.contains("docker desktop") ||
-                    osImageLower.contains("docker desktop")) {
+                        osImageLower.contains("docker desktop") ||
+                        osImageLower.contains("docker desktop")) {
                     return true;
                 }
             }
@@ -1428,10 +1517,10 @@ public class GatewayInstanceService {
         if (node.getMetadata() != null && node.getMetadata().getName() != null) {
             String hostname = node.getMetadata().getName().toLowerCase();
             if (hostname.equals("localhost") ||
-                hostname.equals("docker-desktop") ||
-                hostname.equals("minikube") ||
-                hostname.startsWith("kind-") ||
-                hostname.startsWith("k3d-")) {
+                    hostname.equals("docker-desktop") ||
+                    hostname.equals("minikube") ||
+                    hostname.startsWith("kind-") ||
+                    hostname.startsWith("k3d-")) {
                 return true;
             }
         }

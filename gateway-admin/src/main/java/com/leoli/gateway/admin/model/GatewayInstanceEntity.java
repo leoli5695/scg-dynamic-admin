@@ -55,6 +55,12 @@ public class GatewayInstanceEntity {
     @Column(name = "redis_server_addr", length = 255)
     private String redisServerAddr;  // Custom Redis server address (optional, for distributed rate limiting)
 
+    @Column(name = "jaeger_server_addr", length = 255)
+    private String jaegerServerAddr;  // Custom Jaeger OTLP address (optional, for distributed tracing)
+
+    @Column(name = "prometheus_server_addr", length = 255)
+    private String prometheusServerAddr;  // Custom Prometheus push address (optional, for metrics)
+
     @Column(name = "spec_type", length = 20)
     private String specType;  // small/medium/large/xlarge/custom
 
@@ -187,7 +193,7 @@ public class GatewayInstanceEntity {
 
     /**
      * Get the effective access URL with priority.
-     * Priority: manualAccessUrl > discoveredAccessUrl > reportedAccessUrl > nodeIp:serverPort
+     * Priority: manualAccessUrl > discoveredAccessUrl > reportedAccessUrl > nodeIp:nodePort
      *
      * @return the effective access URL for this gateway instance
      */
@@ -204,10 +210,7 @@ public class GatewayInstanceEntity {
         if (reportedAccessUrl != null && !reportedAccessUrl.isEmpty()) {
             return reportedAccessUrl;
         }
-        // 4. Default: nodeIp:serverPort
-        if (nodeIp != null && !nodeIp.isEmpty() && serverPort != null) {
-            return "http://" + nodeIp + ":" + serverPort;
-        }
+        // 4. Default: nodeIp:nodePort (for NodePort service access)
         if (nodeIp != null && !nodeIp.isEmpty() && nodePort != null) {
             return "http://" + nodeIp + ":" + nodePort;
         }

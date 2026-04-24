@@ -77,7 +77,7 @@ class GatewayInstanceServiceTest {
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(service, "defaultImage", "my-gateway:latest");
-        ReflectionTestUtils.setField(service, "imagePullPolicy", "IfNotPresent");
+        ReflectionTestUtils.setField(service, "imagePullPolicy", "Never");
         ReflectionTestUtils.setField(service, "nacosServerAddr", "localhost:8848");
         ReflectionTestUtils.setField(service, "nacosK8sNamespace", "test");
         ReflectionTestUtils.setField(service, "nacosK8sServiceName", "nacos");

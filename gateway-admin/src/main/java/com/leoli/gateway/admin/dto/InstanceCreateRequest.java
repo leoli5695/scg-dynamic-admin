@@ -30,7 +30,7 @@ public class InstanceCreateRequest {
 
     private String imageType = "preset";  // preset or custom
 
-    private String imagePullPolicy = "IfNotPresent";  // Always, IfNotPresent, Never
+    private String imagePullPolicy = "Never";  // Always, IfNotPresent, Never
 
     private String description;
 
@@ -38,7 +38,7 @@ public class InstanceCreateRequest {
      * Gateway HTTP port (server.port).
      * Default: 9090
      */
-    private Integer serverPort = 9090;
+    private Integer serverPort = 80;
 
     /**
      * Gateway management/actuator port (management.server.port).
@@ -60,4 +60,18 @@ public class InstanceCreateRequest {
      * Example: redis.other-namespace.svc.cluster.local:6379
      */
     private String redisServerAddr;
+
+    /**
+     * Custom Jaeger OTLP address for distributed tracing.
+     * Leave empty if Jaeger is in the same K8s cluster as the gateway instance.
+     * Example: jaeger.other-namespace.svc.cluster.local:4317
+     */
+    private String jaegerServerAddr;
+
+    /**
+     * Custom Prometheus push address for metrics.
+     * Leave empty if Prometheus is in the same K8s cluster as the gateway instance.
+     * Example: prometheus.other-namespace.svc.cluster.local:9090
+     */
+    private String prometheusServerAddr;
 }

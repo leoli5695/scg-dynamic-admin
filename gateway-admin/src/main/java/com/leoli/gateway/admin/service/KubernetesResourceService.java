@@ -146,12 +146,15 @@ public class KubernetesResourceService {
 
             if (pod.getStatus().getConditions() != null) {
                 List<Map<String, Object>> conditions = pod.getStatus().getConditions().stream()
-                        .map(c -> Map.<String, Object>of(
-                                "type", c.getType(),
-                                "status", c.getStatus(),
-                                "reason", c.getReason(),
-                                "message", c.getMessage(),
-                                "lastTransitionTime", c.getLastTransitionTime()))
+                        .map(c -> {
+                            Map<String, Object> map = new HashMap<>();
+                            map.put("type", c.getType());
+                            map.put("status", c.getStatus());
+                            map.put("reason", c.getReason());
+                            map.put("message", c.getMessage());
+                            map.put("lastTransitionTime", c.getLastTransitionTime());
+                            return map;
+                        })
                         .toList();
                 result.put("conditions", conditions);
             }
@@ -163,13 +166,16 @@ public class KubernetesResourceService {
                         .fieldSelector(fieldSelector).execute();
                 if (events.getItems() != null) {
                     List<Map<String, Object>> eventList = events.getItems().stream()
-                            .map(e -> Map.<String, Object>of(
-                                    "type", e.getType(),
-                                    "reason", e.getReason(),
-                                    "message", e.getMessage(),
-                                    "count", e.getCount(),
-                                    "firstTimestamp", e.getFirstTimestamp(),
-                                    "lastTimestamp", e.getLastTimestamp()))
+                            .map(e -> {
+                                Map<String, Object> map = new HashMap<>();
+                                map.put("type", e.getType());
+                                map.put("reason", e.getReason());
+                                map.put("message", e.getMessage());
+                                map.put("count", e.getCount());
+                                map.put("firstTimestamp", e.getFirstTimestamp());
+                                map.put("lastTimestamp", e.getLastTimestamp());
+                                return map;
+                            })
                             .toList();
                     result.put("events", eventList);
                 }
@@ -256,15 +262,23 @@ public class KubernetesResourceService {
 
         if (c.getPorts() != null) {
             info.put("ports", c.getPorts().stream()
-                    .map(p -> Map.<String, Object>of(
-                            "containerPort", p.getContainerPort(),
-                            "protocol", p.getProtocol(),
-                            "name", p.getName()))
+                    .map(p -> {
+                        Map<String, Object> portMap = new HashMap<>();
+                        portMap.put("containerPort", p.getContainerPort());
+                        portMap.put("protocol", p.getProtocol());
+                        portMap.put("name", p.getName());
+                        return portMap;
+                    })
                     .toList());
         }
         if (c.getEnv() != null) {
             info.put("env", c.getEnv().stream()
-                    .map(e -> Map.<String, String>of("name", e.getName(), "value", e.getValue()))
+                    .map(e -> {
+                        Map<String, String> envMap = new HashMap<>();
+                        envMap.put("name", e.getName());
+                        envMap.put("value", e.getValue());
+                        return envMap;
+                    })
                     .toList());
         }
         if (c.getResources() != null) {
@@ -287,16 +301,18 @@ public class KubernetesResourceService {
             Map<String, Object> state = new HashMap<>();
             if (s.getState().getRunning() != null) state.put("running", s.getState().getRunning().getStartedAt());
             if (s.getState().getWaiting() != null) {
-                state.put("waiting", Map.of(
-                        "reason", s.getState().getWaiting().getReason(),
-                        "message", s.getState().getWaiting().getMessage()));
+                Map<String, Object> waiting = new HashMap<>();
+                waiting.put("reason", s.getState().getWaiting().getReason());
+                waiting.put("message", s.getState().getWaiting().getMessage());
+                state.put("waiting", waiting);
             }
             if (s.getState().getTerminated() != null) {
-                state.put("terminated", Map.of(
-                        "exitCode", s.getState().getTerminated().getExitCode(),
-                        "reason", s.getState().getTerminated().getReason(),
-                        "finishedAt", s.getState().getTerminated().getFinishedAt(),
-                        "startedAt", s.getState().getTerminated().getStartedAt()));
+                Map<String, Object> terminated = new HashMap<>();
+                terminated.put("exitCode", s.getState().getTerminated().getExitCode());
+                terminated.put("reason", s.getState().getTerminated().getReason());
+                terminated.put("finishedAt", s.getState().getTerminated().getFinishedAt());
+                terminated.put("startedAt", s.getState().getTerminated().getStartedAt());
+                state.put("terminated", terminated);
             }
             info.put("state", state);
         }

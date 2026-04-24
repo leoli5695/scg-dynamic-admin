@@ -138,8 +138,8 @@ const getEffectiveAccessUrl = (inst: GatewayInstance): string | null => {
 };
 
 // Helper function to get effective Nacos server address
-const getEffectiveNacosServerAddr = (inst: GatewayInstance): string => {
-  return inst.nacosServerAddr || '127.0.0.1:8848';
+const getEffectiveNacosServerAddr = (inst: GatewayInstance | null, globalAddr: string): string => {
+  return inst?.nacosServerAddr || globalAddr;
 };
 
 const InstanceDetailPage: React.FC = () => {
@@ -153,6 +153,7 @@ const InstanceDetailPage: React.FC = () => {
   const [scaleModalVisible, setScaleModalVisible] = useState(false);
   const [scaleReplicas, setScaleReplicas] = useState(1);
   const [scaleLoading, setScaleLoading] = useState(false);
+  const [globalNacosAddr, setGlobalNacosAddr] = useState<string>("127.0.0.1:8848");
 
   // User info for header display
   const [user, setUser] = useState<{
@@ -220,7 +221,19 @@ const InstanceDetailPage: React.FC = () => {
 
   useEffect(() => {
     fetchInstance();
+    fetchConfig();
   }, [instanceId]);
+
+  const fetchConfig = async () => {
+    try {
+      const response = await axios.get("/api/instances/config");
+      if (response.data.code === 200 && response.data.data?.nacosServerAddr) {
+        setGlobalNacosAddr(response.data.data.nacosServerAddr);
+      }
+    } catch (error) {
+      console.error("Failed to fetch config:", error);
+    }
+  };
 
   const fetchInstance = async () => {
     if (!instanceId) return;
@@ -644,13 +657,13 @@ const InstanceDetailPage: React.FC = () => {
                 <Descriptions.Item label={t("instance.nacos_console")}>
                   <Tooltip title={t("instance.click_to_open_nacos")}>
                     <a
-                      href={`http://${getEffectiveNacosServerAddr(instance)}/nacos/#/configurationManagement?dataId=&group=&namespace=${instance.nacosNamespace}`}
+                      href={`http://${getEffectiveNacosServerAddr(instance, globalNacosAddr)}/nacos/#/configurationManagement?dataId=&group=&namespace=${instance?.nacosNamespace}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="instance-access-url"
                     >
                       <LinkOutlined style={{ marginRight: "4px" }} />
-                      http://{getEffectiveNacosServerAddr(instance)}/nacos
+                      http://{getEffectiveNacosServerAddr(instance, globalNacosAddr)}/nacos
                     </a>
                   </Tooltip>
                 </Descriptions.Item>

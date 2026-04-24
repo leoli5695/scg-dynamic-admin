@@ -209,7 +209,9 @@ const InstanceCreatePage: React.FC = () => {
               replicas: 1,
               createNamespace: true,
               image: "my-gateway:latest",
-              imagePullPolicy: "IfNotPresent",
+              imagePullPolicy: "Never",
+              serverPort: 80,
+              managementPort: 9091,
             }}
           >
             {/* Basic Info Section */}
@@ -308,6 +310,26 @@ const InstanceCreatePage: React.FC = () => {
                       tooltip={t("instance.redis_server_addr_tooltip")}
                     >
                       <Input placeholder={t("instance.redis_server_addr_placeholder")} size="large" />
+                    </Form.Item>
+                  </Col>
+                </Row>
+                <Row gutter={16}>
+                  <Col span={12}>
+                    <Form.Item
+                      name="jaegerServerAddr"
+                      label={t("instance.jaeger_server_addr")}
+                      tooltip={t("instance.jaeger_server_addr_tooltip")}
+                    >
+                      <Input placeholder={t("instance.jaeger_server_addr_placeholder")} size="large" />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item
+                      name="prometheusServerAddr"
+                      label={t("instance.prometheus_server_addr")}
+                      tooltip={t("instance.prometheus_server_addr_tooltip")}
+                    >
+                      <Input placeholder={t("instance.prometheus_server_addr_placeholder")} size="large" />
                     </Form.Item>
                   </Col>
                 </Row>

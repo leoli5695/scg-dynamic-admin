@@ -1,0 +1,22 @@
+FROM ghcr.io/graalvm/graalvm-community:17
+WORKDIR /app
+
+RUN microdnf install -y curl tzdata && microdnf clean all
+
+RUN groupadd -r demo && useradd -r -g demo -d /home/demo demo
+
+RUN mkdir -p /home/demo && chown -R demo:demo /home/demo
+
+COPY target/demo-service-1.0.0.jar app.jar
+
+RUN chown -R demo:demo /app
+
+USER demo
+
+EXPOSE 8081
+
+ENV JAVA_OPTS="-Xms128m -Xmx256m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD curl -f http://localhost:8081/actuator/health || exit 1
+
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

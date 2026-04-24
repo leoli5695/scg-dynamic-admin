@@ -6,6 +6,7 @@ import com.leoli.gateway.admin.service.GatewayInstanceService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,6 +27,22 @@ public class GatewayInstanceController {
 
     @Autowired
     private GatewayInstanceService instanceService;
+
+    @Value("${nacos.server-addr:localhost:8848}")
+    private String nacosServerAddr;
+
+    /**
+     * Get gateway-admin config for frontend.
+     */
+    @GetMapping("/config")
+    public ResponseEntity<Map<String, Object>> getConfig() {
+        Map<String, Object> config = new HashMap<>();
+        config.put("nacosServerAddr", nacosServerAddr);
+        Map<String, Object> result = new HashMap<>();
+        result.put("code", 200);
+        result.put("data", config);
+        return ResponseEntity.ok(result);
+    }
 
     /**
      * Get all instances.
@@ -261,11 +278,11 @@ public class GatewayInstanceController {
             @RequestBody Map<String, Object> request) {
         try {
             String specType = (String) request.get("specType");
-            Double cpuCores = request.get("cpuCores") != null ? 
+            Double cpuCores = request.get("cpuCores") != null ?
                     ((Number) request.get("cpuCores")).doubleValue() : null;
-            Integer memoryMB = request.get("memoryMB") != null ? 
+            Integer memoryMB = request.get("memoryMB") != null ?
                     ((Number) request.get("memoryMB")).intValue() : null;
-            
+
             GatewayInstanceEntity instance = instanceService.updateSpec(id, specType, cpuCores, memoryMB);
             log.info("Updated spec for instance {}: {}", id, specType);
 
