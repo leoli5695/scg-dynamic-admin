@@ -30,6 +30,9 @@ public class PrometheusService {
     @Autowired
     private GatewayInstanceRepository instanceRepository;
 
+    // ThreadLocal to store timestamp context for historical queries
+    private static final ThreadLocal<Long> timestampContext = new ThreadLocal<>();
+
     public PrometheusService(RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
         this.objectMapper = new ObjectMapper();
@@ -49,39 +52,63 @@ public class PrometheusService {
     }
 
     /**
-     * Get Gateway instances metrics from Prometheus.
+     * Get Gateway instances metrics from Prometheus (current time).
+     *
      * @param instanceId Optional instance ID to filter metrics for a specific instance
+     * @param podInstance Optional Prometheus instance label (Pod IP:port) to filter metrics for a specific Pod
      */
-    public Map<String, Object> getGatewayMetrics(String instanceId) {
+    public Map<String, Object> getGatewayMetrics(String instanceId, String podInstance) {
+        return getGatewayMetricsAtTime(instanceId, podInstance, null);
+    }
+
+    /**
+     * Get Gateway instances metrics from Prometheus at a specific timestamp.
+     *
+     * @param instanceId Optional instance ID to filter metrics for a specific instance
+     * @param podInstance Optional Prometheus instance label (Pod IP:port) to filter metrics for a specific Pod
+     * @param timestamp Optional Unix timestamp in seconds. If null, query current data.
+     */
+    public Map<String, Object> getGatewayMetricsAtTime(String instanceId, String podInstance, Long timestamp) {
         Map<String, Object> metrics = new LinkedHashMap<>();
 
         try {
-            // Gateway instances (from Nacos/Consul discovery)
+            // Set timestamp context for all queries in this thread
+            timestampContext.set(timestamp);
+
+            // Gateway instances (from Nacos/Consul discovery) - always current
             metrics.put("instances", getGatewayInstances(instanceId));
 
             // Try to get metrics from Prometheus first
-            Map<String, Object> jvmMemory = getJvmMemory(instanceId);
+            Map<String, Object> jvmMemory = getJvmMemory(instanceId, podInstance);
             if (isMetricsEmpty(jvmMemory)) {
-                // Prometheus has no data, fetch directly from gateway
-                log.info("Prometheus has no data, fetching metrics directly from gateway");
-                fetchMetricsDirectlyFromGateway(metrics);
+                // Prometheus has no data, fetch directly from gateway (only for current time)
+                if (timestamp == null) {
+                    log.info("Prometheus has no data, fetching metrics directly from gateway");
+                    fetchMetricsDirectlyFromGateway(metrics);
+                } else {
+                    log.warn("Prometheus has no historical data for timestamp: {}", timestamp);
+                    metrics.put("error", "No historical data available for the selected time");
+                }
             } else {
                 // Use Prometheus data
                 metrics.put("jvmMemory", jvmMemory);
-                metrics.put("gc", getGCMetrics(instanceId));
-                metrics.put("threads", getThreadMetrics(instanceId));
-                metrics.put("httpRequests", getHttpRequestStats(instanceId));
-                metrics.put("httpStatus", getHttpStatusDistribution(instanceId));
-                metrics.put("cpu", getCpuUsage(instanceId));
-                metrics.put("process", getProcessInfo(instanceId));
-                metrics.put("disk", getDiskInfo(instanceId));
-                metrics.put("gateway", getGatewaySpecificMetrics(instanceId));
-                metrics.put("connectionPool", getConnectionPoolMetrics(instanceId));
+                metrics.put("gc", getGCMetrics(instanceId, podInstance));
+                metrics.put("threads", getThreadMetrics(instanceId, podInstance));
+                metrics.put("httpRequests", getHttpRequestStats(instanceId, podInstance));
+                metrics.put("httpStatus", getHttpStatusDistribution(instanceId, podInstance));
+                metrics.put("cpu", getCpuUsage(instanceId, podInstance));
+                metrics.put("process", getProcessInfo(instanceId, podInstance));
+                metrics.put("disk", getDiskInfo(instanceId, podInstance));
+                metrics.put("gateway", getGatewaySpecificMetrics(instanceId, podInstance));
+                metrics.put("logEvents", getLogEventsMetrics(instanceId, podInstance));
             }
 
         } catch (Exception e) {
-            log.error("Failed to get gateway metrics: {}", e.getMessage());
+            log.error("Failed to get gateway metrics at time {}: {}", timestamp, e.getMessage());
             metrics.put("error", e.getMessage());
+        } finally {
+            // Clear timestamp context
+            timestampContext.remove();
         }
 
         return metrics;
@@ -91,7 +118,14 @@ public class PrometheusService {
      * Get Gateway instances metrics from Prometheus (all instances).
      */
     public Map<String, Object> getGatewayMetrics() {
-        return getGatewayMetrics(null);
+        return getGatewayMetrics(null, null);
+    }
+
+    /**
+     * Get Gateway instances metrics from Prometheus with instanceId filter.
+     */
+    public Map<String, Object> getGatewayMetrics(String instanceId) {
+        return getGatewayMetrics(instanceId, null);
     }
 
     /**
@@ -107,6 +141,45 @@ public class PrometheusService {
             return ",gateway_instance_id=\"" + instanceId + "\"";
         }
         return "";
+    }
+
+    /**
+     * Build pod instance filter for Prometheus query.
+     * If podInstance is provided, adds instance label filter (Pod IP:port).
+     * This is used to filter metrics for a specific Pod in a multi-pod deployment.
+     */
+    private String buildPodInstanceFilter(String podInstance) {
+        if (podInstance != null && !podInstance.isEmpty()) {
+            // Use Prometheus's instance label which is the Pod IP:port
+            return ",instance=\"" + podInstance + "\"";
+        }
+        return "";
+    }
+
+    /**
+     * Build combined filter for Prometheus query.
+     * Combines instanceId and podInstance filters.
+     */
+    private String buildCombinedFilter(String instanceId, String podInstance) {
+        StringBuilder filter = new StringBuilder();
+        if (instanceId != null && !instanceId.isEmpty()) {
+            filter.append(",gateway_instance_id=\"").append(instanceId).append("\"");
+        }
+        if (podInstance != null && !podInstance.isEmpty()) {
+            filter.append(",instance=\"").append(podInstance).append("\"");
+        }
+        return filter.toString();
+    }
+
+    /**
+     * Build application filter for Prometheus query.
+     * Supports both 'application="my-gateway"' and 'job="gateway"' labels
+     * to handle different Prometheus configurations.
+     */
+    private String buildAppFilter() {
+        // Use regex to match both application="my-gateway" and job="gateway" (or job=~"gateway.*")
+        // This ensures compatibility with different Prometheus configurations
+        return "application=\"my-gateway\"";
     }
 
     /**
@@ -183,7 +256,8 @@ public class PrometheusService {
                         simpleMetrics.put(name, value);
                     }
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
 
         // JVM Memory
@@ -287,6 +361,7 @@ public class PrometheusService {
 
     /**
      * Get Gateway instances from database (source of truth).
+     *
      * @param instanceId Optional instance ID to filter for a specific instance
      */
     private List<Map<String, Object>> getGatewayInstances(String instanceId) {
@@ -297,8 +372,8 @@ public class PrometheusService {
             List<GatewayInstanceEntity> dbInstances;
             if (instanceId != null && !instanceId.isEmpty()) {
                 dbInstances = instanceRepository.findByInstanceId(instanceId)
-                    .map(List::of)
-                    .orElse(List.of());
+                        .map(List::of)
+                        .orElse(List.of());
             } else {
                 dbInstances = instanceRepository.findByEnabledTrue();
             }
@@ -360,6 +435,7 @@ public class PrometheusService {
      * Check if we have actual metrics data from the gateway.
      * This is more reliable than the 'up' metric when there are network issues between
      * Prometheus and the gateway.
+     *
      * @param instanceId Optional instance ID to filter for a specific instance
      */
     private boolean hasActualMetricsData(String instanceId) {
@@ -368,8 +444,8 @@ public class PrometheusService {
             String instanceFilter = buildInstanceFilter(instanceId);
             // Use gateway_instance_id label if filtering by specific instance
             String query = instanceId != null && !instanceId.isEmpty()
-                ? "sum(jvm_memory_used_bytes{application=\"my-gateway\",gateway_instance_id=\"" + instanceId + "\"})"
-                : "sum(jvm_memory_used_bytes{application=\"my-gateway\"})";
+                    ? "sum(jvm_memory_used_bytes{application=\"my-gateway\",gateway_instance_id=\"" + instanceId + "\"})"
+                    : "sum(jvm_memory_used_bytes{application=\"my-gateway\"})";
             String result = queryPrometheus(query);
             double value = extractValue(result, -1);
             return value > 0;
@@ -380,11 +456,17 @@ public class PrometheusService {
 
     /**
      * Get JVM memory metrics.
+     *
      * @param instanceId Optional instance ID to filter for a specific instance
+     * @param podInstance Optional Prometheus instance label (Pod IP:port) to filter for a specific Pod
      */
-    private Map<String, Object> getJvmMemory(String instanceId) {
+    private Map<String, Object> getJvmMemory(String instanceId, String podInstance) {
+        return getJvmMemory(instanceId, podInstance, null);
+    }
+
+    private Map<String, Object> getJvmMemory(String instanceId, String podInstance, Long timestamp) {
         Map<String, Object> memory = new HashMap<>();
-        String instanceFilter = buildInstanceFilter(instanceId);
+        String instanceFilter = buildCombinedFilter(instanceId, podInstance);
 
         try {
             // JVM Heap Used (sum of all heap regions)
@@ -418,11 +500,13 @@ public class PrometheusService {
 
     /**
      * Get HTTP request statistics.
+     *
      * @param instanceId Optional instance ID to filter for a specific instance
+     * @param podInstance Optional Prometheus instance label (Pod IP:port) to filter for a specific Pod
      */
-    private Map<String, Object> getHttpRequestStats(String instanceId) {
+    private Map<String, Object> getHttpRequestStats(String instanceId, String podInstance) {
         Map<String, Object> stats = new HashMap<>();
-        String instanceFilter = buildInstanceFilter(instanceId);
+        String instanceFilter = buildCombinedFilter(instanceId, podInstance);
 
         try {
             // Request count (rate per second over 1 minute)
@@ -450,29 +534,49 @@ public class PrometheusService {
 
     /**
      * Get CPU usage.
+     *
      * @param instanceId Optional instance ID to filter for a specific instance
+     * @param podInstance Optional Prometheus instance label (Pod IP:port) to filter for a specific Pod
      */
-    private Map<String, Object> getCpuUsage(String instanceId) {
+    private Map<String, Object> getCpuUsage(String instanceId, String podInstance) {
         Map<String, Object> cpu = new HashMap<>();
-        String instanceFilter = buildInstanceFilter(instanceId);
+        String instanceFilter = buildCombinedFilter(instanceId, podInstance);
 
         try {
-            // System CPU usage
-            String systemQuery = "system_cpu_usage{application=\"my-gateway\"" + instanceFilter + "}";
-            String systemResult = queryPrometheus(systemQuery);
-            double systemUsage = extractValue(systemResult, 0.0);
-            cpu.put("systemUsage", Math.round(systemUsage * 10000) / 100.0);
+            // System Load Average - 系统整体负载（1分钟平均）
+            // 这是真正的系统负载指标，反映整个系统的CPU压力
+            // 使用avg聚合多Pod的平均系统负载
+            String loadQuery = "avg(system_load_average_1m{application=\"my-gateway\"" + instanceFilter + "})";
+            String loadResult = queryPrometheus(loadQuery);
+            double systemLoad = extractValue(loadResult, 0.0);
+            cpu.put("systemLoadAverage", Math.round(systemLoad * 100) / 100.0);
 
-            // Process CPU usage
-            String processQuery = "process_cpu_usage{application=\"my-gateway\"" + instanceFilter + "}";
+            // Process CPU usage - JVM进程的CPU使用率（0-1之间，表示进程占用CPU的比例）
+            // 注意：这是进程相对于整个系统的CPU使用率，不是相对于单核
+            // 使用avg聚合多Pod的平均CPU使用率
+            String processQuery = "avg(process_cpu_usage{application=\"my-gateway\"" + instanceFilter + "})";
             String processResult = queryPrometheus(processQuery);
             double processUsage = extractValue(processResult, 0.0);
             cpu.put("processUsage", Math.round(processUsage * 10000) / 100.0);
 
-            // Available processors
-            String processorsQuery = "system_cpu_count{application=\"my-gateway\"}";
+            // System CPU usage - JVM观察到的系统CPU使用率（0-1之间）
+            // 注意：这是JVM视角的系统CPU使用率，可能不准确，建议结合system_load_average_1m
+            // 使用avg聚合多Pod的平均系统CPU使用率
+            String systemQuery = "avg(system_cpu_usage{application=\"my-gateway\"" + instanceFilter + "})";
+            String systemResult = queryPrometheus(systemQuery);
+            double systemUsage = extractValue(systemResult, 0.0);
+            cpu.put("systemUsage", Math.round(systemUsage * 10000) / 100.0);
+
+            // Available processors - CPU核心数（每个Pod相同，取平均值即可）
+            String processorsQuery = "avg(system_cpu_count{application=\"my-gateway\"" + instanceFilter + "})";
             String processorsResult = queryPrometheus(processorsQuery);
-            cpu.put("availableProcessors", extractValue(processorsResult, 0));
+            int processors = (int) extractValue(processorsResult, 0);
+            cpu.put("availableProcessors", processors);
+
+            // 计算进程CPU使用率相对于单核的百分比（更直观）
+            // process_cpu_usage * processors = 进程占用的核心数
+            double processCpuCores = processUsage * processors;
+            cpu.put("processCpuCores", Math.round(processCpuCores * 100) / 100.0);
 
         } catch (Exception e) {
             log.warn("Failed to get CPU usage: {}", e.getMessage());
@@ -483,11 +587,13 @@ public class PrometheusService {
 
     /**
      * Get Gateway specific metrics.
+     *
      * @param instanceId Optional instance ID to filter for a specific instance
+     * @param podInstance Optional Prometheus instance label (Pod IP:port) to filter for a specific Pod
      */
-    private Map<String, Object> getGatewaySpecificMetrics(String instanceId) {
+    private Map<String, Object> getGatewaySpecificMetrics(String instanceId, String podInstance) {
         Map<String, Object> gateway = new HashMap<>();
-        String instanceFilter = buildInstanceFilter(instanceId);
+        String instanceFilter = buildCombinedFilter(instanceId, podInstance);
 
         try {
             // Route count from Spring Cloud Gateway
@@ -503,12 +609,48 @@ public class PrometheusService {
     }
 
     /**
-     * Get HikariCP connection pool metrics.
+     * Get logback events metrics (error, warn, info counts).
+     * This is useful for AI analysis to detect system health issues.
+     *
      * @param instanceId Optional instance ID to filter for a specific instance
+     * @param podInstance Optional Prometheus instance label (Pod IP:port) to filter for a specific Pod
      */
-    private Map<String, Object> getConnectionPoolMetrics(String instanceId) {
+    private Map<String, Object> getLogEventsMetrics(String instanceId, String podInstance) {
+        Map<String, Object> logEvents = new HashMap<>();
+        String instanceFilter = buildCombinedFilter(instanceId, podInstance);
+
+        try {
+            // Error log count
+            String errorQuery = "sum(logback_events_total{application=\"my-gateway\"" + instanceFilter + ",level=\"error\"})";
+            String errorResult = queryPrometheus(errorQuery);
+            logEvents.put("errorCount", (long) extractValue(errorResult, 0));
+
+            // Warn log count
+            String warnQuery = "sum(logback_events_total{application=\"my-gateway\"" + instanceFilter + ",level=\"warn\"})";
+            String warnResult = queryPrometheus(warnQuery);
+            logEvents.put("warnCount", (long) extractValue(warnResult, 0));
+
+            // Info log count
+            String infoQuery = "sum(logback_events_total{application=\"my-gateway\"" + instanceFilter + ",level=\"info\"})";
+            String infoResult = queryPrometheus(infoQuery);
+            logEvents.put("infoCount", (long) extractValue(infoResult, 0));
+
+        } catch (Exception e) {
+            log.warn("Failed to get log events: {}", e.getMessage());
+        }
+
+        return logEvents;
+    }
+
+    /**
+     * Get HikariCP connection pool metrics.
+     *
+     * @param instanceId Optional instance ID to filter for a specific instance
+     * @param podInstance Optional Prometheus instance label (Pod IP:port) to filter for a specific Pod
+     */
+    private Map<String, Object> getConnectionPoolMetrics(String instanceId, String podInstance) {
         Map<String, Object> pool = new HashMap<>();
-        String instanceFilter = buildInstanceFilter(instanceId);
+        String instanceFilter = buildCombinedFilter(instanceId, podInstance);
 
         try {
             // Active connections
@@ -573,30 +715,257 @@ public class PrometheusService {
     }
 
     /**
-     * Get GC metrics.
+     * Get GC metrics (enhanced for AI tuning analysis).
+     *
      * @param instanceId Optional instance ID to filter for a specific instance
+     * @param podInstance Optional Prometheus instance label (Pod IP:port) to filter for a specific Pod
      */
-    private Map<String, Object> getGCMetrics(String instanceId) {
+    private Map<String, Object> getGCMetrics(String instanceId, String podInstance) {
         Map<String, Object> gc = new HashMap<>();
-        String instanceFilter = buildInstanceFilter(instanceId);
+        String instanceFilter = buildCombinedFilter(instanceId, podInstance);
 
         try {
-            // GC count (total in last 5 minutes)
-            String countQuery = "sum(increase(jvm_gc_pause_seconds_count{application=\"my-gateway\"" + instanceFilter + "}[5m]))";
-            String countResult = queryPrometheus(countQuery);
-            gc.put("gcCount", extractValue(countResult, 0));
+            // ========== Basic GC Stats ==========
+            // 使用rate函数获取GC速率（更可靠），而不是increase
+            // rate函数计算每秒的速率，更稳定且不受数据完整性的影响
+            
+            // 对于GC开销百分比，使用avg()获取所有实例的平均值（更合理）
+            // 对于GC次数和时间，使用sum()获取累计值（总量）
+            String countRateQuery = "sum(rate(jvm_gc_pause_seconds_count{application=\"my-gateway\"" + instanceFilter + "}[5m]))";
+            double gcCountRate = extractValue(queryPrometheus(countRateQuery), 0.0);
+            // 5分钟内的预估次数 = rate * 300秒
+            long gcCount = (long) (gcCountRate * 300);
+            gc.put("gcCount", gcCount);
+            log.debug("GC count rate: {} per second, estimated count in 5min: {}", gcCountRate, gcCount);
 
-            // GC total time (seconds in last 5 minutes)
-            String timeQuery = "sum(increase(jvm_gc_pause_seconds_sum{application=\"my-gateway\"" + instanceFilter + "}[5m]))";
-            String timeResult = queryPrometheus(timeQuery);
-            double gcTime = extractValue(timeResult, 0.0);
+            String timeRateQuery = "sum(rate(jvm_gc_pause_seconds_sum{application=\"my-gateway\"" + instanceFilter + "}[5m]))";
+            double gcTimeRate = extractValue(queryPrometheus(timeRateQuery), 0.0);
+            // 5分钟内的预估时间 = rate * 300秒
+            double gcTime = gcTimeRate * 300;
             gc.put("gcTimeSeconds", Math.round(gcTime * 1000) / 1000.0);
+            log.debug("GC time rate: {} per second, estimated time in 5min: {}s", gcTimeRate, gcTime);
 
-            // GC overhead percent
-            String overheadQuery = "jvm_gc_overhead_percent{application=\"my-gateway\"" + instanceFilter + "}";
-            String overheadResult = queryPrometheus(overheadQuery);
-            double overhead = extractValue(overheadResult, 0.0);
-            gc.put("gcOverheadPercent", Math.round(overhead * 100) / 100.0);
+            // GC速率（每秒次数）
+            gc.put("gcRatePerSecond", Math.round(gcCountRate * 100) / 100.0);
+
+            // GC开销百分比 - 使用avg()获取所有实例的平均GC开销（更合理）
+            // avg(rate()) 计算的是每个实例的平均GC速率，直接乘以100就是平均GC开销百分比
+            // 使用 application="my-gateway" 确保只匹配正确的目标
+            String avgTimeRateQuery = "avg(rate(jvm_gc_pause_seconds_sum{application=\"my-gateway\"" + instanceFilter + "}[5m]))";
+            String avgTimeRateResult = queryPrometheus(avgTimeRateQuery);
+            double avgGcTimeRate = extractValue(avgTimeRateResult, 0.0);
+            double gcOverheadPercent = avgGcTimeRate * 100;
+            gc.put("gcOverheadPercent", Math.round(gcOverheadPercent * 100) / 100.0);
+            log.info("Avg GC time rate query: {}, result: {}, avgGcTimeRate: {} per second, GC overhead: {}%", avgTimeRateQuery, avgTimeRateResult, avgGcTimeRate, gcOverheadPercent);
+
+            // 获取实例数量，用于显示累计值的说明
+            // 使用 count(count by (instance) ...) 正确计算实例数量，而不是时间序列数量
+            // 因为 jvm_memory_used_bytes{area="heap"} 对每个实例有多个时间序列（Eden, Survivor, Old Gen等）
+            String instanceCountQuery = "count(count by (instance) (jvm_memory_used_bytes{application=\"my-gateway\"" + instanceFilter + ",area=\"heap\"}))";
+            String instanceCountResult = queryPrometheus(instanceCountQuery);
+            double instanceCount = extractValue(instanceCountResult, 0.0);
+            log.info("Instance count query: {}, result: {}, count: {}", instanceCountQuery, instanceCountResult, instanceCount);
+            if (instanceCount > 1) {
+                gc.put("instanceCount", (int) instanceCount);
+                gc.put("aggregateNote", "数据为" + (int)instanceCount + "个实例的累计值，GC开销为平均值");
+            }
+
+            // ========== Memory Region Details (for GC tuning) ==========
+            Map<String, Object> memoryRegions = new HashMap<>();
+
+            // Eden Space
+            String edenUsedQuery = "sum(jvm_memory_used_bytes{application=\"my-gateway\"" + instanceFilter + ",area=\"heap\",id=~\".*Eden.*\"})";
+            String edenUsedResult = queryPrometheus(edenUsedQuery);
+            double edenUsed = extractValue(edenUsedResult, 0.0);
+
+            String edenMaxQuery = "sum(jvm_memory_max_bytes{application=\"my-gateway\"" + instanceFilter + ",area=\"heap\",id=~\".*Eden.*\"})";
+            String edenMaxResult = queryPrometheus(edenMaxQuery);
+            double edenMax = extractValue(edenMaxResult, 0.0);
+
+            Map<String, Object> eden = new HashMap<>();
+            eden.put("usedBytes", edenUsed);
+            eden.put("maxBytes", edenMax);
+            eden.put("usagePercent", edenMax > 0 ? Math.round(edenUsed / edenMax * 10000) / 100.0 : 0.0);
+            memoryRegions.put("eden", eden);
+
+            // Survivor Space
+            String survivorUsedQuery = "sum(jvm_memory_used_bytes{application=\"my-gateway\"" + instanceFilter + ",area=\"heap\",id=~\".*Survivor.*\"})";
+            String survivorUsedResult = queryPrometheus(survivorUsedQuery);
+            double survivorUsed = extractValue(survivorUsedResult, 0.0);
+
+            String survivorMaxQuery = "sum(jvm_memory_max_bytes{application=\"my-gateway\"" + instanceFilter + ",area=\"heap\",id=~\".*Survivor.*\"})";
+            String survivorMaxResult = queryPrometheus(survivorMaxQuery);
+            double survivorMax = extractValue(survivorMaxResult, 0.0);
+
+            Map<String, Object> survivor = new HashMap<>();
+            survivor.put("usedBytes", survivorUsed);
+            survivor.put("maxBytes", survivorMax);
+            survivor.put("usagePercent", survivorMax > 0 ? Math.round(survivorUsed / survivorMax * 10000) / 100.0 : 0.0);
+            memoryRegions.put("survivor", survivor);
+
+            // Old/Tenured Gen
+            String oldUsedQuery = "sum(jvm_memory_used_bytes{application=\"my-gateway\"" + instanceFilter + ",area=\"heap\",id=~\".*Old.*|.*Tenured.*\"})";
+            String oldUsedResult = queryPrometheus(oldUsedQuery);
+            double oldUsed = extractValue(oldUsedResult, 0.0);
+
+            String oldMaxQuery = "sum(jvm_memory_max_bytes{application=\"my-gateway\"" + instanceFilter + ",area=\"heap\",id=~\".*Old.*|.*Tenured.*\"})";
+            String oldMaxResult = queryPrometheus(oldMaxQuery);
+            double oldMax = extractValue(oldMaxResult, 0.0);
+
+            Map<String, Object> oldGen = new HashMap<>();
+            oldGen.put("usedBytes", oldUsed);
+            oldGen.put("maxBytes", oldMax);
+            oldGen.put("usagePercent", oldMax > 0 ? Math.round(oldUsed / oldMax * 10000) / 100.0 : 0.0);
+            memoryRegions.put("oldGen", oldGen);
+
+            gc.put("memoryRegions", memoryRegions);
+
+            // ========== GC by Type (Young vs Old/Full) ==========
+            // 使用 gc 标签（垃圾收集器名称）来区分，而不是依赖 action 标签
+            // 因为不同GC（G1、CMS、Parallel）的 action 值不同，但 gc 名称是标准的
+            // Young GC: G1 Young Generation, Parallel Scavenge, PS Scavenge, Copy
+            // Old/Full GC: G1 Old Generation, Parallel Mark-Sweep, PS MarkSweep, CMS, MarkSweepCompact
+            Map<String, Object> gcByType = new HashMap<>();
+
+            // Young GC - 使用 gc 标签匹配所有 Young GC 类型
+            // G1 Young Generation, Parallel Scavenge/PS Scavenge, ParNew, Copy
+            String youngCountRateQuery = "sum(rate(jvm_gc_pause_seconds_count{application=\"my-gateway\"" + instanceFilter + ",gc=~\"G1 Young Generation|.*Scavenge|ParNew|Copy|Young.*\"}[5m]))";
+            double youngCountRate = extractValue(queryPrometheus(youngCountRateQuery), 0.0);
+            // 5分钟内的预估次数 = rate * 300秒
+            double youngCount = youngCountRate * 300;
+
+            String youngTimeRateQuery = "sum(rate(jvm_gc_pause_seconds_sum{application=\"my-gateway\"" + instanceFilter + ",gc=~\"G1 Young Generation|.*Scavenge|ParNew|Copy|Young.*\"}[5m]))";
+            double youngTimeRate = extractValue(queryPrometheus(youngTimeRateQuery), 0.0);
+            // 5分钟内的预估时间 = rate * 300秒
+            double youngTime = youngTimeRate * 300;
+
+            Map<String, Object> youngGC = new HashMap<>();
+            youngGC.put("count", (long) youngCount);
+            youngGC.put("ratePerSecond", Math.round(youngCountRate * 100) / 100.0);
+            youngGC.put("totalTimeSeconds", Math.round(youngTime * 1000) / 1000.0);
+            youngGC.put("avgTimeMs", youngCount > 0 ? Math.round(youngTime / youngCount * 1000) : 0.0);
+            gcByType.put("youngGC", youngGC);
+            log.debug("Young GC: rate={}, count={}, time={}s, avg={}ms", youngCountRate, (long)youngCount, youngTime, youngGC.get("avgTimeMs"));
+
+            // Old/Full GC - 使用 gc 标签匹配所有 Old/Major GC 类型
+            // G1 Old Generation, Parallel Mark-Sweep/PS MarkSweep, CMS Concurrent Mark-Sweep, MarkSweepCompact
+            // 同时也匹配 action="end of major GC" 作为备用
+            String oldCountRateQuery = "sum(rate(jvm_gc_pause_seconds_count{application=\"my-gateway\"" + instanceFilter + ",gc=~\"G1 Old Generation|.*MarkSweep|CMS|MarkSweepCompact|Old.*\"}[5m]))";
+            double oldCountRate = extractValue(queryPrometheus(oldCountRateQuery), 0.0);
+            // 5分钟内的预估次数 = rate * 300秒
+            double oldCount = oldCountRate * 300;
+            log.info("Old GC count rate: {} per second, estimated count in 5min: {}", oldCountRate, oldCount);
+
+            String oldTimeRateQuery = "sum(rate(jvm_gc_pause_seconds_sum{application=\"my-gateway\"" + instanceFilter + ",gc=~\"G1 Old Generation|.*MarkSweep|CMS|MarkSweepCompact|Old.*\"}[5m]))";
+            double oldTimeRate = extractValue(queryPrometheus(oldTimeRateQuery), 0.0);
+            // 5分钟内的预估时间 = rate * 300秒
+            double oldTime = oldTimeRate * 300;
+            log.info("Old GC time rate: {} per second, estimated time in 5min: {}s", oldTimeRate, oldTime);
+
+            Map<String, Object> oldGC = new HashMap<>();
+            oldGC.put("count", (long) oldCount);
+            oldGC.put("ratePerSecond", Math.round(oldCountRate * 100) / 100.0);
+            oldGC.put("totalTimeSeconds", Math.round(oldTime * 1000) / 1000.0);
+            oldGC.put("avgTimeMs", oldCount > 0 ? Math.round(oldTime / oldCount * 1000) : 0.0);
+            gcByType.put("oldGC", oldGC);
+
+            gc.put("gcByType", gcByType);
+
+            // ========== Memory Allocation Rate (bytes per second) ==========
+            String allocRateQuery = "sum(rate(jvm_gc_memory_allocated_bytes_total{application=\"my-gateway\"" + instanceFilter + "}[1m]))";
+            String allocRateResult = queryPrometheus(allocRateQuery);
+            double allocRate = extractValue(allocRateResult, 0.0);
+            gc.put("allocationRateBytesPerSec", allocRate);
+            gc.put("allocationRateMBPerSec", Math.round(allocRate / 1024 / 1024 * 100) / 100.0);
+
+            // ========== Memory Promotion Rate (bytes per second) ==========
+            // 对象从Young Gen晋升到Old Gen的速率，对分析内存问题非常重要
+            // 高晋升速率可能意味着：对象过早晋升、大对象分配、或潜在的内存泄漏
+            String promoRateQuery = "sum(rate(jvm_gc_memory_promoted_bytes_total{application=\"my-gateway\"" + instanceFilter + "}[1m]))";
+            String promoRateResult = queryPrometheus(promoRateQuery);
+            double promoRate = extractValue(promoRateResult, 0.0);
+            gc.put("promotionRateBytesPerSec", promoRate);
+            gc.put("promotionRateMBPerSec", Math.round(promoRate / 1024 / 1024 * 100) / 100.0);
+            // 晋升比例 = 晋升速率 / 分配速率，帮助判断对象生命周期模式
+            if (allocRate > 0) {
+                double promotionRatio = promoRate / allocRate;
+                gc.put("promotionRatio", Math.round(promotionRatio * 10000) / 100.0);  // 百分比
+            }
+            log.info("Memory allocation rate: {} MB/s, promotion rate: {} MB/s", gc.get("allocationRateMBPerSec"), gc.get("promotionRateMBPerSec"));
+
+            // ========== GC Pause Action Breakdown ==========
+            // 同时使用 action 和 gc 标签来捕获所有GC类型
+            // G1 GC 的 action 可能是 "end of minor GC", "end of concurrent cycle"
+            // 但 gc 标签值是 "G1 Young Generation", "G1 Old Generation"
+            Map<String, Object> gcActions = new HashMap<>();
+
+            // 首先尝试使用 action 标签（传统方式）
+            String[] actions = {"end of minor GC", "end of major GC", "end of concurrent cycle"};
+            for (String action : actions) {
+                // 使用rate函数计算最近5分钟的速率（最佳实践）
+                String actionCountQuery = "sum(rate(jvm_gc_pause_seconds_count{application=\"my-gateway\"" + instanceFilter + ",action=\"" + action + "\"}[5m]))";
+                String actionCountResult = queryPrometheus(actionCountQuery);
+                double actionCount = extractValue(actionCountResult, 0.0);
+
+                String actionTimeQuery = "sum(rate(jvm_gc_pause_seconds_sum{application=\"my-gateway\"" + instanceFilter + ",action=\"" + action + "\"}[5m]))";
+                String actionTimeResult = queryPrometheus(actionTimeQuery);
+                double actionTime = extractValue(actionTimeResult, 0.0);
+
+                log.info("GC action '{}' - count: {}, time: {}", action, actionCount, actionTime);
+
+                if (actionCount > 0 || actionTime > 0) {
+                    Map<String, Object> actionData = new HashMap<>();
+                    actionData.put("count", actionCount);
+                    actionData.put("totalTimeSeconds", actionTime);
+                    gcActions.put(action.replace(" ", "_"), actionData);
+                }
+            }
+            gc.put("gcActions", gcActions);
+
+            // ========== GC Health Assessment ==========
+            String healthStatus = "HEALTHY";
+            String healthReason = "";
+
+            // 定义阈值
+            double highPromotionRateThreshold = 10.0; // MB/s
+            double highAllocationRateThreshold = 50.0; // MB/s
+            double highPromotionRatioThreshold = 30.0; // %
+
+            // 获取晋升和分配速率（MB/s）
+            double promotionRateMBPerSec = promoRate / 1024 / 1024;
+            double allocationRateMBPerSec = allocRate / 1024 / 1024;
+            double promotionRatio = allocRate > 0 ? (promoRate / allocRate) * 100 : 0;
+
+            if (oldCount > 3) {
+                healthStatus = "CRITICAL";
+                healthReason = "Full GC频繁（" + (int) oldCount + "次/5分钟），可能存在内存压力或配置问题";
+            } else if (oldCount > 1) {
+                healthStatus = "WARNING";
+                healthReason = "有Full GC发生（" + (int) oldCount + "次/5分钟），需关注内存使用";
+            } else if (oldMax > 0 && oldUsed / oldMax > 0.8) {
+                healthStatus = "WARNING";
+                healthReason = "Old Gen使用率过高（" + Math.round(oldUsed / oldMax * 100) + "%），可能即将触发Full GC";
+            } else if (gcOverheadPercent > 10) {
+                healthStatus = "WARNING";
+                healthReason = "GC开销过高（" + Math.round(gcOverheadPercent) + "%），影响应用性能";
+            } else if (promotionRateMBPerSec > highPromotionRateThreshold && allocationRateMBPerSec > highAllocationRateThreshold) {
+                healthStatus = "WARNING";
+                healthReason = "高晋升速率（" + Math.round(promotionRateMBPerSec) + " MB/s）+ 高分配速率（" + Math.round(allocationRateMBPerSec) + " MB/s），对象生命周期短但有大量短期对象晋升，需调整Survivor区";
+            } else if (promotionRateMBPerSec > highPromotionRateThreshold && allocationRateMBPerSec <= highAllocationRateThreshold) {
+                healthStatus = "WARNING";
+                healthReason = "高晋升速率（" + Math.round(promotionRateMBPerSec) + " MB/s）+ 低分配速率（" + Math.round(allocationRateMBPerSec) + " MB/s），有大对象直接进Old Gen，需检查代码";
+            } else if (promotionRatio > highPromotionRatioThreshold) {
+                healthStatus = "WARNING";
+                healthReason = "晋升比例过高（" + Math.round(promotionRatio) + "%），可能存在内存泄漏";
+            } else if (youngCount > 100) {
+                healthStatus = "WARNING";
+                healthReason = "Young GC过于频繁（" + (int) youngCount + "次/5分钟），建议增大年轻代";
+            } else {
+                healthReason = "GC表现正常，Young GC平均耗时" + (youngCount > 0 ? Math.round(youngTime / youngCount * 1000) : 0) + "ms";
+            }
+
+            gc.put("healthStatus", healthStatus);
+            gc.put("healthReason", healthReason);
 
         } catch (Exception e) {
             log.warn("Failed to get GC metrics: {}", e.getMessage());
@@ -607,11 +976,13 @@ public class PrometheusService {
 
     /**
      * Get Thread metrics.
+     *
      * @param instanceId Optional instance ID to filter for a specific instance
+     * @param podInstance Optional Prometheus instance label (Pod IP:port) to filter for a specific Pod
      */
-    private Map<String, Object> getThreadMetrics(String instanceId) {
+    private Map<String, Object> getThreadMetrics(String instanceId, String podInstance) {
         Map<String, Object> threads = new HashMap<>();
-        String instanceFilter = buildInstanceFilter(instanceId);
+        String instanceFilter = buildCombinedFilter(instanceId, podInstance);
 
         try {
             // Live threads
@@ -638,11 +1009,13 @@ public class PrometheusService {
 
     /**
      * Get HTTP status distribution.
+     *
      * @param instanceId Optional instance ID to filter for a specific instance
+     * @param podInstance Optional Prometheus instance label (Pod IP:port) to filter for a specific Pod
      */
-    private Map<String, Object> getHttpStatusDistribution(String instanceId) {
+    private Map<String, Object> getHttpStatusDistribution(String instanceId, String podInstance) {
         Map<String, Object> status = new HashMap<>();
-        String instanceFilter = buildInstanceFilter(instanceId);
+        String instanceFilter = buildCombinedFilter(instanceId, podInstance);
 
         try {
             // 2xx responses rate
@@ -669,11 +1042,13 @@ public class PrometheusService {
 
     /**
      * Get Process info.
+     *
      * @param instanceId Optional instance ID to filter for a specific instance
+     * @param podInstance Optional Prometheus instance label (Pod IP:port) to filter for a specific Pod
      */
-    private Map<String, Object> getProcessInfo(String instanceId) {
+    private Map<String, Object> getProcessInfo(String instanceId, String podInstance) {
         Map<String, Object> process = new HashMap<>();
-        String instanceFilter = buildInstanceFilter(instanceId);
+        String instanceFilter = buildCombinedFilter(instanceId, podInstance);
 
         try {
             // Process uptime in seconds
@@ -697,11 +1072,13 @@ public class PrometheusService {
 
     /**
      * Get Disk info.
+     *
      * @param instanceId Optional instance ID to filter for a specific instance
+     * @param podInstance Optional Prometheus instance label (Pod IP:port) to filter for a specific Pod
      */
-    private Map<String, Object> getDiskInfo(String instanceId) {
+    private Map<String, Object> getDiskInfo(String instanceId, String podInstance) {
         Map<String, Object> disk = new HashMap<>();
-        String instanceFilter = buildInstanceFilter(instanceId);
+        String instanceFilter = buildCombinedFilter(instanceId, podInstance);
 
         try {
             // Disk free space
@@ -735,19 +1112,38 @@ public class PrometheusService {
      * Query Prometheus API.
      */
     private String queryPrometheus(String query) {
+        // Get timestamp from ThreadLocal context
+        Long timestamp = timestampContext.get();
+        return queryPrometheusAtTime(query, timestamp);
+    }
+
+    /**
+     * Query Prometheus at a specific timestamp.
+     * If timestamp is null, query current data (instant query without time parameter).
+     * If timestamp is provided, query data at that specific time point.
+     *
+     * @param query PromQL query
+     * @param timestamp Unix timestamp in seconds (optional)
+     * @return Prometheus query result as JSON string
+     */
+    private String queryPrometheusAtTime(String query, Long timestamp) {
         try {
             // Use UriComponentsBuilder to properly encode the query
-            // build().toUri() automatically encodes URI components correctly
-            java.net.URI uri = org.springframework.web.util.UriComponentsBuilder
+            org.springframework.web.util.UriComponentsBuilder builder = org.springframework.web.util.UriComponentsBuilder
                     .fromHttpUrl(prometheusUrl + "/api/v1/query")
-                    .queryParam("query", query)
-                    .build()
-                    .toUri();
-            log.debug("Prometheus query: {} -> URI: {}", query, uri);
+                    .queryParam("query", query);
+
+            // Add time parameter if provided
+            if (timestamp != null) {
+                builder.queryParam("time", timestamp);
+            }
+
+            java.net.URI uri = builder.build().toUri();
+            log.debug("Prometheus query: {} at time={} -> URI: {}", query, timestamp, uri);
             String result = restTemplate.getForObject(uri, String.class);
             return result;
         } catch (Exception e) {
-            log.warn("Prometheus query failed: {} - {}", query, e.getMessage());
+            log.warn("Prometheus query failed: {} at time={} - {}", query, timestamp, e.getMessage());
             return "{\"status\":\"error\"}";
         }
     }
@@ -774,15 +1170,16 @@ public class PrometheusService {
 
     /**
      * Query Prometheus range API for time series data.
+     *
      * @param query Prometheus query
      * @param start Start time in seconds (Unix timestamp)
-     * @param end End time in seconds (Unix timestamp)
-     * @param step Query step interval (e.g., "1m", "5m", "1h")
+     * @param end   End time in seconds (Unix timestamp)
+     * @param step  Query step interval (e.g., "1m", "5m", "1h")
      * @return List of [timestamp, value] pairs
      */
     public List<Map<String, Object>> queryRange(String query, long start, long end, String step) {
         List<Map<String, Object>> result = new ArrayList<>();
-        
+
         try {
             java.net.URI uri = org.springframework.web.util.UriComponentsBuilder
                     .fromHttpUrl(prometheusUrl + "/api/v1/query_range")
@@ -792,36 +1189,49 @@ public class PrometheusService {
                     .queryParam("step", step)
                     .build()
                     .toUri();
-            
-            log.debug("Prometheus range query: {} from {} to {} step {}", query, start, end, step);
+
+            log.info("Prometheus range query: {}", query);
             String response = restTemplate.getForObject(uri, String.class);
-            
+
             JsonNode root = objectMapper.readTree(response);
             JsonNode data = root.path("data").path("result");
-            
+
             if (data.isArray() && data.size() > 0) {
                 JsonNode values = data.get(0).path("values");
                 if (values.isArray()) {
+                    int totalPoints = values.size();
+                    if (totalPoints > 0) {
+                        JsonNode firstValue = values.get(0);
+                        JsonNode lastValue = values.get(totalPoints - 1);
+                        double firstData = firstValue.isArray() && firstValue.size() >= 2 ? firstValue.get(1).asDouble() : 0;
+                        double lastData = lastValue.isArray() && lastValue.size() >= 2 ? lastValue.get(1).asDouble() : 0;
+                        log.info("Query '{}' returned {} points, first value: {}, last value: {}",
+                                query, totalPoints, firstData, lastData);
+                    }
+
                     for (JsonNode value : values) {
                         if (value.isArray() && value.size() >= 2) {
                             Map<String, Object> point = new HashMap<>();
-                            point.put("timestamp", value.get(0).asLong() * 1000); // Convert to milliseconds
+                            point.put("timestamp", value.get(0).asLong() * 1000);
                             point.put("value", value.get(1).asDouble());
                             result.add(point);
                         }
                     }
                 }
+            } else {
+                log.warn("No data found for query '{}'", query);
             }
         } catch (Exception e) {
             log.warn("Prometheus range query failed: {} - {}", query, e.getMessage());
         }
-        
+
         return result;
     }
 
     /**
      * Get detailed GC metrics with Young/Old GC breakdown.
      * This provides more granular GC statistics for performance analysis.
+     *
      * @param instanceId Optional instance ID to filter for a specific instance
      */
     public Map<String, Object> getDetailedGCMetrics(String instanceId) {
@@ -831,10 +1241,13 @@ public class PrometheusService {
         try {
             // Young GC (G1 Young Generation / ParNew / PS Scavenge)
             Map<String, Object> youngGC = new LinkedHashMap<>();
-            String youngCountQuery = "sum(increase(jvm_gc_pause_seconds_count{application=\"my-gateway\"" + instanceFilter + ",gc=~\"G1 Young Generation|ParNew|PS Scavenge|Copy\"}[5m]))";
-            String youngTimeQuery = "sum(increase(jvm_gc_pause_seconds_sum{application=\"my-gateway\"" + instanceFilter + ",gc=~\"G1 Young Generation|ParNew|PS Scavenge|Copy\"}[5m]))";
-            double youngCount = extractValue(queryPrometheus(youngCountQuery), 0);
-            double youngTime = extractValue(queryPrometheus(youngTimeQuery), 0);
+            String youngCountRateQuery = "sum(rate(jvm_gc_pause_seconds_count{application=\"my-gateway\"" + instanceFilter + ",gc=~\"G1 Young Generation|ParNew|PS Scavenge|Copy\"}[5m]))";
+            String youngTimeRateQuery = "sum(rate(jvm_gc_pause_seconds_sum{application=\"my-gateway\"" + instanceFilter + ",gc=~\"G1 Young Generation|ParNew|PS Scavenge|Copy\"}[5m]))";
+            double youngCountRate = extractValue(queryPrometheus(youngCountRateQuery), 0);
+            double youngTimeRate = extractValue(queryPrometheus(youngTimeRateQuery), 0);
+            // 5分钟内的预估次数和时间
+            double youngCount = youngCountRate * 300;
+            double youngTime = youngTimeRate * 300;
             youngGC.put("count", (long) youngCount);
             youngGC.put("totalTimeSeconds", Math.round(youngTime * 1000) / 1000.0);
             youngGC.put("avgTimeMs", youngCount > 0 ? Math.round(youngTime / youngCount * 1000) : 0);
@@ -842,10 +1255,13 @@ public class PrometheusService {
 
             // Old/Full GC (G1 Old Generation / CMS / PS MarkSweep)
             Map<String, Object> oldGC = new LinkedHashMap<>();
-            String oldCountQuery = "sum(increase(jvm_gc_pause_seconds_count{application=\"my-gateway\"" + instanceFilter + ",gc=~\"G1 Old Generation|ConcurrentMarkSweep|PS MarkSweep|MarkSweepCompact\"}[5m]))";
-            String oldTimeQuery = "sum(increase(jvm_gc_pause_seconds_sum{application=\"my-gateway\"" + instanceFilter + ",gc=~\"G1 Old Generation|ConcurrentMarkSweep|PS MarkSweep|MarkSweepCompact\"}[5m]))";
-            double oldCount = extractValue(queryPrometheus(oldCountQuery), 0);
-            double oldTime = extractValue(queryPrometheus(oldTimeQuery), 0);
+            String oldCountRateQuery = "sum(rate(jvm_gc_pause_seconds_count{application=\"my-gateway\"" + instanceFilter + ",gc=~\"G1 Old Generation|ConcurrentMarkSweep|PS MarkSweep|MarkSweepCompact\"}[5m]))";
+            String oldTimeRateQuery = "sum(rate(jvm_gc_pause_seconds_sum{application=\"my-gateway\"" + instanceFilter + ",gc=~\"G1 Old Generation|ConcurrentMarkSweep|PS MarkSweep|MarkSweepCompact\"}[5m]))";
+            double oldCountRate = extractValue(queryPrometheus(oldCountRateQuery), 0);
+            double oldTimeRate = extractValue(queryPrometheus(oldTimeRateQuery), 0);
+            // 5分钟内的预估次数和时间
+            double oldCount = oldCountRate * 300;
+            double oldTime = oldTimeRate * 300;
             oldGC.put("count", (long) oldCount);
             oldGC.put("totalTimeSeconds", Math.round(oldTime * 1000) / 1000.0);
             oldGC.put("avgTimeMs", oldCount > 0 ? Math.round(oldTime / oldCount * 1000) : 0);
@@ -858,8 +1274,12 @@ public class PrometheusService {
             summary.put("totalGCTimeSeconds", Math.round(totalTime * 1000) / 1000.0);
             summary.put("totalGCCount", totalCount);
 
-            // GC Overhead percentage (5分钟内GC时间占比)
-            double overheadPercent = (totalTime / 300.0) * 100; // 5分钟 = 300秒
+            // GC Overhead percentage - 使用avg()获取所有实例的平均GC开销（更合理）
+            String avgYoungTimeRateQuery = "avg(rate(jvm_gc_pause_seconds_sum{application=\"my-gateway\"" + instanceFilter + ",gc=~\"G1 Young Generation|ParNew|PS Scavenge|Copy\"}[5m]))";
+            String avgOldTimeRateQuery = "avg(rate(jvm_gc_pause_seconds_sum{application=\"my-gateway\"" + instanceFilter + ",gc=~\"G1 Old Generation|ConcurrentMarkSweep|PS MarkSweep|MarkSweepCompact\"}[5m]))";
+            double avgYoungTimeRate = extractValue(queryPrometheus(avgYoungTimeRateQuery), 0);
+            double avgOldTimeRate = extractValue(queryPrometheus(avgOldTimeRateQuery), 0);
+            double overheadPercent = (avgYoungTimeRate + avgOldTimeRate) * 100;
             summary.put("gcOverheadPercent", Math.round(overheadPercent * 100) / 100.0);
 
             // Health status
@@ -894,68 +1314,290 @@ public class PrometheusService {
 
     /**
      * Get history metrics for charts.
-     * @param hours Number of hours to look back (default 24)
+     *
+     * @param hours      Number of hours to look back (default 24)
      * @param instanceId Optional instance ID to filter for a specific instance
+     * @param podInstance Optional Prometheus instance label (Pod IP:port) to filter for a specific Pod
      */
-    public Map<String, Object> getHistoryMetrics(int hours, String instanceId) {
+    /**
+     * Get history metrics for charts.
+     * 
+     * @param hours Number of hours to query
+     * @param instanceId Optional instance ID to filter
+     * @param podInstance Optional Pod instance to filter
+     * @param centerTime Optional Unix timestamp (seconds) - query around this time point instead of current time
+     */
+    public Map<String, Object> getHistoryMetrics(int hours, String instanceId, String podInstance, Long centerTime) {
         Map<String, Object> history = new LinkedHashMap<>();
+
+        // Calculate time range based on centerTime
+        long end, start;
+        if (centerTime != null && centerTime > 0) {
+            // Historical mode: query from centerTime backwards
+            // 用户选择"最近N小时"，显示从那个时间点往前N小时的趋势
+            end = centerTime;
+            start = centerTime - (hours * 3600L);
+            log.info("Historical query: centerTime={}, range={} hours ({} to {})",
+                    centerTime, hours, new java.util.Date(start * 1000), new java.util.Date(end * 1000));
+        } else {
+            // Realtime mode: query from now backwards
+            end = System.currentTimeMillis() / 1000;
+            start = end - (hours * 3600L);
+        }
         
-        long end = System.currentTimeMillis() / 1000;
-        long start = end - (hours * 3600L);
         String step = hours <= 1 ? "1m" : hours <= 6 ? "5m" : "15m";
-        String instanceFilter = buildInstanceFilter(instanceId);
-        
+        String instanceFilter = buildCombinedFilter(instanceId, podInstance);
+
         try {
-            // JVM Heap Memory History
             history.put("heapMemory", queryRange(
                     "sum(jvm_memory_used_bytes{application=\"my-gateway\"" + instanceFilter + ",area=\"heap\"})",
                     start, end, step));
-            
-            // System CPU Usage History (整体系统CPU)
+
+            history.put("edenMemory", queryRange(
+                    "sum(jvm_memory_used_bytes{application=\"my-gateway\"" + instanceFilter + ",area=\"heap\",id=~\".*Eden.*\"})",
+                    start, end, step));
+
+            history.put("oldGenMemory", queryRange(
+                    "sum(jvm_memory_used_bytes{application=\"my-gateway\"" + instanceFilter + ",area=\"heap\",id=~\".*Old.*|.*Tenured.*\"})",
+                    start, end, step));
+
+            history.put("nonHeapMemory", queryRange(
+                    "sum(jvm_memory_used_bytes{application=\"my-gateway\"" + instanceFilter + ",area=\"nonheap\"})",
+                    start, end, step));
+
+            history.put("systemLoadAverage", queryRange(
+                    "system_load_average_1m{application=\"my-gateway\"" + instanceFilter + "}",
+                    start, end, step));
+
             history.put("systemCpuUsage", queryRange(
                     "system_cpu_usage{application=\"my-gateway\"" + instanceFilter + "}",
                     start, end, step));
-            
-            // Process CPU Usage History (网关进程CPU - 关键指标)
+
             history.put("processCpuUsage", queryRange(
                     "process_cpu_usage{application=\"my-gateway\"" + instanceFilter + "}",
                     start, end, step));
-            
-            // 兼容旧接口，保留 cpuUsage 字段（指向 systemCpuUsage）
+
             history.put("cpuUsage", history.get("systemCpuUsage"));
-            
-            // HTTP Requests Rate History
+
             history.put("requestRate", queryRange(
                     "sum(rate(http_server_requests_seconds_count{application=\"my-gateway\"" + instanceFilter + "}[1m]))",
                     start, end, step));
-            
-            // Response Time History
+
             history.put("responseTime", queryRange(
                     "sum(rate(http_server_requests_seconds_sum{application=\"my-gateway\"" + instanceFilter + "}[1m])) / sum(rate(http_server_requests_seconds_count{application=\"my-gateway\"" + instanceFilter + "}[1m]))",
                     start, end, step));
-            
-            // GC Time History
+
             history.put("gcTime", queryRange(
-                    "sum(rate(jvm_gc_pause_seconds_sum{application=\"my-gateway\"" + instanceFilter + "}[5m]))",
+                    "sum(rate(jvm_gc_pause_seconds_sum{application=\"my-gateway\"" + instanceFilter + "}[5m])) * 300",
                     start, end, step));
-            
-            // Thread Count History
+
+            history.put("gcCount", queryRange(
+                    "sum(rate(jvm_gc_pause_seconds_count{application=\"my-gateway\"" + instanceFilter + "}[5m])) * 300",
+                    start, end, step));
+
+            history.put("youngGcCount", queryRange(
+                    "sum(rate(jvm_gc_pause_seconds_count{application=\"my-gateway\"" + instanceFilter + ",action=\"end of minor GC\"}[5m])) * 300",
+                    start, end, step));
+
+            history.put("oldGcCount", queryRange(
+                    "sum(rate(jvm_gc_pause_seconds_count{application=\"my-gateway\"" + instanceFilter + ",action=\"end of major GC\"}[5m])) * 300",
+                    start, end, step));
+
             history.put("threadCount", queryRange(
                     "jvm_threads_live_threads{application=\"my-gateway\"" + instanceFilter + "}",
                     start, end, step));
-                    
+
+            history.put("daemonThreadCount", queryRange(
+                    "jvm_threads_daemon_threads{application=\"my-gateway\"" + instanceFilter + "}",
+                    start, end, step));
+
+            history.put("allocationRate", queryRange(
+                    "sum(rate(jvm_gc_memory_allocated_bytes_total{application=\"my-gateway\"" + instanceFilter + "}[1m]))",
+                    start, end, step));
+
+            // 晋升速率历史数据（对象从Young Gen晋升到Old Gen的速率）
+            history.put("promotionRate", queryRange(
+                    "sum(rate(jvm_gc_memory_promoted_bytes_total{application=\"my-gateway\"" + instanceFilter + "}[1m]))",
+                    start, end, step));
+
         } catch (Exception e) {
             log.error("Failed to get history metrics: {}", e.getMessage());
         }
-        
+
         return history;
     }
 
     /**
+     * Get history metrics for charts (with instanceId filter).
+     *
+     * @param hours      Number of hours to look back (default 24)
+     * @param instanceId Optional instance ID to filter for a specific instance
+     * @param podInstance Optional Prometheus instance label (Pod IP:port) to filter for a specific Pod
+     */
+    public Map<String, Object> getHistoryMetrics(int hours, String instanceId, String podInstance) {
+        return getHistoryMetrics(hours, instanceId, podInstance, null);
+    }
+
+    /**
+     * Get history metrics for charts (with instanceId filter).
+     *
+     * @param hours      Number of hours to look back (default 24)
+     * @param instanceId Optional instance ID to filter for a specific instance
+     */
+    public Map<String, Object> getHistoryMetrics(int hours, String instanceId) {
+        return getHistoryMetrics(hours, instanceId, null, null);
+    }
+
+    /**
      * Get history metrics for charts (all instances).
+     *
      * @param hours Number of hours to look back (default 24)
      */
     public Map<String, Object> getHistoryMetrics(int hours) {
-        return getHistoryMetrics(hours, null);
+        return getHistoryMetrics(hours, null, null, null);
+    }
+
+    /**
+     * Get route-level metrics from Prometheus.
+     * Query per-route response time, error rate, and throughput.
+     *
+     * @param instanceId Optional instance ID to filter metrics for a specific instance
+     * @param podInstance Optional Prometheus instance label (Pod IP:port) to filter for a specific Pod
+     * @param hours Number of hours to analyze (default 1)
+     * @return List of route metrics
+     */
+    public List<Map<String, Object>> getRouteMetrics(String instanceId, String podInstance, int hours) {
+        List<Map<String, Object>> routeMetrics = new ArrayList<>();
+        String instanceFilter = buildCombinedFilter(instanceId, podInstance);
+
+        try {
+            // Query all routes with their request counts in the time range
+            // http_server_requests_seconds_count has labels: uri, method, status
+            String routeQuery = "sum by (uri, method) (increase(http_server_requests_seconds_count{application=\"my-gateway\"" + instanceFilter + "}[" + hours + "h]))";
+            String routeResult = queryPrometheus(routeQuery);
+            
+            // Parse route request counts
+            Map<String, Map<String, Double>> routeRequests = parseRouteResult(routeResult);
+            
+            // Query route error counts (status 4xx and 5xx)
+            String errorQuery = "sum by (uri, method) (increase(http_server_requests_seconds_count{application=\"my-gateway\"" + instanceFilter + ",status=~\"4..|5..\"}[" + hours + "h]))";
+            String errorResult = queryPrometheus(errorQuery);
+            Map<String, Map<String, Double>> routeErrors = parseRouteResult(errorResult);
+            
+            // Query route response times
+            String responseTimeQuery = "sum by (uri, method) (rate(http_server_requests_seconds_sum{application=\"my-gateway\"" + instanceFilter + "}[" + hours + "h])) / sum by (uri, method) (rate(http_server_requests_seconds_count{application=\"my-gateway\"" + instanceFilter + "}[" + hours + "h]))";
+            String responseTimeResult = queryPrometheus(responseTimeQuery);
+            Map<String, Map<String, Double>> routeResponseTimes = parseRouteResult(responseTimeResult);
+            
+            // Calculate throughput (requests per minute)
+            String throughputQuery = "sum by (uri, method) (rate(http_server_requests_seconds_count{application=\"my-gateway\"" + instanceFilter + "}[" + hours + "h])) * 60";
+            String throughputResult = queryPrometheus(throughputQuery);
+            Map<String, Map<String, Double>> routeThroughput = parseRouteResult(throughputResult);
+            
+            // Build route metrics map
+            for (Map.Entry<String, Map<String, Double>> entry : routeRequests.entrySet()) {
+                String routeKey = entry.getKey();
+                String uri = extractLabel(routeKey, "uri");
+                String method = extractLabel(routeKey, "method");
+                
+                if (uri == null || uri.isEmpty() || uri.equals("/actuator/prometheus") || uri.equals("/actuator/health")) {
+                    continue; // Skip internal endpoints
+                }
+                
+                Map<String, Object> routeData = new LinkedHashMap<>();
+                routeData.put("uri", uri);
+                routeData.put("method", method != null ? method : "ALL");
+                
+                // Request count
+                double totalRequests = entry.getValue().values().stream().mapToDouble(Double::doubleValue).sum();
+                routeData.put("requestCount", (long) totalRequests);
+                
+                // Error count and rate
+                double errorCount = routeErrors.getOrDefault(routeKey, new HashMap<>()).values().stream().mapToDouble(Double::doubleValue).sum();
+                routeData.put("errorCount", (long) errorCount);
+                double errorRate = totalRequests > 0 ? (errorCount / totalRequests) * 100 : 0;
+                routeData.put("errorRate", Math.round(errorRate * 100) / 100.0);
+                
+                // Average response time (convert from seconds to milliseconds)
+                double avgResponseTimeSec = routeResponseTimes.getOrDefault(routeKey, new HashMap<>()).values().stream().mapToDouble(Double::doubleValue).average().orElse(0);
+                routeData.put("avgResponseTimeMs", Math.round(avgResponseTimeSec * 1000));
+                
+                // Throughput (requests per minute)
+                double throughput = routeThroughput.getOrDefault(routeKey, new HashMap<>()).values().stream().mapToDouble(Double::doubleValue).sum();
+                routeData.put("throughputPerMin", Math.round(throughput * 100) / 100.0);
+                
+                // Health status based on error rate and response time
+                String healthStatus = "HEALTHY";
+                if (errorRate > 10 || avgResponseTimeSec > 1) {
+                    healthStatus = "CRITICAL";
+                } else if (errorRate > 5 || avgResponseTimeSec > 0.5) {
+                    healthStatus = "WARNING";
+                }
+                routeData.put("healthStatus", healthStatus);
+                
+                routeMetrics.add(routeData);
+            }
+            
+            // Sort by request count descending
+            routeMetrics.sort((a, b) -> Long.compare(
+                (Long) b.getOrDefault("requestCount", 0L),
+                (Long) a.getOrDefault("requestCount", 0L)
+            ));
+            
+            log.info("Found {} routes with metrics", routeMetrics.size());
+            
+        } catch (Exception e) {
+            log.warn("Failed to get route metrics: {}", e.getMessage());
+        }
+        
+        return routeMetrics;
+    }
+
+    /**
+     * Parse Prometheus result that contains uri and method labels.
+     * Returns a map with key as "uri:method" and value as metric values.
+     */
+    private Map<String, Map<String, Double>> parseRouteResult(String jsonResult) {
+        Map<String, Map<String, Double>> result = new HashMap<>();
+        
+        try {
+            JsonNode root = objectMapper.readTree(jsonResult);
+            JsonNode data = root.path("data").path("result");
+            
+            if (data.isArray()) {
+                for (JsonNode item : data) {
+                    JsonNode metric = item.path("metric");
+                    String uri = metric.path("uri").asText("");
+                    String method = metric.path("method").asText("");
+                    
+                    if (!uri.isEmpty()) {
+                        String key = uri + ":" + method;
+                        JsonNode valueNode = item.path("value");
+                        if (valueNode.isArray() && valueNode.size() > 1) {
+                            double value = valueNode.get(1).asDouble(0);
+                            result.computeIfAbsent(key, k -> new HashMap<>()).put(method, value);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Failed to parse route result: {}", e.getMessage());
+        }
+        
+        return result;
+    }
+
+    /**
+     * Extract label value from route key.
+     */
+    private String extractLabel(String routeKey, String labelName) {
+        // Route key format: "uri:method"
+        String[] parts = routeKey.split(":");
+        if (labelName.equals("uri") && parts.length > 0) {
+            return parts[0];
+        } else if (labelName.equals("method") && parts.length > 1) {
+            return parts[1];
+        }
+        return "";
     }
 }

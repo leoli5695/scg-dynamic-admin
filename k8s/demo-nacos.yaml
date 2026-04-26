@@ -6,19 +6,19 @@ metadata:
   name: demo-nacos-1
   namespace: test
   labels:
-    app: demo-nacos-1
+    app: demo-nacos
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: demo-nacos-1
+      app: demo-nacos
+      instance: demo-nacos-1
   template:
     metadata:
       labels:
-        app: demo-nacos-1
+        app: demo-nacos
+        instance: demo-nacos-1
     spec:
-      hostNetwork: true
-      dnsPolicy: ClusterFirstWithHostNet
       initContainers:
       - name: wait-for-nacos
         image: rancher/mirrored-library-busybox:1.37.0
@@ -31,12 +31,13 @@ spec:
         ports:
         - containerPort: 9004
           name: http
-          hostPort: 9004
         env:
         - name: SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR
           value: "nacos:8848"
         - name: SPRING_CLOUD_NACOS_DISCOVERY_IP
-          value: "127.0.0.1"
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
         - name: SPRING_CLOUD_NACOS_DISCOVERY_PORT
           value: "9004"
         - name: SERVER_PORT
@@ -71,19 +72,19 @@ metadata:
   name: demo-nacos-2
   namespace: test
   labels:
-    app: demo-nacos-2
+    app: demo-nacos
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: demo-nacos-2
+      app: demo-nacos
+      instance: demo-nacos-2
   template:
     metadata:
       labels:
-        app: demo-nacos-2
+        app: demo-nacos
+        instance: demo-nacos-2
     spec:
-      hostNetwork: true
-      dnsPolicy: ClusterFirstWithHostNet
       initContainers:
       - name: wait-for-nacos
         image: rancher/mirrored-library-busybox:1.37.0
@@ -96,12 +97,13 @@ spec:
         ports:
         - containerPort: 9005
           name: http
-          hostPort: 9005
         env:
         - name: SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR
           value: "nacos:8848"
         - name: SPRING_CLOUD_NACOS_DISCOVERY_IP
-          value: "127.0.0.1"
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
         - name: SPRING_CLOUD_NACOS_DISCOVERY_PORT
           value: "9005"
         - name: SERVER_PORT
@@ -127,3 +129,24 @@ spec:
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
+
+---
+# Demo Service Nacos - Service (for external access)
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-nacos
+  namespace: test
+spec:
+  type: NodePort
+  selector:
+    app: demo-nacos
+  ports:
+  - name: http-1
+    port: 9004
+    targetPort: 9004
+    nodePort: 30904
+  - name: http-2
+    port: 9005
+    targetPort: 9005
+    nodePort: 30905

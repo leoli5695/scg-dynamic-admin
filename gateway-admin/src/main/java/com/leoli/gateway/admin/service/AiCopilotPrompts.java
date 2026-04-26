@@ -1878,6 +1878,94 @@ public class AiCopilotPrompts {
                 - 监控: 压测期间监控 CPU/内存/响应时间
                 """);
 
+        // ========== Pod 维度分析（新增）==========
+        prompts.put("podAnalysis", """
+                ## Pod 维度分析指南
+                
+                当用户请求按 Pod 维度分析性能或压测结果时，请按以下步骤操作：
+                
+                ### 1. 获取 Pod 列表
+                
+                首先调用 `get_instance_pods` 工具获取该网关实例的所有 Pod：
+                ```
+                get_instance_pods(instanceId="xxx")
+                ```
+                
+                返回结果包含：
+                - name: Pod 名称
+                - podIP: Pod IP 地址
+                - managementPort: 管理端口（用于监控指标）
+                - phase: 运行状态
+                
+                ### 2. 构建 podInstance 格式
+                
+                从返回结果中构建 `podInstance` 参数：
+                ```
+                podInstance = podIP + ":" + managementPort
+                例如: "10.0.0.1:9091"
+                ```
+                
+                ### 3. 查询各 Pod 监控数据
+                
+                有两种方式：
+                
+                **方式A：使用对比工具（推荐）**
+                ```
+                compare_pod_performance(instanceId="xxx", hours=1)
+                ```
+                该工具会自动获取所有 Pod 并生成对比报告。
+                
+                **方式B：逐个查询**
+                对每个 Pod 分别调用：
+                ```
+                get_pod_metrics(instanceId="xxx", podInstance="10.0.0.1:9091")
+                get_history_metrics(hours=1, instanceId="xxx", podInstance="10.0.0.1:9091")
+                ```
+                
+                ### 4. 压测后 Pod 分析
+                
+                如果用户提到压测后分析各 Pod：
+                ```
+                analyze_pod_stress_test(instanceId="xxx", testId=可选)
+                ```
+                
+                ### 5. 分析重点
+                
+                分析报告应包含：
+                - **负载均衡分析**：各 Pod 的 CPU/请求量差异，是否存在不均衡
+                - **性能对比表**：列出各 Pod 的关键指标对比
+                - **异常 Pod 检测**：识别负载异常高或低的 Pod
+                - **原因分析**：负载不均衡的可能原因（路由倾斜、连接池热点等）
+                - **优化建议**：负载均衡策略调整、JVM 参数优化
+                
+                ### 6. 关键指标
+                
+                | 指标 | 说明 | 不均衡阈值 |
+                |------|------|-----------|
+                | process_cpu_usage | 进程CPU使用率 | 差异 > 30% 需关注 |
+                | heapUsagePercent | JVM堆内存使用率 | 差异 > 20% 需关注 |
+                | requestsPerSecond | 请求处理量 | 差异 > 30% 需关注 |
+                | avgResponseTimeMs | 平均响应时间 | 某Pod > 其他Pod 2倍需关注 |
+                | gcOverheadPercent | GC开销占比 | 任一Pod > 10% 需关注 |
+                
+                ### 7. 负载不均衡常见原因
+                
+                - **路由配置倾斜**：某些路由请求集中到特定 Pod
+                - **负载均衡策略不当**：权重配置不合理
+                - **连接池热点**：某些 Pod 的连接池饱和
+                - **缓存热点**：热点数据集中在某 Pod
+                - **JVM 参数差异**：不同 Pod 的内存/GC 配置不一致
+                
+                ### 8. 优化建议
+                
+                根据分析结果给出具体建议：
+                - 调整负载均衡策略（如改为 round-robin）
+                - 调整服务权重配置
+                - 增加副本数分担负载
+                - 检查路由配置是否存在倾斜
+                - JVM 参数调优（如有 GC 问题）
+                """);
+
         return prompts;
     }
 
@@ -2202,6 +2290,93 @@ public class AiCopilotPrompts {
                 | errorRatePercent | > 1% |
                 """);
 
+        // ========== Pod Analysis (New) ==========
+        prompts.put("podAnalysis", """
+                ## Pod Analysis Guide
+                
+                When users request Pod-level performance or stress test analysis, follow these steps:
+                
+                ### 1. Get Pod List
+                
+                First call `get_instance_pods` to get all Pods for the gateway instance:
+                ```
+                get_instance_pods(instanceId="xxx")
+                ```
+                
+                Returns:
+                - name: Pod name
+                - podIP: Pod IP address
+                - managementPort: Management port (for metrics)
+                - phase: Running status
+                
+                ### 2. Build podInstance Format
+                
+                Build `podInstance` parameter from returned data:
+                ```
+                podInstance = podIP + ":" + managementPort
+                Example: "10.0.0.1:9091"
+                ```
+                
+                ### 3. Query Pod Metrics
+                
+                Two approaches:
+                
+                **Approach A: Use comparison tool (Recommended)**
+                ```
+                compare_pod_performance(instanceId="xxx", hours=1)
+                ```
+                This tool automatically gets all Pods and generates comparison report.
+                
+                **Approach B: Query individually**
+                For each Pod:
+                ```
+                get_pod_metrics(instanceId="xxx", podInstance="10.0.0.1:9091")
+                get_history_metrics(hours=1, instanceId="xxx", podInstance="10.0.0.1:9091")
+                ```
+                
+                ### 4. Post-Stress Test Pod Analysis
+                
+                For stress test pod analysis:
+                ```
+                analyze_pod_stress_test(instanceId="xxx", testId=optional)
+                ```
+                
+                ### 5. Analysis Focus
+                
+                Report should include:
+                - **Load Balance Analysis**: CPU/request differences between Pods
+                - **Performance Comparison Table**: Key metrics comparison
+                - **Anomaly Detection**: Identify overloaded or underloaded Pods
+                - **Root Cause Analysis**: Reasons for load imbalance
+                - **Optimization Recommendations**: LB strategy, JVM tuning
+                
+                ### 6. Key Metrics
+                
+                | Metric | Description | Imbalance Threshold |
+                |--------|-------------|---------------------|
+                | process_cpu_usage | Process CPU usage | > 30% difference |
+                | heapUsagePercent | JVM heap usage | > 20% difference |
+                | requestsPerSecond | Request rate | > 30% difference |
+                | avgResponseTimeMs | Avg response time | 2x slower Pod |
+                | gcOverheadPercent | GC overhead | > 10% in any Pod |
+                
+                ### 7. Common Causes of Load Imbalance
+                
+                - Route configuration skew
+                - Improper load balancer weights
+                - Connection pool hotspot
+                - Cache hotspot
+                - JVM parameter differences
+                
+                ### 8. Optimization Recommendations
+                
+                - Adjust load balancer strategy (e.g., round-robin)
+                - Adjust service weights
+                - Increase replica count
+                - Check route configuration
+                - JVM parameter tuning (for GC issues)
+                """);
+
         return prompts;
     }
 
@@ -2341,6 +2516,21 @@ public class AiCopilotPrompts {
         KEYWORD_WEIGHTS.add(new KeywordWeight("压测报告", "test", 8));
         KEYWORD_WEIGHTS.add(new KeywordWeight("压测分析", "test", 8));
         KEYWORD_WEIGHTS.add(new KeywordWeight("stress test result", "test", 8));
+
+        // Pod维度分析相关（新增）
+        KEYWORD_WEIGHTS.add(new KeywordWeight("Pod维度", "podAnalysis", 15));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("各Pod", "podAnalysis", 15));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("Pod对比", "podAnalysis", 15));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("Pod性能", "podAnalysis", 15));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("Pod分析", "podAnalysis", 15));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("Pod负载", "podAnalysis", 12));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("哪个Pod", "podAnalysis", 12));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("pod分析", "podAnalysis", 10));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("pod对比", "podAnalysis", 10));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("pod performance", "podAnalysis", 10));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("pod comparison", "podAnalysis", 10));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("负载均衡分析", "podAnalysis", 8));
+        KEYWORD_WEIGHTS.add(new KeywordWeight("负载不均衡", "podAnalysis", 10));
 
         // === 中权重关键词（权重=5）===
         // 路由相关
@@ -2510,6 +2700,17 @@ public class AiCopilotPrompts {
         COMBO_RULES.add(new ComboRule(List.of("压测", "分析"), "performance", 25));
         COMBO_RULES.add(new ComboRule(List.of("压力测试", "结果"), "performance", 25));
         COMBO_RULES.add(new ComboRule(List.of("压测", "报告"), "performance", 25));
+
+        // Pod维度分析相关（新增）
+        COMBO_RULES.add(new ComboRule(List.of("Pod", "性能"), "podAnalysis", 30));
+        COMBO_RULES.add(new ComboRule(List.of("Pod", "分析"), "podAnalysis", 30));
+        COMBO_RULES.add(new ComboRule(List.of("Pod", "对比"), "podAnalysis", 30));
+        COMBO_RULES.add(new ComboRule(List.of("各Pod", "性能"), "podAnalysis", 30));
+        COMBO_RULES.add(new ComboRule(List.of("压测", "Pod"), "podAnalysis", 30));
+        COMBO_RULES.add(new ComboRule(List.of("Pod", "负载"), "podAnalysis", 25));
+        COMBO_RULES.add(new ComboRule(List.of("pod", "performance"), "podAnalysis", 30));
+        COMBO_RULES.add(new ComboRule(List.of("pod", "analysis"), "podAnalysis", 30));
+        COMBO_RULES.add(new ComboRule(List.of("pod", "comparison"), "podAnalysis", 30));
 
         // 告警配置
         COMBO_RULES.add(new ComboRule(List.of("告警", "配置"), "alert", 20));

@@ -54,16 +54,26 @@ data:
               names:
                 - test
         relabel_configs:
+          # 只保留 gateway pod
           - source_labels: [__meta_kubernetes_pod_label_app]
             regex: gateway-.*
             action: keep
-          - source_labels: [__meta_kubernetes_pod_ip]
-            target_label: __address__
-            replacement: ${1}:9091
-          - source_labels: [__meta_kubernetes_pod_label_gateway_instance_id]
-            target_label: instance_id
-          - source_labels: [__meta_kubernetes_pod_label_app]
+          # 只保留 management 端口（actuator 在 management port）
+          - source_labels: [__meta_kubernetes_pod_container_port_name]
+            regex: management
+            action: keep
+          # instance 标签 = Pod IP:management port（用于前端按 Pod 过滤）
+          - source_labels: [__address__]
             target_label: instance
+          # gateway_instance_id 用于按实例过滤
+          - source_labels: [__meta_kubernetes_pod_label_gateway_instance_id]
+            target_label: gateway_instance_id
+          # pod_name 用于区分不同 pod
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod_name
+          # application 标签固定为 my-gateway
+          - target_label: application
+            replacement: my-gateway
 
       - job_name: 'demo-nacos'
         metrics_path: '/actuator/prometheus'

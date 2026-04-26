@@ -13,6 +13,8 @@ import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -149,9 +151,19 @@ public class StressTestService {
 
         test = stressTestRepository.save(test);
 
-        // Start test asynchronously on orchestration executor
-        startTestAsync(test.getId(), config.getTargetQps(),
-                config.getRequestTimeoutSeconds() != null ? config.getRequestTimeoutSeconds() : 30);
+        // Register synchronization to start test AFTER transaction commits
+        // This ensures the test record is visible to the async thread
+        final Long testId = test.getId();
+        final Integer targetQps = config.getTargetQps();
+        final int requestTimeoutSeconds = config.getRequestTimeoutSeconds() != null ? config.getRequestTimeoutSeconds() : 30;
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                log.info("Transaction committed, starting async stress test: {}", testId);
+                startTestAsync(testId, targetQps, requestTimeoutSeconds);
+            }
+        });
 
         return test;
     }

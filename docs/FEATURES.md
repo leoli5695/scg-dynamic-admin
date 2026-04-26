@@ -44,6 +44,7 @@
 | Feature | Description | Document |
 |---------|-------------|----------|
 | **Monitoring & Alerts** | JVM, CPU, HTTP metrics with threshold alerts | [monitoring-alerts.md](features/monitoring-alerts.md) |
+| **Access Log** | JSON logging with K8S real-time viewing & ES integration | [access-log.md](features/access-log.md) |
 | **Request Tracing** | Error/slow request capture with replay | [request-tracing.md](features/request-tracing.md) |
 | **AI-Powered Analysis** | GPT/Claude/Qwen metrics analysis | [ai-analysis.md](features/ai-analysis.md) |
 | **Email Notifications** | SMTP alerts with AI-generated content | [email-notifications.md](features/email-notifications.md) |

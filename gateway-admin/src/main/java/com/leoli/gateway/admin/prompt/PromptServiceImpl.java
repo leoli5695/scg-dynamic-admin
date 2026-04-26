@@ -342,6 +342,8 @@ public class PromptServiceImpl implements PromptService {
         return getPromptsByCategory("domain", null).keySet().stream()
             .anyMatch(k -> k.contains(intent))
             || "strategyTest".equals(intent)  // 策略测试指南（数据库动态加载）
+            || "podAnalysis".equals(intent)   // Pod维度分析（新增）
+            || "pod_stress_test".equals(intent)  // Pod压测分析（新增）
             || "general".equals(intent)
             || "config".equals(intent);
     }
@@ -358,6 +360,8 @@ public class PromptServiceImpl implements PromptService {
             }
         }
         intents.add("strategyTest");  // 策略测试指南（数据库动态加载）
+        intents.add("podAnalysis");   // Pod维度分析（新增）
+        intents.add("pod_stress_test");  // Pod压测分析（新增）
         intents.add("general");
         intents.add("config");
         return new ArrayList<>(intents);

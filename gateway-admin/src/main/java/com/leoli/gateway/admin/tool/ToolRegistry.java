@@ -75,11 +75,15 @@ public class ToolRegistry {
         // get_gateway_metrics - 实时监控指标
         tools.put("get_gateway_metrics", ToolDefinition.create(
             "get_gateway_metrics",
-            "获取网关实时监控指标，包括 JVM 内存使用率、CPU 使用率、HTTP 请求数(QPS)、平均响应时间、错误率、线程数、GC 统计等。适用于性能分析和实时监控。",
+            "获取网关实时监控指标，包括：JVM内存(heap/nonheap、Eden/Survivor/OldGen使用率)、CPU使用率、HTTP请求数(QPS)、响应时间、错误率、线程数、GC统计(Young/Old GC次数和时间、GC开销百分比)、内存分配速率(MB/s)、晋升速率(MB/s)、晋升比例(%)、GC健康状态等。适用于性能分析、JVM调优和实时监控。",
             Map.of(
                 "instanceId", Map.of(
                     "type", "string",
                     "description", "网关实例ID（可选）。不提供时返回所有实例汇总指标。"
+                ),
+                "podInstance", Map.of(
+                    "type", "string",
+                    "description", "Pod实例标签（可选）。格式为 Pod IP:管理端口，如 '10.0.0.1:9091'。用于按Pod维度查询监控数据。"
                 )
             ),
             List.of(),
@@ -90,7 +94,7 @@ public class ToolRegistry {
         // get_history_metrics - 历史监控数据
         tools.put("get_history_metrics", ToolDefinition.create(
             "get_history_metrics",
-            "获取指定时间范围的历史监控数据，用于趋势分析和问题排查。返回时间序列格式的指标数据。",
+            "获取指定时间范围的历史监控数据，包括：堆内存趋势、Eden/OldGen内存变化、系统负载、CPU使用率、请求速率、响应时间、GC次数/时间、内存分配速率趋势等。用于趋势分析、问题排查和JVM调优分析。",
             Map.of(
                 "hours", Map.of(
                     "type", "integer",
@@ -100,9 +104,97 @@ public class ToolRegistry {
                 "instanceId", Map.of(
                     "type", "string",
                     "description", "网关实例ID（可选）。"
+                ),
+                "podInstance", Map.of(
+                    "type", "string",
+                    "description", "Pod实例标签（可选）。格式为 Pod IP:管理端口，如 '10.0.0.1:9091'。用于按Pod维度查询历史数据。"
                 )
             ),
             List.of(),
+            "monitor",
+            true
+        ));
+
+        // get_pod_metrics - 查询指定Pod实时指标（新增）
+        tools.put("get_pod_metrics", ToolDefinition.create(
+            "get_pod_metrics",
+            "获取指定 Pod 的实时监控指标，包括：JVM内存(heap/nonheap、Eden/Survivor/OldGen使用率)、CPU使用率、HTTP请求数、响应时间、GC统计(Young/Old GC、内存分配速率、晋升速率、晋升比例)、GC健康状态等。用于按Pod维度分析性能，识别异常Pod和JVM调优。",
+            Map.of(
+                "instanceId", Map.of(
+                    "type", "string",
+                    "description", "网关实例ID（12位随机ID）"
+                ),
+                "podInstance", Map.of(
+                    "type", "string",
+                    "description", "Pod实例标签（必填）。格式为 Pod IP:管理端口，如 '10.0.0.1:9091'。可通过 get_instance_pods 工具获取 Pod 的 podIP 和 managementPort 信息来构建。"
+                )
+            ),
+            List.of("instanceId", "podInstance"),
+            "monitor",
+            true
+        ));
+
+        // compare_pod_performance - Pod性能对比（新增）
+        tools.put("compare_pod_performance", ToolDefinition.create(
+            "compare_pod_performance",
+            "对比网关实例所有 Pod 的性能指标，生成对比报告，识别负载不均衡或异常 Pod。自动获取 Pod 列表并分别查询每个 Pod 的监控数据。",
+            Map.of(
+                "instanceId", Map.of(
+                    "type", "string",
+                    "description", "网关实例ID（12位随机ID）"
+                ),
+                "hours", Map.of(
+                    "type", "integer",
+                    "description", "统计最近N小时的数据（默认1小时）",
+                    "default", 1
+                )
+            ),
+            List.of("instanceId"),
+            "performance",
+            true
+        ));
+
+        // analyze_pod_stress_test - Pod维度压测分析（新增）
+        tools.put("analyze_pod_stress_test", ToolDefinition.create(
+            "analyze_pod_stress_test",
+            "按 Pod 维度分析压力测试结果，分别分析每个 Pod 在压测期间的性能表现并对比。用于识别负载不均衡、找出负载最高的 Pod、分析负载均衡策略是否合理。",
+            Map.of(
+                "instanceId", Map.of(
+                    "type", "string",
+                    "description", "网关实例ID（12位随机ID）"
+                ),
+                "testId", Map.of(
+                    "type", "integer",
+                    "description", "压测ID（可选）。不提供时使用该实例最近的压测记录。"
+                ),
+                "language", Map.of(
+                    "type", "string",
+                    "description", "报告语言（zh中文/en英文，默认zh）",
+                    "default", "zh",
+                    "enum", List.of("zh", "en")
+                )
+            ),
+            List.of("instanceId"),
+            "test",
+            true
+        ));
+
+        // check_pod_count_for_analysis - 压测分析前Pod检测（新增）
+        tools.put("check_pod_count_for_analysis", ToolDefinition.create(
+            "check_pod_count_for_analysis",
+            "【压测分析必调】在分析压测监控数据前，先检查网关实例是否有多个Pod。如有多个Pod，返回建议调用compare_pod_performance进行Pod维度对比分析；如只有一个Pod，返回单Pod分析建议。AI应根据返回结果决定后续分析策略。",
+            Map.of(
+                "instanceId", Map.of(
+                    "type", "string",
+                    "description", "网关实例ID（12位随机ID）"
+                ),
+                "hours", Map.of(
+                    "type", "integer",
+                    "description", "分析时间窗口（默认1小时）",
+                    "default", 1
+                )
+            ),
+            List.of("instanceId"),
             "monitor",
             true
         ));

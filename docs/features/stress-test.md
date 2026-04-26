@@ -180,6 +180,78 @@ curl -X POST http://localhost:9090/api/stress-test/start \
 
 ---
 
+## Architecture & Implementation Details
+
+### Transaction-Async Execution Pattern (Bug Fix)
+
+**Fixed: 2026-04-25**
+
+**Problem: Stress test not executing, stuck in CREATED status**
+
+Original code had a classic Spring transaction + async execution concurrency issue:
+
+```java
+// ❌ Original problematic code
+@Transactional
+public StressTest createAndStartTest(...) {
+    test = stressTestRepository.save(test);  // Transaction NOT committed yet
+    startTestAsync(test.getId());             // Async thread starts immediately
+    return test;
+}
+
+private void startTestAsync(Long testId) {
+    orchestrationExecutor.submit(() -> executeTest(testId));
+}
+
+private void executeTest(Long testId) {
+    StressTest test = stressTestRepository.findById(testId).orElse(null);
+    // ❌ Returns NULL because transaction not committed!
+    if (test == null) return;  // Test stuck in CREATED status
+}
+```
+
+**Root Cause:**
+1. Main thread saves test but transaction not committed
+2. Async thread starts and queries test immediately
+3. Database transaction isolation: async thread can't see uncommitted data
+4. Async thread finds null and exits
+5. Test status remains CREATED forever
+
+**Solution: Use TransactionSynchronization**
+
+```java
+// ✅ Fixed code
+@Transactional
+public StressTest createAndStartTest(...) {
+    test = stressTestRepository.save(test);
+    
+    // Register callback to start async AFTER transaction commits
+    final Long testId = test.getId();
+    TransactionSynchronizationManager.registerSynchronization(
+        new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                log.info("Transaction committed, starting async test: {}", testId);
+                startTestAsync(testId, targetQps, timeout);
+            }
+        }
+    );
+    
+    return test;
+}
+
+// Now async thread starts AFTER transaction commits
+// Database can see committed test record
+// Test executes successfully: CREATED → RUNNING → COMPLETED
+```
+
+**Benefits:**
+- Guaranteed test execution after data is visible
+- No race condition between transaction commit and async start
+- Clean separation of transaction and async boundaries
+
+---
+
 ## Best Practices
 
 1. **Gradual Ramp-up**: Use rampUp to avoid sudden load spikes

@@ -1,11 +1,9 @@
-FROM ghcr.io/graalvm/graalvm-community:17
+FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 
-RUN microdnf install -y curl tzdata && microdnf clean all
+RUN apk add --no-cache curl tzdata
 
-RUN groupadd -r demo && useradd -r -g demo -d /home/demo demo
-
-RUN mkdir -p /home/demo && chown -R demo:demo /home/demo
+RUN addgroup -S demo && adduser -S demo -G demo
 
 COPY target/demo-service-1.0.0.jar app.jar
 

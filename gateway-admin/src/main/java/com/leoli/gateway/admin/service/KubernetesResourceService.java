@@ -207,6 +207,10 @@ public class KubernetesResourceService {
     }
 
     public String getPodLogs(Long clusterId, String namespace, String podName, String containerName, Integer tailLines) {
+        return getPodLogs(clusterId, namespace, podName, containerName, tailLines, null);
+    }
+
+    public String getPodLogs(Long clusterId, String namespace, String podName, String containerName, Integer tailLines, Integer sinceSeconds) {
         ApiClient client = connectionService.getApiClient(clusterId);
         CoreV1Api api = new CoreV1Api(client);
 
@@ -217,6 +221,9 @@ public class KubernetesResourceService {
             }
             if (tailLines != null && tailLines > 0) {
                 request.tailLines(tailLines);
+            }
+            if (sinceSeconds != null && sinceSeconds > 0) {
+                request.sinceSeconds(sinceSeconds);
             }
             return request.execute();
         } catch (ApiException e) {

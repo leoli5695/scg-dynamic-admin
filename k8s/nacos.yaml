@@ -34,18 +34,34 @@ spec:
     spec:
       containers:
       - name: nacos
-        image: nacos/nacos-server:v2.3.2
-        imagePullPolicy: IfNotPresent
+        image: nacos/nacos-server:v2.2.3
+        imagePullPolicy: Never
         ports:
         - containerPort: 8848
           name: client
         - containerPort: 9848
           name: raft
+        - containerPort: 9849
+          name: raft-internal
         env:
         - name: MODE
           value: "standalone"
         - name: PREFER_HOST_MODE
           value: "hostname"
+        - name: NACOS_SERVER_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: NACOS_APPLICATION_PORT
+          value: "8848"
+        - name: NACOS_SERVER_PORT
+          value: "9848"
+        - name: JVM_XMS
+          value: "512m"
+        - name: JVM_XMX
+          value: "512m"
+        - name: JVM_XMN
+          value: "256m"
         resources:
           requests:
             cpu: "500m"
@@ -93,7 +109,10 @@ spec:
     port: 8848
     targetPort: 8848
     nodePort: 30848
-  - name: raft
+  - name: grpc
     port: 9848
     targetPort: 9848
-    nodePort: 30849
+    nodePort: 31848
+  - name: raft-internal
+    port: 9849
+    targetPort: 9849

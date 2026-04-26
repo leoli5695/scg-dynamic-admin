@@ -731,7 +731,7 @@ const InstanceDetailPage: React.FC = () => {
         return (
           <ErrorBoundary>
             <Suspense fallback={<TabLoading />}>
-              <MonitorPage instanceId={instance.instanceId} />
+              <MonitorPage instanceId={instance.instanceId} instanceDbId={instance.id} />
             </Suspense>
           </ErrorBoundary>
         );

@@ -12,7 +12,7 @@ import {
   ReloadOutlined, SaveOutlined, InfoCircleOutlined,
   EyeOutlined, BarChartOutlined, FilterOutlined,
   SearchOutlined, ClockCircleOutlined, CopyOutlined,
-  CheckCircleOutlined, CodeOutlined, FileOutlined
+  CheckCircleOutlined, CodeOutlined, FileOutlined, HistoryOutlined
 } from '@ant-design/icons';
 import api from '../utils/api';
 import { useTranslation } from 'react-i18next';
@@ -95,6 +95,9 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
   const [form] = Form.useForm();
   const { t } = useTranslation();
 
+  // Watch deployMode field for collection guide tab sync
+  const watchedDeployMode = Form.useWatch('deployMode', form);
+
   // Log viewing state
   const [logLoading, setLogLoading] = useState(false);
   const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
@@ -113,6 +116,20 @@ const AccessLogConfigPage: React.FC<AccessLogConfigPageProps> = ({ instanceId })
   const [bodyViewMode, setBodyViewMode] = useState<'raw' | 'formatted'>('formatted');
   const [outputTarget, setOutputTarget] = useState<'stdout' | 'file' | 'both'>('file');
   const [showFileConfig, setShowFileConfig] = useState(true);  // 是否显示文件配置项
+
+  // K8S Pod selection state
+  const [k8sClusters, setK8sClusters] = useState<Array<{id: number; clusterName: string; enabled: boolean; connectionStatus: string}>>([]);
+  const [clusterId, setClusterId] = useState<number | null>(null);
+  const [k8sClustersLoading, setK8sClustersLoading] = useState(false);
+  const [k8sPods, setK8sPods] = useState<Array<{name: string; namespace: string; phase: string; podIP: string}>>([]);
+  const [selectedPod, setSelectedPod] = useState<string | null>(null);
+  const [selectedNamespace, setSelectedNamespace] = useState<string>('');
+  const [k8sNamespaces, setK8sNamespaces] = useState<string[]>([]);
+  const [k8sPodsLoading, setK8sPodsLoading] = useState(false);
+  const [k8sNamespacesLoading, setK8sNamespacesLoading] = useState(false);
+  const [currentDeployMode, setCurrentDeployMode] = useState<string>('LOCAL'); // 当前选择的部署模式（用于日志查看Tab）
+  const [logViewMode, setLogViewMode] = useState<'realtime' | 'history'>('realtime'); // 日志查看模式：实时/历史
+  const [historyTimeRange, setHistoryTimeRange] = useState<string>('1h'); // 历史时间范围：1h/6h/12h/24h/7d/30d
 
   // Fluent Bit 配置模板常量
   const fluentBitK8sConfig = `# Fluent Bit DaemonSet 配置示例
@@ -229,7 +246,7 @@ data:
   // 一键复制配置模板
   const handleCopyConfig = (configText: string) => {
     navigator.clipboard.writeText(configText);
-    message.success('配置已复制到剪贴板');
+    message.success(t('access_log.config_copied'));
   };
 
   // Load config
@@ -241,6 +258,9 @@ data:
       if (res.data.code === 200) {
         setConfig(res.data.data);
         form.setFieldsValue(res.data.data);
+
+        // Set currentDeployMode
+        setCurrentDeployMode(res.data.data.deployMode || 'LOCAL');
 
         // Infer outputTarget from existing config
         const logToConsole = res.data.data.logToConsole;
@@ -259,6 +279,9 @@ data:
         setShowFileConfig(inferredTarget !== 'stdout');
         form.setFieldsValue({ outputTarget: inferredTarget });
       }
+
+      // Note: clusterId is now selected manually by user from cluster dropdown
+      // (previously tried to get from instance via UUID, but caused type mismatch issues)
     } catch (e) {
       console.error('Failed to load config:', e);
       message.error(t('access_log.load_failed') || 'Failed to load configuration');
@@ -283,20 +306,94 @@ data:
   const loadLogEntries = async () => {
     try {
       setLogLoading(true);
-      const params = new URLSearchParams();
-      if (filters.startTime) params.append('startTime', filters.startTime);
-      if (filters.endTime) params.append('endTime', filters.endTime);
-      params.append('page', logPage.toString());
-      params.append('size', logPageSize.toString());
-      if (filters.method) params.append('method', filters.method);
-      if (filters.statusCode) params.append('statusCode', filters.statusCode.toString());
-      if (filters.path) params.append('path', filters.path);
-      if (filters.traceId) params.append('traceId', filters.traceId);
 
-      const res = await api.get(`/api/access-log/entries?${params.toString()}`);
-      if (res.data.code === 200) {
-        setLogEntries(res.data.data.entries);
-        setLogTotal(res.data.data.total);
+      // 计算 sinceSeconds（用于 K8S Pod 历史查询）
+      const getSinceSeconds = () => {
+        switch (historyTimeRange) {
+          case '1h': return 1 * 60 * 60;
+          case '6h': return 6 * 60 * 60;
+          case '12h': return 12 * 60 * 60;
+          case '24h': return 24 * 60 * 60;
+          case '7d': return 7 * 24 * 60 * 60;
+          case '30d': return 30 * 24 * 60 * 60;
+          default: return 1 * 60 * 60;
+        }
+      };
+
+      // K8S 模式（实时和历史都从 Pod stdout 查询）
+      if (currentDeployMode === 'K8S' && clusterId && selectedPod) {
+        const params = new URLSearchParams();
+        params.append('clusterId', clusterId.toString());
+        params.append('namespace', selectedNamespace);
+        params.append('podName', selectedPod);
+        params.append('page', logPage.toString());
+        params.append('size', logPageSize.toString());
+        
+        // 历史模式使用 sinceSeconds，实时模式使用 tailLines
+        if (logViewMode === 'history') {
+          params.append('sinceSeconds', getSinceSeconds().toString());
+        } else {
+          params.append('tailLines', '500');
+        }
+        
+        if (filters.method) params.append('method', filters.method);
+        if (filters.statusCode) params.append('statusCode', filters.statusCode.toString());
+        if (filters.path) params.append('path', filters.path);
+        if (filters.traceId) params.append('traceId', filters.traceId);
+
+        const res = await api.get(`/api/access-log/k8s/entries?${params.toString()}`);
+        if (res.data.code === 200) {
+          setLogEntries(res.data.data.entries);
+          setLogTotal(res.data.data.total);
+        }
+      } else if (logViewMode === 'history') {
+        // 本地文件历史模式：从数据库查询（需要配置 Fluent Bit 收集）
+        const params = new URLSearchParams();
+        
+        const now = new Date();
+        let startTime: Date;
+        switch (historyTimeRange) {
+          case '1h': startTime = new Date(now.getTime() - 1 * 60 * 60 * 1000); break;
+          case '6h': startTime = new Date(now.getTime() - 6 * 60 * 60 * 1000); break;
+          case '12h': startTime = new Date(now.getTime() - 12 * 60 * 60 * 1000); break;
+          case '24h': startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000); break;
+          case '7d': startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); break;
+          case '30d': startTime = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); break;
+          default: startTime = new Date(now.getTime() - 1 * 60 * 60 * 1000);
+        }
+        params.append('startTime', startTime.toISOString());
+        params.append('endTime', now.toISOString());
+        
+        params.append('page', logPage.toString());
+        params.append('size', logPageSize.toString());
+        if (filters.method) params.append('method', filters.method);
+        if (filters.statusCode) params.append('statusCode', filters.statusCode.toString());
+        if (filters.path) params.append('path', filters.path);
+        if (filters.traceId) params.append('traceId', filters.traceId);
+        if (instanceId) params.append('instanceId', instanceId);
+
+        const res = await api.get(`/api/access-log/history/entries?${params.toString()}`);
+        if (res.data.code === 200) {
+          setLogEntries(res.data.data.entries);
+          setLogTotal(res.data.data.total);
+        }
+      } else {
+        // 本地文件实时模式
+        const params = new URLSearchParams();
+        if (filters.startTime) params.append('startTime', filters.startTime);
+        if (filters.endTime) params.append('endTime', filters.endTime);
+        params.append('page', logPage.toString());
+        params.append('size', logPageSize.toString());
+        if (filters.method) params.append('method', filters.method);
+        if (filters.statusCode) params.append('statusCode', filters.statusCode.toString());
+        if (filters.path) params.append('path', filters.path);
+        if (filters.traceId) params.append('traceId', filters.traceId);
+
+        const res = await api.get(`/api/access-log/entries?${params.toString()}`);
+        if (res.data.code === 200) {
+          setLogEntries(res.data.data.entries);
+          setLogTotal(res.data.data.total);
+        }
       }
     } catch (e) {
       console.error('Failed to load log entries:', e);
@@ -309,31 +406,180 @@ data:
   // Load log stats
   const loadLogStats = async () => {
     try {
-      const params = new URLSearchParams();
-      if (filters.startTime) params.append('startTime', filters.startTime);
-      if (filters.endTime) params.append('endTime', filters.endTime);
-      const queryString = params.toString() ? `?${params.toString()}` : '';
-      const res = await api.get(`/api/access-log/stats${queryString}`);
-      if (res.data.code === 200) {
-        setLogStats(res.data.data);
+      // 计算 sinceSeconds（用于 K8S Pod 历史查询）
+      const getSinceSeconds = () => {
+        switch (historyTimeRange) {
+          case '1h': return 1 * 60 * 60;
+          case '6h': return 6 * 60 * 60;
+          case '12h': return 12 * 60 * 60;
+          case '24h': return 24 * 60 * 60;
+          case '7d': return 7 * 24 * 60 * 60;
+          case '30d': return 30 * 24 * 60 * 60;
+          default: return 1 * 60 * 60;
+        }
+      };
+
+      // K8S 模式（实时和历史都从 Pod stdout 查询）
+      if (currentDeployMode === 'K8S' && clusterId && selectedPod) {
+        const params = new URLSearchParams();
+        params.append('clusterId', clusterId.toString());
+        params.append('namespace', selectedNamespace);
+        params.append('podName', selectedPod);
+        
+        // 历史模式使用 sinceSeconds，实时模式使用 tailLines
+        if (logViewMode === 'history') {
+          params.append('sinceSeconds', getSinceSeconds().toString());
+        } else {
+          params.append('tailLines', '500');
+        }
+        
+        const res = await api.get(`/api/access-log/k8s/stats?${params.toString()}`);
+        if (res.data.code === 200) {
+          setLogStats(res.data.data);
+        }
+      } else if (logViewMode === 'history') {
+        // 本地文件历史模式：从数据库统计（需要配置 Fluent Bit 收集）
+        const params = new URLSearchParams();
+        
+        const now = new Date();
+        let startTime: Date;
+        switch (historyTimeRange) {
+          case '1h': startTime = new Date(now.getTime() - 1 * 60 * 60 * 1000); break;
+          case '6h': startTime = new Date(now.getTime() - 6 * 60 * 60 * 1000); break;
+          case '12h': startTime = new Date(now.getTime() - 12 * 60 * 60 * 1000); break;
+          case '24h': startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000); break;
+          case '7d': startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); break;
+          case '30d': startTime = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); break;
+          default: startTime = new Date(now.getTime() - 1 * 60 * 60 * 1000);
+        }
+        params.append('startTime', startTime.toISOString());
+        params.append('endTime', now.toISOString());
+        
+        if (instanceId) params.append('instanceId', instanceId);
+        const res = await api.get(`/api/access-log/history/stats?${params.toString()}`);
+        if (res.data.code === 200) {
+          setLogStats(res.data.data);
+        }
+      } else {
+        // 本地文件实时模式
+        const params = new URLSearchParams();
+        if (filters.startTime) params.append('startTime', filters.startTime);
+        if (filters.endTime) params.append('endTime', filters.endTime);
+        const queryString = params.toString() ? `?${params.toString()}` : '';
+        const res = await api.get(`/api/access-log/stats${queryString}`);
+        if (res.data.code === 200) {
+          setLogStats(res.data.data);
+        }
       }
     } catch (e) {
       console.error('Failed to load log stats:', e);
     }
   };
 
+  // Load K8s clusters
+  const loadK8sClusters = async () => {
+    try {
+      setK8sClustersLoading(true);
+      const res = await api.get('/api/kubernetes/clusters');
+      if (res.data.code === 200) {
+        const clusters = res.data.data || [];
+        setK8sClusters(clusters);
+        // Auto-select first enabled cluster
+        const enabledCluster = clusters.find((c: {enabled: boolean}) => c.enabled);
+        if (enabledCluster) {
+          setClusterId(enabledCluster.id);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load K8s clusters:', e);
+      message.error('Failed to load clusters');
+    } finally {
+      setK8sClustersLoading(false);
+    }
+  };
+
+  // Load K8s namespaces
+  const loadK8sNamespaces = async () => {
+    if (!clusterId) return;
+    try {
+      setK8sNamespacesLoading(true);
+      const res = await api.get(`/api/access-log/k8s/namespaces?clusterId=${clusterId}`);
+      if (res.data.code === 200) {
+        setK8sNamespaces(res.data.data || []);
+      }
+    } catch (e) {
+      console.error('Failed to load K8s namespaces:', e);
+      message.error('Failed to load namespaces');
+    } finally {
+      setK8sNamespacesLoading(false);
+    }
+  };
+
+  // Load K8s gateway pods
+  const loadK8sPods = async () => {
+    if (!clusterId) return;
+    try {
+      setK8sPodsLoading(true);
+      const params = new URLSearchParams();
+      params.append('clusterId', clusterId.toString());
+      if (selectedNamespace) params.append('namespace', selectedNamespace);
+      const res = await api.get(`/api/access-log/k8s/pods?${params.toString()}`);
+      if (res.data.code === 200) {
+        setK8sPods(res.data.data || []);
+        // Auto-select first pod if none selected
+        if (res.data.data && res.data.data.length > 0 && !selectedPod) {
+          setSelectedPod(res.data.data[0].name);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load K8s pods:', e);
+      message.error('Failed to load gateway pods');
+    } finally {
+      setK8sPodsLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadConfig();
     loadDeployModes();
+    loadK8sClusters();
   }, []);
 
+  // Load K8s namespaces and pods when deployMode changes to K8S and clusterId is set
   useEffect(() => {
-    loadLogEntries();
-    loadLogStats();
-  }, [logPage, logPageSize, filters.startTime, filters.endTime, filters.method, filters.statusCode, filters.path, filters.traceId]);
+    if (currentDeployMode === 'K8S' && clusterId) {
+      loadK8sNamespaces();
+      loadK8sPods();
+    }
+  }, [currentDeployMode, clusterId]);
+
+  // Reload pods when namespace changes
+  useEffect(() => {
+    if (currentDeployMode === 'K8S' && clusterId && selectedNamespace) {
+      // Clear selected pod when namespace changes (pods are namespace-specific)
+      setSelectedPod(null);
+      loadK8sPods();
+    }
+  }, [selectedNamespace]);
+
+  useEffect(() => {
+    // 历史模式直接加载，K8S实时模式需要 selectedPod
+    if (logViewMode === 'history') {
+      loadLogEntries();
+      loadLogStats();
+    } else if (currentDeployMode === 'K8S' && !selectedPod) {
+      return;
+    } else {
+      loadLogEntries();
+      loadLogStats();
+    }
+  }, [logPage, logPageSize, filters.method, filters.statusCode, filters.path, filters.traceId, selectedPod, currentDeployMode, logViewMode, historyTimeRange]);
 
   // Handle deploy mode change - auto-fill default path and set output target recommendation
   const handleDeployModeChange = (mode: string) => {
+    // Update currentDeployMode for LogViewerTab
+    setCurrentDeployMode(mode);
+
     const selectedMode = deployModes.find(m => m.mode === mode);
     if (selectedMode) {
       // Auto-fill default path
@@ -351,7 +597,7 @@ data:
         recommendedTarget = 'stdout';
         showFile = false;
         form.setFieldsValue({ logToConsole: true });
-        message.info('Kubernetes 模式已自动切换到 stdout 输出，这是云原生最佳实践');
+        message.info(t('access_log.k8s_auto_switch_msg'));
         break;
       case 'DOCKER':
         // Docker: recommend both (stdout for collection + file for backup)
@@ -463,7 +709,7 @@ data:
   // Log table columns
   const logColumns = [
     {
-      title: 'Time',
+      title: t('access_log.col_time'),
       dataIndex: '@timestamp',
       key: 'timestamp',
       width: 180,
@@ -475,7 +721,7 @@ data:
       ),
     },
     {
-      title: 'Method',
+      title: t('access_log.method'),
       dataIndex: 'method',
       key: 'method',
       width: 80,
@@ -486,21 +732,21 @@ data:
       ),
     },
     {
-      title: 'Path',
+      title: t('access_log.path_label'),
       dataIndex: 'path',
       key: 'path',
       ellipsis: true,
       render: (path: string) => <Text code style={{ fontSize: 12 }}>{path}</Text>,
     },
     {
-      title: 'Status',
+      title: t('access_log.status'),
       dataIndex: 'statusCode',
       key: 'statusCode',
       width: 80,
       render: (code: number) => <Badge status={getStatusColor(code) as any} text={code} />,
     },
     {
-      title: 'Duration',
+      title: t('access_log.col_duration'),
       dataIndex: 'durationMs',
       key: 'durationMs',
       width: 100,
@@ -511,24 +757,24 @@ data:
       ),
     },
     {
-      title: 'Client IP',
+      title: t('access_log.col_client_ip'),
       dataIndex: 'clientIp',
       key: 'clientIp',
       width: 140,
       ellipsis: true,
     },
     {
-      title: 'Auth',
+      title: t('access_log.auth'),
       key: 'auth',
       width: 120,
       render: (_: any, record: LogEntry) => record.authType ? (
-        <AntTooltip title={`Policy: ${record.authPolicy || '-'}`}>
+        <AntTooltip title={`${t('access_log.col_policy')}${record.authPolicy || '-'}`}>
           <Tag color="purple" style={{ fontSize: 11 }}>{record.authType}</Tag>
         </AntTooltip>
       ) : '-',
     },
     {
-      title: 'Trace ID',
+      title: t('access_log.col_trace_id'),
       dataIndex: 'traceId',
       key: 'traceId',
       width: 120,
@@ -606,7 +852,7 @@ data:
                             <CodeOutlined />
                             <span>stdout</span>
                             {config?.deployMode === 'K8S' && (
-                              <Badge status="success" text={<Text style={{ fontSize: 11, color: '#52c41a' }}>推荐</Text>} />
+                              <Badge status="success" text={<Text style={{ fontSize: 11, color: '#52c41a' }}>{t('access_log.recommended')}</Text>} />
                             )}
                           </Space>
                         ),
@@ -618,7 +864,7 @@ data:
                             <FileOutlined />
                             <span>file</span>
                             {config?.deployMode === 'LOCAL' && (
-                              <Badge status="success" text={<Text style={{ fontSize: 11, color: '#52c41a' }}>推荐</Text>} />
+                              <Badge status="success" text={<Text style={{ fontSize: 11, color: '#52c41a' }}>{t('access_log.recommended')}</Text>} />
                             )}
                           </Space>
                         ),
@@ -631,7 +877,7 @@ data:
                             <FileTextOutlined />
                             <span>both</span>
                             {config?.deployMode === 'DOCKER' && (
-                              <Badge status="processing" text={<Text style={{ fontSize: 11, color: '#1890ff' }}>推荐</Text>} />
+                              <Badge status="processing" text={<Text style={{ fontSize: 11, color: '#1890ff' }}>{t('access_log.recommended')}</Text>} />
                             )}
                           </Space>
                         ),
@@ -647,7 +893,7 @@ data:
                       style={{ marginTop: 8, padding: '8px 12px' }}
                       message={
                         <Text style={{ fontSize: 12 }}>
-                          <strong>file/both 已禁用：</strong>Kubernetes 模式下推荐仅使用 stdout，文件输出会增加不必要的 I/O 开销且难以跨节点聚合。
+                          {t('access_log.file_both_disabled')}
                         </Text>
                       }
                     />
@@ -662,14 +908,14 @@ data:
                   showIcon
                   icon={<CheckCircleOutlined />}
                   style={{ marginBottom: 16, borderLeft: '4px solid #52c41a' }}
-                  message={<Text strong>{t('access_log.k8s_stdout_hint') || '云原生最佳实践'}</Text>}
+                  message={<Text strong>{t('access_log.k8s_stdout_hint')}</Text>}
                   description={
                     <div>
                       <p style={{ marginBottom: 8 }}>
-                        Gateway 输出 JSON 格式日志到 stdout，Kubernetes 自动重定向到 <code style={{ background: '#f5f5f5', padding: '2px 6px', borderRadius: 4 }}>/var/log/containers/*.log</code>
+                        {t('access_log.k8s_stdout_desc_line1')}<code style={{ background: '#f5f5f5', padding: '2px 6px', borderRadius: 4 }}>/var/log/containers/*.log</code>
                       </p>
                       <p style={{ color: '#52c41a', fontWeight: 500 }}>
-                        Fluent Bit DaemonSet 可直接采集，无需额外配置文件路径！
+                        {t('access_log.k8s_stdout_desc_line2')}
                       </p>
                     </div>
                   }
@@ -681,12 +927,12 @@ data:
                   type="info"
                   showIcon
                   style={{ marginBottom: 16, borderLeft: '4px solid #1890ff' }}
-                  message={<Text strong>{t('access_log.docker_hint') || 'Docker 部署提示'}</Text>}
+                  message={<Text strong>{t('access_log.docker_hint')}</Text>}
                   description={
                     <div>
-                      <p>推荐使用 <code style={{ background: '#f5f5f5', padding: '2px 6px', borderRadius: 4 }}>both</code> 模式：stdout 用于采集，file 用于备份。</p>
+                      <p>{t('access_log.docker_desc_line1')}<code style={{ background: '#f5f5f5', padding: '2px 6px', borderRadius: 4 }}>both</code>{t('access_log.docker_desc_line2')}</p>
                       <p style={{ color: '#1890ff', fontWeight: 500 }}>
-                        请确保 docker run 或 compose 中配置了 volume 挂载！
+                        {t('access_log.docker_desc_line3')}
                       </p>
                     </div>
                   }
@@ -698,8 +944,8 @@ data:
                   type="info"
                   showIcon
                   style={{ marginBottom: 16 }}
-                  message="本地部署建议"
-                  description="使用 file 模式，日志写入本地目录。可通过 Fluent Bit 或 Filebeat 直接 tail 采集。"
+                  message={t('access_log.local_hint_msg')}
+                  description={t('access_log.local_hint_desc')}
                 />
               )}
 
@@ -708,8 +954,8 @@ data:
                   type="warning"
                   showIcon
                   style={{ marginBottom: 16 }}
-                  message="自定义路径配置"
-                  description="请确保指定的路径存在且 Gateway 有写入权限。采集 Agent 需要能访问该路径。"
+                  message={t('access_log.custom_hint_msg')}
+                  description={t('access_log.custom_hint_desc')}
                 />
               )}
 
@@ -835,7 +1081,7 @@ data:
               <Form.Item
                 name="samplingRate"
                 label={t('access_log.sampling_rate') || 'Sampling Rate (%)'}
-                extra={t('access_log.sampling_extra') || '采样率 100% 表示记录所有请求。生产环境建议设置为 10~30% 以平衡存储与可观测性。'}
+                extra={t('access_log.sampling_extra')}
               >
                 <InputNumber min={1} max={100} style={{ width: '100%' }} />
               </Form.Item>
@@ -873,22 +1119,29 @@ data:
 
         {/* Log Collection Config Reference - Fluent Bit Templates */}
         <Card
-          title={<Space><InfoCircleOutlined />{t('access_log.collection_guide') || 'Log Collection Guide (Fluent Bit)'}</Space>}
+          title={<Space><InfoCircleOutlined />{t('access_log.advanced_config')}</Space>}
           className="config-card"
           style={{ marginTop: 16 }}
         >
-          <Tabs defaultActiveKey={config?.deployMode || 'K8S'} items={[
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message={t('access_log.storage_hint_msg')}
+            description={t('access_log.storage_hint_desc')}
+          />
+          <Tabs activeKey={watchedDeployMode || currentDeployMode || 'LOCAL'} items={[
             {
               key: 'K8S',
-              label: <Space><CloudServerOutlined />Kubernetes DaemonSet</Space>,
+              label: <Space><CloudServerOutlined />{t('access_log.collection_k8s_title')}</Space>,
               children: (
                 <div>
                   <Alert
                     type="success"
                     showIcon
                     icon={<CheckCircleOutlined />}
-                    message="云原生最佳实践：stdout + Fluent Bit DaemonSet"
-                    description="Gateway 输出到 stdout，K8s 自动重定向到 /var/log/containers/*.log，每个节点部署一个 Fluent Bit Agent 自动采集。"
+                    message={t('access_log.collection_k8s_msg')}
+                    description={t('access_log.collection_k8s_desc')}
                     style={{ marginBottom: 12 }}
                   />
                   {/* 两个复制按钮 */}
@@ -900,14 +1153,14 @@ data:
                         icon={<CopyOutlined />}
                         onClick={() => handleCopyConfig(fluentBitK8sConfig)}
                       >
-                        复制 fluent-bit.conf
+                        {t('access_log.collection_copy_config')}
                       </Button>
                       <Button
                         size="small"
                         icon={<CopyOutlined />}
                         onClick={() => handleCopyConfig(fluentBitK8sConfigMap)}
                       >
-                        复制为 ConfigMap (推荐)
+                        {t('access_log.collection_copy_configmap')}
                       </Button>
                     </Space>
                   </div>
@@ -919,17 +1172,17 @@ data:
             },
             {
               key: 'DOCKER',
-              label: <Space><ContainerOutlined />Docker Sidecar / Host Agent</Space>,
+              label: <Space><ContainerOutlined />{t('access_log.collection_docker_title')}</Space>,
               children: (
                 <div>
                   <Alert
                     type="info"
                     showIcon
-                    message="推荐两种方案"
+                    message={t('access_log.collection_docker_msg')}
                     description={
                       <ul style={{ margin: 0, paddingLeft: 20 }}>
-                        <li><strong>Sidecar模式：</strong>Fluent Bit 作为 sidecar 容器，共享 volume，最干净</li>
-                        <li><strong>宿主机Agent：</strong>宿主机运行 Fluent Bit，监控挂载的 volume 路径</li>
+                        <li><strong>{t('access_log.collection_docker_sidecar')}</strong></li>
+                        <li><strong>{t('access_log.collection_docker_host')}</strong></li>
                       </ul>
                     }
                     style={{ marginBottom: 12 }}
@@ -941,7 +1194,7 @@ data:
                       style={{ position: 'absolute', top: 8, right: 8 }}
                       onClick={() => handleCopyConfig(fluentBitDockerConfig)}
                     >
-                      复制配置
+                      {t('access_log.collection_copy')}
                     </Button>
                     <div style={{ background: '#1e1e1e', padding: 12, borderRadius: 4, paddingRight: 100 }}>
                       <pre style={{ color: '#d4d4d4', fontSize: 12, margin: 0, whiteSpace: 'pre-wrap' }}>{fluentBitDockerConfig}</pre>
@@ -952,14 +1205,14 @@ data:
             },
             {
               key: 'LOCAL',
-              label: <Space><DesktopOutlined />Local File Tailing</Space>,
+              label: <Space><DesktopOutlined />{t('access_log.collection_local_title')}</Space>,
               children: (
                 <div>
                   <Alert
                     type="info"
                     showIcon
-                    message="直接采集本地文件"
-                    description="宿主机运行 Fluent Bit 或 Filebeat，tail 配置的日志目录（支持通配符）。"
+                    message={t('access_log.collection_local_msg')}
+                    description={t('access_log.collection_local_desc')}
                     style={{ marginBottom: 12 }}
                   />
                   <div style={{ position: 'relative' }}>
@@ -969,7 +1222,7 @@ data:
                       style={{ position: 'absolute', top: 8, right: 8 }}
                       onClick={() => handleCopyConfig(fluentBitLocalConfig)}
                     >
-                      复制配置
+                      {t('access_log.collection_copy')}
                     </Button>
                     <div style={{ background: '#1e1e1e', padding: 12, borderRadius: 4, paddingRight: 100 }}>
                       <pre style={{ color: '#d4d4d4', fontSize: 12, margin: 0, whiteSpace: 'pre-wrap' }}>{fluentBitLocalConfig}</pre>
@@ -980,14 +1233,14 @@ data:
             },
             {
               key: 'CUSTOM',
-              label: <Space><FolderOutlined />Custom Path (注意权限)</Space>,
+              label: <Space><FolderOutlined />{t('access_log.collection_custom_title')}</Space>,
               children: (
                 <div>
                   <Alert
                     type="warning"
                     showIcon
-                    message="自定义路径配置"
-                    description="请确保路径正确，Fluent Bit 需要有权限访问该路径。可使用通配符如 /custom/path/access-*.log"
+                    message={t('access_log.collection_custom_msg')}
+                    description={t('access_log.collection_custom_desc')}
                     style={{ marginBottom: 12 }}
                   />
                   <div style={{ position: 'relative' }}>
@@ -997,7 +1250,7 @@ data:
                       style={{ position: 'absolute', top: 8, right: 8 }}
                       onClick={() => handleCopyConfig(fluentBitCustomConfig)}
                     >
-                      复制配置
+                      {t('access_log.collection_copy')}
                     </Button>
                     <div style={{ background: '#1e1e1e', padding: 12, borderRadius: 4, paddingRight: 100 }}>
                       <pre style={{ color: '#d4d4d4', fontSize: 12, margin: 0, whiteSpace: 'pre-wrap' }}>{fluentBitCustomConfig}</pre>
@@ -1015,21 +1268,118 @@ data:
   // Log Viewer Tab
   const LogViewerTab = (
     <div style={{ padding: '16px 0' }}>
+      {/* 实时/历史切换 */}
+      <Card size="small" style={{ marginBottom: 16 }}>
+        <Space>
+          <Text strong>{t('access_log.view_mode')}:</Text>
+          <Segmented
+            value={logViewMode}
+            onChange={(value) => setLogViewMode(value as 'realtime' | 'history')}
+            options={[
+              { value: 'realtime', label: <Space><ClockCircleOutlined />{t('access_log.realtime_mode')}</Space> },
+              { value: 'history', label: <Space><HistoryOutlined />{t('access_log.history_mode')}</Space> },
+            ]}
+          />
+          {logViewMode === 'history' && (
+            <Tag color="blue">{t('access_log.history_mode_desc')}</Tag>
+          )}
+        </Space>
+      </Card>
+
+      {/* K8S Pod Selector - 实时和历史模式都需要 */}
+      {currentDeployMode === 'K8S' && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16, borderLeft: '4px solid #1890ff' }}
+          message={<Space><CloudServerOutlined />{t('access_log.k8s_viewer_title')}</Space>}
+          description={
+            <div>
+              <div style={{ marginBottom: 8 }}>
+                <Text strong>{logViewMode === 'history' ? t('access_log.k8s_viewer_desc_history') : t('access_log.k8s_viewer_desc_realtime')}</Text>
+              </div>
+              <Space>
+                <Select
+                  placeholder={t('access_log.select_cluster')}
+                  value={clusterId}
+                  onChange={(val) => { setClusterId(Number(val)); setSelectedNamespace(''); setSelectedPod(null); }}
+                  style={{ width: 180 }}
+                  loading={k8sClustersLoading}
+                  showSearch
+                  filterOption={(input, option) =>
+                    (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                  }
+                  options={k8sClusters.filter(c => c.enabled).map(c => ({
+                    value: c.id,
+                    label: c.clusterName,
+                  }))}
+                />
+                <Select
+                  placeholder={t('access_log.select_namespace')}
+                  value={selectedNamespace}
+                  onChange={setSelectedNamespace}
+                  style={{ width: 150 }}
+                  loading={k8sNamespacesLoading}
+                  showSearch
+                  allowClear
+                  filterOption={(input, option) =>
+                    (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                  }
+                  options={k8sNamespaces.map(ns => ({
+                    value: ns,
+                    label: ns,
+                  }))}
+                />
+                <Select
+                  placeholder={t('access_log.select_pod')}
+                  value={selectedPod}
+                  onChange={setSelectedPod}
+                  style={{ width: 280 }}
+                  loading={k8sPodsLoading}
+                  showSearch
+                  filterOption={(input, option) =>
+                    (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                  }
+                  options={k8sPods.map(p => ({
+                    value: p.name,
+                    label: `${p.name} (${p.phase})`,
+                  }))}
+                />
+                <Button icon={<ReloadOutlined />} onClick={loadK8sPods} loading={k8sPodsLoading}>
+                  {t('access_log.refresh_pod_list')}
+                </Button>
+              </Space>
+            </div>
+          }
+        />
+      )}
+
+      {/* Local file notice - 仅实时模式显示 */}
+      {logViewMode === 'realtime' && currentDeployMode !== 'K8S' && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={t('access_log.local_viewer_title')}
+          description={t('access_log.local_viewer_desc')}
+        />
+      )}
+
       {/* Stats */}
       {logStats && (
         <Row gutter={16} style={{ marginBottom: 16 }}>
           <Col span={4}>
             <Card size="small">
-              <Statistic title="Total Requests" value={logStats.totalRequests} />
+              <Statistic title={t('access_log.total_requests')} value={logStats.totalRequests} />
             </Card>
           </Col>
           <Col span={4}>
             <Card size="small">
-              <Statistic title="Avg Duration" value={logStats.avgDuration} suffix="ms" />
+              <Statistic title={t('access_log.avg_duration')} value={logStats.avgDuration} suffix="ms" />
             </Card>
           </Col>
           <Col span={8}>
-            <Card size="small" title="Status Codes">
+            <Card size="small" title={t('access_log.status_codes')}>
               <Space>
                 {Object.entries(logStats.statusCodes).map(([code, count]) => (
                   <Tag key={code} color={getStatusColor(parseInt(code)) as any}>
@@ -1040,7 +1390,7 @@ data:
             </Card>
           </Col>
           <Col span={8}>
-            <Card size="small" title="Methods">
+            <Card size="small" title={t('access_log.methods')}>
               <Space>
                 {Object.entries(logStats.methods).map(([method, count]) => (
                   <Tag key={method} color={method === 'GET' ? 'green' : method === 'POST' ? 'blue' : 'default'}>
@@ -1056,36 +1406,62 @@ data:
       {/* Filters */}
       <Card size="small" style={{ marginBottom: 16 }}>
         <Space wrap>
-          <RangePicker
-            showTime
-            placeholder={['Start Time', 'End Time']}
-            format="YYYY-MM-DD HH:mm"
-            onChange={(dates) => {
-              if (dates && dates[0] && dates[1]) {
-                setFilters({ 
-                  ...filters, 
-                  startTime: dates[0].toISOString(),
-                  endTime: dates[1].toISOString()
-                });
-              } else {
-                const { startTime, endTime, ...restFilters } = filters;
-                setFilters(restFilters);
-              }
-            }}
-            allowClear
-            getPopupContainer={(triggerNode) => document.body}
-            placement="bottomLeft"
-            popupStyle={{ zIndex: 9999 }}
-          />
+          {/* 历史模式：预设时间范围选择 */}
+          {logViewMode === 'history' && (
+            <Select
+              value={historyTimeRange}
+              onChange={(value) => setHistoryTimeRange(value)}
+              style={{ width: 120 }}
+              getPopupContainer={(triggerNode) => document.body}
+              popupMatchSelectWidth={false}
+            >
+              <Select.Option value="1h">{t('access_log.time_1h')}</Select.Option>
+              <Select.Option value="6h">{t('access_log.time_6h')}</Select.Option>
+              <Select.Option value="12h">{t('access_log.time_12h')}</Select.Option>
+              <Select.Option value="24h">{t('access_log.time_24h')}</Select.Option>
+              <Select.Option value="7d">{t('access_log.time_7d')}</Select.Option>
+              <Select.Option value="30d">{t('access_log.time_30d')}</Select.Option>
+            </Select>
+          )}
+          {/* 本地文件实时模式：时间范围选择 */}
+          {logViewMode === 'realtime' && currentDeployMode !== 'K8S' && (
+            <RangePicker
+              showTime
+              placeholder={[t('access_log.start_time'), t('access_log.end_time')]}
+              format="YYYY-MM-DD HH:mm"
+              onChange={(dates) => {
+                if (dates && dates[0] && dates[1]) {
+                  setFilters({ 
+                    ...filters, 
+                    startTime: dates[0].toISOString(),
+                    endTime: dates[1].toISOString()
+                  });
+                } else {
+                  const { startTime, endTime, ...restFilters } = filters;
+                  setFilters(restFilters);
+                }
+              }}
+              allowClear
+              getPopupContainer={(triggerNode) => document.body}
+              placement="bottomLeft"
+              popupStyle={{ zIndex: 9999 }}
+            />
+          )}
+          {/* K8S实时模式显示实时提示 */}
+          {logViewMode === 'realtime' && currentDeployMode === 'K8S' && selectedPod && (
+            <Tag color="processing" icon={<ClockCircleOutlined />}>
+              {t('access_log.realtime_stdout')}
+            </Tag>
+          )}
           <Input
-            placeholder="Path contains..."
+            placeholder={t('access_log.path_contains')}
             prefix={<SearchOutlined />}
             style={{ width: 200 }}
             onPressEnter={(e) => setFilters({ ...filters, path: (e.target as HTMLInputElement).value })}
             allowClear
           />
           <Select
-            placeholder="Method"
+            placeholder={t('access_log.method')}
             style={{ width: 100 }}
             allowClear
             onChange={(v) => setFilters({ ...filters, method: v || undefined })}
@@ -1096,7 +1472,7 @@ data:
             <Select.Option value="DELETE">DELETE</Select.Option>
           </Select>
           <Select
-            placeholder="Status"
+            placeholder={t('access_log.status')}
             style={{ width: 100 }}
             allowClear
             onChange={(v) => setFilters({ ...filters, statusCode: v || undefined })}
@@ -1106,14 +1482,14 @@ data:
             <Select.Option value={500}>5xx</Select.Option>
           </Select>
           <Input
-            placeholder="Trace ID"
+            placeholder={t('access_log.trace_id')}
             prefix={<SearchOutlined />}
             style={{ width: 150 }}
             onPressEnter={(e) => setFilters({ ...filters, traceId: (e.target as HTMLInputElement).value })}
             allowClear
           />
           <Button icon={<ReloadOutlined />} onClick={() => { loadLogEntries(); loadLogStats(); }}>
-            Refresh
+            {t('access_log.refresh')}
           </Button>
         </Space>
       </Card>
@@ -1130,7 +1506,7 @@ data:
           pageSize: logPageSize,
           total: logTotal,
           showSizeChanger: true,
-          showTotal: (total) => `Total ${total} entries`,
+          showTotal: (total) => t('access_log.total_entries', { count: total }),
           onChange: (page, size) => {
             setLogPage(page - 1);
             setLogPageSize(size);
@@ -1189,16 +1565,16 @@ data:
                   labelStyle={{ width: 80, color: 'var(--text-secondary)' }}
                   style={{ marginBottom: 8 }}
                 >
-                  <Descriptions.Item label="时间">{formatTime(record['@timestamp'])}</Descriptions.Item>
-                  <Descriptions.Item label="状态码">
+                  <Descriptions.Item label={t('access_log.time')}>{formatTime(record['@timestamp'])}</Descriptions.Item>
+                  <Descriptions.Item label={t('access_log.status_code')}>
                     <Badge status={getStatusColor(record.statusCode) as any} text={<Text strong>{record.statusCode}</Text>} />
                   </Descriptions.Item>
-                  <Descriptions.Item label="耗时">
+                  <Descriptions.Item label={t('access_log.latency')}>
                     <Text style={{ color: record.durationMs > 1000 ? '#ff4d4f' : record.durationMs > 500 ? '#faad14' : '#52c41a', fontWeight: 'bold' }}>
                       {record.durationMs} ms
                     </Text>
                   </Descriptions.Item>
-                  <Descriptions.Item label="客户端IP">{record.clientIp || '-'}</Descriptions.Item>
+                  <Descriptions.Item label={t('access_log.client_ip_label')}>{record.clientIp || '-'}</Descriptions.Item>
                 </Descriptions>
 
                 {/* 第二行：请求信息 */}
@@ -1208,15 +1584,15 @@ data:
                   labelStyle={{ width: 80, color: 'var(--text-secondary)' }}
                   style={{ marginBottom: 8 }}
                 >
-                  <Descriptions.Item label="方法">
+                  <Descriptions.Item label={t('access_log.method_label')}>
                     <Tag color={record.method === 'GET' ? 'green' : record.method === 'POST' ? 'blue' : record.method === 'DELETE' ? 'red' : 'default'}>
                       {record.method}
                     </Tag>
                   </Descriptions.Item>
-                  <Descriptions.Item label="路径">
+                  <Descriptions.Item label={t('access_log.path_label')}>
                     <Text code style={{ fontSize: 12, wordBreak: 'break-all' }}>{record.path}</Text>
                   </Descriptions.Item>
-                  <Descriptions.Item label="查询参数">
+                  <Descriptions.Item label={t('access_log.query_params')}>
                     {record.query ? <Text code style={{ fontSize: 12, wordBreak: 'break-all' }}>{record.query}</Text> : '-'}
                   </Descriptions.Item>
                 </Descriptions>
@@ -1228,10 +1604,10 @@ data:
                   labelStyle={{ width: 80, color: 'var(--text-secondary)' }}
                   style={{ marginBottom: 8 }}
                 >
-                  <Descriptions.Item label="请求ID">
+                  <Descriptions.Item label={t('access_log.request_id')}>
                     <Text copyable code style={{ fontSize: 11 }}>{record.requestId}</Text>
                   </Descriptions.Item>
-                  <Descriptions.Item label="Trace ID">
+                  <Descriptions.Item label={t('access_log.trace_id_label')}>
                     {record.traceId ? (
                       <Tooltip title={record.traceId}>
                         <Text copyable code style={{ fontSize: 11 }}>
@@ -1240,8 +1616,8 @@ data:
                       </Tooltip>
                     ) : '-'}
                   </Descriptions.Item>
-                  <Descriptions.Item label="请求大小">{reqSize}</Descriptions.Item>
-                  <Descriptions.Item label="响应大小">{resSize}</Descriptions.Item>
+                  <Descriptions.Item label={t('access_log.request_size')}>{reqSize}</Descriptions.Item>
+                  <Descriptions.Item label={t('access_log.response_size')}>{resSize}</Descriptions.Item>
                 </Descriptions>
 
                 {/* 第四行：认证和路由信息 */}
@@ -1252,9 +1628,9 @@ data:
                     labelStyle={{ width: 80, color: 'var(--text-secondary)' }}
                     style={{ marginBottom: 8 }}
                   >
-                    {record.authType && <Descriptions.Item label="认证"><Tag color="purple">{record.authType}</Tag></Descriptions.Item>}
-                    {record.authPolicy && <Descriptions.Item label="策略"><Text code style={{ fontSize: 11 }}>{record.authPolicy}</Text></Descriptions.Item>}
-                    {record.authUser && <Descriptions.Item label="用户">{record.authUser}</Descriptions.Item>}
+                    {record.authType && <Descriptions.Item label={t('access_log.auth')}><Tag color="purple">{record.authType}</Tag></Descriptions.Item>}
+                    {record.authPolicy && <Descriptions.Item label={t('access_log.policy')}><Text code style={{ fontSize: 11 }}>{record.authPolicy}</Text></Descriptions.Item>}
+                    {record.authUser && <Descriptions.Item label={t('access_log.user')}>{record.authUser}</Descriptions.Item>}
                   </Descriptions>
                 )}
                 
@@ -1266,10 +1642,10 @@ data:
                     labelStyle={{ width: 80, color: 'var(--text-secondary)' }}
                     style={{ marginBottom: 8 }}
                   >
-                    {record.routeId && <Descriptions.Item label="路由ID">
+                    {record.routeId && <Descriptions.Item label={t('access_log.route_id')}>
                       <Text code copyable style={{ fontSize: 11, wordBreak: 'break-all' }}>{record.routeId}</Text>
                     </Descriptions.Item>}
-                    {record.serviceId && <Descriptions.Item label="服务ID">
+                    {record.serviceId && <Descriptions.Item label={t('access_log.service_id')}>
                       <Text code copyable style={{ fontSize: 11 }}>{record.serviceId}</Text>
                     </Descriptions.Item>}
                   </Descriptions>
@@ -1279,15 +1655,15 @@ data:
                 <div style={{ marginTop: 12 }}>
                   <div className="json-container">
                     <div className="json-header">
-                      <span>📤 请求体 (Request Body)</span>
+                      <span>📤 {t('access_log.request_body')}</span>
                       {record.requestBody && <span className="json-size">{record.requestBody.length} bytes</span>}
                       <Radio.Group 
                         size="small" 
                         value={bodyViewMode} 
                         onChange={(e) => setBodyViewMode(e.target.value)}
                       >
-                        <Radio.Button value="formatted">格式化</Radio.Button>
-                        <Radio.Button value="raw">原始</Radio.Button>
+                        <Radio.Button value="formatted">{t('access_log.formatted')}</Radio.Button>
+                        <Radio.Button value="raw">{t('access_log.raw')}</Radio.Button>
                       </Radio.Group>
                     </div>
                     <div className="json-content">
@@ -1299,7 +1675,7 @@ data:
                             {renderRawJson(record.requestBody)}
                           </div>
                         )
-                      ) : <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-secondary)' }}>未记录</div>}
+                      ) : <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-secondary)' }}>{t('access_log.not_recorded')}</div>}
                     </div>
                   </div>
                 </div>
@@ -1308,7 +1684,7 @@ data:
                 <div style={{ marginTop: 12 }}>
                   <div className="json-container">
                     <div className="json-header" style={{ color: 'var(--success-color, #52c41a)' }}>
-                      <span>📥 响应体 (Response Body)</span>
+                      <span>📥 {t('access_log.response_body')}</span>
                       {record.responseBody && <span className="json-size">{record.responseBody.length} bytes</span>}
                     </div>
                     <div className="json-content">
@@ -1320,7 +1696,7 @@ data:
                             {renderRawJson(record.responseBody)}
                           </div>
                         )
-                      ) : <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-secondary)' }}>未记录</div>}
+                      ) : <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-secondary)' }}>{t('access_log.not_recorded')}</div>}
                     </div>
                   </div>
                 </div>
@@ -1328,7 +1704,7 @@ data:
                 {/* 错误信息 */}
                 {record.errorMessage && (
                   <Alert 
-                    message="错误信息" 
+                    message={t('access_log.error_info')} 
                     description={record.errorMessage} 
                     type="error" 
                     showIcon 

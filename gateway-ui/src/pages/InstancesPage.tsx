@@ -13,6 +13,8 @@ import {
   Empty,
   Descriptions,
   Typography,
+  Badge,
+  Progress,
 } from "antd";
 import {
   PlusOutlined,
@@ -21,6 +23,10 @@ import {
   DeleteOutlined,
   ReloadOutlined,
   CloudServerOutlined,
+  ClusterOutlined,
+  InboxOutlined,
+  DashboardOutlined,
+  SettingOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -222,25 +228,48 @@ const InstancesPage: React.FC = () => {
                   <div className="instance-card-info">
                     <div className="instance-card-name">
                       <Text strong>{instance.instanceName}</Text>
-                      <Tag className="instance-status-tag" color={getStatusColor(instance.statusCode)}>
-                        {getStatusText(instance.statusCode, instance.status)}
-                      </Tag>
                     </div>
                     <div className="instance-card-meta">
-                      <span className="instance-cluster">{instance.clusterName}</span>
+                      <span className="instance-cluster">
+                        <ClusterOutlined style={{ marginRight: 4, fontSize: 12 }} />
+                        {instance.clusterName}
+                      </span>
                       <span className="instance-divider">·</span>
-                      <span className="instance-namespace">{instance.namespace}</span>
+                      <span className="instance-namespace">
+                        <InboxOutlined style={{ marginRight: 4, fontSize: 12 }} />
+                        {instance.namespace}
+                      </span>
                     </div>
+                  </div>
+                  <div className="instance-card-status-indicator">
+                    <div className={`status-bar status-bar-${instance.statusCode}`}></div>
+                    <Tag className="instance-status-tag" color={getStatusColor(instance.statusCode)}>
+                      {getStatusText(instance.statusCode, instance.status)}
+                    </Tag>
                   </div>
                 </div>
 
-                {/* Card Body */}
+                {/* Card Body - Resource Metrics */}
                 <div className="instance-card-body">
-                  <div className="instance-spec">
-                    <Text className="instance-spec-label">{t("instance.resources") || '资源'}</Text>
-                    <Text className="instance-spec-value">
-                      {getSpecText(instance)} · {instance.replicas} Pods
-                    </Text>
+                  <div className="instance-metrics-grid">
+                    <div className="instance-metric-item">
+                      <div className="instance-metric-icon">
+                        <DashboardOutlined />
+                      </div>
+                      <div className="instance-metric-content">
+                        <span className="instance-metric-label">{t("instance.spec") || '规格'}</span>
+                        <span className="instance-metric-value">{getSpecText(instance)}</span>
+                      </div>
+                    </div>
+                    <div className="instance-metric-item">
+                      <div className="instance-metric-icon">
+                        <SettingOutlined />
+                      </div>
+                      <div className="instance-metric-content">
+                        <span className="instance-metric-label">{t("instance.replicas") || '副本'}</span>
+                        <span className="instance-metric-value">{instance.replicas}</span>
+                      </div>
+                    </div>
                   </div>
                   
                   {instance.statusMessage && (

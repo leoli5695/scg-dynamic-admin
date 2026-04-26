@@ -35,6 +35,7 @@ spec:
       containers:
       - name: consul
         image: hashicorp/consul:latest
+        imagePullPolicy: Never
         ports:
         - containerPort: 8500
           name: http

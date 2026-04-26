@@ -411,6 +411,7 @@ public class KubernetesController {
 
     /**
      * Get pod logs.
+     * Supports both historical logs (by tailLines or sinceSeconds) and real-time logs.
      */
     @GetMapping("/clusters/{id}/pods/{namespace}/{name}/logs")
     public ResponseEntity<Map<String, Object>> getPodLogs(
@@ -418,9 +419,10 @@ public class KubernetesController {
             @PathVariable String namespace,
             @PathVariable String name,
             @RequestParam(required = false) String container,
-            @RequestParam(required = false, defaultValue = "500") Integer tailLines) {
+            @RequestParam(required = false, defaultValue = "500") Integer tailLines,
+            @RequestParam(required = false) Integer sinceSeconds) {
         try {
-            String logs = kubernetesService.getPodLogs(id, namespace, name, container, tailLines);
+            String logs = kubernetesService.getPodLogs(id, namespace, name, container, tailLines, sinceSeconds);
 
             Map<String, Object> result = new HashMap<>();
             result.put("code", 200);

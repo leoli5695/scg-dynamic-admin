@@ -12,6 +12,7 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -21,12 +22,25 @@ import java.util.*;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class AiAnalysisService {
 
     private final AiConfigRepository aiConfigRepository;
     private final PrometheusService prometheusService;
     private final PromptService promptService;  // 新增：用于动态提示词
+    private final GatewayInstanceService gatewayInstanceService;  // Pod维度分析需要
+    private final StressTestService stressTestService;  // Pod维度压测分析需要，使用@Lazy打破循环依赖
+
+    public AiAnalysisService(AiConfigRepository aiConfigRepository,
+                              PrometheusService prometheusService,
+                              PromptService promptService,
+                              GatewayInstanceService gatewayInstanceService,
+                              @Lazy StressTestService stressTestService) {
+        this.aiConfigRepository = aiConfigRepository;
+        this.prometheusService = prometheusService;
+        this.promptService = promptService;
+        this.gatewayInstanceService = gatewayInstanceService;
+        this.stressTestService = stressTestService;
+    }
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @PostConstruct
@@ -767,7 +781,7 @@ public class AiAnalysisService {
             sb.append("压测后恢复: ").append(String.format("%.2f ms", recoveryResp * 1000)).append("\n");
             sb.append("响应时间是否恢复: ").append(recoveryResp <= baselineResp * 1.5 ? "✅ 已恢复" : "⚠️ 未完全恢复").append("\n\n");
 
-            // ========== GC统计（增强版）==========
+            // ========== GC统计（增强版 - 支持AI调优分析）==========
             sb.append("【GC详细统计】\n");
 
             // Young GC
@@ -781,9 +795,24 @@ public class AiAnalysisService {
                     "sum(increase(jvm_gc_pause_seconds_count{application=\"my-gateway\",action=\"end of minor GC\"}[5m]))",
                     endTime, recoveryEndTime, "1m");
 
-            sb.append("Young GC次数（压测前5分钟）: ").append(String.format("%.0f", youngGcCountBefore)).append("\n");
-            sb.append("Young GC次数（压测期间）: ").append(String.format("%.0f", youngGcCountDuring)).append("\n");
-            sb.append("Young GC次数（压测后5分钟）: ").append(String.format("%.0f", youngGcCountAfter)).append("\n");
+            // Young GC 耗时
+            double youngGcTimeBefore = getMetricSum(
+                    "sum(increase(jvm_gc_pause_seconds_sum{application=\"my-gateway\",action=\"end of minor GC\"}[5m]))",
+                    baselineStartTime, startTime, "1m");
+            double youngGcTimeDuring = getMetricSum(
+                    "sum(increase(jvm_gc_pause_seconds_sum{application=\"my-gateway\",action=\"end of minor GC\"}[5m]))",
+                    startTime, endTime, step);
+            double youngGcTimeAfter = getMetricSum(
+                    "sum(increase(jvm_gc_pause_seconds_sum{application=\"my-gateway\",action=\"end of minor GC\"}[5m]))",
+                    endTime, recoveryEndTime, "1m");
+
+            sb.append("Young GC次数（压测前5分钟）: ").append(String.format("%.0f", youngGcCountBefore)).append(" 次\n");
+            sb.append("Young GC次数（压测期间）: ").append(String.format("%.0f", youngGcCountDuring)).append(" 次\n");
+            sb.append("Young GC次数（压测后5分钟）: ").append(String.format("%.0f", youngGcCountAfter)).append(" 次\n");
+            sb.append("Young GC平均耗时: ").append(youngGcCountDuring > 0 ? 
+                    String.format("%.2f ms", youngGcTimeDuring / youngGcCountDuring * 1000) : "N/A").append("\n");
+            sb.append("Young GC频率: ").append(durationMinutes > 0 && youngGcCountDuring > 0 ? 
+                    String.format("%.2f 次/分钟", youngGcCountDuring / durationMinutes) : "N/A").append("\n");
 
             // Full GC
             double fullGcCountBefore = getMetricSum(
@@ -796,30 +825,156 @@ public class AiAnalysisService {
                     "sum(increase(jvm_gc_pause_seconds_count{application=\"my-gateway\",action=\"end of major GC\"}[5m]))",
                     endTime, recoveryEndTime, "1m");
 
-            sb.append("Full GC次数（压测前5分钟）: ").append(String.format("%.0f", fullGcCountBefore)).append("\n");
-            sb.append("Full GC次数（压测期间）: ").append(String.format("%.0f", fullGcCountDuring)).append("\n");
-            sb.append("Full GC次数（压测后5分钟）: ").append(String.format("%.0f", fullGcCountAfter)).append("\n");
+            // Full GC 耗时
+            double fullGcTimeBefore = getMetricSum(
+                    "sum(increase(jvm_gc_pause_seconds_sum{application=\"my-gateway\",action=\"end of major GC\"}[5m]))",
+                    baselineStartTime, startTime, "1m");
+            double fullGcTimeDuring = getMetricSum(
+                    "sum(increase(jvm_gc_pause_seconds_sum{application=\"my-gateway\",action=\"end of major GC\"}[5m]))",
+                    startTime, endTime, step);
+            double fullGcTimeAfter = getMetricSum(
+                    "sum(increase(jvm_gc_pause_seconds_sum{application=\"my-gateway\",action=\"end of major GC\"}[5m]))",
+                    endTime, recoveryEndTime, "1m");
+
+            sb.append("Full GC次数（压测前5分钟）: ").append(String.format("%.0f", fullGcCountBefore)).append(" 次\n");
+            sb.append("Full GC次数（压测期间）: ").append(String.format("%.0f", fullGcCountDuring)).append(" 次\n");
+            sb.append("Full GC次数（压测后5分钟）: ").append(String.format("%.0f", fullGcCountAfter)).append(" 次\n");
+            sb.append("Full GC平均耗时: ").append(fullGcCountDuring > 0 ? 
+                    String.format("%.2f ms", fullGcTimeDuring / fullGcCountDuring * 1000) : "N/A").append("\n");
+            sb.append("Full GC总耗时: ").append(String.format("%.2f", fullGcTimeDuring)).append(" 秒\n");
 
             // GC总耗时
-            List<Map<String, Object>> gcTimeData = prometheusService.queryRange(
-                    "sum(increase(jvm_gc_pause_seconds_sum{application=\"my-gateway\"}[5m]))", startTime, endTime, step);
-            if (gcTimeData != null && !gcTimeData.isEmpty()) {
-                double totalGcTime = 0;
-                for (Map<String, Object> point : gcTimeData) {
-                    Object valObj = point.get("value");
-                    if (valObj instanceof Number) {
-                        totalGcTime += ((Number) valObj).doubleValue();
-                    }
-                }
-                sb.append("GC总耗时（压测期间）: ").append(String.format("%.2f", totalGcTime)).append(" 秒\n");
-                sb.append("GC频率: ").append(durationMinutes > 0 ? String.format("%.2f", totalGcTime / durationMinutes) : "N/A").append(" 秒/分钟\n");
-            }
+            double totalGcTimeDuring = youngGcTimeDuring + fullGcTimeDuring;
+            sb.append("GC总耗时（压测期间）: ").append(String.format("%.2f", totalGcTimeDuring)).append(" 秒\n");
+            sb.append("GC频率: ").append(durationMinutes > 0 ? String.format("%.2f", totalGcTimeDuring / durationMinutes) : "N/A").append(" 秒/分钟\n");
+            
+            // GC开销百分比
+            double gcOverheadPercent = durationMinutes > 0 ? (totalGcTimeDuring / (durationMinutes * 60)) * 100 : 0;
+            sb.append("GC开销百分比: ").append(String.format("%.2f%%", gcOverheadPercent)).append("（GC时间占总运行时间比例）\n");
+
+            // ========== 内存区域详情（GC调优关键数据）==========
+            sb.append("\n【内存区域详情】\n");
+            
+            // Eden Space
+            double edenUsedBefore = getMetricAverage(
+                    "sum(jvm_memory_used_bytes{application=\"my-gateway\",area=\"heap\",id=~\".*Eden.*\"})",
+                    baselineStartTime, startTime, "15s");
+            double edenUsedDuring = getMetricAverage(
+                    "sum(jvm_memory_used_bytes{application=\"my-gateway\",area=\"heap\",id=~\".*Eden.*\"})",
+                    startTime, endTime, step);
+            double edenUsedAfter = getMetricAverage(
+                    "sum(jvm_memory_used_bytes{application=\"my-gateway\",area=\"heap\",id=~\".*Eden.*\"})",
+                    endTime, recoveryEndTime, "15s");
+            double edenMax = getMetricAverage(
+                    "sum(jvm_memory_max_bytes{application=\"my-gateway\",area=\"heap\",id=~\".*Eden.*\"})",
+                    startTime, endTime, step);
+            
+            sb.append("Eden区使用（压测前）: ").append(formatBytes(edenUsedBefore)).append("\n");
+            sb.append("Eden区使用（压测期间平均）: ").append(formatBytes(edenUsedDuring)).append("\n");
+            sb.append("Eden区使用（压测后）: ").append(formatBytes(edenUsedAfter)).append("\n");
+            sb.append("Eden区最大容量: ").append(formatBytes(edenMax)).append("\n");
+            sb.append("Eden区使用率: ").append(edenMax > 0 ? String.format("%.1f%%", edenUsedDuring / edenMax * 100) : "N/A").append("\n");
+
+            // Survivor Space
+            double survivorUsedBefore = getMetricAverage(
+                    "sum(jvm_memory_used_bytes{application=\"my-gateway\",area=\"heap\",id=~\".*Survivor.*\"})",
+                    baselineStartTime, startTime, "15s");
+            double survivorUsedDuring = getMetricAverage(
+                    "sum(jvm_memory_used_bytes{application=\"my-gateway\",area=\"heap\",id=~\".*Survivor.*\"})",
+                    startTime, endTime, step);
+            double survivorUsedAfter = getMetricAverage(
+                    "sum(jvm_memory_used_bytes{application=\"my-gateway\",area=\"heap\",id=~\".*Survivor.*\"})",
+                    endTime, recoveryEndTime, "15s");
+            double survivorMax = getMetricAverage(
+                    "sum(jvm_memory_max_bytes{application=\"my-gateway\",area=\"heap\",id=~\".*Survivor.*\"})",
+                    startTime, endTime, step);
+            
+            sb.append("Survivor区使用（压测前）: ").append(formatBytes(survivorUsedBefore)).append("\n");
+            sb.append("Survivor区使用（压测期间平均）: ").append(formatBytes(survivorUsedDuring)).append("\n");
+            sb.append("Survivor区使用（压测后）: ").append(formatBytes(survivorUsedAfter)).append("\n");
+            sb.append("Survivor区最大容量: ").append(formatBytes(survivorMax)).append("\n");
+            sb.append("Survivor区使用率: ").append(survivorMax > 0 ? String.format("%.1f%%", survivorUsedDuring / survivorMax * 100) : "N/A").append("\n");
+
+            // Old/Tenured Gen
+            double oldUsedBefore = getMetricAverage(
+                    "sum(jvm_memory_used_bytes{application=\"my-gateway\",area=\"heap\",id=~\".*Old.*|.*Tenured.*\"})",
+                    baselineStartTime, startTime, "15s");
+            double oldUsedDuring = getMetricAverage(
+                    "sum(jvm_memory_used_bytes{application=\"my-gateway\",area=\"heap\",id=~\".*Old.*|.*Tenured.*\"})",
+                    startTime, endTime, step);
+            double oldUsedAfter = getMetricAverage(
+                    "sum(jvm_memory_used_bytes{application=\"my-gateway\",area=\"heap\",id=~\".*Old.*|.*Tenured.*\"})",
+                    endTime, recoveryEndTime, "15s");
+            double oldMax = getMetricAverage(
+                    "sum(jvm_memory_max_bytes{application=\"my-gateway\",area=\"heap\",id=~\".*Old.*|.*Tenured.*\"})",
+                    startTime, endTime, step);
+            
+            sb.append("Old区使用（压测前）: ").append(formatBytes(oldUsedBefore)).append("\n");
+            sb.append("Old区使用（压测期间平均）: ").append(formatBytes(oldUsedDuring)).append("\n");
+            sb.append("Old区使用（压测后）: ").append(formatBytes(oldUsedAfter)).append("\n");
+            sb.append("Old区最大容量: ").append(formatBytes(oldMax)).append("\n");
+            sb.append("Old区使用率: ").append(oldMax > 0 ? String.format("%.1f%%", oldUsedDuring / oldMax * 100) : "N/A").append("\n");
+            
+            // 内存晋升分析
+            double oldGenIncrease = oldUsedAfter - oldUsedBefore;
+            sb.append("Old区内存增长: ").append(formatBytes(oldGenIncrease)).append("（压测后比压测前）\n");
+            sb.append("晋升速率估算: ").append(durationMinutes > 0 && oldGenIncrease > 0 ? 
+                    String.format("%.2f MB/分钟", oldGenIncrease / 1024 / 1024 / durationMinutes) : "N/A").append("\n");
+
+            // ========== 内存分配速率 ==========
+            sb.append("\n【内存分配速率】\n");
+            double allocRateBefore = getMetricAverage(
+                    "sum(rate(jvm_gc_memory_allocated_bytes_total{application=\"my-gateway\"}[1m]))",
+                    baselineStartTime, startTime, "15s");
+            double allocRateDuring = getMetricAverage(
+                    "sum(rate(jvm_gc_memory_allocated_bytes_total{application=\"my-gateway\"}[1m]))",
+                    startTime, endTime, step);
+            double allocRateAfter = getMetricAverage(
+                    "sum(rate(jvm_gc_memory_allocated_bytes_total{application=\"my-gateway\"}[1m]))",
+                    endTime, recoveryEndTime, "15s");
+            
+            sb.append("内存分配速率（压测前）: ").append(String.format("%.2f MB/s", allocRateBefore / 1024 / 1024)).append("\n");
+            sb.append("内存分配速率（压测期间）: ").append(String.format("%.2f MB/s", allocRateDuring / 1024 / 1024)).append("\n");
+            sb.append("内存分配速率（压测后）: ").append(String.format("%.2f MB/s", allocRateAfter / 1024 / 1024)).append("\n");
+            
+            // Eden填充速率（用于调优建议）
+            double edenFillTime = edenMax > 0 && allocRateDuring > 0 ? edenMax / allocRateDuring : 0;
+            sb.append("Eden填充时间估算: ").append(edenFillTime > 0 ? String.format("%.2f 秒", edenFillTime) : "N/A").append("（Eden满触发Young GC）\n");
 
             // GC异常判定
+            sb.append("\n【GC健康判定】\n");
             if (fullGcCountDuring > 3) {
-                sb.append("GC判定: ⚠️ Full GC频繁（压测期间发生").append(String.format("%.0f", fullGcCountDuring)).append("次），可能存在内存压力\n");
+                sb.append("❌ Full GC频繁（压测期间发生").append(String.format("%.0f", fullGcCountDuring)).append("次）\n");
+                sb.append("   可能原因: Old区内存不足、大对象直接晋升、内存泄漏\n");
+                sb.append("   建议: 增大Old区(-XX:OldSize)、检查大对象分配、排查内存泄漏\n");
+            } else if (fullGcCountDuring > 1) {
+                sb.append("⚠️ 有Full GC发生（").append(String.format("%.0f", fullGcCountDuring)).append("次）\n");
+                sb.append("   建议: 关注Old区使用率，考虑增大堆内存\n");
             } else {
-                sb.append("GC判定: ✅ 正常\n");
+                sb.append("✅ Full GC正常（无或极少）\n");
+            }
+            
+            if (gcOverheadPercent > 10) {
+                sb.append("❌ GC开销过高（").append(String.format("%.2f%%", gcOverheadPercent)).append(">10%）\n");
+                sb.append("   建议: 增大堆内存、调整GC算法\n");
+            } else if (gcOverheadPercent > 5) {
+                sb.append("⚠️ GC开销偏高（").append(String.format("%.2f%%", gcOverheadPercent)).append("）\n");
+            } else {
+                sb.append("✅ GC开销正常（").append(String.format("%.2f%%", gcOverheadPercent)).append("<5%）\n");
+            }
+            
+            if (youngGcCountDuring / durationMinutes > 10) {
+                sb.append("⚠️ Young GC频繁（").append(String.format("%.2f", youngGcCountDuring / durationMinutes)).append("次/分钟）\n");
+                sb.append("   建议: 增大Eden区(-XX:NewSize或-XX:SurvivorRatio)\n");
+            } else {
+                sb.append("✅ Young GC频率正常\n");
+            }
+            
+            if (oldUsedAfter > oldUsedBefore * 1.3) {
+                sb.append("⚠️ Old区内存未完全回收（增长").append(String.format("%.1f%%", (oldUsedAfter - oldUsedBefore) / oldUsedBefore * 100)).append("）\n");
+                sb.append("   可能原因: 长生命周期对象、内存泄漏\n");
+            } else {
+                sb.append("✅ Old区内存回收正常\n");
             }
             sb.append("\n");
 
@@ -880,7 +1035,7 @@ public class AiAnalysisService {
 
             // ========== 汇总对比表 ==========
             sb.append("【压测前后对比汇总】\n");
-            sb.append("| 指标 | 压测前基准 | 压测峰值 | 压测后恢复 | 变化率 |\n");
+            sb.append("| 指标 | 压测前基准 | 压测峰值/平均 | 压测后恢复 | 变化率 |\n");
             sb.append("|------|-----------|---------|-----------|-------|\n");
             sb.append(String.format("| 进程CPU | %.1f%% | %.1f%% | %.1f%% | %.1f%% |\n",
                     baselineProcessCpu * 100, maxProcessCpu, recoveryProcessCpu * 100,
@@ -888,15 +1043,51 @@ public class AiAnalysisService {
             sb.append(String.format("| 系统CPU | %.1f%% | %.1f%% | %.1f%% | %.1f%% |\n",
                     baselineSystemCpu * 100, maxSystemCpu, recoverySystemCpu * 100,
                     baselineSystemCpu > 0 ? (recoverySystemCpu - baselineSystemCpu) / baselineSystemCpu * 100 : 0));
-            sb.append(String.format("| 内存 | %s | %s | %s | %.1f%% |\n",
+            sb.append(String.format("| Heap内存 | %s | %s | %s | %.1f%% |\n",
                     formatBytes(baselineHeap), formatBytes(maxHeap > 0 ? maxHeap : baselineHeap), formatBytes(recoveryHeap), heapIncreasePercent));
+            sb.append(String.format("| Eden区 | %s | %s | %s | - |\n",
+                    formatBytes(edenUsedBefore), formatBytes(edenUsedDuring), formatBytes(edenUsedAfter)));
+            sb.append(String.format("| Old区 | %s | %s | %s | %.1f%% |\n",
+                    formatBytes(oldUsedBefore), formatBytes(oldUsedDuring), formatBytes(oldUsedAfter),
+                    oldUsedBefore > 0 ? (oldUsedAfter - oldUsedBefore) / oldUsedBefore * 100 : 0));
             sb.append(String.format("| 响应时间 | %.2fms | %.2fms | %.2fms | %.1f%% |\n",
                     baselineResp * 1000, maxResp, recoveryResp * 1000,
                     baselineResp > 0 ? (recoveryResp - baselineResp) / baselineResp * 100 : 0));
-            sb.append(String.format("| Young GC | %.0f次 | %.0f次 | %.0f次 | - |\n",
+            sb.append(String.format("| Young GC次数 | %.0f | %.0f | %.0f | - |\n",
                     youngGcCountBefore, youngGcCountDuring, youngGcCountAfter));
-            sb.append(String.format("| Full GC | %.0f次 | %.0f次 | %.0f次 | - |\n",
+            sb.append(String.format("| Young GC耗时 | %.2fms | %.2fms | %.2fms | - |\n",
+                    youngGcTimeBefore * 1000, youngGcTimeDuring * 1000, youngGcTimeAfter * 1000));
+            sb.append(String.format("| Full GC次数 | %.0f | %.0f | %.0f | - |\n",
                     fullGcCountBefore, fullGcCountDuring, fullGcCountAfter));
+            sb.append(String.format("| Full GC耗时 | %.2fms | %.2fms | %.2fms | - |\n",
+                    fullGcTimeBefore * 1000, fullGcTimeDuring * 1000, fullGcTimeAfter * 1000));
+            sb.append(String.format("| GC开销 | - | %.2f%% | - | - |\n", gcOverheadPercent));
+            sb.append(String.format("| 内存分配速率 | %.2fMB/s | %.2fMB/s | %.2fMB/s | - |\n",
+                    allocRateBefore / 1024 / 1024, allocRateDuring / 1024 / 1024, allocRateAfter / 1024 / 1024));
+            
+            // ========== JVM参数建议（基于数据分析）==========
+            sb.append("\n【JVM参数建议】\n");
+            sb.append("当前堆内存配置建议:\n");
+            if (maxHeap > 0) {
+                sb.append("- 当前最大堆使用: ").append(formatBytes(maxHeap)).append("\n");
+                sb.append("- 建议堆大小(-Xmx): ").append(formatBytes(maxHeap * 1.5)).append("（峰值1.5倍）\n");
+            }
+            if (edenMax > 0 && youngGcCountDuring / durationMinutes > 5) {
+                sb.append("- Young GC频率较高，建议增大Eden区:\n");
+                sb.append("  - 当前Eden大小: ").append(formatBytes(edenMax)).append("\n");
+                sb.append("  - 建议Eden大小(-XX:NewSize): ").append(formatBytes(edenMax * 1.5)).append("\n");
+            }
+            if (oldMax > 0 && oldUsedDuring / oldMax > 0.7) {
+                sb.append("- Old区使用率较高，建议增大堆或调整比例:\n");
+                sb.append("  - 当前Old区使用率: ").append(String.format("%.1f%%", oldUsedDuring / oldMax * 100)).append("\n");
+                sb.append("  - 建议: 增大-Xmx或调整-XX:NewRatio（减小年轻代比例）\n");
+            }
+            if (fullGcCountDuring > 1) {
+                sb.append("- 有Full GC发生，建议:\n");
+                sb.append("  - 检查是否有大对象直接晋升到Old区\n");
+                sb.append("  - 考虑使用G1GC: -XX:+UseG1GC\n");
+                sb.append("  - 设置大对象阈值: -XX:G1HeapRegionSize=16m（如使用G1）\n");
+            }
 
         } catch (Exception e) {
             log.error("Failed to collect time range metrics data", e);
@@ -960,40 +1151,59 @@ public class AiAnalysisService {
         long durationMinutes = (endTime - startTime) / 60;
 
         return String.format("""
-                你是一个专业的Java应用运维专家和性能分析师。请分析以下Gateway网关在指定时间段内的监控数据。
-                            
+                你是一个专业的Java应用运维专家、性能分析师和JVM调优专家。请分析以下Gateway网关在指定时间段内的监控数据。
+                
                 这段时间可能进行了压力测试或遇到了性能问题，请仔细分析各项指标的峰值、平均值和变化趋势。
-                            
+                
                 请用%s回答。
-                            
+                
                 %s
-                            
+                
                 请输出详细的分析报告，包含：
-                            
+                
                 ## 1. 时间段概览
                 - 分析时间段的基本情况
-                            
+                
                 ## 2. 性能分析
                 - 各指标（CPU、内存、请求、响应时间）的峰值和平均值分析
                 - 是否存在性能瓶颈
                 - 指标之间的关联性（如CPU和请求量的关系）
-                            
-                ## 3. 问题诊断
+                
+                ## 3. JVM内存与GC分析（重点）
+                - **内存区域分析**：分析Eden、Survivor、Old区的使用情况和变化趋势
+                - **GC行为分析**：
+                  - Young GC频率是否合理（正常<10次/分钟）
+                  - Full GC是否发生（正常应极少或无）
+                  - GC平均耗时是否正常（Young GC正常<50ms，Full GC正常<500ms）
+                - **GC开销评估**：GC时间占比是否合理（正常<5%，警告5-10%，严重>10%）
+                - **内存分配速率**：对象创建速度是否过高
+                - **晋升分析**：Old区内存增长是否异常
+                
+                ## 4. GC调优建议（如有问题）
+                根据数据分析结果，给出具体的JVM参数调优建议：
+                - 如果Young GC频繁：建议增大Eden区（-XX:NewSize或调整-XX:SurvivorRatio）
+                - 如果Full GC频繁：建议增大Old区或整个堆（-Xmx），检查是否有大对象直接晋升
+                - 如果GC开销过高：建议增大堆内存或切换GC算法（如G1GC）
+                - 如果Old区持续增长：建议排查内存泄漏或长生命周期对象
+                
+                ## 5. 问题诊断
                 - 发现的异常或问题
                 - 可能的根本原因分析
                 - 对比正常情况，指出异常点
-                            
-                ## 4. 性能评估
+                
+                ## 6. 性能评估
                 - 系统在此时间段的整体表现评分（1-10分）
                 - 吞吐量评估
                 - 资源利用率评估
-                            
-                ## 5. 优化建议
+                - JVM健康度评估
+                
+                ## 7. 优化建议
                 - 针对发现的问题提出具体的优化建议
+                - JVM参数调整建议（如有GC问题）
                 - 配置调整建议
                 - 容量规划建议
-                            
-                请用Markdown格式输出，要专业、详细、有数据支撑。
+                
+                请用Markdown格式输出，要专业、详细、有数据支撑。GC调优建议要具体，包含具体的JVM参数值。
                 """, langName, metricsData);
     }
 
@@ -1655,5 +1865,289 @@ public class AiAnalysisService {
         public Map<String, Object> getArguments() {
             return arguments;
         }
+    }
+
+    // ===================== Pod 维度分析方法 =====================
+
+    /**
+     * 按 Pod 维度分析压力测试结果.
+     * 分别分析每个 Pod 在压测期间的性能表现并对比.
+     *
+     * @param instanceId 网关实例ID
+     * @param testId     压测ID（可选）
+     * @param startTime  压测开始时间（时间戳，秒）
+     * @param endTime    压测结束时间（时间戳，秒）
+     * @param language   语言
+     * @return AI分析结果
+     */
+    public String analyzePodStressTest(String instanceId, Long testId, long startTime, long endTime, String language) {
+        AiConfig config = aiConfigRepository.findAll().stream()
+                .filter(c -> c.getApiKey() != null && c.getModel() != null && c.getIsValid())
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("No valid AI provider configured"));
+
+        // 获取实例信息
+        var instance = gatewayInstanceService.getInstanceByInstanceId(instanceId);
+        if (instance == null) {
+            throw new RuntimeException("Gateway instance not found: " + instanceId);
+        }
+
+        // 获取 Pod 列表
+        List<Map<String, Object>> pods = gatewayInstanceService.getInstancePods(instance.getId());
+        if (pods == null || pods.isEmpty()) {
+            throw new RuntimeException("No running pods found for instance: " + instanceId);
+        }
+
+        // 收集各 Pod 的监控数据
+        Map<String, String> podMetricsMap = new LinkedHashMap<>();
+        for (Map<String, Object> pod : pods) {
+            String podName = (String) pod.get("name");
+            String podIP = (String) pod.get("podIP");
+            Object managementPortObj = pod.get("managementPort");
+            int managementPort = managementPortObj instanceof Number ? ((Number) managementPortObj).intValue() : 9091;
+
+            if (podIP == null) {
+                log.warn("Pod {} has no IP, skipping", podName);
+                continue;
+            }
+
+            String podInstance = podIP + ":" + managementPort;
+            String podMetrics = collectPodMetricsData(startTime, endTime, podInstance, podName);
+            podMetricsMap.put(podName, podMetrics);
+        }
+
+        // 构建对比分析 Prompt
+        String prompt = buildPodComparisonPrompt(podMetricsMap, startTime, endTime, language);
+
+        // 调用 AI 分析
+        return callModelApi(config, prompt);
+    }
+
+    /**
+     * 收集指定 Pod 在时间段内的监控数据.
+     * 所有 Prometheus 查询添加 instance 标签过滤.
+     *
+     * @param startTime  开始时间（时间戳，秒）
+     * @param endTime    结束时间（时间戳，秒）
+     * @param podInstance Pod实例标签（格式：IP:port）
+     * @param podName    Pod名称（用于显示）
+     * @return 监控数据字符串
+     */
+    private String collectPodMetricsData(long startTime, long endTime, String podInstance, String podName) {
+        StringBuilder sb = new StringBuilder();
+
+        try {
+            String startTimeStr = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date(startTime * 1000));
+            String endTimeStr = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date(endTime * 1000));
+            long durationMinutes = (endTime - startTime) / 60;
+
+            long baselineStartTime = startTime - 300; // 压测前5分钟
+            long recoveryEndTime = endTime + 300;     // 压测后5分钟
+
+            sb.append("### Pod: ").append(podName).append(" (").append(podInstance).append(")\n");
+            sb.append("分析时间段: ").append(startTimeStr).append(" - ").append(endTimeStr).append("\n");
+
+            String step = durationMinutes <= 5 ? "15s" : durationMinutes <= 30 ? "1m" : "5m";
+
+            // ========== CPU 使用率分析（带instance过滤）==========
+            sb.append("\n**CPU使用率**\n");
+
+            // 构建带instance过滤的查询
+            String processCpuQuery = "process_cpu_usage{application=\"my-gateway\",instance=\"" + podInstance + "\"}";
+            String systemCpuQuery = "system_cpu_usage{application=\"my-gateway\",instance=\"" + podInstance + "\"}";
+
+            double baselineProcessCpu = getMetricAverage(processCpuQuery, baselineStartTime, startTime, "15s");
+            sb.append("- 进程CPU压测前基准: ").append(String.format("%.1f%%", baselineProcessCpu * 100)).append("\n");
+
+            List<Map<String, Object>> processCpuData = prometheusService.queryRange(processCpuQuery, startTime, endTime, step);
+            double maxProcessCpu = 0, avgProcessCpu = 0;
+            if (processCpuData != null && !processCpuData.isEmpty()) {
+                double sumProcessCpu = 0;
+                int countProcessCpu = 0;
+                for (Map<String, Object> point : processCpuData) {
+                    Object valObj = point.get("value");
+                    if (valObj instanceof Number) {
+                        double val = ((Number) valObj).doubleValue() * 100;
+                        maxProcessCpu = Math.max(maxProcessCpu, val);
+                        sumProcessCpu += val;
+                        countProcessCpu++;
+                    }
+                }
+                avgProcessCpu = countProcessCpu > 0 ? sumProcessCpu / countProcessCpu : 0;
+                sb.append("- 进程CPU压测峰值: ").append(String.format("%.1f%%", maxProcessCpu)).append("\n");
+                sb.append("- 进程CPU压测平均: ").append(String.format("%.1f%%", avgProcessCpu)).append("\n");
+            }
+
+            double recoveryProcessCpu = getMetricAverage(processCpuQuery, endTime, recoveryEndTime, "15s");
+            sb.append("- 进程CPU压测后恢复: ").append(String.format("%.1f%%", recoveryProcessCpu * 100)).append("\n");
+
+            // ========== JVM 堆内存分析（带instance过滤）==========
+            sb.append("\n**JVM堆内存**\n");
+
+            String heapQuery = "jvm_memory_used_bytes{application=\"my-gateway\",area=\"heap\",instance=\"" + podInstance + "\"}";
+
+            double baselineHeap = getMetricAverage("sum(" + heapQuery + ")", baselineStartTime, startTime, "15s");
+            sb.append("- 压测前基准: ").append(formatBytes(baselineHeap)).append("\n");
+
+            List<Map<String, Object>> heapData = prometheusService.queryRange("sum(" + heapQuery + ")", startTime, endTime, step);
+            double maxHeap = 0, avgHeap = 0;
+            if (heapData != null && !heapData.isEmpty()) {
+                double sumHeap = 0;
+                int countHeap = 0;
+                for (Map<String, Object> point : heapData) {
+                    Object valObj = point.get("value");
+                    if (valObj instanceof Number) {
+                        double val = ((Number) valObj).doubleValue();
+                        maxHeap = Math.max(maxHeap, val);
+                        sumHeap += val;
+                        countHeap++;
+                    }
+                }
+                avgHeap = countHeap > 0 ? sumHeap / countHeap : 0;
+                sb.append("- 压测峰值: ").append(formatBytes(maxHeap)).append("\n");
+                sb.append("- 压测平均: ").append(formatBytes(avgHeap)).append("\n");
+            }
+
+            double recoveryHeap = getMetricAverage("sum(" + heapQuery + ")", endTime, recoveryEndTime, "15s");
+            sb.append("- 压测后恢复: ").append(formatBytes(recoveryHeap)).append("\n");
+
+            double heapIncreasePercent = baselineHeap > 0 ? (recoveryHeap - baselineHeap) / baselineHeap * 100 : 0;
+            sb.append("- 内存变化率: ").append(String.format("%.1f%%", heapIncreasePercent)).append("\n");
+            if (heapIncreasePercent > 30) {
+                sb.append("- ⚠️ **内存泄漏风险**: 压测后内存比压测前高出30%以上\n");
+            } else if (heapIncreasePercent > 10) {
+                sb.append("- ⚠️ 内存未完全释放: 压测后内存比压测前高出10-30%\n");
+            } else {
+                sb.append("- ✅ 内存正常: 已回落到基准水平\n");
+            }
+
+            // ========== HTTP 请求分析（带instance过滤）==========
+            sb.append("\n**HTTP请求**\n");
+
+            String reqQuery = "rate(http_server_requests_seconds_count{application=\"my-gateway\",instance=\"" + podInstance + "\"}[1m])";
+            List<Map<String, Object>> reqData = prometheusService.queryRange("sum(" + reqQuery + ")", startTime, endTime, step);
+            if (reqData != null && !reqData.isEmpty()) {
+                double maxReq = 0, sumReq = 0;
+                int countReq = 0;
+                for (Map<String, Object> point : reqData) {
+                    Object valObj = point.get("value");
+                    if (valObj instanceof Number) {
+                        double val = ((Number) valObj).doubleValue();
+                        maxReq = Math.max(maxReq, val);
+                        sumReq += val;
+                        countReq++;
+                    }
+                }
+                sb.append("- 请求峰值: ").append(String.format("%.2f", maxReq)).append(" req/s\n");
+                sb.append("- 请求平均: ").append(String.format("%.2f", sumReq / countReq)).append(" req/s\n");
+            }
+
+            // ========== GC 分析（带instance过滤）==========
+            sb.append("\n**GC统计**\n");
+
+            String youngGcCountQuery = "increase(jvm_gc_pause_seconds_count{application=\"my-gateway\",action=\"end of minor GC\",instance=\"" + podInstance + "\"}[" + durationMinutes + "m])";
+            String fullGcCountQuery = "increase(jvm_gc_pause_seconds_count{application=\"my-gateway\",action=\"end of major GC\",instance=\"" + podInstance + "\"}[" + durationMinutes + "m])";
+
+            double youngGcCount = getMetricSum("sum(" + youngGcCountQuery + ")", startTime, endTime, step);
+            double fullGcCount = getMetricSum("sum(" + fullGcCountQuery + ")", startTime, endTime, step);
+
+            sb.append("- Young GC次数: ").append(String.format("%.0f", youngGcCount)).append("\n");
+            sb.append("- Full GC次数: ").append(String.format("%.0f", fullGcCount)).append("\n");
+
+            if (fullGcCount > 3) {
+                sb.append("- ❌ **Full GC频繁**: 压测期间发生" + String.format("%.0f", fullGcCount) + "次Full GC\n");
+            } else if (fullGcCount > 1) {
+                sb.append("- ⚠️ 有Full GC发生\n");
+            } else {
+                sb.append("- ✅ Full GC正常\n");
+            }
+
+            // ========== 线程分析（带instance过滤）==========
+            sb.append("\n**线程数**\n");
+
+            String threadQuery = "jvm_threads_live_threads{application=\"my-gateway\",instance=\"" + podInstance + "\"}";
+            List<Map<String, Object>> threadData = prometheusService.queryRange(threadQuery, startTime, endTime, step);
+            if (threadData != null && !threadData.isEmpty()) {
+                int maxThreads = 0;
+                for (Map<String, Object> point : threadData) {
+                    Object valObj = point.get("value");
+                    if (valObj instanceof Number) {
+                        maxThreads = Math.max(maxThreads, ((Number) valObj).intValue());
+                    }
+                }
+                sb.append("- 线程峰值: ").append(maxThreads).append("\n");
+            }
+
+        } catch (Exception e) {
+            log.error("Failed to collect pod metrics data for {}", podInstance, e);
+            sb.append("数据收集失败: ").append(e.getMessage());
+        }
+
+        return sb.toString();
+    }
+
+    /**
+     * 构建 Pod 对比分析 Prompt.
+     *
+     * @param podMetricsMap 各Pod的监控数据（Pod名称 -> 监控数据）
+     * @param startTime     开始时间
+     * @param endTime       结束时间
+     * @param language      语言
+     * @return Prompt字符串
+     */
+    private String buildPodComparisonPrompt(Map<String, String> podMetricsMap, long startTime, long endTime, String language) {
+        String langName = "zh".equals(language) ? "中文" : "English";
+        long durationMinutes = (endTime - startTime) / 60;
+
+        StringBuilder podDataSection = new StringBuilder();
+        podDataSection.append("## 各Pod监控数据\n\n");
+        for (Map.Entry<String, String> entry : podMetricsMap.entrySet()) {
+            podDataSection.append(entry.getValue()).append("\n\n---\n\n");
+        }
+
+        return String.format("""
+                你是一个专业的性能测试工程师和Java应用运维专家。请分析以下网关实例各Pod在压测期间的性能对比数据。
+
+                请用%s回答。
+
+                压测持续时间: %d 分钟
+
+                %s
+
+                ## 分析要求
+
+                请输出详细的分析报告，包含：
+
+                ### 1. Pod性能对比总览
+                - 列出所有Pod的CPU、内存、请求量、响应时间对比表
+                - 识别负载最高的Pod和负载最低的Pod
+
+                ### 2. 负载均衡分析（重点）
+                - 分析各Pod之间是否存在负载不均衡
+                - 如果某个Pod负载明显高于其他Pod，分析可能原因：
+                  - 负载均衡策略配置问题
+                  - 请求路由倾斜（特定路由请求集中到某个Pod）
+                  - 连接池或缓存热点
+                - 给出具体的负载均衡优化建议
+
+                ### 3. 各Pod性能详细分析
+                - 对每个Pod分别分析：
+                  - CPU使用率是否正常
+                  - 内存使用是否存在泄漏风险
+                  - GC表现是否健康
+                - 标注异常Pod（如有）
+
+                ### 4. 问题诊断
+                - 发现的异常或问题
+                - 可能的根本原因分析
+
+                ### 5. 优化建议
+                - 负载均衡策略调整建议
+                - JVM参数调整建议（如有GC问题）
+                - 配置调整建议
+                - 容量规划建议（如需要扩容）
+
+                请用Markdown格式输出，重点关注负载均衡问题。如果发现某个Pod负载异常高，必须给出具体的排查和优化建议。
+                """, langName, durationMinutes, podDataSection.toString());
     }
 }

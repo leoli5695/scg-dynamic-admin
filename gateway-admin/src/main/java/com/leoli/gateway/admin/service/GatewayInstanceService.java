@@ -1089,6 +1089,7 @@ public class GatewayInstanceService {
                     .execute();
 
             List<Map<String, Object>> result = new ArrayList<>();
+            int managementPort = instance.getManagementPort() != null ? instance.getManagementPort() : 9091;
             for (V1Pod pod : pods.getItems()) {
                 Map<String, Object> podInfo = new HashMap<>();
                 podInfo.put("name", pod.getMetadata().getName());
@@ -1096,6 +1097,7 @@ public class GatewayInstanceService {
                 podInfo.put("phase", pod.getStatus().getPhase());
                 podInfo.put("podIP", pod.getStatus().getPodIP());
                 podInfo.put("startTime", pod.getStatus().getStartTime());
+                podInfo.put("managementPort", managementPort);
 
                 if (pod.getStatus().getContainerStatuses() != null) {
                     List<Map<String, Object>> containers = new ArrayList<>();

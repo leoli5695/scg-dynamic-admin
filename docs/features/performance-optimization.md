@@ -1014,3 +1014,121 @@ gateway:
 - [Service Discovery](service-discovery.md) - Load balancing strategies
 - [Filter Chain Analysis](filter-chain-analysis.md) - Filter performance analysis
 - [Health Check](../ARCHITECTURE.md#health-check) - Health check architecture
+
+---
+
+## 10. GC Tuning and Promotion Rate Monitoring (New Feature)
+
+**Added: 2026-04-25**
+
+### Overview
+
+Proper GC tuning is critical for gateway performance. The system now provides intelligent GC diagnostics beyond simple threshold alerts.
+
+### Memory Allocation Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    JVM Memory Regions                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│   Eden Space                                                 │
+│   ├─ New objects allocated here                             │
+│   ├─ Short-lived objects die here                           │
+│   └─ Full → Trigger Young GC                                │
+│                                                              │
+│   Survivor Space (S0, S1)                                    │
+│   ├─ Objects that survived Young GC                         │
+│   ├─ Objects age (+1 each GC)                               │
+│   ├─ Age threshold (default 15) → Promote to Old Gen        │
+│   └─ Too small → Premature promotion                        │
+│                                                              │
+│   Old Gen / Tenured                                          │
+│   ├─ Long-lived objects                                     │
+│   ├─ Large objects (bypass Young Gen)                       │
+│   ├─ Full → Trigger Full GC (slow!)                         │
+│   └─ Memory leak → Old Gen grows continuously               │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+
+Allocation Rate: Rate of new objects in Eden (MB/s)
+Promotion Rate:  Rate of objects moving to Old Gen (MB/s)
+Promotion Ratio: Promotion Rate / Allocation Rate (%)
+```
+
+### Intelligent GC Diagnostics
+
+The system now provides 3 combined diagnostic patterns for GC tuning:
+
+#### Pattern 1: Premature Promotion (High Promotion + High Allocation)
+- **Trigger**: `promotionRate > 10 MB/s && allocationRate > 50 MB/s`
+- **Diagnosis**: Short-lived objects promoting to Old Gen too early
+- **Recommendation**: Increase Survivor space, adjust young gen size
+
+#### Pattern 2: Large Object Bypass (High Promotion + Low Allocation)
+- **Trigger**: `promotionRate > 10 MB/s && allocationRate <= 50 MB/s`
+- **Diagnosis**: Large objects bypassing Young Gen directly to Old Gen
+- **Recommendation**: Check code for large allocations, use G1 GC
+
+#### Pattern 3: Memory Leak Indicator (High Promotion Ratio)
+- **Trigger**: `promotionRatio > 30%`
+- **Diagnosis**: Too many objects surviving, possible memory leak
+- **Recommendation**: Analyze heap dump, check for resource leaks
+
+### Recommended JVM Options
+
+For Gateway (High QPS, Short-lived Requests):
+
+```bash
+# Heap size
+-Xms2g -Xmx2g
+
+# Young Gen (50-60% of heap)
+-Xmn1g
+
+# Survivor ratio (larger for premature promotion prevention)
+-XX:SurvivorRatio=6
+
+# Tenure threshold
+-XX:MaxTenuringThreshold=15
+
+# G1 GC (recommended for gateway)
+-XX:+UseG1GC
+-XX:MaxGCPauseMillis=200
+
+# GC logging
+-Xlog:gc*:file=gc.log:time,uptime,level,tags:filecount=5,filesize=10m
+```
+
+### Integration with Monitoring
+
+Monitor UI now shows:
+- **GC Status Card**: Health status with diagnostic reason
+- **Promotion Rate**: MB/s trend
+- **Promotion Ratio**: Percentage trend
+- **Memory Regions**: Eden, Survivor, Old Gen usage
+
+**API Endpoint:**
+
+```bash
+GET /api/monitor/metrics
+
+# Response includes GC diagnostics:
+{
+  "gc": {
+    "healthStatus": "HEALTHY",
+    "healthReason": "GC表现正常，Young GC平均耗时20ms",
+    "promotionRateMBPerSec": 3.8,
+    "promotionRatio": 8.4,
+    "allocationRateMBPerSec": 45.2
+  }
+}
+```
+
+### Related Documentation
+
+- [Monitoring & Alerts](monitoring-alerts.md) - GC health monitoring
+- [Stress Test Tool](stress-test.md) - Test GC under load
+- [AI-Powered Analysis](ai-analysis.md) - AI GC analysis
+
+---

@@ -200,7 +200,7 @@ const StressTestSharePage: React.FC<Props> = ({ shareId }) => {
           <Card size="small" style={{ background: "rgba(15, 23, 42, 0.6)", border: "none" }}>
             <div style={{ textAlign: "center" }}>
               <Text type="secondary">Error Rate</Text>
-              <div style={{ fontSize: "24px", fontWeight: "bold", color: test?.errorRate > 5 ? "#ef4444" : "#22c55e" }}>
+              <div style={{ fontSize: "24px", fontWeight: "bold", color: (test?.errorRate ?? 0) > 5 ? "#ef4444" : "#22c55e" }}>
                 {test?.errorRate?.toFixed(2)}%
               </div>
             </div>

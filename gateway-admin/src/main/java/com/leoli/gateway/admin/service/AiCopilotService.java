@@ -68,7 +68,8 @@ public class AiCopilotService {
     // ===================== 工具调用配置 =====================
 
     // 最大工具调用轮数（防止无限循环）
-    private static final int MAX_TOOL_CALL_ITERATIONS = 5;
+    // 压测分析等复杂场景需要调用多个工具获取完整数据，因此增加到15轮
+    private static final int MAX_TOOL_CALL_ITERATIONS = 15;
 
     // 工具执行超时时间（毫秒）
     private static final int TOOL_CALL_TIMEOUT_MS = 30000;

@@ -1,6 +1,7 @@
 /**
- * Instances Page - Modern Premium Design
- * Enhanced visual hierarchy with glass effects, status glows, and refined interactions
+ * Instances Page - Modern Premium Design v2
+ * Enhanced visual hierarchy with status bars, metric grids, and refined interactions
+ * Inspired by Vercel Dashboard, Linear, and Kubernetes Dashboard
  */
 
 /* ==================== Page Layout ==================== */
@@ -16,32 +17,31 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: var(--space-8);
-  padding-bottom: var(--space-6);
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-5);
   border-bottom: 1px solid var(--border-subtle);
 }
 
 .instances-page-header-left {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
 .instances-page-title {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-3);
 }
 
 .instances-page-title .anticon {
-  font-size: 24px;
+  font-size: 22px;
   color: var(--primary-color);
-  filter: drop-shadow(0 2px 8px rgba(59, 130, 246, 0.3));
 }
 
 .instances-page-title-text {
-  font-size: 24px;
-  font-weight: 700;
+  font-size: 22px;
+  font-weight: 600;
   color: var(--text-primary);
   letter-spacing: -0.02em;
 }
@@ -49,7 +49,7 @@
 .instances-page-subtitle {
   font-size: 14px;
   color: var(--text-muted);
-  margin-left: 28px;
+  margin-left: 26px;
 }
 
 .instances-page-actions {
@@ -64,6 +64,7 @@
   border: none !important;
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3) !important;
   transition: all 0.2s ease !important;
+  height: 40px !important;
 }
 
 .instances-page-actions .ant-btn-primary:hover {
@@ -79,102 +80,128 @@
 
 /* ==================== Instances Grid ==================== */
 .instances-grid {
-  margin-top: 24px;
+  margin-top: 20px;
 }
 
 /* ==================== Instance Card ==================== */
 .instance-card {
   position: relative;
-  background: rgba(28, 28, 33, 0.9) !important;
-  backdrop-filter: blur(12px) !important;
+  background: rgba(28, 28, 33, 0.95) !important;
+  backdrop-filter: blur(16px) !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  border-radius: 16px !important;
+  border-radius: 12px !important;
   overflow: hidden;
   cursor: pointer;
-  transition: all 0.2s ease !important;
-}
-
-.instance-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.03) 0%, rgba(139, 92, 246, 0.03) 100%);
-  border-radius: inherit;
-  z-index: 0;
-  transition: background 0.2s ease;
-}
-
-.instance-card:hover::before {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.06) 0%, rgba(139, 92, 246, 0.04) 100%);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
 .instance-card .ant-card-body {
   position: relative;
   z-index: 1;
   background: transparent !important;
-  padding: 24px !important;
+  padding: 20px !important;
 }
 
 .instance-card:hover {
-  border-color: rgba(59, 130, 246, 0.25) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(59, 130, 246, 0.15) !important;
-  transform: translateY(-3px);
+  border-color: rgba(59, 130, 246, 0.2) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(59, 130, 246, 0.1) !important;
+  transform: translateY(-2px);
 }
 
-/* Running status card */
-.instance-card.status-running {
-  border-color: rgba(34, 197, 94, 0.15) !important;
+/* ==================== Status Bar (Left indicator) ==================== */
+.instance-card-status-indicator {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.instance-card.status-running::before {
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.04) 0%, rgba(22, 163, 74, 0.02) 100%);
+.status-bar {
+  width: 4px;
+  height: 32px;
+  border-radius: 2px;
+  transition: all 0.3s ease;
 }
 
-.instance-card.status-running:hover {
-  border-color: rgba(34, 197, 94, 0.3) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 30px rgba(34, 197, 94, 0.1) !important;
+/* Running - Green gradient */
+.status-bar-1 {
+  background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.4);
 }
 
-/* Error status card */
-.instance-card.status-error {
-  border-color: rgba(239, 68, 68, 0.15) !important;
+.instance-card:hover .status-bar-1 {
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.6);
+  height: 36px;
 }
 
-.instance-card.status-error::before {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.04) 0%, rgba(220, 38, 38, 0.02) 100%);
+/* Starting - Blue gradient */
+.status-bar-0 {
+  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
+  animation: statusBarPulse 1.5s ease-in-out infinite;
+}
+
+/* Stopped - Amber gradient */
+.status-bar-4 {
+  background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%);
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.4);
+}
+
+/* Error - Red gradient */
+.status-bar-2 {
+  background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+}
+
+/* Stopping - Purple gradient */
+.status-bar-3 {
+  background: linear-gradient(180deg, #8b5cf6 0%, #7c3aed 100%);
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.4);
+  animation: statusBarPulse 1s ease-in-out infinite;
+}
+
+@keyframes statusBarPulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
+  }
+  50% {
+    opacity: 0.7;
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.6);
+  }
 }
 
 /* ==================== Card Header ==================== */
 .instance-card-header {
   display: flex;
   align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 20px;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .instance-card-icon {
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(39, 39, 42, 0.8);
-  border-radius: 12px;
-  color: #a1a1aa;
-  font-size: 22px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(139, 92, 246, 0.1) 100%);
+  border-radius: 10px;
+  color: #60a5fa;
+  font-size: 20px;
   flex-shrink: 0;
   transition: all 0.15s ease;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(59, 130, 246, 0.1);
 }
 
 .instance-card:hover .instance-card-icon {
-  background: rgba(59, 130, 246, 0.15);
-  color: #60a5fa;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(139, 92, 246, 0.15) 100%);
   border-color: rgba(59, 130, 246, 0.2);
-  box-shadow: 0 0 12px rgba(59, 130, 246, 0.2);
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.15);
 }
 
 .instance-card-info {
@@ -185,12 +212,12 @@
 .instance-card-name {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .instance-card-name .ant-typography {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   color: #fafafa;
   overflow: hidden;
@@ -201,47 +228,43 @@
 /* ==================== Status Tag ==================== */
 .instance-status-tag {
   margin: 0;
-  border-radius: 9999px !important;
-  font-size: 12px !important;
-  font-weight: 600 !important;
-  padding: 4px 12px !important;
+  border-radius: 6px !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  padding: 3px 8px !important;
   border: none !important;
   letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 /* Running - green */
 .instance-status-tag.ant-tag-green {
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(22, 163, 74, 0.15) 100%) !important;
+  background: rgba(34, 197, 94, 0.15) !important;
   color: #4ade80 !important;
-  box-shadow: 0 0 8px rgba(34, 197, 94, 0.25) !important;
 }
 
 /* Starting - blue */
 .instance-status-tag.ant-tag-blue {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(37, 99, 235, 0.15) 100%) !important;
+  background: rgba(59, 130, 246, 0.15) !important;
   color: #60a5fa !important;
-  box-shadow: 0 0 8px rgba(59, 130, 246, 0.25) !important;
 }
 
 /* Stopped - amber */
 .instance-status-tag.ant-tag-orange {
-  background: linear-gradient(135deg, rgba(251, 191, 36, 0.2) 0%, rgba(245, 158, 11, 0.15) 100%) !important;
+  background: rgba(251, 191, 36, 0.15) !important;
   color: #fbbf24 !important;
-  box-shadow: 0 0 8px rgba(251, 191, 36, 0.25) !important;
 }
 
 /* Error - red */
 .instance-status-tag.ant-tag-red {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(220, 38, 38, 0.15) 100%) !important;
+  background: rgba(239, 68, 68, 0.15) !important;
   color: #f87171 !important;
-  box-shadow: 0 0 8px rgba(239, 68, 68, 0.25) !important;
 }
 
 /* Stopping - purple */
 .instance-status-tag.ant-tag-purple {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(124, 58, 237, 0.15) 100%) !important;
+  background: rgba(139, 92, 246, 0.15) !important;
   color: #a78bfa !important;
-  box-shadow: 0 0 8px rgba(139, 92, 246, 0.25) !important;
 }
 
 /* ==================== Card Meta ==================== */
@@ -249,65 +272,101 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .instance-cluster {
   font-size: 13px;
   color: #a1a1aa;
   font-weight: 500;
+  display: inline-flex;
+  align-items: center;
 }
 
 .instance-divider {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.1);
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.15);
 }
 
 .instance-namespace {
   font-size: 13px;
   color: #71717a;
-}
-
-/* ==================== Card Body ==================== */
-.instance-card-body {
-  margin-bottom: 20px;
-}
-
-.instance-spec {
-  display: flex;
-  justify-content: space-between;
+  display: inline-flex;
   align-items: center;
-  padding: 12px 16px;
-  background: rgba(39, 39, 42, 0.6);
+}
+
+/* ==================== Card Body - Metrics Grid ==================== */
+.instance-card-body {
+  margin-bottom: 16px;
+}
+
+.instance-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.instance-metric-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(39, 39, 42, 0.5);
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.15s ease;
 }
 
-.instance-spec-label {
+.instance-card:hover .instance-metric-item {
+  background: rgba(39, 39, 42, 0.7);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.instance-metric-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: 6px;
+  color: #60a5fa;
+  font-size: 14px;
+}
+
+.instance-metric-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.instance-metric-label {
   font-size: 11px;
   color: #71717a;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.03em;
   font-weight: 500;
 }
 
-.instance-spec-value {
+.instance-metric-value {
   font-size: 13px;
-  color: #a1a1aa;
+  color: #d4d4d8;
   font-weight: 600;
 }
 
 .instance-status-message {
   margin-top: 12px;
-  padding: 10px 12px;
-  background: rgba(239, 68, 68, 0.05);
-  border: 1px solid rgba(239, 68, 68, 0.1);
-  border-radius: 8px;
+  padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.12);
+  border-radius: 6px;
 }
 
 .instance-status-text {
   font-size: 12px;
   color: #f87171;
-  line-height: 1.5;
+  line-height: 1.4;
   word-break: break-word;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -319,14 +378,14 @@
 .instance-card-actions {
   display: flex;
   gap: 8px;
-  padding-top: 16px;
+  padding-top: 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   justify-content: flex-end;
 }
 
 .instance-action-btn {
-  width: 36px !important;
-  height: 36px !important;
+  width: 34px !important;
+  height: 34px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -338,9 +397,9 @@
 }
 
 .instance-action-btn:hover {
-  background: rgba(255, 255, 255, 0.08) !important;
+  background: rgba(255, 255, 255, 0.1) !important;
   color: #a1a1aa !important;
-  transform: scale(1.08);
+  transform: scale(1.05);
 }
 
 .instance-action-btn-start {
@@ -352,21 +411,21 @@
 .instance-action-btn-start:hover {
   background: rgba(34, 197, 94, 0.2) !important;
   color: #4ade80 !important;
-  border-color: rgba(34, 197, 94, 0.3) !important;
-  box-shadow: 0 0 10px rgba(34, 197, 94, 0.2) !important;
+  border-color: rgba(34, 197, 94, 0.25) !important;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.2) !important;
 }
 
 .instance-action-btn-danger {
   background: rgba(239, 68, 68, 0.08) !important;
   color: #ef4444 !important;
-  border-color: rgba(239, 68, 68, 0.12) !important;
+  border-color: rgba(239, 68, 68, 0.1) !important;
 }
 
 .instance-action-btn-danger:hover {
   background: rgba(239, 68, 68, 0.15) !important;
   color: #f87171 !important;
-  border-color: rgba(239, 68, 68, 0.25) !important;
-  box-shadow: 0 0 10px rgba(239, 68, 68, 0.15) !important;
+  border-color: rgba(239, 68, 68, 0.2) !important;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.15) !important;
 }
 
 /* ==================== Empty State ==================== */
@@ -375,37 +434,29 @@
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  padding: 64px 32px;
+  padding: 48px 32px;
   background: rgba(28, 28, 33, 0.8);
-  border-radius: 16px;
+  border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   margin-top: 24px;
 }
 
 .instances-empty .ant-empty-image {
-  height: 80px;
+  height: 64px;
 }
 
 .instances-empty .ant-empty-description {
   color: #71717a;
-  font-size: 15px;
-}
-
-/* ==================== Animation ==================== */
-@keyframes statusPulse {
-  0%, 100% {
-    box-shadow: 0 0 8px rgba(34, 197, 94, 0.25);
-  }
-  50% {
-    box-shadow: 0 0 12px rgba(34, 197, 94, 0.4);
-  }
-}
-
-.instance-card.status-running .instance-status-tag {
-  animation: statusPulse 2s ease-in-out infinite;
+  font-size: 14px;
 }
 
 /* ==================== Responsive ==================== */
+@media (max-width: 1200px) {
+  .instance-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 768px) {
   .instances-page { padding: 16px; }
 
@@ -416,38 +467,27 @@
     padding-bottom: 16px;
   }
 
-  .instances-page-title .anticon {
-    font-size: 20px;
+  .instances-page-title .anticon { font-size: 18px; }
+  .instances-page-title-text { font-size: 18px; }
+  .instances-page-subtitle { margin-left: 0; }
+
+  .instance-card .ant-card-body { padding: 16px !important; }
+  .instance-card-icon { width: 36px; height: 36px; font-size: 16px; }
+  .instance-card-name .ant-typography { font-size: 14px; }
+  .instance-metrics-grid { grid-template-columns: 1fr; gap: 8px; }
+  .instance-metric-item { padding: 8px 10px; }
+  .instance-metric-icon { width: 28px; height: 28px; font-size: 12px; }
+
+  .instance-card-status-indicator {
+    top: 16px;
+    right: 16px;
   }
 
-  .instances-page-title-text {
-    font-size: 20px;
-  }
-
-  .instances-page-subtitle {
-    margin-left: 0;
-  }
-
-  .instance-card .ant-card-body {
-    padding: 20px !important;
-  }
-
-  .instance-card-icon {
-    width: 40px;
-    height: 40px;
-    font-size: 18px;
-  }
-
-  .instance-card-name .ant-typography {
-    font-size: 15px;
-  }
-
-  .instance-action-btn {
-    width: 32px !important;
-    height: 32px !important;
-  }
+  .instance-action-btn { width: 32px !important; height: 32px !important; }
 }
 
 @media (max-width: 480px) {
   .instances-page { padding: 12px; }
+  .instance-metric-label { font-size: 10px; }
+  .instance-metric-value { font-size: 12px; }
 }

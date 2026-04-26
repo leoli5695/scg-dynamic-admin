@@ -139,7 +139,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
   const [responseBodyExpanded, setResponseBodyExpanded] = useState(false);
 
   // Filter waterfall chart state
-  const [selectedFilterExecution, setSelectedFilterExecution] = useState<FilterChainExecution | null>(null);
+  const [selectedFilterExecution, setSelectedFilterExecution] = useState<FilterExecutionBar | null>(null);
   const [filterDetailDrawerVisible, setFilterDetailDrawerVisible] = useState(false);
 
   // Jaeger distributed tracing state
@@ -1274,19 +1274,20 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                       label: <span><ThunderboltOutlined /> {t('trace.waterfall_view')}</span>,
                       children: (
                         <FilterWaterfallChart
-                          executions={selectedTrace.filterChain.executions.map((exec, idx) => {
+                          executions={(selectedTrace.filterChain?.executions ?? []).map((exec, idx) => {
                             // Calculate startTimeOffset based on cumulative selfTime
                             let offset = 0;
+                            const executions = selectedTrace.filterChain?.executions ?? [];
                             for (let i = 0; i < idx; i++) {
-                              offset += selectedTrace.filterChain.executions[i].durationMs * 0.3;
+                              offset += (executions[i]?.durationMs ?? 0) * 0.3;
                             }
                             return {
                               filterName: exec.filterName,
                               order: exec.filterOrder,
                               startTimeOffset: offset,
-                              selfTimeMs: exec.durationMs * 0.3,
-                              totalTimeMs: exec.durationMs,
-                              downstreamMs: exec.durationMs * 0.7,
+                              selfTimeMs: (exec.durationMs ?? 0) * 0.3,
+                              totalTimeMs: exec.durationMs ?? 0,
+                              downstreamMs: (exec.durationMs ?? 0) * 0.7,
                               success: exec.success,
                               errorMessage: exec.errorMessage,
                               timePercentage: exec.timePercentage

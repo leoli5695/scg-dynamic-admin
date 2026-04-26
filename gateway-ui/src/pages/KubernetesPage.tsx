@@ -155,6 +155,14 @@ const KubernetesPage: React.FC = () => {
   const [podLogs, setPodLogs] = useState<string>('');
   const [podDetailLoading, setPodDetailLoading] = useState(false);
   const [podDetailTab, setPodDetailTab] = useState('info');
+  
+  // Log viewer states
+  const [logMode, setLogMode] = useState<'history' | 'realtime'>('history');
+  const [logTailLines, setLogTailLines] = useState<number>(200);
+  const [logSinceSeconds, setLogSinceSeconds] = useState<number>(0);
+  const [logAutoRefresh, setLogAutoRefresh] = useState<boolean>(false);
+  const [logRefreshInterval, setLogRefreshInterval] = useState<number>(3);
+  const [logRefreshTimer, setLogRefreshTimer] = useState<NodeJS.Timeout | null>(null);
 
   const [importForm] = Form.useForm();
   const [deployForm] = Form.useForm();
@@ -421,13 +429,19 @@ const KubernetesPage: React.FC = () => {
     setPodDetail(null);
     setPodYaml('');
     setPodLogs('');
+    setLogMode('history');
+    setLogAutoRefresh(false);
+    if (logRefreshTimer) {
+      clearInterval(logRefreshTimer);
+      setLogRefreshTimer(null);
+    }
 
     try {
       const [detailRes, yamlRes, logsRes] = await Promise.all([
         api.get(`/api/kubernetes/clusters/${selectedCluster.id}/pods/${pod.namespace}/${pod.name}`),
         api.get(`/api/kubernetes/clusters/${selectedCluster.id}/pods/${pod.namespace}/${pod.name}/yaml`),
         api.get(`/api/kubernetes/clusters/${selectedCluster.id}/pods/${pod.namespace}/${pod.name}/logs`, {
-          params: { tailLines: 200 }
+          params: { tailLines: logTailLines }
         })
       ]);
 
@@ -445,7 +459,62 @@ const KubernetesPage: React.FC = () => {
     } finally {
       setPodDetailLoading(false);
     }
-  }, [selectedCluster]);
+  }, [selectedCluster, logTailLines, logRefreshTimer]);
+
+  // Load pod logs separately (for refresh)
+  const loadPodLogs = useCallback(async () => {
+    if (!selectedCluster || !selectedPod) return;
+    
+    try {
+      const params: Record<string, number | string> = {};
+      if (logSinceSeconds > 0) {
+        params.sinceSeconds = logSinceSeconds;
+      } else {
+        params.tailLines = logTailLines;
+      }
+      
+      const res = await api.get(`/api/kubernetes/clusters/${selectedCluster.id}/pods/${selectedPod.namespace}/${selectedPod.name}/logs`, {
+        params
+      });
+      
+      if (res.data.code === 200) {
+        const newLogs = res.data.data || 'No logs available';
+        if (logMode === 'realtime' && logAutoRefresh) {
+          setPodLogs(prev => prev + '\n' + newLogs);
+        } else {
+          setPodLogs(newLogs);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load pod logs:', error);
+    }
+  }, [selectedCluster, selectedPod, logTailLines, logSinceSeconds, logMode, logAutoRefresh]);
+
+  // Toggle auto refresh
+  const toggleAutoRefresh = useCallback((enabled: boolean) => {
+    setLogAutoRefresh(enabled);
+    if (logRefreshTimer) {
+      clearInterval(logRefreshTimer);
+      setLogRefreshTimer(null);
+    }
+    if (enabled) {
+      setLogMode('realtime');
+      setPodLogs('');
+      const timer = setInterval(() => {
+        loadPodLogs();
+      }, logRefreshInterval * 1000);
+      setLogRefreshTimer(timer);
+    }
+  }, [logRefreshTimer, logRefreshInterval, loadPodLogs]);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (logRefreshTimer) {
+        clearInterval(logRefreshTimer);
+      }
+    };
+  }, [logRefreshTimer]);
 
   // Copy YAML to clipboard
   const copyYamlToClipboard = useCallback(() => {
@@ -1196,11 +1265,94 @@ const KubernetesPage: React.FC = () => {
                 label: t('k8s.logs'),
                 children: (
                   <div className="pod-code-container">
-                    <div className="pod-code-header">
-                      <span style={{ color: '#a1a1aa', fontSize: 13 }}>Container Logs</span>
+                    <div className="pod-code-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                      <Space size="small">
+                        <span style={{ color: '#a1a1aa', fontSize: 13 }}>Container Logs</span>
+                        <Select
+                          value={logMode}
+                          onChange={(v) => {
+                            setLogMode(v);
+                            if (v === 'history') {
+                              toggleAutoRefresh(false);
+                            }
+                          }}
+                          style={{ width: 120 }}
+                          options={[
+                            { value: 'history', label: t('k8s.log_history') || 'History' },
+                            { value: 'realtime', label: t('k8s.log_realtime') || 'Real-time' }
+                          ]}
+                        />
+                      </Space>
+                      <Space size="small">
+                        {logMode === 'history' && (
+                          <>
+                            <Select
+                              value={logTailLines}
+                              onChange={setLogTailLines}
+                              style={{ width: 100 }}
+                              options={[
+                                { value: 100, label: '100 lines' },
+                                { value: 200, label: '200 lines' },
+                                { value: 500, label: '500 lines' },
+                                { value: 1000, label: '1000 lines' }
+                              ]}
+                            />
+                            <Select
+                              value={logSinceSeconds}
+                              onChange={setLogSinceSeconds}
+                              style={{ width: 120 }}
+                              options={[
+                                { value: 0, label: 'All time' },
+                                { value: 300, label: '5 min' },
+                                { value: 600, label: '10 min' },
+                                { value: 1800, label: '30 min' },
+                                { value: 3600, label: '1 hour' }
+                              ]}
+                            />
+                            <Button 
+                              icon={<ReloadOutlined />} 
+                              onClick={loadPodLogs}
+                              loading={podDetailLoading}
+                            >
+                              {t('common.refresh')}
+                            </Button>
+                          </>
+                        )}
+                        {logMode === 'realtime' && (
+                          <>
+                            <Select
+                              value={logRefreshInterval}
+                              onChange={setLogRefreshInterval}
+                              style={{ width: 100 }}
+                              options={[
+                                { value: 1, label: '1s' },
+                                { value: 3, label: '3s' },
+                                { value: 5, label: '5s' },
+                                { value: 10, label: '10s' }
+                              ]}
+                            />
+                            <Button
+                              type={logAutoRefresh ? 'primary' : 'default'}
+                              icon={<PlayCircleOutlined />}
+                              onClick={() => toggleAutoRefresh(!logAutoRefresh)}
+                            >
+                              {logAutoRefresh ? (t('k8s.log_stop') || 'Stop') : (t('k8s.log_start') || 'Start')}
+                            </Button>
+                            <Button 
+                              icon={<ReloadOutlined />} 
+                              onClick={() => {
+                                setPodLogs('');
+                                loadPodLogs();
+                              }}
+                            >
+                              {t('k8s.log_clear') || 'Clear'}
+                            </Button>
+                          </>
+                        )}
+                      </Space>
                     </div>
-                    <div className="pod-code-body">
-                      <pre className="pod-code-text">{podLogs}</pre>
+                    <div className="pod-code-body" style={{ maxHeight: logMode === 'realtime' ? '400px' : '500px', overflow: 'auto' }}>
+                      <pre className="pod-code-text" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{podLogs}</pre>
                     </div>
                   </div>
                 )

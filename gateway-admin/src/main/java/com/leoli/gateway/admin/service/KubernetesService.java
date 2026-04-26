@@ -136,6 +136,10 @@ public class KubernetesService {
         return resourceService.getPodLogs(clusterId, namespace, podName, containerName, tailLines);
     }
 
+    public String getPodLogs(Long clusterId, String namespace, String podName, String containerName, Integer tailLines, Integer sinceSeconds) {
+        return resourceService.getPodLogs(clusterId, namespace, podName, containerName, tailLines, sinceSeconds);
+    }
+
     public List<Map<String, Object>> getClusterImages(Long clusterId) {
         return resourceService.getClusterImages(clusterId);
     }

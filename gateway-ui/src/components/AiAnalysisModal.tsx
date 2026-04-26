@@ -152,8 +152,9 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
         endTime: timeRange[1]!.valueOf(),
         language
       });
+      if (!res) return; // Request was cancelled or failed
       if (res.data.code === 200) {
-        setResult(res.data.data.result);
+        setResult(res.data.data?.result || '');
       } else {
         message.error(res.data.message || t('ai.analysis_failed') || 'AI分析失败');
       }

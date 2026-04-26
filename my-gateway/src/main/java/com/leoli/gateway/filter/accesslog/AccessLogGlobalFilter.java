@@ -25,6 +25,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.cloud.gateway.route.RouteDefinition;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferFactory;
@@ -70,6 +71,7 @@ import static com.leoli.gateway.filter.accesslog.constants.AccessLogConstants.*;
  */
 @Slf4j
 @Component
+@DependsOn("nacosConfigServiceWrapper")
 public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
 
     // Dedicated logger for access logs (configured in logback-spring.xml)
@@ -125,27 +127,32 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
 
     private void loadConfig() {
         try {
+            log.info("Loading access log config from Nacos: dataId={}, group={}", ACCESS_LOG_CONFIG, GROUP);
             String content = configCenterService.getConfig(ACCESS_LOG_CONFIG, GROUP);
             if (content != null && !content.isEmpty()) {
                 config = objectMapper.readValue(content, AccessLogConfig.class);
-                log.info("Loaded access log config: enabled={}, mode={}, format={}",
-                        config.isEnabled(), config.getDeployMode(), config.getLogFormat());
+                log.info("Loaded access log config successfully: enabled={}, mode={}, format={}, logToConsole={}, logDirectory={}",
+                        config.isEnabled(), config.getDeployMode(), config.getLogFormat(), 
+                        config.isLogToConsole(), config.getLogDirectory());
+            } else {
+                log.warn("Access log config not found in Nacos (dataId={}, group={}), using defaults: enabled={}",
+                        ACCESS_LOG_CONFIG, GROUP, config.isEnabled());
             }
         } catch (Exception e) {
-            log.warn("Failed to load access log config, using defaults: {}", e.getMessage());
+            log.warn("Failed to load access log config, using defaults: enabled={}, error={}", 
+                    config.isEnabled(), e.getMessage());
         }
     }
 
     /**
-     * Dynamically configure Logback appenders based on current config.
+     * Dynamically create and configure Logback appenders based on current config.
+     * Appenders are created programmatically to avoid Logback XML parsing issues.
      */
-    @SuppressWarnings("unchecked")
     private void updateLogbackAppenders() {
         LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
         Logger accessLogger = loggerContext.getLogger(ACCESS_LOG_LOGGER_NAME);
-        Logger rootLogger = loggerContext.getLogger(Logger.ROOT_LOGGER_NAME);
 
-        // Clear existing appenders
+        // Clear existing appenders first
         accessLogger.detachAndStopAllAppenders();
 
         if (!config.isEnabled()) {
@@ -158,33 +165,86 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
         boolean toConsole = config.isLogToConsole();
         boolean toFile = logDirectory != null && !logDirectory.isEmpty();
 
-        if (toFile) {
-            Appender<ch.qos.logback.classic.spi.ILoggingEvent> fileAppender =
-                    (Appender<ch.qos.logback.classic.spi.ILoggingEvent>) rootLogger.getAppender("ACCESS_FILE_ASYNC");
-            if (fileAppender != null) {
-                accessLogger.addAppender(fileAppender);
-                log.info("Access log file output enabled, directory: {}", logDirectory);
-                loggerContext.putProperty("ACCESS_LOG_DIRECTORY", logDirectory);
-            } else {
-                log.warn("ACCESS_FILE_ASYNC appender not found in logback-spring.xml");
-            }
+        // Create console appender (pure JSON output for stdout)
+        if (toConsole) {
+            ch.qos.logback.core.ConsoleAppender<ch.qos.logback.classic.spi.ILoggingEvent> consoleAppender =
+                    new ch.qos.logback.core.ConsoleAppender<>();
+            consoleAppender.setName("ACCESS_CONSOLE");
+            consoleAppender.setContext(loggerContext);
+
+            // Create pattern layout for pure JSON output
+            ch.qos.logback.classic.PatternLayout layout = new ch.qos.logback.classic.PatternLayout();
+            layout.setPattern("%msg%n");
+            layout.setContext(loggerContext);
+            layout.start();
+
+            ch.qos.logback.core.encoder.LayoutWrappingEncoder<ch.qos.logback.classic.spi.ILoggingEvent> encoder =
+                    new ch.qos.logback.core.encoder.LayoutWrappingEncoder<>();
+            encoder.setLayout(layout);
+            encoder.setContext(loggerContext);
+            encoder.start();
+            consoleAppender.setEncoder(encoder);
+            consoleAppender.start();
+            accessLogger.addAppender(consoleAppender);
+            log.info("Access log console output enabled (stdout)");
         }
 
-        if (toConsole) {
-            Appender<ch.qos.logback.classic.spi.ILoggingEvent> consoleAppender =
-                    (Appender<ch.qos.logback.classic.spi.ILoggingEvent>) rootLogger.getAppender("ACCESS_CONSOLE");
-            if (consoleAppender != null) {
-                accessLogger.addAppender(consoleAppender);
-                log.info("Access log console output enabled (stdout)");
-            } else {
-                log.warn("ACCESS_CONSOLE appender not found in logback-spring.xml");
-            }
+        // Create file appender with async wrapper
+        if (toFile) {
+            // Create rolling file appender
+            ch.qos.logback.core.rolling.RollingFileAppender<ch.qos.logback.classic.spi.ILoggingEvent> fileAppender =
+                    new ch.qos.logback.core.rolling.RollingFileAppender<>();
+            fileAppender.setName("ACCESS_FILE");
+            fileAppender.setContext(loggerContext);
+            fileAppender.setFile(logDirectory + "/access.log");
+
+            // Configure rolling policy
+            ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy<ch.qos.logback.classic.spi.ILoggingEvent> rollingPolicy =
+                    new ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy<>();
+            rollingPolicy.setContext(loggerContext);
+            rollingPolicy.setParent(fileAppender);
+            rollingPolicy.setFileNamePattern(logDirectory + "/access-%d{yyyy-MM-dd}.%i.log");
+            rollingPolicy.setMaxFileSize(ch.qos.logback.core.util.FileSize.valueOf(config.getMaxFileSizeMb() + "MB"));
+            rollingPolicy.setMaxHistory(config.getMaxBackupFiles());
+            rollingPolicy.setTotalSizeCap(ch.qos.logback.core.util.FileSize.valueOf("10GB"));
+            rollingPolicy.setCleanHistoryOnStart(true);
+            rollingPolicy.start();
+
+            fileAppender.setRollingPolicy(rollingPolicy);
+
+            // Create pattern layout for pure JSON output
+            ch.qos.logback.classic.PatternLayout fileLayout = new ch.qos.logback.classic.PatternLayout();
+            fileLayout.setPattern("%msg%n");
+            fileLayout.setContext(loggerContext);
+            fileLayout.start();
+
+            ch.qos.logback.core.encoder.LayoutWrappingEncoder<ch.qos.logback.classic.spi.ILoggingEvent> fileEncoder =
+                    new ch.qos.logback.core.encoder.LayoutWrappingEncoder<>();
+            fileEncoder.setLayout(fileLayout);
+            fileEncoder.setContext(loggerContext);
+            fileEncoder.start();
+            fileAppender.setEncoder(fileEncoder);
+            fileAppender.start();
+
+            // Create async appender wrapper
+            ch.qos.logback.classic.AsyncAppender asyncAppender = new ch.qos.logback.classic.AsyncAppender();
+            asyncAppender.setName("ACCESS_FILE_ASYNC");
+            asyncAppender.setContext(loggerContext);
+            asyncAppender.setQueueSize(1024);
+            asyncAppender.setDiscardingThreshold(0);
+            asyncAppender.setNeverBlock(true);
+            asyncAppender.setIncludeCallerData(false);
+            asyncAppender.addAppender(fileAppender);
+            asyncAppender.start();
+            accessLogger.addAppender(asyncAppender);
+
+            log.info("Access log file output enabled, directory: {}", logDirectory);
         }
 
         accessLogger.setLevel(Level.INFO);
         accessLogger.setAdditive(false);
 
-        log.info("Access log appenders configured: file={}, console={}", toFile, toConsole);
+        log.info("Access log enabled: file={}, console={}", toFile, toConsole);
     }
 
     @Override

@@ -3,6 +3,7 @@ package com.leoli.gateway.admin.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.model.AccessLogGlobalConfig;
 import com.leoli.gateway.admin.service.AccessLogConfigService;
+import com.leoli.gateway.admin.service.KubernetesResourceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -31,6 +32,8 @@ import java.util.stream.Stream;
 public class AccessLogConfigController {
 
     private final AccessLogConfigService accessLogConfigService;
+    private final KubernetesResourceService kubernetesResourceService;
+    private final com.leoli.gateway.admin.repository.AccessLogEntryRepository accessLogEntryRepository;
 
     /**
      * Get current access log configuration.
@@ -812,6 +815,575 @@ services:
             log.error("Failed to get log stats", e);
             result.put("code", 500);
             result.put("message", "Failed to get stats: " + e.getMessage());
+        }
+
+        return ResponseEntity.ok(result);
+    }
+
+    // ============================================================
+    // Kubernetes Pod Access Log APIs (Real-time from stdout)
+    // ============================================================
+
+    /**
+     * Get namespaces for K8S mode.
+     * Returns list of namespaces in the cluster.
+     */
+    @GetMapping("/k8s/namespaces")
+    public ResponseEntity<Map<String, Object>> getK8sNamespaces(@RequestParam Long clusterId) {
+        Map<String, Object> result = new HashMap<>();
+
+        try {
+            List<String> namespaces = kubernetesResourceService.getClusterNamespaces(clusterId);
+            result.put("code", 200);
+            result.put("data", namespaces);
+        } catch (Exception e) {
+            log.error("Failed to get K8s namespaces", e);
+            result.put("code", 500);
+            result.put("message", "Failed to get namespaces: " + e.getMessage());
+        }
+
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Get gateway pods for K8S mode.
+     * Returns list of pods that can be selected for log viewing.
+     */
+    @GetMapping("/k8s/pods")
+    public ResponseEntity<Map<String, Object>> getK8sGatewayPods(
+            @RequestParam Long clusterId,
+            @RequestParam(required = false) String namespace) {
+        Map<String, Object> result = new HashMap<>();
+
+        try {
+            // Get all pods and filter by gateway label
+            List<Map<String, Object>> allPods = kubernetesResourceService.getPods(clusterId, namespace);
+            
+            // Filter pods that match gateway (by label app=my-gateway or name contains gateway)
+            List<Map<String, Object>> gatewayPods = allPods.stream()
+                    .filter(pod -> {
+                        Map<String, String> labels = (Map<String, String>) pod.get("labels");
+                        if (labels != null) {
+                            // Check common gateway labels
+                            String app = labels.get("app");
+                            String appName = labels.get("app-name");
+                            if (app != null && app.contains("gateway")) return true;
+                            if (appName != null && appName.contains("gateway")) return true;
+                        }
+                        // Also check pod name
+                        String name = (String) pod.get("name");
+                        if (name != null && name.contains("gateway")) return true;
+                        return false;
+                    })
+                    .map(pod -> {
+                        Map<String, Object> info = new HashMap<>();
+                        info.put("name", pod.get("name"));
+                        info.put("namespace", pod.get("namespace"));
+                        info.put("phase", pod.get("phase"));
+                        info.put("podIP", pod.get("podIP"));
+                        return info;
+                    })
+                    .toList();
+
+            result.put("code", 200);
+            result.put("data", gatewayPods);
+
+        } catch (Exception e) {
+            log.error("Failed to get K8s gateway pods", e);
+            result.put("code", 500);
+            result.put("message", "Failed to get pods: " + e.getMessage());
+        }
+
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Get access log entries from K8s Pod stdout.
+     * Supports both real-time (tailLines) and history (sinceSeconds) modes.
+     */
+    @GetMapping("/k8s/entries")
+    public ResponseEntity<Map<String, Object>> getK8sLogEntries(
+            @RequestParam Long clusterId,
+            @RequestParam String namespace,
+            @RequestParam String podName,
+            @RequestParam(defaultValue = "500") int tailLines,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size,
+            @RequestParam(required = false) String method,
+            @RequestParam(required = false) Integer statusCode,
+            @RequestParam(required = false) String path,
+            @RequestParam(required = false) String traceId,
+            @RequestParam(required = false) Integer sinceSeconds) {
+
+        Map<String, Object> result = new HashMap<>();
+
+        try {
+            // Get raw logs from Pod stdout
+            // If sinceSeconds is provided, use it for history query; otherwise use tailLines for real-time
+            String rawLogs = kubernetesResourceService.getPodLogs(clusterId, namespace, podName, null, 
+                sinceSeconds != null ? null : tailLines, sinceSeconds);
+
+            // Parse JSON log entries
+            List<Map<String, Object>> allEntries = new ArrayList<>();
+            if (rawLogs != null && !rawLogs.isEmpty()) {
+                for (String line : rawLogs.split("\n")) {
+                    if (line == null || line.trim().isEmpty()) continue;
+                    
+                    // Skip non-JSON lines (like startup logs, errors, etc.)
+                    if (!line.trim().startsWith("{")) continue;
+                    
+                    try {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> entry = objectMapper.readValue(line, Map.class);
+
+                        // Check if this is an access log entry (has required fields)
+                        if (entry.get("method") == null || entry.get("path") == null) continue;
+
+                        // Apply filters
+                        if (method != null && !method.isEmpty()) {
+                            if (!method.equalsIgnoreCase((String) entry.get("method"))) continue;
+                        }
+                        if (statusCode != null) {
+                            Object code = entry.get("statusCode");
+                            if (code == null || ((Number) code).intValue() != statusCode) continue;
+                        }
+                        if (path != null && !path.isEmpty()) {
+                            String entryPath = (String) entry.get("path");
+                            if (entryPath == null || !entryPath.contains(path)) continue;
+                        }
+                        if (traceId != null && !traceId.isEmpty()) {
+                            if (!traceId.equals(entry.get("traceId"))) continue;
+                        }
+
+                        allEntries.add(entry);
+                    } catch (Exception e) {
+                        // Skip malformed JSON lines
+                    }
+                }
+            }
+
+            // Sort by timestamp (newest first)
+            allEntries.sort((a, b) -> {
+                String tsA = (String) a.get("@timestamp");
+                String tsB = (String) b.get("@timestamp");
+                if (tsA == null || tsB == null) return 0;
+                return tsB.compareTo(tsA);  // Descending
+            });
+
+            // Paginate
+            int total = allEntries.size();
+            int fromIndex = page * size;
+            int toIndex = Math.min(fromIndex + size, total);
+
+            List<Map<String, Object>> pagedEntries;
+            if (fromIndex >= total) {
+                pagedEntries = Collections.emptyList();
+            } else {
+                pagedEntries = allEntries.subList(fromIndex, toIndex);
+            }
+
+            result.put("code", 200);
+            result.put("data", Map.of(
+                "entries", pagedEntries,
+                "total", total,
+                "page", page,
+                "size", size,
+                "podName", podName,
+                "namespace", namespace,
+                "realtime", true  // Mark as realtime
+            ));
+
+        } catch (Exception e) {
+            log.error("Failed to get K8s log entries", e);
+            result.put("code", 500);
+            result.put("message", "Failed to read logs from Pod: " + e.getMessage());
+        }
+
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Get access log statistics from K8s Pod stdout.
+     * Supports both real-time (tailLines) and history (sinceSeconds) modes.
+     */
+    @GetMapping("/k8s/stats")
+    public ResponseEntity<Map<String, Object>> getK8sLogStats(
+            @RequestParam Long clusterId,
+            @RequestParam String namespace,
+            @RequestParam String podName,
+            @RequestParam(defaultValue = "500") int tailLines,
+            @RequestParam(required = false) Integer sinceSeconds) {
+
+        Map<String, Object> result = new HashMap<>();
+
+        try {
+            // If sinceSeconds is provided, use it for history query; otherwise use tailLines for real-time
+            String rawLogs = kubernetesResourceService.getPodLogs(clusterId, namespace, podName, null, 
+                sinceSeconds != null ? null : tailLines, sinceSeconds);
+
+            // Calculate statistics
+            long totalRequests = 0;
+            long totalDuration = 0;
+            Map<Integer, Integer> statusCodes = new HashMap<>();
+            Map<String, Integer> paths = new HashMap<>();
+            Map<String, Integer> methods = new HashMap<>();
+
+            if (rawLogs != null && !rawLogs.isEmpty()) {
+                for (String line : rawLogs.split("\n")) {
+                    if (line == null || line.trim().isEmpty()) continue;
+                    if (!line.trim().startsWith("{")) continue;
+
+                    try {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> entry = objectMapper.readValue(line, Map.class);
+
+                        // Only count access log entries
+                        if (entry.get("method") == null || entry.get("path") == null) continue;
+
+                        totalRequests++;
+
+                        Object duration = entry.get("durationMs");
+                        if (duration != null) {
+                            totalDuration += ((Number) duration).longValue();
+                        }
+
+                        Object status = entry.get("statusCode");
+                        if (status != null) {
+                            int code = ((Number) status).intValue();
+                            statusCodes.merge(code, 1, Integer::sum);
+                        }
+
+                        String pathStr = (String) entry.get("path");
+                        if (pathStr != null) {
+                            paths.merge(pathStr, 1, Integer::sum);
+                        }
+
+                        String methodStr = (String) entry.get("method");
+                        if (methodStr != null) {
+                            methods.merge(methodStr, 1, Integer::sum);
+                        }
+                    } catch (Exception e) {
+                        // Skip malformed lines
+                    }
+                }
+            }
+
+            // Get top 10 paths
+            List<Map<String, Object>> topPaths = paths.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                .limit(10)
+                .map(e -> Map.<String, Object>of("path", e.getKey(), "count", e.getValue()))
+                .toList();
+
+            double avgDuration = totalRequests > 0 ? (double) totalDuration / totalRequests : 0;
+
+            result.put("code", 200);
+            result.put("data", Map.of(
+                "totalRequests", totalRequests,
+                "avgDuration", Math.round(avgDuration * 100.0) / 100.0,
+                "statusCodes", statusCodes,
+                "topPaths", topPaths,
+                "methods", methods,
+                "podName", podName,
+                "realtime", true
+            ));
+
+        } catch (Exception e) {
+            log.error("Failed to get K8s log stats", e);
+            result.put("code", 500);
+            result.put("message", "Failed to get stats: " + e.getMessage());
+        }
+
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/collect")
+    public ResponseEntity<Map<String, Object>> collectLogs(@RequestBody List<Map<String, Object>> logs) {
+        Map<String, Object> result = new HashMap<>();
+
+        try {
+            if (logs == null || logs.isEmpty()) {
+                result.put("code", 200);
+                result.put("message", "No logs to collect");
+                result.put("count", 0);
+                return ResponseEntity.ok(result);
+            }
+
+            String instanceId = null;
+            List<com.leoli.gateway.admin.model.AccessLogEntryEntity> entries = new ArrayList<>();
+
+            for (Map<String, Object> logEntry : logs) {
+                try {
+                    com.leoli.gateway.admin.model.AccessLogEntryEntity entity = new com.leoli.gateway.admin.model.AccessLogEntryEntity();
+
+                    if (instanceId == null && logEntry.containsKey("instanceId")) {
+                        instanceId = (String) logEntry.get("instanceId");
+                    }
+                    entity.setInstanceId(instanceId != null ? instanceId : "default");
+
+                    entity.setTraceId((String) logEntry.get("traceId"));
+                    entity.setRequestId((String) logEntry.get("requestId"));
+                    entity.setRouteId((String) logEntry.get("routeId"));
+                    entity.setServiceId((String) logEntry.get("serviceId"));
+
+                    String method = (String) logEntry.get("method");
+                    entity.setMethod(method != null ? method : "UNKNOWN");
+
+                    String path = (String) logEntry.get("path");
+                    entity.setPath(path != null ? path : "/");
+
+                    entity.setQueryString((String) logEntry.get("query"));
+                    entity.setClientIp((String) logEntry.get("clientIp"));
+                    entity.setUserAgent((String) logEntry.get("userAgent"));
+
+                    Object statusCode = logEntry.get("statusCode");
+                    entity.setStatusCode(statusCode != null ? ((Number) statusCode).intValue() : 0);
+
+                    Object duration = logEntry.get("durationMs");
+                    entity.setDurationMs(duration != null ? ((Number) duration).longValue() : 0L);
+
+                    entity.setAuthType((String) logEntry.get("authType"));
+                    entity.setAuthPolicy((String) logEntry.get("authPolicy"));
+                    entity.setAuthUser((String) logEntry.get("authUser"));
+                    entity.setErrorMessage((String) logEntry.get("errorMessage"));
+
+                    String timestampStr = (String) logEntry.get("@timestamp");
+                    if (timestampStr != null) {
+                        try {
+                            entity.setLogTimestamp(java.time.LocalDateTime.parse(timestampStr.replace("Z", ""), java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+                        } catch (Exception e) {
+                            entity.setLogTimestamp(java.time.LocalDateTime.now());
+                        }
+                    } else {
+                        entity.setLogTimestamp(java.time.LocalDateTime.now());
+                    }
+
+                    entries.add(entity);
+                } catch (Exception e) {
+                    log.warn("Failed to parse log entry: {}", e.getMessage());
+                }
+            }
+
+            if (!entries.isEmpty()) {
+                accessLogEntryRepository.saveAll(entries);
+            }
+
+            result.put("code", 200);
+            result.put("message", "Logs collected successfully");
+            result.put("count", entries.size());
+
+        } catch (Exception e) {
+            log.error("Failed to collect logs", e);
+            result.put("code", 500);
+            result.put("message", "Failed to collect logs: " + e.getMessage());
+        }
+
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/history/entries")
+    public ResponseEntity<Map<String, Object>> getHistoryEntries(
+            @RequestParam(required = false) String instanceId,
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime,
+            @RequestParam(required = false) String method,
+            @RequestParam(required = false) Integer statusCode,
+            @RequestParam(required = false) String path,
+            @RequestParam(required = false) String traceId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        Map<String, Object> result = new HashMap<>();
+
+        try {
+            String effectiveInstanceId = instanceId != null ? instanceId : "default";
+
+            java.time.LocalDateTime start = startTime != null
+                ? java.time.LocalDateTime.parse(startTime.replace("Z", "").substring(0, 19))
+                : java.time.LocalDateTime.now().minusHours(1);
+            java.time.LocalDateTime end = endTime != null
+                ? java.time.LocalDateTime.parse(endTime.replace("Z", "").substring(0, 19))
+                : java.time.LocalDateTime.now();
+
+            org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(
+                page, size, org.springframework.data.domain.Sort.by("logTimestamp").descending()
+            );
+
+            org.springframework.data.domain.Page<com.leoli.gateway.admin.model.AccessLogEntryEntity> logPage;
+
+            if (traceId != null && !traceId.isEmpty()) {
+                logPage = accessLogEntryRepository.findByInstanceIdAndTraceId(effectiveInstanceId, traceId, pageable);
+            } else if (method != null && statusCode != null && path != null) {
+                logPage = accessLogEntryRepository.findByInstanceIdAndMethodAndTimeRange(
+                    effectiveInstanceId, method, start, end, pageable);
+            } else if (statusCode != null) {
+                logPage = accessLogEntryRepository.findByInstanceIdAndStatusCodeAndTimeRange(
+                    effectiveInstanceId, statusCode, start, end, pageable);
+            } else if (path != null && !path.isEmpty()) {
+                logPage = accessLogEntryRepository.findByInstanceIdAndPathLikeAndTimeRange(
+                    effectiveInstanceId, "%" + path + "%", start, end, pageable);
+            } else {
+                logPage = accessLogEntryRepository.findByInstanceIdAndTimeRange(
+                    effectiveInstanceId, start, end, pageable);
+            }
+
+            List<Map<String, Object>> entries = logPage.getContent().stream()
+                .map(entity -> {
+                    Map<String, Object> entry = new HashMap<>();
+                    entry.put("id", entity.getId());
+                    entry.put("@timestamp", entity.getLogTimestamp().toString());
+                    entry.put("traceId", entity.getTraceId());
+                    entry.put("requestId", entity.getRequestId());
+                    entry.put("routeId", entity.getRouteId());
+                    entry.put("serviceId", entity.getServiceId());
+                    entry.put("method", entity.getMethod());
+                    entry.put("path", entity.getPath());
+                    entry.put("query", entity.getQueryString());
+                    entry.put("clientIp", entity.getClientIp());
+                    entry.put("userAgent", entity.getUserAgent());
+                    entry.put("statusCode", entity.getStatusCode());
+                    entry.put("durationMs", entity.getDurationMs());
+                    entry.put("authType", entity.getAuthType());
+                    entry.put("authPolicy", entity.getAuthPolicy());
+                    entry.put("authUser", entity.getAuthUser());
+                    entry.put("errorMessage", entity.getErrorMessage());
+                    return entry;
+                })
+                .toList();
+
+            result.put("code", 200);
+            result.put("data", Map.of(
+                "entries", entries,
+                "total", logPage.getTotalElements(),
+                "page", page,
+                "size", size,
+                "totalPages", logPage.getTotalPages(),
+                "history", true
+            ));
+
+        } catch (Exception e) {
+            log.error("Failed to get history log entries", e);
+            result.put("code", 500);
+            result.put("message", "Failed to get history logs: " + e.getMessage());
+        }
+
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/history/stats")
+    public ResponseEntity<Map<String, Object>> getHistoryStats(
+            @RequestParam(required = false) String instanceId,
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime) {
+        Map<String, Object> result = new HashMap<>();
+
+        try {
+            String effectiveInstanceId = instanceId != null ? instanceId : "default";
+
+            java.time.LocalDateTime start = startTime != null
+                ? java.time.LocalDateTime.parse(startTime.replace("Z", "").substring(0, 19))
+                : java.time.LocalDateTime.now().minusHours(1);
+            java.time.LocalDateTime end = endTime != null
+                ? java.time.LocalDateTime.parse(endTime.replace("Z", "").substring(0, 19))
+                : java.time.LocalDateTime.now();
+
+            long totalRequests = accessLogEntryRepository.countByInstanceIdAndTimeRange(effectiveInstanceId, start, end);
+            Double avgDuration = accessLogEntryRepository.avgDurationByInstanceIdAndTimeRange(effectiveInstanceId, start, end);
+
+            List<Object[]> statusCodeCounts = accessLogEntryRepository.countByStatusCodeGroupByInstanceIdAndTimeRange(effectiveInstanceId, start, end);
+            Map<String, Integer> statusCodes = new HashMap<>();
+            for (Object[] row : statusCodeCounts) {
+                statusCodes.put(String.valueOf(row[0]), ((Number) row[1]).intValue());
+            }
+
+            List<Object[]> methodCounts = accessLogEntryRepository.countByMethodGroupByInstanceIdAndTimeRange(effectiveInstanceId, start, end);
+            Map<String, Integer> methods = new HashMap<>();
+            for (Object[] row : methodCounts) {
+                methods.put(String.valueOf(row[0]), ((Number) row[1]).intValue());
+            }
+
+            List<Object[]> topPathsRaw = accessLogEntryRepository.topPathsByInstanceIdAndTimeRange(effectiveInstanceId, start, end, 10);
+            List<Map<String, Object>> topPaths = new ArrayList<>();
+            for (Object[] row : topPathsRaw) {
+                Map<String, Object> pathInfo = new HashMap<>();
+                pathInfo.put("path", row[0]);
+                pathInfo.put("count", ((Number) row[1]).intValue());
+                topPaths.add(pathInfo);
+            }
+
+            result.put("code", 200);
+            result.put("data", Map.of(
+                "totalRequests", totalRequests,
+                "avgDuration", avgDuration != null ? Math.round(avgDuration * 100.0) / 100.0 : 0.0,
+                "statusCodes", statusCodes,
+                "topPaths", topPaths,
+                "methods", methods,
+                "history", true,
+                "startTime", start.toString(),
+                "endTime", end.toString()
+            ));
+
+        } catch (Exception e) {
+            log.error("Failed to get history log stats", e);
+            result.put("code", 500);
+            result.put("message", "Failed to get history stats: " + e.getMessage());
+        }
+
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/history/cleanup/stats")
+    public ResponseEntity<Map<String, Object>> getCleanupStats(
+            @RequestParam(required = false) String instanceId,
+            @RequestParam(defaultValue = "7") int retentionDays) {
+        Map<String, Object> result = new HashMap<>();
+
+        try {
+            String effectiveInstanceId = instanceId != null ? instanceId : "default";
+            java.time.LocalDateTime beforeTime = java.time.LocalDateTime.now().minusDays(retentionDays);
+
+            long oldLogsCount = accessLogEntryRepository.countByInstanceIdAndLogTimestampBefore(effectiveInstanceId, beforeTime);
+            long totalLogs = accessLogEntryRepository.count();
+
+            result.put("code", 200);
+            result.put("data", Map.of(
+                "oldLogsCount", oldLogsCount,
+                "totalLogs", totalLogs,
+                "retentionDays", retentionDays,
+                "beforeTime", beforeTime.toString()
+            ));
+
+        } catch (Exception e) {
+            log.error("Failed to get cleanup stats", e);
+            result.put("code", 500);
+            result.put("message", "Failed to get cleanup stats: " + e.getMessage());
+        }
+
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/history/cleanup")
+    public ResponseEntity<Map<String, Object>> cleanupOldLogs(
+            @RequestParam(required = false) String instanceId,
+            @RequestParam(defaultValue = "7") int retentionDays) {
+        Map<String, Object> result = new HashMap<>();
+
+        try {
+            String effectiveInstanceId = instanceId != null ? instanceId : "default";
+            java.time.LocalDateTime beforeTime = java.time.LocalDateTime.now().minusDays(retentionDays);
+
+            int deleted = accessLogEntryRepository.deleteOldLogsByInstanceId(effectiveInstanceId, beforeTime);
+
+            result.put("code", 200);
+            result.put("message", "Cleanup completed");
+            result.put("data", Map.of(
+                "deletedCount", deleted,
+                "retentionDays", retentionDays
+            ));
+
+        } catch (Exception e) {
+            log.error("Failed to cleanup old logs", e);
+            result.put("code", 500);
+            result.put("message", "Failed to cleanup logs: " + e.getMessage());
         }
 
         return ResponseEntity.ok(result);

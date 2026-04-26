@@ -65,13 +65,23 @@ gateway:
       secret: ${GATEWAY_ADMIN_JWT_SECRET:mySecretKeyForJWTTokenGenerationWhichMustBeLongEnoughAndSecure}
       expiration: 86400000  # 24 hours in milliseconds
       enabled: true  # Enable JWT for production
-  # Prometheus configuration for Gateway monitoring
-  prometheus:
-    url: ${PROMETHEUS_URL:http://127.0.0.1:9091}
   # Jaeger configuration for distributed tracing
   jaeger:
     url: ${JAEGER_URL:http://127.0.0.1:16686}
     enabled: ${JAEGER_ENABLED:true}
+    # K8s internal address for gateway instances (OTLP endpoint)
+    k8s-server-addr: ${JAEGER_K8S_SERVER_ADDR:}
+    k8s-namespace: ${JAEGER_K8S_NAMESPACE:test}
+    k8s-service-name: ${JAEGER_K8S_SERVICE_NAME:jaeger}
+    k8s-port: ${JAEGER_K8S_PORT:4317}
+  # Prometheus configuration for Gateway monitoring
+  prometheus:
+    url: ${PROMETHEUS_URL:http://127.0.0.1:9091}
+    # K8s internal address for gateway instances
+    k8s-server-addr: ${PROMETHEUS_K8S_SERVER_ADDR:}
+    k8s-namespace: ${PROMETHEUS_K8S_NAMESPACE:test}
+    k8s-service-name: ${PROMETHEUS_K8S_SERVICE_NAME:prometheus}
+    k8s-port: ${PROMETHEUS_K8S_PORT:9090}
   consul:
     host: ${CONSUL_HOST:consul}
     port: ${CONSUL_PORT:8500}

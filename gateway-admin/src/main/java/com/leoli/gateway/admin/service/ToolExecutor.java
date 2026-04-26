@@ -3,12 +3,7 @@ package com.leoli.gateway.admin.service;
 import com.alibaba.nacos.api.naming.pojo.Instance;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.center.NacosConfigCenterService;
-import com.leoli.gateway.admin.model.AuditLogEntity;
-import com.leoli.gateway.admin.model.GatewayInstanceEntity;
-import com.leoli.gateway.admin.model.KubernetesCluster;
-import com.leoli.gateway.admin.model.RouteDefinition;
-import com.leoli.gateway.admin.model.RouteEntity;
-import com.leoli.gateway.admin.model.RouteResponse;
+import com.leoli.gateway.admin.model.*;
 import com.leoli.gateway.admin.repository.FilterChainExecutionRepository;
 import com.leoli.gateway.admin.repository.KubernetesClusterRepository;
 import com.leoli.gateway.admin.repository.RequestTraceRepository;
@@ -83,8 +78,8 @@ public class ToolExecutor {
                     // 返回待确认状态，而不是执行操作
                     log.info("Tool {} requires confirmation, returning pending status", toolName);
                     return ToolResult.pendingConfirmation(
-                        toolName,
-                        generateConfirmationPreview(toolName, arguments)
+                            toolName,
+                            generateConfirmationPreview(toolName, arguments)
                     );
                 }
             }
@@ -149,6 +144,12 @@ public class ToolExecutor {
                 case "analyze_filter_anomaly" -> executeAnalyzeFilterAnomaly(arguments);
                 case "predict_filter_performance" -> executePredictFilterPerformance(arguments);
 
+                // Pod 维度分析类（新增）
+                case "get_pod_metrics" -> executeGetPodMetrics(arguments);
+                case "compare_pod_performance" -> executeComparePodPerformance(arguments);
+                case "analyze_pod_stress_test" -> executeAnalyzePodStressTest(arguments);
+                case "check_pod_count_for_analysis" -> executeCheckPodCountForAnalysis(arguments);
+
                 default -> Map.of("error", "Tool not implemented: " + toolName);
             };
 
@@ -181,7 +182,7 @@ public class ToolExecutor {
         result.put("overallScore", report.getOverallScore());
         // 动态计算 status（与 DiagnosticReport.toMap() 一致）
         String status = report.getOverallScore() >= 80 ? "HEALTHY" :
-                       report.getOverallScore() >= 50 ? "WARNING" : "CRITICAL";
+                report.getOverallScore() >= 50 ? "WARNING" : "CRITICAL";
         result.put("status", status);
         result.put("duration", report.getDuration() + " ms");
 
@@ -232,7 +233,10 @@ public class ToolExecutor {
 
     private Object executeGetGatewayMetrics(Map<String, Object> args) {
         String instanceId = getStringArg(args, "instanceId");
-        if (instanceId != null) {
+        String podInstance = getStringArg(args, "podInstance");
+        if (instanceId != null && podInstance != null) {
+            return prometheusService.getGatewayMetrics(instanceId, podInstance);
+        } else if (instanceId != null) {
             return prometheusService.getGatewayMetrics(instanceId);
         }
         return prometheusService.getGatewayMetrics();
@@ -241,9 +245,10 @@ public class ToolExecutor {
     private Object executeGetHistoryMetrics(Map<String, Object> args) {
         int hours = getIntArg(args, "hours", 1);
         String instanceId = getStringArg(args, "instanceId");
+        String podInstance = getStringArg(args, "podInstance");
         // 默认最多24小时
         hours = Math.min(hours, 24);
-        return prometheusService.getHistoryMetrics(hours, instanceId);
+        return prometheusService.getHistoryMetrics(hours, instanceId, podInstance);
     }
 
     // ===================== 路由管理类工具执行 =====================
@@ -306,10 +311,10 @@ public class ToolExecutor {
         }
 
         return Map.of(
-            "success", true,
-            "routeId", routeId,
-            "enabled", enabled,
-            "message", enabled ? "路由已启用" : "路由已禁用"
+                "success", true,
+                "routeId", routeId,
+                "enabled", enabled,
+                "message", enabled ? "路由已启用" : "路由已禁用"
         );
     }
 
@@ -332,24 +337,24 @@ public class ToolExecutor {
             RouteEntity entity = routeService.createRoute(route, instanceId);
 
             return Map.of(
-                "success", true,
-                "routeId", entity.getRouteId(),
-                "routeName", entity.getRouteName(),
-                "enabled", entity.getEnabled(),
-                "message", "路由创建成功，已推送到 Nacos，网关将自动获取最新配置"
+                    "success", true,
+                    "routeId", entity.getRouteId(),
+                    "routeName", entity.getRouteName(),
+                    "enabled", entity.getEnabled(),
+                    "message", "路由创建成功，已推送到 Nacos，网关将自动获取最新配置"
             );
 
         } catch (IllegalArgumentException e) {
             log.warn("Route creation validation failed: {}", e.getMessage());
             return Map.of(
-                "success", false,
-                "error", "路由配置验证失败: " + e.getMessage()
+                    "success", false,
+                    "error", "路由配置验证失败: " + e.getMessage()
             );
         } catch (Exception e) {
             log.error("Route creation failed", e);
             return Map.of(
-                "success", false,
-                "error", "路由创建失败: " + e.getMessage()
+                    "success", false,
+                    "error", "路由创建失败: " + e.getMessage()
             );
         }
     }
@@ -366,8 +371,8 @@ public class ToolExecutor {
             RouteDefinition route = routeService.getRoute(routeId);
             if (route == null) {
                 return Map.of(
-                    "success", false,
-                    "error", "路由不存在: " + routeId
+                        "success", false,
+                        "error", "路由不存在: " + routeId
                 );
             }
 
@@ -375,17 +380,17 @@ public class ToolExecutor {
             routeService.deleteRouteByRouteId(routeId);
 
             return Map.of(
-                "success", true,
-                "routeId", routeId,
-                "routeName", route.getRouteName(),
-                "message", "路由已删除，配置已从 Nacos 移除，网关将自动获取最新配置"
+                    "success", true,
+                    "routeId", routeId,
+                    "routeName", route.getRouteName(),
+                    "message", "路由已删除，配置已从 Nacos 移除，网关将自动获取最新配置"
             );
 
         } catch (Exception e) {
             log.error("Route deletion failed for routeId: {}", routeId, e);
             return Map.of(
-                "success", false,
-                "error", "路由删除失败: " + e.getMessage()
+                    "success", false,
+                    "error", "路由删除失败: " + e.getMessage()
             );
         }
     }
@@ -403,8 +408,8 @@ public class ToolExecutor {
             RouteDefinition existingRoute = routeService.getRoute(routeId);
             if (existingRoute == null) {
                 return Map.of(
-                    "success", false,
-                    "error", "路由不存在: " + routeId
+                        "success", false,
+                        "error", "路由不存在: " + routeId
                 );
             }
 
@@ -421,24 +426,24 @@ public class ToolExecutor {
             RouteEntity entity = routeService.updateRouteByRouteId(routeId, route);
 
             return Map.of(
-                "success", true,
-                "routeId", entity.getRouteId(),
-                "routeName", entity.getRouteName(),
-                "enabled", entity.getEnabled(),
-                "message", "路由已修改，配置已推送到 Nacos，网关将自动获取最新配置"
+                    "success", true,
+                    "routeId", entity.getRouteId(),
+                    "routeName", entity.getRouteName(),
+                    "enabled", entity.getEnabled(),
+                    "message", "路由已修改，配置已推送到 Nacos，网关将自动获取最新配置"
             );
 
         } catch (IllegalArgumentException e) {
             log.warn("Route modification validation failed: {}", e.getMessage());
             return Map.of(
-                "success", false,
-                "error", "路由配置验证失败: " + e.getMessage()
+                    "success", false,
+                    "error", "路由配置验证失败: " + e.getMessage()
             );
         } catch (Exception e) {
             log.error("Route modification failed for routeId: {}", routeId, e);
             return Map.of(
-                "success", false,
-                "error", "路由修改失败: " + e.getMessage()
+                    "success", false,
+                    "error", "路由修改失败: " + e.getMessage()
             );
         }
     }
@@ -496,13 +501,13 @@ public class ToolExecutor {
 
             if (allInstances == null || allInstances.isEmpty()) {
                 return Map.of(
-                    "serviceName", serviceName,
-                    "namespace", namespace != null ? namespace : "public",
-                    "group", group,
-                    "found", false,
-                    "totalInstances", 0,
-                    "healthyInstances", 0,
-                    "message", "在 Nacos 中未找到该服务的注册实例。可能原因：1) 服务未启动或未注册到 Nacos；2) namespace/group 配置错误；3) 服务名拼写错误。"
+                        "serviceName", serviceName,
+                        "namespace", namespace != null ? namespace : "public",
+                        "group", group,
+                        "found", false,
+                        "totalInstances", 0,
+                        "healthyInstances", 0,
+                        "message", "在 Nacos 中未找到该服务的注册实例。可能原因：1) 服务未启动或未注册到 Nacos；2) namespace/group 配置错误；3) 服务名拼写错误。"
                 );
             }
 
@@ -560,12 +565,12 @@ public class ToolExecutor {
         } catch (Exception e) {
             log.error("Failed to query Nacos service discovery for: {}", serviceName, e);
             return Map.of(
-                "serviceName", serviceName,
-                "namespace", namespace != null ? namespace : "public",
-                "group", group,
-                "found", false,
-                "error", "Nacos 服务发现查询失败: " + e.getMessage(),
-                "message", "无法连接到 Nacos 或查询失败。请检查 Nacos 服务状态和网络连接。"
+                    "serviceName", serviceName,
+                    "namespace", namespace != null ? namespace : "public",
+                    "group", group,
+                    "found", false,
+                    "error", "Nacos 服务发现查询失败: " + e.getMessage(),
+                    "message", "无法连接到 Nacos 或查询失败。请检查 Nacos 服务状态和网络连接。"
             );
         }
     }
@@ -678,11 +683,11 @@ public class ToolExecutor {
         result.put("cluster", cluster);
         result.put("instances", instances.stream()
                 .map(i -> Map.of(
-                    "instanceId", i.getInstanceId(),
-                    "instanceName", i.getInstanceName(),
-                    "namespace", i.getNamespace(),
-                    "status", i.getStatus(),
-                    "statusCode", i.getStatusCode()
+                        "instanceId", i.getInstanceId(),
+                        "instanceName", i.getInstanceName(),
+                        "namespace", i.getNamespace(),
+                        "status", i.getStatus(),
+                        "statusCode", i.getStatusCode()
                 ))
                 .toList());
         result.put("instanceCount", instances.size());
@@ -863,10 +868,10 @@ public class ToolExecutor {
         // 调用 AI 分析
         String analysis = stressTestService.analyzeTestResults(testId, null, language);
         return Map.of(
-            "testId", testId,
-            "testName", test.getTestName(),
-            "status", test.getStatus(),
-            "analysis", analysis
+                "testId", testId,
+                "testName", test.getTestName(),
+                "status", test.getStatus(),
+                "analysis", analysis
         );
     }
 
@@ -888,55 +893,55 @@ public class ToolExecutor {
 
         // 过滤并简化输出
         List<Map<String, Object>> history = tests.stream()
-            .filter(t -> {
-                if (t instanceof com.leoli.gateway.admin.model.StressTest) {
+                .filter(t -> {
+                    if (t instanceof com.leoli.gateway.admin.model.StressTest) {
+                        com.leoli.gateway.admin.model.StressTest test = (com.leoli.gateway.admin.model.StressTest) t;
+                        // 状态过滤
+                        if (status != null && !test.getStatus().equals(status)) {
+                            return false;
+                        }
+                        // 最小请求数过滤
+                        if (minRequests != null && test.getActualRequests() < minRequests) {
+                            return false;
+                        }
+                        return true;
+                    }
+                    return false;
+                })
+                .limit(limit)
+                .map(t -> {
                     com.leoli.gateway.admin.model.StressTest test = (com.leoli.gateway.admin.model.StressTest) t;
-                    // 状态过滤
-                    if (status != null && !test.getStatus().equals(status)) {
-                        return false;
-                    }
-                    // 最小请求数过滤
-                    if (minRequests != null && test.getActualRequests() < minRequests) {
-                        return false;
-                    }
-                    return true;
-                }
-                return false;
-            })
-            .limit(limit)
-            .map(t -> {
-                com.leoli.gateway.admin.model.StressTest test = (com.leoli.gateway.admin.model.StressTest) t;
-                Map<String, Object> simplified = new LinkedHashMap<>();
-                simplified.put("testId", test.getId());
-                simplified.put("testName", test.getTestName());
-                simplified.put("status", test.getStatus());
-                simplified.put("targetUrl", test.getTargetUrl());
-                simplified.put("method", test.getMethod());
-                simplified.put("concurrentUsers", test.getConcurrentUsers());
-                simplified.put("totalRequests", test.getTotalRequests());
-                simplified.put("actualRequests", test.getActualRequests());
-                simplified.put("successfulRequests", test.getSuccessfulRequests());
-                simplified.put("failedRequests", test.getFailedRequests());
-                simplified.put("errorRate", test.getErrorRate() != null ?
-                    String.format("%.2f%%", test.getErrorRate()) : "0.00%");
-                simplified.put("requestsPerSecond", test.getRequestsPerSecond() != null ?
-                    String.format("%.2f", test.getRequestsPerSecond()) : "0.00");
-                simplified.put("avgResponseTimeMs", test.getAvgResponseTimeMs() != null ?
-                    String.format("%.2f", test.getAvgResponseTimeMs()) : "0.00");
-                simplified.put("p50ResponseTimeMs", test.getP50ResponseTimeMs() != null ?
-                    test.getP50ResponseTimeMs() : 0);
-                simplified.put("p90ResponseTimeMs", test.getP90ResponseTimeMs() != null ?
-                    test.getP90ResponseTimeMs() : 0);
-                simplified.put("p99ResponseTimeMs", test.getP99ResponseTimeMs() != null ?
-                    test.getP99ResponseTimeMs() : 0);
-                simplified.put("startTime", test.getStartTime() != null ?
-                    test.getStartTime().toString() : null);
-                simplified.put("endTime", test.getEndTime() != null ?
-                    test.getEndTime().toString() : null);
-                simplified.put("duration", calculateDuration(test.getStartTime(), test.getEndTime()));
-                return simplified;
-            })
-            .toList();
+                    Map<String, Object> simplified = new LinkedHashMap<>();
+                    simplified.put("testId", test.getId());
+                    simplified.put("testName", test.getTestName());
+                    simplified.put("status", test.getStatus());
+                    simplified.put("targetUrl", test.getTargetUrl());
+                    simplified.put("method", test.getMethod());
+                    simplified.put("concurrentUsers", test.getConcurrentUsers());
+                    simplified.put("totalRequests", test.getTotalRequests());
+                    simplified.put("actualRequests", test.getActualRequests());
+                    simplified.put("successfulRequests", test.getSuccessfulRequests());
+                    simplified.put("failedRequests", test.getFailedRequests());
+                    simplified.put("errorRate", test.getErrorRate() != null ?
+                            String.format("%.2f%%", test.getErrorRate()) : "0.00%");
+                    simplified.put("requestsPerSecond", test.getRequestsPerSecond() != null ?
+                            String.format("%.2f", test.getRequestsPerSecond()) : "0.00");
+                    simplified.put("avgResponseTimeMs", test.getAvgResponseTimeMs() != null ?
+                            String.format("%.2f", test.getAvgResponseTimeMs()) : "0.00");
+                    simplified.put("p50ResponseTimeMs", test.getP50ResponseTimeMs() != null ?
+                            test.getP50ResponseTimeMs() : 0);
+                    simplified.put("p90ResponseTimeMs", test.getP90ResponseTimeMs() != null ?
+                            test.getP90ResponseTimeMs() : 0);
+                    simplified.put("p99ResponseTimeMs", test.getP99ResponseTimeMs() != null ?
+                            test.getP99ResponseTimeMs() : 0);
+                    simplified.put("startTime", test.getStartTime() != null ?
+                            test.getStartTime().toString() : null);
+                    simplified.put("endTime", test.getEndTime() != null ?
+                            test.getEndTime().toString() : null);
+                    simplified.put("duration", calculateDuration(test.getStartTime(), test.getEndTime()));
+                    return simplified;
+                })
+                .toList();
 
         // 添加汇总信息
         Map<String, Object> response = new LinkedHashMap<>();
@@ -945,27 +950,27 @@ public class ToolExecutor {
 
         // 计算汇总统计（仅对已完成的测试）
         List<com.leoli.gateway.admin.model.StressTest> completedTests = tests.stream()
-            .filter(t -> t instanceof com.leoli.gateway.admin.model.StressTest)
-            .map(t -> (com.leoli.gateway.admin.model.StressTest) t)
-            .filter(t -> "COMPLETED".equals(t.getStatus()))
-            .toList();
+                .filter(t -> t instanceof com.leoli.gateway.admin.model.StressTest)
+                .map(t -> (com.leoli.gateway.admin.model.StressTest) t)
+                .filter(t -> "COMPLETED".equals(t.getStatus()))
+                .toList();
 
         if (!completedTests.isEmpty()) {
             double avgQps = completedTests.stream()
-                .filter(t -> t.getRequestsPerSecond() != null)
-                .mapToDouble(t -> t.getRequestsPerSecond())
-                .average()
-                .orElse(0);
+                    .filter(t -> t.getRequestsPerSecond() != null)
+                    .mapToDouble(t -> t.getRequestsPerSecond())
+                    .average()
+                    .orElse(0);
             double avgErrorRate = completedTests.stream()
-                .filter(t -> t.getErrorRate() != null)
-                .mapToDouble(t -> t.getErrorRate())
-                .average()
-                .orElse(0);
+                    .filter(t -> t.getErrorRate() != null)
+                    .mapToDouble(t -> t.getErrorRate())
+                    .average()
+                    .orElse(0);
             double avgResponseTime = completedTests.stream()
-                .filter(t -> t.getAvgResponseTimeMs() != null)
-                .mapToDouble(t -> t.getAvgResponseTimeMs())
-                .average()
-                .orElse(0);
+                    .filter(t -> t.getAvgResponseTimeMs() != null)
+                    .mapToDouble(t -> t.getAvgResponseTimeMs())
+                    .average()
+                    .orElse(0);
 
             Map<String, Object> summary = new LinkedHashMap<>();
             summary.put("completedTests", completedTests.size());
@@ -1182,10 +1187,10 @@ public class ToolExecutor {
             Map<String, Object> response = restTemplate.postForObject(url, null, Map.class);
 
             return Map.of(
-                "success", true,
-                "instanceId", instanceId,
-                "thresholdMs", thresholdMs,
-                "message", "Slow threshold updated successfully"
+                    "success", true,
+                    "instanceId", instanceId,
+                    "thresholdMs", thresholdMs,
+                    "message", "Slow threshold updated successfully"
             );
         } catch (Exception e) {
             log.error("Failed to set slow threshold for instance: {}", instanceId, e);
@@ -1294,8 +1299,8 @@ public class ToolExecutor {
 
         try {
             Page<AuditLogEntity> logs = auditLogService.getAuditLogs(
-                instanceId, targetType, targetId, operationType,
-                startTime, endTime, page, size
+                    instanceId, targetType, targetId, operationType,
+                    startTime, endTime, page, size
             );
 
             // 格式化输出
@@ -1308,20 +1313,20 @@ public class ToolExecutor {
 
             // 简化日志列表
             List<Map<String, Object>> simplifiedLogs = logs.getContent().stream()
-                .map(log -> {
-                    Map<String, Object> item = new LinkedHashMap<>();
-                    item.put("id", log.getId());
-                    item.put("operator", log.getOperator());
-                    item.put("operationType", log.getOperationType());
-                    item.put("targetType", log.getTargetType());
-                    item.put("targetId", log.getTargetId());
-                    item.put("targetName", log.getTargetName());
-                    item.put("createdAt", log.getCreatedAt() != null ? 
-                        log.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null);
-                    item.put("instanceId", log.getInstanceId());
-                    return item;
-                })
-                .toList();
+                    .map(log -> {
+                        Map<String, Object> item = new LinkedHashMap<>();
+                        item.put("id", log.getId());
+                        item.put("operator", log.getOperator());
+                        item.put("operationType", log.getOperationType());
+                        item.put("targetType", log.getTargetType());
+                        item.put("targetId", log.getTargetId());
+                        item.put("targetName", log.getTargetName());
+                        item.put("createdAt", log.getCreatedAt() != null ?
+                                log.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null);
+                        item.put("instanceId", log.getInstanceId());
+                        return item;
+                    })
+                    .toList();
             result.put("logs", simplifiedLogs);
 
             return result;
@@ -1413,13 +1418,13 @@ public class ToolExecutor {
                 switch (sortBy) {
                     case "avgLatency":
                         return Double.compare(((Number) b.get("avgLatencyMs")).doubleValue(),
-                                              ((Number) a.get("avgLatencyMs")).doubleValue());
+                                ((Number) a.get("avgLatencyMs")).doubleValue());
                     case "errorRate":
                         return Double.compare(((Number) b.get("errorRate")).doubleValue(),
-                                              ((Number) a.get("errorRate")).doubleValue());
+                                ((Number) a.get("errorRate")).doubleValue());
                     default: // count
                         return Long.compare(((Number) b.get("count")).longValue(),
-                                           ((Number) a.get("count")).longValue());
+                                ((Number) a.get("count")).longValue());
                 }
             });
 
@@ -1459,9 +1464,9 @@ public class ToolExecutor {
             if (gcMetrics.get("youngGC") != null) {
                 Map<String, Object> youngGC = (Map<String, Object>) gcMetrics.get("youngGC");
                 result.put("youngGC", Map.of(
-                    "count", youngGC.get("count"),
-                    "totalTimeSeconds", youngGC.get("totalTimeSeconds"),
-                    "avgTimeMs", youngGC.get("avgTimeMs")
+                        "count", youngGC.get("count"),
+                        "totalTimeSeconds", youngGC.get("totalTimeSeconds"),
+                        "avgTimeMs", youngGC.get("avgTimeMs")
                 ));
             }
 
@@ -1469,9 +1474,9 @@ public class ToolExecutor {
             if (gcMetrics.get("oldGC") != null) {
                 Map<String, Object> oldGC = (Map<String, Object>) gcMetrics.get("oldGC");
                 result.put("oldGC", Map.of(
-                    "count", oldGC.get("count"),
-                    "totalTimeSeconds", oldGC.get("totalTimeSeconds"),
-                    "avgTimeMs", oldGC.get("avgTimeMs")
+                        "count", oldGC.get("count"),
+                        "totalTimeSeconds", oldGC.get("totalTimeSeconds"),
+                        "avgTimeMs", oldGC.get("avgTimeMs")
                 ));
             }
 
@@ -1504,7 +1509,7 @@ public class ToolExecutor {
         try {
             // 获取当前时间段和上一时间段的Filter统计对比
             List<Object[]> trendComparison = filterChainExecutionRepository.findFilterTrendComparison(
-                instanceId, currentStart, now, previousStart, previousEnd
+                    instanceId, currentStart, now, previousStart, previousEnd
             );
 
             // 获取Filter详细统计
@@ -1542,8 +1547,8 @@ public class ToolExecutor {
 
             // 按平均耗时排序，识别瓶颈
             filterAnalysis.sort((a, b) -> Double.compare(
-                ((Number) b.get("avgDurationMs")).doubleValue(),
-                ((Number) a.get("avgDurationMs")).doubleValue()
+                    ((Number) b.get("avgDurationMs")).doubleValue(),
+                    ((Number) a.get("avgDurationMs")).doubleValue()
             ));
 
             // 生成重排序建议
@@ -1702,7 +1707,7 @@ public class ToolExecutor {
             LocalDateTime baselineStart = startTime.minusHours(baselineHours);
             LocalDateTime baselineEnd = startTime;
             List<Object[]> trendComparison = filterChainExecutionRepository.findFilterTrendComparison(
-                instanceId, startTime, now, baselineStart, baselineEnd
+                    instanceId, startTime, now, baselineStart, baselineEnd
             );
 
             // 获取错误统计
@@ -1837,9 +1842,9 @@ public class ToolExecutor {
                 aiSummary = "Filter链执行正常，未检测到异常。各Filter执行耗时、错误率均在正常范围内。";
             } else {
                 aiSummary = String.format("检测到 %d 个异常Filter，其中 %d 个严重异常、%d 个警告异常。建议优先处理严重异常，避免影响系统稳定性。",
-                    anomalies.size(),
-                    anomalies.stream().filter(a -> "CRITICAL".equals(a.get("severity"))).count(),
-                    anomalies.stream().filter(a -> "WARNING".equals(a.get("severity"))).count()
+                        anomalies.size(),
+                        anomalies.stream().filter(a -> "CRITICAL".equals(a.get("severity"))).count(),
+                        anomalies.stream().filter(a -> "WARNING".equals(a.get("severity"))).count()
                 );
             }
             result.put("aiSummary", aiSummary);
@@ -1952,14 +1957,16 @@ public class ToolExecutor {
         if ("DURATION_SPIKE".equals(anomalyType)) {
             double increaseRatio = currentValue / baselineValue;
             return switch (filterType) {
-                case "auth" -> String.format("认证Filter耗时突增%.0f%%，可能原因：token验证服务响应慢、JWT解析负载高、认证缓存失效", (increaseRatio - 1) * 100);
+                case "auth" ->
+                        String.format("认证Filter耗时突增%.0f%%，可能原因：token验证服务响应慢、JWT解析负载高、认证缓存失效", (increaseRatio - 1) * 100);
                 case "rate-limit" -> "限流Filter耗时突增，可能原因：限流算法计算负载增加、分布式限流锁竞争、限流规则复杂化";
                 case "logging" -> "日志Filter耗时突增，可能原因：日志量激增、异步队列阻塞、日志格式化开销增加";
                 case "cache" -> "缓存Filter耗时突增，可能原因：缓存命中率下降、缓存连接超时、缓存数据量过大";
                 case "loadbalancer" -> "负载均衡Filter耗时突增，可能原因：实例列表过大、健康检查开销增加、权重计算复杂化";
                 case "circuit-breaker" -> "熔断器Filter耗时突增，可能原因：熔断状态频繁切换、失败统计计算开销增加";
                 case "retry" -> "重试Filter耗时突增，可能原因：下游服务不稳定导致重试增多、重试策略配置不当";
-                default -> String.format("Filter耗时突增%.0f%%，建议检查Filter实现逻辑和依赖服务状态", (increaseRatio - 1) * 100);
+                default ->
+                        String.format("Filter耗时突增%.0f%%，建议检查Filter实现逻辑和依赖服务状态", (increaseRatio - 1) * 100);
             };
         } else if ("HIGH_ERROR_RATE".equals(anomalyType)) {
             return switch (filterType) {
@@ -2206,7 +2213,7 @@ public class ToolExecutor {
             String trend = (String) durationPrediction.get("trend");
             if ("INCREASING".equals(trend)) {
                 summary.append(String.format("平均耗时预计增长至%.1fms，",
-                    ((Number) durationPrediction.get("predictedAvgMs")).doubleValue()));
+                        ((Number) durationPrediction.get("predictedAvgMs")).doubleValue()));
             }
         }
 
@@ -2385,28 +2392,28 @@ public class ToolExecutor {
                     routeService.disableRouteByRouteId(routeId);
                 }
                 results.add(Map.of(
-                    "routeId", routeId,
-                    "success", true,
-                    "enabled", enabled
+                        "routeId", routeId,
+                        "success", true,
+                        "enabled", enabled
                 ));
                 successCount++;
             } catch (Exception e) {
                 results.add(Map.of(
-                    "routeId", routeId,
-                    "success", false,
-                    "error", e.getMessage()
+                        "routeId", routeId,
+                        "success", false,
+                        "error", e.getMessage()
                 ));
                 failCount++;
             }
         }
 
         return Map.of(
-            "success", true,
-            "totalRoutes", routeIds.length,
-            "successCount", successCount,
-            "failCount", failCount,
-            "results", results,
-            "message", String.format("批量操作完成：成功 %d 个，失败 %d 个", successCount, failCount)
+                "success", true,
+                "totalRoutes", routeIds.length,
+                "successCount", successCount,
+                "failCount", failCount,
+                "results", results,
+                "message", String.format("批量操作完成：成功 %d 个，失败 %d 个", successCount, failCount)
         );
     }
 
@@ -2447,15 +2454,15 @@ public class ToolExecutor {
                 RouteDefinition expectedState = objectMapper.convertValue(newValue, RouteDefinition.class);
                 if (!isRouteVersionMatch(currentRoute, expectedState)) {
                     return Map.of(
-                        "error", "版本冲突：路由已被其他操作修改",
-                        "detail", Map.of(
-                            "auditLogId", logId,
-                            "auditLogTime", logCreatedAt != null ? logCreatedAt.toString() : "unknown",
-                            "auditOperator", operator != null ? operator : "unknown",
-                            "currentRouteName", currentRoute.getRouteName(),
-                            "expectedRouteName", expectedState.getRouteName(),
-                            "suggestion", "路由可能已被其他操作修改，请确认后再回滚。如需强制回滚，设置 skipVersionCheck=true"
-                        )
+                            "error", "版本冲突：路由已被其他操作修改",
+                            "detail", Map.of(
+                                    "auditLogId", logId,
+                                    "auditLogTime", logCreatedAt != null ? logCreatedAt.toString() : "unknown",
+                                    "auditOperator", operator != null ? operator : "unknown",
+                                    "currentRouteName", currentRoute.getRouteName(),
+                                    "expectedRouteName", expectedState.getRouteName(),
+                                    "suggestion", "路由可能已被其他操作修改，请确认后再回滚。如需强制回滚，设置 skipVersionCheck=true"
+                            )
                     );
                 }
             }
@@ -2467,21 +2474,21 @@ public class ToolExecutor {
                 if ("CREATE".equals(operationType)) {
                     if (currentRoute == null) {
                         return Map.of(
-                            "success", true,
-                            "action", "no_action",
-                            "routeId", routeId,
-                            "message", "路由已不存在，无需回滚"
+                                "success", true,
+                                "action", "no_action",
+                                "routeId", routeId,
+                                "message", "路由已不存在，无需回滚"
                         );
                     }
                     // 使用 AuditLogService.rollback() 执行事务回滚
                     Map<String, Object> rollbackResult = auditLogService.rollback(logId, "AI_COPILOT");
                     if (Boolean.TRUE.equals(rollbackResult.get("success"))) {
                         return Map.of(
-                            "success", true,
-                            "action", "deleted",
-                            "routeId", routeId,
-                            "auditLogId", rollbackResult.get("auditLogId"),
-                            "message", "回滚成功：已删除新创建的路由"
+                                "success", true,
+                                "action", "deleted",
+                                "routeId", routeId,
+                                "auditLogId", rollbackResult.get("auditLogId"),
+                                "message", "回滚成功：已删除新创建的路由"
                         );
                     } else {
                         return Map.of("error", "回滚删除失败: " + rollbackResult.get("message"));
@@ -2513,18 +2520,18 @@ public class ToolExecutor {
             }
 
             return Map.of(
-                "success", true,
-                "action", actionType,
-                "routeId", routeId,
-                "routeName", historicalRoute.getRouteName(),
-                "auditLogId", rollbackResult.get("auditLogId"),
-                "rolledBackFrom", Map.of(
-                    "auditLogId", logId,
-                    "operationType", operationType,
-                    "operator", operator,
-                    "createdAt", logCreatedAt != null ? logCreatedAt.toString() : "unknown"
-                ),
-                "message", message
+                    "success", true,
+                    "action", actionType,
+                    "routeId", routeId,
+                    "routeName", historicalRoute.getRouteName(),
+                    "auditLogId", rollbackResult.get("auditLogId"),
+                    "rolledBackFrom", Map.of(
+                            "auditLogId", logId,
+                            "operationType", operationType,
+                            "operator", operator,
+                            "createdAt", logCreatedAt != null ? logCreatedAt.toString() : "unknown"
+                    ),
+                    "message", message
             );
 
         } catch (IllegalArgumentException e) {
@@ -2546,8 +2553,8 @@ public class ToolExecutor {
         }
         // 比较关键字段
         return Objects.equals(current.getId(), expected.getId())
-            && Objects.equals(current.getRouteName(), expected.getRouteName())
-            && Objects.equals(current.getUri(), expected.getUri());
+                && Objects.equals(current.getRouteName(), expected.getRouteName())
+                && Objects.equals(current.getUri(), expected.getUri());
     }
 
     /**
@@ -2650,8 +2657,8 @@ public class ToolExecutor {
                     result.put("partialMatches", partialMatches);
                 }
                 result.put("message", partialMatches.isEmpty()
-                    ? "没有匹配到任何路由，请求将返回 404"
-                    : String.format("没有完全匹配的路由，但有 %d 个部分匹配（可能缺少 Method/Header/Query 条件）", partialMatches.size()));
+                        ? "没有匹配到任何路由，请求将返回 404"
+                        : String.format("没有完全匹配的路由，但有 %d 个部分匹配（可能缺少 Method/Header/Query 条件）", partialMatches.size()));
                 return result;
             }
 
@@ -2669,7 +2676,7 @@ public class ToolExecutor {
                 result.put("partialMatches", partialMatches);
             }
             result.put("message", String.format("匹配到 %d 个路由，优先级最高的是: %s",
-                matchedRoutes.size(), bestMatch.get("routeName")));
+                    matchedRoutes.size(), bestMatch.get("routeName")));
             return result;
 
         } catch (Exception e) {
@@ -2755,7 +2762,7 @@ public class ToolExecutor {
      * 详细检查路由匹配（支持多种 Predicate 类型）.
      */
     private MatchResult checkRouteMatchDetailed(RouteResponse route, String path, String method,
-                                                  Map<String, String> headers, Map<String, String> queryParams) {
+                                                Map<String, String> headers, Map<String, String> queryParams) {
         MatchResult result = new MatchResult();
 
         try {
@@ -2809,7 +2816,7 @@ public class ToolExecutor {
                             if (methods != null) {
                                 String[] allowedMethods = methods.split(",");
                                 boolean methodMatched = Arrays.stream(allowedMethods)
-                                    .anyMatch(m -> m.trim().equalsIgnoreCase(method));
+                                        .anyMatch(m -> m.trim().equalsIgnoreCase(method));
                                 if (methodMatched) {
                                     result.addMatchedPredicate("Method", Map.of("allowed", methods, "actual", method));
                                 } else {
@@ -3005,6 +3012,435 @@ public class ToolExecutor {
         return false;
     }
 
+    // ===================== Pod 分析类工具执行 =====================
+
+    /**
+     * 检查Pod数量，决定分析策略.
+     * 在压测分析前调用，检查是否有多个Pod需要分别分析。
+     */
+    private Object executeCheckPodCountForAnalysis(Map<String, Object> args) {
+        String instanceId = getRequiredStringArg(args, "instanceId");
+        int hours = getIntArg(args, "hours", 1);
+
+        try {
+            // 获取实例信息
+            GatewayInstanceEntity instance = gatewayInstanceService.getInstanceByInstanceId(instanceId);
+            if (instance == null) {
+                return Map.of(
+                        "success", false,
+                        "error", "网关实例不存在: " + instanceId,
+                        "suggestion", "请先获取正确的实例ID"
+                );
+            }
+
+            // 获取 Pod 列表
+            List<Map<String, Object>> pods = gatewayInstanceService.getInstancePods(instance.getId());
+            int podCount = pods != null ? pods.size() : 0;
+
+            // 计算精确时间范围
+            long endTime = System.currentTimeMillis();
+            long startTime = endTime - (hours * 3600L * 1000);
+            String startTimeStr = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date(startTime));
+            String endTimeStr = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date(endTime));
+
+            // 查询最近的压测记录（如果用户提到压测）
+            List<?> stressTests = stressTestService.getTestsForInstance(instanceId);
+            Map<String, Object> latestStressTest = null;
+            if (stressTests != null && !stressTests.isEmpty()) {
+                Object latestTest = stressTests.get(0);
+                if (latestTest instanceof com.leoli.gateway.admin.model.StressTest test) {
+                    latestStressTest = new LinkedHashMap<>();
+                    latestStressTest.put("testId", test.getId());
+                    latestStressTest.put("testName", test.getTestName());
+                    latestStressTest.put("startTime", test.getStartTime() != null ? test.getStartTime().toString() : null);
+                    latestStressTest.put("endTime", test.getEndTime() != null ? test.getEndTime().toString() : null);
+                    latestStressTest.put("status", test.getStatus());
+                    latestStressTest.put("targetQps", test.getTargetQps());
+                    latestStressTest.put("concurrentUsers", test.getConcurrentUsers());
+                }
+            }
+
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("instanceId", instanceId);
+            result.put("instanceName", instance.getInstanceName());
+            result.put("podCount", podCount);
+            result.put("hours", hours);
+            result.put("analysisTimeRange", Map.of(
+                    "startTimestamp", startTime,
+                    "endTimestamp", endTime,
+                    "startTimeFormatted", startTimeStr,
+                    "endTimeFormatted", endTimeStr,
+                    "durationHours", hours
+            ));
+
+            // 添加最近压测记录信息
+            if (latestStressTest != null) {
+                result.put("latestStressTest", latestStressTest);
+                result.put("hasStressTestRecord", true);
+            } else {
+                result.put("hasStressTestRecord", false);
+            }
+
+            if (podCount == 0) {
+                result.put("success", false);
+                result.put("error", "该实例没有运行中的Pod");
+                result.put("suggestion", "请检查Pod状态或等待Pod启动");
+            } else if (podCount == 1) {
+                // 单Pod场景：直接分析聚合数据即可
+                Map<String, Object> pod = pods.get(0);
+                String podName = (String) pod.get("name");
+                String podIP = (String) pod.get("podIP");
+                Integer managementPort = (Integer) pod.get("managementPort");
+                String podInstance = podIP + ":" + (managementPort != null ? managementPort : 9091);
+                String startTimeFormatted = pod.get("startTime") != null ? pod.get("startTime").toString() : null;
+
+                result.put("success", true);
+                result.put("analysisMode", "single_pod");
+                result.put("podInfo", Map.of(
+                        "name", podName,
+                        "podIP", podIP,
+                        "phase", pod.get("phase"),
+                        "podInstance", podInstance,
+                        "managementPort", managementPort != null ? managementPort : 9091,
+                        "startTime", startTimeFormatted
+                ));
+                result.put("suggestion", "该实例只有1个Pod，可直接使用 get_gateway_metrics 和 get_history_metrics 分析，无需Pod对比");
+                result.put("recommendedTools", List.of(
+                        "get_gateway_metrics(instanceId=\"" + instanceId + "\", podInstance=\"" + podInstance + "\")",
+                        "get_history_metrics(hours=" + hours + ", instanceId=\"" + instanceId + "\", podInstance=\"" + podInstance + "\")",
+                        "get_filter_chain_stats(instanceId=\"" + instanceId + "\")"
+                ));
+            } else {
+                // 多Pod场景：需要Pod维度对比分析
+                List<Map<String, Object>> podDetails = pods.stream().map(p -> {
+                    String pPodIP = (String) p.get("podIP");
+                    Object pManagementPort = p.get("managementPort");
+                    int pPort = pManagementPort instanceof Number ? ((Number) pManagementPort).intValue() : 9091;
+                    Map<String, Object> detail = new LinkedHashMap<>();
+                    detail.put("name", p.get("name"));
+                    detail.put("podIP", pPodIP);
+                    detail.put("phase", p.get("phase"));
+                    detail.put("podInstance", pPodIP + ":" + pPort);
+                    detail.put("managementPort", pPort);
+                    detail.put("startTime", p.get("startTime") != null ? p.get("startTime").toString() : null);
+                    return detail;
+                }).toList();
+
+                result.put("success", true);
+                result.put("analysisMode", "multi_pod");
+                result.put("pods", podDetails);
+                result.put("suggestion", "该实例有" + podCount + "个Pod，强烈建议进行Pod维度对比分析，识别负载不均衡问题");
+                result.put("recommendedTools", List.of(
+                        "compare_pod_performance(instanceId=\"" + instanceId + "\", hours=" + hours + ")",
+                        "analyze_pod_stress_test(instanceId=\"" + instanceId + "\")"
+                ));
+                result.put("analysisPriority", List.of(
+                        "1. 先调用 compare_pod_performance 获取所有Pod的对比数据",
+                        "2. 分析每个Pod的CPU、内存、请求量差异",
+                        "3. 识别负载最高和最低的Pod",
+                        "4. 分析负载不均衡的原因和建议"
+                ));
+            }
+
+            return result;
+        } catch (Exception e) {
+            log.error("Failed to check pod count for instance: {}", instanceId, e);
+            return Map.of(
+                    "success", false,
+                    "error", "检查Pod数量失败: " + e.getMessage()
+            );
+        }
+    }
+
+    /**
+     * 获取指定 Pod 的实时监控指标.
+     */
+    private Object executeGetPodMetrics(Map<String, Object> args) {
+        String instanceId = getRequiredStringArg(args, "instanceId");
+        String podInstance = getRequiredStringArg(args, "podInstance");
+
+        try {
+            Map<String, Object> metrics = prometheusService.getGatewayMetrics(instanceId, podInstance);
+
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("instanceId", instanceId);
+            result.put("podInstance", podInstance);
+            result.put("metrics", metrics);
+            result.put("message", "Pod 监控数据获取成功");
+
+            return result;
+        } catch (Exception e) {
+            log.error("Failed to get pod metrics for instance: {}, pod: {}", instanceId, podInstance, e);
+            return Map.of("error", "获取Pod监控数据失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 对比所有 Pod 的性能指标.
+     */
+    private Object executeComparePodPerformance(Map<String, Object> args) {
+        String instanceId = getRequiredStringArg(args, "instanceId");
+        int hours = getIntArg(args, "hours", 1);
+
+        try {
+            // 获取 Pod 列表
+            GatewayInstanceEntity instance = gatewayInstanceService.getInstanceByInstanceId(instanceId);
+            if (instance == null) {
+                return Map.of("error", "网关实例不存在: " + instanceId);
+            }
+
+            List<Map<String, Object>> pods = gatewayInstanceService.getInstancePods(instance.getId());
+            if (pods == null || pods.isEmpty()) {
+                return Map.of("error", "该实例没有运行中的 Pod");
+            }
+
+            // 计算精确时间范围
+            long endTime = System.currentTimeMillis();
+            long startTime = endTime - (hours * 3600L * 1000);
+            String startTimeStr = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date(startTime));
+            String endTimeStr = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date(endTime));
+
+            // 收集各 Pod 的监控数据
+            List<Map<String, Object>> podMetricsList = new ArrayList<>();
+            for (Map<String, Object> pod : pods) {
+                String podName = (String) pod.get("name");
+                String podIP = (String) pod.get("podIP");
+                Object managementPortObj = pod.get("managementPort");
+                int managementPort = managementPortObj instanceof Number ? ((Number) managementPortObj).intValue() : 9091;
+                String startTimeFormatted = pod.get("startTime") != null ? pod.get("startTime").toString() : null;
+
+                if (podIP == null) {
+                    continue;
+                }
+
+                String podInstance = podIP + ":" + managementPort;
+
+                // 获取该 Pod 的监控数据
+                Map<String, Object> podMetrics = new LinkedHashMap<>();
+                podMetrics.put("podName", podName);
+                podMetrics.put("podInstance", podInstance);
+                podMetrics.put("podIP", podIP);
+                podMetrics.put("phase", pod.get("phase"));
+                podMetrics.put("managementPort", managementPort);
+                podMetrics.put("startTime", startTimeFormatted);
+
+                // 获取实时指标
+                try {
+                    Map<String, Object> metrics = prometheusService.getGatewayMetrics(instanceId, podInstance);
+                    podMetrics.put("metrics", metrics);
+                } catch (Exception e) {
+                    podMetrics.put("metricsError", e.getMessage());
+                }
+
+                // 获取历史指标
+                try {
+                    Map<String, Object> historyMetrics = prometheusService.getHistoryMetrics(hours, instanceId, podInstance);
+                    podMetrics.put("historyMetrics", historyMetrics);
+                } catch (Exception e) {
+                    podMetrics.put("historyError", e.getMessage());
+                }
+
+                podMetricsList.add(podMetrics);
+            }
+
+            // 构建对比结果
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("instanceId", instanceId);
+            result.put("instanceName", instance.getInstanceName());
+            result.put("totalPods", pods.size());
+            result.put("analysisTimeRange", Map.of(
+                    "startTimestamp", startTime,
+                    "endTimestamp", endTime,
+                    "startTimeFormatted", startTimeStr,
+                    "endTimeFormatted", endTimeStr,
+                    "durationHours", hours
+            ));
+            result.put("podMetrics", podMetricsList);
+
+            // 简要对比分析（识别负载不均衡）
+            Map<String, Object> comparisonSummary = generatePodComparisonSummary(podMetricsList);
+            result.put("comparisonSummary", comparisonSummary);
+
+            return result;
+        } catch (Exception e) {
+            log.error("Failed to compare pod performance for instance: {}", instanceId, e);
+            return Map.of("error", "Pod性能对比失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 生成 Pod 对比摘要.
+     */
+    private Map<String, Object> generatePodComparisonSummary(List<Map<String, Object>> podMetricsList) {
+        Map<String, Object> summary = new LinkedHashMap<>();
+
+        if (podMetricsList.isEmpty()) {
+            summary.put("message", "没有可用的 Pod 数据");
+            return summary;
+        }
+
+        // 找出 CPU 使用率最高和最低的 Pod
+        String highestCpuPod = null;
+        String lowestCpuPod = null;
+        double highestCpu = 0;
+        double lowestCpu = Double.MAX_VALUE;
+
+        // 找出内存使用率最高和最低的 Pod
+        String highestMemPod = null;
+        String lowestMemPod = null;
+        double highestMem = 0;
+        double lowestMem = Double.MAX_VALUE;
+
+        for (Map<String, Object> podData : podMetricsList) {
+            String podName = (String) podData.get("podName");
+            Map<String, Object> metrics = (Map<String, Object>) podData.get("metrics");
+
+            if (metrics != null) {
+                // CPU 使用率
+                Object cpuUsageObj = metrics.get("systemUsage");
+                if (cpuUsageObj instanceof Number) {
+                    double cpu = ((Number) cpuUsageObj).doubleValue();
+                    if (cpu > highestCpu) {
+                        highestCpu = cpu;
+                        highestCpuPod = podName;
+                    }
+                    if (cpu < lowestCpu) {
+                        lowestCpu = cpu;
+                        lowestCpuPod = podName;
+                    }
+                }
+
+                // 内存使用率
+                Object heapUsageObj = metrics.get("heapUsagePercent");
+                if (heapUsageObj instanceof Number) {
+                    double mem = ((Number) heapUsageObj).doubleValue();
+                    if (mem > highestMem) {
+                        highestMem = mem;
+                        highestMemPod = podName;
+                    }
+                    if (mem < lowestMem) {
+                        lowestMem = mem;
+                        lowestMemPod = podName;
+                    }
+                }
+            }
+        }
+
+        // 记录对比结果
+        if (highestCpuPod != null && lowestCpuPod != null) {
+            summary.put("highestCpuPod", highestCpuPod);
+            summary.put("highestCpuPercent", String.format("%.1f%%", highestCpu * 100));
+            summary.put("lowestCpuPod", lowestCpuPod);
+            summary.put("lowestCpuPercent", String.format("%.1f%%", lowestCpu * 100));
+            double cpuDiff = (highestCpu - lowestCpu) * 100;
+            summary.put("cpuDifference", String.format("%.1f%%", cpuDiff));
+
+            // 负载不均衡警告
+            if (cpuDiff > 30) {
+                summary.put("cpuWarning", "⚠️ CPU负载差异较大（>" + String.format("%.0f%%", cpuDiff) + "），可能存在负载不均衡");
+            }
+        }
+
+        if (highestMemPod != null && lowestMemPod != null) {
+            summary.put("highestMemPod", highestMemPod);
+            summary.put("highestMemPercent", String.format("%.1f%%", highestMem));
+            summary.put("lowestMemPod", lowestMemPod);
+            summary.put("lowestMemPercent", String.format("%.1f%%", lowestMem));
+            double memDiff = highestMem - lowestMem;
+            summary.put("memDifference", String.format("%.1f%%", memDiff));
+
+            // 内存差异警告
+            if (memDiff > 20) {
+                summary.put("memWarning", "⚠️ 内存使用差异较大（>" + String.format("%.0f%%", memDiff) + "），需关注内存分配");
+            }
+        }
+
+        return summary;
+    }
+
+    /**
+     * 按 Pod 维度分析压测结果.
+     */
+    private Object executeAnalyzePodStressTest(Map<String, Object> args) {
+        String instanceId = getRequiredStringArg(args, "instanceId");
+        Long testId = getOptionalLongArg(args, "testId");
+        String language = getStringArg(args, "language", "zh");
+
+        try {
+            // 获取实例信息
+            GatewayInstanceEntity instance = gatewayInstanceService.getInstanceByInstanceId(instanceId);
+            if (instance == null) {
+                return Map.of("error", "网关实例不存在: " + instanceId);
+            }
+
+            // 获取压测信息
+            com.leoli.gateway.admin.model.StressTest test;
+            if (testId != null) {
+                test = stressTestService.getTest(testId);
+            } else {
+                // 获取该实例最近的压测记录
+                List<?> tests = stressTestService.getTestsForInstance(instanceId);
+                if (tests == null || tests.isEmpty()) {
+                    return Map.of("error", "该实例没有压测记录");
+                }
+                test = (com.leoli.gateway.admin.model.StressTest) tests.get(0);
+            }
+
+            if (test == null) {
+                return Map.of("error", "压测记录不存在");
+            }
+
+            // 获取 Pod 列表
+            List<Map<String, Object>> pods = gatewayInstanceService.getInstancePods(instance.getId());
+            if (pods == null || pods.isEmpty()) {
+                return Map.of("error", "该实例没有运行中的 Pod");
+            }
+
+            // 获取压测时间范围
+            LocalDateTime startTime = test.getStartTime();
+            LocalDateTime endTime = test.getEndTime();
+            if (startTime == null || endTime == null) {
+                return Map.of("error", "压测时间信息不完整");
+            }
+
+            long startTimeEpoch = startTime.atZone(java.time.ZoneId.systemDefault()).toEpochSecond();
+            long endTimeEpoch = endTime.atZone(java.time.ZoneId.systemDefault()).toEpochSecond();
+
+            // 调用 AiAnalysisService 进行 Pod 维度压测分析
+            String analysis = aiAnalysisService.analyzePodStressTest(instanceId, testId, startTimeEpoch, endTimeEpoch, language);
+
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("instanceId", instanceId);
+            result.put("instanceName", instance.getInstanceName());
+            result.put("testId", test.getId());
+            result.put("testName", test.getTestName());
+            result.put("totalPods", pods.size());
+            result.put("podNames", pods.stream().map(p -> p.get("name")).toList());
+            result.put("startTime", startTime.toString());
+            result.put("endTime", endTime.toString());
+            result.put("analysis", analysis);
+
+            return result;
+        } catch (Exception e) {
+            log.error("Failed to analyze pod stress test for instance: {}", instanceId, e);
+            return Map.of("error", "Pod维度压测分析失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 获取可选的 Long 类型参数.
+     */
+    private Long getOptionalLongArg(Map<String, Object> args, String key) {
+        Object value = args.get(key);
+        if (value == null) return null;
+        if (value instanceof Number) return ((Number) value).longValue();
+        try {
+            return Long.parseLong(value.toString());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
     // ===================== 工具结果类 =====================
 
     public static class ToolResult {
@@ -3041,12 +3477,29 @@ public class ToolExecutor {
             return new ToolResult(false, true, null, null, toolName, preview);
         }
 
-        public boolean isSuccess() { return success; }
-        public boolean isPendingConfirmation() { return pendingConfirmation; }
-        public Object getData() { return data; }
-        public String getError() { return error; }
-        public String getToolName() { return toolName; }
-        public Map<String, Object> getConfirmationPreview() { return confirmationPreview; }
+        public boolean isSuccess() {
+            return success;
+        }
+
+        public boolean isPendingConfirmation() {
+            return pendingConfirmation;
+        }
+
+        public Object getData() {
+            return data;
+        }
+
+        public String getError() {
+            return error;
+        }
+
+        public String getToolName() {
+            return toolName;
+        }
+
+        public Map<String, Object> getConfirmationPreview() {
+            return confirmationPreview;
+        }
 
         /**
          * 转换为 JSON 字符串（用于返回给 AI）
