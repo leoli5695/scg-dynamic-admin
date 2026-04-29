@@ -259,14 +259,35 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
      * - DISCOVERY: lb://serviceId (no mark) → SCG native ReactiveLoadBalancer handles
      */
     private void transformUriForServiceType(ServerWebExchange exchange, String serviceId, ServiceBindingType type) {
-        // Build new URI with appropriate scheme (path/query handled by downstream filters)
+        // Get current request URL (contains path and query after StripPrefix etc.)
+        URI currentUrl = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR);
+
+        // Build new URI with appropriate scheme, but preserve path and query
         String scheme = (type == ServiceBindingType.STATIC) ? "static" : "lb";
-        URI newUri = URI.create(scheme + "://" + serviceId);
+
+        URI newUri;
+        if (currentUrl != null) {
+            // Preserve path and query from current URL
+            StringBuilder uriBuilder = new StringBuilder(scheme + "://" + serviceId);
+            if (currentUrl.getPath() != null && !currentUrl.getPath().isEmpty()) {
+                uriBuilder.append(currentUrl.getPath());
+            }
+            if (currentUrl.getQuery() != null && !currentUrl.getQuery().isEmpty()) {
+                uriBuilder.append("?").append(currentUrl.getQuery());
+            }
+            newUri = URI.create(uriBuilder.toString());
+        } else {
+            // Fallback: no path/query available
+            newUri = URI.create(scheme + "://" + serviceId);
+        }
+
         exchange.getAttributes().put(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR, newUri);
 
         if (type == ServiceBindingType.STATIC) {
             exchange.getAttributes().put(ORIGINAL_STATIC_URI_ATTR, "static://" + serviceId);
         }
+
+        log.debug("Transformed URI: {} -> {} (path preserved)", currentUrl, newUri);
     }
 
     /**

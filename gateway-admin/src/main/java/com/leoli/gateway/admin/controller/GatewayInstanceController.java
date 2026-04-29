@@ -1,7 +1,9 @@
 package com.leoli.gateway.admin.controller;
 
 import com.leoli.gateway.admin.dto.InstanceCreateRequest;
+import com.leoli.gateway.admin.dto.ScaleInstanceRequest;
 import com.leoli.gateway.admin.model.GatewayInstanceEntity;
+import com.leoli.gateway.admin.service.ClusterHealthService;
 import com.leoli.gateway.admin.service.GatewayInstanceService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +29,9 @@ public class GatewayInstanceController {
 
     @Autowired
     private GatewayInstanceService instanceService;
+
+    @Autowired
+    private ClusterHealthService clusterHealthService;
 
     @Value("${nacos.server-addr:localhost:8848}")
     private String nacosServerAddr;
@@ -238,6 +243,39 @@ public class GatewayInstanceController {
     }
 
     /**
+     * Scale instance - unified API for replicas and/or spec modification.
+     * Supports horizontal scaling (replicas) and vertical scaling (spec) in one call.
+     */
+    @PutMapping("/{id}/scale")
+    public ResponseEntity<Map<String, Object>> scaleInstance(
+            @PathVariable Long id,
+            @RequestBody ScaleInstanceRequest request) {
+        try {
+            GatewayInstanceEntity instance = instanceService.scaleInstance(id, request);
+            log.info("Scaled instance {}: replicas={}, spec={}",
+                    id, request.getReplicas(), request.getSpecType());
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 200);
+            result.put("message", "Instance scaled successfully");
+            result.put("data", instance);
+            return ResponseEntity.ok(result);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            log.warn("Failed to scale instance: {}", e.getMessage());
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 400);
+            result.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(result);
+        } catch (Exception e) {
+            log.error("Error scaling instance", e);
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 500);
+            result.put("message", "Failed to scale instance: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(result);
+        }
+    }
+
+    /**
      * Update instance replicas (direct scale, no restart).
      */
     @PutMapping("/{id}/replicas")
@@ -334,6 +372,96 @@ public class GatewayInstanceController {
             Map<String, Object> result = new HashMap<>();
             result.put("code", 500);
             result.put("message", "Failed to update image: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(result);
+        }
+    }
+
+    /**
+     * Get instance events (Kubernetes Events for the instance's Pods).
+     */
+    @GetMapping("/{id}/events")
+    public ResponseEntity<Map<String, Object>> getInstanceEvents(
+            @PathVariable Long id,
+            @RequestParam(required = false, defaultValue = "3600") Integer sinceSeconds,
+            @RequestParam(required = false, defaultValue = "50") Integer limit) {
+        try {
+            Map<String, Object> events = instanceService.getInstanceEvents(id, sinceSeconds, limit);
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 200);
+            result.put("message", "success");
+            result.put("data", events);
+            return ResponseEntity.ok(result);
+        } catch (IllegalArgumentException e) {
+            log.warn("Failed to get instance events: {}", e.getMessage());
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 404);
+            result.put("message", e.getMessage());
+            return ResponseEntity.status(404).body(result);
+        } catch (Exception e) {
+            log.error("Error getting instance events", e);
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 500);
+            result.put("message", "Failed to get instance events: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(result);
+        }
+    }
+
+    /**
+     * Get cluster health score for an instance.
+     * Returns health score based on node status, pod health, and resource availability.
+     */
+    @GetMapping("/{id}/health-score")
+    public ResponseEntity<Map<String, Object>> getInstanceHealthScore(@PathVariable Long id) {
+        try {
+            GatewayInstanceEntity instance = instanceService.getInstanceById(id);
+            Map<String, Object> health = clusterHealthService.getClusterHealth(
+                    instance.getClusterId(), instance.getNamespace());
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 200);
+            result.put("message", "success");
+            result.put("data", health);
+            return ResponseEntity.ok(result);
+        } catch (IllegalArgumentException e) {
+            log.warn("Failed to get health score: {}", e.getMessage());
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 404);
+            result.put("message", e.getMessage());
+            return ResponseEntity.status(404).body(result);
+        } catch (Exception e) {
+            log.error("Error getting health score", e);
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 500);
+            result.put("message", "Failed to get health score: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(result);
+        }
+    }
+
+    /**
+     * Get cluster resource metrics for an instance.
+     * Returns node and pod resource information.
+     */
+    @GetMapping("/{id}/resource-metrics")
+    public ResponseEntity<Map<String, Object>> getInstanceResourceMetrics(@PathVariable Long id) {
+        try {
+            GatewayInstanceEntity instance = instanceService.getInstanceById(id);
+            Map<String, Object> metrics = clusterHealthService.getResourceMetrics(
+                    instance.getClusterId(), instance.getNamespace(), instance.getInstanceId());
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 200);
+            result.put("message", "success");
+            result.put("data", metrics);
+            return ResponseEntity.ok(result);
+        } catch (IllegalArgumentException e) {
+            log.warn("Failed to get resource metrics: {}", e.getMessage());
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 404);
+            result.put("message", e.getMessage());
+            return ResponseEntity.status(404).body(result);
+        } catch (Exception e) {
+            log.error("Error getting resource metrics", e);
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 500);
+            result.put("message", "Failed to get resource metrics: " + e.getMessage());
             return ResponseEntity.internalServerError().body(result);
         }
     }

@@ -46,7 +46,7 @@ public class TrustedProxyProperties {
      * <p>
      * Enable this for internal deployments where all proxies are within the private network.
      */
-    private boolean trustPrivateNetworks = true;
+    private boolean trustPrivateNetworks = false;
 
     /**
      * Which IP to use from X-Forwarded-For chain.

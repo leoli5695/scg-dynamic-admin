@@ -38,6 +38,18 @@ public class RouteResponse implements Serializable {
     private String serviceId;
 
     /**
+     * Service namespace for DISCOVERY type (Nacos namespace).
+     * Only applicable for lb:// services.
+     */
+    private String serviceNamespace;
+
+    /**
+     * Service group for DISCOVERY type (Nacos group).
+     * Only applicable for lb:// services.
+     */
+    private String serviceGroup;
+
+    /**
      * Service bindings for multi-service routing (for MULTI mode)
      */
     private java.util.List<RouteServiceBinding> services;

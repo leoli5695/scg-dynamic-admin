@@ -8,6 +8,9 @@ import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.loadbalancer.LoadBalancerUriTools;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
@@ -101,17 +104,39 @@ public class InstanceRetryExecutor {
         return chain.filter(exchange)
                 .doOnSuccess(aVoid -> {
                     healthChecker.recordSuccess(serviceId, instance.getHost(), instance.getPort());
-                    log.trace("Recorded success for instance {}:{}", instance.getHost(), instance.getPort());
+                    ServerHttpResponse response = exchange.getResponse();
+                    log.warn("[RETRY-SUCCESS] Request succeeded to instance {}:{}, statusCode={}, headersCount={}",
+                            instance.getHost(), instance.getPort(),
+                            response.getStatusCode(), response.getHeaders().size());
                 })
                 .onErrorResume(error -> {
                     healthChecker.recordFailure(serviceId, instance.getHost(), instance.getPort());
                     log.warn("Request to instance {}:{} failed: {}", instance.getHost(), instance.getPort(), error.getMessage());
 
-                    if (exchange.getResponse().isCommitted()) {
-                        log.error("Response already committed, cannot retry. Instance: {}:{}",
+                    ServerHttpResponse response = exchange.getResponse();
+
+                    // Check if response is already committed - cannot retry
+                    if (response.isCommitted()) {
+                        log.error("[RETRY-BLOCKED] Response already committed, cannot retry. Instance: {}:{}",
                                 instance.getHost(), instance.getPort());
                         return Mono.error(buildServiceUnavailableError(serviceId, instance, error));
                     }
+
+                    // CRITICAL FIX: Check if response statusCode was already set before error occurred
+                    // This is the ROOT CAUSE of "fake 200" (statusCode=200 but no body)
+                    // Netty sets statusCode=200 before body is written, so if error occurs after that,
+                    // we cannot retry because response state is already polluted
+                    HttpStatus currentStatus = (HttpStatus) response.getStatusCode();
+                    if (currentStatus != null) {
+                        log.error("[RETRY-BLOCKED] Response statusCode already set to {} BEFORE error occurred! " +
+                                "This indicates response state pollution. Cannot retry, returning 503. " +
+                                "Instance: {}:{}, Error: {}",
+                                currentStatus, instance.getHost(), instance.getPort(), error.getMessage());
+                        // Cannot safely retry - return 503 error immediately
+                        return Mono.error(buildServiceUnavailableError(serviceId, instance, error));
+                    }
+                    log.info("[RETRY-OK] Response state clean, can retry safely: statusCode=null, headersCount={}",
+                            response.getHeaders().size());
 
                     ServiceInstance next = instanceFilter.findAlternative(serviceId, allInstances, triedInstances);
                     if (next != null) {

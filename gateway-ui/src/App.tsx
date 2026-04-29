@@ -302,6 +302,8 @@ const App: React.FC = () => {
                   <Route path="request_replay" element={null} />
                   <Route path="copilot" element={null} />
                   <Route path="stress_test" element={null} />
+                  <Route path="events" element={null} />
+                  <Route path="resources" element={null} />
                 </Route>
                 <Route path="/kubernetes" element={<KubernetesPage />} />
               </Routes>

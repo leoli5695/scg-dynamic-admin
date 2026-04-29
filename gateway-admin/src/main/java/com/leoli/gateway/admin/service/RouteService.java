@@ -299,6 +299,20 @@ public class RouteService {
         // Get Nacos namespace from instance
         String nacosNamespace = getNacosNamespace(entity.getInstanceId());
 
+        // Fallback: preserve serviceNamespace/serviceGroup if frontend sends null/empty
+        // This is a defensive measure - the frontend should send correct values
+        RouteDefinition originalRoute = routeConverter.toDefinition(entity);
+        if ((route.getServiceNamespace() == null || route.getServiceNamespace().isEmpty())
+                && originalRoute.getServiceNamespace() != null && !originalRoute.getServiceNamespace().isEmpty()) {
+            route.setServiceNamespace(originalRoute.getServiceNamespace());
+            log.warn("Preserving original serviceNamespace for route {} (frontend sent null/empty)", routeId);
+        }
+        if ((route.getServiceGroup() == null || route.getServiceGroup().isEmpty())
+                && originalRoute.getServiceGroup() != null && !originalRoute.getServiceGroup().isEmpty()) {
+            route.setServiceGroup(originalRoute.getServiceGroup());
+            log.warn("Preserving original serviceGroup for route {} (frontend sent null/empty)", routeId);
+        }
+
         // Update entity
         entity.setRouteName(route.getRouteName());
         entity.setDescription(route.getDescription());
@@ -455,6 +469,8 @@ public class RouteService {
         response.setUri(def.getUri());
         response.setMode(def.getMode());
         response.setServiceId(def.getServiceId());
+        response.setServiceNamespace(def.getServiceNamespace());
+        response.setServiceGroup(def.getServiceGroup());
         response.setServices(def.getServices());
         response.setGrayRules(def.getGrayRules());
         response.setOrder(def.getOrder());

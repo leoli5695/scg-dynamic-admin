@@ -51,18 +51,32 @@ public class TrackedGlobalFilter implements GlobalFilter, Ordered {
         this(delegate, tracker, null);
     }
 
+    // Core filters that should NOT be circuit-breaked - they are gateway's essential functions
+    // If these fail, it indicates service problems that users need to investigate
+    private static final java.util.Set<String> CORE_FILTERS = java.util.Set.of(
+        "ReactiveLoadBalancerClient",
+        "NacosDiscoveryLoadBalancer",
+        "DiscoveryLoadBalancer",
+        "MultiServiceLoadBalancer",
+        "AuthGlobalFilter",
+        "RateLimiterGlobalFilter",
+        "HybridRateLimiterFilter",
+        "CircuitBreakerGlobalFilter"
+    );
+
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         // Create a deferred Mono - traceId is obtained inside defer to ensure
         // it's available (set by TraceIdGlobalFilter which runs first due to order)
         return Mono.defer(() -> {
             // ===== Circuit Breaker Check =====
-            if (circuitBreakerManager != null && circuitBreakerManager.shouldSkipFilter(filterName)) {
-                log.warn("Filter {} is circuit-breaked, skipping execution", filterName);
-                // Skip this filter and continue to downstream chain
+            // Core filters are never circuit-breaked - let them fail naturally to expose real problems
+            if (circuitBreakerManager != null && !CORE_FILTERS.contains(filterName) 
+                    && circuitBreakerManager.shouldSkipFilter(filterName)) {
+                // Auxiliary filter circuit broken - skip and continue (functional degradation)
+                log.warn("Auxiliary filter {} circuit-breaked, skipping execution (functional degradation)", filterName);
                 return chain.filter(exchange)
                     .doOnSuccess(v -> {
-                        // Record that filter was skipped
                         log.debug("Filter {} skipped (circuit breaker), downstream completed successfully", filterName);
                     })
                     .doOnError(error -> {

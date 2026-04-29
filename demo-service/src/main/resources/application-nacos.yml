@@ -2,6 +2,7 @@
 server:
   port: 9000
 
+
 spring:
   application:
     name: demo-service
@@ -24,6 +25,8 @@ spring:
       enabled: false
       discovery:
         enabled: false
+  profiles:
+    active: nacos-only
 
 management:
   endpoints:

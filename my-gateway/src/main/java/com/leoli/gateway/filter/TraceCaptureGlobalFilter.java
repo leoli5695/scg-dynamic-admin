@@ -19,6 +19,8 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpRequestDecorator;
+import org.springframework.http.server.reactive.ServerHttpResponse;
+import org.springframework.http.server.reactive.ServerHttpResponseDecorator;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.server.ServerWebExchange;
@@ -98,25 +100,6 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        // Check if this is an intermediate retry request - skip trace capture for those
-        // Only capture trace for the final result (success or max retries exhausted)
-        Boolean isRetryRequest = exchange.getAttribute(IS_RETRY_REQUEST_ATTR);
-        if (isRetryRequest != null && isRetryRequest) {
-            log.debug("Skipping trace capture for intermediate retry request: traceId={}",
-                    (String) exchange.getAttribute(TraceIdGlobalFilter.TRACE_ID_ATTR));
-            // Clear the retry flag so next attempt can decide if it's final
-            exchange.getAttributes().remove(IS_RETRY_REQUEST_ATTR);
-            return chain.filter(exchange);
-        }
-
-        // Check if trace was already captured for this request (prevents duplicates)
-        Boolean traceCaptured = exchange.getAttribute(TRACE_CAPTURED_ATTR);
-        if (traceCaptured != null && traceCaptured) {
-            log.debug("Trace already captured, skipping: traceId={}",
-                    (String) exchange.getAttribute(TraceIdGlobalFilter.TRACE_ID_ATTR));
-            return chain.filter(exchange);
-        }
-
         // Record start time
         final long startTime = System.currentTimeMillis();
         exchange.getAttributes().put(START_TIME_ATTR, startTime);
@@ -138,15 +121,55 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
         // Check if we need to capture request body (for POST/PUT)
         boolean shouldCaptureBody = shouldCaptureBody(request);
 
+        // Create a StringBuilder to capture response body (always capture for all requests including retries)
+        StringBuilder responseBodyBuilder = new StringBuilder();
+
+        // Wrap response to capture response body (always wrap, even for retry requests)
+        ServerHttpResponse decoratedResponse = new ServerHttpResponseDecorator(exchange.getResponse()) {
+            @Override
+            public Mono<Void> writeWith(org.reactivestreams.Publisher<? extends DataBuffer> body) {
+                // Use WARN level to ensure visibility for debugging
+                log.warn("[TRACE-CAPTURE] writeWith called: body type={}, statusCode={}, isCommitted={}, headersCount={}",
+                        body != null ? body.getClass().getSimpleName() : "null",
+                        getDelegate().getStatusCode(),
+                        getDelegate().isCommitted(),
+                        getDelegate().getHeaders().size());
+                if (body instanceof Flux) {
+                    Flux<? extends DataBuffer> flux = (Flux<? extends DataBuffer>) body;
+                    return super.writeWith(flux.doOnNext(dataBuffer -> {
+                        // Cache response body
+                        byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                        dataBuffer.read(bytes);
+                        String chunk = new String(bytes, StandardCharsets.UTF_8);
+                        if (responseBodyBuilder.length() + chunk.length() <= maxBodySize) {
+                            responseBodyBuilder.append(chunk);
+                        } else if (responseBodyBuilder.length() < maxBodySize) {
+                            int remaining = maxBodySize - responseBodyBuilder.length();
+                            responseBodyBuilder.append(chunk.substring(0, remaining)).append("...[TRUNCATED]");
+                        }
+                        // Reset buffer position for actual write
+                        dataBuffer.readPosition(0);
+                        log.info("[TRACE-CAPTURE] Response body chunk captured: {} bytes, total captured: {} bytes",
+                                bytes.length, responseBodyBuilder.length());
+                    }));
+                }
+                return super.writeWith(body);
+            }
+        };
+
+        ServerWebExchange decoratedExchange = exchange.mutate()
+                .response(decoratedResponse)
+                .build();
+
         if (shouldCaptureBody) {
-            return cacheRequestBodyAndContinue(exchange, chain, startTime, finalTraceId);
+            return cacheRequestBodyAndContinue(decoratedExchange, chain, startTime, finalTraceId, responseBodyBuilder);
         }
 
-        // Continue without caching body
-        return chain.filter(exchange).then(Mono.fromRunnable(() -> {
-            // Mark trace as captured to prevent duplicates on retries
-            exchange.getAttributes().put(TRACE_CAPTURED_ATTR, true);
-            afterRequest(exchange, startTime, finalTraceId, null);
+        // Continue without caching request body
+        return chain.filter(decoratedExchange).then(Mono.fromRunnable(() -> {
+            // Get captured response body
+            String responseBody = responseBodyBuilder.length() > 0 ? responseBodyBuilder.toString() : null;
+            afterRequest(decoratedExchange, startTime, finalTraceId, null, responseBody);
         }));
     }
 
@@ -154,7 +177,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
      * Cache request body and continue filter chain.
      */
     private Mono<Void> cacheRequestBodyAndContinue(ServerWebExchange exchange, GatewayFilterChain chain,
-                                                   long startTime, String traceId) {
+                                                   long startTime, String traceId, StringBuilder responseBodyBuilder) {
         ServerHttpRequest request = exchange.getRequest();
 
         return DataBufferUtils.join(request.getBody())
@@ -183,9 +206,9 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
 
                     return chain.filter(exchange.mutate().request(newRequest).build())
                             .then(Mono.fromRunnable(() -> {
-                                // Mark trace as captured to prevent duplicates on retries
-                                exchange.getAttributes().put(TRACE_CAPTURED_ATTR, true);
-                                afterRequest(exchange, startTime, traceId, requestBody);
+                                // Get captured response body
+                                String responseBody = responseBodyBuilder.length() > 0 ? responseBodyBuilder.toString() : null;
+                                afterRequest(exchange, startTime, traceId, requestBody, responseBody);
                             }));
                 });
     }
@@ -193,8 +216,27 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
     /**
      * Called after request completes to check if we should capture the trace.
      * Supports sampling rates for errors and normal requests.
+     * <p>
+     * Note: For retry scenarios, we only send trace on final result (success or all retries exhausted).
+     * Intermediate retry requests are skipped to avoid duplicate traces.
      */
-    private void afterRequest(ServerWebExchange exchange, long startTime, String traceId, String requestBody) {
+    private void afterRequest(ServerWebExchange exchange, long startTime, String traceId, String requestBody, String responseBody) {
+        // Check if this is an intermediate retry request - skip sending trace
+        // Only send trace for the final result (success or max retries exhausted)
+        Boolean isRetryRequest = exchange.getAttribute(IS_RETRY_REQUEST_ATTR);
+        if (isRetryRequest != null && isRetryRequest) {
+            log.debug("Skipping trace send for intermediate retry request: traceId={}, responseBody captured={}",
+                    traceId, responseBody != null);
+            return;
+        }
+
+        // Check if trace was already captured for this request (prevents duplicates)
+        Boolean traceCaptured = exchange.getAttribute(TRACE_CAPTURED_ATTR);
+        if (traceCaptured != null && traceCaptured) {
+            log.debug("Trace already captured, skipping: traceId={}", traceId);
+            return;
+        }
+
         long duration = System.currentTimeMillis() - startTime;
         int statusCode = exchange.getResponse().getStatusCode() != null ?
                 exchange.getResponse().getStatusCode().value() : 0;
@@ -224,7 +266,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
         if (captureErrors && isError) {
             if (samplingRateForErrors >= 100 || random < samplingRateForErrors) {
                 log.info("Capturing ERROR trace: traceId={}", traceId);
-                captureTrace(exchange, startTime, traceId, requestBody, duration, statusCode,
+                captureTrace(exchange, startTime, traceId, requestBody, responseBody, duration, statusCode,
                         true, false, replayType, replayable, "ERROR");
             }
             return;
@@ -233,7 +275,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
         // Slow requests: capture all if captureSlow is enabled
         if (captureSlow && isSlow) {
             log.info("Capturing SLOW trace: traceId={}, duration={}ms > threshold={}ms", traceId, duration, slowThresholdMs);
-            captureTrace(exchange, startTime, traceId, requestBody, duration, statusCode,
+            captureTrace(exchange, startTime, traceId, requestBody, responseBody, duration, statusCode,
                     false, true, replayType, replayable, "SLOW");
             return;
         }
@@ -242,7 +284,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
         if (captureAll) {
             if (samplingRate >= 100 || random < samplingRate) {
                 log.info("Capturing ALL trace: traceId={}, samplingRate={}, random={}", traceId, samplingRate, random);
-                captureTrace(exchange, startTime, traceId, requestBody, duration, statusCode,
+                captureTrace(exchange, startTime, traceId, requestBody, responseBody, duration, statusCode,
                         false, false, replayType, replayable, "ALL");
             } else {
                 log.info("Skipping trace due to sampling: traceId={}, samplingRate={}, random={}", traceId, samplingRate, random);
@@ -255,11 +297,15 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
      * Includes filter chain execution details if available.
      */
     private void captureTrace(ServerWebExchange exchange, long startTime, String traceId,
-                              String requestBody, long duration, int statusCode,
+                              String requestBody, String responseBody, long duration, int statusCode,
                               boolean isError, boolean isSlow, String replayType,
                               boolean replayable, String traceType) {
+        // Mark trace as captured to prevent duplicates
+        exchange.getAttributes().put(TRACE_CAPTURED_ATTR, true);
+
         try {
             ServerHttpRequest request = exchange.getRequest();
+            ServerHttpResponse response = exchange.getResponse();
 
             // Get original request URI from GATEWAY_ORIGINAL_REQUEST_URL_ATTR
             // Spring Cloud Gateway saves the original URL before any modifications (e.g., StripPrefix)
@@ -300,18 +346,34 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
                     java.time.Instant.ofEpochMilli(startTime),
                     java.time.ZoneId.systemDefault()).toString());
 
-            // Capture headers (filter sensitive ones)
-            Map<String, String> headers = new HashMap<>();
+            // Capture request headers (filter sensitive ones)
+            Map<String, String> requestHeaders = new HashMap<>();
             request.getHeaders().forEach((key, values) -> {
                 if (!isSensitiveHeader(key)) {
-                    headers.put(key, String.join(", ", values));
+                    requestHeaders.put(key, String.join(", ", values));
                 }
             });
-            trace.put("requestHeaders", objectMapper.writeValueAsString(headers));
+            trace.put("requestHeaders", objectMapper.writeValueAsString(requestHeaders));
 
             // Add request body if available
             if (requestBody != null && !requestBody.isEmpty()) {
                 trace.put("requestBody", requestBody);
+            }
+
+            // Capture response headers (filter sensitive ones)
+            Map<String, String> responseHeaders = new HashMap<>();
+            response.getHeaders().forEach((key, values) -> {
+                if (!isSensitiveHeader(key)) {
+                    responseHeaders.put(key, String.join(", ", values));
+                }
+            });
+            if (!responseHeaders.isEmpty()) {
+                trace.put("responseHeaders", objectMapper.writeValueAsString(responseHeaders));
+            }
+
+            // Add response body if available
+            if (responseBody != null && !responseBody.isEmpty()) {
+                trace.put("responseBody", responseBody);
             }
 
             // Add target instance if available

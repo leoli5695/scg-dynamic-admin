@@ -116,3 +116,4 @@ spec:
   - name: raft-internal
     port: 9849
     targetPort: 9849
+    nodePort: 31849

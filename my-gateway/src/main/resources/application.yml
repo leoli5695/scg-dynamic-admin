@@ -127,7 +127,13 @@ gateway:
   # Admin service URL for health status sync and API calls
   admin:
     url: ${GATEWAY_ADMIN_URL:http://127.0.0.1:9090}
-  
+
+  # Timeout Configuration
+  # Default timeout values applied when no timeout strategy is configured
+  timeout:
+    default-connect-timeout: ${GATEWAY_TIMEOUT_CONNECT:1000}
+    default-response-timeout: ${GATEWAY_TIMEOUT_RESPONSE:30000}
+
   # Heartbeat Configuration
   # Gateway reports heartbeat to Admin Console for instance health monitoring
   heartbeat:

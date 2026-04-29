@@ -2,6 +2,7 @@ package com.leoli.gateway.admin.repository;
 
 import com.leoli.gateway.admin.model.DiagnosticHistoryEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -66,6 +67,14 @@ public interface DiagnosticHistoryRepository extends JpaRepository<DiagnosticHis
     /**
      * Delete old history (older than specified days).
      */
+    @Modifying
     @Query("DELETE FROM DiagnosticHistoryEntity d WHERE d.createdAt < :cutoff")
     void deleteOldHistory(@Param("cutoff") LocalDateTime cutoff);
+
+    /**
+     * Delete all history by instance ID.
+     */
+    @Modifying
+    @Query("DELETE FROM DiagnosticHistoryEntity d WHERE d.instanceId = :instanceId")
+    int deleteByInstanceId(@Param("instanceId") String instanceId);
 }

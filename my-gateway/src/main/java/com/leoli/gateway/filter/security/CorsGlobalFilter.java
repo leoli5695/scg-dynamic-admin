@@ -12,6 +12,7 @@ import org.springframework.core.Ordered;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
@@ -76,8 +77,7 @@ public class CorsGlobalFilter implements GlobalFilter, Ordered {
         List<String> allowedOrigins = getStringListValue(config, "allowedOrigins");
         if (!isOriginAllowed(origin, allowedOrigins)) {
             log.warn("CORS preflight rejected for origin: {}", origin);
-            response.setStatusCode(HttpStatus.FORBIDDEN);
-            return response.setComplete();
+            return writeCorsForbiddenResponse(response, origin);
         }
 
         // Add CORS headers
@@ -179,5 +179,21 @@ public class CorsGlobalFilter implements GlobalFilter, Ordered {
     @Override
     public int getOrder() {
         return FilterOrderConstants.CORS;
+    }
+
+    /**
+     * Write CORS forbidden response with error body.
+     * Returns HTTP 403 with JSON body explaining the CORS rejection.
+     */
+    private Mono<Void> writeCorsForbiddenResponse(ServerHttpResponse response, String origin) {
+        response.setStatusCode(HttpStatus.FORBIDDEN);
+        response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+
+        String body = String.format(
+                "{\"httpStatus\":403,\"code\":403,\"error\":\"Forbidden\",\"message\":\"CORS preflight request rejected: origin '%s' is not allowed\",\"data\":null}",
+                origin != null ? origin : "unknown"
+        );
+
+        return response.writeWith(Mono.just(response.bufferFactory().wrap(body.getBytes())));
     }
 }

@@ -25,6 +25,10 @@ import static org.springframework.cloud.gateway.support.ServerWebExchangeUtils.G
  * Timeout global filter.
  * Writes timeout configuration into route metadata so that SCG's
  * underlying NettyRoutingFilter can apply per-route timeouts.
+ * <p>
+ * Priority logic:
+ * - No timeout strategy configured → use default (from application.yml)
+ * - Timeout strategy configured → use user-defined values
  *
  * @author leoli
  */
@@ -44,16 +48,25 @@ public class TimeoutGlobalFilter implements GlobalFilter, Ordered {
         String routeId = RouteUtils.getRouteId(exchange);
         Map<String, Object> config = strategyManager.getTimeoutConfig(routeId);
 
-        if (config == null) {
-            return chain.filter(exchange);
-        }
+        // Determine connect timeout:
+        // - No timeout strategy: use default from properties
+        // - Timeout strategy configured: use user-defined value or fallback to default
+        int connectTimeout;
+        int responseTimeout;
 
-        int connectTimeout = config.get("connectTimeout") != null 
-                ? ((Number) config.get("connectTimeout")).intValue() 
-                : timeoutProperties.getDefaultConnectTimeout();
-        int responseTimeout = config.get("responseTimeout") != null 
-                ? ((Number) config.get("responseTimeout")).intValue() 
-                : timeoutProperties.getDefaultResponseTimeout();
+        if (config == null) {
+            // No timeout strategy configured → use defaults
+            connectTimeout = timeoutProperties.getDefaultConnectTimeout();
+            responseTimeout = timeoutProperties.getDefaultResponseTimeout();
+        } else {
+            // Timeout strategy configured → use user-defined or fallback to default
+            connectTimeout = config.get("connectTimeout") != null
+                    ? ((Number) config.get("connectTimeout")).intValue()
+                    : timeoutProperties.getDefaultConnectTimeout();
+            responseTimeout = config.get("responseTimeout") != null
+                    ? ((Number) config.get("responseTimeout")).intValue()
+                    : timeoutProperties.getDefaultResponseTimeout();
+        }
 
         logger.debug("Applying timeout for route {}: connect={}ms, response={}ms",
                 routeId, connectTimeout, responseTimeout);

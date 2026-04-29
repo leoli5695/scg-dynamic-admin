@@ -124,6 +124,7 @@
 /* ==================== Overview Stats ==================== */
 .instance-overview-stats {
   padding: var(--space-6);
+  overflow: visible;
 }
 
 .instance-stat-card {
@@ -132,6 +133,7 @@
   border-radius: var(--radius-lg);
   padding: var(--space-4);
   transition: border-color var(--duration-fast) var(--ease-default);
+  overflow: visible;
 }
 
 .instance-stat-card:hover {
@@ -231,4 +233,20 @@
   .instance-detail-tabs .ant-tabs-tab .anticon {
     display: none;
   }
+}
+
+/* ==================== Events Tab ==================== */
+.event-card-warning {
+  background: rgba(255, 77, 79, 0.05);
+  border-left: 3px solid var(--error-color);
+}
+
+.event-card-normal {
+  background: rgba(82, 196, 26, 0.05);
+  border-left: 3px solid var(--success-color);
+}
+
+.event-card-warning:hover,
+.event-card-normal:hover {
+  background: var(--bg-card);
 }

@@ -473,7 +473,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
   };
 
   // Handle filter bar click in waterfall chart
-  const handleFilterBarClick = (execution: FilterChainExecution) => {
+  const handleFilterBarClick = (execution: FilterExecutionBar) => {
     setSelectedFilterExecution(execution);
     setFilterDetailDrawerVisible(true);
   };
@@ -1307,17 +1307,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
             {/* Filter Execution Detail Drawer */}
             <FilterExecutionDetailDrawer
               visible={filterDetailDrawerVisible}
-              execution={selectedFilterExecution ? {
-                filterName: selectedFilterExecution.filterName,
-                order: selectedFilterExecution.filterOrder,
-                startTimeOffset: 0,
-                selfTimeMs: selectedFilterExecution.durationMs * 0.3,
-                totalTimeMs: selectedFilterExecution.durationMs,
-                downstreamMs: selectedFilterExecution.durationMs * 0.7,
-                success: selectedFilterExecution.success,
-                errorMessage: selectedFilterExecution.errorMessage,
-                timePercentage: selectedFilterExecution.timePercentage
-              } : null}
+              execution={selectedFilterExecution}
               onClose={() => setFilterDetailDrawerVisible(false)}
               instanceId={selectedTrace?.instanceId}
             />

@@ -1,11 +1,41 @@
 # Simple runtime image - uses pre-built jar
 # Build jar first: mvn clean package -DskipTests
+# Using graalvm (Oracle Linux based) with required tools
 
 FROM ghcr.io/graalvm/graalvm-community:17
 WORKDIR /app
 
-# Install curl for health check
-RUN microdnf install -y curl tzdata && microdnf clean all
+# Install useful tools for debugging
+RUN microdnf install -y \
+    curl \
+    wget \
+    unzip \
+    tar \
+    gzip \
+    net-tools \
+    procps-ng \
+    vim-minimal \
+    less \
+    nc \
+    iputils \
+    bind-utils \
+    lsof \
+    strace \
+    tcpdump \
+    jq \
+    findutils \
+    diffutils \
+    patch \
+    file \
+    which \
+    && microdnf clean all
+
+# Copy local Arthas package (faster build, no network dependency)
+COPY arthas-bin.zip /tmp/arthas.zip
+RUN mkdir -p /opt/arthas && \
+    unzip -q /tmp/arthas.zip -d /opt/arthas && \
+    rm /tmp/arthas.zip && \
+    chmod +x /opt/arthas/*.jar
 
 # Create non-root user for security
 RUN groupadd -r gateway && useradd -r -g gateway -d /home/gateway gateway
@@ -16,8 +46,8 @@ RUN mkdir -p /home/gateway && chown -R gateway:gateway /home/gateway
 # Copy pre-built jar (build locally first)
 COPY target/my-gateway-1.0.0.jar app.jar
 
-# Set ownership
-RUN chown -R gateway:gateway /app
+# Set ownership (including Arthas directory)
+RUN chown -R gateway:gateway /app /opt/arthas
 
 # Switch to non-root user
 USER gateway

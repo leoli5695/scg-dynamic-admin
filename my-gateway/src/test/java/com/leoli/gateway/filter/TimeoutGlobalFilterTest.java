@@ -59,10 +59,10 @@ class TimeoutGlobalFilterTest {
         filter = new TimeoutGlobalFilter();
         org.springframework.test.util.ReflectionTestUtils.setField(filter, "strategyManager", strategyManager);
         org.springframework.test.util.ReflectionTestUtils.setField(filter, "timeoutProperties", timeoutProperties);
-        
-        lenient().when(timeoutProperties.getDefaultConnectTimeout()).thenReturn(5000);
+
+        lenient().when(timeoutProperties.getDefaultConnectTimeout()).thenReturn(1000);
         lenient().when(timeoutProperties.getDefaultResponseTimeout()).thenReturn(30000);
-        
+
         lenient().when(exchange.getRequest()).thenReturn(request);
         lenient().when(chain.filter(any(ServerWebExchange.class))).thenReturn(Mono.empty());
     }
@@ -72,19 +72,43 @@ class TimeoutGlobalFilterTest {
     class TimeoutConfigurationTests {
 
         @Test
-        @DisplayName("Should apply timeout config to route")
-        void shouldApplyTimeoutConfig() {
-            // Given
-            Map<String, Object> config = new HashMap<>();
-            config.put("connectTimeout", 5000);
-            config.put("responseTimeout", 30000);
-            
+        @DisplayName("Should apply default timeout when no strategy configured")
+        void shouldApplyDefaultTimeoutWhenNoStrategy() {
+            // Given - no timeout strategy configured
             Route route = Route.async()
                     .id(ROUTE_ID)
                     .uri(URI.create("http://localhost:8080"))
                     .predicate(e -> true)
                     .build();
-            
+
+            when(strategyManager.getTimeoutConfig(ROUTE_ID)).thenReturn(null);
+            when(exchange.getAttribute(anyString())).thenReturn(route);
+            when(exchange.getAttributes()).thenReturn(new HashMap<>());
+
+            // When
+            Mono<Void> result = filter.filter(exchange, chain);
+
+            // Then
+            StepVerifier.create(result)
+                    .verifyComplete();
+            verify(timeoutProperties).getDefaultConnectTimeout();
+            verify(timeoutProperties).getDefaultResponseTimeout();
+        }
+
+        @Test
+        @DisplayName("Should apply user-defined timeout when strategy configured")
+        void shouldApplyUserDefinedTimeoutWhenStrategyConfigured() {
+            // Given - timeout strategy with user-defined values
+            Map<String, Object> config = new HashMap<>();
+            config.put("connectTimeout", 5000);
+            config.put("responseTimeout", 60000);
+
+            Route route = Route.async()
+                    .id(ROUTE_ID)
+                    .uri(URI.create("http://localhost:8080"))
+                    .predicate(e -> true)
+                    .build();
+
             when(strategyManager.getTimeoutConfig(ROUTE_ID)).thenReturn(config);
             when(exchange.getAttribute(anyString())).thenReturn(route);
             when(exchange.getAttributes()).thenReturn(new HashMap<>());
@@ -99,17 +123,20 @@ class TimeoutGlobalFilterTest {
         }
 
         @Test
-        @DisplayName("Should skip when no timeout config")
-        void shouldSkipWhenNoConfig() {
-            // Given
+        @DisplayName("Should use default values when strategy config values are null")
+        void shouldUseDefaultValuesWhenConfigValuesNull() {
+            // Given - timeout strategy but no explicit values
+            Map<String, Object> config = new HashMap<>();
+
             Route route = Route.async()
                     .id(ROUTE_ID)
                     .uri(URI.create("http://localhost:8080"))
                     .predicate(e -> true)
                     .build();
-            
+
+            when(strategyManager.getTimeoutConfig(ROUTE_ID)).thenReturn(config);
             when(exchange.getAttribute(anyString())).thenReturn(route);
-            when(strategyManager.getTimeoutConfig(ROUTE_ID)).thenReturn(null);
+            when(exchange.getAttributes()).thenReturn(new HashMap<>());
 
             // When
             Mono<Void> result = filter.filter(exchange, chain);
@@ -117,41 +144,16 @@ class TimeoutGlobalFilterTest {
             // Then
             StepVerifier.create(result)
                     .verifyComplete();
-            verify(chain).filter(exchange);
+            verify(timeoutProperties).getDefaultConnectTimeout();
+            verify(timeoutProperties).getDefaultResponseTimeout();
         }
 
         @Test
         @DisplayName("Should handle route without route attribute")
         void shouldHandleNoRouteAttribute() {
-            // Given
-            // When route is null, RouteUtils.getRouteId returns "unknown"
+            // Given - no route attribute
             when(exchange.getAttribute(anyString())).thenReturn(null);
             when(strategyManager.getTimeoutConfig("unknown")).thenReturn(null);
-
-            // When
-            Mono<Void> result = filter.filter(exchange, chain);
-
-            // Then
-            StepVerifier.create(result)
-                    .verifyComplete();
-        }
-
-        @Test
-        @DisplayName("Should use default values when config values are null")
-        void shouldUseDefaultValues() {
-            // Given
-            Map<String, Object> config = new HashMap<>();
-            // Empty config - should use defaults
-            
-            Route route = Route.async()
-                    .id(ROUTE_ID)
-                    .uri(URI.create("http://localhost:8080"))
-                    .predicate(e -> true)
-                    .build();
-            
-            when(strategyManager.getTimeoutConfig(ROUTE_ID)).thenReturn(config);
-            when(exchange.getAttribute(anyString())).thenReturn(route);
-            when(exchange.getAttributes()).thenReturn(new HashMap<>());
 
             // When
             Mono<Void> result = filter.filter(exchange, chain);

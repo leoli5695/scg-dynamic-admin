@@ -3,6 +3,7 @@ package com.leoli.gateway.admin.service;
 import com.leoli.gateway.admin.cache.InstanceNamespaceCache;
 import com.leoli.gateway.admin.center.ConfigCenterService;
 import com.leoli.gateway.admin.dto.InstanceCreateRequest;
+import com.leoli.gateway.admin.dto.ScaleInstanceRequest;
 import com.leoli.gateway.admin.model.GatewayInstanceEntity;
 import com.leoli.gateway.admin.model.InstanceSpec;
 import com.leoli.gateway.admin.model.InstanceStatus;
@@ -29,6 +30,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -314,7 +316,7 @@ public class GatewayInstanceService {
      * Get all instances.
      */
     public List<GatewayInstanceEntity> getAllInstances() {
-        List<GatewayInstanceEntity> instances = instanceRepository.findAll();
+        List<GatewayInstanceEntity> instances = instanceRepository.findByEnabledTrue();
         // Refresh service info from K8s for each instance
         for (GatewayInstanceEntity instance : instances) {
             refreshServiceInfoFromK8s(instance);
@@ -1038,6 +1040,153 @@ public class GatewayInstanceService {
     }
 
     /**
+     * Scale instance - unified method for replicas and/or spec modification.
+     * Can update replicas (horizontal scaling) and spec (vertical scaling) in one call.
+     *
+     * @param id      Instance ID
+     * @param request Scale request containing replicas and/or spec changes
+     * @return Updated instance entity
+     */
+    @Transactional
+    public GatewayInstanceEntity scaleInstance(Long id, ScaleInstanceRequest request) {
+        GatewayInstanceEntity instance = getInstanceById(id);
+
+        // Validate instance state
+        Integer currentStatus = instance.getStatusCode();
+        if (currentStatus != InstanceStatus.RUNNING.getCode() &&
+                currentStatus != InstanceStatus.STOPPED.getCode()) {
+            throw new IllegalStateException("Can only scale instance when it is running or stopped");
+        }
+
+        boolean replicasChanged = false;
+        boolean specChanged = false;
+        Integer newReplicas = request.getReplicas();
+        String newSpecType = request.getSpecType();
+        Double newCpuCores = request.getCpuCores();
+        Integer newMemoryMB = request.getMemoryMB();
+
+        // Validate and prepare replicas change
+        if (newReplicas != null) {
+            if (newReplicas < 1 || newReplicas > 10) {
+                throw new IllegalArgumentException("Replicas must be between 1 and 10");
+            }
+            if (!newReplicas.equals(instance.getReplicas())) {
+                replicasChanged = true;
+                instance.setReplicas(newReplicas);
+            }
+        }
+
+        // Validate and prepare spec change
+        Double finalCpuCores = newCpuCores;
+        Integer finalMemoryMB = newMemoryMB;
+        if (newSpecType != null) {
+            InstanceSpec spec = InstanceSpec.fromType(newSpecType);
+            if (!spec.isCustom()) {
+                finalCpuCores = spec.getCpuCores();
+                finalMemoryMB = spec.getMemoryMB();
+            }
+            if (finalCpuCores == null || finalMemoryMB == null) {
+                throw new IllegalArgumentException("CPU and memory must be specified for custom spec");
+            }
+            // Check if spec actually changed
+            if (!newSpecType.equals(instance.getSpecType()) ||
+                !finalCpuCores.equals(instance.getCpuCores()) ||
+                !finalMemoryMB.equals(instance.getMemoryMB())) {
+                specChanged = true;
+                instance.setSpecType(newSpecType);
+                instance.setCpuCores(finalCpuCores);
+                instance.setMemoryMB(finalMemoryMB);
+            }
+        }
+
+        // If nothing changed, return early
+        if (!replicasChanged && !specChanged) {
+            log.info("No changes requested for instance {}", id);
+            return instance;
+        }
+
+        KubernetesCluster cluster = clusterRepository.findById(instance.getClusterId())
+                .orElseThrow(() -> new IllegalArgumentException("Cluster not found"));
+
+        ApiClient client = getApiClient(cluster.getId(), cluster.getKubeconfig());
+        AppsV1Api appsApi = new AppsV1Api(client);
+
+        try {
+            V1Deployment deployment = appsApi.readNamespacedDeployment(
+                    instance.getDeploymentName(),
+                    instance.getNamespace()
+            ).execute();
+
+            // Update replicas if changed
+            if (replicasChanged) {
+                deployment.getSpec().setReplicas(newReplicas);
+                log.info("Updating replicas from {} to {}", instance.getReplicas(), newReplicas);
+            }
+
+            // Update spec (resources) if changed
+            if (specChanged) {
+                V1Container container = deployment.getSpec().getTemplate().getSpec().getContainers().get(0);
+                V1ResourceRequirements resources = container.getResources();
+                if (resources == null) {
+                    resources = new V1ResourceRequirements();
+                }
+
+                Map<String, Quantity> limits = new HashMap<>();
+                Map<String, Quantity> requests = new HashMap<>();
+                limits.put("cpu", new Quantity(finalCpuCores.toString()));
+                limits.put("memory", new Quantity(finalMemoryMB + "Mi"));
+                requests.put("cpu", new Quantity((finalCpuCores / 2) + ""));
+                requests.put("memory", new Quantity((finalMemoryMB / 2) + "Mi"));
+
+                resources.setLimits(limits);
+                resources.setRequests(requests);
+                container.setResources(resources);
+                log.info("Updating spec to {} (CPU: {}, Memory: {}MB)", newSpecType, finalCpuCores, finalMemoryMB);
+            }
+
+            // Apply changes to K8s
+            appsApi.replaceNamespacedDeployment(
+                    instance.getDeploymentName(),
+                    instance.getNamespace(),
+                    deployment
+            ).execute();
+
+            // Update status message
+            String statusMessage = buildScaleStatusMessage(replicasChanged, specChanged, newReplicas, newSpecType);
+            if (currentStatus == InstanceStatus.RUNNING.getCode()) {
+                if (specChanged) {
+                    // Spec change triggers pod restart
+                    instance.setStatus(InstanceStatus.STARTING.getDescription());
+                    instance.setStatusCode(InstanceStatus.STARTING.getCode());
+                }
+                instance.setStatusMessage(statusMessage);
+            }
+
+            log.info("Instance {} scaled successfully: {}", id, statusMessage);
+            return instanceRepository.save(instance);
+        } catch (ApiException e) {
+            log.error("Failed to scale instance {}: {}", id, e.getMessage());
+            throw new RuntimeException("Failed to scale instance: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Build status message for scale operation.
+     */
+    private String buildScaleStatusMessage(boolean replicasChanged, boolean specChanged,
+                                           Integer replicas, String specType) {
+        StringBuilder sb = new StringBuilder("Scaled: ");
+        if (replicasChanged) {
+            sb.append("replicas=").append(replicas);
+        }
+        if (specChanged) {
+            if (replicasChanged) sb.append(", ");
+            sb.append("spec=").append(specType);
+        }
+        return sb.toString();
+    }
+
+    /**
      * Scale instance replicas.
      */
     private GatewayInstanceEntity scaleInstance(GatewayInstanceEntity instance, int replicas) {
@@ -1543,5 +1692,133 @@ public class GatewayInstanceService {
         }
 
         return false;
+    }
+
+    /**
+     * Get Kubernetes Events for an instance's Pods.
+     * Returns events from the last sinceSeconds seconds, limited to limit items.
+     *
+     * @param id           Instance database ID
+     * @param sinceSeconds Time range in seconds (default 3600 = 1 hour)
+     * @param limit        Maximum number of events to return
+     * @return Map containing events list and statistics
+     */
+    public Map<String, Object> getInstanceEvents(Long id, Integer sinceSeconds, Integer limit) {
+        GatewayInstanceEntity instance = getInstanceById(id);
+        KubernetesCluster cluster = clusterRepository.findById(instance.getClusterId()).orElse(null);
+        if (cluster == null) {
+            log.warn("Cluster not found for instance {}: {}", id, instance.getClusterId());
+            Map<String, Object> result = new HashMap<>();
+            result.put("events", new ArrayList<>());
+            result.put("total", 0);
+            result.put("warningCount", 0);
+            result.put("normalCount", 0);
+            result.put("instanceId", instance.getInstanceId());
+            result.put("error", "Cluster not found: " + instance.getClusterId());
+            return result;
+        }
+
+        ApiClient client = getApiClient(cluster.getId(), cluster.getKubeconfig());
+        CoreV1Api coreApi = new CoreV1Api(client);
+
+        try {
+            // Get all Pods for this instance
+            String labelSelector = "gateway-instance-id=" + instance.getInstanceId();
+            V1PodList pods = coreApi.listNamespacedPod(instance.getNamespace())
+                    .labelSelector(labelSelector)
+                    .execute();
+
+            if (pods.getItems() == null || pods.getItems().isEmpty()) {
+                Map<String, Object> emptyResult = new HashMap<>();
+                emptyResult.put("events", new ArrayList<>());
+                emptyResult.put("total", 0);
+                emptyResult.put("warningCount", 0);
+                emptyResult.put("normalCount", 0);
+                emptyResult.put("instanceId", instance.getInstanceId());
+                return emptyResult;
+            }
+
+            // Build field selector for events related to these pods
+            List<String> podNames = pods.getItems().stream()
+                    .map(pod -> pod.getMetadata().getName())
+                    .toList();
+
+            // Query events for the namespace
+            CoreV1EventList eventList = coreApi.listNamespacedEvent(instance.getNamespace())
+                    .limit(limit)
+                    .execute();
+
+            // Filter events related to our instance's pods
+            List<Map<String, Object>> events = new ArrayList<>();
+            int warningCount = 0;
+            int normalCount = 0;
+
+            if (eventList.getItems() != null) {
+                OffsetDateTime cutoffTime = OffsetDateTime.now().minusSeconds(sinceSeconds);
+
+                for (CoreV1Event event : eventList.getItems()) {
+                    // Check if event is related to our pods
+                    if (event.getInvolvedObject() != null &&
+                            "Pod".equals(event.getInvolvedObject().getKind()) &&
+                            podNames.contains(event.getInvolvedObject().getName())) {
+
+                        // Check time range
+                        OffsetDateTime eventTime = null;
+                        if (event.getLastTimestamp() != null) {
+                            eventTime = event.getLastTimestamp();
+                        } else if (event.getEventTime() != null) {
+                            eventTime = event.getEventTime();
+                        }
+
+                        if (eventTime == null || eventTime.isAfter(cutoffTime)) {
+                            Map<String, Object> eventMap = new HashMap<>();
+                            eventMap.put("type", event.getType());
+                            eventMap.put("reason", event.getReason());
+                            eventMap.put("message", event.getMessage());
+                            eventMap.put("count", event.getCount() != null ? event.getCount() : 1);
+                            eventMap.put("firstTimestamp", event.getFirstTimestamp());
+                            eventMap.put("lastTimestamp", event.getLastTimestamp() != null ?
+                                    event.getLastTimestamp() : event.getEventTime());
+                            eventMap.put("objectName", event.getInvolvedObject().getName());
+                            eventMap.put("objectKind", event.getInvolvedObject().getKind());
+                            eventMap.put("namespace", instance.getNamespace());
+                            events.add(eventMap);
+
+                            if ("Warning".equalsIgnoreCase(event.getType())) {
+                                warningCount++;
+                            } else {
+                                normalCount++;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Sort by lastTimestamp descending (most recent first)
+            events.sort((a, b) -> {
+                OffsetDateTime timeA = (OffsetDateTime) a.get("lastTimestamp");
+                OffsetDateTime timeB = (OffsetDateTime) b.get("lastTimestamp");
+                if (timeA == null && timeB == null) return 0;
+                if (timeA == null) return 1;
+                if (timeB == null) return -1;
+                return timeB.compareTo(timeA);
+            });
+
+            // Limit results
+            if (events.size() > limit) {
+                events = events.subList(0, limit);
+            }
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("instanceId", instance.getInstanceId());
+            result.put("events", events);
+            result.put("total", events.size());
+            result.put("warningCount", warningCount);
+            result.put("normalCount", normalCount);
+            return result;
+        } catch (ApiException e) {
+            log.error("Failed to get instance events: {}", e.getMessage());
+            throw new RuntimeException("Failed to get instance events: " + e.getMessage());
+        }
     }
 }

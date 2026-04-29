@@ -10,13 +10,20 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Filter-level Circuit Breaker Manager.
  * 
- * Manages circuit breaker state for each individual filter, enabling
- * automatic isolation of problematic filters based on health score.
+ * Manages circuit breaker state for auxiliary filters, enabling
+ * automatic isolation of problematic non-core filters based on health score.
+ * 
+ * IMPORTANT: Core filters (LoadBalancer, Auth, RateLimiter) are NOT managed here.
+ * Core filters should fail naturally to expose real service problems for user investigation.
+ * Only auxiliary filters (TraceCapture, AccessLog, Cache, etc.) can be circuit-breaked
+ * for functional degradation.
  * 
  * States:
  * - CLOSED: Normal operation, filter executes normally
- * - OPEN: Circuit broken, filter is skipped (bypassed)
+ * - OPEN: Circuit broken, auxiliary filter is skipped (functional degradation)
  * - HALF_OPEN: Testing state, limited requests pass through to check recovery
+ * 
+ * Default: DISABLED - must be enabled via gateway-admin API when needed
  * 
  * @author leoli
  */
@@ -28,12 +35,13 @@ public class FilterCircuitBreakerManager {
     private final List<FilterCircuitBreakerEvent> eventHistory = new ArrayList<>();
     private final int maxHistorySize = 1000;
 
-    // Default configuration
+    // Default configuration - DISABLED by default, enable via gateway-admin API
+    // Only affects auxiliary filters, core filters are excluded from circuit breaker
     private volatile int healthScoreThreshold = 60;      // Health score threshold to trigger OPEN
     private volatile double failureRateThreshold = 50.0; // Failure rate threshold (%)
     private volatile long waitDurationMs = 30000;         // OPEN -> HALF_OPEN wait time (30s)
     private volatile int halfOpenRequestCount = 5;       // Requests allowed in HALF_OPEN state
-    private volatile boolean enabled = true;              // Global enable/disable
+    private volatile boolean enabled = false;             // Disabled by default - enable via gateway-admin API
 
     /**
      * Circuit breaker states.

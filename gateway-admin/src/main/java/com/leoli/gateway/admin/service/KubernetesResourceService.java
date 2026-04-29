@@ -245,7 +245,7 @@ public class KubernetesResourceService {
                     for (V1ContainerImage image : node.getStatus().getImages()) {
                         if (image.getNames() != null) {
                             image.getNames().stream()
-                                    .filter(n -> !n.startsWith("sha256:"))
+                                    .filter(n -> !n.startsWith("sha256:") && !n.contains("@sha256:"))
                                     .forEach(imageSet::add);
                         }
                     }

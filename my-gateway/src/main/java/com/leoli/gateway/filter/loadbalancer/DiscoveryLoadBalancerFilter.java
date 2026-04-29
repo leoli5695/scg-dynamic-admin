@@ -12,6 +12,7 @@ import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
 import org.springframework.core.Ordered;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 import org.springframework.web.server.ServerWebExchange;
@@ -22,6 +23,7 @@ import java.util.HashSet;
 import java.util.List;
 
 import static com.leoli.gateway.filter.loadbalancer.MultiServiceLoadBalancerFilter.ORIGINAL_STATIC_URI_ATTR;
+import static com.leoli.gateway.filter.loadbalancer.MultiServiceLoadBalancerFilter.SERVICE_BINDING_TYPE_ATTR;
 import static com.leoli.gateway.filter.loadbalancer.MultiServiceLoadBalancerFilter.TARGET_SERVICE_ID_ATTR;
 
 /**
@@ -83,6 +85,9 @@ public class DiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
         String targetServiceId = exchange.getAttribute(TARGET_SERVICE_ID_ATTR);
         String serviceId = targetServiceId != null ? targetServiceId : requestUri.getHost();
 
+        // Add X-Service-Source header to identify service origin (STATIC type)
+        addServiceSourceHeader(exchange, "static", serviceId);
+
         return chooseInstance(serviceId, exchange)
                 .flatMap(response -> {
                     if (!response.hasServer()) {
@@ -92,6 +97,18 @@ public class DiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
                     }
                     return executeWithRetry(exchange, chain, serviceId, response.getServer(), new HashSet<>());
                 });
+    }
+
+    /**
+     * Add X-Service-Source header to identify service origin.
+     * Format: "{type}-{serviceId}" (e.g., "static-demo-service", "discovery-user-service")
+     * Added to both request and response headers for visibility.
+     */
+    private void addServiceSourceHeader(ServerWebExchange exchange, String type, String serviceId) {
+        String serviceSource = type + "-" + serviceId;
+        // Add to response headers for visibility (request headers already sent)
+        exchange.getResponse().getHeaders().add("X-Service-Source", serviceSource);
+        log.debug("Added X-Service-Source header: {}", serviceSource);
     }
 
     private Mono<Response<ServiceInstance>> chooseInstance(String serviceId, ServerWebExchange exchange) {

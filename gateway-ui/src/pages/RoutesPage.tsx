@@ -863,6 +863,17 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
           ? serviceId
           : (services.find(svc => svc.serviceId === serviceId)?.name || serviceId);
 
+        // For Nacos services, lookup namespace/group from nacosServices list
+        let serviceNamespace: string | undefined;
+        let serviceGroup: string | undefined;
+        if (protocol === 'lb') {
+          const nacosService = nacosServices.find(ns => ns.serviceName === serviceId);
+          if (nacosService) {
+            serviceNamespace = nacosService.namespace || '';
+            serviceGroup = nacosService.group || 'DEFAULT_GROUP';
+          }
+        }
+
         return {
           serviceId: serviceId,
           serviceName: serviceName,
@@ -870,8 +881,8 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
           version: s.version,
           enabled: s.enabled !== false,
           type: bindingType,
-          serviceNamespace: s.serviceNamespace,  // From form field (onChange sets it)
-          serviceGroup: s.serviceGroup           // From form field (onChange sets it)
+          serviceNamespace: serviceNamespace,
+          serviceGroup: serviceGroup
         };
       });
 
@@ -986,25 +997,18 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
       routeData.services = serviceBindings.map((s: any) => {
         const uriParts = (s.serviceId || '').split('://');
         const protocol = uriParts[0] || 'static';
-        const serviceInfo = uriParts[1] || s.serviceId;
+        const serviceId = uriParts[1] || s.serviceId;
         const bindingType: ServiceBindingType = protocol === 'lb' ? 'DISCOVERY' : 'STATIC';
 
-        // For Nacos services (lb://), parse serviceName?namespace=xxx&group=yyy format
-        let serviceId: string;
+        // For Nacos services (lb://), lookup namespace/group from nacosServices list
         let serviceNamespace: string | undefined;
         let serviceGroup: string | undefined;
-
         if (protocol === 'lb') {
-          // Parse query parameters: serviceName?namespace=xxx&group=yyy
-          const [namePart, queryPart] = serviceInfo.split('?');
-          serviceId = namePart || serviceInfo;
-          if (queryPart) {
-            const params = new URLSearchParams(queryPart);
-            serviceNamespace = params.get('namespace') || undefined;
-            serviceGroup = params.get('group') || 'DEFAULT_GROUP';
+          const nacosService = nacosServices.find(ns => ns.serviceName === serviceId);
+          if (nacosService) {
+            serviceNamespace = nacosService.namespace || '';
+            serviceGroup = nacosService.group || 'DEFAULT_GROUP';
           }
-        } else {
-          serviceId = serviceInfo;
         }
 
         // For Nacos services (lb://), use serviceId directly as serviceName
@@ -1020,8 +1024,8 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
           version: s.version,
           enabled: s.enabled !== false,
           type: bindingType,
-          serviceNamespace: s.serviceNamespace,  // From form field (onChange sets it)
-          serviceGroup: s.serviceGroup           // From form field (onChange sets it)
+          serviceNamespace: serviceNamespace,
+          serviceGroup: serviceGroup
         };
       });
 

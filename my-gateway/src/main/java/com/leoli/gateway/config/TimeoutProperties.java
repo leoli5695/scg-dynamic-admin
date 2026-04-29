@@ -9,9 +9,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * <pre>
  * gateway:
  *   timeout:
- *     default-connect-timeout: 5000
+ *     default-connect-timeout: 1000
  *     default-response-timeout: 30000
  * </pre>
+ * <p>
+ * These defaults are applied when no timeout strategy is configured for a route.
  *
  * @author leoli
  */
@@ -20,11 +22,13 @@ public class TimeoutProperties {
 
     /**
      * Default connect timeout in milliseconds.
+     * Applied when no timeout strategy is configured.
      */
-    private int defaultConnectTimeout = 5000;
+    private int defaultConnectTimeout = 1000;
 
     /**
      * Default response timeout in milliseconds.
+     * Applied when no timeout strategy is configured.
      */
     private int defaultResponseTimeout = 30000;
 

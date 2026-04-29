@@ -84,6 +84,13 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
 
         // If no namespace/group override, let SCG's native filter handle it
         if (namespace == null && group == null) {
+            // Still add X-Service-Source header for DISCOVERY type services
+            ServiceBindingType serviceType = exchange.getAttribute(SERVICE_BINDING_TYPE_ATTR);
+            if (serviceType == ServiceBindingType.DISCOVERY) {
+                String targetServiceId = exchange.getAttribute(TARGET_SERVICE_ID_ATTR);
+                String serviceName = targetServiceId != null ? targetServiceId : url.getHost();
+                addServiceSourceHeader(exchange, "discovery", serviceName);
+            }
             log.debug("No namespace/group override for lb:// service: {}, using native SCG filter", url.getHost());
             return chain.filter(exchange);
         }
@@ -124,6 +131,9 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
                     URI newUri = buildUri(instance, url);
                     exchange.getAttributes().put(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR, newUri);
 
+                    // Add X-Service-Source header to identify service origin (DISCOVERY type)
+                    addServiceSourceHeader(exchange, "discovery", serviceName);
+
                     log.debug("Selected instance: {}:{} (weight={}) for service: {}, namespace: {}, group: {}",
                             instance.getHost(), instance.getPort(), instance.getMetadata().get("weight"),
                             serviceName, namespace, group);
@@ -131,6 +141,18 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
                     // Continue with the modified URI - downstream errors go to global handler
                     return chain.filter(exchange);
                 });
+    }
+
+    /**
+     * Add X-Service-Source header to identify service origin.
+     * Format: "{type}-{serviceId}" (e.g., "static-demo-service", "discovery-user-service")
+     * Added to both request and response headers for visibility.
+     */
+    private void addServiceSourceHeader(ServerWebExchange exchange, String type, String serviceId) {
+        String serviceSource = type + "-" + serviceId;
+        // Add to response headers for visibility (request headers already sent)
+        exchange.getResponse().getHeaders().add("X-Service-Source", serviceSource);
+        log.debug("Added X-Service-Source header: {}", serviceSource);
     }
 
     /**
