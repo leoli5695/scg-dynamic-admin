@@ -492,77 +492,185 @@ AI Copilot correctly identifies the real cause - overturning user's initial 404 
 
 ---
 
-## 20. AI Copilot - Stress Test Analysis
+## 20. AI Copilot - Stress Test Analysis (基于真实Prometheus和数据库数据)
 
-### 55.png - Request AI Analysis
-![Request AI Analysis](55.png)
+### 55.png - Performance Analysis Report
+![AI Performance Analysis](55.png)
 
-User asks AI to analyze stress test results from the last 2 minutes.
+AI Copilot生成压测性能分析报告，包含：
+- P99响应时间：596.0ms（>2000ms为严重，当前为警告级别）
+- 错误率：0.8（<0.1%为正常，当前警告）
+- 分析结论：响应时间极高（平均>2.5秒），这不是网关性能问题，而是下游服务延迟问题
+- 过滤器链性能分析表：
+  - NettyWriteResponse：P99 258.6ms（主要瓶颈）
+  - TraceCapture：P99 33.8ms（可接受）
+  - AccessLog：P99 54.3ms（可接受）
+  - NettyRouting：P99 49.6ms（可接受）
+- 关键发现：NettyWriteResponse的高自身时间表明下游服务响应时间慢
 
-### 56.png - AI Queries Prometheus
-![AI Prometheus](56.png)
+### 56.png - GC Pressure During Stress Test
+![AI GC Analysis](56.png)
 
-AI Copilot queries Prometheus for real-time metrics during the test period.
+压测期间GC压力分析表：
+- Young GC次数：压测前0次，压测中78.0次（警告）
+- Full GC次数：压测前0次，压测中10次（严重）
+- GC开销：压测前0%，压测中1.4%（警告）
+- 分配速率：28.87 MB/s（高压）
+- 晋升速率：6.75 MB/s（升高）
+- GC时间线：
+  - 压测前：无GC活动
+  - 压测中：78次Young GC（4.6秒总计），10次Full GC（1.8秒总计）- 严重问题
 
-### 57.png - AI Queries Database
-![AI Database](57.png)
+### 57.png - Root Cause Analysis & CPU Resources
+![AI Root Cause](57.png)
 
-AI Copilot queries database for stress test records and results.
+根因分析：高请求率导致：
+1. 快速对象分配（28.87 MB/s）
+2. Old Gen内存快速填满（从39MB跳到163MB）
+3. 在2分钟测试期间触发10次Full GC
 
-### 58.png - AI Data Aggregation
-![AI Aggregation](58.png)
+CPU和系统资源表：
+- 进程CPU：压测前3-5%，压测中100%（饱和）
+- 系统负载：压测前0.5-1.5，压测中1.64（高）
+- 线程数：54-57 → 66（正常增加）
+- 堆使用量：~60-80MB → 164MB（可接受）
+- CPU使用时间线：压测前3-5%，压测中CPU飙升至100%持续2分钟
 
-AI combines data from multiple sources (DB + Prometheus) for comprehensive analysis.
+### 58.png - Monitoring Data Trends
+![AI Data Trends](58.png)
 
-### 59.png - AI Analysis Report
-![AI Report](59.png)
+监控数据趋势：
+- 请求速率（req/s）：
+  - 压测前：0.17 → 0.38（正常流量）
+  - 压测中：47.6 → 155.1 → 130（负载测试）
+- 响应时间（ms）：
+  - 压测前：~4ms（优秀）
+  - 压测中：2102ms → 1820ms → 1478ms（退化）
+- 老年代内存（MB）：
+  - 压测前：稳定在39MB
+  - 压测中：跳至163MB，GC后70MB，结束时100MB
 
-AI-generated analysis report with:
-- Performance bottlenecks identified
-- Resource utilization insights
-- Error pattern analysis
+### 59.png - Root Cause: Downstream Service Latency
+![AI Downstream Latency](59.png)
 
-### 60.png - AI Recommendations
-![AI Recommendations](60.png)
+根因分析 - 主要问题：下游服务延迟
 
-AI provides actionable recommendations:
-- Configuration adjustments
-- Resource optimization
-- Scaling suggestions
+请求流程：
+```
+Client → Gateway（filters：<10ms）→ Downstream Service（2500+ ms）→ Response
+                                                    ↑
+                                            瓶颈在此
+```
 
-### 61.png - Response Time Analysis
-![AI Response Analysis](61.png)
+证据：
+1. NettyWriteResponse过滤器自身时间=553.8ms（等待下游服务）
+2. 网关过滤器处理非常快（<10ms总计）
+3. 高P99（5145ms）表明后端服务延迟方差大
 
-AI explains response time patterns during the test.
+次要问题：负载下的内存压力
+1. 压测期间高分配率（28.87 MB/s）
+2. 2分钟内触发10次Full GC
+3. Old Gen内存快速累积
 
-### 62.png - Error Analysis
-![AI Error Analysis](62.png)
+### 60.png - Optimization Recommendations
+![AI Optimization](60.png)
 
-AI analyzes any errors encountered during stress test.
+优化建议：
+- 高优先级
+  1. 优化下游服务（严重）
+     - 当前：后端响应时间~2.5秒
+     - 目标：<500ms
+     - 影响：整体响应时间将减少80%
+  - 具体行动：
+    - 检查后端服务日志查找慢查询
+    - 分析数据库查询性能
+    - 考虑缓存频繁访问的数据
+    - 审查后端服务资源限制（CPU/内存）
 
-### 63.png - Summary and Next Steps
-![AI Summary](63.png)
+### 61.png - JVM Tuning for High Load
+![AI JVM Tuning](61.png)
 
-AI summarizes findings and suggests next optimization steps.
+当前配置问题：
+- Heap Max：~495MB（对高并发太小）
+- Full GC在负载下频繁触发
+
+推荐设置：
+```
+# 增加堆大小
+-Xms1g -Xmx1g
+
+# 使用G1GC获得更好的低延迟性能
+-XX:+UseG1GC
+-XX:MaxGCPauseMillis=200
+-XX:G1HeapRegionSize=16m
+
+# 减少晋升率
+-XX:InitiatingHeapOccupancyPercent=45
+```
+
+### 62.png - Performance Comparison
+![AI Performance Comparison](62.png)
+
+性能对比表：
+
+| 组件 | 当前 | 目标 | 差距 |
+|------|------|------|------|
+| 网关处理 | <10ms | <20ms | ✅ 优秀 |
+| 后端响应 | ~2500ms | <500ms | ❌ 慢5倍 |
+| GC开销 | 1.30% | <1% | ⚠️ 超30% |
+| Full GC频率 | 10次/2分钟 | 0-1次/2分钟 | ❌ 多10倍 |
+| CPU饱和度 | 100% | <70% | ❌ 满负荷 |
+
+结论总结：
+1. ✅ 网关性能良好：过滤器处理时间<10ms
+2. ❌ 后端服务慢：响应时间>2.5秒
+3. ️ 内存压力：2分钟测试期间10次Full GC
+4. ❌ CPU饱和：负载下100% CPU使用率
 
 ---
 
-## 21. AI Copilot - Route Disabled Analysis
+## 21. AI Copilot - Route Disabled Analysis (404错误根因诊断)
 
-### 64.png - User Disabled All Routes
+### 64.png - Routes All Disabled
 ![Disabled Routes](64.png)
 
-User disabled all routes in the system and asks why requests return 404.
+路由管理页面显示：
+- 2个路由，0个启用，2个禁用
+- service-01-api路由：标记为"Disabled"
+- route-01路由：标记为"Disabled"
+- 两个路由都处于禁用状态
 
-### 65.png - AI Route Status Query
-![AI Route Status](65.png)
+### 65.png - AI 404 Error Analysis Report
+![AI 404 Analysis](65.png)
 
-AI Copilot queries all routes and finds they are all disabled (enabled=false).
+AI 404错误分析报告：
+- 验证结果（基于工具）：
+  - 根因确认：路由未匹配，导致404
+  - 直接原因：Route route-01（ID: 608cc154...）已禁用（enabled=false）
+- 注意：之前声称"路由匹配"的陈述不正确。similar_route_match工具明确返回matched=false，消息为"没有匹配到任何路由，请求将返回404"
+- 诊断摘要：
+  - Route Match： FAILED - 没有路由匹配，路由已禁用
+  - Route Enabled：❌ DISABLED - route-01已禁用（enabled=false）
 
-### 66.png - AI Explains 404 Cause
-![AI Explains 404](66.png)
+### 66.png - AI Route Configuration Details
+![AI Route Details](66.png)
 
-AI Copilot correctly explains: "All routes are disabled. No route can match the request, so the gateway returns 404. Enable at least one route to resolve this."
+AI详细路由配置分析：
+- 诊断摘要（续）：
+  - Gateway Health：✅ HEALTHY - 总体得分100/100
+  - Backend Services：✅ CONFIGURED
+- 路由配置详情（route-01）：
+  - 路由名称：route-01
+  - 路由ID：608cc154-9917-4798-ae07-40b16e5f0023
+  - Enabled：false ← 这是根本原因
+  - 谓词：Path=/api/**
+  - 过滤器：
+    - StripPrefix（parts=1）
+    - AddResponseHeader（aaaa=66666）
+  - 后端服务（加权负载均衡）：
+    - service-01（50%，STATIC）：10.48.118.31:9001 ✅ 健康
+    - 127.0.0.1:9003
+    - demo-service（50%，DISCOVERY）：10.42.0.114:9004 ✅ 健康
 
 ---
 
