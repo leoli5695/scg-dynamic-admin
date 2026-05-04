@@ -552,13 +552,25 @@ cd my-gateway && mvn test
 │       ├── components/         # Reusable UI components
 │       └── i18n.ts             # Internationalization (EN/CN)
 │
+├── docs/                       # Documentation
+│   ├── features/               # Feature-specific documentation
+│   ├── operations/             # Deployment & operations guides
+│   ├── images/                 # Screenshots & diagrams
+│   ├── ARCHITECTURE.md         # System architecture
+│   ├── FEATURES.md             # Feature index
+│   └── QUICK_START.md          # Setup guide
+│
 ├── demo-service/               # Sample backend service
 │
-└── k8s/                        # Kubernetes deployment manifests
-    ├── nacos.yaml              # Nacos deployment
-    ├── redis.yaml              # Redis deployment
-    ├── my-gateway.yaml         # Gateway deployment
-    └── prometheus.yaml         # Prometheus monitoring
+├── k8s/                        # Kubernetes deployment manifests
+│   ├── nacos.yaml              # Nacos deployment
+│   ├── redis.yaml              # Redis deployment
+│   ├── my-gateway.yaml         # Gateway deployment
+│   └── prometheus.yaml         # Prometheus monitoring
+│
+├── prometheus/                 # Prometheus configuration
+│
+└── scripts/                    # Utility scripts
 ```
 
 ---
