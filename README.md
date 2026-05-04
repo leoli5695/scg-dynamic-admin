@@ -4,6 +4,8 @@
 
 **📺 [Watch Full Feature Demo on YouTube](https://youtu.be/u4CjBDdKTQ4)**
 
+**📸 [View Feature Screenshots](docs/images/SCREENSHOTS.md)** - If you prefer screenshots over video demo, browse 66 annotated screenshots covering all features.
+
 [![Java](https://img.shields.io/badge/Java-17+-orange)](https://openjdk.org/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2-brightgreen)](https://spring.io/projects/spring-boot)
 [![Spring Cloud Gateway](https://img.shields.io/badge/Spring%20Cloud%20Gateway-4.1-blue)](https://spring.io/projects/spring-cloud-gateway)
