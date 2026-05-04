@@ -1,723 +1,256 @@
 # Feature Screenshots Guide
 
-> Complete visual documentation of all gateway features with screenshot annotations.
+> Complete visual documentation of all API Gateway features - 66 annotated screenshots covering the entire platform.
 
 ---
 
-## Table of Contents
+## 1. Login (Screenshot 01)
 
-| Section | Screenshots | Description |
-|---------|-------------|-------------|
-| [1. Login](#1-login) | 01 | System login interface |
-| [2. Kubernetes Cluster Management](#2-kubernetes-cluster-management) | 02-05 | Import and configure K8s clusters |
-| [3. Gateway Instance Management](#3-gateway-instance-management) | 06-09 | Deploy gateway instances to K8s |
-| [4. Nacos Configuration](#4-nacos-configuration) | 10-11 | Config center & service discovery |
-| [5. Service Management](#5-service-management) | 12 | Backend service configuration |
-| [6. AI Copilot - Route Creation](#6-ai-copilot---route-creation) | 13-16 | Create routes via natural language |
-| [7. Multi-Service Routing (Gray Release)](#7-multi-service-routing-gray-release) | 17 | Weight-based traffic splitting |
-| [8. Strategy Configuration](#8-strategy-configuration) | 18-20 | Protection policies overview |
-| [9. SSL Certificate Management](#9-ssl-certificate-management) | 21-22 | Certificate upload and monitoring |
-| [10. Request Tracing](#10-request-tracing) | 23 | Request chain analysis |
-| [11. Real-time Monitoring](#11-real-time-monitoring) | 24-31 | JVM, CPU, HTTP metrics |
-| [12. Alert Configuration](#12-alert-configuration) | 32 | Threshold alerts setup |
-| [13. Access Logs](#13-access-logs) | 33-35 | Request logging & viewing |
-| [14. Audit Logs](#14-audit-logs) | 36-37 | Configuration change history |
-| [15. System Diagnostic](#15-system-diagnostic) | 38-39 | Health check & diagnostics |
-| [16. Traffic Topology](#16-traffic-topology) | 40 | Real-time traffic visualization |
-| [17. Filter Chain Analysis](#17-filter-chain-analysis) | 41 | Filter execution statistics |
-| [18. Stress Testing](#18-stress-testing) | 42-49 | Load testing with monitoring |
-| [19. AI Copilot - Error Debugging](#19-ai-copilot---error-debugging) | 50-54 | AI assists in debugging 404 claims |
-| [20. AI Copilot - Stress Test Analysis](#20-ai-copilot---stress-test-analysis) | 55-63 | AI analyzes test results from DB & Prometheus |
-| [21. AI Copilot - Route Disabled Analysis](#21-ai-copilot---route-disabled-analysis) | 64-66 | AI explains 404 caused by disabled routes |
+**01.png** - 系统登录界面，支持用户名/密码认证，默认管理员账号：admin/admin123。
 
 ---
 
-## 1. Login
+## 2. Kubernetes Cluster Management (Screenshots 02-05)
 
-### 01.png - Login Interface
-![Login](01.png)
+**02-05.png** - 集群管理全流程：
 
-System login page with:
-- Username/password authentication
-- JWT-based session management
-- Default credentials: `admin` / `admin123`
-
----
-
-## 2. Kubernetes Cluster Management
-
-### 02.png - Kubernetes Clusters Page
-![K8s Clusters](02.png)
-
-Kubernetes cluster management overview showing registered clusters.
-
-### 03.png - Add Cluster Dialog
-![Add Cluster](03.png)
-
-Cluster registration form:
-- Cluster name and API server URL
-- Authentication token
-- Namespace selection
-
-### 04.png - Cluster Connection Test
-![Cluster Test](04.png)
-
-Validating cluster connection before saving.
-
-### 05.png - Cluster Detail View
-![Cluster Detail](05.png)
-
-Cluster details including:
-- Connected status
-- Available namespaces
-- Resource quotas
+- **02.png**: Kubernetes集群管理主界面，展示已注册的集群列表
+- **03.png**: 添加集群对话框，填写集群名称、API Server地址、认证Token等信息
+- **04.png**: 集群连接测试，验证与Kubernetes API的连通性
+- **05.png**: 集群详情页，展示连接状态、可用Namespace、资源配额等信息
 
 ---
 
-## 3. Gateway Instance Management
+## 3. Gateway Instance Management (Screenshots 06-09)
 
-### 06.png - Instance List
-![Instance List](06.png)
+**06-09.png** - 网关实例的创建、部署和运行管理：
 
-Gateway instances overview showing deployed instances across clusters.
-
-### 07.png - Create Gateway Instance
-![Create Instance](07.png)
-
-Instance creation form:
-- Instance name
-- Cluster selection
-- Spec type (small/medium/large/xlarge)
-- Namespace isolation
-- Replica count
-
-### 08.png - Instance Overview
-![Instance Overview](08.png)
-
-Instance status dashboard showing:
-- Running state (Starting → Running)
-- Heartbeat status
-- Pod replicas
-- Resource usage
-
-### 09.png - 404 Error After Instance Creation
-![404 After Creation](09.png)
-
-Calling gateway after instance creation returns 404 because no routes are configured yet. This demonstrates the need for route configuration before the gateway can proxy traffic.
+- **06.png**: 实例列表，展示已部署的网关实例
+- **07.png**: 创建网关实例表单，配置实例名称、集群选择、规格、Namespace隔离、副本数等
+- **08.png**: 实例概览，展示实例从Starting到Running的状态变化，包含心跳状态、Pod副本数、运行时长等
+- **09.png**: 创建实例成功后，访问网关返回404错误，因为尚未配置任何路由
 
 ---
 
-## 4. Nacos Configuration
+## 4. Nacos Configuration (Screenshots 10-11)
 
-### 10.png - Nacos Config Center
-![Nacos Config](10.png)
+**10-11.png** - Nacos配置中心和注册中心界面：
 
-Nacos configuration management console showing:
-- gateway-routes.json
-- gateway-services.json
-- gateway-strategies.json
-
-### 11.png - Nacos Service Discovery
-![Nacos Discovery](11.png)
-
-Nacos service registration showing registered backend services and their instances.
+- **10.png**: Nacos配置列表，展示配置中心中的配置项
+- **11.png**: 服务详情，展示demo-service的实例列表，包括实例地址、权重、健康状态等
 
 ---
 
-## 5. Service Management
+## 5. Service Management (Screenshot 12)
 
-### 12.png - Service Management Page
-![Service Management](12.png)
-
-Service configuration interface:
-- Service ID and name
-- Discovery type (Nacos/Consul/Static)
-- Namespace and group settings
-- Instance list with health status
+**12.png** - 服务管理界面，管理后端微服务。展示service-02和service-01等后端服务，包含健康实例列表、服务地址、权重配置等信息。
 
 ---
 
-## 6. AI Copilot - Route Creation
+## 6. AI Copilot - Route Creation (Screenshots 13-16)
 
-### 13.png - AI Copilot Chat
-![AI Chat](13.png)
+**13-16.png** - AI助手通过自然语言创建路由的完整流程：
 
-Using AI Copilot to create route via natural language: "Create a route to demo-service"
-
-### 14.png - AI Tool Execution
-![AI Tool](14.png)
-
-AI Copilot autonomously calls tools to:
-- Check existing routes
-- Create new route with proper predicates
-- Bind to specified service
-
-### 15.png - Route Created Successfully
-![Route Created](15.png)
-
-AI Copilot confirms route creation with details about the new route.
-
-### 16.png - Request Success via AI-created Route
-![Request Success](16.png)
-
-Calling gateway with route created by AI Copilot - returns successful response, proving the AI-created route works correctly.
+- **13.png**: AI Copilot工具界面，展示可用的35+个AI工具
+- **14.png**: 用户通过自然语言描述需求："创建一个路由，将/api/service01的请求转发到service-01"
+- **15.png**: AI助手调用工具，自动生成路由配置并提交
+- **16.png**: 通过AI助手创建的路由调用成功，Postman测试返回200 OK
 
 ---
 
-## 7. Multi-Service Routing (Gray Release)
+## 7. Multi-Service Routing / Gray Release (Screenshot 17)
 
-### 17.png - Multi-Service Route Configuration
-![Multi-Service](17.png)
-
-Route with multiple backend services for gray release:
-- Weight-based distribution (e.g., 90% to v1, 10% to v2)
-- Header/Cookie-based routing rules
-- Canary deployment support
+**17.png** - 多服务路由配置（灰度发布）。展示基于Header的流量分流策略：Header `aaa=111` 路由到service-01，Header `aaa=222` 路由到demo-service，实现精确的流量控制。
 
 ---
 
-## 8. Strategy Configuration
+## 8. Strategy Configuration (Screenshots 18-20)
 
-### 18.png - Strategy Types Overview
-![Strategy Types](18.png)
+**18-20.png** - 支持的策略类型总览：
 
-Available strategy types including:
-- Rate Limiting
-- IP Filtering
-- Authentication (JWT/API Key/Basic/HMAC/OAuth2)
-- Circuit Breaker
-- Timeout Control
-- Retry Mechanism
-- Request/Response Transform
-- Mock Response
-- Response Caching
-- CORS
-- Header Operations
-
-### 19.png - Strategy List
-![Strategy List](19.png)
-
-Configured strategies with scope (GLOBAL or ROUTE_BOUND).
-
-### 20.png - Create Authentication Strategy
-![Auth Strategy](20.png)
-
-Creating authentication strategy:
-- Select auth type (JWT/API Key/etc.)
-- Configure validation parameters
-- Bind to specific route
+- **18.png**: 策略类型选择对话框，展示所有支持的策略分类
+- **19.png**: 各类策略详细列表，包括IP黑名单/白名单、限流、熔断、超时、重试、降级等数十种保护策略
+- **20.png**: 鉴权配置界面，创建Basic Auth鉴权策略并绑定到具体路由（service-01-api）
 
 ---
 
-## 9. SSL Certificate Management
+## 9. SSL Certificate Management (Screenshots 21-22)
 
-### 21.png - Certificate List
-![Certificates](21.png)
+**21-22.png** - SSL证书管理：
 
-SSL certificates management showing:
-- Certificate name
-- Domain(s)
-- Expiry date
-- Status indicators
-
-### 22.png - Upload Certificate
-![Upload Cert](22.png)
-
-Certificate upload form supporting:
-- PEM, PKCS12, JKS formats
-- Multi-domain certificates
-- Automatic expiry monitoring
+- **21.png**: 证书列表，展示已上传的SSL证书（如baidu-cert用于www.baidu.com），显示证书格式（PEM）、有效期、状态（Valid）等
+- **22.png**: 证书详情，展示证书完整信息和绑定状态
 
 ---
 
-## 10. Request Tracing
+## 10. Request Tracing (Screenshot 23)
 
-### 23.png - Request Chain Visualization
-![Request Chain](23.png)
-
-Request tracing showing:
-- Full request path through filters
-- Each filter's execution time
-- Request/response headers
-- Target instance information
+**23.png** - 请求链路追踪，集成Jaeger分布式追踪系统。展示完整的请求链路详情，包括Trace ID、Span ID、各服务调用链、耗时分布等。
 
 ---
 
-## 11. Real-time Monitoring
+## 11. Real-time Monitoring (Screenshots 24-31)
 
-### 24.png - Monitoring Dashboard Overview
-![Monitoring Overview](24.png)
+**24-31.png** - 全面的实时监控仪表板：
 
-Real-time metrics dashboard showing JVM, system, and HTTP statistics.
-
-### 25.png - JVM Metrics
-![JVM Metrics](25.png)
-
-JVM monitoring:
-- Heap memory usage
-- GC count and time
-- Thread count
-
-### 26.png - CPU Metrics
-![CPU Metrics](26.png)
-
-CPU monitoring:
-- Process CPU usage
-- System CPU usage
-- Historical trends
-
-### 27.png - HTTP Metrics
-![HTTP Metrics](27.png)
-
-HTTP statistics:
-- Requests per second
-- Average response time
-- Error rate
-
-### 28.png - Status Code Distribution
-![Status Codes](28.png)
-
-HTTP status distribution chart:
-- 2xx success responses
-- 4xx client errors
-- 5xx server errors
-
-### 29.png - Response Time Percentiles
-![Response Percentiles](29.png)
-
-Response time analysis:
-- P50, P95, P99 latencies
-- Slow request detection
-
-### 30.png - Historical Trends
-![Historical Trends](30.png)
-
-Time-series charts showing metric changes over time.
-
-### 31.png - Gateway Instance Pod Monitoring
-![Pod Monitoring](31.png)
-
-Kubernetes pod metrics during stress test:
-- Pod resource usage
-- Replica status
-- Container health
+- **24.png**: 监控概览，展示JVM内存、GC、线程等核心指标
+- **25.png**: CPU使用率监控
+- **26.png**: HTTP请求指标（QPS、响应时间、错误率）
+- **27.png**: 历史趋势图，展示指标随时间的变化
+- **28.png**: Pod选择器，支持选择特定Pod查看其指标
+- **29.png**: 路由表状态监控
+- **30-31.png**: 更多监控维度和图表展示
 
 ---
 
-## 12. Alert Configuration
+## 12. Alert Configuration (Screenshot 32)
 
-### 32.png - Alert Thresholds
-![Alert Config](32.png)
-
-Alert configuration:
-- CPU threshold (process/system)
-- Memory threshold
-- HTTP error rate threshold
-- Response time threshold
-- Email notification settings
+**32.png** - 告警配置界面，支持设置邮件告警。可配置告警阈值（CPU、内存、响应时间等）、接收人邮箱、告警频率等。
 
 ---
 
-## 13. Access Logs
+## 13. Access Logs (Screenshots 33-35)
 
-### 33.png - Access Log Configuration
-![Access Log Config](33.png)
+**33-35.png** - 访问日志管理：
 
-Configure access logging:
-- Enable/disable per route
-- Log format (JSON)
-- Storage settings
-
-### 34.png - Access Log Viewer
-![Access Log Viewer](34.png)
-
-View access logs with:
-- Request timestamp
-- Client IP
-- Route matched
-- Response status
-- Latency
-
-### 35.png - Kubernetes Pod Log Viewer
-![K8s Pod Logs](35.png)
-
-Real-time log viewing from Kubernetes pods without SSH access.
+- **33.png**: 访问日志配置界面，支持Kubernetes PVC存储模式
+- **34.png**: 日志存储配置选项
+- **35.png**: 日志查看器，实时查看网关访问日志
 
 ---
 
-## 14. Audit Logs
+## 14. Audit Logs (Screenshots 36-37)
 
-### 36.png - Audit Log List
-![Audit Logs](36.png)
+**36-37.png** - 审计日志，记录所有配置变更历史：
 
-Configuration change history:
-- Who made the change
-- What was changed
-- When it occurred
-- Diff comparison
-
-### 37.png - Audit Log Detail with Rollback
-![Audit Detail](37.png)
-
-Detailed change view with rollback capability to restore previous configuration.
+- **36.png**: 审计日志列表，展示谁在什么时候做了什么修改
+- **37.png**: 变更详情，支持对比变更前后的配置差异，并提供一键回滚功能
 
 ---
 
-## 15. System Diagnostic
+## 15. System Diagnostic (Screenshots 38-39)
 
-### 38.png - System Health Check
-![Health Check](38.png)
+**38-39.png** - 系统诊断功能：
 
-Comprehensive health check showing:
-- Nacos connection status
-- Redis availability
-- Database health
-- JVM status
-
-### 39.png - Diagnostic Report
-![Diagnostic](39.png)
-
-System diagnostic results with recommendations for issues found.
+- **38.png**: 健康检查，检查Nacos连接、Redis可用性、数据库健康、JVM状态等
+- **39.png**: 诊断报告，展示系统健康评分（如87分）、各组件检查状态、优化建议等
 
 ---
 
-## 16. Traffic Topology
+## 16. Traffic Topology (Screenshot 40)
 
-### 40.png - Traffic Flow Visualization
-![Traffic Topology](40.png)
-
-Real-time traffic topology diagram showing:
-- Client → Gateway → Backend flow
-- Request distribution across instances
-- Service health indicators
+**40.png** - 流量拓扑图，实时可视化展示请求流量路径：gateway-01 → route-01 → service-01/demo-service，直观呈现流量分布和服务健康状态。
 
 ---
 
-## 17. Filter Chain Analysis
+## 17. Filter Chain Analysis (Screenshot 41)
 
-### 41.png - Filter Execution Statistics
-![Filter Chain](41.png)
-
-Filter chain performance analysis:
-- Each filter's self-time
-- P50/P95/P99 execution time
-- Slow filter detection
-- Optimization suggestions
+**41.png** - 过滤器链性能分析，展示每个过滤器的自身耗时、P99延迟、性能瓶颈识别和优化建议。帮助定位性能问题的根源。
 
 ---
 
-## 18. Stress Testing
+## 18. Stress Testing (Screenshots 42-49)
 
-### 42.png - Stress Test Configuration
-![Stress Test Config](42.png)
+**42-49.png** - 完整的压测流程，包括压测期间的监控变化：
 
-Configure load test:
-- Target route
-- Concurrent requests
-- Test duration
-- Request payload
-
-### 43.png - Stress Test Execution
-![Stress Test Running](43.png)
-
-Running stress test with live statistics.
-
-### 44.png - Real-time QPS During Test
-![QPS During Test](44.png)
-
-Requests per second chart during stress test.
-
-### 45.png - Response Time During Test
-![Response Time Test](45.png)
-
-Response time changes under load.
-
-### 46.png - Error Rate During Test
-![Error Rate Test](46.png)
-
-Error rate monitoring during stress test.
-
-### 47.png - Pod Resource Usage During Test
-![Pod Usage Test](47.png)
-
-Gateway pod CPU/memory usage during stress test - demonstrates K8s autoscaling potential.
-
-### 48.png - Stress Test Report
-![Stress Test Report](48.png)
-
-Complete test report with:
-- Total requests
-- Success/failure rate
-- Response time statistics
-- Throughput analysis
-
-### 49.png - Report Export Options
-![Report Export](49.png)
-
-Export stress test report to:
-- PDF
-- Excel
-- JSON
-- Markdown
-- Shareable link
+- **42.png**: 压测快速启动模板，预设多种测试场景
+- **43.png**: 压测配置界面，配置目标路由、并发数、持续时间、请求负载等
+- **44.png**: 压测执行中，实时QPS图表
+- **45.png**: 压测期间响应时间变化
+- **46.png**: 压测期间错误率监控
+- **47.png**: 压测期间网关Pod的CPU/内存资源使用情况（演示K8s自动扩缩容潜力）
+- **48.png**: 压测完成报告，包含总请求数、成功率、响应时间统计、吞吐量分析
+- **49.png**: 报告导出选项，支持PDF、Excel、JSON、Markdown等格式
 
 ---
 
-## 19. AI Copilot - Error Debugging
+## 19. AI Copilot - Error Debugging (Screenshots 50-54)
 
-### 50.png - User Claims 404 Error
-![Claim 404](50.png)
+**50-54.png** - AI助手协助调试404错误的精彩场景：
 
-User asks AI Copilot: "Why is my request returning 404?" - expecting an error investigation.
+用户声称请求返回404，要求AI助手帮忙排查。但AI助手通过工具查询后发现：路由实际上是可以匹配上的！AI助手推翻了用户的404结论，展示了AI Copilot的自主分析能力和工具调用能力。
 
-### 51.png - AI Tool Execution - Route Query
-![AI Route Query](51.png)
-
-AI Copilot autonomously queries route configuration to check if request path matches any route.
-
-### 52.png - AI Analysis Result
-![AI Analysis](52.png)
-
-AI Copilot analyzes the route predicates and determines the request SHOULD match successfully.
-
-### 53.png - AI Disproves User's Claim
-![AI Disproves](53.png)
-
-AI Copilot concludes: "The request should NOT return 404 based on route configuration. There might be another issue."
-
-### 54.png - Correct Diagnosis
-![Correct Diagnosis](54.png)
-
-AI Copilot correctly identifies the real cause - overturning user's initial 404 assumption with evidence from configuration analysis.
+- **50.png**: 用户向AI助手提出404问题
+- **51.png**: AI助手调用路由查询工具
+- **52.png**: AI助手分析路由谓词，发现请求应该能匹配
+- **53.png**: AI助手得出结论：请求不应该返回404，可能存在其他问题
+- **54.png**: AI助手给出正确诊断，推翻用户最初的404假设
 
 ---
 
-## 20. AI Copilot - Stress Test Analysis (基于真实Prometheus和数据库数据)
+## 20. AI Copilot - Stress Test Analysis (Screenshots 55-63)
 
-### 55.png - Performance Analysis Report
-![AI Performance Analysis](55.png)
+**55-63.png** - AI助手基于真实数据（数据库 + Prometheus）分析最近两分钟内的压测结果，并给出专业的分析与优化建议：
 
-AI Copilot生成压测性能分析报告，包含：
-- P99响应时间：596.0ms（>2000ms为严重，当前为警告级别）
-- 错误率：0.8（<0.1%为正常，当前警告）
-- 分析结论：响应时间极高（平均>2.5秒），这不是网关性能问题，而是下游服务延迟问题
-- 过滤器链性能分析表：
-  - NettyWriteResponse：P99 258.6ms（主要瓶颈）
-  - TraceCapture：P99 33.8ms（可接受）
-  - AccessLog：P99 54.3ms（可接受）
-  - NettyRouting：P99 49.6ms（可接受）
-- 关键发现：NettyWriteResponse的高自身时间表明下游服务响应时间慢
-
-### 56.png - GC Pressure During Stress Test
-![AI GC Analysis](56.png)
-
-压测期间GC压力分析表：
-- Young GC次数：压测前0次，压测中78.0次（警告）
-- Full GC次数：压测前0次，压测中10次（严重）
-- GC开销：压测前0%，压测中1.4%（警告）
-- 分配速率：28.87 MB/s（高压）
-- 晋升速率：6.75 MB/s（升高）
-- GC时间线：
-  - 压测前：无GC活动
-  - 压测中：78次Young GC（4.6秒总计），10次Full GC（1.8秒总计）- 严重问题
-
-### 57.png - Root Cause Analysis & CPU Resources
-![AI Root Cause](57.png)
-
-根因分析：高请求率导致：
-1. 快速对象分配（28.87 MB/s）
-2. Old Gen内存快速填满（从39MB跳到163MB）
-3. 在2分钟测试期间触发10次Full GC
-
-CPU和系统资源表：
-- 进程CPU：压测前3-5%，压测中100%（饱和）
-- 系统负载：压测前0.5-1.5，压测中1.64（高）
-- 线程数：54-57 → 66（正常增加）
-- 堆使用量：~60-80MB → 164MB（可接受）
-- CPU使用时间线：压测前3-5%，压测中CPU飙升至100%持续2分钟
-
-### 58.png - Monitoring Data Trends
-![AI Data Trends](58.png)
-
-监控数据趋势：
-- 请求速率（req/s）：
-  - 压测前：0.17 → 0.38（正常流量）
-  - 压测中：47.6 → 155.1 → 130（负载测试）
-- 响应时间（ms）：
-  - 压测前：~4ms（优秀）
-  - 压测中：2102ms → 1820ms → 1478ms（退化）
-- 老年代内存（MB）：
-  - 压测前：稳定在39MB
-  - 压测中：跳至163MB，GC后70MB，结束时100MB
-
-### 59.png - Root Cause: Downstream Service Latency
-![AI Downstream Latency](59.png)
-
-根因分析 - 主要问题：下游服务延迟
-
-请求流程：
-```
-Client → Gateway（filters：<10ms）→ Downstream Service（2500+ ms）→ Response
-                                                    ↑
-                                            瓶颈在此
-```
-
-证据：
-1. NettyWriteResponse过滤器自身时间=553.8ms（等待下游服务）
-2. 网关过滤器处理非常快（<10ms总计）
-3. 高P99（5145ms）表明后端服务延迟方差大
-
-次要问题：负载下的内存压力
-1. 压测期间高分配率（28.87 MB/s）
-2. 2分钟内触发10次Full GC
-3. Old Gen内存快速累积
-
-### 60.png - Optimization Recommendations
-![AI Optimization](60.png)
-
-优化建议：
-- 高优先级
-  1. 优化下游服务（严重）
-     - 当前：后端响应时间~2.5秒
-     - 目标：<500ms
-     - 影响：整体响应时间将减少80%
-  - 具体行动：
-    - 检查后端服务日志查找慢查询
-    - 分析数据库查询性能
-    - 考虑缓存频繁访问的数据
-    - 审查后端服务资源限制（CPU/内存）
-
-### 61.png - JVM Tuning for High Load
-![AI JVM Tuning](61.png)
-
-当前配置问题：
-- Heap Max：~495MB（对高并发太小）
-- Full GC在负载下频繁触发
-
-推荐设置：
-```
-# 增加堆大小
--Xms1g -Xmx1g
-
-# 使用G1GC获得更好的低延迟性能
--XX:+UseG1GC
--XX:MaxGCPauseMillis=200
--XX:G1HeapRegionSize=16m
-
-# 减少晋升率
--XX:InitiatingHeapOccupancyPercent=45
-```
-
-### 62.png - Performance Comparison
-![AI Performance Comparison](62.png)
-
-性能对比表：
-
-| 组件 | 当前 | 目标 | 差距 |
-|------|------|------|------|
-| 网关处理 | <10ms | <20ms | ✅ 优秀 |
-| 后端响应 | ~2500ms | <500ms | ❌ 慢5倍 |
-| GC开销 | 1.30% | <1% | ⚠️ 超30% |
-| Full GC频率 | 10次/2分钟 | 0-1次/2分钟 | ❌ 多10倍 |
-| CPU饱和度 | 100% | <70% | ❌ 满负荷 |
-
-结论总结：
-1. ✅ 网关性能良好：过滤器处理时间<10ms
-2. ❌ 后端服务慢：响应时间>2.5秒
-3. ️ 内存压力：2分钟测试期间10次Full GC
-4. ❌ CPU饱和：负载下100% CPU使用率
+- **55.png**: 性能分析报告，包含P99响应时间、错误率、过滤器链瓶颈分析
+- **56.png**: GC压力分析，展示压测前后的Young GC、Full GC次数变化
+- **57.png**: 根因分析与CPU资源监控，识别高请求率导致的资源饱和
+- **58.png**: 监控数据趋势，展示请求速率、响应时间、内存使用的变化
+- **59.png**: 根因定位 - 下游服务延迟（2500+ms瓶颈）
+- **60.png**: 优化建议，给出具体可执行的优化方案
+- **61.png**: JVM调优建议，推荐G1GC、堆大小等参数配置
+- **62.png**: 性能对比表，当前性能 vs 目标性能 vs 差距
+- **63.png**: 结论总结，明确指出网关性能良好，问题在于下游服务响应慢
 
 ---
 
-## 21. AI Copilot - Route Disabled Analysis (404错误根因诊断)
+## 21. AI Copilot - Route Disabled Analysis (Screenshots 64-66)
 
-### 64.png - Routes All Disabled
-![Disabled Routes](64.png)
+**64-66.png** - 用户禁用了所有路由后，再次询问为什么访问404。AI助手给出了正确的回答：
 
-路由管理页面显示：
-- 2个路由，0个启用，2个禁用
-- service-01-api路由：标记为"Disabled"
-- route-01路由：标记为"Disabled"
-- 两个路由都处于禁用状态
+由于所有路由均被禁用了（enabled=false），导致请求匹配不到任何路由，所以返回404。AI助手通过工具查询路由配置，详细分析了路由状态、谓词、过滤器、后端服务等信息，准确定位了404的根本原因。
 
-### 65.png - AI 404 Error Analysis Report
-![AI 404 Analysis](65.png)
-
-AI 404错误分析报告：
-- 验证结果（基于工具）：
-  - 根因确认：路由未匹配，导致404
-  - 直接原因：Route route-01（ID: 608cc154...）已禁用（enabled=false）
-- 注意：之前声称"路由匹配"的陈述不正确。similar_route_match工具明确返回matched=false，消息为"没有匹配到任何路由，请求将返回404"
-- 诊断摘要：
-  - Route Match： FAILED - 没有路由匹配，路由已禁用
-  - Route Enabled：❌ DISABLED - route-01已禁用（enabled=false）
-
-### 66.png - AI Route Configuration Details
-![AI Route Details](66.png)
-
-AI详细路由配置分析：
-- 诊断摘要（续）：
-  - Gateway Health：✅ HEALTHY - 总体得分100/100
-  - Backend Services：✅ CONFIGURED
-- 路由配置详情（route-01）：
-  - 路由名称：route-01
-  - 路由ID：608cc154-9917-4798-ae07-40b16e5f0023
-  - Enabled：false ← 这是根本原因
-  - 谓词：Path=/api/**
-  - 过滤器：
-    - StripPrefix（parts=1）
-    - AddResponseHeader（aaaa=66666）
-  - 后端服务（加权负载均衡）：
-    - service-01（50%，STATIC）：10.48.118.31:9001 ✅ 健康
-    - 127.0.0.1:9003
-    - demo-service（50%，DISCOVERY）：10.42.0.114:9004 ✅ 健康
+- **64.png**: 路由管理界面，显示所有路由均被禁用（Disabled状态）
+- **65.png**: AI 404错误分析报告，验证路由未匹配，路由已禁用
+- **66.png**: AI详细路由配置分析，展示路由ID、谓词、过滤器、后端服务健康状态等完整信息
 
 ---
 
 ## Quick Reference
 
-| Feature | Screenshots |
-|---------|-------------|
-| Login | 01 |
-| Kubernetes Clusters | 02-05 |
-| Gateway Instances | 06-09 |
-| Nacos Config | 10-11 |
-| Service Management | 12 |
-| AI Route Creation | 13-16 |
-| Multi-Service Routing | 17 |
-| Strategy Types | 18-20 |
-| SSL Certificates | 21-22 |
-| Request Tracing | 23 |
-| Monitoring | 24-31 |
-| Alert Configuration | 32 |
-| Access Logs | 33-35 |
-| Audit Logs | 36-37 |
-| System Diagnostic | 38-39 |
-| Traffic Topology | 40 |
-| Filter Chain | 41 |
-| Stress Testing | 42-49 |
-| AI Error Debugging | 50-54 |
-| AI Stress Analysis | 55-63 |
-| AI Route Analysis | 64-66 |
+| 功能模块 | 截图编号 | 截图数量 |
+|---------|---------|---------|
+| 登录 | 01 | 1 |
+| Kubernetes集群管理 | 02-05 | 4 |
+| 网关实例管理 | 06-09 | 4 |
+| Nacos配置中心 | 10-11 | 2 |
+| 服务管理 | 12 | 1 |
+| AI助手创建路由 | 13-16 | 4 |
+| 多服务路由（灰度） | 17 | 1 |
+| 策略配置 | 18-20 | 3 |
+| SSL证书管理 | 21-22 | 2 |
+| 请求链路追踪 | 23 | 1 |
+| 实时监控 | 24-31 | 8 |
+| 告警配置 | 32 | 1 |
+| 访问日志 | 33-35 | 3 |
+| 审计日志 | 36-37 | 2 |
+| 系统诊断 | 38-39 | 2 |
+| 流量拓扑 | 40 | 1 |
+| 过滤器链分析 | 41 | 1 |
+| 压力测试 | 42-49 | 8 |
+| AI助手调试404 | 50-54 | 5 |
+| AI助手压测分析 | 55-63 | 9 |
+| AI助手路由禁用分析 | 64-66 | 3 |
+| **总计** | **01-66** | **66** |
 
 ---
 
 ## Usage in Documentation
 
-Reference these screenshots in feature documentation:
+在功能文档中引用这些截图：
 
 ```markdown
-![Rate Limiting Configuration](images/13.png)
+![限流配置](images/13.png)
 ```
 
-For multi-image features:
+对于多截图的功能：
 
 ```markdown
-### Stress Test Setup
+### 压测配置
 
-| Step | Screenshot |
-|------|------------|
-| Configure test | [42.png](images/42.png) |
-| Run test | [43.png](images/43.png) |
-| View results | [48.png](images/48.png) |
+| 步骤 | 截图 |
+|------|------|
+| 配置测试 | [42.png](images/42.png) |
+| 运行测试 | [43.png](images/43.png) |
+| 查看结果 | [48.png](images/48.png) |
 ```
