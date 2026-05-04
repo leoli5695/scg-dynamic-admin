@@ -573,3 +573,23 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 - **Issues**: [GitHub Issues](https://github.com/leoli5695/scg-dynamic-admin/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/leoli5695/scg-dynamic-admin/discussions)
+
+---
+
+## Author
+
+**Leo Li** - Full-Stack Developer specializing in Microservices, API Gateway, and Cloud-Native Architecture.
+
+**Core Competencies:**
+- ✓ Microservices Architecture Design (Spring Cloud, Dubbo)
+- ✓ API Gateway Development (Spring Cloud Gateway, Kong)
+- ✓ Kubernetes Deployment & DevOps Automation
+- ✓ High-Availability Patterns (Rate Limiting, Circuit Breaker, Failover)
+- ✓ Full-Stack Development (Java Backend + React Frontend)
+- ✓ AI Integration for Intelligent Operations
+
+All core features of this project were designed and implemented independently, demonstrating production-grade distributed system development capability.
+
+**Contact:**
+- GitHub: [@leoli5695](https://github.com/leoli5695)
+- Available for freelance projects on Upwork

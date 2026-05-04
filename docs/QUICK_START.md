@@ -286,11 +286,11 @@ curl http://localhost:80/actuator/health
 
 ## Next Steps
 
-- [Configure Multi-Service Routing](FEATURES.md#2-multi-service-routing--gray-release)
-- [Set up Authentication](FEATURES.md#5-authentication)
-- [Enable SSL Termination](FEATURES.md#4-ssl-termination)
-- [Configure Monitoring & Alerts](FEATURES.md#15-monitoring--alerts)
-- [Deploy Gateway Instance to Kubernetes](FEATURES.md#19-gateway-instance-management)
+- [Configure Multi-Service Routing](features/multi-service-routing.md)
+- [Set up Authentication](features/authentication.md)
+- [Enable SSL Termination](features/ssl-termination.md)
+- [Configure Monitoring & Alerts](features/monitoring-alerts.md)
+- [Deploy Gateway Instance to Kubernetes](features/kubernetes-integration.md)
 
 ---
 
