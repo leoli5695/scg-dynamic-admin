@@ -2,6 +2,8 @@
 
 > **Enterprise-Grade API Gateway with Dynamic Configuration, Multi-Service Routing & Intelligent Monitoring**
 
+**📺 [Watch Full Feature Demo on YouTube](https://youtu.be/6pUP_zAfShQ)**
+
 [![Java](https://img.shields.io/badge/Java-17+-orange)](https://openjdk.org/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2-brightgreen)](https://spring.io/projects/spring-boot)
 [![Spring Cloud Gateway](https://img.shields.io/badge/Spring%20Cloud%20Gateway-4.1-blue)](https://spring.io/projects/spring-cloud-gateway)
