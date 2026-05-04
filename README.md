@@ -592,4 +592,7 @@ All core features of this project were designed and implemented independently, d
 
 **Contact:**
 - GitHub: [@leoli5695](https://github.com/leoli5695)
-- Available for freelance projects on Upwork
+- Email: lizhao5695@gmail.com
+- Upwork: [Hire Me on Upwork](https://www.upwork.com/freelancers/~017be8c63f36907379)
+
+Available for freelance projects. Feel free to reach out!
