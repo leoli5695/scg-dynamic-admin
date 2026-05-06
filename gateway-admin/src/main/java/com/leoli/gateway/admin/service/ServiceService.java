@@ -167,8 +167,18 @@ public class ServiceService {
     // Get Nacos namespace from instance
     String nacosNamespace = getNacosNamespace(instanceId);
 
+    // STRICT CHECK: Require valid instanceId for all services
+    // Services MUST be associated with a gateway instance with valid nacosNamespace
+    // Do NOT allow publishing to public namespace (null namespace)
+    if (nacosNamespace == null || nacosNamespace.isEmpty()) {
+        throw new IllegalArgumentException(
+            "Service MUST be associated with a valid gateway instance. " +
+            "instanceId=" + instanceId + " does not have a valid nacosNamespace. " +
+            "Create a gateway instance first or provide a valid instanceId.");
+    }
+
     // 1. Convert to entity and save to database
-    log.info("Saving service to database: {}, instanceId={}", serviceName, instanceId);
+    log.info("Saving service to database: {}, instanceId={}, namespace={}", serviceName, instanceId, nacosNamespace);
     ServiceEntity entity = toEntity(service);
     entity.setServiceName(serviceName);
     entity.setServiceId(generatedServiceId);
@@ -192,7 +202,7 @@ public class ServiceService {
     configCenterService.publishConfig(serviceDataId, nacosNamespace, nacosConfig);
     log.info("Service pushed to Nacos: {} (namespace: {})", serviceDataId, nacosNamespace);
 
-    // 4. Rebuild services index for this namespace
+    // 4. Rebuild services index for this namespace (not public)
     rebuildServicesIndex(nacosNamespace);
 
     log.info("Service created successfully: {} (Database + Cache + Nacos)", serviceName);
@@ -221,8 +231,17 @@ public class ServiceService {
     // Get Nacos namespace from instance
     String nacosNamespace = getNacosNamespace(entity.getInstanceId());
 
+    // STRICT CHECK: Service must have valid instanceId
+    // Do NOT allow updating services that would publish to public namespace
+    if (nacosNamespace == null || nacosNamespace.isEmpty()) {
+        throw new IllegalArgumentException(
+            "Service '" + serviceName + "' is not associated with a valid gateway instance. " +
+            "instanceId=" + entity.getInstanceId() + " does not have a valid nacosNamespace. " +
+            "Please associate this service with a valid gateway instance first.");
+    }
+
     // 1. Update database fields
-    log.info("Updating service in database: {}", serviceName);
+    log.info("Updating service in database: {}, namespace={}", serviceName, nacosNamespace);
     // Update description
     entity.setDescription(service.getDescription());
     // Update metadata JSON backup
@@ -454,24 +473,21 @@ public class ServiceService {
   /**
    * Rebuild services index from database.
    * Only includes ENABLED services since disabled services have no config in Nacos.
-   * @param nacosNamespace the Nacos namespace to publish the index to (null for default)
+   * @param nacosNamespace the Nacos namespace to publish the index to (MUST be valid, not null)
    */
   private void rebuildServicesIndex(String nacosNamespace) {
+    // STRICT CHECK: Do NOT allow publishing to public namespace
+    if (nacosNamespace == null || nacosNamespace.isEmpty()) {
+        log.warn("Skipping services index rebuild for public namespace - services MUST be isolated per-instance");
+        return;
+    }
+
     try {
-      // Query services for the specific instance (or all if no instance filter)
-      List<String> serviceIds;
-      if (nacosNamespace != null && !nacosNamespace.isEmpty()) {
-        // Get services for this specific instance
-        serviceIds = serviceRepository.findByEnabledTrue().stream()
-            .filter(entity -> nacosNamespace.equals(getNacosNamespace(entity.getInstanceId())))
-            .map(ServiceEntity::getServiceId)
-            .collect(Collectors.toList());
-      } else {
-        // Get all services (default namespace / public)
-        serviceIds = serviceRepository.findByEnabledTrue().stream()
-            .map(ServiceEntity::getServiceId)
-            .collect(Collectors.toList());
-      }
+      // Get services for this specific instance namespace only
+      List<String> serviceIds = serviceRepository.findByEnabledTrue().stream()
+          .filter(entity -> nacosNamespace.equals(getNacosNamespace(entity.getInstanceId())))
+          .map(ServiceEntity::getServiceId)
+          .collect(Collectors.toList());
       
       // Load current Nacos index to check if update is needed
       List<String> currentNacosIndex = null;
@@ -502,23 +518,14 @@ public class ServiceService {
       
       // Perform rebuild if needed
       if (needsRebuild) {
-        log.info("🔄 Rebuilding services index for namespace {} (reason: {})...", 
-            nacosNamespace == null || nacosNamespace.isEmpty() ? "public" : nacosNamespace, reason);
+        log.info("Rebuilding services index for namespace {} (reason: {})...", nacosNamespace, reason);
         configCenterService.publishConfig(SERVICES_INDEX, nacosNamespace, serviceIds);
-        log.info("✅ Services index rebuilt with {} services for namespace {}", 
-            serviceIds.size(), nacosNamespace == null || nacosNamespace.isEmpty() ? "public" : nacosNamespace);
+        log.info("Services index rebuilt with {} services for namespace {}", serviceIds.size(), nacosNamespace);
       }
       
     } catch (Exception e) {
       log.error("Failed to rebuild services index", e);
     }
-  }
-  
-  /**
-   * Rebuild services index for default namespace (backward compatible).
-   */
-  private void rebuildServicesIndex() {
-    rebuildServicesIndex(null);
   }
 
   /**
@@ -650,6 +657,14 @@ public class ServiceService {
         String nacosNamespace = getNacosNamespace(entity.getInstanceId());
         String serviceDataId = SERVICE_PREFIX + serviceId;
         
+        // STRICT CHECK: Skip services without valid namespace (invalid instanceId)
+        if (nacosNamespace == null || nacosNamespace.isEmpty()) {
+            log.warn("Skipping service '{}' (serviceId={}) - no valid instanceId/namespace. " +
+                     "instanceId={} - Service MUST be associated with a gateway instance.",
+                     serviceName, serviceId, entity.getInstanceId());
+            continue;
+        }
+        
         // Check if config already exists in Nacos
         String existingConfig = configCenterService.getConfig(serviceDataId, nacosNamespace, String.class);
         
@@ -710,6 +725,16 @@ public class ServiceService {
         // Skip disabled services (they shouldn't have config in Nacos)
         if (!Boolean.TRUE.equals(entity.getEnabled())) {
           log.debug("Skipping disabled service: {}", serviceName);
+          continue;
+        }
+        
+        // STRICT CHECK: Skip services without valid namespace (invalid instanceId)
+        if (nacosNamespace == null || nacosNamespace.isEmpty()) {
+          log.warn("Skipping service '{}' (serviceId={}) - no valid instanceId/namespace. " +
+                   "instanceId={} - Service MUST be associated with gateway instance.",
+                   serviceName, serviceId, entity.getInstanceId());
+          failCount++;
+          failedServices.add(serviceName + " (no valid instanceId)");
           continue;
         }
         
