@@ -4,6 +4,7 @@ import com.leoli.gateway.admin.model.GatewayInstanceEntity;
 import com.leoli.gateway.admin.model.RouteDefinition;
 import com.leoli.gateway.admin.model.ServiceDefinition;
 import com.leoli.gateway.admin.model.ServiceEntity;
+import com.leoli.gateway.admin.model.ServiceType;
 import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
 import com.leoli.gateway.admin.repository.ServiceRepository;
 import lombok.RequiredArgsConstructor;
@@ -152,22 +153,24 @@ public class TrafficTopologyService {
 
                 // Extract upstream service from URI or service bindings
                 if (route.getMode() == RouteDefinition.RoutingMode.MULTI && route.getServices() != null) {
-                    // Multi-service mode: add all services
+                    // Multi-service mode: add all services with their actual serviceType
                     for (var binding : route.getServices()) {
                         if (binding.isEnabled()) {
-                            addServiceNode(graph, routeNode, binding.getServiceId(), routeId);
+                            // Pass binding's serviceType for correct display
+                            ServiceType bindingServiceType = binding.getServiceType();
+                            addServiceNode(graph, routeNode, binding.getServiceId(), routeId, bindingServiceType);
                         }
                     }
                 } else {
                     // Single-service mode
                     String serviceId = route.getServiceId();
                     if (serviceId != null && !serviceId.isEmpty()) {
-                        addServiceNode(graph, routeNode, serviceId, routeId);
+                        addServiceNode(graph, routeNode, serviceId, routeId, null);
                     } else {
                         // Fallback: extract from URI
                         String upstreamService = extractServiceFromUri(uri);
                         if (upstreamService != null) {
-                            addServiceNode(graph, routeNode, upstreamService, routeId);
+                            addServiceNode(graph, routeNode, upstreamService, routeId, null);
                         }
                     }
                 }
@@ -180,13 +183,19 @@ public class TrafficTopologyService {
     /**
      * Add a service node to the graph.
      * The input parameter is serviceId, we need to query the actual serviceName.
-     * Also determine serviceType based on route URI.
+     * Also determine serviceType based on binding's serviceType (for multi-service mode) or route URI.
      * Include service instances (IP:Port) for detailed display.
+     *
+     * @param graph Topology graph
+     * @param routeNode Route node
+     * @param serviceId Service ID
+     * @param routeId Route ID
+     * @param bindingServiceType Service type from RouteServiceBinding (NACOS/STATIC/CONSUL), null for single-service mode
      */
-    private void addServiceNode(TopologyGraph graph, TopologyNode routeNode, String serviceId, String routeId) {
+    private void addServiceNode(TopologyGraph graph, TopologyNode routeNode, String serviceId, String routeId, ServiceType bindingServiceType) {
         // Query actual serviceName from database
         String actualServiceName = serviceId;
-        String serviceType = "服务发现"; // default
+        String displayServiceType = "服务发现"; // default
         List<Map<String, Object>> instancesInfo = new ArrayList<>();
         int healthyCount = 0;
         int totalInstanceCount = 0;
@@ -217,28 +226,46 @@ public class TrafficTopologyService {
             log.warn("Failed to find service details for serviceId: {}, using serviceId as name", serviceId);
         }
 
-        // Determine serviceType from route URI
-        String routeUri = routeNode.getUri();
-        if (routeUri != null) {
-            if (routeUri.startsWith("static://")) {
-                serviceType = "静态服务";
-            } else if (routeUri.startsWith("lb://")) {
-                serviceType = "服务发现";
-            } else if (routeUri.startsWith("http://") || routeUri.startsWith("https://")) {
-                serviceType = "静态服务";
-                // For static services, extract IP:Port from URI as single instance
-                String hostPort = extractServiceFromUri(routeUri);
-                if (hostPort != null && instancesInfo.isEmpty()) {
-                    Map<String, Object> staticInstance = new LinkedHashMap<>();
-                    String[] parts = hostPort.split(":");
-                    staticInstance.put("ip", parts.length > 0 ? parts[0] : hostPort);
-                    staticInstance.put("port", parts.length > 1 ? Integer.parseInt(parts[1]) : 80);
-                    staticInstance.put("weight", 1);
-                    staticInstance.put("enabled", true);
-                    staticInstance.put("static", true);
-                    instancesInfo.add(staticInstance);
-                    healthyCount = 1;
-                    totalInstanceCount = 1;
+        // Determine serviceType - prioritize binding's serviceType (for multi-service mode)
+        if (bindingServiceType != null) {
+            // Multi-service mode: use binding's explicit serviceType
+            switch (bindingServiceType) {
+                case NACOS:
+                    displayServiceType = "服务发现";
+                    break;
+                case CONSUL:
+                    displayServiceType = "服务发现";
+                    break;
+                case STATIC:
+                    displayServiceType = "静态服务";
+                    break;
+                default:
+                    displayServiceType = "服务发现";
+            }
+        } else {
+            // Single-service mode: fallback to route URI analysis
+            String routeUri = routeNode.getUri();
+            if (routeUri != null) {
+                if (routeUri.startsWith("static://")) {
+                    displayServiceType = "静态服务";
+                } else if (routeUri.startsWith("lb://")) {
+                    displayServiceType = "服务发现";
+                } else if (routeUri.startsWith("http://") || routeUri.startsWith("https://")) {
+                    displayServiceType = "静态服务";
+                    // For static services, extract IP:Port from URI as single instance
+                    String hostPort = extractServiceFromUri(routeUri);
+                    if (hostPort != null && instancesInfo.isEmpty()) {
+                        Map<String, Object> staticInstance = new LinkedHashMap<>();
+                        String[] parts = hostPort.split(":");
+                        staticInstance.put("ip", parts.length > 0 ? parts[0] : hostPort);
+                        staticInstance.put("port", parts.length > 1 ? Integer.parseInt(parts[1]) : 80);
+                        staticInstance.put("weight", 1);
+                        staticInstance.put("enabled", true);
+                        staticInstance.put("static", true);
+                        instancesInfo.add(staticInstance);
+                        healthyCount = 1;
+                        totalInstanceCount = 1;
+                    }
                 }
             }
         }
@@ -250,7 +277,7 @@ public class TrafficTopologyService {
             serviceNode.setType("service");
             serviceNode.setName(actualServiceName);
             serviceNode.setServiceId(serviceId);
-            serviceNode.setServiceType(serviceType);
+            serviceNode.setServiceType(displayServiceType);
             serviceNode.setInstances(instancesInfo);
             serviceNode.setHealthyInstances(healthyCount);
             serviceNode.setTotalInstances(totalInstanceCount);

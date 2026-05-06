@@ -24,6 +24,8 @@ spec:
         ports:
         - containerPort: 80
           name: http
+        - containerPort: 8443
+          name: https
         - containerPort: 8081
           name: actuator
         env:
@@ -44,7 +46,7 @@ spec:
         - name: REDIS_PORT
           value: "6379"
         - name: GATEWAY_SSL_ENABLED
-          value: "false"
+          value: "true"
         resources:
           requests:
             cpu: "500m"
@@ -83,6 +85,10 @@ spec:
     port: 80
     targetPort: 80
     nodePort: 30080
+  - name: https
+    port: 443
+    targetPort: 8443
+    nodePort: 30443
   - name: actuator
     port: 8081
     targetPort: 8081

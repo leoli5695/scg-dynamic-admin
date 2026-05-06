@@ -15,11 +15,13 @@ import org.springframework.web.reactive.resource.NoResourceFoundException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
+import io.netty.channel.ConnectTimeoutException;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -39,6 +41,12 @@ import java.util.regex.Pattern;
 public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
 
     private final ObjectMapper objectMapper;
+    
+    @org.springframework.beans.factory.annotation.Value("${gateway.admin.url:http://127.0.0.1:9090}")
+    private String adminUrl;
+    
+    @org.springframework.beans.factory.annotation.Value("${gateway.instance-id:gateway-unknown}")
+    private String instanceId;
 
     @Autowired
     public ScgGlobalExceptionHandler(ObjectMapper objectMapper) {
@@ -62,6 +70,10 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
         // Set response attributes
         response.setStatusCode(status);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+
+        // Capture error trace (delegate to TraceCaptureGlobalFilter's afterRequest logic)
+        // This ensures error requests are captured even when filter chain is interrupted
+        captureErrorTrace(exchange, ex, status);
 
         // Add Retry-After header for rate limit errors
         if (ex instanceof RateLimitException) {
@@ -117,8 +129,8 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
             return;
         }
 
-        // Non-gateway exceptions - log at warn level with stack trace
-        log.warn("Gateway exception: {}", ex.getMessage(), ex);
+        // Non-gateway exceptions - log at warn level, message only (no stack trace to avoid verbose output)
+        log.warn("Gateway exception: {}", ex.getMessage());
     }
 
     /**
@@ -130,22 +142,27 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
             return ((GatewayException) ex).getErrorCode().getStatus();
         }
 
-        // 2. ResponseStatusException - directly use its status code
+        // 2. ConnectTimeoutException - connection timeout (504)
+        if (ex instanceof ConnectTimeoutException) {
+            return HttpStatus.GATEWAY_TIMEOUT;
+        }
+
+        // 3. ResponseStatusException - directly use its status code
         if (ex instanceof ResponseStatusException) {
             return HttpStatus.valueOf(((ResponseStatusException) ex).getStatusCode().value());
         }
 
-        // 3. NotFoundException - analyze the message
+        // 4. NotFoundException - analyze the message
         if (ex instanceof NotFoundException) {
             return determineStatusFromNotFoundException((NotFoundException) ex);
         }
 
-        // 4. NoResourceFoundException - no route matched (404)
+        // 5. NoResourceFoundException - no route matched (404)
         if (ex instanceof NoResourceFoundException) {
             return HttpStatus.NOT_FOUND;
         }
 
-        // 5. Default to 500
+        // 6. Default to 500
         return HttpStatus.INTERNAL_SERVER_ERROR;
     }
 
@@ -194,7 +211,8 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
                 lowerMessage.contains("took longer than timeout") ||
                 lowerMessage.contains("read timed out") ||
                 lowerMessage.contains("socket timeout") ||
-                lowerMessage.contains("timeout exception");
+                lowerMessage.contains("timeout exception") ||
+                lowerMessage.contains("connection timed out");
     }
 
     private boolean isNoInstancesError(String message) {
@@ -283,5 +301,178 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
         }
 
         return message;
+    }
+
+    /**
+     * Capture error trace for error requests.
+     * Called after response is written to ensure statusCode is set.
+     * Captures full request/response data including headers and body.
+     */
+    private void captureErrorTrace(ServerWebExchange exchange, Throwable ex, HttpStatus status) {
+        try {
+            // Get traceId from exchange attribute (set by TraceIdGlobalFilter)
+            String traceId = exchange.getAttribute(com.leoli.gateway.filter.TraceIdGlobalFilter.TRACE_ID_ATTR);
+            if (traceId == null || traceId.isEmpty()) {
+                traceId = UUID.randomUUID().toString();
+            }
+
+            // Check if trace capture is enabled (read from config via value resolver)
+            Boolean captureErrors = exchange.getAttribute("gateway.trace.capture-errors");
+            if (captureErrors == null) {
+                captureErrors = true; // Default enabled
+            }
+
+            if (!captureErrors || status.value() < 400) {
+                return; // Not an error or capture disabled
+            }
+
+            // Get request info
+            org.springframework.http.server.reactive.ServerHttpRequest request = exchange.getRequest();
+            org.springframework.http.server.reactive.ServerHttpResponse response = exchange.getResponse();
+            long startTime = exchange.getAttribute("traceStartTime") != null ?
+                    (Long) exchange.getAttribute("traceStartTime") : System.currentTimeMillis();
+            long duration = System.currentTimeMillis() - startTime;
+
+            // Build error trace
+            Map<String, Object> trace = new LinkedHashMap<>();
+            trace.put("traceId", traceId);
+            trace.put("instanceId", instanceId);
+            trace.put("routeId", exchange.getAttribute("org.springframework.cloud.gateway.support.ServerWebExchangeUtils.gatewayRoute"));
+            trace.put("method", request.getMethod().name());
+            trace.put("uri", request.getURI().toString());
+            trace.put("path", request.getURI().getPath());
+            trace.put("queryString", request.getURI().getQuery());
+            trace.put("statusCode", status.value());
+            trace.put("latencyMs", duration);
+            trace.put("clientIp", getClientIp(request));
+            trace.put("userAgent", request.getHeaders().getFirst(org.springframework.http.HttpHeaders.USER_AGENT));
+            trace.put("traceType", "ERROR");
+            trace.put("replayType", "HTTP");
+            trace.put("replayable", true);
+            trace.put("traceTime", java.time.LocalDateTime.ofInstant(
+                    java.time.Instant.ofEpochMilli(startTime),
+                    java.time.ZoneId.systemDefault()).toString());
+            trace.put("errorMessage", ex.getMessage());
+            trace.put("errorType", ex.getClass().getSimpleName());
+
+            // Capture request headers (filter sensitive ones)
+            Map<String, String> requestHeaders = new LinkedHashMap<>();
+            request.getHeaders().forEach((key, values) -> {
+                if (!isSensitiveHeader(key)) {
+                    requestHeaders.put(key, String.join(", ", values));
+                }
+            });
+            try {
+                trace.put("requestHeaders", objectMapper.writeValueAsString(requestHeaders));
+            } catch (Exception e) {
+                log.debug("Failed to serialize request headers");
+            }
+
+            // Capture request body if cached by TraceCaptureGlobalFilter
+            String requestBody = exchange.getAttribute("traceRequestBody");
+            if (requestBody != null && !requestBody.isEmpty()) {
+                trace.put("requestBody", requestBody);
+            }
+
+            // Capture response headers (filter sensitive ones)
+            Map<String, String> responseHeaders = new LinkedHashMap<>();
+            response.getHeaders().forEach((key, values) -> {
+                if (!isSensitiveHeader(key)) {
+                    responseHeaders.put(key, String.join(", ", values));
+                }
+            });
+            if (!responseHeaders.isEmpty()) {
+                try {
+                    trace.put("responseHeaders", objectMapper.writeValueAsString(responseHeaders));
+                } catch (Exception e) {
+                    log.debug("Failed to serialize response headers");
+                }
+            }
+
+            // Capture error response body (the body we're sending in this error response)
+            Map<String, Object> errorBody = buildErrorBody(exchange, ex, status);
+            try {
+                trace.put("responseBody", objectMapper.writeValueAsString(errorBody));
+            } catch (Exception e) {
+                log.debug("Failed to serialize response body");
+            }
+
+            // Add target instance if available
+            Object targetInstance = exchange.getAttribute("org.springframework.cloud.gateway.support.ServerWebExchangeUtils.gatewayRequestUrl");
+            if (targetInstance != null) {
+                trace.put("targetInstance", targetInstance.toString());
+            }
+
+            // Send to admin asynchronously (don't block error response)
+            sendErrorTraceToAdmin(trace);
+
+            log.debug("Captured error trace: traceId={}, statusCode={}, duration={}ms", traceId, status.value(), duration);
+
+        } catch (Exception e) {
+            log.error("Failed to capture error trace", e);
+        }
+    }
+
+    /**
+     * Check if header is sensitive and should not be captured.
+     */
+    private boolean isSensitiveHeader(String header) {
+        String lower = header.toLowerCase();
+        return lower.contains("authorization") ||
+                lower.contains("cookie") ||
+                lower.contains("set-cookie") ||
+                lower.contains("proxy-authorization");
+    }
+
+    /**
+     * Send error trace to admin service.
+     */
+    private void sendErrorTraceToAdmin(Map<String, Object> trace) {
+        try {
+            String traceId = (String) trace.get("traceId");
+
+            // Use async execution to not block error response
+            java.util.concurrent.CompletableFuture.runAsync(() -> {
+                try {
+                    org.springframework.web.reactive.function.client.WebClient.create()
+                            .post()
+                            .uri(adminUrl + "/api/traces/internal")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .bodyValue(trace)
+                            .retrieve()
+                            .bodyToMono(String.class)
+                            .subscribe(
+                                    response -> log.debug("Error trace saved: traceId={}", traceId),
+                                    error -> log.error("Failed to send error trace: traceId={}, error={}", traceId, error.getMessage())
+                            );
+                } catch (Exception e) {
+                    log.error("Failed to send error trace async", e);
+                }
+            });
+        } catch (Exception e) {
+            log.error("Failed to initiate error trace send", e);
+        }
+    }
+
+    /**
+     * Get client IP from request.
+     */
+    private String getClientIp(org.springframework.http.server.reactive.ServerHttpRequest request) {
+        String ip = request.getHeaders().getFirst("X-Forwarded-For");
+        if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
+            int index = ip.indexOf(",");
+            if (index != -1) {
+                return ip.substring(0, index).trim();
+            }
+            return ip.trim();
+        }
+
+        ip = request.getHeaders().getFirst("X-Real-IP");
+        if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
+            return ip.trim();
+        }
+
+        return request.getRemoteAddress() != null ?
+                request.getRemoteAddress().getAddress().getHostAddress() : "unknown";
     }
 }

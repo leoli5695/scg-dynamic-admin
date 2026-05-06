@@ -128,32 +128,22 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
         ServerHttpResponse decoratedResponse = new ServerHttpResponseDecorator(exchange.getResponse()) {
             @Override
             public Mono<Void> writeWith(org.reactivestreams.Publisher<? extends DataBuffer> body) {
-                // Use WARN level to ensure visibility for debugging
-                log.warn("[TRACE-CAPTURE] writeWith called: body type={}, statusCode={}, isCommitted={}, headersCount={}",
-                        body != null ? body.getClass().getSimpleName() : "null",
-                        getDelegate().getStatusCode(),
-                        getDelegate().isCommitted(),
-                        getDelegate().getHeaders().size());
-                if (body instanceof Flux) {
-                    Flux<? extends DataBuffer> flux = (Flux<? extends DataBuffer>) body;
-                    return super.writeWith(flux.doOnNext(dataBuffer -> {
-                        // Cache response body
-                        byte[] bytes = new byte[dataBuffer.readableByteCount()];
-                        dataBuffer.read(bytes);
-                        String chunk = new String(bytes, StandardCharsets.UTF_8);
-                        if (responseBodyBuilder.length() + chunk.length() <= maxBodySize) {
-                            responseBodyBuilder.append(chunk);
-                        } else if (responseBodyBuilder.length() < maxBodySize) {
-                            int remaining = maxBodySize - responseBodyBuilder.length();
-                            responseBodyBuilder.append(chunk.substring(0, remaining)).append("...[TRUNCATED]");
-                        }
-                        // Reset buffer position for actual write
-                        dataBuffer.readPosition(0);
-                        log.info("[TRACE-CAPTURE] Response body chunk captured: {} bytes, total captured: {} bytes",
-                                bytes.length, responseBodyBuilder.length());
-                    }));
-                }
-                return super.writeWith(body);
+                // Convert any Publisher to Flux for consistent handling
+                Flux<? extends DataBuffer> flux = Flux.from(body);
+                return super.writeWith(flux.doOnNext(dataBuffer -> {
+                    // Cache response body
+                    byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                    dataBuffer.read(bytes);
+                    String chunk = new String(bytes, StandardCharsets.UTF_8);
+                    if (responseBodyBuilder.length() + chunk.length() <= maxBodySize) {
+                        responseBodyBuilder.append(chunk);
+                    } else if (responseBodyBuilder.length() < maxBodySize) {
+                        int remaining = maxBodySize - responseBodyBuilder.length();
+                        responseBodyBuilder.append(chunk.substring(0, remaining)).append("...[TRUNCATED]");
+                    }
+                    // Reset buffer position for actual write
+                    dataBuffer.readPosition(0);
+                }));
             }
         };
 
@@ -166,11 +156,13 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
         }
 
         // Continue without caching request body
-        return chain.filter(decoratedExchange).then(Mono.fromRunnable(() -> {
-            // Get captured response body
-            String responseBody = responseBodyBuilder.length() > 0 ? responseBodyBuilder.toString() : null;
-            afterRequest(decoratedExchange, startTime, finalTraceId, null, responseBody);
-        }));
+        return chain.filter(decoratedExchange)
+                .doFinally(signalType -> {
+                    // Capture trace regardless of success or error
+                    // Get captured response body
+                    String responseBody = responseBodyBuilder.length() > 0 ? responseBodyBuilder.toString() : null;
+                    afterRequest(decoratedExchange, startTime, finalTraceId, null, responseBody);
+                });
     }
 
     /**
@@ -204,12 +196,15 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
                         }
                     };
 
-                    return chain.filter(exchange.mutate().request(newRequest).build())
-                            .then(Mono.fromRunnable(() -> {
+                    // Important: Keep the decorated response (for capturing response body)
+                    // Otherwise response body won't be captured
+                    return chain.filter(exchange.mutate().request(newRequest).response(exchange.getResponse()).build())
+                            .doFinally(signalType -> {
+                                // Capture trace regardless of success or error
                                 // Get captured response body
                                 String responseBody = responseBodyBuilder.length() > 0 ? responseBodyBuilder.toString() : null;
                                 afterRequest(exchange, startTime, traceId, requestBody, responseBody);
-                            }));
+                            });
                 });
     }
 
@@ -234,6 +229,15 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
         Boolean traceCaptured = exchange.getAttribute(TRACE_CAPTURED_ATTR);
         if (traceCaptured != null && traceCaptured) {
             log.debug("Trace already captured, skipping: traceId={}", traceId);
+            return;
+        }
+
+        // Check if there's a gateway exception - if so, skip this filter's capture
+        // ScgGlobalExceptionHandler will capture the complete error trace with response body
+        Throwable gatewayException = exchange.getAttribute("org.springframework.cloud.gateway.support.ServerWebExchangeUtils.gatewayException");
+        if (gatewayException != null) {
+            log.debug("Gateway exception detected, skipping trace capture (will be captured by exception handler): traceId={}, exception={}",
+                    traceId, gatewayException.getClass().getSimpleName());
             return;
         }
 
@@ -307,6 +311,12 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
             ServerHttpRequest request = exchange.getRequest();
             ServerHttpResponse response = exchange.getResponse();
 
+            // Get the actual response (unwrap if decorated)
+            ServerHttpResponse actualResponse = response;
+            if (response instanceof ServerHttpResponseDecorator) {
+                actualResponse = ((ServerHttpResponseDecorator) response).getDelegate();
+            }
+
             // Get original request URI from GATEWAY_ORIGINAL_REQUEST_URL_ATTR
             // Spring Cloud Gateway saves the original URL before any modifications (e.g., StripPrefix)
             // The set may contain multiple URLs (http:// original + static:// internal)
@@ -360,9 +370,9 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
                 trace.put("requestBody", requestBody);
             }
 
-            // Capture response headers (filter sensitive ones)
+            // Capture response headers (filter sensitive ones) - use actualResponse for correct headers
             Map<String, String> responseHeaders = new HashMap<>();
-            response.getHeaders().forEach((key, values) -> {
+            actualResponse.getHeaders().forEach((key, values) -> {
                 if (!isSensitiveHeader(key)) {
                     responseHeaders.put(key, String.join(", ", values));
                 }

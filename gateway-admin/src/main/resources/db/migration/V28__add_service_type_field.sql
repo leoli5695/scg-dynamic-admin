@@ -1,1 +1,0 @@
-ALTER TABLE gateway_instances ADD COLUMN service_type VARCHAR(20);

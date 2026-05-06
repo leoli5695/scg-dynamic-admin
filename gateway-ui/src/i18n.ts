@@ -7,6 +7,7 @@ const resources = {
     translation: {
       // Common
       'common.submit': 'Submit',
+      'common.total': 'Total',
       'common.cancel': 'Cancel',
       'common.delete': 'Delete',
       'common.enable': 'Enable',
@@ -34,6 +35,7 @@ const resources = {
       'common.copy': 'Copy',
       'common.copy_id': 'Copy ID',
       'common.clear': 'Clear',
+      'common.none': 'None',
       
       // Navigation
       'nav.routes': 'Routes',
@@ -485,6 +487,7 @@ const resources = {
 
       // Audit target types
       'audit.target_route': 'Route',
+      'audit.view_target_detail': 'View Target Details',
       'audit.target_service': 'Service',
       'audit.target_strategy': 'Strategy',
       'audit.target_auth_policy': 'Auth Policy',
@@ -538,6 +541,8 @@ const resources = {
       'audit.change_details': 'Change Details',
       'audit.type': 'Type',
       'audit.view_diff': 'View Diff',
+      'audit.view_details': 'View Details',
+      'audit.value_comparison': 'Value Comparison',
 
       // Version Conflict
       'audit.version_conflict': 'Version Conflict Warning',
@@ -845,6 +850,7 @@ const resources = {
       'trace.delete_old_confirm': 'Delete traces older than 7 days?',
       'trace.delete_all': 'Delete All',
       'trace.delete_all_confirm': 'Delete ALL traces? This action cannot be undone!',
+      'trace.delete_all_desc': 'Only error/slow traces in database will be cleared. Distributed tracing data (Jaeger) is stored separately and will not be affected.',
       'trace.trace_id': 'Trace ID',
       'trace.method': 'Method',
       'trace.path': 'Path',
@@ -925,6 +931,8 @@ const resources = {
       'trace.legend_internal': 'Internal',
       'trace.no_spans': 'No spans data',
       'trace.service': 'Service',
+      'trace.downstream_tracing_tip': 'Enable Downstream Service Tracing',
+      'trace.downstream_tracing_desc': 'Currently only gateway is traced. To trace downstream services, add -javaagent:/path/to/opentelemetry-javaagent.jar to their startup command. No code changes required.',
 
       // Request Replay Page
       'replay.title': 'Request Replay Debugger',
@@ -2215,6 +2223,7 @@ const resources = {
     translation: {
       // Common
       'common.submit': '提交',
+      'common.total': '共',
       'common.cancel': '取消',
       'common.delete': '删除',
       'common.enable': '启用',
@@ -2242,6 +2251,7 @@ const resources = {
       'common.copy': '复制',
       'common.copy_id': '复制ID',
       'common.clear': '清空',
+      'common.none': '无',
       
       // Navigation
       'nav.routes': '路由管理',
@@ -2284,6 +2294,8 @@ const resources = {
       'routes.select_nacos_service': '-- 选择 Nacos 注册的服务 --',
       'routes.target_uri': '目标 URI',
       'routes.uri_auto_generated': '根据目标类型和服务自动生成',
+      'routes.create_description': '创建带有断言和路由插件的新 API 路由',
+      'routes.edit_description': '更新路由配置',
       'routes.description_helper': '路由简要描述',
       'routes.route_name_readonly': '路由名称根据 ID 自动生成',
       'routes.target_helper': '配置路由目标：静态服务或服务发现',
@@ -2686,6 +2698,7 @@ const resources = {
 
       // Audit target types - Chinese
       'audit.target_route': '路由',
+      'audit.view_target_detail': '查看目标详情',
       'audit.target_service': '服务',
       'audit.target_strategy': '策略',
       'audit.target_auth_policy': '认证策略',
@@ -2739,6 +2752,8 @@ const resources = {
       'audit.change_details': '变更详情',
       'audit.type': '类型',
       'audit.view_diff': '查看差异',
+      'audit.view_details': '查看详情',
+      'audit.value_comparison': '值对比',
 
       // Version Conflict - Chinese
       'audit.version_conflict': '版本冲突警告',
@@ -3038,6 +3053,7 @@ const resources = {
       'trace.delete_old_confirm': '确定删除7天前的追踪记录？',
       'trace.delete_all': '清空所有',
       'trace.delete_all_confirm': '确定清空所有追踪记录？此操作不可恢复！',
+      'trace.delete_all_desc': '仅清空数据库中的错误/慢请求记录，分布式追踪数据（Jaeger）存储在外部，不会被清空。',
       'trace.trace_id': '追踪ID',
       'trace.method': '方法',
       'trace.path': '路径',
@@ -3103,6 +3119,8 @@ const resources = {
       'trace.legend_internal': '内部',
       'trace.no_spans': '无Span数据',
       'trace.service': '服务',
+      'trace.downstream_tracing_tip': '启用下游服务追踪',
+      'trace.downstream_tracing_desc': '当前仅网关支持追踪。要追踪下游服务，请在启动命令中添加 -javaagent:/path/to/opentelemetry-javaagent.jar 参数，无需修改代码。',
 
       // Request Replay Page
       'replay.title': '请求回放调试器',

@@ -115,6 +115,22 @@ public interface GatewayConfigConstants {
     String ACCESS_LOG_CONFIG = "config.gateway.access-log";
 
     // ============================================================
+    // SSL Certificate Configuration
+    // ============================================================
+
+    /**
+     * SSL certificate config data ID prefix.
+     * Full data ID: ssl-certificate-{domain}
+     */
+    String SSL_CERTIFICATE_PREFIX = "ssl-certificate-";
+
+    /**
+     * SSL certificates index data ID.
+     * Contains JSON array of all certificate domains.
+     */
+    String SSL_CERTIFICATES_INDEX = "config.gateway.metadata.ssl-certificates-index";
+
+    // ============================================================
     // Metadata Prefix
     // ============================================================
 
@@ -161,5 +177,12 @@ public interface GatewayConfigConstants {
      */
     static String authRoutesDataId(String routeId) {
         return AUTH_ROUTES_PREFIX + routeId;
+    }
+
+    /**
+     * Build SSL certificate config data ID.
+     */
+    static String sslCertificateDataId(String domain) {
+        return SSL_CERTIFICATE_PREFIX + domain;
     }
 }

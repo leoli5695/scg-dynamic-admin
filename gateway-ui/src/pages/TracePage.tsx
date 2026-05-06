@@ -441,12 +441,18 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
   // Copy all request/response data
   const copyAllRequest = () => {
     if (!selectedTrace) return;
+    let headers = {};
+    try {
+      headers = selectedTrace.requestHeaders ? JSON.parse(selectedTrace.requestHeaders) : {};
+    } catch {
+      headers = selectedTrace.requestHeaders || {};
+    }
     const data = {
       method: selectedTrace.method,
       uri: selectedTrace.uri,
       path: selectedTrace.path,
       queryString: selectedTrace.queryString,
-      headers: selectedTrace.requestHeaders ? JSON.parse(selectedTrace.requestHeaders) : {},
+      headers,
       body: selectedTrace.requestBody
     };
     navigator.clipboard.writeText(JSON.stringify(data, null, 2));
@@ -455,9 +461,15 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
 
   const copyAllResponse = () => {
     if (!selectedTrace) return;
+    let headers = {};
+    try {
+      headers = selectedTrace.responseHeaders ? JSON.parse(selectedTrace.responseHeaders) : {};
+    } catch {
+      headers = selectedTrace.responseHeaders || {};
+    }
     const data = {
       statusCode: selectedTrace.statusCode,
-      headers: selectedTrace.responseHeaders ? JSON.parse(selectedTrace.responseHeaders) : {},
+      headers,
       body: selectedTrace.responseBody,
       latencyMs: selectedTrace.latencyMs,
       errorMessage: selectedTrace.errorMessage
@@ -523,6 +535,16 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
   // Check if body is large (> 500 bytes)
   const isBodyLarge = (body: string | null | undefined): boolean => {
     return (body?.length || 0) > 500;
+  };
+
+  // Safe parse headers count
+  const getHeadersCount = (headers: string | null | undefined): number => {
+    if (!headers) return 0;
+    try {
+      return Object.keys(JSON.parse(headers)).length;
+    } catch {
+      return 0;
+    }
   };
 
   const filterColumns = [
@@ -677,35 +699,6 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
     return '';
   };
 
-  // Column settings dropdown
-  const columnSettingsMenu = (
-    <div style={{ padding: 8, background: '#fff', borderRadius: 4 }}>
-      <Text strong style={{ marginBottom: 8, display: 'block' }}>{t('trace.visible_columns')}</Text>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {ALL_COLUMNS.map(col => (
-          <label key={col} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input
-              type="checkbox"
-              checked={visibleColumns.includes(col)}
-              onChange={(e) => {
-                if (e.target.checked) {
-                  setVisibleColumns([...visibleColumns, col]);
-                } else if (col !== 'actions') { // Actions column always visible
-                  setVisibleColumns(visibleColumns.filter(c => c !== col));
-                }
-              }}
-              disabled={col === 'actions'}
-            />
-            <Text>{t(`trace.${col}`)}</Text>
-          </label>
-        ))}
-      </div>
-      <Button size="small" style={{ marginTop: 8 }} onClick={() => setVisibleColumns(DEFAULT_VISIBLE_COLUMNS)}>
-        {t('common.reset')}
-      </Button>
-    </div>
-  );
-
   // Helper function to calculate span depth (for hierarchical display)
   const getSpanDepth = (span: any, allSpans: any[]): number => {
     if (!span.parentSpanId || span.parentSpanId === '') return 0;
@@ -834,7 +827,36 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
             </Space>
           </Col>
           <Col>
-            <Dropdown dropdownRender={() => columnSettingsMenu}>
+            <Dropdown
+            trigger={['click']}
+            dropdownRender={() => (
+              <Card size="small" style={{ width: 200, padding: 8 }}>
+                <Text strong style={{ marginBottom: 8, display: 'block' }}>{t('trace.visible_columns')}</Text>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {ALL_COLUMNS.map(col => (
+                    <label key={col} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns.includes(col)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setVisibleColumns([...visibleColumns, col]);
+                          } else if (col !== 'actions') {
+                            setVisibleColumns(visibleColumns.filter(c => c !== col));
+                          }
+                        }}
+                        disabled={col === 'actions'}
+                      />
+                      <Text style={{ fontSize: 12 }}>{t(`trace.${col}`)}</Text>
+                    </label>
+                  ))}
+                </div>
+                <Button size="small" style={{ marginTop: 8 }} onClick={() => setVisibleColumns(DEFAULT_VISIBLE_COLUMNS)}>
+                  {t('common.reset')}
+                </Button>
+              </Card>
+            )}
+          >
               <Button icon={<SettingOutlined />}>
                 {t('trace.columns')}
               </Button>
@@ -1008,6 +1030,8 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
         }
         placement="right"
         width={900}
+        destroyOnClose
+        maskClosable
         onClose={() => setDetailDrawerVisible(false)}
         open={detailDrawerVisible}
         styles={{ body: { padding: 16 } }}
@@ -1116,7 +1140,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                   style={{ marginBottom: 16 }}
                 >
                   <Collapse bordered size="small" defaultActiveKey={['headers', 'body']}>
-                    <Panel header={`Headers (${selectedTrace.requestHeaders ? Object.keys(JSON.parse(selectedTrace.requestHeaders)).length : 0})`} key="headers">
+                    <Panel header={`Headers (${getHeadersCount(selectedTrace.requestHeaders)})`} key="headers">
                       <pre style={{
                         background: detailViewMode === 'formatted' ? '#f5f5f5' : 'transparent',
                         padding: 8,
@@ -1165,7 +1189,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                   style={{ marginBottom: 16 }}
                 >
                   <Collapse bordered size="small" defaultActiveKey={['headers', 'body']}>
-                    <Panel header={`Headers (${selectedTrace.responseHeaders ? Object.keys(JSON.parse(selectedTrace.responseHeaders)).length : 0})`} key="headers">
+                    <Panel header={`Headers (${getHeadersCount(selectedTrace.responseHeaders)})`} key="headers">
                       <pre style={{
                         background: '#f5f5f5',
                         padding: 8,

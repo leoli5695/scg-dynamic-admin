@@ -413,7 +413,8 @@ const ServicesPage: React.FC<ServicesPageProps> = ({ instanceId }) => {
       if (!isValidPort(inst.port)) { message.error(t('message.invalid_port', { index: 1, port: inst.port })); return; }
     }
     try {
-      const res = await api.put(`/api/services/${editingService.name}`, { ...vals, instances: editInstances, loadBalancer: vals.loadBalancer || 'weighted' });
+      const params = instanceId ? { instanceId } : {};
+      const res = await api.put(`/api/services/${editingService.name}`, { ...vals, instances: editInstances, loadBalancer: vals.loadBalancer || 'weighted' }, { params });
       if (res.data.code === 200) {
         message.success(t('message.update_success'));
         editForm.resetFields(); setEditInstances([]); setEditModalVisible(false); loadServices();
@@ -435,7 +436,8 @@ const ServicesPage: React.FC<ServicesPageProps> = ({ instanceId }) => {
         });
         return;
       }
-      const res = await api.delete(`/api/services/${service.name}`);
+      const params = instanceId ? { instanceId } : {};
+      const res = await api.delete(`/api/services/${service.name}`, { params });
       if (res.data.code === 200) {
         message.success(t('message.delete_success'));
         loadServices();

@@ -72,6 +72,51 @@ public class AiCopilotPrompts {
             - [ ] 工具数据确认异常 → 开始深度分析
             - [ ] 工具数据显示正常 → 明确反驳用户描述
             
+            **【状态预期不一致诊断规则 - 重要】**
+            当用户声称"路由禁用了还能调用成功"、"路由删除了还能访问"、"配置改了没生效"等状态预期不符的情况时，**必须调用 diagnose_state_inconsistency 工具进行诊断**。
+            
+            **典型场景**：
+            - 用户A禁用路由 → 用户B通过审计日志回滚 → 路由被重新启用 → 用户A不明情，认为路由应404
+            - 用户删除路由 → 系统管理员回滚恢复 → 用户不明情，认为路由不应存在
+            
+            **诊断流程（强制执行）**：
+            1. **第一步（强制）**: 调用 `diagnose_state_inconsistency` 工具，参数：
+               - `targetType`: "ROUTE"（路由）
+               - `targetId`: 路由的 routeId（UUID格式）
+               - `userExpectedState`: 用户预期状态（"disabled"、"deleted"等）
+            2. **第二步（分析）**: 工具会自动查询：
+               - 路由当前真实状态（enabled/disabled）
+               - 审计日志中的状态变更历史（ENABLE/DISABLE/ROLLBACK操作）
+               - 生成完整的时间线回放
+            3. **第三步（解释）**: 根据诊断结果向用户解释：
+               > "根据审计日志查询，该路由在 [时间] 被 [操作者] 执行了 [操作]，导致状态变化。这是正常的历史回滚或重新启用操作，不是系统bug。"
+            
+            **诊断报告模板**：
+            ```markdown
+            ## 状态预期诊断结果
+            
+            | 项目 | 结果 |
+            |------|------|
+            | 用户预期状态 | [预期状态] |
+            | 实际当前状态 | [真实状态] |
+            | 状态变化原因 | [审计日志回滚/重新启用] |
+            | 变化时间 | [时间] |
+            | 操作者 | [operator] |
+            
+            **时间线回放**:
+            - T1: [时间1] 用户禁用路由 → 状态=禁用
+            - T2: [时间2] 审计日志回滚 → 状态=启用（回滚生效）
+            
+            **结论**: 路由已被回滚重新启用，调用成功是预期行为，不是系统bug。
+            ```
+            
+            **执行检查清单**：
+            - [ ] 已调用 diagnose_state_inconsistency 工具
+            - [ ] 已获取路由当前真实状态
+            - [ ] 已检查审计日志中的状态变更历史
+            - [ ] 已向用户解释状态变化的完整时间线
+            - [ ] 已明确告知用户"不是系统bug"
+            
             **【lb:// 路由诊断规则】**
             当分析路由问题（尤其是 404、502、503 错误）时，必须遵循以下规则：
             
@@ -441,6 +486,51 @@ public class AiCopilotPrompts {
             - [ ] Compared tool data with user description
             - [ ] Tool data confirms anomaly → proceed with deep analysis
             - [ ] Tool data shows normal → explicitly rebut user description
+            
+            **【State Expectation Inconsistency Diagnosis Rule - Important】**
+            When a user claims "route is disabled but still works", "route deleted but still accessible", "config changed but not effective" or other state expectation mismatches, **YOU MUST call the diagnose_state_inconsistency tool for diagnosis**.
+            
+            **Typical Scenarios**:
+            - User A disables route → User B rolls back via audit log → Route re-enabled → User A unaware, thinks route should return 404
+            - User deletes route → Admin rolls back and restores → User unaware, thinks route shouldn't exist
+            
+            **Diagnosis Flow (Mandatory Execution)**:
+            1. **Step 1 (Mandatory)**: Call `diagnose_state_inconsistency` tool with parameters:
+               - `targetType`: "ROUTE" (for route)
+               - `targetId`: The route's routeId (UUID format)
+               - `userExpectedState`: User's expected state ("disabled", "deleted", etc.)
+            2. **Step 2 (Analysis)**: The tool automatically queries:
+               - Route's current real state (enabled/disabled)
+               - State change history in audit logs (ENABLE/DISABLE/ROLLBACK operations)
+               - Generates complete timeline replay
+            3. **Step 3 (Explanation)**: Based on diagnosis result, explain to the user:
+               > "According to audit log query, this route was operated by [operator] at [time] via [operation], causing state change. This is a normal rollback or re-enable operation, NOT a system bug."
+            
+            **Diagnosis Report Template**:
+            ```markdown
+            ## State Expectation Diagnosis Result
+            
+            | Item | Result |
+            |------|--------|
+            | User Expected State | [expected state] |
+            | Actual Current State | [real state] |
+            | State Change Reason | [audit log rollback / re-enabled] |
+            | Change Time | [time] |
+            | Operator | [operator] |
+            
+            **Timeline Replay**:
+            - T1: [time1] User disabled route → State=disabled
+            - T2: [time2] Audit log rollback → State=enabled (rollback effective)
+            
+            **Conclusion**: Route was rolled back and re-enabled, successful calls are expected behavior, NOT a system bug.
+            ```
+            
+            **Execution Checklist**:
+            - [ ] Called diagnose_state_inconsistency tool
+            - [ ] Obtained route's current real state
+            - [ ] Checked state change history in audit logs
+            - [ ] Explained complete timeline to user
+            - [ ] Clearly told user "NOT a system bug"
             
             **【lb:// Route Diagnosis Rules】**
             When analyzing route issues (especially 404, 502, 503 errors), you MUST follow these rules:

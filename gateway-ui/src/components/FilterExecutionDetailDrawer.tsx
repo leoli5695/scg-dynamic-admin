@@ -117,6 +117,8 @@ const FilterExecutionDetailDrawer: React.FC<FilterExecutionDetailDrawerProps> = 
       }
       placement="right"
       width={500}
+      destroyOnClose
+      maskClosable
       onClose={onClose}
       open={visible}
       styles={{ body: { padding: 16 } }}

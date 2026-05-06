@@ -19,7 +19,6 @@ import reactor.core.publisher.Mono;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -60,12 +59,15 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
     public static final String SERVICE_NAMESPACE_ATTR = "serviceNamespace";
     public static final String SERVICE_GROUP_ATTR = "serviceGroup";
 
-    // Round-robin counter for weighted selection
+    // Round-robin counter for weighted selection (fallback when all weights are 0)
     private final Map<String, AtomicInteger> roundRobinCounters = new java.util.concurrent.ConcurrentHashMap<>();
+    
+    // Smooth weighted round-robin: service -> (instanceKey -> currentWeight)
+    private final Map<String, Map<String, AtomicInteger>> instanceCurrentWeights = new java.util.concurrent.ConcurrentHashMap<>();
 
     public NacosDiscoveryLoadBalancerFilter(NacosDiscoveryService nacosDiscoveryService) {
         this.nacosDiscoveryService = nacosDiscoveryService;
-        log.info("NacosDiscoveryLoadBalancerFilter initialized with weighted load balancing");
+        log.info("NacosDiscoveryLoadBalancerFilter initialized with smooth weighted round-robin");
     }
 
     @Override
@@ -194,8 +196,18 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * Select instance using weighted round-robin (smooth version).
-     * This algorithm ensures even distribution based on weights.
+     * Select instance using smooth weighted round-robin.
+     * This algorithm ensures even distribution based on weights without randomness.
+     * 
+     * Algorithm:
+     * 1. Each instance has static weight and dynamic currentWeight
+     * 2. On each selection:
+     *    - Add static weight to currentWeight for all instances
+     *    - Select instance with highest currentWeight
+     *    - Subtract total weight from selected instance's currentWeight
+     * 
+     * Example: A(weight=5), B(weight=3), C(weight=2), total=10
+     * Selection sequence: A, B, C, A, B, A, C, A, B, C...
      */
     private ServiceInstance selectByWeightedRoundRobin(String serviceName, List<ServiceInstance> instances) {
         if (instances.size() == 1) {
@@ -214,19 +226,40 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
             return instances.get(index);
         }
 
-        // Weighted random selection (simple and effective)
-        double randomWeight = ThreadLocalRandom.current().nextDouble() * totalWeight;
-        double currentWeight = 0;
-
+        // Smooth weighted round-robin
+        // Each instance's currentWeight is stored in a map
+        Map<String, AtomicInteger> weightMap = instanceCurrentWeights.computeIfAbsent(
+                serviceName, k -> new java.util.concurrent.ConcurrentHashMap<>());
+        
+        // Add static weight to currentWeight for all instances
+        ServiceInstance selected = null;
+        double maxCurrentWeight = -1;
+        
         for (ServiceInstance instance : instances) {
-            currentWeight += instance.getWeight();
-            if (randomWeight <= currentWeight) {
-                return instance;
+            String instanceKey = instance.getHost() + ":" + instance.getPort();
+            AtomicInteger currentWeight = weightMap.computeIfAbsent(
+                    instanceKey, k -> new AtomicInteger(0));
+            
+            // Add static weight to current weight
+            int newWeight = currentWeight.addAndGet((int) instance.getWeight());
+            
+            // Track instance with highest current weight
+            if (newWeight > maxCurrentWeight) {
+                maxCurrentWeight = newWeight;
+                selected = instance;
             }
         }
-
-        // Fallback to last instance
-        return instances.get(instances.size() - 1);
+        
+        // Subtract total weight from selected instance
+        if (selected != null) {
+            String selectedKey = selected.getHost() + ":" + selected.getPort();
+            AtomicInteger selectedWeight = weightMap.get(selectedKey);
+            if (selectedWeight != null) {
+                selectedWeight.addAndGet(-(int) totalWeight);
+            }
+        }
+        
+        return selected != null ? selected : instances.get(0);
     }
 
     /**

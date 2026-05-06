@@ -14,15 +14,38 @@ spec:
   storageClassName: local-path
 
 ---
-# Nacos Deployment
+# Nacos Headless Service (为 StatefulSet 提供稳定的网络标识)
+apiVersion: v1
+kind: Service
+metadata:
+  name: nacos-headless
+  namespace: test
+spec:
+  clusterIP: None
+  selector:
+    app: nacos
+  ports:
+  - name: client
+    port: 8848
+    targetPort: 8848
+  - name: grpc
+    port: 9848
+    targetPort: 9848
+  - name: raft-internal
+    port: 9849
+    targetPort: 9849
+
+---
+# Nacos StatefulSet (使用稳定的 hostname)
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: nacos
   namespace: test
   labels:
     app: nacos
 spec:
+  serviceName: nacos-headless
   replicas: 1
   selector:
     matchLabels:
@@ -49,9 +72,7 @@ spec:
         - name: PREFER_HOST_MODE
           value: "hostname"
         - name: NACOS_SERVER_IP
-          valueFrom:
-            fieldRef:
-              fieldPath: status.podIP
+          value: "nacos-0.nacos-headless.test.svc.cluster.local"
         - name: NACOS_APPLICATION_PORT
           value: "8848"
         - name: NACOS_SERVER_PORT
@@ -88,13 +109,18 @@ spec:
           periodSeconds: 5
           timeoutSeconds: 3
           failureThreshold: 10
-      volumes:
-      - name: nacos-data
-        persistentVolumeClaim:
-          claimName: nacos-pvc
+  volumeClaimTemplates:
+  - metadata:
+      name: nacos-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: local-path
+      resources:
+        requests:
+          storage: 5Gi
 
 ---
-# Nacos Service
+# Nacos Service (对外暴露)
 apiVersion: v1
 kind: Service
 metadata:

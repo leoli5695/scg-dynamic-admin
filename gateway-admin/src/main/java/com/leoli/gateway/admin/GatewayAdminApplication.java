@@ -32,8 +32,7 @@ public class GatewayAdminApplication {
     public void onApplicationEvent() {
         System.out.println("========================================");
         System.out.println("  Gateway Admin Console Started!");
-        System.out.println("  API Base URL: http://localhost:8080/api");
-        System.out.println("  H2 Console: http://localhost:8080/h2-console");
+        System.out.println("  API Base URL: http://localhost:9090/api");
         System.out.println("========================================");
     }
 }

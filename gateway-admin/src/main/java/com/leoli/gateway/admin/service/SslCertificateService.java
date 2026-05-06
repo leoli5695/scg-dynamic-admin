@@ -2,13 +2,16 @@ package com.leoli.gateway.admin.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.center.ConfigCenterService;
+import com.leoli.gateway.admin.model.GatewayInstanceEntity;
 import com.leoli.gateway.admin.model.SslCertificate;
+import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
 import com.leoli.gateway.admin.repository.SslCertificateRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.annotation.PostConstruct;
 import javax.crypto.Cipher;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
@@ -17,6 +20,7 @@ import java.security.cert.*;
 import java.security.cert.Certificate;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Service for managing SSL certificates.
@@ -32,9 +36,129 @@ public class SslCertificateService {
     private final SslCertificateRepository sslCertificateRepository;
     private final ObjectMapper objectMapper;
     private final ConfigCenterService configCenterService;
+    private final GatewayInstanceRepository gatewayInstanceRepository;
+
+    /**
+     * Get Nacos namespace from instance ID.
+     * Returns null for default namespace if instance not found.
+     */
+    private String getNacosNamespace(String instanceId) {
+        if (instanceId == null || instanceId.isEmpty()) {
+            return null; // Use default namespace
+        }
+        return gatewayInstanceRepository.findByInstanceId(instanceId)
+                .map(GatewayInstanceEntity::getNacosNamespace)
+                .orElse(null);
+    }
 
     // Secret key for encrypting passwords (should be externalized in production)
     private static final String ENCRYPTION_KEY = "GatewaySSLKey123";
+
+    private static final String CERTIFICATE_PREFIX = "ssl-certificate-";
+    private static final String CERTIFICATES_INDEX = "config.gateway.metadata.ssl-certificates-index";
+
+    @PostConstruct
+    public void init() {
+        loadCertificatesFromDatabase();
+        log.info("SslCertificateService initialized with Nacos sync");
+    }
+
+    /**
+     * Load certificates from database on startup and recover missing configs in Nacos.
+     * Only pushes to Nacos if config is missing (to avoid unnecessary Gateway refresh).
+     */
+    private void loadCertificatesFromDatabase() {
+        try {
+            List<SslCertificate> certs = sslCertificateRepository.findByEnabled(true);
+            if (certs == null || certs.isEmpty()) {
+                log.info("No enabled certificates found in database");
+                return;
+            }
+
+            log.info("Loaded {} enabled certificates from database", certs.size());
+
+            // Batch load all gateway instances to avoid N+1 queries
+            Map<String, String> instanceNamespaceMap = gatewayInstanceRepository.findAll().stream()
+                    .filter(i -> i.getNacosNamespace() != null)
+                    .collect(Collectors.toMap(
+                            GatewayInstanceEntity::getInstanceId,
+                            GatewayInstanceEntity::getNacosNamespace,
+                            (a, b) -> a // handle duplicates
+                    ));
+
+            // Group certificates by instanceId
+            Map<String, List<SslCertificate>> certsByInstance = certs.stream()
+                    .filter(c -> c.getInstanceId() != null && instanceNamespaceMap.containsKey(c.getInstanceId()))
+                    .collect(Collectors.groupingBy(SslCertificate::getInstanceId));
+
+            // Recover certificates that are missing in Nacos
+            int recoveredCount = 0;
+            for (Map.Entry<String, List<SslCertificate>> entry : certsByInstance.entrySet()) {
+                String instanceId = entry.getKey();
+                String nacosNamespace = instanceNamespaceMap.get(instanceId);
+
+                for (SslCertificate cert : entry.getValue()) {
+                    String certDataId = CERTIFICATE_PREFIX + cert.getDomain();
+                    if (!configCenterService.configExists(certDataId, nacosNamespace)) {
+                        // Convert to config and push
+                        Map<String, Object> config = toConfigMap(cert);
+                        configCenterService.publishConfig(certDataId, nacosNamespace, config);
+                        recoveredCount++;
+                        log.info("Recovered missing certificate in Nacos: {} (namespace: {})", certDataId, nacosNamespace);
+                    }
+                }
+
+                // Rebuild certificates index for each instance
+                rebuildCertificatesIndex(instanceId, nacosNamespace, entry.getValue());
+            }
+
+            if (recoveredCount > 0) {
+                log.info("Recovered {} missing certificates in Nacos on startup", recoveredCount);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to load certificates from database: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Rebuild certificates index from database for a specific instance.
+     */
+    private void rebuildCertificatesIndex(String instanceId, String nacosNamespace, List<SslCertificate> certs) {
+        try {
+            List<String> domains = certs.stream()
+                    .map(SslCertificate::getDomain)
+                    .collect(Collectors.toList());
+
+            configCenterService.publishConfig(CERTIFICATES_INDEX, nacosNamespace, domains);
+            log.debug("Certificates index rebuilt with {} certificates in namespace {}", domains.size(), nacosNamespace);
+        } catch (Exception e) {
+            log.warn("Failed to rebuild certificates index for instance {}: {}", instanceId, e.getMessage());
+        }
+    }
+
+    /**
+     * Convert certificate entity to config map for Nacos.
+     */
+    private Map<String, Object> toConfigMap(SslCertificate cert) {
+        Map<String, Object> config = new HashMap<>();
+        config.put("id", cert.getId());
+        config.put("domain", cert.getDomain());
+        config.put("certName", cert.getCertName());
+        config.put("certType", cert.getCertType());
+        config.put("certContent", cert.getCertContent());
+        config.put("keyContent", cert.getKeyContent());
+        config.put("keystoreContent", cert.getKeystoreContent());
+        config.put("keystorePassword", cert.getKeystorePassword());
+        config.put("issuer", cert.getIssuer());
+        config.put("serialNumber", cert.getSerialNumber());
+        config.put("validFrom", cert.getValidFrom());
+        config.put("validTo", cert.getValidTo());
+        config.put("daysToExpiry", cert.getDaysToExpiry());
+        config.put("status", cert.getStatus());
+        config.put("enabled", cert.getEnabled());
+        config.put("associatedRoutes", cert.getAssociatedRoutes());
+        return config;
+    }
 
     /**
      * Get all certificates
@@ -417,10 +541,16 @@ public class SslCertificateService {
             config.put("enabled", cert.getEnabled());
 
             String dataId = "ssl-certificate-" + cert.getDomain();
-            String namespace = instanceId;
+            // Get correct nacosNamespace from GatewayInstanceEntity (e.g., gateway-kd2onojjfcu9)
+            String namespace = getNacosNamespace(instanceId);
             configCenterService.publishConfig(dataId, namespace, config);
 
-            log.info("Published certificate update to config center: {} (instance: {})", cert.getDomain(), instanceId);
+            log.info("Published certificate update to config center: {} (instance: {}, namespace: {})",
+                    cert.getDomain(), instanceId, namespace);
+
+            // IMPORTANT: Rebuild certificates index after each certificate change
+            // This ensures my-gateway can discover the new certificate on startup
+            rebuildCertificatesIndexAfterChange(instanceId);
         } catch (Exception e) {
             log.error("Failed to publish certificate update", e);
         }
@@ -439,11 +569,49 @@ public class SslCertificateService {
     private void publishCertificateRemoval(String instanceId, SslCertificate cert) {
         try {
             String dataId = "ssl-certificate-" + cert.getDomain();
-            String namespace = instanceId;
+            // Get correct nacosNamespace from GatewayInstanceEntity (e.g., gateway-kd2onojjfcu9)
+            String namespace = getNacosNamespace(instanceId);
             configCenterService.removeConfig(dataId, namespace);
-            log.info("Published certificate removal to config center: {} (instance: {})", cert.getDomain(), instanceId);
+            log.info("Published certificate removal to config center: {} (instance: {}, namespace: {})",
+                    cert.getDomain(), instanceId, namespace);
+
+            // IMPORTANT: Rebuild certificates index after removal
+            // This ensures the removed certificate is no longer in the index
+            rebuildCertificatesIndexAfterChange(instanceId);
         } catch (Exception e) {
             log.error("Failed to publish certificate removal", e);
+        }
+    }
+
+    /**
+     * Rebuild certificates index after a certificate change (create/update/delete/enable/disable).
+     * This ensures my-gateway can discover all enabled certificates on startup.
+     */
+    private void rebuildCertificatesIndexAfterChange(String instanceId) {
+        if (instanceId == null || instanceId.isEmpty()) {
+            log.warn("Cannot rebuild certificates index: instanceId is null or empty");
+            return;
+        }
+
+        String nacosNamespace = getNacosNamespace(instanceId);
+        if (nacosNamespace == null) {
+            log.warn("Cannot rebuild certificates index: no namespace found for instance {}", instanceId);
+            return;
+        }
+
+        try {
+            // Get all ENABLED certificates for this instance
+            List<SslCertificate> enabledCerts = sslCertificateRepository.findByInstanceIdAndEnabledTrue(instanceId);
+            List<String> domains = enabledCerts.stream()
+                    .map(SslCertificate::getDomain)
+                    .collect(Collectors.toList());
+
+            // Publish index as JSON array
+            configCenterService.publishConfig(CERTIFICATES_INDEX, nacosNamespace, domains);
+            log.info("Certificates index rebuilt with {} enabled certificates (instance: {}, namespace: {})",
+                    domains.size(), instanceId, nacosNamespace);
+        } catch (Exception e) {
+            log.error("Failed to rebuild certificates index for instance {}", instanceId, e);
         }
     }
 }

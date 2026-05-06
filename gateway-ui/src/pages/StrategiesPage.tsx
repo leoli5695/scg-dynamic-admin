@@ -590,7 +590,7 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
         config: buildConfig(values, selectedStrategy.strategyType),
       };
 
-      const response = await api.put(`/api/strategies/${selectedStrategy.strategyId}`, strategy);
+      const response = await api.put(`/api/strategies/${selectedStrategy.strategyId}`, strategy, { params: instanceId ? { instanceId } : {} });
       if (response.data.code === 200) {
         message.success(t('message.update_success'));
         editForm.resetFields();
@@ -614,7 +614,7 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
       cancelText: t('common.cancel'),
       onOk: async () => {
         try {
-          const response = await api.delete(`/api/strategies/${strategy.strategyId}`);
+          const response = await api.delete(`/api/strategies/${strategy.strategyId}`, { params: instanceId ? { instanceId } : {} });
           if (response.data.code === 200) {
             message.success(t('message.delete_success'));
             loadStrategies();
@@ -630,7 +630,8 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
 
   const handleEnable = useCallback(async (strategy: StrategyDefinition) => {
     try {
-      const response = await api.post(`/api/strategies/${strategy.strategyId}/enable`);
+      const params = instanceId ? { instanceId } : {};
+      const response = await api.post(`/api/strategies/${strategy.strategyId}/enable`, null, { params });
       if (response.data.code === 200) {
         message.success(t('message.enable_success'));
         loadStrategies();
@@ -644,7 +645,8 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
 
   const handleDisable = useCallback(async (strategy: StrategyDefinition) => {
     try {
-      const response = await api.post(`/api/strategies/${strategy.strategyId}/disable`);
+      const params = instanceId ? { instanceId } : {};
+      const response = await api.post(`/api/strategies/${strategy.strategyId}/disable`, null, { params });
       if (response.data.code === 200) {
         message.success(t('message.disable_success'));
         loadStrategies();

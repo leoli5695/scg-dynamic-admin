@@ -50,6 +50,8 @@ interface DiffResult {
   id: number;
   targetType: string;
   targetId: string;
+  targetName?: string;
+  instanceId?: string;
   operationType: string;
   operator: string;
   createdAt: string;
@@ -574,15 +576,18 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
 
   // 行样式高亮（根据操作类型）
   const getRowClassName = (record: AuditLog) => {
-    switch (record.operationType) {
-      case 'DELETE':
-        return 'audit-row-delete';
-      case 'CREATE':
-        return 'audit-row-create';
-      case 'ROLLBACK':
-        return 'audit-row-rollback';
-      default:
-        return '';
+    return '';
+  };
+
+  const getRowStyle = (operationType: string) => {
+    switch (operationType) {
+      case 'DELETE': return { backgroundColor: 'rgba(255, 77, 79, 0.08)' };
+      case 'CREATE': return { backgroundColor: 'rgba(82, 196, 26, 0.08)' };
+      case 'ROLLBACK': return { backgroundColor: 'rgba(250, 173, 20, 0.08)' };
+      case 'UPDATE': return { backgroundColor: 'rgba(24, 144, 255, 0.08)' };
+      case 'ENABLE': return { backgroundColor: 'rgba(82, 196, 26, 0.08)' };
+      case 'DISABLE': return { backgroundColor: 'rgba(255, 77, 79, 0.08)' };
+      default: return {}; // 不设置背景色，使用主题默认
     }
   };
 
@@ -733,35 +738,33 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
       key: 'actions', width: 150, fixed: 'right',
       render: (_, record) => (
         <Space size="small">
-          <Tooltip title={t('audit.view_diff') || '查看差异'}>
+          <Tooltip title={t('audit.view_diff') || '查看差异'} placement="top">
             <Button type="link" size="small" icon={<DiffOutlined />} onClick={() => showDiff(record.id)} />
           </Tooltip>
           {record.oldValue && (
+            <Tooltip title={t('audit.rollback') || '回滚'} placement="top">
+              <Popconfirm
+                title={t('audit.rollback_confirm') || '确定回滚到此版本？'}
+                onConfirm={() => handleRollback(record.id)}
+                okText={t('common.confirm') || '确定'}
+                cancelText={t('common.cancel') || '取消'}
+              >
+                <Button type="link" size="small" icon={<RollbackOutlined />} danger />
+              </Popconfirm>
+            </Tooltip>
+          )}
+          <Tooltip title={t('audit.delete') || '删除'} placement="top">
             <Popconfirm
-              title={t('audit.rollback_confirm') || '确定回滚到此版本？'}
-              onConfirm={() => handleRollback(record.id)}
+              title={t('audit.delete_confirm') || '确定删除此日志？'}
+              description={t('audit.delete_warning') || '删除后无法恢复'}
+              onConfirm={() => handleDelete(record.id)}
               okText={t('common.confirm') || '确定'}
               cancelText={t('common.cancel') || '取消'}
-              getPopupContainer={() => document.body}
+              okButtonProps={{ danger: true }}
             >
-              <Tooltip title={t('audit.rollback') || '回滚'}>
-                <Button type="link" size="small" icon={<RollbackOutlined />} danger />
-              </Tooltip>
-            </Popconfirm>
-          )}
-          <Popconfirm
-            title={t('audit.delete_confirm') || '确定删除此日志？'}
-            description={t('audit.delete_warning') || '删除后无法恢复'}
-            onConfirm={() => handleDelete(record.id)}
-            okText={t('common.confirm') || '确定'}
-            cancelText={t('common.cancel') || '取消'}
-            okButtonProps={{ danger: true }}
-            getPopupContainer={() => document.body}
-          >
-            <Tooltip title={t('audit.delete') || '删除'}>
               <Button type="link" size="small" icon={<DeleteOutlined />} />
-            </Tooltip>
-          </Popconfirm>
+            </Popconfirm>
+          </Tooltip>
         </Space>
       ),
     },
@@ -791,17 +794,18 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
     );
   };
 
-  // Helper: Get target detail link
-  const getTargetLink = (targetType: string, targetId: string) => {
+  // Helper: Get target detail link (使用 highlight 参数打开详情 Drawer)
+  const getTargetLink = (targetType: string, targetId: string, instanceId?: string) => {
+    if (!instanceId) return null; // 如果没有实例ID，无法跳转到详情
     switch (targetType) {
       case 'ROUTE':
-        return `/routes/${targetId}`;
+        return `/instances/${instanceId}/routes?highlight=${targetId}&from=audit`;
       case 'SERVICE':
-        return `/services/${targetId}`;
+        return `/instances/${instanceId}/services?highlight=${targetId}&from=audit`;
       case 'STRATEGY':
-        return `/strategies/${targetId}`;
+        return `/instances/${instanceId}/strategies?highlight=${targetId}&from=audit`;
       case 'AUTH_POLICY':
-        return `/auth-policies/${targetId}`;
+        return `/instances/${instanceId}/auth-policies?highlight=${targetId}&from=audit`;
       default:
         return null;
     }
@@ -811,7 +815,7 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
     if (diffLoading) return <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>;
     if (!diffData) return null;
 
-    const targetLink = getTargetLink(diffData.targetType, diffData.targetId);
+    const targetLink = getTargetLink(diffData.targetType, diffData.targetId, diffData.instanceId || instanceId);
 
     return (
       <div>
@@ -823,11 +827,27 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
           <Descriptions.Item label={t('audit.target_type') || '目标类型'}>
             {getTargetTypeTag(diffData.targetType)}
           </Descriptions.Item>
-          <Descriptions.Item label={t('audit.target_id') || '目标ID'}>
+          <Descriptions.Item label={t('audit.target_route') || '目标路由'}>
             <Space>
-              <Text copyable style={{ fontSize: 11 }}>{diffData.targetId}</Text>
+              <Tooltip
+                title={`ID: ${diffData.targetId}`}
+                placement="top"
+                mouseEnterDelay={0.1}
+                autoAdjustOverflow
+                align={{ offset: [0, 4] }}
+              >
+                <Text copyable style={{ fontSize: 11 }}>
+                  {diffData.targetName && diffData.targetName !== 'unknown' ? diffData.targetName : diffData.targetId}
+                </Text>
+              </Tooltip>
               {targetLink && (
-                <Tooltip title={t('audit.view_target_detail') || '查看目标详情'}>
+                <Tooltip
+                  title={t('audit.view_target_detail') || '查看目标详情'}
+                  placement="top"
+                  mouseEnterDelay={0.1}
+                  autoAdjustOverflow
+                  align={{ offset: [0, 4] }}
+                >
                   <Button
                     type="link"
                     size="small"
@@ -863,11 +883,11 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
                 { title: t('audit.field') || '字段', dataIndex: 'field', width: 150 },
                 {
                   title: t('audit.old_value') || '旧值', dataIndex: 'oldValue',
-                  render: (v) => v ? <Text style={{ fontSize: 11, color: '#ff4d4f' }}>{JSON.stringify(v)}</Text> : '-',
+                  render: (v) => v ? <Text type="danger" style={{ fontSize: 11 }}>{JSON.stringify(v)}</Text> : <Text type="secondary">-</Text>,
                 },
                 {
                   title: t('audit.new_value') || '新值', dataIndex: 'newValue',
-                  render: (v) => v ? <Text style={{ fontSize: 11, color: '#52c41a' }}>{JSON.stringify(v)}</Text> : '-',
+                  render: (v) => v ? <Text type="success" style={{ fontSize: 11 }}>{JSON.stringify(v)}</Text> : <Text type="secondary">-</Text>,
                 },
               ]}
               size="small"
@@ -881,13 +901,13 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
           <Row gutter={16}>
             <Col span={12}>
               <Alert type="error" message={t('audit.old_value') || '旧值'} style={{ marginBottom: 8 }} />
-              <div style={{ background: '#fff1f0', padding: 8, borderRadius: 4, maxHeight: 300, overflow: 'auto' }}>
+              <div style={{ background: 'rgba(255, 77, 79, 0.08)', padding: 8, borderRadius: 4, maxHeight: 300, overflow: 'auto' }}>
                 {renderJsonValue(diffData.oldValue, 280)}
               </div>
             </Col>
             <Col span={12}>
               <Alert type="success" message={t('audit.new_value') || '新值'} style={{ marginBottom: 8 }} />
-              <div style={{ background: '#f6ffed', padding: 8, borderRadius: 4, maxHeight: 300, overflow: 'auto' }}>
+              <div style={{ background: 'rgba(82, 196, 26, 0.08)', padding: 8, borderRadius: 4, maxHeight: 300, overflow: 'auto' }}>
                 {renderJsonValue(diffData.newValue, 280)}
               </div>
             </Col>
@@ -1069,21 +1089,15 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
 
       {/* Table */}
       <Card>
-        <style>{`
-          .audit-row-delete { background-color: #fff1f0 !important; }
-          .audit-row-create { background-color: #f6ffed !important; }
-          .audit-row-rollback { background-color: #fffbe6 !important; }
-          .audit-row-delete:hover { background-color: #ffe7e6 !important; }
-          .audit-row-create:hover { background-color: #e6f7e6 !important; }
-          .audit-row-rollback:hover { background-color: #fff1cc !important; }
-        `}</style>
         <Table
           columns={columns}
           dataSource={logs}
           rowKey="id"
           loading={loading}
           scroll={{ x: 1200 }}
-          rowClassName={getRowClassName}
+          onRow={(record: AuditLog) => ({
+            style: getRowStyle(record.operationType)
+          })}
           locale={{
             emptyText: (
               <Empty

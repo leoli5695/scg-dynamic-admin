@@ -59,12 +59,6 @@ public class SslServerConfig {
             return;
         }
 
-        if (serverStarted.get()) {
-            log.debug("HTTPS server already started, updating SSL context cache");
-            updateSslCache();
-            return;
-        }
-
         // Always update cache first
         updateSslCache();
 
@@ -73,8 +67,21 @@ public class SslServerConfig {
             return;
         }
 
+        // Check if there are any certificates left
         if (sslContextManager.getConfiguredDomains().isEmpty()) {
-            log.warn("No SSL certificates configured, HTTPS server not started");
+            log.warn("No SSL certificates configured");
+            // If server is running, stop it since no certificates available
+            if (serverStarted.get()) {
+                stopHttpsServerInternal();
+                log.info("HTTPS server stopped due to no certificates available");
+            }
+            return;
+        }
+
+        // If server already started, just update the cache
+        if (serverStarted.get()) {
+            log.debug("HTTPS server already started, updating SSL context cache");
+            updateSslCache();
             return;
         }
 
@@ -178,10 +185,15 @@ public class SslServerConfig {
                     if (contentType != null) {
                         headers.add("Content-Type", contentType);
                     }
+                    // Add content-length if present (important for POST/PUT with body)
+                    String contentLength = request.requestHeaders().get("Content-Length");
+                    if (contentLength != null) {
+                        headers.add("Content-Length", contentLength);
+                    }
                 })
                 .request(request.method())
                 .uri(path)
-                .send(request.receive())
+                .send(request.receive().map(ByteBuf::retain))  // Retain request body ByteBuf to prevent premature release
                 .response((proxyResponse, bodyFlux) -> {
                     log.info("Got response: {} for {}", proxyResponse.status(), path);
                     // Set response status
@@ -300,14 +312,30 @@ public class SslServerConfig {
     }
 
     /**
-     * Stop HTTPS server
+     * Stop HTTPS server (public method for manual stop)
      */
-    @PreDestroy
-    public void stopHttpsServer() {
-        if (httpsServer != null) {
+    public synchronized void stopHttpsServer() {
+        stopHttpsServerInternal();
+    }
+
+    /**
+     * Internal method to stop HTTPS server
+     */
+    private void stopHttpsServerInternal() {
+        if (httpsServer != null && !httpsServer.isDisposed()) {
             httpsServer.disposeNow(Duration.ofSeconds(10));
+            serverStarted.set(false);
+            sslContextCache.clear();
             log.info("HTTPS server stopped");
         }
+    }
+
+    /**
+     * Stop HTTPS server on bean destroy
+     */
+    @PreDestroy
+    public void onDestroy() {
+        stopHttpsServerInternal();
     }
 
     /**

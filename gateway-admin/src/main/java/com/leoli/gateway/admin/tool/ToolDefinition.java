@@ -117,7 +117,7 @@ public class ToolDefinition {
      * 创建无参数的工具定义
      */
     public static ToolDefinition createNoArgs(String name, String description,
-                                               String category, boolean readOnly) {
+                                              String category, boolean readOnly) {
         Map<String, Object> parameters = new LinkedHashMap<>();
         parameters.put("type", "object");
         parameters.put("properties", new LinkedHashMap<>());

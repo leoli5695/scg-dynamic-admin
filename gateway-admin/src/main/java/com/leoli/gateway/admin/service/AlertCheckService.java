@@ -56,11 +56,20 @@ public class AlertCheckService {
     // Only send CRITICAL alert when value exceeds threshold by 20%
     private static final double CRITICAL_MULTIPLIER = 1.2;
 
-    // Cooldown period for alerts (in minutes) - increased to reduce spam
-    private static final int ALERT_COOLDOWN_MINUTES = 15;
+    // Cooldown period for alerts (in minutes) - base cooldown
+    private static final int BASE_COOLDOWN_MINUTES = 15;
+
+    // Max cooldown period (in minutes)
+    private static final int MAX_COOLDOWN_MINUTES = 120;
 
     // Track last alert times to avoid spam
     private final Map<String, LocalDateTime> lastAlertTimes = new HashMap<>();
+
+    // Track alert counts for progressive cooldown
+    private final Map<String, Integer> alertCounts = new HashMap<>();
+
+    // Track last metric values for recovery detection
+    private final Map<String, Double> lastMetricValues = new HashMap<>();
 
     /**
      * Scheduled alert check - runs every 30 seconds.
@@ -236,10 +245,28 @@ public class AlertCheckService {
 
     /**
      * Check a metric against threshold and send alert if exceeded.
+     * Implements progressive cooldown: interval increases with each alert sent.
+     * Resets count when metric returns to normal.
      */
     private void checkMetricAgainstThreshold(String alertType, String metricName,
                                               double currentValue, double threshold,
                                               AlertConfig config, String instanceId, String unit) {
+        String key = buildAlertKey(alertType, instanceId);
+
+        // Check if metric is back to normal - reset alert count
+        if (currentValue < threshold) {
+            if (alertCounts.containsKey(key) && alertCounts.get(key) > 0) {
+                log.info("Metric {} returned to normal ({} < {}), resetting alert count for {}",
+                    metricName, currentValue, threshold, key);
+                alertCounts.put(key, 0);
+                lastMetricValues.remove(key);
+            }
+            return; // No alert needed
+        }
+
+        // Store last metric value for tracking
+        lastMetricValues.put(key, currentValue);
+
         double criticalThreshold = threshold * CRITICAL_MULTIPLIER;
 
         String level = null;
@@ -253,6 +280,7 @@ public class AlertCheckService {
             exceededThreshold = threshold;
         }
 
+        // Check if we should send alert (progressive cooldown)
         if (level != null && shouldSendAlert(alertType, instanceId)) {
             log.info("Alert triggered for instance {}: {} - {} = {} (threshold: {}, critical: {})",
                 instanceId, alertType, metricName, currentValue, threshold, criticalThreshold);
@@ -278,14 +306,21 @@ public class AlertCheckService {
 
             EmailSendResult sendResult = emailSenderService.sendEmailWithResult(recipients, title, htmlBody, true);
 
+            // Get current alert count for logging
+            int alertCount = alertCounts.getOrDefault(key, 0) + 1;
+            int currentCooldown = getProgressiveCooldown(key);
+
             saveAlertHistory(alertType, level, metricName, currentValue,
                 exceededThreshold, title, content, recipients, sendResult.isSuccess(),
                 sendResult.isSuccess() ? null : sendResult.getErrorMessage());
 
-            lastAlertTimes.put(buildAlertKey(alertType, instanceId), LocalDateTime.now());
+            // Update alert tracking
+            lastAlertTimes.put(key, LocalDateTime.now());
+            alertCounts.put(key, alertCount);
 
             if (sendResult.isSuccess()) {
-                log.info("Sent {} alert for instance {}: {} {}", level, instanceId, currentValue, unit);
+                log.info("Sent {} alert for instance {}: {} {} (count: {}, next cooldown: {}min)",
+                    level, instanceId, currentValue, unit, alertCount, currentCooldown);
             } else {
                 log.warn("Failed to send {} alert for instance {}: {}", level, instanceId, sendResult.getErrorMessage());
             }
@@ -293,7 +328,22 @@ public class AlertCheckService {
     }
 
     /**
-     * Check if enough time has passed since last alert (cooldown check).
+     * Get progressive cooldown based on alert count.
+     * Pattern: 15min -> 30min -> 60min -> 120min (max)
+     */
+    private int getProgressiveCooldown(String key) {
+        int count = alertCounts.getOrDefault(key, 0);
+
+        // Progressive cooldown pattern
+        if (count == 0) return BASE_COOLDOWN_MINUTES;        // 1st alert: 15min
+        if (count == 1) return BASE_COOLDOWN_MINUTES * 2;    // 2nd alert: 30min
+        if (count == 2) return BASE_COOLDOWN_MINUTES * 4;    // 3rd alert: 60min
+        return MAX_COOLDOWN_MINUTES;                          // 4th+ alert: 120min
+    }
+
+    /**
+     * Check if enough time has passed since last alert (progressive cooldown check).
+     * Cooldown increases with each alert sent.
      */
     private boolean shouldSendAlert(String alertType, String instanceId) {
         String key = buildAlertKey(alertType, instanceId);
@@ -301,7 +351,18 @@ public class AlertCheckService {
         if (lastAlert == null) {
             return true;
         }
-        return lastAlert.plusMinutes(ALERT_COOLDOWN_MINUTES).isBefore(LocalDateTime.now());
+
+        int cooldownMinutes = getProgressiveCooldown(key);
+        LocalDateTime nextAllowedTime = lastAlert.plusMinutes(cooldownMinutes);
+
+        boolean canSend = nextAllowedTime.isBefore(LocalDateTime.now());
+
+        if (!canSend) {
+            log.debug("Alert {} still in cooldown ({}min remaining, count: {})",
+                key, cooldownMinutes, alertCounts.getOrDefault(key, 0));
+        }
+
+        return canSend;
     }
 
     /**

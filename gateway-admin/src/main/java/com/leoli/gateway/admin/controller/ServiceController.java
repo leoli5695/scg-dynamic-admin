@@ -173,7 +173,7 @@ public class ServiceController extends BaseController {
 
             // Record audit log - CREATE
             String newValue = objectMapper.writeValueAsString(service);
-            auditLogService.recordAuditLog(getOperator(), "CREATE", "SERVICE", service.getServiceId(),
+            auditLogService.recordAuditLog(instanceId, getOperator(), "CREATE", "SERVICE", service.getServiceId(),
                     service.getName(), oldValue, newValue, getIpAddress(request));
 
             Map<String, Object> result = new HashMap<>();
@@ -202,9 +202,10 @@ public class ServiceController extends BaseController {
     @PutMapping("/{name}")
     public ResponseEntity<Map<String, Object>> updateService(@PathVariable String name,
                                                              @RequestBody ServiceDefinition service,
+                                                             @RequestParam(required = false) String instanceId,
                                                              HttpServletRequest request) {
         try {
-            log.info("Updating service: {}", name);
+            log.info("Updating service: {} for instance: {}", name, instanceId);
 
             // Get old value before update
             ServiceDefinition oldService = serviceManager.getServiceByName(name);
@@ -214,7 +215,7 @@ public class ServiceController extends BaseController {
 
             // Record audit log - UPDATE
             String newValue = objectMapper.writeValueAsString(service);
-            auditLogService.recordAuditLog(getOperator(), "UPDATE", "SERVICE", service.getServiceId(),
+            auditLogService.recordAuditLog(instanceId, getOperator(), "UPDATE", "SERVICE", service.getServiceId(),
                     service.getName(), oldValue, newValue, getIpAddress(request));
 
             Map<String, Object> result = new HashMap<>();
@@ -241,9 +242,11 @@ public class ServiceController extends BaseController {
      * Delete a service.
      */
     @DeleteMapping("/{name}")
-    public ResponseEntity<Map<String, Object>> deleteService(@PathVariable String name, HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> deleteService(@PathVariable String name,
+                                                             @RequestParam(required = false) String instanceId,
+                                                             HttpServletRequest request) {
         try {
-            log.info("Deleting service: {}", name);
+            log.info("Deleting service: {} for instance: {}", name, instanceId);
 
             // Get old value before delete
             ServiceDefinition oldService = serviceManager.getServiceByName(name);
@@ -252,7 +255,7 @@ public class ServiceController extends BaseController {
             serviceManager.deleteService(name);
 
             // Record audit log - DELETE
-            auditLogService.recordAuditLog(getOperator(), "DELETE", "SERVICE", name,
+            auditLogService.recordAuditLog(instanceId, getOperator(), "DELETE", "SERVICE", name,
                     name, oldValue, null, getIpAddress(request));
 
             Map<String, Object> result = new HashMap<>();
@@ -280,10 +283,11 @@ public class ServiceController extends BaseController {
     @PostMapping("/{name}/instances")
     public ResponseEntity<Map<String, Object>> addServiceInstance(
             @PathVariable String name,
+            @RequestParam(required = false, name = "instanceId") String gatewayInstanceId,
             @RequestBody ServiceDefinition.ServiceInstance instance,
             HttpServletRequest request) {
         try {
-            log.info("Adding instance to service {}: {}:{}", name, instance.getIp(), instance.getPort());
+            log.info("Adding instance to service {}: {}:{} for gateway instance: {}", name, instance.getIp(), instance.getPort(), gatewayInstanceId);
 
             // Get old value before add
             ServiceDefinition oldService = serviceManager.getServiceByName(name);
@@ -293,7 +297,7 @@ public class ServiceController extends BaseController {
 
             // Record audit log - ADD_INSTANCE
             String newValue = objectMapper.writeValueAsString(updated);
-            auditLogService.recordAuditLog(getOperator(), "ADD_INSTANCE", "SERVICE", name,
+            auditLogService.recordAuditLog(gatewayInstanceId, getOperator(), "ADD_INSTANCE", "SERVICE", name,
                     name, oldValue, newValue, getIpAddress(request));
 
             Map<String, Object> result = new HashMap<>();
@@ -323,9 +327,10 @@ public class ServiceController extends BaseController {
     public ResponseEntity<Map<String, Object>> removeServiceInstance(
             @PathVariable String name,
             @PathVariable String instanceId,
+            @RequestParam(required = false, name = "gatewayInstanceId") String gatewayInstanceId,
             HttpServletRequest request) {
         try {
-            log.info("Removing instance {} from service {}", instanceId, name);
+            log.info("Removing instance {} from service {} for gateway instance: {}", instanceId, name, gatewayInstanceId);
 
             // Get old value before remove
             ServiceDefinition oldService = serviceManager.getServiceByName(name);
@@ -335,7 +340,7 @@ public class ServiceController extends BaseController {
 
             // Record audit log - REMOVE_INSTANCE
             String newValue = objectMapper.writeValueAsString(updated);
-            auditLogService.recordAuditLog(getOperator(), "REMOVE_INSTANCE", "SERVICE", name,
+            auditLogService.recordAuditLog(gatewayInstanceId, getOperator(), "REMOVE_INSTANCE", "SERVICE", name,
                     name, oldValue, newValue, getIpAddress(request));
 
             Map<String, Object> result = new HashMap<>();
@@ -365,12 +370,13 @@ public class ServiceController extends BaseController {
     public ResponseEntity<Map<String, Object>> updateInstanceStatus(
             @PathVariable String name,
             @PathVariable String instanceId,
+            @RequestParam(required = false, name = "gatewayInstanceId") String gatewayInstanceId,
             @RequestBody Map<String, Boolean> statusRequest,
             HttpServletRequest request) {
         try {
             Boolean enabled = statusRequest.get("enabled");
             Boolean healthy = statusRequest.get("healthy");
-            log.info("Updating instance {} status in service {}: enabled={}, healthy={}", instanceId, name, enabled, healthy);
+            log.info("Updating instance {} status in service {}: enabled={}, healthy={} for gateway instance: {}", instanceId, name, enabled, healthy, gatewayInstanceId);
 
             // Get old value before update
             ServiceDefinition oldService = serviceManager.getServiceByName(name);
@@ -380,7 +386,7 @@ public class ServiceController extends BaseController {
 
             // Record audit log - UPDATE_INSTANCE
             String newValue = objectMapper.writeValueAsString(updated);
-            auditLogService.recordAuditLog(getOperator(), "UPDATE_INSTANCE", "SERVICE", name,
+            auditLogService.recordAuditLog(gatewayInstanceId, getOperator(), "UPDATE_INSTANCE", "SERVICE", name,
                     name, oldValue, newValue, getIpAddress(request));
 
             Map<String, Object> result = new HashMap<>();

@@ -216,9 +216,12 @@ logging:
     com.alibaba.nacos: ${LOG_LEVEL_NACOS:INFO}
     com.ecwid.consul: ${LOG_LEVEL_CONSUL:INFO}
 
-    # 健康检查相关日志（开发时可调为 DEBUG）
+    # Gateway 项目日志
+    com.leoli.gateway: INFO
     com.leoli.gateway.health: INFO
     com.leoli.gateway.filter: INFO
+    com.leoli.gateway.ssl: INFO
+    com.leoli.gateway.refresher: INFO
 
     # 【已禁用】告警服务日志 - 避免噪音
     com.leoli.gateway.monitor: WARN

@@ -151,4 +151,35 @@ public interface AuditLogRepository extends JpaRepository<AuditLogEntity, Long>,
      * Find audit logs by instanceId created after a specified time.
      */
     List<AuditLogEntity> findByInstanceIdAndCreatedAtAfter(String instanceId, LocalDateTime createdAt, Pageable pageable);
+
+    /**
+     * Find recent audit logs for a specific target (e.g., a route) ordered by time desc.
+     * Used for state inconsistency diagnosis - to understand the timeline of state changes.
+     * Focuses on state-changing operations: ENABLE, DISABLE, CREATE, DELETE, UPDATE, ROLLBACK.
+     *
+     * @param targetType the target type (ROUTE, SERVICE, STRATEGY, etc.)
+     * @param targetId the target ID (e.g., routeId)
+     * @param limit the maximum number of records to return
+     * @return list of audit logs ordered by created time descending
+     */
+    @Query("SELECT a FROM audit_logs a WHERE a.targetType = :targetType AND a.targetId = :targetId " +
+           "AND a.operationType IN ('ENABLE', 'DISABLE', 'CREATE', 'DELETE', 'UPDATE', 'ROLLBACK') " +
+           "ORDER BY a.createdAt DESC LIMIT :limit")
+    List<AuditLogEntity> findRecentStateChangesForTarget(
+            @Param("targetType") String targetType,
+            @Param("targetId") String targetId,
+            @Param("limit") int limit);
+
+    /**
+     * Find recent audit logs for a specific target within an instanceId scope.
+     * Used for multi-instance environments.
+     */
+    @Query("SELECT a FROM audit_logs a WHERE a.instanceId = :instanceId AND a.targetType = :targetType AND a.targetId = :targetId " +
+           "AND a.operationType IN ('ENABLE', 'DISABLE', 'CREATE', 'DELETE', 'UPDATE', 'ROLLBACK') " +
+           "ORDER BY a.createdAt DESC LIMIT :limit")
+    List<AuditLogEntity> findRecentStateChangesForTargetByInstanceId(
+            @Param("instanceId") String instanceId,
+            @Param("targetType") String targetType,
+            @Param("targetId") String targetId,
+            @Param("limit") int limit);
 }

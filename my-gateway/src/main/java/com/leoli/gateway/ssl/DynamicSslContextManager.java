@@ -53,37 +53,7 @@ public class DynamicSslContextManager {
     public DynamicSslContextManager(ConfigCenterService configCenterService, ObjectMapper objectMapper) {
         this.configCenterService = configCenterService;
         this.objectMapper = objectMapper;
-        initialize();
-    }
-
-    /**
-     * Initialize by subscribing to certificate updates
-     */
-    private void initialize() {
-        if (configCenterService == null) {
-            log.warn("ConfigCenterService not available, SSL hot-reload disabled");
-            return;
-        }
-
-        // Subscribe to certificate config changes
-        configCenterService.addListener("ssl-certificates", "gateway-ssl", (dataId, group, content) -> {
-            if (content != null && !content.isEmpty()) {
-                try {
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> certData = objectMapper.readValue(content, Map.class);
-                    handleCertificateUpdate(certData);
-                } catch (Exception e) {
-                    log.error("Failed to process certificate update", e);
-                }
-            } else {
-                // Certificate removed
-                log.info("Certificate config removed, clearing cache");
-                sslContextCache.clear();
-                certificateDataCache.clear();
-            }
-        });
-
-        log.info("DynamicSslContextManager initialized, listening for certificate updates");
+        log.info("DynamicSslContextManager initialized (listening handled by SslCertificateRefresher)");
     }
 
     /**

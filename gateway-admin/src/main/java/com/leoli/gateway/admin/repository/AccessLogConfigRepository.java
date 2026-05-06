@@ -23,4 +23,9 @@ public interface AccessLogConfigRepository extends JpaRepository<AccessLogConfig
      * Check if config exists for instance.
      */
     boolean existsByInstanceId(String instanceId);
+
+    /**
+     * Delete config by instance ID.
+     */
+    int deleteByInstanceId(String instanceId);
 }

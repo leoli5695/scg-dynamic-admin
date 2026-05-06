@@ -327,6 +327,8 @@ public class AuditLogService {
         result.put("id", auditLog.getId());
         result.put("targetType", auditLog.getTargetType());
         result.put("targetId", auditLog.getTargetId());
+        result.put("targetName", auditLog.getTargetName());
+        result.put("instanceId", auditLog.getInstanceId());
         result.put("operationType", auditLog.getOperationType());
         result.put("operator", auditLog.getOperator());
         result.put("createdAt", auditLog.getCreatedAt());

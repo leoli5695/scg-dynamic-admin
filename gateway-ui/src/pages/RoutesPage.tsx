@@ -655,6 +655,8 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
   const [nacosServices, setNacosServices] = useState<NacosService[]>([]);
   // Use ref to store nacosServices for stable callback references
   const nacosServicesRef = useRef<NacosService[]>(nacosServices);
+  // Use ref to store services for stable callback references
+  const servicesRef = useRef<Service[]>(services);
   const [loading, setLoading] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -711,6 +713,11 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
   useEffect(() => {
     nacosServicesRef.current = nacosServices;
   }, [nacosServices]);
+
+  // Keep ref in sync with services state for stable callback references
+  useEffect(() => {
+    servicesRef.current = services;
+  }, [services]);
 
   const loadRoutes = useCallback(async () => {
     try {
@@ -858,10 +865,16 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
         const bindingType: ServiceBindingType = protocol === 'lb' ? 'DISCOVERY' : 'STATIC';
 
         // For Nacos services (lb://), use serviceId directly as serviceName
-        // For static services, look up name from services list
-        const serviceName = protocol === 'lb'
-          ? serviceId
-          : (services.find(svc => svc.serviceId === serviceId)?.name || serviceId);
+        // For static services, look up name from services list (use ref for reliability)
+        // Priority: use s.serviceName if already set by onChange, otherwise lookup
+        let serviceName = s.serviceName;
+        if (protocol === 'lb') {
+          serviceName = serviceId;
+        } else if (!serviceName || /^[a-f0-9-]{36}$/i.test(serviceName)) {
+          // serviceName is UUID or missing, lookup from servicesRef
+          const found = servicesRef.current.find(svc => svc.serviceId === serviceId);
+          serviceName = found?.name || s.serviceName || serviceId;
+        }
 
         // For Nacos services, lookup namespace/group from nacosServices list
         let serviceNamespace: string | undefined;
@@ -1297,14 +1310,41 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
     // Infer type from nacosServices list, NOT from stored type field (which may be wrong)
     // Use ref to avoid dependency on nacosServices state
     const editServices = (record.services || []).map((s: any) => {
-      // If serviceId already has protocol, use it
-      if (s.serviceId && s.serviceId.includes('://')) {
-        return s;
+      // If serviceId already has protocol, extract the pure ID
+      let pureServiceId = s.serviceId || '';
+      let protocol = 'static';
+
+      if (pureServiceId.includes('://')) {
+        const parts = pureServiceId.split('://');
+        protocol = parts[0] || 'static';
+        pureServiceId = parts[1] || pureServiceId;
+      } else {
+        // Infer protocol from nacosServices list (more reliable than stored type)
+        const isNacosService = nacosServicesRef.current.some(ns => ns.serviceName === pureServiceId);
+        protocol = isNacosService ? 'lb' : 'static';
       }
-      // Infer protocol from nacosServices list (more reliable than stored type)
-      const isNacosService = nacosServicesRef.current.some(ns => ns.serviceName === s.serviceId);
-      const protocol = isNacosService ? 'lb' : 'static';
-      return { ...s, serviceId: `${protocol}://${s.serviceId}` };
+
+      // Ensure serviceName is correctly set
+      // Priority: 1. Use existing serviceName if it's not a UUID format
+      //           2. Lookup from services list (servicesRef)
+      //           3. Keep original serviceName as fallback
+      let serviceName = s.serviceName;
+      const isUuidFormat = /^[a-f0-9-]{36}$/i.test(serviceName || '');
+
+      // Only lookup if serviceName is UUID format or missing
+      if (isUuidFormat || !serviceName) {
+        const found = servicesRef.current.find(svc => svc.serviceId === pureServiceId);
+        if (found?.name) {
+          serviceName = found.name;
+        }
+        // If not found in servicesRef, keep original serviceName (don't fallback to UUID)
+      }
+
+      return {
+        ...s,
+        serviceId: `${protocol}://${pureServiceId}`,
+        serviceName: serviceName
+      };
     });
 
     editForm.setFieldsValue({
@@ -1858,7 +1898,7 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
                                     let serviceGroup = undefined;
                                     if (value?.startsWith('static://')) {
                                       const id = value.replace('static://', '');
-                                      const found = services.find(s => s.serviceId === id);
+                                      const found = servicesRef.current.find(s => s.serviceId === id);
                                       serviceName = found?.name || id;
                                     } else if (value?.startsWith('lb://')) {
                                       serviceName = value.replace('lb://', '');
@@ -2003,12 +2043,31 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
                                         size="small"
                                         suffixIcon={<span style={{ color: '#94a3b8', fontSize: '12px' }}>▼</span>}
                                         popupClassName="gray-rule-select-dropdown"
+                                        labelRender={(option: any) => {
+                                          // Custom label rendering: lookup service name if value is UUID
+                                          const value = option?.value;
+                                          if (!value) return option?.label || '';
+                                          // Check if value is UUID format
+                                          if (/^[a-f0-9-]{36}$/i.test(value)) {
+                                            const found = servicesRef.current.find(svc => svc.serviceId === value);
+                                            if (found?.name) return found.name;
+                                          }
+                                          return option?.label || value;
+                                        }}
                                       >
                                         {configuredServices.map((s: any, idx: number) => {
                                           const serviceId = s?.serviceId?.replace?.('static://', '').replace?.('lb://', '') || s?.serviceId;
-                                          const displayName = s?.serviceName || serviceId;
+                                          // Try to get serviceName from s, if UUID format, lookup from servicesRef
+                                          let displayName = s?.serviceName || serviceId;
+                                          if (/^[a-f0-9-]{36}$/i.test(displayName)) {
+                                            // serviceName is UUID format, try to find actual name from servicesRef
+                                            const found = servicesRef.current.find(svc => svc.serviceId === serviceId);
+                                            if (found?.name) {
+                                              displayName = found.name;
+                                            }
+                                          }
                                           return (
-                                            <Select.Option key={idx} value={serviceId}>
+                                            <Select.Option key={idx} value={serviceId} label={displayName}>
                                               {displayName}
                                             </Select.Option>
                                           );
@@ -2263,7 +2322,7 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
                                     let serviceGroup = undefined;
                                     if (value?.startsWith('static://')) {
                                       const id = value.replace('static://', '');
-                                      const found = services.find(s => s.serviceId === id);
+                                      const found = servicesRef.current.find(s => s.serviceId === id);
                                       serviceName = found?.name || id;
                                     } else if (value?.startsWith('lb://')) {
                                       serviceName = value.replace('lb://', '');
@@ -2410,12 +2469,31 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
                                         size="small"
                                         suffixIcon={<span style={{ color: '#94a3b8', fontSize: '12px' }}>▼</span>}
                                         popupClassName="gray-rule-select-dropdown"
+                                        labelRender={(option: any) => {
+                                          // Custom label rendering: lookup service name if value is UUID
+                                          const value = option?.value;
+                                          if (!value) return option?.label || '';
+                                          // Check if value is UUID format
+                                          if (/^[a-f0-9-]{36}$/i.test(value)) {
+                                            const found = servicesRef.current.find(svc => svc.serviceId === value);
+                                            if (found?.name) return found.name;
+                                          }
+                                          return option?.label || value;
+                                        }}
                                       >
                                         {configuredServices.map((s: any, idx: number) => {
                                           const serviceId = s?.serviceId?.replace?.('static://', '').replace?.('lb://', '') || s?.serviceId;
-                                          const displayName = s?.serviceName || serviceId;
+                                          // Try to get serviceName from s, if UUID format, lookup from servicesRef
+                                          let displayName = s?.serviceName || serviceId;
+                                          if (/^[a-f0-9-]{36}$/i.test(displayName)) {
+                                            // serviceName is UUID format, try to find actual name from servicesRef
+                                            const found = servicesRef.current.find(svc => svc.serviceId === serviceId);
+                                            if (found?.name) {
+                                              displayName = found.name;
+                                            }
+                                          }
                                           return (
-                                            <Select.Option key={idx} value={serviceId}>
+                                            <Select.Option key={idx} value={serviceId} label={displayName}>
                                               {displayName}
                                             </Select.Option>
                                           );

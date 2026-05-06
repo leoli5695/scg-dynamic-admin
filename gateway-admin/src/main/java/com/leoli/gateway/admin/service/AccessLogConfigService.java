@@ -8,6 +8,7 @@ import com.leoli.gateway.admin.model.AccessLogGlobalConfig;
 import com.leoli.gateway.admin.model.GatewayInstanceEntity;
 import com.leoli.gateway.admin.repository.AccessLogConfigRepository;
 import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -43,6 +44,12 @@ public class AccessLogConfigService {
 
     {
         objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
+    }
+
+    @PostConstruct
+    public void init() {
+        syncAllConfigsToNacos();
+        log.info("AccessLogConfigService initialized with Nacos sync");
     }
 
     /**

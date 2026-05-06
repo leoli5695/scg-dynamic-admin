@@ -92,6 +92,9 @@ public class GatewayInstanceService {
     private AuditLogRepository auditLogRepository;
 
     @Autowired
+    private AccessLogConfigRepository accessLogConfigRepository;
+
+    @Autowired
     private InstanceNamespaceCache namespaceCache;
 
     @Value("${gateway.image.default:my-gateway:latest}")
@@ -465,9 +468,10 @@ public class GatewayInstanceService {
 
         // Generate instance ID (12 characters, lowercase alphanumeric)
         String instanceId = generateShortId();
-        String shortId = instanceId.substring(0, 8);
-        String deploymentName = "gateway-" + shortId;
-        String nacosNamespace = deploymentName;  // Use same name as deployment (e.g., gateway-o0m1rhg5)
+        // Use full instanceId for nacosNamespace and deploymentName (e.g., gateway-kd2onojjfcu9)
+        // This makes namespace more traceable - you can directly see which instance it belongs to
+        String nacosNamespace = "gateway-" + instanceId;  // e.g., gateway-kd2onojjfcu9
+        String deploymentName = nacosNamespace;  // Use same name for consistency
 
         // Get spec configuration
         InstanceSpec spec = InstanceSpec.fromType(request.getSpecType());
@@ -623,11 +627,11 @@ public class GatewayInstanceService {
 
         V1DeploymentSpec spec = new V1DeploymentSpec();
         spec.setReplicas(instance.getReplicas());
-        spec.setSelector(new V1LabelSelector().matchLabels(Map.of("app", "gateway-" + instance.getInstanceId().substring(0, 8))));
+        spec.setSelector(new V1LabelSelector().matchLabels(Map.of("app", instance.getDeploymentName())));
 
         V1PodTemplateSpec template = new V1PodTemplateSpec();
         template.setMetadata(new V1ObjectMeta().labels(Map.of(
-                "app", "gateway-" + instance.getInstanceId().substring(0, 8),
+                "app", instance.getDeploymentName(),
                 "gateway-instance-id", instance.getInstanceId())));
 
         V1PodSpec podSpec = new V1PodSpec();
@@ -742,7 +746,7 @@ public class GatewayInstanceService {
                         "gateway-instance-id", instance.getInstanceId())));
 
         V1ServiceSpec spec = new V1ServiceSpec();
-        spec.setSelector(Map.of("app", "gateway-" + instance.getInstanceId().substring(0, 8)));
+        spec.setSelector(Map.of("app", instance.getDeploymentName()));
         spec.setType("NodePort");
 
         List<V1ServicePort> ports = new ArrayList<>();
@@ -867,6 +871,10 @@ public class GatewayInstanceService {
         // Delete services
         int serviceCount = serviceRepository.deleteByInstanceId(instanceId);
         log.info("Deleted {} services", serviceCount);
+
+        // Delete access log config
+        int accessLogConfigCount = accessLogConfigRepository.deleteByInstanceId(instanceId);
+        log.info("Deleted {} access log configs", accessLogConfigCount);
     }
 
     /**
@@ -892,6 +900,14 @@ public class GatewayInstanceService {
             // Delete strategies index
             configCenterService.removeConfig("config.gateway.metadata.strategies-index", nacosNamespace);
             log.info("Deleted strategies-index from Nacos");
+
+            // Delete access log config
+            configCenterService.removeConfig("config.gateway.access-log", nacosNamespace);
+            log.info("Deleted access-log config from Nacos");
+
+            // Delete ssl certificates index
+            configCenterService.removeConfig("config.gateway.metadata.ssl-certificates-index", nacosNamespace);
+            log.info("Deleted ssl-certificates-index from Nacos");
 
             // Note: Individual route/service/strategy configs are deleted by their respective services
             // when we delete them from database above. But we also need to clean up any remaining configs.

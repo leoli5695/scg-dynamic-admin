@@ -321,6 +321,7 @@ public class AiCopilotController {
             // Record audit log
             String newValue = objectMapper.writeValueAsString(route);
             auditLogService.recordAuditLog(
+                    request.getInstanceId(),
                     "AI_COPILOT",
                     "CREATE",
                     "ROUTE",

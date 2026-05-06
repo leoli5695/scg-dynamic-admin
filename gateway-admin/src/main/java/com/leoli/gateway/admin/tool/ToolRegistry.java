@@ -5,7 +5,10 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * AI 工具注册中心.
@@ -44,159 +47,159 @@ public class ToolRegistry {
     private void registerMonitorTools() {
         // run_quick_diagnostic - 快速诊断
         tools.put("run_quick_diagnostic", ToolDefinition.create(
-            "run_quick_diagnostic",
-            "快速诊断网关健康状态，检查数据库、Redis、配置中心(Nacos)连接。返回健康评分和各组件状态。适用于快速检查系统是否正常。",
-            Map.of(
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID（可选）。不提供时使用默认实例或所有实例汇总。"
-                )
-            ),
-            List.of(),
-            "monitor",
-            true
+                "run_quick_diagnostic",
+                "快速诊断网关健康状态，检查数据库、Redis、配置中心(Nacos)连接。返回健康评分和各组件状态。适用于快速检查系统是否正常。",
+                Map.of(
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID（可选）。不提供时使用默认实例或所有实例汇总。"
+                        )
+                ),
+                List.of(),
+                "monitor",
+                true
         ));
 
         // run_full_diagnostic - 全量诊断
         tools.put("run_full_diagnostic", ToolDefinition.create(
-            "run_full_diagnostic",
-            "全量诊断网关健康状态，包含数据库、Redis、Nacos、路由、认证、网关实例、性能等所有组件检查。返回详细的诊断报告和优化建议。适用于深度排查问题。",
-            Map.of(
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID（可选）。"
-                )
-            ),
-            List.of(),
-            "monitor",
-            true
+                "run_full_diagnostic",
+                "全量诊断网关健康状态，包含数据库、Redis、Nacos、路由、认证、网关实例、性能等所有组件检查。返回详细的诊断报告和优化建议。适用于深度排查问题。",
+                Map.of(
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID（可选）。"
+                        )
+                ),
+                List.of(),
+                "monitor",
+                true
         ));
 
         // get_gateway_metrics - 实时监控指标
         tools.put("get_gateway_metrics", ToolDefinition.create(
-            "get_gateway_metrics",
-            "获取网关实时监控指标，包括：JVM内存(heap/nonheap、Eden/Survivor/OldGen使用率)、CPU使用率、HTTP请求数(QPS)、响应时间、错误率、线程数、GC统计(Young/Old GC次数和时间、GC开销百分比)、内存分配速率(MB/s)、晋升速率(MB/s)、晋升比例(%)、GC健康状态等。适用于性能分析、JVM调优和实时监控。",
-            Map.of(
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID（可选）。不提供时返回所有实例汇总指标。"
+                "get_gateway_metrics",
+                "获取网关实时监控指标，包括：JVM内存(heap/nonheap、Eden/Survivor/OldGen使用率)、CPU使用率、HTTP请求数(QPS)、响应时间、错误率、线程数、GC统计(Young/Old GC次数和时间、GC开销百分比)、内存分配速率(MB/s)、晋升速率(MB/s)、晋升比例(%)、GC健康状态等。适用于性能分析、JVM调优和实时监控。",
+                Map.of(
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID（可选）。不提供时返回所有实例汇总指标。"
+                        ),
+                        "podInstance", Map.of(
+                                "type", "string",
+                                "description", "Pod实例标签（可选）。格式为 Pod IP:管理端口，如 '10.0.0.1:9091'。用于按Pod维度查询监控数据。"
+                        )
                 ),
-                "podInstance", Map.of(
-                    "type", "string",
-                    "description", "Pod实例标签（可选）。格式为 Pod IP:管理端口，如 '10.0.0.1:9091'。用于按Pod维度查询监控数据。"
-                )
-            ),
-            List.of(),
-            "monitor",
-            true
+                List.of(),
+                "monitor",
+                true
         ));
 
         // get_history_metrics - 历史监控数据
         tools.put("get_history_metrics", ToolDefinition.create(
-            "get_history_metrics",
-            "获取指定时间范围的历史监控数据，包括：堆内存趋势、Eden/OldGen内存变化、系统负载、CPU使用率、请求速率、响应时间、GC次数/时间、内存分配速率趋势等。用于趋势分析、问题排查和JVM调优分析。",
-            Map.of(
-                "hours", Map.of(
-                    "type", "integer",
-                    "description", "查询最近多少小时的历史数据（默认1小时，最多24小时）",
-                    "default", 1
+                "get_history_metrics",
+                "获取指定时间范围的历史监控数据，包括：堆内存趋势、Eden/OldGen内存变化、系统负载、CPU使用率、请求速率、响应时间、GC次数/时间、内存分配速率趋势等。用于趋势分析、问题排查和JVM调优分析。",
+                Map.of(
+                        "hours", Map.of(
+                                "type", "integer",
+                                "description", "查询最近多少小时的历史数据（默认1小时，最多24小时）",
+                                "default", 1
+                        ),
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID（可选）。"
+                        ),
+                        "podInstance", Map.of(
+                                "type", "string",
+                                "description", "Pod实例标签（可选）。格式为 Pod IP:管理端口，如 '10.0.0.1:9091'。用于按Pod维度查询历史数据。"
+                        )
                 ),
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID（可选）。"
-                ),
-                "podInstance", Map.of(
-                    "type", "string",
-                    "description", "Pod实例标签（可选）。格式为 Pod IP:管理端口，如 '10.0.0.1:9091'。用于按Pod维度查询历史数据。"
-                )
-            ),
-            List.of(),
-            "monitor",
-            true
+                List.of(),
+                "monitor",
+                true
         ));
 
         // get_pod_metrics - 查询指定Pod实时指标（新增）
         tools.put("get_pod_metrics", ToolDefinition.create(
-            "get_pod_metrics",
-            "获取指定 Pod 的实时监控指标，包括：JVM内存(heap/nonheap、Eden/Survivor/OldGen使用率)、CPU使用率、HTTP请求数、响应时间、GC统计(Young/Old GC、内存分配速率、晋升速率、晋升比例)、GC健康状态等。用于按Pod维度分析性能，识别异常Pod和JVM调优。",
-            Map.of(
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID（12位随机ID）"
+                "get_pod_metrics",
+                "获取指定 Pod 的实时监控指标，包括：JVM内存(heap/nonheap、Eden/Survivor/OldGen使用率)、CPU使用率、HTTP请求数、响应时间、GC统计(Young/Old GC、内存分配速率、晋升速率、晋升比例)、GC健康状态等。用于按Pod维度分析性能，识别异常Pod和JVM调优。",
+                Map.of(
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID（12位随机ID）"
+                        ),
+                        "podInstance", Map.of(
+                                "type", "string",
+                                "description", "Pod实例标签（必填）。格式为 Pod IP:管理端口，如 '10.0.0.1:9091'。可通过 get_instance_pods 工具获取 Pod 的 podIP 和 managementPort 信息来构建。"
+                        )
                 ),
-                "podInstance", Map.of(
-                    "type", "string",
-                    "description", "Pod实例标签（必填）。格式为 Pod IP:管理端口，如 '10.0.0.1:9091'。可通过 get_instance_pods 工具获取 Pod 的 podIP 和 managementPort 信息来构建。"
-                )
-            ),
-            List.of("instanceId", "podInstance"),
-            "monitor",
-            true
+                List.of("instanceId", "podInstance"),
+                "monitor",
+                true
         ));
 
         // compare_pod_performance - Pod性能对比（新增）
         tools.put("compare_pod_performance", ToolDefinition.create(
-            "compare_pod_performance",
-            "对比网关实例所有 Pod 的性能指标，生成对比报告，识别负载不均衡或异常 Pod。自动获取 Pod 列表并分别查询每个 Pod 的监控数据。",
-            Map.of(
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID（12位随机ID）"
+                "compare_pod_performance",
+                "对比网关实例所有 Pod 的性能指标，生成对比报告，识别负载不均衡或异常 Pod。自动获取 Pod 列表并分别查询每个 Pod 的监控数据。",
+                Map.of(
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID（12位随机ID）"
+                        ),
+                        "hours", Map.of(
+                                "type", "integer",
+                                "description", "统计最近N小时的数据（默认1小时）",
+                                "default", 1
+                        )
                 ),
-                "hours", Map.of(
-                    "type", "integer",
-                    "description", "统计最近N小时的数据（默认1小时）",
-                    "default", 1
-                )
-            ),
-            List.of("instanceId"),
-            "performance",
-            true
+                List.of("instanceId"),
+                "performance",
+                true
         ));
 
         // analyze_pod_stress_test - Pod维度压测分析（新增）
         tools.put("analyze_pod_stress_test", ToolDefinition.create(
-            "analyze_pod_stress_test",
-            "按 Pod 维度分析压力测试结果，分别分析每个 Pod 在压测期间的性能表现并对比。用于识别负载不均衡、找出负载最高的 Pod、分析负载均衡策略是否合理。",
-            Map.of(
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID（12位随机ID）"
+                "analyze_pod_stress_test",
+                "按 Pod 维度分析压力测试结果，分别分析每个 Pod 在压测期间的性能表现并对比。用于识别负载不均衡、找出负载最高的 Pod、分析负载均衡策略是否合理。",
+                Map.of(
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID（12位随机ID）"
+                        ),
+                        "testId", Map.of(
+                                "type", "integer",
+                                "description", "压测ID（可选）。不提供时使用该实例最近的压测记录。"
+                        ),
+                        "language", Map.of(
+                                "type", "string",
+                                "description", "报告语言（zh中文/en英文，默认zh）",
+                                "default", "zh",
+                                "enum", List.of("zh", "en")
+                        )
                 ),
-                "testId", Map.of(
-                    "type", "integer",
-                    "description", "压测ID（可选）。不提供时使用该实例最近的压测记录。"
-                ),
-                "language", Map.of(
-                    "type", "string",
-                    "description", "报告语言（zh中文/en英文，默认zh）",
-                    "default", "zh",
-                    "enum", List.of("zh", "en")
-                )
-            ),
-            List.of("instanceId"),
-            "test",
-            true
+                List.of("instanceId"),
+                "test",
+                true
         ));
 
         // check_pod_count_for_analysis - 压测分析前Pod检测（新增）
         tools.put("check_pod_count_for_analysis", ToolDefinition.create(
-            "check_pod_count_for_analysis",
-            "【压测分析必调】在分析压测监控数据前，先检查网关实例是否有多个Pod。如有多个Pod，返回建议调用compare_pod_performance进行Pod维度对比分析；如只有一个Pod，返回单Pod分析建议。AI应根据返回结果决定后续分析策略。",
-            Map.of(
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID（12位随机ID）"
+                "check_pod_count_for_analysis",
+                "【压测分析必调】在分析压测监控数据前，先检查网关实例是否有多个Pod。如有多个Pod，返回建议调用compare_pod_performance进行Pod维度对比分析；如只有一个Pod，返回单Pod分析建议。AI应根据返回结果决定后续分析策略。",
+                Map.of(
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID（12位随机ID）"
+                        ),
+                        "hours", Map.of(
+                                "type", "integer",
+                                "description", "分析时间窗口（默认1小时）",
+                                "default", 1
+                        )
                 ),
-                "hours", Map.of(
-                    "type", "integer",
-                    "description", "分析时间窗口（默认1小时）",
-                    "default", 1
-                )
-            ),
-            List.of("instanceId"),
-            "monitor",
-            true
+                List.of("instanceId"),
+                "monitor",
+                true
         ));
     }
 
@@ -205,215 +208,215 @@ public class ToolRegistry {
     private void registerRouteTools() {
         // list_routes - 获取路由列表
         tools.put("list_routes", ToolDefinition.create(
-            "list_routes",
-            "获取所有路由配置列表，包含路由ID、名称、URI、断言(predicates)、过滤器(filters)、优先级(order)、启用状态等信息。用于查看当前路由配置。",
-            Map.of(
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID（可选）。不提供时返回所有路由。"
+                "list_routes",
+                "获取所有路由配置列表，包含路由ID、名称、URI、断言(predicates)、过滤器(filters)、优先级(order)、启用状态等信息。用于查看当前路由配置。",
+                Map.of(
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID（可选）。不提供时返回所有路由。"
+                        ),
+                        "enabledOnly", Map.of(
+                                "type", "boolean",
+                                "description", "是否只返回启用的路由（默认false返回所有）。",
+                                "default", false
+                        )
                 ),
-                "enabledOnly", Map.of(
-                    "type", "boolean",
-                    "description", "是否只返回启用的路由（默认false返回所有）。",
-                    "default", false
-                )
-            ),
-            List.of(),
-            "route",
-            true
+                List.of(),
+                "route",
+                true
         ));
 
         // get_route_detail - 获取路由详情
         tools.put("get_route_detail", ToolDefinition.create(
-            "get_route_detail",
-            "获取单个路由的详细配置信息，包括完整的断言、过滤器、灰度规则、元数据等。用于深入分析特定路由配置。",
-            Map.of(
-                "routeId", Map.of(
-                    "type", "string",
-                    "description", "路由ID（UUID格式）。"
-                )
-            ),
-            List.of("routeId"),
-            "route",
-            true
+                "get_route_detail",
+                "获取单个路由的详细配置信息，包括完整的断言、过滤器、灰度规则、元数据等。用于深入分析特定路由配置。",
+                Map.of(
+                        "routeId", Map.of(
+                                "type", "string",
+                                "description", "路由ID（UUID格式）。"
+                        )
+                ),
+                List.of("routeId"),
+                "route",
+                true
         ));
 
         // toggle_route - 启用/禁用路由（写操作，需要确认）
         tools.put("toggle_route", ToolDefinition.create(
-            "toggle_route",
-            "启用或禁用指定路由。这是一个写操作，会实际修改路由状态并推送到 Nacos 配置中心。**需要用户二次确认后才能执行。**",
-            Map.of(
-                "routeId", Map.of(
-                    "type", "string",
-                    "description", "路由ID（UUID格式）。"
+                "toggle_route",
+                "启用或禁用指定路由。这是一个写操作，会实际修改路由状态并推送到 Nacos 配置中心。**需要用户二次确认后才能执行。**",
+                Map.of(
+                        "routeId", Map.of(
+                                "type", "string",
+                                "description", "路由ID（UUID格式）。"
+                        ),
+                        "enabled", Map.of(
+                                "type", "boolean",
+                                "description", "true 表示启用路由，false 表示禁用路由。"
+                        )
                 ),
-                "enabled", Map.of(
-                    "type", "boolean",
-                    "description", "true 表示启用路由，false 表示禁用路由。"
-                )
-            ),
-            List.of("routeId", "enabled"),
-            "route",
-            false,  // 写操作
-            true    // 需要确认
+                List.of("routeId", "enabled"),
+                "route",
+                false,  // 写操作
+                true    // 需要确认
         ));
 
         // create_route - 创建路由（写操作，闭环能力，需要确认）
         tools.put("create_route", ToolDefinition.create(
-            "create_route",
-            "创建新的路由配置。这是一个写操作，会将路由保存到数据库并推送到 Nacos 配置中心，网关会自动获取最新配置。**需要用户二次确认后才能执行。** 参数 routeJson 必须是符合 RouteDefinition 格式的 JSON 字符串。",
-            Map.of(
-                "routeJson", Map.of(
-                    "type", "string",
-                    "description", "路由配置 JSON 字符串，包含 id(可选)、routeName、uri、predicates、filters、order 等字段。示例: {\"routeName\":\"test-route\",\"uri\":\"lb://demo-service\",\"predicates\":[{\"name\":\"Path\",\"args\":{\"pattern\":\"/demo/**\"}}]}"
+                "create_route",
+                "创建新的路由配置。这是一个写操作，会将路由保存到数据库并推送到 Nacos 配置中心，网关会自动获取最新配置。**需要用户二次确认后才能执行。** 参数 routeJson 必须是符合 RouteDefinition 格式的 JSON 字符串。",
+                Map.of(
+                        "routeJson", Map.of(
+                                "type", "string",
+                                "description", "路由配置 JSON 字符串，包含 id(可选)、routeName、uri、predicates、filters、order 等字段。示例: {\"routeName\":\"test-route\",\"uri\":\"lb://demo-service\",\"predicates\":[{\"name\":\"Path\",\"args\":{\"pattern\":\"/demo/**\"}}]}"
+                        ),
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID（可选）。不提供时使用默认实例。"
+                        ),
+                        "confirmed", Map.of(
+                                "type", "boolean",
+                                "description", "用户是否已确认执行此操作。必须为 true 才会真正执行。",
+                                "default", false
+                        )
                 ),
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID（可选）。不提供时使用默认实例。"
-                ),
-                "confirmed", Map.of(
-                    "type", "boolean",
-                    "description", "用户是否已确认执行此操作。必须为 true 才会真正执行。",
-                    "default", false
-                )
-            ),
-            List.of("routeJson"),
-            "route",
-            false,  // 写操作
-            true    // 需要确认
+                List.of("routeJson"),
+                "route",
+                false,  // 写操作
+                true    // 需要确认
         ));
 
         // delete_route - 删除路由（写操作，闭环能力，需要确认）
         tools.put("delete_route", ToolDefinition.create(
-            "delete_route",
-            "删除指定路由配置。这是一个写操作，会从数据库删除路由并从 Nacos 配置中心移除配置，网关会自动获取最新配置。**需要用户二次确认后才能执行。** 删除后可通过 rollback_route 工具回滚。",
-            Map.of(
-                "routeId", Map.of(
-                    "type", "string",
-                    "description", "路由ID（UUID格式）。"
+                "delete_route",
+                "删除指定路由配置。这是一个写操作，会从数据库删除路由并从 Nacos 配置中心移除配置，网关会自动获取最新配置。**需要用户二次确认后才能执行。** 删除后可通过 rollback_route 工具回滚。",
+                Map.of(
+                        "routeId", Map.of(
+                                "type", "string",
+                                "description", "路由ID（UUID格式）。"
+                        ),
+                        "confirmed", Map.of(
+                                "type", "boolean",
+                                "description", "用户是否已确认执行此操作。必须为 true 才会真正执行。",
+                                "default", false
+                        )
                 ),
-                "confirmed", Map.of(
-                    "type", "boolean",
-                    "description", "用户是否已确认执行此操作。必须为 true 才会真正执行。",
-                    "default", false
-                )
-            ),
-            List.of("routeId"),
-            "route",
-            false,  // 写操作
-            true    // 需要确认
+                List.of("routeId"),
+                "route",
+                false,  // 写操作
+                true    // 需要确认
         ));
 
         // modify_route - 修改路由（写操作，闭环能力，需要确认）
         tools.put("modify_route", ToolDefinition.create(
-            "modify_route",
-            "修改已有路由配置。这是一个写操作，会更新数据库中的路由并推送到 Nacos 配置中心，网关会自动获取最新配置。**需要用户二次确认后才能执行。** 参数 routeJson 必须包含完整的路由配置。",
-            Map.of(
-                "routeId", Map.of(
-                    "type", "string",
-                    "description", "路由ID（UUID格式）。"
+                "modify_route",
+                "修改已有路由配置。这是一个写操作，会更新数据库中的路由并推送到 Nacos 配置中心，网关会自动获取最新配置。**需要用户二次确认后才能执行。** 参数 routeJson 必须包含完整的路由配置。",
+                Map.of(
+                        "routeId", Map.of(
+                                "type", "string",
+                                "description", "路由ID（UUID格式）。"
+                        ),
+                        "routeJson", Map.of(
+                                "type", "string",
+                                "description", "完整的路由配置 JSON 字符串，包含要修改的所有字段。"
+                        ),
+                        "confirmed", Map.of(
+                                "type", "boolean",
+                                "description", "用户是否已确认执行此操作。必须为 true 才会真正执行。",
+                                "default", false
+                        )
                 ),
-                "routeJson", Map.of(
-                    "type", "string",
-                    "description", "完整的路由配置 JSON 字符串，包含要修改的所有字段。"
-                ),
-                "confirmed", Map.of(
-                    "type", "boolean",
-                    "description", "用户是否已确认执行此操作。必须为 true 才会真正执行。",
-                    "default", false
-                )
-            ),
-            List.of("routeId", "routeJson"),
-            "route",
-            false,  // 写操作
-            true    // 需要确认
+                List.of("routeId", "routeJson"),
+                "route",
+                false,  // 写操作
+                true    // 需要确认
         ));
 
         // batch_toggle_routes - 批量启用/禁用路由（写操作，需要确认）
         tools.put("batch_toggle_routes", ToolDefinition.create(
-            "batch_toggle_routes",
-            "批量启用或禁用多个路由。这是一个写操作，会修改多个路由状态并推送到 Nacos。**需要用户二次确认后才能执行。**",
-            Map.of(
-                "routeIds", Map.of(
-                    "type", "string",
-                    "description", "路由ID列表，用逗号分隔。例如：'route-id-1,route-id-2,route-id-3'"
+                "batch_toggle_routes",
+                "批量启用或禁用多个路由。这是一个写操作，会修改多个路由状态并推送到 Nacos。**需要用户二次确认后才能执行。**",
+                Map.of(
+                        "routeIds", Map.of(
+                                "type", "string",
+                                "description", "路由ID列表，用逗号分隔。例如：'route-id-1,route-id-2,route-id-3'"
+                        ),
+                        "enabled", Map.of(
+                                "type", "boolean",
+                                "description", "true 表示批量启用，false 表示批量禁用。"
+                        ),
+                        "confirmed", Map.of(
+                                "type", "boolean",
+                                "description", "用户是否已确认执行此操作。必须为 true 才会真正执行。",
+                                "default", false
+                        )
                 ),
-                "enabled", Map.of(
-                    "type", "boolean",
-                    "description", "true 表示批量启用，false 表示批量禁用。"
-                ),
-                "confirmed", Map.of(
-                    "type", "boolean",
-                    "description", "用户是否已确认执行此操作。必须为 true 才会真正执行。",
-                    "default", false
-                )
-            ),
-            List.of("routeIds", "enabled"),
-            "route",
-            false,  // 写操作
-            true    // 需要确认
+                List.of("routeIds", "enabled"),
+                "route",
+                false,  // 写操作
+                true    // 需要确认
         ));
 
         // rollback_route - 路由配置回滚（写操作，需要确认）
         tools.put("rollback_route", ToolDefinition.create(
-            "rollback_route",
-            "通过审计日志 ID 将路由配置回滚到历史版本。可用于恢复误删的路由或撤销错误的修改。" +
-            "**风险说明**：回滚会修改当前路由配置，可能影响正在运行的流量。" +
-            "**版本校验**：默认检查路由是否被其他操作修改，如版本冲突需确认后强制回滚。",
-            Map.of(
-                "logId", Map.of(
-                    "type", "integer",
-                    "description", "审计日志ID（从 audit_query 结果中获取）。"
+                "rollback_route",
+                "通过审计日志 ID 将路由配置回滚到历史版本。可用于恢复误删的路由或撤销错误的修改。" +
+                        "**风险说明**：回滚会修改当前路由配置，可能影响正在运行的流量。" +
+                        "**版本校验**：默认检查路由是否被其他操作修改，如版本冲突需确认后强制回滚。",
+                Map.of(
+                        "logId", Map.of(
+                                "type", "integer",
+                                "description", "审计日志ID（从 audit_query 结果中获取）。"
+                        ),
+                        "skipVersionCheck", Map.of(
+                                "type", "boolean",
+                                "description", "跳过版本校验（默认 false）。设为 true 可强制回滚，但可能导致数据不一致。",
+                                "default", false
+                        ),
+                        "confirmed", Map.of(
+                                "type", "boolean",
+                                "description", "用户确认标志（AI Copilot 二次确认流程使用）。",
+                                "default", false
+                        )
                 ),
-                "skipVersionCheck", Map.of(
-                    "type", "boolean",
-                    "description", "跳过版本校验（默认 false）。设为 true 可强制回滚，但可能导致数据不一致。",
-                    "default", false
-                ),
-                "confirmed", Map.of(
-                    "type", "boolean",
-                    "description", "用户确认标志（AI Copilot 二次确认流程使用）。",
-                    "default", false
-                )
-            ),
-            List.of("logId"),
-            "route",
-            false,  // 写操作（回滚会修改配置）
-            true    // 需要确认
+                List.of("logId"),
+                "route",
+                false,  // 写操作（回滚会修改配置）
+                true    // 需要确认
         ));
 
         // simulate_route_match - 模拟路由匹配（支持 Path/Method/Header/Query）
         tools.put("simulate_route_match", ToolDefinition.create(
-            "simulate_route_match",
-            "模拟路由匹配测试。输入请求信息（URL、Method、Headers、Query参数），返回会匹配到的路由列表和最佳匹配路由。" +
-            "支持多种 Predicate 类型：Path、Method、Header、Query。用于验证路由配置正确性或排查 404 问题。",
-            Map.of(
-                "url", Map.of(
-                    "type", "string",
-                    "description", "要测试的 URL 或 path。例如：'/api/user/123' 或 'http://example.com/api/user/123'"
+                "simulate_route_match",
+                "模拟路由匹配测试。输入请求信息（URL、Method、Headers、Query参数），返回会匹配到的路由列表和最佳匹配路由。" +
+                        "支持多种 Predicate 类型：Path、Method、Header、Query。用于验证路由配置正确性或排查 404 问题。",
+                Map.of(
+                        "url", Map.of(
+                                "type", "string",
+                                "description", "要测试的 URL 或 path。例如：'/api/user/123' 或 'http://example.com/api/user/123'"
+                        ),
+                        "method", Map.of(
+                                "type", "string",
+                                "description", "HTTP 方法（可选，默认 GET）。用于匹配 Method Predicate。",
+                                "default", "GET",
+                                "enum", List.of("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS")
+                        ),
+                        "headers", Map.of(
+                                "type", "object",
+                                "description", "请求 Headers（可选）。用于匹配 Header Predicate。格式：Map 或字符串 'Header1:Value1,Header2:Value2'"
+                        ),
+                        "queryParams", Map.of(
+                                "type", "object",
+                                "description", "Query 参数（可选）。用于匹配 Query Predicate。格式：Map 或字符串 'param1=value1&param2=value2'"
+                        ),
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID（可选）。"
+                        )
                 ),
-                "method", Map.of(
-                    "type", "string",
-                    "description", "HTTP 方法（可选，默认 GET）。用于匹配 Method Predicate。",
-                    "default", "GET",
-                    "enum", List.of("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS")
-                ),
-                "headers", Map.of(
-                    "type", "object",
-                    "description", "请求 Headers（可选）。用于匹配 Header Predicate。格式：Map 或字符串 'Header1:Value1,Header2:Value2'"
-                ),
-                "queryParams", Map.of(
-                    "type", "object",
-                    "description", "Query 参数（可选）。用于匹配 Query Predicate。格式：Map 或字符串 'param1=value1&param2=value2'"
-                ),
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID（可选）。"
-                )
-            ),
-            List.of("url"),
-            "route",
-            true   // 读操作
+                List.of("url"),
+                "route",
+                true   // 读操作
         ));
     }
 
@@ -422,55 +425,55 @@ public class ToolRegistry {
     private void registerServiceTools() {
         // list_services - 获取服务列表
         tools.put("list_services", ToolDefinition.create(
-            "list_services",
-            "获取所有后端服务配置列表，包含服务ID、名称、负载均衡策略(loadBalancer)、后端实例列表等信息。用于查看当前服务配置。",
-            Map.of(
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID（可选）。不提供时返回所有服务。"
-                )
-            ),
-            List.of(),
-            "service",
-            true
+                "list_services",
+                "获取所有后端服务配置列表，包含服务ID、名称、负载均衡策略(loadBalancer)、后端实例列表等信息。用于查看当前服务配置。",
+                Map.of(
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID（可选）。不提供时返回所有服务。"
+                        )
+                ),
+                List.of(),
+                "service",
+                true
         ));
 
         // get_service_detail - 获取服务详情
         tools.put("get_service_detail", ToolDefinition.create(
-            "get_service_detail",
-            "获取单个服务的详细配置信息，包括完整的实例列表（IP、端口、权重、健康状态）、负载均衡配置、元数据等。",
-            Map.of(
-                "serviceName", Map.of(
-                    "type", "string",
-                    "description", "服务名称。"
-                )
-            ),
-            List.of("serviceName"),
-            "service",
-            true
+                "get_service_detail",
+                "获取单个服务的详细配置信息，包括完整的实例列表（IP、端口、权重、健康状态）、负载均衡配置、元数据等。",
+                Map.of(
+                        "serviceName", Map.of(
+                                "type", "string",
+                                "description", "服务名称。"
+                        )
+                ),
+                List.of("serviceName"),
+                "service",
+                true
         ));
 
         // nacos_service_discovery - Nacos 服务发现查询（最高优先级）
         tools.put("nacos_service_discovery", ToolDefinition.create(
-            "nacos_service_discovery",
-            "【最高优先级】查询 Nacos 注册中心中指定 service-name 的实例列表和健康状态。当路由 target URI 以 lb:// 开头时，必须优先调用此工具查询该 service-name 的真实实例信息。返回实例的 IP、端口、权重、健康状态、元数据等。",
-            Map.of(
-                "serviceName", Map.of(
-                    "type", "string",
-                    "description", "要查询的服务名称（从路由 URI lb://{serviceName} 中提取的服务名）。"
+                "nacos_service_discovery",
+                "【最高优先级】查询 Nacos 注册中心中指定 service-name 的实例列表和健康状态。当路由 target URI 以 lb:// 开头时，必须优先调用此工具查询该 service-name 的真实实例信息。返回实例的 IP、端口、权重、健康状态、元数据等。",
+                Map.of(
+                        "serviceName", Map.of(
+                                "type", "string",
+                                "description", "要查询的服务名称（从路由 URI lb://{serviceName} 中提取的服务名）。"
+                        ),
+                        "namespace", Map.of(
+                                "type", "string",
+                                "description", "Nacos namespace（可选）。不提供时使用默认 namespace。"
+                        ),
+                        "group", Map.of(
+                                "type", "string",
+                                "description", "Nacos group（可选，默认 DEFAULT_GROUP）。"
+                        )
                 ),
-                "namespace", Map.of(
-                    "type", "string",
-                    "description", "Nacos namespace（可选）。不提供时使用默认 namespace。"
-                ),
-                "group", Map.of(
-                    "type", "string",
-                    "description", "Nacos group（可选，默认 DEFAULT_GROUP）。"
-                )
-            ),
-            List.of("serviceName"),
-            "service",
-            true
+                List.of("serviceName"),
+                "service",
+                true
         ));
     }
 
@@ -479,48 +482,48 @@ public class ToolRegistry {
     private void registerInstanceTools() {
         // list_instances - 获取实例列表
         tools.put("list_instances", ToolDefinition.create(
-            "list_instances",
-            "获取所有网关实例列表，包含实例ID、名称、状态(statusCode)、规格(specType)、副本数(replicas)、访问地址等信息。用于查看部署情况。",
-            Map.of(
-                "enabledOnly", Map.of(
-                    "type", "boolean",
-                    "description", "是否只返回运行中的实例（默认false返回所有）。",
-                    "default", false
-                )
-            ),
-            List.of(),
-            "instance",
-            true
+                "list_instances",
+                "获取所有网关实例列表，包含实例ID、名称、状态(statusCode)、规格(specType)、副本数(replicas)、访问地址等信息。用于查看部署情况。",
+                Map.of(
+                        "enabledOnly", Map.of(
+                                "type", "boolean",
+                                "description", "是否只返回运行中的实例（默认false返回所有）。",
+                                "default", false
+                        )
+                ),
+                List.of(),
+                "instance",
+                true
         ));
 
         // get_instance_detail - 获取实例详情
         tools.put("get_instance_detail", ToolDefinition.create(
-            "get_instance_detail",
-            "获取单个网关实例的详细信息，包括部署状态、心跳时间、Kubernetes 信息（namespace、deployment）、资源配置（CPU、内存）等。",
-            Map.of(
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID（12位随机ID）。"
-                )
-            ),
-            List.of("instanceId"),
-            "instance",
-            true
+                "get_instance_detail",
+                "获取单个网关实例的详细信息，包括部署状态、心跳时间、Kubernetes 信息（namespace、deployment）、资源配置（CPU、内存）等。",
+                Map.of(
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID（12位随机ID）。"
+                        )
+                ),
+                List.of("instanceId"),
+                "instance",
+                true
         ));
 
         // get_instance_pods - 获取 Pod 列表
         tools.put("get_instance_pods", ToolDefinition.create(
-            "get_instance_pods",
-            "获取网关实例的 Kubernetes Pod 列表和状态，包括 Pod 名称、状态(Running/Pending/Error)、重启次数、IP 地址等。用于排查部署问题。",
-            Map.of(
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID（12位随机ID）或数据库ID。"
-                )
-            ),
-            List.of("instanceId"),
-            "instance",
-            true
+                "get_instance_pods",
+                "获取网关实例的 Kubernetes Pod 列表和状态，包括 Pod 名称、状态(Running/Pending/Error)、重启次数、IP 地址等。用于排查部署问题。",
+                Map.of(
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID（12位随机ID）或数据库ID。"
+                        )
+                ),
+                List.of("instanceId"),
+                "instance",
+                true
         ));
     }
 
@@ -529,54 +532,54 @@ public class ToolRegistry {
     private void registerClusterTools() {
         // list_clusters - 获取集群列表
         tools.put("list_clusters", ToolDefinition.create(
-            "list_clusters",
-            "获取所有 Kubernetes 集群列表，包含集群ID、名称、服务器地址、版本、节点数、Pod数、CPU/内存容量、连接状态等信息。用于多集群管理场景。",
-            Map.of(
-                "enabledOnly", Map.of(
-                    "type", "boolean",
-                    "description", "是否只返回启用的集群（默认false返回所有）。",
-                    "default", false
-                )
-            ),
-            List.of(),
-            "cluster",
-            true
+                "list_clusters",
+                "获取所有 Kubernetes 集群列表，包含集群ID、名称、服务器地址、版本、节点数、Pod数、CPU/内存容量、连接状态等信息。用于多集群管理场景。",
+                Map.of(
+                        "enabledOnly", Map.of(
+                                "type", "boolean",
+                                "description", "是否只返回启用的集群（默认false返回所有）。",
+                                "default", false
+                        )
+                ),
+                List.of(),
+                "cluster",
+                true
         ));
 
         // get_cluster_detail - 获取集群详情
         tools.put("get_cluster_detail", ToolDefinition.create(
-            "get_cluster_detail",
-            "获取单个 Kubernetes 集群的详细信息，包括版本、节点列表、资源容量、命名空间列表等。用于深度了解集群状态。",
-            Map.of(
-                "clusterId", Map.of(
-                    "type", "integer",
-                    "description", "集群ID（数字）。"
-                )
-            ),
-            List.of("clusterId"),
-            "cluster",
-            true
+                "get_cluster_detail",
+                "获取单个 Kubernetes 集群的详细信息，包括版本、节点列表、资源容量、命名空间列表等。用于深度了解集群状态。",
+                Map.of(
+                        "clusterId", Map.of(
+                                "type", "integer",
+                                "description", "集群ID（数字）。"
+                        )
+                ),
+                List.of("clusterId"),
+                "cluster",
+                true
         ));
 
         // compare_instances - 实例对比
         tools.put("compare_instances", ToolDefinition.create(
-            "compare_instances",
-            "对比多个网关实例的配置和性能指标，包括路由数、服务数、CPU/内存使用率、QPS、响应时间等。用于多实例场景下的配置一致性检查和性能对比。",
-            Map.of(
-                "instanceIds", Map.of(
-                    "type", "string",
-                    "description", "要对比的实例ID列表，用逗号分隔。例如：'abc123,def456'。不提供时对比所有运行中的实例。"
+                "compare_instances",
+                "对比多个网关实例的配置和性能指标，包括路由数、服务数、CPU/内存使用率、QPS、响应时间等。用于多实例场景下的配置一致性检查和性能对比。",
+                Map.of(
+                        "instanceIds", Map.of(
+                                "type", "string",
+                                "description", "要对比的实例ID列表，用逗号分隔。例如：'abc123,def456'。不提供时对比所有运行中的实例。"
+                        ),
+                        "compareType", Map.of(
+                                "type", "string",
+                                "description", "对比类型：config(配置对比)、performance(性能对比)、all(全部)。",
+                                "default", "all",
+                                "enum", List.of("config", "performance", "all")
+                        )
                 ),
-                "compareType", Map.of(
-                    "type", "string",
-                    "description", "对比类型：config(配置对比)、performance(性能对比)、all(全部)。",
-                    "default", "all",
-                    "enum", List.of("config", "performance", "all")
-                )
-            ),
-            List.of(),
-            "cluster",
-            true
+                List.of(),
+                "cluster",
+                true
         ));
     }
 
@@ -585,82 +588,82 @@ public class ToolRegistry {
     private void registerTestTools() {
         // get_stress_test_status - 获取压测状态
         tools.put("get_stress_test_status", ToolDefinition.create(
-            "get_stress_test_status",
-            "获取压力测试的实时状态和结果，包括测试进度(progress)、实时RPS、平均响应时间、错误率、成功/失败请求数等。用于监控压测执行情况。",
-            Map.of(
-                "testId", Map.of(
-                    "type", "integer",
-                    "description", "压力测试ID。"
-                )
-            ),
-            List.of("testId"),
-            "test",
-            true
+                "get_stress_test_status",
+                "获取压力测试的实时状态和结果，包括测试进度(progress)、实时RPS、平均响应时间、错误率、成功/失败请求数等。用于监控压测执行情况。",
+                Map.of(
+                        "testId", Map.of(
+                                "type", "integer",
+                                "description", "压力测试ID。"
+                        )
+                ),
+                List.of("testId"),
+                "test",
+                true
         ));
 
         // analyze_test_results - AI分析压测结果
         tools.put("analyze_test_results", ToolDefinition.create(
-            "analyze_test_results",
-            "使用 AI 分析压力测试结果，生成性能报告和优化建议。包括性能瓶颈分析、资源利用率评估、配置优化建议等。",
-            Map.of(
-                "testId", Map.of(
-                    "type", "integer",
-                    "description", "压力测试ID。"
+                "analyze_test_results",
+                "使用 AI 分析压力测试结果，生成性能报告和优化建议。包括性能瓶颈分析、资源利用率评估、配置优化建议等。",
+                Map.of(
+                        "testId", Map.of(
+                                "type", "integer",
+                                "description", "压力测试ID。"
+                        ),
+                        "language", Map.of(
+                                "type", "string",
+                                "description", "报告语言（zh中文/en英文，默认zh）。",
+                                "default", "zh",
+                                "enum", List.of("zh", "en")
+                        )
                 ),
-                "language", Map.of(
-                    "type", "string",
-                    "description", "报告语言（zh中文/en英文，默认zh）。",
-                    "default", "zh",
-                    "enum", List.of("zh", "en")
-                )
-            ),
-            List.of("testId"),
-            "test",
-            true
+                List.of("testId"),
+                "test",
+                true
         ));
 
         // list_stress_test_history - 查询压测历史记录列表
         tools.put("list_stress_test_history", ToolDefinition.create(
-            "list_stress_test_history",
-            "查询压力测试历史记录列表，包含测试ID、名称、状态、目标URL、并发数、总请求数、实际请求数、响应时间、错误率、开始/结束时间等。用于对比历次压测表现、排查性能问题趋势。当用户提到'压测历史'、'压测记录'、'压测结果'、'最近压测'等关键词时应调用此工具。",
-            Map.of(
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID（可选）。不提供时返回所有实例的压测记录。"
+                "list_stress_test_history",
+                "查询压力测试历史记录列表，包含测试ID、名称、状态、目标URL、并发数、总请求数、实际请求数、响应时间、错误率、开始/结束时间等。用于对比历次压测表现、排查性能问题趋势。当用户提到'压测历史'、'压测记录'、'压测结果'、'最近压测'等关键词时应调用此工具。",
+                Map.of(
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID（可选）。不提供时返回所有实例的压测记录。"
+                        ),
+                        "status", Map.of(
+                                "type", "string",
+                                "description", "状态过滤（可选）：RUNNING(运行中)、COMPLETED(已完成)、STOPPED(已停止)。不提供时返回所有状态。",
+                                "enum", List.of("RUNNING", "COMPLETED", "STOPPED")
+                        ),
+                        "limit", Map.of(
+                                "type", "integer",
+                                "description", "返回记录数量（默认10条，最多50条）。",
+                                "default", 10
+                        ),
+                        "minRequests", Map.of(
+                                "type", "integer",
+                                "description", "最小请求数过滤（可选）。用于过滤有意义的压测记录，忽略测试性小规模压测。"
+                        )
                 ),
-                "status", Map.of(
-                    "type", "string",
-                    "description", "状态过滤（可选）：RUNNING(运行中)、COMPLETED(已完成)、STOPPED(已停止)。不提供时返回所有状态。",
-                    "enum", List.of("RUNNING", "COMPLETED", "STOPPED")
-                ),
-                "limit", Map.of(
-                    "type", "integer",
-                    "description", "返回记录数量（默认10条，最多50条）。",
-                    "default", 10
-                ),
-                "minRequests", Map.of(
-                    "type", "integer",
-                    "description", "最小请求数过滤（可选）。用于过滤有意义的压测记录，忽略测试性小规模压测。"
-                )
-            ),
-            List.of(),
-            "test",
-            true
+                List.of(),
+                "test",
+                true
         ));
 
         // get_stress_test_detail - 获取单个压测详细结果
         tools.put("get_stress_test_detail", ToolDefinition.create(
-            "get_stress_test_detail",
-            "获取单个压力测试的详细结果，包括完整的配置参数、响应时间分布、错误分布、时间线数据等。用于深入分析特定压测的表现。",
-            Map.of(
-                "testId", Map.of(
-                    "type", "integer",
-                    "description", "压力测试ID。"
-                )
-            ),
-            List.of("testId"),
-            "test",
-            true
+                "get_stress_test_detail",
+                "获取单个压力测试的详细结果，包括完整的配置参数、响应时间分布、错误分布、时间线数据等。用于深入分析特定压测的表现。",
+                Map.of(
+                        "testId", Map.of(
+                                "type", "integer",
+                                "description", "压力测试ID。"
+                        )
+                ),
+                List.of("testId"),
+                "test",
+                true
         ));
     }
 
@@ -669,101 +672,101 @@ public class ToolRegistry {
     private void registerFilterChainTools() {
         // get_filter_chain_stats - 获取过滤器链统计
         tools.put("get_filter_chain_stats", ToolDefinition.create(
-            "get_filter_chain_stats",
-            "获取过滤器链执行统计信息，包括各过滤器的执行次数、成功率、平均耗时、P50/P95/P99分位数、慢请求数量等。用于分析性能瓶颈和识别慢过滤器。",
-            Map.of(
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID。"
-                )
-            ),
-            List.of("instanceId"),
-            "filter-chain",
-            true
+                "get_filter_chain_stats",
+                "获取过滤器链执行统计信息，包括各过滤器的执行次数、成功率、平均耗时、P50/P95/P99分位数、慢请求数量等。用于分析性能瓶颈和识别慢过滤器。",
+                Map.of(
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID。"
+                        )
+                ),
+                List.of("instanceId"),
+                "filter-chain",
+                true
         ));
 
         // get_slowest_filters - 获取最慢的过滤器排名
         tools.put("get_slowest_filters", ToolDefinition.create(
-            "get_slowest_filters",
-            "获取平均执行时间最长的过滤器排名列表，快速定位性能瓶颈。返回过滤器名称、平均耗时、最大耗时、P95/P99等统计。",
-            Map.of(
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID。"
+                "get_slowest_filters",
+                "获取平均执行时间最长的过滤器排名列表，快速定位性能瓶颈。返回过滤器名称、平均耗时、最大耗时、P95/P99等统计。",
+                Map.of(
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID。"
+                        ),
+                        "limit", Map.of(
+                                "type", "integer",
+                                "description", "返回数量限制（默认10）。",
+                                "default", 10
+                        )
                 ),
-                "limit", Map.of(
-                    "type", "integer",
-                    "description", "返回数量限制（默认10）。",
-                    "default", 10
-                )
-            ),
-            List.of("instanceId"),
-            "filter-chain",
-            true
+                List.of("instanceId"),
+                "filter-chain",
+                true
         ));
 
         // get_slow_requests - 获取慢请求列表
         tools.put("get_slow_requests", ToolDefinition.create(
-            "get_slow_requests",
-            "获取超过阈值时间的慢请求列表，包含每个请求的traceId、总耗时、各过滤器执行明细和时间占比。用于深度排查慢请求原因。",
-            Map.of(
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID。"
+                "get_slow_requests",
+                "获取超过阈值时间的慢请求列表，包含每个请求的traceId、总耗时、各过滤器执行明细和时间占比。用于深度排查慢请求原因。",
+                Map.of(
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID。"
+                        ),
+                        "limit", Map.of(
+                                "type", "integer",
+                                "description", "返回数量限制（默认20）。",
+                                "default", 20
+                        )
                 ),
-                "limit", Map.of(
-                    "type", "integer",
-                    "description", "返回数量限制（默认20）。",
-                    "default", 20
-                )
-            ),
-            List.of("instanceId"),
-            "filter-chain",
-            true
+                List.of("instanceId"),
+                "filter-chain",
+                true
         ));
 
         // get_filter_trace_detail - 获取单个trace的过滤器执行详情
         tools.put("get_filter_trace_detail", ToolDefinition.create(
-            "get_filter_trace_detail",
-            "获取指定traceId的完整过滤器链执行详情，包括每个过滤器的执行顺序、耗时、成功状态、错误信息、时间占比百分比。用于深度分析单个请求。",
-            Map.of(
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID。"
+                "get_filter_trace_detail",
+                "获取指定traceId的完整过滤器链执行详情，包括每个过滤器的执行顺序、耗时、成功状态、错误信息、时间占比百分比。用于深度分析单个请求。",
+                Map.of(
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID。"
+                        ),
+                        "traceId", Map.of(
+                                "type", "string",
+                                "description", "请求追踪ID（UUID格式）。"
+                        )
                 ),
-                "traceId", Map.of(
-                    "type", "string",
-                    "description", "请求追踪ID（UUID格式）。"
-                )
-            ),
-            List.of("instanceId", "traceId"),
-            "filter-chain",
-            true
+                List.of("instanceId", "traceId"),
+                "filter-chain",
+                true
         ));
 
         // set_slow_threshold - 设置慢请求阈值（写操作，需要确认）
         tools.put("set_slow_threshold", ToolDefinition.create(
-            "set_slow_threshold",
-            "设置慢请求告警阈值（毫秒）。超过此阈值的请求将被标记为慢请求并记录。这是一个写操作，**需要用户确认后才能执行。**",
-            Map.of(
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID。"
+                "set_slow_threshold",
+                "设置慢请求告警阈值（毫秒）。超过此阈值的请求将被标记为慢请求并记录。这是一个写操作，**需要用户确认后才能执行。**",
+                Map.of(
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID。"
+                        ),
+                        "thresholdMs", Map.of(
+                                "type", "integer",
+                                "description", "慢请求阈值（毫秒，建议500-5000）。"
+                        ),
+                        "confirmed", Map.of(
+                                "type", "boolean",
+                                "description", "用户是否已确认执行此操作。必须为 true 才会真正执行。",
+                                "default", false
+                        )
                 ),
-                "thresholdMs", Map.of(
-                    "type", "integer",
-                    "description", "慢请求阈值（毫秒，建议500-5000）。"
-                ),
-                "confirmed", Map.of(
-                    "type", "boolean",
-                    "description", "用户是否已确认执行此操作。必须为 true 才会真正执行。",
-                    "default", false
-                )
-            ),
-            List.of("instanceId", "thresholdMs"),
-            "filter-chain",
-            false,  // 写操作
-            true    // 需要确认
+                List.of("instanceId", "thresholdMs"),
+                "filter-chain",
+                false,  // 写操作
+                true    // 需要确认
         ));
     }
 
@@ -772,55 +775,55 @@ public class ToolRegistry {
     private void registerAiFilterAnalysisTools() {
         // analyze_filter_anomaly - 使用AI异常检测算法分析Filter链性能异常
         tools.put("analyze_filter_anomaly", ToolDefinition.create(
-            "analyze_filter_anomaly",
-            "使用 AI 异常检测算法分析 Filter 链性能异常。综合分析执行耗时突变、错误率异常、健康评分变化，识别异常 Filter 并给出根本原因分析和修复建议。",
-            Map.of(
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID。"
+                "analyze_filter_anomaly",
+                "使用 AI 异常检测算法分析 Filter 链性能异常。综合分析执行耗时突变、错误率异常、健康评分变化，识别异常 Filter 并给出根本原因分析和修复建议。",
+                Map.of(
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID。"
+                        ),
+                        "analysisMode", Map.of(
+                                "type", "string",
+                                "description", "分析模式：quick(快速诊断，最近1小时)、deep(深度分析，最近24小时)、realtime(实时异常检测)。",
+                                "default", "quick",
+                                "enum", List.of("quick", "deep", "realtime")
+                        ),
+                        "focusFilters", Map.of(
+                                "type", "array",
+                                "description", "重点关注特定Filter列表（可选）。",
+                                "items", Map.of("type", "string")
+                        )
                 ),
-                "analysisMode", Map.of(
-                    "type", "string",
-                    "description", "分析模式：quick(快速诊断，最近1小时)、deep(深度分析，最近24小时)、realtime(实时异常检测)。",
-                    "default", "quick",
-                    "enum", List.of("quick", "deep", "realtime")
-                ),
-                "focusFilters", Map.of(
-                    "type", "array",
-                    "description", "重点关注特定Filter列表（可选）。",
-                    "items", Map.of("type", "string")
-                )
-            ),
-            List.of("instanceId"),
-            "ai-filter-analysis",
-            true
+                List.of("instanceId"),
+                "ai-filter-analysis",
+                true
         ));
 
         // predict_filter_performance - 预测Filter链未来性能趋势
         tools.put("predict_filter_performance", ToolDefinition.create(
-            "predict_filter_performance",
-            "基于历史数据和 AI 模型预测 Filter 未来性能趋势。分析执行耗时、错误率、吞吐量的历史变化规律，预测未来性能瓶颈和潜在风险，给出预防性优化建议。",
-            Map.of(
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID。"
+                "predict_filter_performance",
+                "基于历史数据和 AI 模型预测 Filter 未来性能趋势。分析执行耗时、错误率、吞吐量的历史变化规律，预测未来性能瓶颈和潜在风险，给出预防性优化建议。",
+                Map.of(
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID。"
+                        ),
+                        "predictionWindow", Map.of(
+                                "type", "string",
+                                "description", "预测窗口：1h(1小时)、6h(6小时)、24h(24小时)、7d(7天)。",
+                                "default", "1h",
+                                "enum", List.of("1h", "6h", "24h", "7d")
+                        ),
+                        "metricsToPredict", Map.of(
+                                "type", "array",
+                                "description", "预测指标列表（可选）：avgDuration(平均耗时)、errorRate(错误率)、throughput(吞吐量)。",
+                                "default", List.of("avgDuration", "errorRate"),
+                                "items", Map.of("type", "string")
+                        )
                 ),
-                "predictionWindow", Map.of(
-                    "type", "string",
-                    "description", "预测窗口：1h(1小时)、6h(6小时)、24h(24小时)、7d(7天)。",
-                    "default", "1h",
-                    "enum", List.of("1h", "6h", "24h", "7d")
-                ),
-                "metricsToPredict", Map.of(
-                    "type", "array",
-                    "description", "预测指标列表（可选）：avgDuration(平均耗时)、errorRate(错误率)、throughput(吞吐量)。",
-                    "default", List.of("avgDuration", "errorRate"),
-                    "items", Map.of("type", "string")
-                )
-            ),
-            List.of("instanceId"),
-            "ai-filter-analysis",
-            true
+                List.of("instanceId"),
+                "ai-filter-analysis",
+                true
         ));
     }
 
@@ -829,68 +832,68 @@ public class ToolRegistry {
     private void registerPerformanceTools() {
         // get_route_metrics - 获取路由性能统计
         tools.put("get_route_metrics", ToolDefinition.create(
-            "get_route_metrics",
-            "获取路由级别的性能统计，包括各路由的请求数、平均延迟、最大延迟、错误率、P50/P95/P99分位数等。用于识别高流量路由和性能瓶颈路由。",
-            Map.of(
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID（可选）。不提供时返回所有实例汇总。"
+                "get_route_metrics",
+                "获取路由级别的性能统计，包括各路由的请求数、平均延迟、最大延迟、错误率、P50/P95/P99分位数等。用于识别高流量路由和性能瓶颈路由。",
+                Map.of(
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID（可选）。不提供时返回所有实例汇总。"
+                        ),
+                        "hours", Map.of(
+                                "type", "integer",
+                                "description", "统计最近多少小时的数据（默认1小时）。",
+                                "default", 1
+                        ),
+                        "sortBy", Map.of(
+                                "type", "string",
+                                "description", "排序字段（默认count）：count(请求数)、avgLatency(平均延迟)、errorRate(错误率)。",
+                                "default", "count",
+                                "enum", List.of("count", "avgLatency", "errorRate")
+                        ),
+                        "limit", Map.of(
+                                "type", "integer",
+                                "description", "返回数量限制（默认10）。",
+                                "default", 10
+                        )
                 ),
-                "hours", Map.of(
-                    "type", "integer",
-                    "description", "统计最近多少小时的数据（默认1小时）。",
-                    "default", 1
-                ),
-                "sortBy", Map.of(
-                    "type", "string",
-                    "description", "排序字段（默认count）：count(请求数)、avgLatency(平均延迟)、errorRate(错误率)。",
-                    "default", "count",
-                    "enum", List.of("count", "avgLatency", "errorRate")
-                ),
-                "limit", Map.of(
-                    "type", "integer",
-                    "description", "返回数量限制（默认10）。",
-                    "default", 10
-                )
-            ),
-            List.of(),
-            "performance",
-            true
+                List.of(),
+                "performance",
+                true
         ));
 
         // get_jvm_gc_detail - 获取JVM GC详细统计
         tools.put("get_jvm_gc_detail", ToolDefinition.create(
-            "get_jvm_gc_detail",
-            "获取JVM垃圾回收的详细统计，包括Young GC和Old GC(Full GC)的次数、总耗时、单次平均耗时、GC开销占比、健康状态评估和建议。用于深度分析内存和GC性能问题。",
-            Map.of(
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID（可选）。"
-                )
-            ),
-            List.of(),
-            "performance",
-            true
+                "get_jvm_gc_detail",
+                "获取JVM垃圾回收的详细统计，包括Young GC和Old GC(Full GC)的次数、总耗时、单次平均耗时、GC开销占比、健康状态评估和建议。用于深度分析内存和GC性能问题。",
+                Map.of(
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID（可选）。"
+                        )
+                ),
+                List.of(),
+                "performance",
+                true
         ));
 
         // suggest_filter_reorder - 建议Filter重排序优化
         tools.put("suggest_filter_reorder", ToolDefinition.create(
-            "suggest_filter_reorder",
-            "分析当前Filter执行顺序并给出优化建议。根据Filter执行耗时、功能类型、依赖关系，建议更优的Filter顺序以提升性能。输出重排序建议和预期性能提升。",
-            Map.of(
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID（必填）。"
+                "suggest_filter_reorder",
+                "分析当前Filter执行顺序并给出优化建议。根据Filter执行耗时、功能类型、依赖关系，建议更优的Filter顺序以提升性能。输出重排序建议和预期性能提升。",
+                Map.of(
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID（必填）。"
+                        ),
+                        "compareHours", Map.of(
+                                "type", "integer",
+                                "description", "趋势对比时长（默认1小时），对比当前时间段与前一时间段的变化。",
+                                "default", 1
+                        )
                 ),
-                "compareHours", Map.of(
-                    "type", "integer",
-                    "description", "趋势对比时长（默认1小时），对比当前时间段与前一时间段的变化。",
-                    "default", 1
-                )
-            ),
-            List.of("instanceId"),
-            "performance",
-            true
+                List.of("instanceId"),
+                "performance",
+                true
         ));
     }
 
@@ -899,57 +902,94 @@ public class ToolRegistry {
     private void registerAuditTools() {
         // audit_query - 审计日志查询
         tools.put("audit_query", ToolDefinition.create(
-            "audit_query",
-            "查询系统审计日志，追踪配置变更历史、操作者信息、变更前后对比。支持按操作类型、目标类型、时间范围筛选。用于问题溯源和合规审计。",
-            Map.of(
-                "instanceId", Map.of(
-                    "type", "string",
-                    "description", "网关实例ID（可选）。"
+                "audit_query",
+                "查询系统审计日志，追踪配置变更历史、操作者信息、变更前后对比。支持按操作类型、目标类型、时间范围筛选。用于问题溯源和合规审计。",
+                Map.of(
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID（可选）。"
+                        ),
+                        "targetType", Map.of(
+                                "type", "string",
+                                "description", "目标类型（可选）：ROUTE、SERVICE、STRATEGY、AUTH_POLICY、SSL_CERTIFICATE",
+                                "enum", List.of("ROUTE", "SERVICE", "STRATEGY", "AUTH_POLICY", "SSL_CERTIFICATE")
+                        ),
+                        "operationType", Map.of(
+                                "type", "string",
+                                "description", "操作类型（可选）：CREATE、UPDATE、DELETE、ENABLE、DISABLE",
+                                "enum", List.of("CREATE", "UPDATE", "DELETE", "ENABLE", "DISABLE")
+                        ),
+                        "hours", Map.of(
+                                "type", "integer",
+                                "description", "查询最近多少小时的记录（可选，默认24小时）。",
+                                "default", 24
+                        ),
+                        "page", Map.of(
+                                "type", "integer",
+                                "description", "页码（默认0）。",
+                                "default", 0
+                        ),
+                        "size", Map.of(
+                                "type", "integer",
+                                "description", "每页条数（默认20）。",
+                                "default", 20
+                        )
                 ),
-                "targetType", Map.of(
-                    "type", "string",
-                    "description", "目标类型（可选）：ROUTE、SERVICE、STRATEGY、AUTH_POLICY、SSL_CERTIFICATE",
-                    "enum", List.of("ROUTE", "SERVICE", "STRATEGY", "AUTH_POLICY", "SSL_CERTIFICATE")
-                ),
-                "operationType", Map.of(
-                    "type", "string",
-                    "description", "操作类型（可选）：CREATE、UPDATE、DELETE、ENABLE、DISABLE",
-                    "enum", List.of("CREATE", "UPDATE", "DELETE", "ENABLE", "DISABLE")
-                ),
-                "hours", Map.of(
-                    "type", "integer",
-                    "description", "查询最近多少小时的记录（可选，默认24小时）。",
-                    "default", 24
-                ),
-                "page", Map.of(
-                    "type", "integer",
-                    "description", "页码（默认0）。",
-                    "default", 0
-                ),
-                "size", Map.of(
-                    "type", "integer",
-                    "description", "每页条数（默认20）。",
-                    "default", 20
-                )
-            ),
-            List.of(),
-            "audit",
-            true
+                List.of(),
+                "audit",
+                true
         ));
 
         // audit_diff - 审计日志变更详情对比
         tools.put("audit_diff", ToolDefinition.create(
-            "audit_diff",
-            "获取指定审计日志的变更前后详细对比。用于查看具体配置字段的变化，支持问题溯源。",
-            Map.of(
-                "logId", Map.of(
-                    "type", "integer",
-                    "description", "审计日志ID。"
-                )
-            ),
-            List.of("logId"),
-            "audit",
-            true
+                "audit_diff",
+                "获取指定审计日志的变更前后详细对比。用于查看具体配置字段的变化，支持问题溯源。",
+                Map.of(
+                        "logId", Map.of(
+                                "type", "integer",
+                                "description", "审计日志ID。"
+                        )
+                ),
+                List.of("logId"),
+                "audit",
+                true
+        ));
+
+        // diagnose_state_inconsistency - 状态预期不一致诊断（新增）
+        tools.put("diagnose_state_inconsistency", ToolDefinition.create(
+                "diagnose_state_inconsistency",
+                "【状态预期不一致诊断】当用户声称'路由禁用了还能调用成功'、'路由删除了还能访问'、'配置改了没生效'等状态预期不符的情况时，调用此工具进行诊断。" +
+                        "自动查询：1)路由/策略当前真实状态；2)审计日志中的状态变更历史（ENABLE/DISABLE/ROLLBACK操作）；3)生成完整的时间线回放。" +
+                        "输出：状态变化原因、操作者、时间、以及'不是系统bug，是历史回滚或重新启用操作'的解释。帮助用户理解状态变化的完整过程。",
+                Map.of(
+                        "targetType", Map.of(
+                                "type", "string",
+                                "description", "目标类型（必填）：ROUTE（路由）、STRATEGY（策略）、SERVICE（服务）、AUTH_POLICY（认证策略）。",
+                                "enum", List.of("ROUTE", "STRATEGY", "SERVICE", "AUTH_POLICY")
+                        ),
+                        "targetId", Map.of(
+                                "type", "string",
+                                "description", "目标ID（必填）。例如路由的 routeId（UUID格式）。"
+                        ),
+                        "instanceId", Map.of(
+                                "type", "string",
+                                "description", "网关实例ID（可选）。多实例环境下需要指定。"
+                        ),
+                        "userExpectedState", Map.of(
+                                "type", "string",
+                                "description", "用户预期的状态（可选）。例如：'disabled'（禁用）、'enabled'（启用）、'deleted'（已删除）。用于对比实际状态。",
+                                "enum", List.of("enabled", "disabled", "deleted", "active", "inactive")
+                        ),
+                        "language", Map.of(
+                                "type", "string",
+                                "description", "报告语言（可选，默认zh中文）。",
+                                "default", "zh",
+                                "enum", List.of("zh", "en")
+                        )
+                ),
+                List.of("targetType", "targetId"),
+                "audit",
+                true
         ));
     }
 

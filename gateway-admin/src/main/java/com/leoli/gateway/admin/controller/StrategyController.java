@@ -123,7 +123,7 @@ public class StrategyController {
 
             // Record audit log - CREATE
             String newValue = objectMapper.writeValueAsString(strategy);
-            auditLogService.recordAuditLog(getOperator(), "CREATE", "STRATEGY", entity.getStrategyId(),
+            auditLogService.recordAuditLog(instanceId, getOperator(), "CREATE", "STRATEGY", entity.getStrategyId(),
                     strategy.getStrategyName(), null, newValue, getIpAddress(request));
 
             return ok(strategy, "Strategy created successfully");
@@ -142,10 +142,11 @@ public class StrategyController {
     @PutMapping("/{id}")
     public ResponseEntity<Map<String, Object>> updateStrategy(
             @PathVariable String id,
+            @RequestParam(required = false) String instanceId,
             @RequestBody StrategyDefinition strategy,
             HttpServletRequest request) {
         try {
-            log.info("Updating strategy: {}", id);
+            log.info("Updating strategy: {} for instance: {}", id, instanceId);
 
             // Get old value before update
             StrategyEntity oldEntity = strategyService.getStrategyEntity(id);
@@ -155,7 +156,7 @@ public class StrategyController {
 
             // Record audit log - UPDATE
             String newValue = objectMapper.writeValueAsString(strategy);
-            auditLogService.recordAuditLog(getOperator(), "UPDATE", "STRATEGY", id,
+            auditLogService.recordAuditLog(instanceId, getOperator(), "UPDATE", "STRATEGY", id,
                     strategy.getStrategyName(), oldValue, newValue, getIpAddress(request));
 
             return ok(strategy, "Strategy updated successfully");
@@ -172,9 +173,12 @@ public class StrategyController {
      * Delete a strategy.
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> deleteStrategy(@PathVariable String id, HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> deleteStrategy(
+            @PathVariable String id,
+            @RequestParam(required = false) String instanceId,
+            HttpServletRequest request) {
         try {
-            log.info("Deleting strategy: {}", id);
+            log.info("Deleting strategy: {} for instance: {}", id, instanceId);
 
             // Get old value before delete
             StrategyEntity oldEntity = strategyService.getStrategyEntity(id);
@@ -184,7 +188,7 @@ public class StrategyController {
             strategyService.deleteStrategy(id);
 
             // Record audit log - DELETE
-            auditLogService.recordAuditLog(getOperator(), "DELETE", "STRATEGY", id,
+            auditLogService.recordAuditLog(instanceId, getOperator(), "DELETE", "STRATEGY", id,
                     targetName, oldValue, null, getIpAddress(request));
 
             return ok(null, "Strategy deleted successfully");
@@ -201,9 +205,12 @@ public class StrategyController {
      * Enable a strategy.
      */
     @PostMapping("/{id}/enable")
-    public ResponseEntity<Map<String, Object>> enableStrategy(@PathVariable String id, HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> enableStrategy(
+            @PathVariable String id,
+            @RequestParam(required = false) String instanceId,
+            HttpServletRequest request) {
         try {
-            log.info("Enabling strategy: {}", id);
+            log.info("Enabling strategy: {} for instance: {}", id, instanceId);
 
             // Get old value before enable
             StrategyEntity oldEntity = strategyService.getStrategyEntity(id);
@@ -217,7 +224,7 @@ public class StrategyController {
             String newValue = newEntity != null ? newEntity.getMetadata() : null;
 
             // Record audit log - ENABLE
-            auditLogService.recordAuditLog(getOperator(), "ENABLE", "STRATEGY", id,
+            auditLogService.recordAuditLog(instanceId, getOperator(), "ENABLE", "STRATEGY", id,
                     targetName, oldValue, newValue, getIpAddress(request));
 
             return ok(null, "Strategy enabled successfully");
@@ -234,9 +241,12 @@ public class StrategyController {
      * Disable a strategy.
      */
     @PostMapping("/{id}/disable")
-    public ResponseEntity<Map<String, Object>> disableStrategy(@PathVariable String id, HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> disableStrategy(
+            @PathVariable String id,
+            @RequestParam(required = false) String instanceId,
+            HttpServletRequest request) {
         try {
-            log.info("Disabling strategy: {}", id);
+            log.info("Disabling strategy: {} for instance: {}", id, instanceId);
 
             // Get old value before disable
             StrategyEntity oldEntity = strategyService.getStrategyEntity(id);
@@ -250,7 +260,7 @@ public class StrategyController {
             String newValue = newEntity != null ? newEntity.getMetadata() : null;
 
             // Record audit log - DISABLE
-            auditLogService.recordAuditLog(getOperator(), "DISABLE", "STRATEGY", id,
+            auditLogService.recordAuditLog(instanceId, getOperator(), "DISABLE", "STRATEGY", id,
                     targetName, oldValue, newValue, getIpAddress(request));
 
             return ok(null, "Strategy disabled successfully");

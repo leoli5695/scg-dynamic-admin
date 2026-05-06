@@ -101,13 +101,14 @@ public class InstanceRetryExecutor {
                     instance.getHost(), instance.getPort());
         }
 
+        log.info("[RETRY-DEBUG] doExecute calling chain.filter, exchange response class={}",
+                exchange.getResponse().getClass().getSimpleName());
         return chain.filter(exchange)
                 .doOnSuccess(aVoid -> {
                     healthChecker.recordSuccess(serviceId, instance.getHost(), instance.getPort());
                     ServerHttpResponse response = exchange.getResponse();
-                    log.warn("[RETRY-SUCCESS] Request succeeded to instance {}:{}, statusCode={}, headersCount={}",
-                            instance.getHost(), instance.getPort(),
-                            response.getStatusCode(), response.getHeaders().size());
+                    log.info("[RETRY-DEBUG] chain.filter success, response class={}, statusCode={}",
+                            response.getClass().getSimpleName(), response.getStatusCode());
                 })
                 .onErrorResume(error -> {
                     healthChecker.recordFailure(serviceId, instance.getHost(), instance.getPort());
