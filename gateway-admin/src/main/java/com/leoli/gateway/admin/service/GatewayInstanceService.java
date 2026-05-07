@@ -750,12 +750,22 @@ public class GatewayInstanceService {
         spec.setType("NodePort");
 
         List<V1ServicePort> ports = new ArrayList<>();
-        V1ServicePort servicePort = new V1ServicePort();
-        servicePort.setPort(serverPort);
-        servicePort.setTargetPort(new io.kubernetes.client.custom.IntOrString(serverPort));
-        servicePort.setProtocol("TCP");
-        servicePort.setName("http");
-        ports.add(servicePort);
+
+        // HTTP port (default: 80)
+        V1ServicePort httpPort = new V1ServicePort();
+        httpPort.setPort(serverPort);
+        httpPort.setTargetPort(new io.kubernetes.client.custom.IntOrString(serverPort));
+        httpPort.setProtocol("TCP");
+        httpPort.setName("http");
+        ports.add(httpPort);
+
+        // HTTPS port (8443) - SSL certificates are dynamically loaded from Nacos
+        V1ServicePort httpsPort = new V1ServicePort();
+        httpsPort.setPort(443);
+        httpsPort.setTargetPort(new io.kubernetes.client.custom.IntOrString(8443));
+        httpsPort.setProtocol("TCP");
+        httpsPort.setName("https");
+        ports.add(httpsPort);
 
         spec.setPorts(ports);
         service.setSpec(spec);
