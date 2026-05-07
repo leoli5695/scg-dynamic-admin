@@ -5,6 +5,7 @@ import com.leoli.gateway.health.HybridHealthChecker;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -27,7 +28,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Component
 public class ServiceManager {
 
+    // Use @Lazy to break circular dependency: ServiceManager -> HybridHealthChecker -> ServiceManager
     @Autowired
+    @Lazy
     private HybridHealthChecker hybridHealthChecker;
 
     // Load balancing strategy cache
