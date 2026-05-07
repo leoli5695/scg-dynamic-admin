@@ -1,8 +1,10 @@
 package com.leoli.gateway.manager;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.leoli.gateway.health.HybridHealthChecker;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -24,6 +26,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Slf4j
 @Component
 public class ServiceManager {
+
+    @Autowired
+    private HybridHealthChecker hybridHealthChecker;
 
     // Load balancing strategy cache
     private final Map<String, String> loadBalancerStrategyCache = new ConcurrentHashMap<>();
@@ -52,7 +57,14 @@ public class ServiceManager {
             return;
         }
 
-        // Clear old cache for this service
+        // CRITICAL: Clear health checker cache FIRST (before instanceCache)
+        // This ensures stale instance records (e.g., old port 30903) are removed
+        // when configuration changes (e.g., to new port 9003)
+        // Must call BEFORE instanceCache.remove() because clearServiceInstances()
+        // needs to check instanceCache for shared instances
+        hybridHealthChecker.clearServiceInstances(serviceId);
+
+        // Then clear old cache for this service
         endpointCache.remove(serviceId);
         instanceCache.remove(serviceId);
         roundRobinCounters.remove(serviceId);
