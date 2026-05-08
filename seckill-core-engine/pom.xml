@@ -147,6 +147,13 @@
             <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
 
+        <!-- Gateway Trace Starter -->
+        <dependency>
+            <groupId>com.leoli.gateway</groupId>
+            <artifactId>gateway-trace-starter</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
         <!-- ShedLock 分布式定时任务锁 -->
         <dependency>
             <groupId>net.javacrumbs.shedlock</groupId>

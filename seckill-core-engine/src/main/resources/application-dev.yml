@@ -1,0 +1,60 @@
+# ============================================================================
+# 开发环境配置 - 简化版（可启动）
+# ============================================================================
+
+spring:
+  cloud:
+    nacos:
+      config:
+        enabled: false  # 开发环境关闭Nacos
+
+  # 使用H2内存数据库（开发模式）
+  datasource:
+    driver-class-name: org.h2.Driver
+    url: jdbc:h2:mem:seckill;DB_CLOSE_DELAY=-1;MODE=MySQL
+    username: sa
+    password: 
+  
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  # Redis配置（连接K8s已有Redis）
+  data:
+    redis:
+      host: localhost
+      port: 30379
+      password: 
+      database: 0
+
+# RocketMQ配置
+rocketmq:
+  name-server: localhost:30976
+  producer:
+    enabled: true  # 开发模式启用RocketMQ
+
+# Redisson配置（无密码）
+redisson:
+  config: |
+    singleServerConfig:
+      address: "redis://localhost:30379"
+      password: null
+      connectionPoolSize: 50
+      connectionMinimumIdleSize: 10
+
+# 禁用ShardingSphere（开发模式）
+spring.shardingsphere:
+  enabled: false
+
+logging:
+  level:
+    root: INFO
+    com.seckill: DEBUG
+    org.springframework: INFO
+
+# 秒杀引擎配置
+seckill:
+  shard-count: 8
+  warmup:
+    enabled: false  # 开发模式禁用预热

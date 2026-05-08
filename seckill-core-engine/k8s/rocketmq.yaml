@@ -1,0 +1,101 @@
+# ============================================================================
+# RocketMQ K8s 部署 - 使用备用镜像源
+# ============================================================================
+
+---
+# NameServer Deployment  
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rocketmq-nameserver
+  namespace: test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rocketmq-nameserver
+  template:
+    metadata:
+      labels:
+        app: rocketmq-nameserver
+    spec:
+      containers:
+        - name: nameserver
+          # 使用ghcr镜像源
+          image: ghcr.io/apache/rocketmq-nameserver:5.1.4
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9876
+          env:
+            - name: JAVA_OPT
+              value: "-Xms256m -Xmx256m"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rocketmq-nameserver
+  namespace: test
+spec:
+  type: NodePort
+  ports:
+    - port: 9876
+      targetPort: 9876
+      nodePort: 30976
+  selector:
+    app: rocketmq-nameserver
+
+---
+# Broker Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rocketmq-broker
+  namespace: test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rocketmq-broker
+  template:
+    metadata:
+      labels:
+        app: rocketmq-broker
+    spec:
+      containers:
+        - name: broker
+          image: ghcr.io/apache/rocketmq-broker:5.1.4
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 10911
+          env:
+            - name: JAVA_OPT_EXT
+              value: "-Xms512m -Xmx512m -Drocketmq.namesrv.addr=rocketmq-nameserver:9876 -Drocketmq.broker.transactionMessageEnable=true"
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rocketmq-broker
+  namespace: test
+spec:
+  type: NodePort
+  ports:
+    - port: 10911
+      targetPort: 10911
+      nodePort: 30911
+      name: broker
+  selector:
+    app: rocketmq-broker

@@ -1,0 +1,164 @@
+# ============================================================================
+# ShardingSphere 分库分表配置
+# ============================================================================
+# 分片规则:
+#   - 分库: database_index = user_id % 8
+#   - 分表: table_index = user_id % 16
+# 结果: 8库 × 16表 = 128个物理表
+
+mode:
+  type: Standalone
+  repository:
+    type: File
+
+dataSources:
+  # 8个分库配置
+  ds_0:
+    dataSourceClassName: com.zaxxer.hikari.HikariDataSource
+    driverClassName: com.mysql.cj.jdbc.Driver
+    jdbcUrl: jdbc:mysql://127.0.0.1:3306/seckill_db_0?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+    pool:
+      maximumPoolSize: 50
+      minimumIdle: 10
+      idleTimeout: 60000
+      connectionTimeout: 30000
+
+  ds_1:
+    dataSourceClassName: com.zaxxer.hikari.HikariDataSource
+    driverClassName: com.mysql.cj.jdbc.Driver
+    jdbcUrl: jdbc:mysql://127.0.0.1:3306/seckill_db_1?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+    pool:
+      maximumPoolSize: 50
+      minimumIdle: 10
+
+  ds_2:
+    dataSourceClassName: com.zaxxer.hikari.HikariDataSource
+    driverClassName: com.mysql.cj.jdbc.Driver
+    jdbcUrl: jdbc:mysql://127.0.0.1:3306/seckill_db_2?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+    pool:
+      maximumPoolSize: 50
+      minimumIdle: 10
+
+  ds_3:
+    dataSourceClassName: com.zaxxer.hikari.HikariDataSource
+    driverClassName: com.mysql.cj.jdbc.Driver
+    jdbcUrl: jdbc:mysql://127.0.0.1:3306/seckill_db_3?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+    pool:
+      maximumPoolSize: 50
+      minimumIdle: 10
+
+  ds_4:
+    dataSourceClassName: com.zaxxer.hikari.HikariDataSource
+    driverClassName: com.mysql.cj.jdbc.Driver
+    jdbcUrl: jdbc:mysql://127.0.0.1:3306/seckill_db_4?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+    pool:
+      maximumPoolSize: 50
+      minimumIdle: 10
+
+  ds_5:
+    dataSourceClassName: com.zaxxer.hikari.HikariDataSource
+    driverClassName: com.mysql.cj.jdbc.Driver
+    jdbcUrl: jdbc:mysql://127.0.0.1:3306/seckill_db_5?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+    pool:
+      maximumPoolSize: 50
+      minimumIdle: 10
+
+  ds_6:
+    dataSourceClassName: com.zaxxer.hikari.HikariDataSource
+    driverClassName: com.mysql.cj.jdbc.Driver
+    jdbcUrl: jdbc:mysql://127.0.0.1:3306/seckill_db_6?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+    pool:
+      maximumPoolSize: 50
+      minimumIdle: 10
+
+  ds_7:
+    dataSourceClassName: com.zaxxer.hikari.HikariDataSource
+    driverClassName: com.mysql.cj.jdbc.Driver
+    jdbcUrl: jdbc:mysql://127.0.0.1:3306/seckill_db_7?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+    pool:
+      maximumPoolSize: 50
+      minimumIdle: 10
+
+rules:
+  - !SHARDING
+    tables:
+      # 订单表分片规则
+      seckill_order:
+        actualDataNodes: ds_${0..7}.order_${0..15}
+        # 分库策略: user_id % 8
+        databaseStrategy:
+          standard:
+            shardingColumn: user_id
+            shardingAlgorithmName: order_db_mod
+        # 分表策略: user_id % 16
+        tableStrategy:
+          standard:
+            shardingColumn: user_id
+            shardingAlgorithmName: order_table_mod
+        # 主键生成策略: 雪花算法
+        keyGenerateStrategy:
+          column: id
+          keyGeneratorName: snowflake
+
+      # 事务日志表（不分片，存储在主库）
+      transaction_log:
+        actualDataNodes: ds_0.transaction_log
+
+      # 秒杀活动表（不分片）
+      seckill_activity:
+        actualDataNodes: ds_0.seckill_activity
+
+      # 秒杀商品表（不分片）
+      seckill_product:
+        actualDataNodes: ds_0.seckill_product
+
+      # 库存对账表（不分片）
+      stock_reconciliation:
+        actualDataNodes: ds_0.stock_reconciliation
+
+    # 分片算法配置
+    shardingAlgorithms:
+      # 订单分库算法: user_id % 8
+      order_db_mod:
+        type: MOD
+        props:
+          sharding-count: 8
+
+      # 订单分表算法: user_id % 16
+      order_table_mod:
+        type: MOD
+        props:
+          sharding-count: 16
+
+    # 主键生成器配置
+    keyGenerators:
+      snowflake:
+        type: SNOWFLAKE
+        props:
+          worker-id: ${WORKER_ID:1}
+          max-vibration-offset: 1
+          max-tolerate-time-difference-milliseconds: 10
+
+props:
+  # SQL日志
+  sql-show: true
+  sql-show-format: true
+  # 分布式主键配置
+  max-connections-count-per-data-source: 50
+  check-table-metadata-enabled: false

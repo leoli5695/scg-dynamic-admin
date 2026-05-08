@@ -1,0 +1,155 @@
+# ============================================================================
+# Prometheus 告警规则 - 秒杀核心引擎
+# ============================================================================
+#
+# 告警规则说明:
+# 1. 业务告警: 秒杀成功率、库存异常等
+# 2. 系统告警: Redis/MQ故障、降级状态等
+# 3. 性能告警: Lua脚本耗时、订单创建耗时等
+#
+# 使用方法:
+# 1. 将此文件添加到 Prometheus 配置中
+# 2. 配置 Alertmanager 接收告警并发送到 Webhook
+# 3. Webhook 接收后转发到钉钉/企业微信等
+#
+
+groups:
+  - name: seckill-business-alerts
+    rules:
+      # 秒杀成功率低于80%
+      - alert: SeckillSuccessRateLow
+        expr: rate(seckill_success_total[5m]) / rate(seckill_request_total[5m]) * 100 < 80
+        for: 2m
+        labels:
+          severity: warning
+          service: seckill-core-engine
+        annotations:
+          summary: "秒杀成功率过低"
+          description: "秒杀成功率 {{ $value | printf \"%.2f\" }}% 低于80%，请检查系统状态"
+      
+      # 秒杀成功率低于50%
+      - alert: SeckillSuccessRateCritical
+        expr: rate(seckill_success_total[5m]) / rate(seckill_request_total[5m]) * 100 < 50
+        for: 1m
+        labels:
+          severity: critical
+          service: seckill-core-engine
+        annotations:
+          summary: "秒杀成功率严重过低"
+          description: "秒杀成功率 {{ $value | printf \"%.2f\" }}% 低于50%，系统可能存在问题"
+      
+      # 库存未预热告警
+      - alert: StockNotWarmed
+        expr: rate(seckill_stock_not_warmed_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: seckill-core-engine
+        annotations:
+          summary: "库存未预热"
+          description: "有 {{ $value }} 次/秒 的库存未预热请求，请立即预热库存"
+      
+      # 库存不足率过高
+      - alert: StockInsufficientRateHigh
+        expr: rate(seckill_stock_insufficient_total[5m]) / rate(seckill_request_total[5m]) * 100 > 50
+        for: 5m
+        labels:
+          severity: warning
+          service: seckill-core-engine
+        annotations:
+          summary: "库存不足率过高"
+          description: "库存不足率 {{ $value | printf \"%.2f\" }}%，可能需要增加库存或调整活动策略"
+
+  - name: seckill-system-alerts
+    rules:
+      # Redis 降级告警
+      - alert: RedisDegraded
+        expr: seckill_redis_status == 2
+        for: 1m
+        labels:
+          severity: critical
+          service: seckill-core-engine
+        annotations:
+          summary: "Redis故障降级"
+          description: "Redis已启用降级模式，系统性能将降低，请尽快恢复Redis服务"
+      
+      # MQ 降级告警
+      - alert: MQDegraded
+        expr: seckill_mq_status == 2
+        for: 1m
+        labels:
+          severity: critical
+          service: seckill-core-engine
+        annotations:
+          summary: "RocketMQ故障降级"
+          description: "RocketMQ已启用降级模式，订单处理将转为同步模式，请尽快恢复MQ服务"
+      
+      # 库存对账差异告警
+      - alert: StockReconciliationDiff
+        expr: abs(seckill_stock_redis_count - seckill_stock_mysql_count) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: seckill-core-engine
+        annotations:
+          summary: "库存对账差异"
+          description: "Redis库存与MySQL库存差异 {{ $value }}，请执行库存补偿"
+
+  - name: seckill-performance-alerts
+    rules:
+      # Lua脚本耗时过高
+      - alert: LuaScriptLatencyHigh
+        expr: histogram_quantile(0.99, rate(seckill_lua_seconds_bucket[5m])) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          service: seckill-core-engine
+        annotations:
+          summary: "Lua脚本耗时过高"
+          description: "Lua脚本P99耗时 {{ $value | printf \"%.3f\" }}s，超过100ms阈值"
+      
+      # 订单创建耗时过高
+      - alert: OrderCreateLatencyHigh
+        expr: histogram_quantile(0.99, rate(seckill_order_create_seconds_bucket[5m])) > 1
+        for: 2m
+        labels:
+          severity: warning
+          service: seckill-core-engine
+        annotations:
+          summary: "订单创建耗时过高"
+          description: "订单创建P99耗时 {{ $value | printf \"%.2f\" }}s，超过1s阈值"
+      
+      # JVM内存告警
+      - alert: JVMMemoryHigh
+        expr: jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"} * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          service: seckill-core-engine
+        annotations:
+          summary: "JVM内存使用过高"
+          description: "JVM Heap使用率 {{ $value | printf \"%.2f\" }}%，超过85%阈值"
+
+  - name: seckill-transaction-alerts
+    rules:
+      # 事务失败率告警
+      - alert: TransactionFailRateHigh
+        expr: rate(seckill_transaction_failed_total[5m]) / (rate(seckill_transaction_success_total[5m]) + rate(seckill_transaction_failed_total[5m])) * 100 > 5
+        for: 2m
+        labels:
+          severity: warning
+          service: seckill-core-engine
+        annotations:
+          summary: "事务失败率过高"
+          description: "事务失败率 {{ $value | printf \"%.2f\" }}%，请检查订单创建流程"
+      
+      # 超时事务积压告警
+      - alert: TimeoutTransactionBacklog
+        expr: seckill_timeout_transaction_count > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: seckill-core-engine
+        annotations:
+          summary: "超时事务积压"
+          description: "超时事务数量 {{ $value }}，请检查补偿服务是否正常运行"

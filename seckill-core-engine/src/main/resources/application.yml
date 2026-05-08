@@ -1,0 +1,159 @@
+# ============================================================================
+# Seckill Core Engine - 主配置文件
+# ============================================================================
+
+spring:
+  application:
+    name: seckill-core-engine
+
+  profiles:
+    active: dev
+
+  # Nacos 配置中心（本地开发禁用）
+  cloud:
+    nacos:
+      config:
+        enabled: false
+
+  # Redis 配置（连接K8s test命名空间的Redis）
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:30379}
+      password: ${REDIS_PASSWORD:}
+      database: 0
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 200
+          max-idle: 50
+          min-idle: 10
+          max-wait: 1000ms
+
+  # MySQL 数据源配置（使用ShardingSphere JDBC URL加载分片配置）
+  datasource:
+    driver-class-name: org.apache.shardingsphere.driver.ShardingSphereDriver
+    url: jdbc:shardingsphere:classpath:sharding-config.yaml
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:123456}
+
+  # Elasticsearch 配置（连接K8s test命名空间的ES）
+  elasticsearch:
+    uris: ${ES_URIS:http://localhost:30920}
+    username: ${ES_USERNAME:}
+    password: ${ES_PASSWORD:}
+
+# Redisson 配置
+redisson:
+  config: |
+    singleServerConfig:
+      address: "redis://${REDIS_HOST:localhost}:${REDIS_PORT:30379}"
+      password: null
+      connectionPoolSize: 100
+      connectionMinimumIdleSize: 20
+      idleConnectionTimeout: 10000
+      connectTimeout: 3000
+      timeout: 3000
+      retryAttempts: 3
+      retryInterval: 1500
+      readMode: MASTER
+
+# RocketMQ 配置（连接K8s test命名空间的RocketMQ）
+rocketmq:
+  name-server: ${ROCKETMQ_NAMESRV:localhost:30976}
+  producer:
+    enabled: true  # 生产环境启用RocketMQ
+    group: seckill-producer-group
+    send-message-timeout: 3000
+    retry-times-when-send-failed: 2
+    retry-times-when-send-async-failed: 2
+    compress-message-body-threshold: 4096
+    # 事务消息配置
+    transaction-message-enable: true
+    check-message-immunity-time: 60000  # 事务回查间隔60秒
+
+# MyBatis-Plus 配置
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.seckill.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# ShardingSphere 分库分表配置
+spring.shardingsphere:
+  enabled: true
+  props:
+    sql-show: true
+
+# 监控配置
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    export:
+      prometheus:
+        enabled: true
+
+# 日志配置
+logging:
+  level:
+    root: INFO
+    com.seckill: DEBUG
+    org.apache.rocketmq: INFO
+    org.apache.shardingsphere: WARN
+    com.baomidou.mybatisplus: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# ============================================================================
+# Gateway Trace Starter 配置
+# ============================================================================
+gateway:
+  trace:
+    admin-url: http://127.0.0.1:9090  # Gateway Admin console URL
+    sample-rate: 1.0                  # Sampling rate (100% for dev)
+    async-trace-enabled: true         # Enable async thread TraceId propagation
+
+# ============================================================================
+# 秒杀引擎核心配置
+# ============================================================================
+seckill:
+  # 热点Key分片数量（将库存分散到8个Key，避免单Key热点）
+  shard-count: 8
+
+  # 库存预热配置
+  warmup:
+    enabled: false  # 本地开发禁用自动预热
+    pre-warmup-minutes: 5
+    stock-expire-seconds: 3600
+
+  # 延迟队列配置（未支付订单回滚）
+  delay:
+    delay-level: 17  # RocketMQ延迟级别17 = 20分钟（官方对照：1s,5s,10s,30s,1m,2m,3m,4m,5m,6m,7m,8m,9m,10m,20m,30m,1h,2h）
+    unpaid-timeout-seconds: 1200  # 20分钟超时，与delayLevel对应
+
+  # 消费者限流配置
+  consumer:
+    order-create-rate: 1000  # TPS
+    batch-size: 50
+
+  # 雪花ID配置（本地开发固定值）
+  snowflake:
+    datacenter-id: 1
+    worker-id: 1

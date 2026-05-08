@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.seckill.mapper.OrderMapper">
+
+    <!-- ============================================================================
+    【攒批落库】批量插入订单
+    ============================================================================
+    
+    性能优化：
+    - 单条 insert: 每次 ~5ms，TPS ~2000
+    - 批量 insert: 每次 ~50ms（50条），TPS ~10000+
+    
+    注意：
+    - ShardingSphere 会根据 user_id 自动路由到对应库表
+    - 批量插入时，不同 user_id 的订单会路由到不同库
+    -->
+    <insert id="insertBatch" parameterType="java.util.List">
+        INSERT INTO seckill_order (
+            order_no, user_id, seckill_id, product_id, quantity,
+            total_amount, status, shard_index, create_time, update_time
+        ) VALUES
+        <foreach collection="list" item="item" separator=",">
+            (
+                #{item.orderNo}, #{item.userId}, #{item.seckillId}, #{item.productId},
+                #{item.quantity}, #{item.totalAmount}, #{item.status}, #{item.shardIndex},
+                #{item.createTime}, #{item.updateTime}
+            )
+        </foreach>
+    </insert>
+
+</mapper>

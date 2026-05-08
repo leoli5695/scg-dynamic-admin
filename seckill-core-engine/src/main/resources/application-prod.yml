@@ -1,0 +1,23 @@
+# ============================================================================
+# 生产环境配置
+# ============================================================================
+
+spring:
+  cloud:
+    nacos:
+      config:
+        enabled: true
+        server-addr: ${NACOS_ADDR:localhost:30848}
+        namespace: ${NACOS_NAMESPACE:production}
+        group: SECKILL_GROUP
+
+# 生产环境必须使用分库分表
+seckill:
+  database:
+    single-mode: false
+
+logging:
+  level:
+    root: WARN
+    com.seckill: INFO
+    com.seckill.redis: INFO
