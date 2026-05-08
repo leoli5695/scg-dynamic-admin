@@ -3,6 +3,7 @@ package com.leoli.gateway.admin.controller;
 import com.leoli.gateway.admin.model.RequestTrace;
 import com.leoli.gateway.admin.service.FilterChainExecutionService;
 import com.leoli.gateway.admin.service.RequestTraceService;
+import com.leoli.gateway.admin.service.TraceBufferService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -29,6 +30,7 @@ public class RequestTraceController {
 
     private final RequestTraceService requestTraceService;
     private final FilterChainExecutionService filterChainExecutionService;
+    private final TraceBufferService traceBufferService;
 
     /**
      * Get trace statistics
@@ -364,68 +366,139 @@ public class RequestTraceController {
         return ResponseEntity.ok(Map.of("message", "Trace deleted"));
     }
 
+    // ============================================================================
+    // 【异步接收优化】Internal API for receiving traces from gateway
+    // ============================================================================
+    // 
+    // 解决高 QPS 场景下 Tomcat 线程池耗尽问题：
+    // 1. 极速解析入队（耗时 <1ms）
+    // 2. 返回 202 Accepted，不阻塞 Starter 端
+    // 3. 后台批量落库（TraceBufferService）
+    // 
+    // 效果：无论压测多猛，接口永远是毫秒级响应
+
     /**
-     * Internal API for receiving traces from gateway
+     * Internal API for receiving traces from gateway（异步接收）
      */
     @PostMapping("/internal")
-    public ResponseEntity<RequestTrace> receiveTrace(@RequestBody Map<String, Object> traceData) {
+    public ResponseEntity<Void> receiveTrace(@RequestBody Map<String, Object> traceData) {
         try {
-            log.info("Received trace from gateway: traceId={}, instanceId={}, clientIp={}, routeId={}",
-                    traceData.get("traceId"), traceData.get("instanceId"), traceData.get("clientIp"), traceData.get("routeId"));
+            log.debug("Received trace from gateway: traceId={}, instanceId={}",
+                    traceData.get("traceId"), traceData.get("instanceId"));
 
-            RequestTrace trace = new RequestTrace();
-            trace.setTraceId((String) traceData.get("traceId"));
-            trace.setInstanceId((String) traceData.get("instanceId"));
-            trace.setRouteId((String) traceData.get("routeId"));
-            trace.setMethod((String) traceData.get("method"));
-            trace.setUri((String) traceData.get("uri"));
-            trace.setPath((String) traceData.get("path"));
-            trace.setQueryString((String) traceData.get("queryString"));
-            trace.setRequestHeaders((String) traceData.get("requestHeaders"));
-            trace.setRequestBody((String) traceData.get("requestBody"));
-            trace.setClientIp((String) traceData.get("clientIp"));
-            trace.setUserAgent((String) traceData.get("userAgent"));
-            trace.setTargetInstance((String) traceData.get("targetInstance"));
-            trace.setErrorMessage((String) traceData.get("errorMessage"));
-            trace.setErrorType((String) traceData.get("errorType"));
-            trace.setTraceType((String) traceData.get("traceType"));
-
-            // Handle replayType and replayable from Gateway
-            String replayType = (String) traceData.get("replayType");
-            if (replayType != null) {
-                trace.setReplayType(replayType);
-            }
-            Object replayableObj = traceData.get("replayable");
-            if (replayableObj != null) {
-                trace.setReplayable(Boolean.TRUE.equals(replayableObj));
+            // 极速解析入队
+            RequestTrace trace = convertTrace(traceData);
+            
+            boolean success = traceBufferService.offer(trace);
+            
+            if (success) {
+                // 立刻返回 202 Accepted，不阻塞 Starter
+                return ResponseEntity.accepted().build();
             } else {
-                trace.setReplayable(true);
+                // 队列满，返回 503 Service Unavailable
+                log.warn("Trace queue full, returning 503: traceId={}", trace.getTraceId());
+                return ResponseEntity.status(503).build();
             }
-
-            // Parse numeric fields
-            if (traceData.get("statusCode") != null) {
-                trace.setStatusCode(((Number) traceData.get("statusCode")).intValue());
-            }
-            if (traceData.get("latencyMs") != null) {
-                trace.setLatencyMs(((Number) traceData.get("latencyMs")).longValue());
-            }
-
-            // Parse trace time
-            if (traceData.get("traceTime") != null) {
-                String timeStr = (String) traceData.get("traceTime");
-                try {
-                    trace.setTraceTime(LocalDateTime.parse(timeStr.replace("Z", "")));
-                } catch (Exception e) {
-                    trace.setTraceTime(LocalDateTime.now());
-                }
-            }
-
-            RequestTrace saved = requestTraceService.saveTrace(trace);
-            log.info("Trace saved successfully: id={}, traceId={}, clientIp={}", saved.getId(), saved.getTraceId(), saved.getClientIp());
-            return ResponseEntity.ok(saved);
+            
         } catch (Exception e) {
-            log.error("Failed to save trace: traceId={}, error={}", traceData.get("traceId"), e.getMessage(), e);
+            log.error("Failed to parse trace: traceId={}, error={}", 
+                traceData.get("traceId"), e.getMessage());
             return ResponseEntity.badRequest().build();
         }
+    }
+
+    /**
+     * 批量接收 Trace（高性能版本）
+     * 
+     * Starter 端批量上报时使用，进一步减少 HTTP 请求数
+     */
+    @PostMapping("/internal/batch")
+    public ResponseEntity<Void> receiveTraceBatch(@RequestBody List<Map<String, Object>> traceBatch) {
+        try {
+            log.debug("Received batch traces: count={}", traceBatch.size());
+            
+            int successCount = 0;
+            int failCount = 0;
+            
+            for (Map<String, Object> traceData : traceBatch) {
+                RequestTrace trace = convertTrace(traceData);
+                if (traceBufferService.offer(trace)) {
+                    successCount++;
+                } else {
+                    failCount++;
+                }
+            }
+            
+            log.debug("Batch received: success={}, fail={}", successCount, failCount);
+            
+            // 立刻返回 202 Accepted
+            return ResponseEntity.accepted().build();
+            
+        } catch (Exception e) {
+            log.error("Failed to parse batch traces: error={}", e.getMessage());
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    /**
+     * 获取 TraceBuffer 统计信息
+     */
+    @GetMapping("/buffer/stats")
+    public ResponseEntity<Map<String, Long>> getBufferStats() {
+        return ResponseEntity.ok(traceBufferService.getStats());
+    }
+
+    /**
+     * 转换 Trace 数据
+     */
+    private RequestTrace convertTrace(Map<String, Object> traceData) {
+        RequestTrace trace = new RequestTrace();
+        trace.setTraceId((String) traceData.get("traceId"));
+        trace.setInstanceId((String) traceData.get("instanceId"));
+        trace.setRouteId((String) traceData.get("routeId"));
+        trace.setMethod((String) traceData.get("method"));
+        trace.setUri((String) traceData.get("uri"));
+        trace.setPath((String) traceData.get("path"));
+        trace.setQueryString((String) traceData.get("queryString"));
+        trace.setRequestHeaders((String) traceData.get("requestHeaders"));
+        trace.setRequestBody((String) traceData.get("requestBody"));
+        trace.setClientIp((String) traceData.get("clientIp"));
+        trace.setUserAgent((String) traceData.get("userAgent"));
+        trace.setTargetInstance((String) traceData.get("targetInstance"));
+        trace.setErrorMessage((String) traceData.get("errorMessage"));
+        trace.setErrorType((String) traceData.get("errorType"));
+        trace.setTraceType((String) traceData.get("traceType"));
+
+        // Handle replayType and replayable from Gateway
+        String replayType = (String) traceData.get("replayType");
+        if (replayType != null) {
+            trace.setReplayType(replayType);
+        }
+        Object replayableObj = traceData.get("replayable");
+        if (replayableObj != null) {
+            trace.setReplayable(Boolean.TRUE.equals(replayableObj));
+        } else {
+            trace.setReplayable(true);
+        }
+
+        // Parse numeric fields
+        if (traceData.get("statusCode") != null) {
+            trace.setStatusCode(((Number) traceData.get("statusCode")).intValue());
+        }
+        if (traceData.get("latencyMs") != null) {
+            trace.setLatencyMs(((Number) traceData.get("latencyMs")).longValue());
+        }
+
+        // Parse trace time
+        if (traceData.get("traceTime") != null) {
+            String timeStr = (String) traceData.get("traceTime");
+            try {
+                trace.setTraceTime(LocalDateTime.parse(timeStr.replace("Z", "")));
+            } catch (Exception e) {
+                trace.setTraceTime(LocalDateTime.now());
+            }
+        }
+
+        return trace;
     }
 }
