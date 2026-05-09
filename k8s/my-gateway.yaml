@@ -8,7 +8,7 @@ metadata:
   labels:
     app: my-gateway
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: my-gateway
@@ -16,6 +16,7 @@ spec:
     metadata:
       labels:
         app: my-gateway
+        gateway_instance_id: "gateway-k8s"
     spec:
       containers:
       - name: my-gateway
@@ -27,22 +28,26 @@ spec:
         - containerPort: 8443
           name: https
         - containerPort: 8081
-          name: actuator
+          name: management
         env:
         - name: NACOS_SERVER_ADDR
           value: "nacos:8848"
         - name: NACOS_NAMESPACE
           value: ""
         - name: NACOS_DISCOVERY_IP
-          value: "127.0.0.1"
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
         - name: GATEWAY_ADMIN_URL
-          value: "http://host.k3s.internal:9090"
+          value: "http://gateway-admin:9090"
         - name: GATEWAY_ID
-          value: "gateway-k8s-1"
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
         - name: GATEWAY_CENTER_TYPE
           value: "nacos"
         - name: REDIS_HOST
-          value: "host.k3s.internal"
+          value: "redis"
         - name: REDIS_PORT
           value: "6379"
         - name: GATEWAY_SSL_ENABLED
@@ -57,17 +62,27 @@ spec:
         livenessProbe:
           httpGet:
             path: /actuator/health/liveness
-            port: 8081
+            port: management
           initialDelaySeconds: 60
           periodSeconds: 15
           timeoutSeconds: 10
+          failureThreshold: 3
         readinessProbe:
           httpGet:
             path: /actuator/health/readiness
-            port: 8081
+            port: management
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: management
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 30
 
 ---
 # my-gateway Service
@@ -77,19 +92,127 @@ metadata:
   name: my-gateway
   namespace: test
 spec:
-  type: NodePort
+  type: ClusterIP
   selector:
     app: my-gateway
   ports:
   - name: http
     port: 80
     targetPort: 80
-    nodePort: 30080
   - name: https
     port: 443
     targetPort: 8443
-    nodePort: 30443
-  - name: actuator
+  - name: management
     port: 8081
     targetPort: 8081
-    nodePort: 30081
+
+---
+# my-gateway HPA - Horizontal Pod Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-gateway-hpa
+  namespace: test
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-gateway
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  # CPU 使用率触发扩缩容
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  # 内存使用率触发扩缩容
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  # 自定义指标：每秒请求数（需要 Prometheus Adapter）
+  # - type: Pods
+  #   pods:
+  #     metric:
+  #       name: http_server_requests_per_second
+  #     target:
+  #       type: AverageValue
+  #       averageValue: 1000
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+      - type: Pods
+        value: 2
+        periodSeconds: 15
+      selectPolicy: Max
+
+---
+# my-gateway Ingress - 外部流量入口
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-gateway-ingress
+  namespace: test
+  annotations:
+    # NGINX Ingress Controller 配置
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    # SSL 配置（如果需要）
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # nginx.ingress.kubernetes.io/proxy-ssl-secret: "test/gateway-tls"
+    # 连接超时配置
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    # 限流配置（可选）
+    # nginx.ingress.kubernetes.io/limit-rps: "100"
+    # CORS 配置（可选）
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Authorization, Content-Type, X-Request-Id, X-Trace-Id"
+spec:
+  rules:
+  # HTTP 路由
+  - host: gateway.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: my-gateway
+            port:
+              number: 80
+  # HTTPS 路由（需要 TLS secret）
+  # tls:
+  # - hosts:
+  #   - gateway.example.com
+  #   secretName: gateway-tls
+
+---
+# my-gateway PodDisruptionBudget - 保证最小可用副本
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-gateway-pdb
+  namespace: test
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: my-gateway

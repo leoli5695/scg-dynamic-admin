@@ -45,6 +45,7 @@ public class AsyncTraceReporter {
 
     private final WebClient webClient;
     private final ExecutorService executor;
+    private final ExecutorService fallbackExecutor;  // 【新增】独立的磁盘 IO 线程池
     private final ObjectMapper objectMapper;
     private final GatewayTraceProperties properties;
     private final BlockingQueue<DistributedTrace> queue;
@@ -73,11 +74,21 @@ public class AsyncTraceReporter {
         this.properties = properties;
         this.webClient = createHighPerformanceWebClient();
         this.queue = new LinkedBlockingQueue<>(properties.getAsyncQueueSize());
+
+        // 主上报线程池
         this.executor = Executors.newSingleThreadExecutor(r -> {
             Thread t = new Thread(r, "trace-reporter");
-            t.setDaemon(false);  // Non-daemon thread, ensures remaining data is reported on shutdown
+            t.setDaemon(false);
             return t;
         });
+
+        // 【新增】独立的磁盘 IO 线程池 - 防止磁盘写入阻塞上报线程
+        this.fallbackExecutor = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "trace-fallback-writer");
+            t.setDaemon(true);  // daemon thread，不阻塞关闭
+            return t;
+        });
+
         this.objectMapper = new ObjectMapper();
 
         // Initialize local log directory
@@ -250,38 +261,42 @@ public class AsyncTraceReporter {
 
     /**
      * Write to local disk log (degraded handling)
-     * <p>
-     * When reporting fails and exceeds retry count, writes Trace data to local disk,
-     * preventing data loss, can be batch imported later via script.
+     *
+     * 【背压修复】：使用独立的异步 IO 线程池写入磁盘
+     * - 防止磁盘 IO 阻塞上报线程
+     * - 磁盘抖动时 Trace 队列不会积压
      */
     private void writeToFallbackLog(DistributedTrace trace, String reason) {
-        try {
-            fallbackCount.incrementAndGet();
+        // 提交到独立的磁盘 IO 线程池，不阻塞上报线程
+        fallbackExecutor.submit(() -> {
+            try {
+                fallbackCount.incrementAndGet();
 
-            // Split files by date for easier processing
-            String date = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-            String fileName = "trace-fallback-" + date + ".log";
-            Path logFile = Paths.get(FALLBACK_LOG_DIR, fileName);
+                // Split files by date for easier processing
+                String date = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+                String fileName = "trace-fallback-" + date + ".log";
+                Path logFile = Paths.get(FALLBACK_LOG_DIR, fileName);
 
-            // Build log line: JSON + reason + timestamp
-            String json = objectMapper.writeValueAsString(trace);
-            String logLine = String.format("%s|%s|%s%n",
-                    LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
-                    reason,
-                    json);
+                // Build log line: JSON + reason + timestamp
+                String json = objectMapper.writeValueAsString(trace);
+                String logLine = String.format("%s|%s|%s%n",
+                        LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+                        reason,
+                        json);
 
-            // Write to file (append mode)
-            Files.writeString(logFile, logLine,
-                    StandardOpenOption.CREATE,
-                    StandardOpenOption.APPEND);
+                // Write to file (append mode)
+                Files.writeString(logFile, logLine,
+                        StandardOpenOption.CREATE,
+                        StandardOpenOption.APPEND);
 
-            log.info("Trace written to fallback log: traceId={}, reason={}, file={}",
-                    trace.getTraceId(), reason, fileName);
+                log.debug("Trace written to fallback log: traceId={}, reason={}, file={}",
+                        trace.getTraceId(), reason, fileName);
 
-        } catch (IOException e) {
-            log.error("Failed to write trace to fallback log: traceId={}, error={}",
-                    trace.getTraceId(), e.getMessage());
-        }
+            } catch (IOException e) {
+                log.error("Failed to write trace to fallback log: traceId={}, error={}",
+                        trace.getTraceId(), e.getMessage());
+            }
+        });
     }
 
     /**
@@ -320,13 +335,26 @@ public class AsyncTraceReporter {
                 log.info("Shutdown: reported {} remaining traces successfully", remaining.size());
             } catch (Exception e) {
                 log.error("Failed to report remaining traces on shutdown: {}", e.getMessage());
-                // Write to local disk
-                remaining.forEach(t -> writeToFallbackLog(t, "shutdown_failed"));
+                // Write to local disk (同步写入，因为已在关闭阶段)
+                for (DistributedTrace t : remaining) {
+                    try {
+                        String json = objectMapper.writeValueAsString(t);
+                        String date = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+                        Path logFile = Paths.get(FALLBACK_LOG_DIR, "trace-fallback-" + date + ".log");
+                        String logLine = String.format("%s|shutdown_failed|%s%n",
+                                LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME), json);
+                        Files.writeString(logFile, logLine, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+                        fallbackCount.incrementAndGet();
+                    } catch (IOException ioEx) {
+                        log.error("Failed to write fallback on shutdown: traceId={}", t.getTraceId());
+                    }
+                }
             }
         }
 
-        // Shutdown thread pool
+        // Shutdown thread pools
         executor.shutdown();
+        fallbackExecutor.shutdown();
 
         // Output statistics
         log.info("AsyncTraceReporter shutdown complete. Stats: reported={}, dropped={}, fallback={}",

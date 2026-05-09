@@ -296,7 +296,7 @@ public class AlertCheckService {
 
             if (recipients.isEmpty()) {
                 log.debug("No recipients configured for instance {}, skipping email", instanceId);
-                saveAlertHistory(alertType, level, metricName, currentValue,
+                saveAlertHistory(instanceId, alertType, level, metricName, currentValue,
                     exceededThreshold, alertEmailBuilder.buildAlertTitle(alertType, level, config.getEmailLanguage()),
                     content, recipients, false, "No recipients configured");
                 return;
@@ -310,7 +310,7 @@ public class AlertCheckService {
             int alertCount = alertCounts.getOrDefault(key, 0) + 1;
             int currentCooldown = getProgressiveCooldown(key);
 
-            saveAlertHistory(alertType, level, metricName, currentValue,
+            saveAlertHistory(instanceId, alertType, level, metricName, currentValue,
                 exceededThreshold, title, content, recipients, sendResult.isSuccess(),
                 sendResult.isSuccess() ? null : sendResult.getErrorMessage());
 
@@ -377,12 +377,13 @@ public class AlertCheckService {
     /**
      * Save alert history to database.
      */
-    private void saveAlertHistory(String alertType, String level, String metricName,
+    private void saveAlertHistory(String instanceId, String alertType, String level, String metricName,
                                   double metricValue, double thresholdValue, String title,
                                   String content, List<String> recipients, boolean sent,
                                   String errorMessage) {
         try {
             AlertHistory history = new AlertHistory();
+            history.setInstanceId(instanceId);  // Record which instance triggered this alert
             history.setAlertType(alertType);
             history.setAlertLevel(level);
             history.setMetricName(metricName);
@@ -395,7 +396,7 @@ public class AlertCheckService {
             history.setErrorMessage(errorMessage);
 
             alertHistoryRepository.save(history);
-            log.debug("Saved alert history: {} - {}", alertType, level);
+            log.debug("Saved alert history: {} - {} for instance {}", alertType, level, instanceId);
         } catch (Exception e) {
             log.error("Failed to save alert history: {}", e.getMessage());
         }
@@ -531,7 +532,7 @@ public class AlertCheckService {
         String title = alertEmailBuilder.buildAlertTitle(alertType, level, config.getEmailLanguage());
 
         boolean sent = emailSenderService.sendEmail(recipients, title, htmlBody, true);
-        saveAlertHistory(alertType, level, metricName, value, threshold, title, content, recipients, sent, null);
+        saveAlertHistory(config.getInstanceId(), alertType, level, metricName, value, threshold, title, content, recipients, sent, null);
 
         log.info("Manual alert triggered: {} - {} (value: {}, threshold: {})", alertType, metricName, value, threshold);
     }

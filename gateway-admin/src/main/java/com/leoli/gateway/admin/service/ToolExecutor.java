@@ -4,6 +4,7 @@ import com.alibaba.nacos.api.naming.pojo.Instance;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.center.NacosConfigCenterService;
+import com.leoli.gateway.admin.client.PrometheusClient;
 import com.leoli.gateway.admin.model.*;
 import com.leoli.gateway.admin.repository.AuditLogRepository;
 import com.leoli.gateway.admin.repository.FilterChainExecutionRepository;
@@ -50,6 +51,11 @@ public class ToolExecutor {
     private final RequestTraceRepository requestTraceRepository;
     private final FilterChainExecutionRepository filterChainExecutionRepository;
     private final RestTemplate restTemplate;
+
+    // 服务中间件和链路追踪服务（新增）
+    private final ServiceMiddlewareService serviceMiddlewareService;
+    private final DistributedTraceService distributedTraceService;
+    private final PrometheusClient prometheusClient;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -154,6 +160,22 @@ public class ToolExecutor {
                 case "compare_pod_performance" -> executeComparePodPerformance(arguments);
                 case "analyze_pod_stress_test" -> executeAnalyzePodStressTest(arguments);
                 case "check_pod_count_for_analysis" -> executeCheckPodCountForAnalysis(arguments);
+
+                // 服务中间件和链路追踪类（新增）
+                case "get_service_middlewares" -> executeGetServiceMiddlewares(arguments);
+                case "get_all_services_with_middlewares" -> executeGetAllServicesWithMiddlewares(arguments);
+                case "get_middleware_statistics" -> executeGetMiddlewareStatistics(arguments);
+                case "get_exporter_mapping" -> executeGetExporterMapping(arguments);
+                case "get_distributed_trace" -> executeGetDistributedTrace(arguments);
+                case "get_service_traces" -> executeGetServiceTraces(arguments);
+                case "get_slow_traces" -> executeGetSlowTraces(arguments);
+                case "get_failed_traces" -> executeGetFailedTraces(arguments);
+                case "get_trace_statistics" -> executeGetTraceStatistics(arguments);
+                case "analyze_request_bottleneck" -> executeAnalyzeRequestBottleneck(arguments);
+                case "query_redis_metrics" -> executeQueryRedisMetrics(arguments);
+                case "query_rocketmq_metrics" -> executeQueryRocketmqMetrics(arguments);
+                case "query_mysql_metrics" -> executeQueryMysqlMetrics(arguments);
+                case "query_es_metrics" -> executeQueryEsMetrics(arguments);
 
                 default -> Map.of("error", "Tool not implemented: " + toolName);
             };
@@ -3746,6 +3768,160 @@ public class ToolExecutor {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    // ===================== 服务中间件和链路追踪类工具执行 =====================
+
+    /**
+     * 获取指定服务的中间件信息
+     */
+    private Object executeGetServiceMiddlewares(Map<String, Object> args) {
+        String serviceName = getStringArg(args, "serviceName");
+        if (serviceName == null) {
+            return Map.of("error", "serviceName is required");
+        }
+        return serviceMiddlewareService.getServiceMiddleware(serviceName);
+    }
+
+    /**
+     * 获取所有已上报中间件的服务列表
+     */
+    private Object executeGetAllServicesWithMiddlewares(Map<String, Object> args) {
+        return serviceMiddlewareService.getAllServices();
+    }
+
+    /**
+     * 获取中间件统计信息
+     */
+    private Object executeGetMiddlewareStatistics(Map<String, Object> args) {
+        return serviceMiddlewareService.getMiddlewareStatistics();
+    }
+
+    /**
+     * 获取Exporter地址映射
+     */
+    private Object executeGetExporterMapping(Map<String, Object> args) {
+        String serviceName = getStringArg(args, "serviceName");
+        if (serviceName == null) {
+            return Map.of("error", "serviceName is required");
+        }
+        return serviceMiddlewareService.getExporterMapping(serviceName);
+    }
+
+    /**
+     * 获取完整链路数据
+     */
+    private Object executeGetDistributedTrace(Map<String, Object> args) {
+        String traceId = getStringArg(args, "traceId");
+        if (traceId == null) {
+            return Map.of("error", "traceId is required");
+        }
+        return distributedTraceService.getTraceByTraceId(traceId);
+    }
+
+    /**
+     * 获取服务的链路追踪数据
+     */
+    private Object executeGetServiceTraces(Map<String, Object> args) {
+        String serviceName = getStringArg(args, "serviceName");
+        if (serviceName == null) {
+            return Map.of("error", "serviceName is required");
+        }
+        int page = getIntArg(args, "page", 0);
+        int size = getIntArg(args, "size", 20);
+        return distributedTraceService.getTracesByService(serviceName, page, size);
+    }
+
+    /**
+     * 获取慢请求链路
+     */
+    private Object executeGetSlowTraces(Map<String, Object> args) {
+        String serviceName = getStringArg(args, "serviceName");
+        int limit = getIntArg(args, "limit", 50);
+        if (serviceName != null) {
+            return distributedTraceService.getSlowTracesByService(serviceName, limit);
+        }
+        return distributedTraceService.getSlowTraces(limit);
+    }
+
+    /**
+     * 获取失败请求链路
+     */
+    private Object executeGetFailedTraces(Map<String, Object> args) {
+        String serviceName = getStringArg(args, "serviceName");
+        int limit = getIntArg(args, "limit", 50);
+        if (serviceName != null) {
+            return distributedTraceService.getFailedTracesByService(serviceName, limit);
+        }
+        return distributedTraceService.getFailedTraces(limit);
+    }
+
+    /**
+     * 获取链路统计信息
+     */
+    private Object executeGetTraceStatistics(Map<String, Object> args) {
+        String serviceName = getStringArg(args, "serviceName");
+        if (serviceName == null) {
+            return Map.of("error", "serviceName is required");
+        }
+        return distributedTraceService.getTraceStatistics(serviceName);
+    }
+
+    /**
+     * 分析请求瓶颈（综合分析）
+     */
+    private Object executeAnalyzeRequestBottleneck(Map<String, Object> args) {
+        String traceId = getStringArg(args, "traceId");
+        if (traceId == null) {
+            return Map.of("error", "traceId is required");
+        }
+        return distributedTraceService.analyzeRequestBottleneck(traceId);
+    }
+
+    /**
+     * 查询Redis指标
+     */
+    private Object executeQueryRedisMetrics(Map<String, Object> args) {
+        String exporterUrl = getStringArg(args, "exporterUrl");
+        if (exporterUrl == null) {
+            return Map.of("error", "exporterUrl is required");
+        }
+        String serviceName = getStringArg(args, "serviceName");
+        return prometheusClient.queryRedisMetrics(exporterUrl, serviceName);
+    }
+
+    /**
+     * 查询RocketMQ指标
+     */
+    private Object executeQueryRocketmqMetrics(Map<String, Object> args) {
+        String exporterUrl = getStringArg(args, "exporterUrl");
+        if (exporterUrl == null) {
+            return Map.of("error", "exporterUrl is required");
+        }
+        String topic = getStringArg(args, "topic");
+        return prometheusClient.queryRocketmqMetrics(exporterUrl, topic);
+    }
+
+    /**
+     * 查询MySQL指标
+     */
+    private Object executeQueryMysqlMetrics(Map<String, Object> args) {
+        String exporterUrl = getStringArg(args, "exporterUrl");
+        if (exporterUrl == null) {
+            return Map.of("error", "exporterUrl is required");
+        }
+        return prometheusClient.queryMysqlMetrics(exporterUrl);
+    }
+
+    /**
+     * 查询Elasticsearch指标
+     */
+    private Object executeQueryEsMetrics(Map<String, Object> args) {
+        String exporterUrl = getStringArg(args, "exporterUrl");
+        if (exporterUrl == null) {
+            return Map.of("error", "exporterUrl is required");
+        }
+        return prometheusClient.queryEsMetrics(exporterUrl);
     }
 
     // ===================== 工具结果类 =====================

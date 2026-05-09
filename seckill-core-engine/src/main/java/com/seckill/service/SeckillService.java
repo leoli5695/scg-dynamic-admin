@@ -18,6 +18,7 @@ import com.seckill.mapper.TransactionLogMapper;
 import com.seckill.redis.lua.SeckillDeductLua;
 import com.seckill.util.SnowflakeIdGenerator;
 import io.micrometer.core.instrument.Counter;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.client.producer.TransactionMQProducer;
@@ -82,24 +83,30 @@ public class SeckillService {
     /**
      * 设置事务消息生产者（由 RocketMQProducerConfig 在 @PostConstruct 中调用）
      * 
-     * 注意: 不在 SeckillService 的 @PostConstruct 中启动 producer，
-     * 因为此时 producer 可能还未注入。Producer 的启动由 RocketMQProducerConfig 管理。
+     * 重要修复：Producer 已在 RocketMQProducerConfig.transactionMQProducer() Bean 创建时启动，
+     * 此处仅设置引用，不再重复启动。避免了 Bean 生命周期反模式问题。
+     * 
+     * 原问题：Setter 不是生命周期方法，可能被多次调用或提前调用，
+     * 导致 Producer 重复启动抛异常或空指针。
      */
     public void setTransactionMQProducer(TransactionMQProducer producer) {
         this.transactionMQProducer = producer;
-        if (producer != null) {
-            try {
-                producer.start();
-                log.info("RocketMQ事务消息生产者启动成功");
-            } catch (Exception e) {
-                log.error("RocketMQ事务消息生产者启动失败", e);
-            }
-        }
+        log.info("TransactionMQProducer set in SeckillService: producer={}", 
+                producer != null ? "configured" : "null");
     }
 
     /**
-     * 旧的 init 方法已移除，producer 启动逻辑移到 setTransactionMQProducer 中
+     * SeckillService 初始化完成后的检查
+     * 
+     * 注意：不在此处启动 producer，因为：
+     * 1. Producer 已在 RocketMQProducerConfig 中启动
+     * 2. 避免 Bean 生命周期反模式
      */
+    @jakarta.annotation.PostConstruct
+    public void init() {
+        log.info("SeckillService initialized: producerStatus={}", 
+                transactionMQProducer != null ? "available" : "disabled");
+    }
 
     /**
      * ============================================================================

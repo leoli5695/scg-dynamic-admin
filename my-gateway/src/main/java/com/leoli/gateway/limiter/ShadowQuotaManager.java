@@ -377,11 +377,19 @@ public class ShadowQuotaManager implements ApplicationListener<HeartbeatEvent> {
      * @param routeId   Route identifier
      * @param configQps Configured QPS (fallback if no shadow quota)
      * @return Shadow quota for local rate limiting (globalQPS / nodeCount)
+     *
+     * 【Fail-Closed 策略修复】：
+     * - Shadow Quota 禁用时，返回保守配额（原始配额的 50%）
+     * - 防止 Redis 挂掉时"放行"所有请求，导致后端服务被击穿
+     * - 网关作为最后一道防线，降级时应该拒绝部分请求，而非放行
      */
     public long getShadowQuota(String routeId, int configQps) {
         if (!shadowQuotaEnabled) {
-            // Shadow quota disabled, use naive fallback (dangerous!)
-            return configQps;
+            // 【Fail-Closed】Shadow quota 禁用时，使用保守配额
+            // 不再返回完整 configQps（相当于放行），而是返回 50% 配额
+            log.warn("Shadow quota disabled, using conservative quota: routeId={}, originalQps={}, conservativeQps={}",
+                    routeId, configQps, configQps / 2);
+            return Math.max(1, configQps / 2);
         }
 
         AtomicLong quota = shadowQuotas.get(routeId);

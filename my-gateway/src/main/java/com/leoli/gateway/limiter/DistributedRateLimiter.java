@@ -37,6 +37,9 @@ public class DistributedRateLimiter {
      * - Request denied (Redis working, limit exceeded)
      * - Redis unavailable (should fallback to local limiter)
      *
+     * IMPORTANT: Time is now obtained from Redis TIME command in Lua script,
+     * ensuring distributed clock synchronization across all gateway nodes.
+     *
      * @param key          Rate limit key
      * @param maxRequests  Maximum requests allowed (steady state rate)
      * @param burstCapacity Burst capacity for handling traffic spikes
@@ -50,11 +53,11 @@ public class DistributedRateLimiter {
         }
 
         try {
-            long now = System.currentTimeMillis();
+            // Note: Time is now obtained from Redis TIME command in Lua script
+            // This ensures distributed clock synchronization across gateway nodes
             Long result = redisTemplate.execute(
                     rateLimitScript,
                     Collections.singletonList(key),
-                    String.valueOf(now),
                     String.valueOf(windowSizeMs),
                     String.valueOf(maxRequests),
                     String.valueOf(burstCapacity)

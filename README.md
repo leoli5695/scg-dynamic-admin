@@ -514,6 +514,198 @@ cd my-gateway && mvn test
 
 ---
 
+## Gateway Trace Starter - Minimal Intrusion Distributed Tracing
+
+### Overview
+
+`gateway-trace-starter` provides a **zero-code-intrusion** distributed tracing solution for Spring Boot applications. By simply adding the dependency and configuring the admin URL, your service will automatically:
+
+- Generate and propagate TraceId across the entire call chain
+- Trace Redis, RocketMQ, MySQL, Elasticsearch, Feign operations
+- Report middleware metadata for AI-powered observability
+- Support async thread Trace propagation (@Async, CompletableFuture)
+
+**Key Features:**
+
+| Feature | Description |
+|---------|-------------|
+| **Zero Intrusion** | No code changes required, just dependency + config |
+| **Auto Trace Propagation** | TraceId flows through HTTP, Feign, async threads |
+| **Middleware Tracing** | Auto-trace Redis, MQ, DB, ES operations |
+| **Graceful Degradation** | Fallback to local disk when admin is unavailable |
+| **Batch Reporting** | Async batch reporting for high throughput |
+
+### Quick Start
+
+#### 1. Add Dependency
+
+```xml
+<dependency>
+    <groupId>com.leoli.gateway</groupId>
+    <artifactId>gateway-trace-starter</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
+
+#### 2. Configure YAML
+
+```yaml
+# Required: Gateway Admin URL
+gateway:
+  trace:
+    admin-url: http://gateway-admin:9090
+
+# Optional configurations (with defaults)
+    enabled: true                    # Enable tracing (default: true)
+    service-name: my-service         # Service name (default: spring.application.name)
+    sample-rate: 1.0                 # Sampling rate 0.0-1.0 (default: 1.0)
+    trace-redis: true                # Trace Redis operations (default: true)
+    trace-mq: true                   # Trace RocketMQ operations (default: true)
+    trace-db: true                   # Trace DB operations (default: true)
+    async-trace-enabled: false       # Enable async thread propagation (default: false)
+```
+
+**Minimal Configuration (all you need):**
+
+```yaml
+gateway:
+  trace:
+    admin-url: http://gateway-admin:9090
+```
+
+#### 3. That's It!
+
+No code changes required. Your service is now part of the distributed tracing system.
+
+### What Gets Traced Automatically
+
+| Component | Tracing Method | TraceId Propagation |
+|-----------|---------------|---------------------|
+| **HTTP Inbound** | WebInterceptor | Extract from header / Generate new |
+| **HTTP Outbound (Feign)** | FeignInterceptor | Inject into request header |
+| **Redis** | RedisTraceInterceptor | Wrap operations with span |
+| **RocketMQ** | RocketMQTraceInterceptor | Inject into message property |
+| **MySQL/JDBC** | DataSourceTraceInterceptor | Wrap SQL execution |
+| **Elasticsearch** | ElasticsearchTraceInterceptor | Trace search/index ops |
+| **@Async Methods** | TraceTaskExecutor | Propagate to async threads |
+
+### Middleware Metadata Reporting
+
+The starter also reports middleware metadata (connection pool, exporters) for AI-powered observability:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Your Service                                  │
+│                                                                  │
+│   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐             │
+│   │ Redis       │  │ RocketMQ    │  │ MySQL       │             │
+│   │ Connection  │  │ Producer    │  │ DataSource  │             │
+│   │ Pool Stats  │  │ Stats       │  │ Pool Stats  │             │
+│   └─────────────┘  └─────────────┘  └─────────────┘             │
+│          │               │               │                       │
+│          └───────────────┼───────────────┘                       │
+│                          ▼                                       │
+│              ┌─────────────────────┐                             │
+│              │ Trace Reporter      │                             │
+│              │ (Async Batch)       │                             │
+│              └─────────────────────┘                             │
+│                          │                                       │
+│                          ▼                                       │
+│              ┌─────────────────────┐                             │
+│              │ Gateway Admin       │                             │
+│              │ (AI Analysis Ready) │                             │
+│              └─────────────────────┘                             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Async Thread Trace Propagation
+
+Enable async thread propagation for `@Async` methods:
+
+```yaml
+gateway:
+  trace:
+    async-trace-enabled: true
+```
+
+This auto-configures `TraceTaskExecutor` that propagates TraceId to:
+
+- `@Async` annotated methods
+- `CompletableFuture` executions
+- Custom thread pool tasks
+
+### Recommended Production Configuration
+
+```yaml
+gateway:
+  trace:
+    admin-url: http://gateway-admin:9090
+    sample-rate: 0.1               # 10% sampling for high traffic
+    async-queue-size: 2000         # Larger queue for burst traffic
+    report-batch-size: 200         # Larger batch for efficiency
+    async-trace-enabled: true      # Enable async propagation
+```
+
+---
+
+## Demo Service & Seckill Service
+
+### demo-service
+
+A sample backend service designed for **gateway testing**. Provides endpoints to test:
+
+- Route matching and load balancing
+- Authentication and authorization flows
+- Rate limiting behavior
+- Circuit breaker triggers
+- Timeout handling
+- Multi-service routing
+
+```bash
+# Start demo service
+cd demo-service
+mvn spring-boot:run
+
+# Test endpoints
+curl http://localhost:9000/api/user/info
+curl http://localhost:9000/api/order/list
+```
+
+### seckill-core-engine
+
+A **high-concurrency seckill (flash sale) service** showcasing:
+
+| Feature | Implementation |
+|---------|---------------|
+| **Stock Deduction** | Redis Lua script (atomic + sharded) |
+| **Order Creation** | RocketMQ transaction message |
+| **Anti-Duplicate** | Redis SISMEMBER + DB unique index |
+| **Rate Limiting** | Redis distributed + local fallback |
+| **Batch Insert** | Async buffering + batch DB write |
+| **Graceful Degradation** | Redis/MQ failover with local fallback |
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Seckill Request Flow                          │
+│                                                                  │
+│   Request ──▶ Lua Deduct Stock ──▶ MQ Transaction Msg           │
+│                   │                      │                       │
+│                   ▼                      ▼                       │
+│              Redis Shards          Transaction Log              │
+│              (Atomic Ops)          (PROCESSING)                 │
+│                                          │                       │
+│                                          ▼                       │
+│                                   Batch Insert Orders            │
+│                                          │                       │
+│                                          ▼                       │
+│                                   Update Transaction (SUCCESS)   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Project Structure
 
 ```
@@ -562,7 +754,11 @@ cd my-gateway && mvn test
 │   ├── FEATURES.md             # Feature index
 │   └── QUICK_START.md          # Setup guide
 │
-├── demo-service/               # Sample backend service
+├── demo-service/               # Sample backend service (for gateway testing)
+│
+├── seckill-core-engine/        # Seckill service (high-concurrency demo)
+│
+├── gateway-trace-starter/      # Distributed tracing starter (minimal intrusion)
 │
 ├── k8s/                        # Kubernetes deployment manifests
 │   ├── nacos.yaml              # Nacos deployment

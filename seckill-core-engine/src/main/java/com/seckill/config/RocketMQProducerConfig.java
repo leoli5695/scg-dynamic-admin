@@ -32,6 +32,8 @@ public class RocketMQProducerConfig {
 
     /**
      * 创建事务消息生产者
+     * 
+     * 注意：destroyMethod="shutdown" 确保应用关闭时正确释放资源
      */
     @Bean(destroyMethod = "shutdown")
     public TransactionMQProducer transactionMQProducer() {
@@ -49,16 +51,28 @@ public class RocketMQProducerConfig {
         producer.setCheckThreadPoolMaxSize(20);
         producer.setCheckRequestHoldMax(2000);
 
+        // 启动生产者（在 Bean 创建时启动，而非 setter 中）
+        try {
+            producer.start();
+            log.info("RocketMQ TransactionMQProducer started successfully: group={}", 
+                    RocketMQConfig.TRANSACTION_PRODUCER_GROUP);
+        } catch (Exception e) {
+            log.error("Failed to start TransactionMQProducer: {}", e.getMessage(), e);
+            throw new RuntimeException("RocketMQ producer startup failed", e);
+        }
+
         return producer;
     }
 
     /**
-     * 注入事务生产者到SeckillService
-     * 使用 @PostConstruct 确保在 Spring 完成依赖注入后设置 producer
+     * 注入事务生产者到 SeckillService
+     * 
+     * 使用 @PostConstruct 确保在 Spring 完成依赖注入后设置 producer。
+     * Producer 已在 Bean 创建时启动，此处仅注入引用。
      */
     @PostConstruct
     public void injectProducer() {
         seckillService.setTransactionMQProducer(transactionMQProducer());
-        log.info("已将 TransactionMQProducer 注入到 SeckillService");
+        log.info("TransactionMQProducer injected into SeckillService");
     }
 }

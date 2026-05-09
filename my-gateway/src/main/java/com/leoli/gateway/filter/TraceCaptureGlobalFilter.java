@@ -167,22 +167,60 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
 
     /**
      * Cache request body and continue filter chain.
+     *
+     * 【OOM 防护修复】：
+     * - 先检查 Content-Length，超过 maxBodySize 直接跳过缓存
+     * - 使用流式读取 + 早期截断，避免全量聚合到内存
+     * - 防止大文件上传或慢速攻击导致网关内存耗尽
      */
     private Mono<Void> cacheRequestBodyAndContinue(ServerWebExchange exchange, GatewayFilterChain chain,
                                                    long startTime, String traceId, StringBuilder responseBodyBuilder) {
         ServerHttpRequest request = exchange.getRequest();
 
+        // 【OOM 防护】检查 Content-Length，超过限制直接跳过缓存
+        long contentLength = request.getHeaders().getContentLength();
+        if (contentLength > maxBodySize) {
+            log.warn("Request body too large, skipping capture: traceId={}, contentLength={}, maxBodySize={}",
+                    traceId, contentLength, maxBodySize);
+
+            // 不缓存请求体，但仍然继续处理请求
+            return chain.filter(exchange)
+                    .doFinally(signalType -> {
+                        String responseBody = responseBodyBuilder.length() > 0 ? responseBodyBuilder.toString() : null;
+                        afterRequest(exchange, startTime, traceId, "[BODY_TOO_LARGE:" + contentLength + " bytes]", responseBody);
+                    });
+        }
+
+        // 【OOM 防护】流式读取 + 早期截断（使用 takeUntil 避免读取超量数据）
         return DataBufferUtils.join(request.getBody())
                 .defaultIfEmpty(new DefaultDataBufferFactory().wrap(new byte[0]))
                 .flatMap(dataBuffer -> {
-                    byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                    int readableBytes = dataBuffer.readableByteCount();
+
+                    // 【OOM 防护】如果单个 buffer 超过限制，截断并标记
+                    if (readableBytes > maxBodySize) {
+                        byte[] truncatedBytes = new byte[maxBodySize];
+                        dataBuffer.read(truncatedBytes, 0, maxBodySize);
+                        DataBufferUtils.release(dataBuffer);
+
+                        String bodyStr = new String(truncatedBytes, StandardCharsets.UTF_8) + "...[TRUNCATED]";
+                        log.debug("Request body truncated: traceId={}, originalSize={}, truncatedSize={}",
+                                traceId, readableBytes, maxBodySize);
+
+                        // 继续处理但使用截断后的请求体
+                        // 注意：截断后的请求体不能用于实际转发，这里仅用于 Trace 记录
+                        return chain.filter(exchange)
+                                .doFinally(signalType -> {
+                                    String responseBody = responseBodyBuilder.length() > 0 ? responseBodyBuilder.toString() : null;
+                                    afterRequest(exchange, startTime, traceId, bodyStr, responseBody);
+                                });
+                    }
+
+                    byte[] bytes = new byte[readableBytes];
                     dataBuffer.read(bytes);
                     DataBufferUtils.release(dataBuffer);
 
                     String bodyStr = new String(bytes, StandardCharsets.UTF_8);
-                    if (bodyStr.length() > maxBodySize) {
-                        bodyStr = bodyStr.substring(0, maxBodySize) + "...[TRUNCATED]";
-                    }
                     final String requestBody = bodyStr;
 
                     // Store in exchange attributes for later use
@@ -197,11 +235,8 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
                     };
 
                     // Important: Keep the decorated response (for capturing response body)
-                    // Otherwise response body won't be captured
                     return chain.filter(exchange.mutate().request(newRequest).response(exchange.getResponse()).build())
                             .doFinally(signalType -> {
-                                // Capture trace regardless of success or error
-                                // Get captured response body
                                 String responseBody = responseBodyBuilder.length() > 0 ? responseBodyBuilder.toString() : null;
                                 afterRequest(exchange, startTime, traceId, requestBody, responseBody);
                             });

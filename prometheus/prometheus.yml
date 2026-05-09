@@ -3,6 +3,10 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
+  # ============================================================
+  # 应用服务监控
+  # ============================================================
+
   # my-gateway metrics - actuator on same port (80) to avoid multi-port HttpHandler conflict
   - job_name: 'my-gateway'
     metrics_path: '/actuator/prometheus'
@@ -11,10 +15,63 @@ scrape_configs:
         labels:
           application: 'my-gateway'
 
-  # gateway-admin 指标 (如果有)
+  # gateway-admin 指标
   - job_name: 'gateway-admin'
     metrics_path: '/actuator/prometheus'
     static_configs:
       - targets: ['host.docker.internal:9090']
         labels:
           application: 'gateway-admin'
+
+  # seckill-core-engine 秒杀服务指标
+  - job_name: 'seckill-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8082']
+        labels:
+          application: 'seckill-service'
+
+  # ============================================================
+  # 中间件监控 - Docker Compose 环境
+  # ============================================================
+
+  # MySQL Exporter - 数据库性能监控
+  - job_name: 'mysql'
+    static_configs:
+      - targets: ['mysqld-exporter:9104']
+        labels:
+          application: 'mysql'
+          component: 'database'
+
+  # Redis Exporter - 缓存性能监控
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels:
+          application: 'redis'
+          component: 'cache'
+
+  # ============================================================
+  # 动态服务发现 - 用于生产环境
+  # ============================================================
+  # 注意：以下配置仅在生产环境（K8s）中使用
+  # Docker Compose 环境请注释掉或删除
+
+  # Consul 服务发现 - 自动发现注册到 Consul 的服务
+  # - job_name: 'consul-services'
+  #   consul_sd_configs:
+  #     - server: 'consul:8500'
+  #       services: []  # 空数组表示发现所有服务
+  #   relabel_configs:
+  #     - source_labels: [__meta_consul_service]
+  #       target_label: service
+  #     - source_labels: [__meta_consul_tags]
+  #       regex: '.*,prometheus,.*'
+  #       action: keep
+
+  # Nacos 服务发现 - 通过 HTTP API 获取服务列表
+  # - job_name: 'nacos-services'
+  #   metrics_path: '/actuator/prometheus'
+  #   http_sd_configs:
+  #     - url: 'http://nacos:8848/nacos/v1/ns/instance/list?serviceName=gateway-services'
+  #       refresh_interval: 30s

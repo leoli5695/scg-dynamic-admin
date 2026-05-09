@@ -56,6 +56,7 @@ import {
   ClockCircleOutlined,
   RightOutlined,
   DownOutlined,
+  DatabaseOutlined,
 } from "@ant-design/icons";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -80,6 +81,7 @@ const FilterChainPage = lazy(() => import("./FilterChainPage"));
 const RequestReplayPage = lazy(() => import("./RequestReplayPage"));
 const AiCopilotPage = lazy(() => import("./AiCopilotPage"));
 const StressTestPage = lazy(() => import("./StressTestPage"));
+const ServiceMiddlewarePage = lazy(() => import("./ServiceMiddlewarePage"));
 
 // Tab loading fallback component
 const TabLoading: React.FC = () => (
@@ -686,6 +688,15 @@ const InstanceDetailPage: React.FC = () => {
         <span>
           <DashboardOutlined />
           {t("menu.resources") || "资源"}
+        </span>
+      ),
+    },
+    {
+      key: "middleware",
+      label: (
+        <span>
+          <DatabaseOutlined />
+          {t("menu.middleware") || "中间件"}
         </span>
       ),
     },
@@ -1383,6 +1394,14 @@ const InstanceDetailPage: React.FC = () => {
               </>
             )}
           </Card>
+        );
+      case "middleware":
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<TabLoading />}>
+              <ServiceMiddlewarePage instanceId={instance.instanceId} />
+            </Suspense>
+          </ErrorBoundary>
         );
       default:
         return (

@@ -246,28 +246,40 @@ public class RedisConfig {
     /**
      * Redis rate limiting Lua script.
      * Uses sorted set for sliding window rate limiting.
+     *
+     * IMPORTANT: Uses Redis TIME command for distributed clock synchronization.
+     * This solves the multi-node clock drift problem where different gateway nodes
+     * may have slightly different system clocks (even milliseconds difference can
+     * cause rate limit counting errors in distributed deployments).
+     *
+     * Redis TIME returns: [unix_timestamp_seconds, microseconds]
+     * We convert to milliseconds: seconds * 1000 + microseconds / 1000
      */
     @Bean
     public DefaultRedisScript<Long> rateLimitScript() {
         String script = """
             local key = KEYS[1]
-            local now = tonumber(ARGV[1])
-            local windowSize = tonumber(ARGV[2])
-            local maxRequests = tonumber(ARGV[3])
-            local burstCapacity = tonumber(ARGV[4])
-            
+            local windowSize = tonumber(ARGV[1])
+            local maxRequests = tonumber(ARGV[2])
+            local burstCapacity = tonumber(ARGV[3])
+
+            -- Use Redis TIME for distributed clock synchronization
+            -- Returns: [seconds, microseconds]
+            local time_result = redis.call('TIME')
+            local now = tonumber(time_result[1]) * 1000 + tonumber(time_result[2]) / 1000
+
             -- Total capacity = steady rate + burst capacity (累加语义)
             local totalCapacity = maxRequests + burstCapacity
-            
+
             -- Calculate window start time
             local windowStart = now - windowSize
-            
+
             -- Remove expired requests
             redis.call('ZREMRANGEBYSCORE', key, '-inf', windowStart)
-            
+
             -- Get current request count in window
             local currentCount = redis.call('ZCARD', key)
-            
+
             -- Check if request is allowed
             -- 优先级: 稳定流量(maxRequests) -> 突发流量(totalCapacity) -> 拒绝
             if currentCount < maxRequests then

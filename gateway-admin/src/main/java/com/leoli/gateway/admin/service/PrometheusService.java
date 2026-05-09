@@ -387,11 +387,17 @@ public class PrometheusService {
                 instance.put("job", "gateway");
 
                 // Determine status based on entity status
+                // "UP" = Running or Starting (healthy states)
+                // "DOWN" = Stopped or Stopping (unhealthy states)
+                // "ERROR" = Error (error state)
+                // "PENDING" = Unknown state
                 String status;
-                if ("Running".equalsIgnoreCase(entity.getStatus())) {
-                    status = "UP";
-                } else if ("Stopped".equalsIgnoreCase(entity.getStatus())) {
-                    status = "DOWN";
+                if ("Running".equalsIgnoreCase(entity.getStatus()) ||
+                    "Starting".equalsIgnoreCase(entity.getStatus())) {
+                    status = "UP";  // Running and Starting are healthy
+                } else if ("Stopped".equalsIgnoreCase(entity.getStatus()) ||
+                           "Stopping".equalsIgnoreCase(entity.getStatus())) {
+                    status = "DOWN";  // Stopped or stopping
                 } else if ("Error".equalsIgnoreCase(entity.getStatus())) {
                     status = "ERROR";
                 } else {

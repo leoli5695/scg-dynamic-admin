@@ -153,7 +153,8 @@ const AlertPage: React.FC<AlertPageProps> = ({ instanceId }) => {
   const loadHistory = async () => {
     try {
       setHistoryLoading(true);
-      const res = await api.get('/api/alerts/history');
+      const params = instanceId ? `?instanceId=${instanceId}` : '';
+      const res = await api.get(`/api/alerts/history${params}`);
       if (res.data.code === 200) {
         setHistory(res.data.data.content || []);
       }
@@ -658,13 +659,17 @@ const AlertPage: React.FC<AlertPageProps> = ({ instanceId }) => {
         extra={
           <Space>
             <Popconfirm
-              title={t('alert.clear_history_confirm') || 'Are you sure to clear all alert history?'}
+              title={instanceId 
+                ? (t('alert.clear_instance_history_confirm') || 'Are you sure to clear alert history for this instance?')
+                : (t('alert.clear_history_confirm') || 'Are you sure to clear all alert history?')}
               onConfirm={handleClearHistory}
               okText={t('common.confirm') || 'Confirm'}
               cancelText={t('common.cancel') || 'Cancel'}
             >
               <Button danger icon={<DeleteOutlined />} disabled={history.length === 0}>
-                {t('alert.clear_history') || 'Clear All'}
+                {instanceId 
+                  ? (t('alert.clear_instance_history') || 'Clear Instance History')
+                  : (t('alert.clear_history') || 'Clear All')}
               </Button>
             </Popconfirm>
             <Button onClick={loadHistory}>{t('common.refresh') || 'Refresh'}</Button>

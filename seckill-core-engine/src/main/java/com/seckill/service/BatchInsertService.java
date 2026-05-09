@@ -17,9 +17,8 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * ============================================================================
@@ -42,9 +41,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  * - 批量写入失败时，逐条重试或告警
  * - 【关键】只有真正落库后才更新事务状态为 SUCCESS
  *
- * 风险控制:
+ * 风险控制（已修复内存膨胀问题）:
  * - 攒批超时时间：100ms（防止积压太久）
  * - 最大攒批数量：50 条（平衡性能和风险）
+ * - 【新增】队列上限：200 条（防止内存无限膨胀）
+ * - 【新增】满队列拒绝策略：触发告警 + 强制刷新
  * - 失败补偿：由 transaction_log 定时任务兜底
  *
  * 【防止吞单设计】：
@@ -64,14 +65,18 @@ public class BatchInsertService {
     private final TransactionLogMapper transactionLogMapper;
 
     /**
-     * 攒批队列
+     * 攒批队列 - 使用有界队列防止内存膨胀
+     * 
+     * 原问题：ConcurrentLinkedQueue 无界，秒杀流量洪峰时内存无限膨胀
+     * 修复：改用 ArrayBlockingQueue，队列满时触发告警 + 强制刷新
      */
-    private final ConcurrentLinkedQueue<SeckillOrder> orderQueue = new ConcurrentLinkedQueue<>();
+    private final ArrayBlockingQueue<SeckillOrder> orderQueue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
 
     /**
-     * 队列大小计数器（用于监控）
+     * 队列容量上限（防止内存膨胀）
+     * 队列满时触发告警 + 强制刷新，拒绝新订单
      */
-    private final AtomicInteger queueSize = new AtomicInteger(0);
+    private static final int QUEUE_CAPACITY = 200;
 
     /**
      * 批量写入阈值（达到此数量触发批量写入）
@@ -98,19 +103,36 @@ public class BatchInsertService {
      *
      * 返回值：
      * - true: 加入成功
-     * - false: 加入失败（队列过大，触发告警）
+     * - false: 加入失败（队列满，触发告警）
+     *
+     * 【内存安全修复】：
+     * - 队列满时触发告警 + 强制刷新，拒绝新订单
+     * - 防止秒杀流量洪峰时内存无限膨胀
      */
     public boolean addToBatch(SeckillOrder order) {
-        // 队列过大时告警（防止内存溢出）
-        if (queueSize.get() > BATCH_THRESHOLD * 3) {
-            log.warn("攒批队列过大: queueSize={}, 触发强制刷新", queueSize.get());
-            alertService.sendAlert("攒批队列过大", "队列大小: " + queueSize.get() + "，触发强制刷新");
+        // 使用有界队列的 offer 方法，队列满时返回 false
+        boolean success = orderQueue.offer(order);
+
+        if (!success) {
+            // 队列满，触发告警 + 强制刷新
+            int queueSize = orderQueue.size();
+            log.warn("攒批队列已满，触发强制刷新: queueSize={}, orderNo={}", 
+                    queueSize, order.getOrderNo());
+            alertService.sendAlert("攒批队列满", 
+                    "队列大小: " + queueSize + "，触发强制刷新，订单: " + order.getOrderNo());
+            
+            // 强制刷新
             flushBatch();
+            
+            // 再次尝试入队
+            if (!orderQueue.offer(order)) {
+                // 刷新后仍然满，拒绝订单（极端情况）
+                log.error("攒批队列刷新后仍满，拒绝订单: orderNo={}", order.getOrderNo());
+                return false;
+            }
         }
 
-        orderQueue.offer(order);
-        int currentSize = queueSize.incrementAndGet();
-
+        int currentSize = orderQueue.size();
         log.debug("订单加入攒批队列: orderNo={}, transactionId={}, queueSize={}",
                 order.getOrderNo(), order.getTransactionId(), currentSize);
 
@@ -135,8 +157,9 @@ public class BatchInsertService {
         long elapsed = now - lastFlushTime;
 
         // 队列有数据且超过最大攒批时间
-        if (queueSize.get() > 0 && elapsed >= MAX_BATCH_WAIT_MS) {
-            log.debug("定时刷新触发: queueSize={}, elapsedMs={}", queueSize.get(), elapsed);
+        int queueSize = orderQueue.size();
+        if (queueSize > 0 && elapsed >= MAX_BATCH_WAIT_MS) {
+            log.debug("定时刷新触发: queueSize={}, elapsedMs={}", queueSize, elapsed);
             flushBatch();
         }
     }
@@ -155,7 +178,7 @@ public class BatchInsertService {
      */
     public void flushBatch() {
         // 检查队列是否有数据
-        if (queueSize.get() == 0) {
+        if (orderQueue.isEmpty()) {
             return;
         }
 
@@ -163,11 +186,8 @@ public class BatchInsertService {
         List<SeckillOrder> batch = new ArrayList<>();
         int maxBatchSize = BATCH_THRESHOLD * 2;
 
-        SeckillOrder order;
-        while (batch.size() < maxBatchSize && (order = orderQueue.poll()) != null) {
-            batch.add(order);
-            queueSize.decrementAndGet();
-        }
+        // 使用 drainTo 更高效地批量取出
+        orderQueue.drainTo(batch, maxBatchSize);
 
         if (batch.isEmpty()) {
             return;
@@ -295,7 +315,7 @@ public class BatchInsertService {
      * ============================================================================
      */
     public int getQueueSize() {
-        return queueSize.get();
+        return orderQueue.size();
     }
 
     /**
