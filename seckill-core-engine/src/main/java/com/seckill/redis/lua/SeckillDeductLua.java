@@ -77,7 +77,7 @@ public class SeckillDeductLua {
      * @return Lua脚本返回值:
      *         -1: 已购买
      *          0: 库存不足
-     *         >0: 成功（返回分片索引）
+     *         >= 1000: 成功（返回 1000 + 分片索引）
      */
     public long deductStock(Long seckillId, Long userId, int quantity) {
         Timer.Sample sample = Timer.start();
@@ -132,7 +132,7 @@ public class SeckillDeductLua {
      * @return Lua脚本返回值:
      *         -1: 未找到分片记录（异常）
      *          0: 用户未购买（无需回补）
-     *         >0: 成功（返回回补的分片索引）
+     *         >= 1000: 成功（返回 1000 + 回补的分片索引）
      */
     public long rollbackStock(Long seckillId, Long userId, int quantity) {
         Timer.Sample sample = Timer.start();

@@ -169,7 +169,7 @@ public class SeckillService {
                     return SeckillResponse.fail(SeckillResult.STOCK_INSUFFICIENT);
                 }
                 
-                luaResult = 0;  // 本地扣减成功
+                luaResult = 1000;  // 本地扣减成功，模拟 shard 0
                 
             } else {
                 // 正常模式：Redis Lua 脚本原子扣减
@@ -198,7 +198,7 @@ public class SeckillService {
             // ========================================================================
             String orderNo = String.valueOf(snowflakeIdGenerator.nextId());
             String transactionId = String.valueOf(snowflakeIdGenerator.nextId());
-            int shardIndex = (int) luaResult; // Lua返回的就是分片索引
+            int shardIndex = SeckillResult.shardIndexFromLuaResult(luaResult);
 
             // ========================================================================
             // Step 4: 获取商品价格，计算总金额（优先从本地缓存获取）

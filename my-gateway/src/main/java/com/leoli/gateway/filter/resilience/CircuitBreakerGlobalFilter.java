@@ -84,19 +84,37 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
             // Execute the filter chain and record result based on response status
             final long startTime = System.currentTimeMillis();
             return chain.filter(exchange)
-                    .doOnTerminate(() -> {
+                    .doOnSuccess(response -> {
+                        // Record result when request completes successfully (has response)
                         long duration = System.currentTimeMillis() - startTime;
                         HttpStatusCode statusCode = exchange.getResponse().getStatusCode();
+                        
                         if (statusCode != null && statusCode.is5xxServerError()) {
+                            // 5xx server errors = failure (service is unhealthy)
                             circuitBreaker.onError(duration, TimeUnit.MILLISECONDS,
                                     new RuntimeException("Server error: " + statusCode.value()));
-                            log.info("Circuit breaker recorded 5xx error for route {}: status={}, state now={}",
+                            log.info("Circuit breaker recorded 5xx error for route {}: status={}, state={}",
                                     routeId, statusCode.value(), circuitBreaker.getState());
                         } else {
+                            // 2xx/3xx/4xx = success (service responded correctly)
+                            // Note: 4xx is a valid client error response, not a service failure
                             circuitBreaker.onSuccess(duration, TimeUnit.MILLISECONDS);
-                            log.debug("Circuit breaker recorded success for route {}: duration={}ms",
-                                    routeId, duration);
+                            log.debug("Circuit breaker recorded success for route {}: duration={}ms, status={}",
+                                    routeId, duration, statusCode);
                         }
+                    })
+                    .doOnError(error -> {
+                        // Exceptions = failure (timeout, connection refused, etc.)
+                        long duration = System.currentTimeMillis() - startTime;
+                        circuitBreaker.onError(duration, TimeUnit.MILLISECONDS, error);
+                        log.warn("Circuit breaker recorded error for route {}: error={}, duration={}ms, state={}",
+                                routeId, error.getClass().getSimpleName(), duration, circuitBreaker.getState());
+                    })
+                    .doOnCancel(() -> {
+                        // Request cancelled (client disconnected) = record as error for monitoring
+                        long duration = System.currentTimeMillis() - startTime;
+                        log.debug("Request cancelled for route {}: duration={}ms", routeId, duration);
+                        // Note: We don't record cancellation as failure - client-side issue
                     });
         });
     }

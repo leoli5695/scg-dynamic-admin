@@ -20,7 +20,7 @@ import java.util.regex.Pattern;
  * Gateway admin stores mapping table, AI queries Prometheus as needed during analysis.
  * <p>
  * Auto-detected middleware:
- * - Redis: spring.redis.host/port
+ * - Redis: spring.data.redis.host/port (SB3) or spring.redis.host/port (SB2 fallback)
  * - RocketMQ: rocketmq.name-server
  * - MySQL: spring.datasource.url
  * - Elasticsearch: spring.elasticsearch.uris
@@ -117,15 +117,26 @@ public class MiddlewareMetadataReporter {
 
     /**
      * Detect Redis configuration
+     * Supports both Spring Boot 3 (spring.data.redis.*) and Spring Boot 2 (spring.redis.*)
      */
     private void detectRedis(MiddlewareMetadata metadata) {
-        String host = environment.getProperty("spring.redis.host");
-        Integer port = environment.getProperty("spring.redis.port", Integer.class);
+        // Spring Boot 3 uses spring.data.redis.host/port
+        String host = environment.getProperty("spring.data.redis.host");
+        Integer port = environment.getProperty("spring.data.redis.port", Integer.class);
+
+        // Fallback to Spring Boot 2 style properties
+        if (host == null) {
+            host = environment.getProperty("spring.redis.host");
+            port = environment.getProperty("spring.redis.port", Integer.class);
+        }
 
         // Compatible with Redis Sentinel/Cluster configuration
         if (host == null) {
-            // Try detecting Sentinel
-            String sentinelHost = environment.getProperty("spring.redis.sentinel.master");
+            // Try detecting Sentinel (SB3 first, then SB2)
+            String sentinelHost = environment.getProperty("spring.data.redis.sentinel.master");
+            if (sentinelHost == null) {
+                sentinelHost = environment.getProperty("spring.redis.sentinel.master");
+            }
             if (sentinelHost != null) {
                 host = "redis-sentinel";
                 port = 26379;

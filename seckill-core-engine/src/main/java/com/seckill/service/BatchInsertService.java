@@ -8,6 +8,7 @@ import com.seckill.enums.OrderStatus;
 import com.seckill.enums.TransactionStatus;
 import com.seckill.mapper.OrderMapper;
 import com.seckill.mapper.TransactionLogMapper;
+import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
@@ -19,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * ============================================================================
@@ -337,5 +339,62 @@ public class BatchInsertService {
         order.setUpdateTime(java.time.LocalDateTime.now());
         order.setTransactionId(orderMessage.getTransactionId());  // 【关键】传递 transactionId
         return order;
+    }
+
+    /**
+     * ============================================================================
+     * 【关键】优雅停机：应用关闭前强制刷新队列
+     * ============================================================================
+     *
+     * 防止 kill -9 或正常停机时丢失内存中的订单：
+     * - Spring 容器关闭时自动调用此方法
+     * - 强制刷新队列中所有待写入订单
+     * - 多次刷新确保队列完全清空
+     * - 超时保护：最多等待 30 秒
+     *
+     * 注意：kill -9 无法触发 @PreDestroy，需要外部信号（SIGTERM）
+     * Docker/K8s 默认发送 SIGTERM，等待 terminationGracePeriodSeconds
+     */
+    @PreDestroy
+    public void shutdown() {
+        log.info("=== BatchInsertService 优雅停机开始 ===");
+        
+        int remainingOrders = orderQueue.size();
+        if (remainingOrders == 0) {
+            log.info("攒批队列已空，无需刷新");
+            return;
+        }
+        
+        log.warn("攒批队列有 {} 条待写入订单，开始强制刷新", remainingOrders);
+        
+        // 多次刷新确保队列完全清空
+        int maxAttempts = 10;
+        int attempt = 0;
+        
+        while (orderQueue.size() > 0 && attempt < maxAttempts) {
+            attempt++;
+            log.info("优雅停机刷新第 {} 次，剩余订单: {}", attempt, orderQueue.size());
+            
+            flushBatch();
+            
+            // 等待短暂时间让异步任务完成
+            try {
+                TimeUnit.MILLISECONDS.sleep(500);
+            } catch (InterruptedException e) {
+                log.warn("优雅停机等待被中断");
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        
+        int finalRemaining = orderQueue.size();
+        if (finalRemaining > 0) {
+            log.error("=== 优雅停机警告：仍有 {} 条订单未能写入数据库 ===", finalRemaining);
+            alertService.sendAlert("优雅停机订单丢失警告",
+                    "停机时仍有 " + finalRemaining + " 条订单在内存队列中未能落库。" +
+                    "这些订单的事务状态为 PROCESSING，将由补偿任务处理。");
+        } else {
+            log.info("=== BatchInsertService 优雅停机完成，所有订单已落库 ===");
+        }
     }
 }

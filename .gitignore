@@ -75,3 +75,13 @@ gateway-admin/admin-new.log
 gateway-admin/admin-err-new.log
 *.tar
 *.tar.gz
+
+# Binary files - should never be committed
+*.zip
+*.jar
+nul
+arthas-*
+demo-*.tar
+
+# Submodules (use git submodule, not directory)
+nacos/

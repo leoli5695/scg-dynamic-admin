@@ -53,13 +53,16 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Allow CORS preflight requests (OPTIONS) without authentication - MUST be first!
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        
-                        // Disable authentication for testing
-                        .anyRequest().permitAll()
+                        // Public endpoints - login, register, health check
+                        .requestMatchers("/api/auth/login", "/api/auth/register", "/actuator/health").permitAll()
+                        // Swagger/OpenAPI documentation (optional - can be restricted in production)
+                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        // All other requests require authentication
+                        .anyRequest().authenticated()
         );
 
-        // JWT filter disabled for testing
-        // .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+        // JWT filter for token validation
+        http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

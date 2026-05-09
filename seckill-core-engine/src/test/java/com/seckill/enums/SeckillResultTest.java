@@ -10,24 +10,29 @@ import static org.junit.jupiter.api.Assertions.*;
  * SeckillResult 枚举测试
  * ============================================================================
  *
- * 测试 Lua 脚本返回值转换
- *
  * Lua返回值定义:
  *   -2: 库存未预热
  *   -1: 已购买
  *    0: 库存不足
- *   >0: 成功，返回分片索引
+ *   >= 1000: 成功，shardIndex = luaResult - 1000
  */
 class SeckillResultTest {
 
     @Test
-    @DisplayName("Lua返回>0 应为SUCCESS（分片索引）")
+    @DisplayName("Lua返回>=1000 应为SUCCESS（1000+分片索引）")
     void testFromLuaResult_Success() {
-        // 测试各种分片索引值（>0 表示成功）
-        assertEquals(SeckillResult.SUCCESS, SeckillResult.fromLuaResult(1));
-        assertEquals(SeckillResult.SUCCESS, SeckillResult.fromLuaResult(2));
-        assertEquals(SeckillResult.SUCCESS, SeckillResult.fromLuaResult(7));
-        assertEquals(SeckillResult.SUCCESS, SeckillResult.fromLuaResult(100));
+        assertEquals(SeckillResult.SUCCESS, SeckillResult.fromLuaResult(1000)); // shard 0
+        assertEquals(SeckillResult.SUCCESS, SeckillResult.fromLuaResult(1001)); // shard 1
+        assertEquals(SeckillResult.SUCCESS, SeckillResult.fromLuaResult(1007)); // shard 7
+        assertEquals(SeckillResult.SUCCESS, SeckillResult.fromLuaResult(1100)); // 极端值
+    }
+
+    @Test
+    @DisplayName("shardIndexFromLuaResult 正确提取分片索引")
+    void testShardIndexFromLuaResult() {
+        assertEquals(0, SeckillResult.shardIndexFromLuaResult(1000));
+        assertEquals(1, SeckillResult.shardIndexFromLuaResult(1001));
+        assertEquals(7, SeckillResult.shardIndexFromLuaResult(1007));
     }
 
     @Test
@@ -49,11 +54,12 @@ class SeckillResultTest {
     }
 
     @Test
-    @DisplayName("Lua返回其他负值 应为SYSTEM_ERROR")
+    @DisplayName("Lua返回其他负值或1-999 应为SYSTEM_ERROR")
     void testFromLuaResult_SystemError() {
         assertEquals(SeckillResult.SYSTEM_ERROR, SeckillResult.fromLuaResult(-3));
         assertEquals(SeckillResult.SYSTEM_ERROR, SeckillResult.fromLuaResult(-99));
-        assertEquals(SeckillResult.SYSTEM_ERROR, SeckillResult.fromLuaResult(-100));
+        assertEquals(SeckillResult.SYSTEM_ERROR, SeckillResult.fromLuaResult(1));   // 旧契约的值
+        assertEquals(SeckillResult.SYSTEM_ERROR, SeckillResult.fromLuaResult(999)); // 边界
     }
 
     @Test

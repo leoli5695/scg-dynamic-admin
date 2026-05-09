@@ -4,6 +4,8 @@ import com.leoli.gateway.constants.AuthConstants;
 import com.leoli.gateway.enums.AuthType;
 import com.leoli.gateway.model.AuthConfig;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
@@ -18,6 +20,7 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * HMAC Signature Authentication Processor.
@@ -29,6 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * - Content-MD5 validation for request body integrity
  * - Custom header support
  * - Multiple access key support
+ * - Distributed nonce validation via Redis (for multi-instance deployments)
  *
  * @author leoli
  */
@@ -46,9 +50,21 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
     // Default clock skew tolerance (uses AuthConstants for gateway-wide consistency)
     private static final int DEFAULT_CLOCK_SKEW_MINUTES = AuthConstants.DEFAULT_CLOCK_SKEW_MINUTES;
 
-    // In-memory nonce cache for replay attack prevention
-    private final Map<String, Long> nonceCache = new ConcurrentHashMap<>();
+    // Redis key prefix for nonce storage
+    private static final String NONCE_KEY_PREFIX = "gateway:hmac:nonce:";
+
+    // Nonce expiry time
     private static final long NONCE_EXPIRY_MS = AuthConstants.DEFAULT_NONCE_EXPIRY_MS;
+
+    // Redis template for distributed nonce validation (optional - may be null if Redis not configured)
+    @Autowired(required = false)
+    private StringRedisTemplate redisTemplate;
+
+    // Local fallback nonce cache for single-instance or when Redis is unavailable
+    private final Map<String, Long> localNonceCache = new ConcurrentHashMap<>();
+
+    // Flag to track if we've warned about Redis unavailable
+    private volatile boolean redisUnavailableWarned = false;
 
     @Override
     public AuthType getAuthType() {
@@ -158,19 +174,73 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
 
     /**
      * Validate nonce to prevent replay attacks.
+     * 
+     * SECURITY FIX: Uses Redis for distributed nonce validation in multi-instance deployments.
+     * Falls back to local cache when Redis is unavailable (with warning logged).
+     * 
+     * Redis-based validation:
+     * - Uses SETNX (SET if Not eXists) for atomic check-and-set
+     * - Sets TTL for automatic cleanup
+     * - Prevents replay attacks across all gateway instances
      */
     private boolean validateNonce(String nonce) {
-        // Clean up expired nonces
+        if (nonce == null || nonce.isEmpty()) {
+            return true;  // No nonce provided, skip validation (timestamp already validates)
+        }
+
+        String redisKey = NONCE_KEY_PREFIX + nonce;
+        long expirySeconds = NONCE_EXPIRY_MS / 1000;
+
+        // Try Redis first (for distributed validation)
+        if (redisTemplate != null) {
+            try {
+                // Use SETNX for atomic "set if not exists" operation
+                Boolean success = redisTemplate.opsForValue()
+                        .setIfAbsent(redisKey, "1", expirySeconds, TimeUnit.SECONDS);
+
+                if (Boolean.TRUE.equals(success)) {
+                    log.debug("Nonce validated via Redis: {}", nonce);
+                    return true;
+                } else {
+                    log.warn("Nonce already used (replay attack detected): {}", nonce);
+                    return false;
+                }
+            } catch (Exception e) {
+                log.error("Redis nonce validation failed, falling back to local cache: {}", e.getMessage());
+                // Fall through to local cache
+            }
+        } else {
+            // Warn once if Redis is unavailable
+            if (!redisUnavailableWarned) {
+                redisUnavailableWarned = true;
+                log.warn("Redis not configured for HMAC nonce validation - using local cache. " +
+                         "Replay attacks may succeed across gateway instances. " +
+                         "Configure Redis for production multi-instance deployments.");
+            }
+        }
+
+        // Fallback: Local cache (single-instance mode)
+        return validateNonceLocal(nonce);
+    }
+
+    /**
+     * Local nonce validation (fallback when Redis is unavailable).
+     * NOTE: Not safe for multi-instance deployments - replay attacks can succeed across instances.
+     */
+    private boolean validateNonceLocal(String nonce) {
         long currentTime = System.currentTimeMillis();
-        nonceCache.entrySet().removeIf(entry -> currentTime - entry.getValue() > NONCE_EXPIRY_MS);
+
+        // Clean up expired nonces periodically
+        localNonceCache.entrySet().removeIf(entry -> currentTime - entry.getValue() > NONCE_EXPIRY_MS);
 
         // Check if nonce has been used
-        if (nonceCache.containsKey(nonce)) {
+        if (localNonceCache.containsKey(nonce)) {
+            log.warn("Nonce already used locally: {}", nonce);
             return false;
         }
 
         // Add nonce to cache
-        nonceCache.put(nonce, currentTime);
+        localNonceCache.put(nonce, currentTime);
         return true;
     }
 

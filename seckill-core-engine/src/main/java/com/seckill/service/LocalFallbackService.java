@@ -137,7 +137,8 @@ public class LocalFallbackService {
         AtomicInteger boughtCount = localBoughtMap.computeIfAbsent(boughtKey, k -> new AtomicInteger(0));
 
         int currentBought = boughtCount.get();
-        int maxBuyCount = seckillConfig.getShardCount(); // 默认限购数量
+        // FIX: Use dedicated maxBuyCount config, NOT shardCount (they are different concepts!)
+        int maxBuyCount = seckillConfig.getMaxBuyCount();  // User purchase limit per activity
 
         if (currentBought >= maxBuyCount) {
             log.warn("本地防重检查：已购买过, seckillId={}, userId={}", seckillId, userId);

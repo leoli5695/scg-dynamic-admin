@@ -10,6 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -193,43 +195,66 @@ public class SslCertificateRefresher {
 
     /**
      * Add listener for a single certificate.
+     * 
+     * REACTIVE FIX: Use Mono.delay instead of Thread.sleep to avoid blocking.
+     * Retry logic runs on boundedElastic scheduler to offload from main thread.
      */
     private void addCertificateListener(String domain) {
         String certDataId = SSL_CERTIFICATE_PREFIX + domain;
 
-        // Try to load certificate config with retry
-        String certConfig = null;
-        for (int i = 0; i < 3; i++) {
-            certConfig = configService.getConfig(certDataId, GROUP);
-            if (certConfig != null && !certConfig.isBlank()) {
-                break;
-            }
-            // Wait a bit before retry (Nacos eventual consistency)
-            if (i < 2) {
-                try {
-                    Thread.sleep(100 * (i + 1));
-                } catch (InterruptedException e) {
-                    log.debug("Retry delay interrupted for certificate: {}", domain);
-                    break;
+        // Try to load certificate config with retry using reactive approach
+        loadCertificateWithRetry(domain, certDataId, 3)
+            .subscribeOn(Schedulers.boundedElastic())
+            .subscribe(
+                certConfig -> {
+                    if (certConfig != null && !certConfig.isBlank()) {
+                        try {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> certData = objectMapper.readValue(certConfig, Map.class);
+                            sslContextManager.handleCertificateUpdate(certData);
+                            log.info("✅ Loaded certificate: {}", domain);
+                        } catch (Exception e) {
+                            log.error("Failed to parse certificate: {}", domain, e);
+                        }
+                    } else {
+                        log.warn("⚠️  Certificate config not found in Nacos after retries: {}, listener will wait for config", certDataId);
+                    }
+                    
+                    // Always register listener (even if config not found yet, it may come later)
+                    registerCertificateListener(domain, certDataId);
+                },
+                error -> {
+                    log.error("Failed to load certificate: {}", domain, error);
+                    // Still register listener for future updates
+                    registerCertificateListener(domain, certDataId);
                 }
-            }
-        }
+            );
+    }
 
-        if (certConfig != null && !certConfig.isBlank()) {
-            // Load the certificate into SSL context manager immediately
-            try {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> certData = objectMapper.readValue(certConfig, Map.class);
-                sslContextManager.handleCertificateUpdate(certData);
-                log.info("✅ Loaded certificate: {}", domain);
-            } catch (Exception e) {
-                log.error("Failed to parse certificate: {}", domain, e);
+    /**
+     * Load certificate with retry using reactive delay.
+     */
+    private Mono<String> loadCertificateWithRetry(String domain, String certDataId, int maxRetries) {
+        return Mono.defer(() -> {
+            String certConfig = configService.getConfig(certDataId, GROUP);
+            if (certConfig != null && !certConfig.isBlank()) {
+                return Mono.just(certConfig);
             }
-        } else {
-            log.warn("⚠️  Certificate config not found in Nacos after retries: {}, listener will wait for config", certDataId);
-        }
+            return Mono.empty();
+        })
+        .repeatWhenEmpty(maxRetries, attempts -> 
+            attempts.delayElements(java.time.Duration.ofMillis(100 * attempts.incrementAndGet()))
+        )
+        .onErrorResume(e -> {
+            log.debug("Retry delay interrupted for certificate: {}", domain);
+            return Mono.empty();
+        });
+    }
 
-        // Always register listener (even if config not found yet, it may come later)
+    /**
+     * Register listener for certificate updates.
+     */
+    private void registerCertificateListener(String domain, String certDataId) {
         ConfigCenterService.ConfigListener listener = (dataId, group, content) -> {
             onSingleCertificateChange(domain, content);
         };

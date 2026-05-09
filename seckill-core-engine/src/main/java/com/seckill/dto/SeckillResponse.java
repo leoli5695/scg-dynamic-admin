@@ -63,4 +63,11 @@ public class SeckillResponse {
         response.setMessage(message);
         return response;
     }
+
+    /**
+     * 判断是否成功
+     */
+    public boolean isSuccess() {
+        return this.code == SeckillResult.SUCCESS.getCode();
+    }
 }

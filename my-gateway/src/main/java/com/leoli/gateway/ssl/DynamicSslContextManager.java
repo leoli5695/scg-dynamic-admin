@@ -42,8 +42,10 @@ public class DynamicSslContextManager {
     // Cache of certificate data
     private final Map<String, CertificateData> certificateDataCache = new ConcurrentHashMap<>();
 
-    // Encryption key for decrypting passwords (should match admin service)
-    private static final String ENCRYPTION_KEY = "GatewaySSLKey123";
+    // Encryption key for decrypting passwords - loaded from environment variable
+    // DO NOT hardcode encryption keys in production
+    @Value("${GATEWAY_SSL_ENCRYPTION_KEY:}")
+    private String encryptionKey;
 
     // Default keystore password for PEM certificates (can be overridden via config)
     @Value("${gateway.ssl.pem-keystore-password:changeit}")
@@ -219,22 +221,40 @@ public class DynamicSslContextManager {
     }
 
     /**
-     * Decrypt password
+     * Decrypt password using environment-configured encryption key.
+     * Returns encrypted password unchanged if decryption fails or key not configured.
      */
     private String decryptPassword(String encryptedPassword) {
         if (encryptedPassword == null || encryptedPassword.isEmpty()) {
             return "";
         }
+        
+        // Validate encryption key is configured
+        if (encryptionKey == null || encryptionKey.isEmpty()) {
+            log.error("GATEWAY_SSL_ENCRYPTION_KEY not configured, cannot decrypt password");
+            throw new IllegalStateException("SSL encryption key not configured. Set GATEWAY_SSL_ENCRYPTION_KEY environment variable.");
+        }
+        
+        // Validate key length (AES-256 requires 32 bytes)
+        byte[] keyBytes = encryptionKey.getBytes(StandardCharsets.UTF_8);
+        if (keyBytes.length < 32) {
+            log.error("GATEWAY_SSL_ENCRYPTION_KEY too short (minimum 32 bytes required for AES-256)");
+            throw new IllegalStateException("SSL encryption key too short. Minimum 32 characters required.");
+        }
+        
         try {
-            javax.crypto.spec.SecretKeySpec key = new javax.crypto.spec.SecretKeySpec(
-                    ENCRYPTION_KEY.getBytes(StandardCharsets.UTF_8), "AES");
+            // Use first 32 bytes for AES-256
+            byte[] validKey = new byte[32];
+            System.arraycopy(keyBytes, 0, validKey, 0, 32);
+            
+            javax.crypto.spec.SecretKeySpec key = new javax.crypto.spec.SecretKeySpec(validKey, "AES");
             javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES");
             cipher.init(javax.crypto.Cipher.DECRYPT_MODE, key);
             byte[] decrypted = cipher.doFinal(Base64.getDecoder().decode(encryptedPassword));
             return new String(decrypted, StandardCharsets.UTF_8);
         } catch (Exception e) {
-            log.error("Failed to decrypt password", e);
-            return encryptedPassword;
+            log.error("Failed to decrypt SSL keystore password", e);
+            throw new IllegalStateException("SSL password decryption failed", e);
         }
     }
 

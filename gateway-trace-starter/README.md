@@ -162,7 +162,7 @@ The Starter automatically detects the following Spring Boot standard configurati
 
 | Middleware | Configuration Key | Example |
 |------------|-------------------|---------|
-| Redis | `spring.redis.host/port` | `redis-cluster:6379` |
+| Redis | `spring.data.redis.host/port` (SB3) or `spring.redis.host/port` (SB2) | `redis-cluster:6379` |
 | RocketMQ | `rocketmq.name-server` | `rocketmq-namesrv:9876` |
 | MySQL | `spring.datasource.url` | `jdbc:mysql://mysql-master:3306/db` |
 | Elasticsearch | `spring.elasticsearch.uris` | `http://es-cluster:9200` |

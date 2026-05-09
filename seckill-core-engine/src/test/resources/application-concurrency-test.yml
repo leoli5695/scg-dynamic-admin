@@ -1,0 +1,49 @@
+# Minimal config for SeckillStockConcurrencyTest.
+# Only Redis is needed; everything else is excluded.
+
+spring:
+  application:
+    name: seckill-concurrency-test
+  cloud:
+    nacos:
+      config:
+        enabled: false
+        import-check:
+          enabled: false
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:30379}
+      database: 0
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 200
+          max-idle: 50
+          min-idle: 10
+          max-wait: 1000ms
+
+# Redisson config (required by redisson-spring-boot-starter)
+redisson:
+  config: |
+    singleServerConfig:
+      address: "redis://${REDIS_HOST:localhost}:${REDIS_PORT:30379}"
+      password: null
+      connectionPoolSize: 64
+      connectionMinimumIdleSize: 10
+      connectTimeout: 5000
+      timeout: 5000
+      retryAttempts: 3
+      retryInterval: 1500
+
+seckill:
+  shard-count: 8
+
+management:
+  endpoints:
+    enabled-by-default: false
+
+logging:
+  level:
+    root: WARN
+    com.seckill: INFO

@@ -58,13 +58,10 @@ public class RedisConfig {
                 return Files.readString(Paths.get(resource.toURI()));
             }
         } catch (Exception e) {
-            log.warn("加载Lua脚本失败: {}", e.getMessage());
+            throw new IllegalStateException("加载Lua脚本失败: " + fileName, e);
         }
-        // 默认脚本内容
-        if (fileName.equals("seckill_deduct.lua")) {
-            return "return 1";
-        }
-        return "return 0";
+        throw new IllegalStateException("Lua脚本文件不存在: lua/" + fileName
+                + "。请确认 src/main/resources/lua/ 下有该文件且已被 Maven 打包到 classpath");
     }
 
     @Bean

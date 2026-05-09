@@ -245,9 +245,9 @@ public class StockConfirmService {
             // 使用Lua脚本精确回补到原分片
             long result = seckillDeductLua.rollbackStock(seckillId, userId, quantity);
 
-            if (result >= 0) {
+            if (result >= 1000) {
                 log.info("库存回补成功: seckillId={}, userId={}, quantity={}, shardIndex={}",
-                        seckillId, userId, quantity, shardIndex);
+                        seckillId, userId, quantity, result - 1000);
             } else {
                 log.error("库存回补失败: seckillId={}, userId={}, result={}",
                         seckillId, userId, result);

@@ -62,7 +62,9 @@ gateway:
     # For Rancher Desktop WSL/K3s, use host.rancher-desktop.internal which resolves to the host machine
     k8sUrl: ${GATEWAY_ADMIN_K8S_URL:http://host.rancher-desktop.internal:9090}
     jwt:
-      secret: ${GATEWAY_ADMIN_JWT_SECRET:mySecretKeyForJWTTokenGenerationWhichMustBeLongEnoughAndSecure}
+      # SECURITY: JWT secret must be set via environment variable (no default)
+      # Minimum 32 characters for HS256, 64 characters for HS512
+      secret: ${GATEWAY_ADMIN_JWT_SECRET:?GATEWAY_ADMIN_JWT_SECRET must be set}
       expiration: 86400000  # 24 hours in milliseconds
       enabled: true  # Enable JWT for production
   # Jaeger configuration for distributed tracing

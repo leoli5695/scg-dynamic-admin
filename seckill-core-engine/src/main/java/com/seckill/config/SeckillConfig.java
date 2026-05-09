@@ -16,6 +16,12 @@ public class SeckillConfig {
 
     private int shardCount = 8;
 
+    /**
+     * Maximum purchase count per user per activity.
+     * This is the actual purchase limit, NOT the shard count.
+     */
+    private int maxBuyCount = 1;  // Default: 1 item per user per activity
+
     private WarmupConfig warmup = new WarmupConfig();
     private DelayConfig delay = new DelayConfig();
     private ConsumerConfig consumer = new ConsumerConfig();

@@ -327,7 +327,7 @@ public class OrderCreateConsumer implements RocketMQListener<String> {
                     .build();
 
             // 发送延迟消息到回补 Topic
-            // delayLevel 17 = 15分钟
+            // delayLevel 17 = 20分钟
             int delayLevel = seckillConfig.getDelay().getDelayLevel();
             
             rocketMQTemplate.syncSend(

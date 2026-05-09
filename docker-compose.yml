@@ -12,7 +12,8 @@ services:
     ports:
       - "3306:3306"
     environment:
-      - MYSQL_ROOT_PASSWORD=root123
+      # SECURITY: Use environment variable instead of hardcoded password
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set}
       - MYSQL_DATABASE=gateway_admin
       - MYSQL_CHARACTER_SET_SERVER=utf8mb4
       - MYSQL_COLLATION_SERVER=utf8mb4_unicode_ci
@@ -23,7 +24,7 @@ services:
     networks:
       - gateway-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot123"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -102,6 +103,8 @@ services:
       - gateway-network
 
   # Elasticsearch（日志存储、链路追踪）
+  # SECURITY: Enable xpack.security for production
+  # For development, set ES_SECURITY_ENABLED=false in .env
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.10.2
     container_name: elasticsearch
@@ -111,14 +114,18 @@ services:
     environment:
       - discovery.type=single-node
       - ES_JAVA_OPTS=-Xms512m -Xmx512m
-      - xpack.security.enabled=false
-      - xpack.security.enrollment.enabled=false
+      # SECURITY: Enable security by default, disable only for local dev via env var
+      - xpack.security.enabled=${ES_SECURITY_ENABLED:-true}
+      - xpack.security.enrollment.enabled=${ES_SECURITY_ENABLED:-true}
+      # Set elastic user password (required when security enabled)
+      - ELASTIC_PASSWORD=${ES_ELASTIC_PASSWORD:-elastic123}
     volumes:
       - es_data:/usr/share/elasticsearch/data
     networks:
       - gateway-network
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      # Use elastic user for health check when security enabled
+      test: ["CMD-SHELL", "curl -s -u elastic:${ES_ELASTIC_PASSWORD:-elastic123} -f http://localhost:9200/_cluster/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -163,6 +170,8 @@ services:
   # ============================================================
 
   # Prometheus 监控
+  # SECURITY: Disable admin API by default (allows deleting data, dangerous)
+  # For development, set PROM_ADMIN_API_ENABLED=true in .env
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
@@ -175,7 +184,9 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--web.enable-lifecycle'
-      - '--web.enable-admin-api'
+      # SECURITY: Admin API disabled by default - enables dangerous operations
+      # Enable only via env var for development/debugging
+      - '--web.enable-admin-api=${PROM_ADMIN_API_ENABLED:-false}'
     networks:
       - gateway-network
     extra_hosts:
@@ -193,7 +204,8 @@ services:
     ports:
       - "9104:9104"
     environment:
-      - DATA_SOURCE_NAME=root:root123@(mysql:3306)/
+      # SECURITY: Use environment variable for password
+      - DATA_SOURCE_NAME=root:${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set}@(mysql:3306)/
     depends_on:
       mysql:
         condition: service_healthy
@@ -244,7 +256,9 @@ services:
         condition: service_healthy
     environment:
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=nacos:8848
-      - SPRING_CLOUD_NACOS_DISCOVERY_IP=127.0.1
+      # FIX: Corrected typo 127.0.1 to 127.0.0.1
+      # NOTE: Using container IP for cross-container communication
+      - SPRING_CLOUD_NACOS_DISCOVERY_IP=127.0.0.1
       - SPRING_CLOUD_NACOS_DISCOVERY_PORT=9005
     networks:
       - gateway-network

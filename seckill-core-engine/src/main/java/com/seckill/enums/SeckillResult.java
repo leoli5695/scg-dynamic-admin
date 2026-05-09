@@ -72,10 +72,10 @@ public enum SeckillResult {
      *   -2: 库存未预热
      *   -1: 已购买
      *    0: 库存不足
-     *   >0: 成功，返回分片索引
+     *   >= 1000: 成功，shardIndex = luaResult - 1000
      */
     public static SeckillResult fromLuaResult(long luaResult) {
-        if (luaResult > 0) {
+        if (luaResult >= 1000) {
             return SUCCESS;
         } else if (luaResult == 0) {
             return STOCK_INSUFFICIENT;
@@ -86,5 +86,12 @@ public enum SeckillResult {
         } else {
             return SYSTEM_ERROR;
         }
+    }
+
+    /**
+     * 从 Lua 返回值中提取分片索引（仅在 fromLuaResult == SUCCESS 时有意义）
+     */
+    public static int shardIndexFromLuaResult(long luaResult) {
+        return (int) (luaResult - 1000);
     }
 }

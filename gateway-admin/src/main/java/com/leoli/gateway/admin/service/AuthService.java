@@ -79,15 +79,32 @@ public class AuthService {
 
     /**
      * Create initial admin user if not exists.
+     * Credentials are loaded from environment variables for security.
+     * Required env vars: ADMIN_USERNAME, ADMIN_PASSWORD
+     * If not set, initial admin creation is skipped (admin must be created manually).
      */
     public void createInitialAdminUser() {
-        String adminUsername = "admin";
+        String adminUsername = System.getenv("ADMIN_USERNAME");
+        String adminPassword = System.getenv("ADMIN_PASSWORD");
+        
+        // Skip if environment variables not configured
+        if (adminUsername == null || adminUsername.isEmpty() ||
+            adminPassword == null || adminPassword.isEmpty()) {
+            log.warn("ADMIN_USERNAME or ADMIN_PASSWORD not configured, skipping initial admin creation. " +
+                     "Please create admin user manually or set environment variables.");
+            return;
+        }
+        
+        // Validate password strength (minimum 12 characters)
+        if (adminPassword.length() < 12) {
+            log.error("ADMIN_PASSWORD too short (minimum 12 characters required), skipping admin creation");
+            return;
+        }
         
         if (!userRepository.existsByUsername(adminUsername)) {
             log.info("Creating initial admin user: {}", adminUsername);
             
-            // Encode password: Admin123456
-            String encodedPassword = passwordEncoder.encode("Admin123456");
+            String encodedPassword = passwordEncoder.encode(adminPassword);
             
             User adminUser = new User(
                 adminUsername,
@@ -99,7 +116,7 @@ public class AuthService {
             userRepository.save(adminUser);
             log.info("Initial admin user created successfully");
         } else {
-            log.info("Admin user already exists");
+            log.info("Admin user '{}' already exists", adminUsername);
         }
     }
 }

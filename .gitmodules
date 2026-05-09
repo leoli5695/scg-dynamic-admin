@@ -1,3 +1,0 @@
-[submodule "nacos"]
-	path = nacos
-	url = https://github.com/alibaba/nacos.git

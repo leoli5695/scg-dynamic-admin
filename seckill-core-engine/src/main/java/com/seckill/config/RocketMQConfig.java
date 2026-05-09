@@ -103,12 +103,21 @@ public class RocketMQConfig {
 
     /**
      * RocketMQ延迟级别
-     * Level 17 = 15分钟（未支付订单回滚）
+     * Level 17 = 20分钟（未支付订单回滚）
+     * 
+     * 官方延迟级别对照：
+     * Level 1-4: 1s, 5s, 10s, 30s
+     * Level 5-12: 1m, 2m, 3m, 4m, 5m, 6m, 7m, 8m
+     * Level 13-16: 9m, 10m, 10m, 10m
+     * Level 17 = 20m
+     * Level 18 = 30m
+     * Level 19 = 1h
+     * Level 20 = 2h
      */
-    public static final int DELAY_LEVEL_15_MIN = 17;
+    public static final int DELAY_LEVEL_20_MIN = 17;
 
     /**
-     * Level 18 = 20分钟
+     * Level 18 = 30分钟
      */
-    public static final int DELAY_LEVEL_20_MIN = 18;
+    public static final int DELAY_LEVEL_30_MIN = 18;
 }

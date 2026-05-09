@@ -126,8 +126,8 @@ public class CompensationService {
     public void processUnpaidOrders() {
         log.info("开始扫描未支付订单...");
 
-        // 查询创建超过15分钟仍未支付的订单
-        LocalDateTime unpaidTime = LocalDateTime.now().minusMinutes(15);
+        // 查询创建超过20分钟仍未支付的订单（与RocketMQ delayLevel 17对应）
+        LocalDateTime unpaidTime = LocalDateTime.now().minusMinutes(20);
         List<SeckillOrder> unpaidOrders = orderMapper.selectUnpaidOrders(unpaidTime);
 
         for (SeckillOrder order : unpaidOrders) {
@@ -156,13 +156,13 @@ public class CompensationService {
                 order.getQuantity()
         );
 
-        if (result >= 0) {
+        if (result >= 1000) {
             // 更新订单状态（使用包含分片键的更新方法）
             order.setStatus(OrderStatus.CANCELLED.getCode());
             order.setUpdateTime(LocalDateTime.now());
             orderMapper.updateById(order);
 
-            log.info("未支付订单取消完成: orderNo={}, shardIndex={}", order.getOrderNo(), result);
+            log.info("未支付订单取消完成: orderNo={}, shardIndex={}", order.getOrderNo(), result - 1000);
         } else {
             log.error("库存回补失败: orderNo={}, result={}", order.getOrderNo(), result);
         }
@@ -178,8 +178,8 @@ public class CompensationService {
 
         long result = seckillDeductLua.rollbackStock(seckillId, userId, quantity);
 
-        if (result >= 0) {
-            log.info("手动回补成功: shardIndex={}", result);
+        if (result >= 1000) {
+            log.info("手动回补成功: shardIndex={}", result - 1000);
             return true;
         } else {
             log.error("手动回补失败: result={}", result);
@@ -199,6 +199,6 @@ public class CompensationService {
                 tx.getQuantity()
         );
 
-        log.info("事务回补库存: transactionId={}, shardIndex={}", tx.getTransactionId(), result);
+        log.info("事务回补库存: transactionId={}, shardIndex={}", tx.getTransactionId(), result >= 1000 ? result - 1000 : result);
     }
 }

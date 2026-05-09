@@ -41,6 +41,13 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
 
     private final StrategyManager strategyManager;
 
+    /**
+     * Maximum body size for security scanning (default: 10MB).
+     * Bodies larger than this are rejected to prevent OOM attacks.
+     * Configure via gateway.security.max-body-size-mb in application.yml
+     */
+    private static final int MAX_BODY_SIZE_BYTES = 10 * 1024 * 1024;  // 10MB
+
     // SQL Injection patterns
     private static final List<Pattern> SQL_INJECTION_PATTERNS = Arrays.asList(
             // SQL keywords with context
@@ -198,16 +205,45 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
 
     /**
      * Check request body for threats.
+     * 
+     * SECURITY: Enforces maximum body size to prevent OOM attacks.
+     * Bodies larger than MAX_BODY_SIZE_BYTES are rejected.
      */
     private Mono<Void> checkRequestBody(ServerWebExchange exchange, GatewayFilterChain chain,
                                         Map<String, Object> config, List<String> existingThreats,
                                         String mode, boolean enableSqlInjection, boolean enableXss) {
         ServerHttpRequest request = exchange.getRequest();
 
+        // Check Content-Length header first (quick rejection without reading body)
+        String contentLength = request.getHeaders().getFirst(HttpHeaders.CONTENT_LENGTH);
+        if (contentLength != null) {
+            try {
+                long length = Long.parseLong(contentLength);
+                if (length > MAX_BODY_SIZE_BYTES) {
+                    log.error("Request body too large for route {}: Content-Length={} bytes (max {} bytes)",
+                            RouteUtils.getRouteId(exchange), length, MAX_BODY_SIZE_BYTES);
+                    return writeTooLargeResponse(exchange.getResponse(), 
+                            "Request body too large. Maximum allowed: " + (MAX_BODY_SIZE_BYTES / 1024 / 1024) + "MB");
+                }
+            } catch (NumberFormatException e) {
+                log.debug("Invalid Content-Length header: {}", contentLength);
+            }
+        }
+
         return DataBufferUtils.join(request.getBody())
                 .defaultIfEmpty(exchange.getResponse().bufferFactory().wrap(new byte[0]))
                 .flatMap(dataBuffer -> {
-                    byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                    // SECURITY: Check actual body size after reading
+                    int readableBytes = dataBuffer.readableByteCount();
+                    if (readableBytes > MAX_BODY_SIZE_BYTES) {
+                        DataBufferUtils.release(dataBuffer);
+                        log.error("Request body size exceeds limit for route {}: {} bytes (max {} bytes)",
+                                RouteUtils.getRouteId(exchange), readableBytes, MAX_BODY_SIZE_BYTES);
+                        return writeTooLargeResponse(exchange.getResponse(),
+                                "Request body too large. Maximum allowed: " + (MAX_BODY_SIZE_BYTES / 1024 / 1024) + "MB");
+                    }
+
+                    byte[] bytes = new byte[readableBytes];
                     dataBuffer.read(bytes);
                     DataBufferUtils.release(dataBuffer);
 
@@ -229,6 +265,19 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
 
                     return chain.filter(exchange.mutate().request(newRequest).build());
                 });
+    }
+
+    /**
+     * Write error response for oversized body.
+     */
+    private Mono<Void> writeTooLargeResponse(ServerHttpResponse response, String message) {
+        response.setStatusCode(HttpStatus.PAYLOAD_TOO_LARGE);  // 413
+        response.getHeaders().add(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
+        
+        String body = String.format("{\"error\":\"PAYLOAD_TOO_LARGE\",\"message\":\"%s\"}", message);
+        DataBuffer buffer = response.bufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8));
+        
+        return response.writeWith(Mono.just(buffer));
     }
 
     /**

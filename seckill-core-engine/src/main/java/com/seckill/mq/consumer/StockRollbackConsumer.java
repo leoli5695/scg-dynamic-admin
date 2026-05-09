@@ -100,9 +100,9 @@ public class StockRollbackConsumer implements RocketMQListener<String> {
                 // Step 3: 精确回补到原分片（关键）
                 long rollbackResult = seckillDeductLua.rollbackStock(seckillId, userId, quantity);
 
-                if (rollbackResult >= 0) {
-                    log.info("库存回补成功: seckillId={}, userId={}, shardIndex={}", 
-                            seckillId, userId, rollbackResult);
+                if (rollbackResult >= 1000) {
+                    log.info("库存回补成功: seckillId={}, userId={}, shardIndex={}",
+                            seckillId, userId, rollbackResult - 1000);
 
                     // Step 4: 更新订单状态为已取消
                     order.setStatus(OrderStatus.CANCELLED.getCode());

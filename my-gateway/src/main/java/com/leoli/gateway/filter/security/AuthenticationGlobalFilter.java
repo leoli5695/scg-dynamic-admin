@@ -244,6 +244,12 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
 
     /**
      * Find policy by validating Bearer token against all credentials of matching auth type.
+     * 
+     * SECURITY WARNING: This iterates through all policies to find a matching secret.
+     * To avoid this brute-force approach, consider:
+     * 1. Including policyId in JWT claims (recommended)
+     * 2. Using unique issuer per policy
+     * 3. Route-level policy binding
      */
     private String findPolicyByBearerToken(String token, String requiredAuthType) {
         if (!"JWT".equals(requiredAuthType) && !"OAUTH2".equals(requiredAuthType)) {
@@ -252,16 +258,33 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
 
         // Get all policies of the required type and try to validate the token
         java.util.List<String> policies = authBindingManager.getPoliciesByType(requiredAuthType);
-        for (String policyId : policies) {
+        
+        // SECURITY: Limit iteration count to prevent excessive brute-force
+        int maxAttempts = Math.min(policies.size(), 10);  // Max 10 policies to try
+        if (policies.size() > 10) {
+            log.warn("JWT validation attempting {} policies (max 10). " +
+                     "Consider using policyId in JWT claims or unique issuer per policy.", 
+                     policies.size());
+        }
+        
+        for (int i = 0; i < maxAttempts; i++) {
+            String policyId = policies.get(i);
             AuthConfig config = authBindingManager.getAuthConfig(policyId);
             if (config != null && config.isEnabled()) {
                 // Try to validate JWT token with this credential's secret
                 if ("JWT".equals(requiredAuthType) && validateJwtToken(token, config)) {
+                    // SECURITY NOTE: If multiple policies share the same secret,
+                    // the first match is returned. Ensure policies use unique secrets.
                     return policyId;
                 }
                 // For OAuth2, could add similar validation logic
             }
         }
+        
+        if (policies.size() > maxAttempts) {
+            log.debug("JWT validation exhausted max attempts ({}), token may belong to untried policy", maxAttempts);
+        }
+        
         return null;
     }
 
@@ -274,10 +297,10 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
             if (secretKey == null || secretKey.isEmpty()) {
                 return false;
             }
-            // Simple validation - try to parse the token (JJWT 0.12.x API)
+            // Validate token using derived key (PBKDF2 for short secrets)
             io.jsonwebtoken.Jwts.parser()
                     .verifyWith(io.jsonwebtoken.security.Keys.hmacShaKeyFor(
-                            padKeyToRequiredLength(secretKey.getBytes(), config.getJwtAlgorithm())))
+                            deriveKeyToRequiredLength(secretKey.getBytes(), config.getJwtAlgorithm())))
                     .build().parseSignedClaims(token);
             return true;
         } catch (Exception e) {
@@ -287,21 +310,38 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * Pad key to required length for JWT algorithm.
+     * Derive key to required length for JWT algorithm.
+     * Uses PBKDF2 for short keys instead of insecure zero-padding.
      */
-    private byte[] padKeyToRequiredLength(byte[] keyBytes, String jwtAlg) {
+    private byte[] deriveKeyToRequiredLength(byte[] keyBytes, String jwtAlg) {
         int requiredLength = 32; // HS256 default
         if ("HS384".equals(jwtAlg)) {
             requiredLength = 48;
         } else if ("HS512".equals(jwtAlg)) {
             requiredLength = 64;
         }
-        if (keyBytes.length < requiredLength) {
-            byte[] paddedKey = new byte[requiredLength];
-            System.arraycopy(keyBytes, 0, paddedKey, 0, keyBytes.length);
-            return paddedKey;
+        
+        if (keyBytes.length >= requiredLength) {
+            return keyBytes;
         }
-        return keyBytes;
+        
+        // Derive key using PBKDF2 for short secrets
+        try {
+            String secret = new String(keyBytes, java.nio.charset.StandardCharsets.UTF_8);
+            byte[] salt = "GatewayJWTKeyDerivationSalt".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            
+            javax.crypto.spec.PBEKeySpec spec = new javax.crypto.spec.PBEKeySpec(
+                secret.toCharArray(), salt, 10000, requiredLength * 8);
+            
+            javax.crypto.SecretKeyFactory factory = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+            return factory.generateSecret(spec).getEncoded();
+        } catch (Exception e) {
+            log.error("Failed to derive JWT key, falling back to truncation (NOT SECURE)", e);
+            // Fallback: truncate or extend (less secure but prevents crash)
+            byte[] result = new byte[requiredLength];
+            System.arraycopy(keyBytes, 0, result, 0, Math.min(keyBytes.length, requiredLength));
+            return result;
+        }
     }
 
     /**

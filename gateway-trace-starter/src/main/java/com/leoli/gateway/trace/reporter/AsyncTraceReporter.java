@@ -21,9 +21,11 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -46,6 +48,7 @@ public class AsyncTraceReporter {
     private final WebClient webClient;
     private final ExecutorService executor;
     private final ExecutorService fallbackExecutor;  // 【新增】独立的磁盘 IO 线程池
+    private final ScheduledExecutorService retryScheduler;  // 【新增】延迟重试调度器（指数退避）
     private final ObjectMapper objectMapper;
     private final GatewayTraceProperties properties;
     private final BlockingQueue<DistributedTrace> queue;
@@ -54,6 +57,14 @@ public class AsyncTraceReporter {
      * Local disk log directory
      */
     private static final String FALLBACK_LOG_DIR = "./trace-fallback";
+
+    /**
+     * Retry backoff configuration
+     * Base delay: 1 second, max delay: 60 seconds
+     * Formula: delay = min(baseDelay * 2^retryCount, maxDelay)
+     */
+    private static final long RETRY_BASE_DELAY_MS = 1000;
+    private static final long RETRY_MAX_DELAY_MS = 60000;
 
     /**
      * Statistics: dropped Trace count
@@ -86,6 +97,13 @@ public class AsyncTraceReporter {
         this.fallbackExecutor = Executors.newSingleThreadExecutor(r -> {
             Thread t = new Thread(r, "trace-fallback-writer");
             t.setDaemon(true);  // daemon thread，不阻塞关闭
+            return t;
+        });
+
+        // 【新增】延迟重试调度器 - 指数退避防止重试风暴
+        this.retryScheduler = Executors.newScheduledThreadPool(1, r -> {
+            Thread t = new Thread(r, "trace-retry-scheduler");
+            t.setDaemon(true);
             return t;
         });
 
@@ -229,11 +247,14 @@ public class AsyncTraceReporter {
     }
 
     /**
-     * Handle failed Traces (with retry count limit)
+     * Handle failed Traces (with exponential backoff retry)
      * <p>
-     * Optimization: prevents retry storms
-     * - retry count < MAX_RETRY_COUNT: put back in queue for retry
+     * FIX: Uses exponential backoff to prevent retry storms
+     * - retry count < MAX_RETRY_COUNT: schedule delayed retry with exponential backoff
      * - retry count >= MAX_RETRY_COUNT: write to local disk log
+     * 
+     * Backoff formula: delay = min(baseDelay * 2^retryCount, maxDelay)
+     * Example: retry 1 -> 1s, retry 2 -> 2s, retry 3 -> 4s, ... max 60s
      */
     private void handleFailedTraces(List<DistributedTrace> traces, Throwable error) {
         for (DistributedTrace trace : traces) {
@@ -245,18 +266,40 @@ public class AsyncTraceReporter {
                 log.warn("Trace max retry exceeded, written to fallback: traceId={}, retryCount={}",
                         trace.getTraceId(), trace.getRetryCount());
             } else {
-                // Try putting back in queue for retry
-                if (!queue.offer(trace)) {
-                    // Queue full, degrade to disk write
-                    droppedCount.incrementAndGet();
-                    writeToFallbackLog(trace, "queue_full_on_retry");
-                    log.warn("Cannot requeue failed trace (queue full): traceId={}", trace.getTraceId());
-                } else {
-                    log.debug("Requeued trace for retry: traceId={}, retryCount={}",
-                            trace.getTraceId(), trace.getRetryCount());
-                }
+                // FIX: Use exponential backoff instead of immediate requeue
+                long delayMs = calculateExponentialBackoff(trace.getRetryCount());
+                scheduleDelayedRetry(trace, delayMs);
+                log.debug("Scheduled trace retry with backoff: traceId={}, retryCount={}, delayMs={}",
+                        trace.getTraceId(), trace.getRetryCount(), delayMs);
             }
         }
+    }
+
+    /**
+     * Calculate exponential backoff delay.
+     * Formula: min(baseDelay * 2^retryCount, maxDelay)
+     */
+    private long calculateExponentialBackoff(int retryCount) {
+        long delay = RETRY_BASE_DELAY_MS * (1L << retryCount);  // 2^retryCount
+        return Math.min(delay, RETRY_MAX_DELAY_MS);
+    }
+
+    /**
+     * Schedule delayed retry using retryScheduler.
+     * Prevents retry storms during network failures.
+     */
+    private void scheduleDelayedRetry(DistributedTrace trace, long delayMs) {
+        retryScheduler.schedule(() -> {
+            if (!queue.offer(trace)) {
+                // Queue full after waiting, degrade to disk write
+                droppedCount.incrementAndGet();
+                writeToFallbackLog(trace, "queue_full_after_backoff");
+                log.warn("Cannot requeue trace after backoff (queue full): traceId={}", trace.getTraceId());
+            } else {
+                log.debug("Requeued trace after backoff: traceId={}, retryCount={}",
+                        trace.getTraceId(), trace.getRetryCount());
+            }
+        }, delayMs, TimeUnit.MILLISECONDS);
     }
 
     /**
@@ -355,6 +398,26 @@ public class AsyncTraceReporter {
         // Shutdown thread pools
         executor.shutdown();
         fallbackExecutor.shutdown();
+        retryScheduler.shutdown();  // 【新增】关闭延迟重试调度器
+
+        try {
+            // Wait for thread pools to terminate (with timeout)
+            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+            }
+            if (!fallbackExecutor.awaitTermination(2, TimeUnit.SECONDS)) {
+                fallbackExecutor.shutdownNow();
+            }
+            if (!retryScheduler.awaitTermination(2, TimeUnit.SECONDS)) {
+                retryScheduler.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            log.warn("Shutdown interrupted, forcing termination");
+            executor.shutdownNow();
+            fallbackExecutor.shutdownNow();
+            retryScheduler.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
 
         // Output statistics
         log.info("AsyncTraceReporter shutdown complete. Stats: reported={}, dropped={}, fallback={}",

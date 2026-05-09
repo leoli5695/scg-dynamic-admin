@@ -174,25 +174,52 @@ public class JwtAuthProcessor extends AbstractAuthProcessor {
 
     /**
      * Get signing key from secret string for HMAC algorithms.
-     * Uses byte padding (0x00) to match token generation in gateway-admin.
+     * Uses PBKDF2 key derivation for short secrets (more secure than zero-padding).
+     * 
+     * SECURITY NOTE: JWT secret should be at least 32 characters for HS256, 
+     * 64 characters for HS512. Short secrets will be derived using PBKDF2.
      */
     private SecretKey getSigningKey(String secret, String algorithm) {
         if (secret == null || secret.isEmpty()) {
             throw new IllegalArgumentException("JWT secret key cannot be empty");
         }
 
-        // Ensure minimum key length for the algorithm using byte padding
         byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
         int minLength = "HS512".equals(algorithm) ? 64 : 32;
 
-        if (keyBytes.length < minLength) {
-            // Pad with zero bytes (0x00) - same as gateway-admin token generation
-            byte[] paddedKey = new byte[minLength];
-            System.arraycopy(keyBytes, 0, paddedKey, 0, keyBytes.length);
-            keyBytes = paddedKey;
+        if (keyBytes.length >= minLength) {
+            // Key is long enough - use directly
+            return Keys.hmacShaKeyFor(keyBytes);
         }
 
-        return Keys.hmacShaKeyFor(keyBytes);
+        // Key is too short - derive using PBKDF2 (better security than zero-padding)
+        log.warn("JWT secret is shorter than {} bytes, deriving key using PBKDF2. " +
+                 "Consider using a longer secret for better security.", minLength);
+        
+        try {
+            return deriveKeyWithPBKDF2(secret, minLength);
+        } catch (Exception e) {
+            log.error("Failed to derive JWT key", e);
+            throw new IllegalArgumentException("Failed to derive JWT key from secret", e);
+        }
+    }
+
+    /**
+     * Derive a key using PBKDF2 with HMAC-SHA256.
+     * This provides proper key stretching instead of insecure zero-padding.
+     */
+    private SecretKey deriveKeyWithPBKDF2(String secret, int keyLength) throws Exception {
+        // Use fixed salt for deterministic key derivation (same secret = same key)
+        // In production, consider storing a random salt per policy
+        byte[] salt = "GatewayJWTKeyDerivationSalt".getBytes(StandardCharsets.UTF_8);
+        
+        javax.crypto.spec.PBEKeySpec spec = new javax.crypto.spec.PBEKeySpec(
+            secret.toCharArray(), salt, 10000, keyLength * 8); // 10000 iterations
+        
+        javax.crypto.SecretKeyFactory factory = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+        byte[] derivedKey = factory.generateSecret(spec).getEncoded();
+        
+        return Keys.hmacShaKeyFor(derivedKey);
     }
 
     /**

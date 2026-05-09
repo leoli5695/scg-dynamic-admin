@@ -77,6 +77,18 @@ class SeckillServiceTest {
     @Mock
     private SeckillConfig seckillConfig;
 
+    @Mock
+    private LocalCacheService localCacheService;
+
+    @Mock
+    private RedisDegradeService redisDegradeService;
+
+    @Mock
+    private LocalFallbackService localFallbackService;
+
+    @Mock
+    private MQDegradeService mqDegradeService;
+
     private SeckillService seckillService;
 
     private SeckillRequest request;
@@ -92,6 +104,10 @@ class SeckillServiceTest {
                 activityMapper,
                 productMapper,
                 transactionLogMapper,
+                localCacheService,
+                redisDegradeService,
+                localFallbackService,
+                mqDegradeService,
                 seckillConfig,
                 objectMapper,
                 seckillRequestCounter,
@@ -119,6 +135,16 @@ class SeckillServiceTest {
         product = new SeckillProduct();
         product.setId(1L);
         product.setSeckillPrice(BigDecimal.valueOf(99.9));
+
+        // Mock LocalCacheService（优先从本地缓存获取）
+        when(localCacheService.getActivity(anyLong())).thenReturn(activity);
+        when(localCacheService.getProduct(anyLong())).thenReturn(product);
+
+        // Mock RedisDegradeService（默认不降级）
+        when(redisDegradeService.isDegraded()).thenReturn(false);
+
+        // Mock MQDegradeService（默认不降级）
+        when(mqDegradeService.isDegraded()).thenReturn(false);
     }
 
     @Test
@@ -180,7 +206,9 @@ class SeckillServiceTest {
     @Test
     @DisplayName("活动不存在")
     void testDoSeckill_ActivityNotFound() {
-        when(activityMapper.selectById(1L)).thenReturn(null);
+        // 重置 localCacheService Mock，让它返回 null（模拟缓存和 DB 都找不到）
+        when(localCacheService.getActivity(anyLong())).thenReturn(null);
+        when(activityMapper.selectById(anyLong())).thenReturn(null);
 
         SeckillResponse response = seckillService.doSeckill(request);
 
