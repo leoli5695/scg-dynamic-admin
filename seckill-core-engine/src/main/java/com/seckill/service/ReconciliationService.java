@@ -174,18 +174,23 @@ public class ReconciliationService {
      * 【自动修正】修正 Redis 库存
      * ============================================================================
      *
+     * 【P2-22修复】将 Redis 库存修正为 MySQL 理论库存值
+     * 使用 warmupStockOnly() 而非 warmupStock()，避免清空 bought set 和 user_shard hash
+     * 防止正在秒杀中的用户被误判为未购买
+     *
      * 将 Redis 库存修正为 MySQL 理论库存值
      */
     private void autoFixStock(Long seckillId, int correctStock) {
         try {
-            // 重置Redis库存为正确值
-            seckillDeductLua.warmupStock(seckillId, correctStock);
+            // 【P2-22修复】使用 warmupStockOnly() 仅更新库存，不清空购买记录
+            // 避免正在秒杀中的用户被误判为未购买
+            seckillDeductLua.warmupStockOnly(seckillId, correctStock);
 
             log.info("库存自动修正完成: seckillId={}, correctStock={}", seckillId, correctStock);
 
             // 发送修正通知（非告警）
             alertService.sendAlert("库存自动修正",
-                    "seckillId=" + seckillId + " Redis库存已自动修正为 " + correctStock);
+                    "seckillId=" + seckillId + " Redis库存已自动修正为 " + correctStock + "（保留购买记录）");
 
         } catch (Exception e) {
             log.error("库存自动修正失败: seckillId={}, error={}", seckillId, e.getMessage());

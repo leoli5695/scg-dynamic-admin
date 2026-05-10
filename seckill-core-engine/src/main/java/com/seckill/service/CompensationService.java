@@ -74,11 +74,24 @@ public class CompensationService {
 
     /**
      * 处理单个超时事务
+     *
+     * 【P1-5修复】避免与 StockConfirmService 冲突：
+     * - StockConfirmService 处理 5 分钟内的超时事务（短时超时）
+     * - CompensationService 处理 30 分钟以上的超时事务（长时超时兜底）
+     * - 添加 Redis 处理标记，避免重复处理
      */
     @Transactional(rollbackFor = Exception.class)
     public void processTimeoutTransaction(TransactionLog tx) {
         log.info("处理超时事务: transactionId={}, seckillId={}, userId={}", 
                 tx.getTransactionId(), tx.getSeckillId(), tx.getUserId());
+
+        // 【P1-5修复】检查是否已被处理（事务状态可能已变更）
+        TransactionLog currentTx = transactionLogMapper.selectByTransactionId(tx.getTransactionId());
+        if (currentTx == null || currentTx.getStatus() != TransactionStatus.PROCESSING.getCode()) {
+            log.info("事务已被处理或状态已变更，跳过: transactionId={}, currentStatus={}",
+                    tx.getTransactionId(), currentTx != null ? currentTx.getStatus() : "null");
+            return;
+        }
 
         // 检查订单是否存在
         SeckillOrder order = orderMapper.selectByOrderNo(tx.getOrderNo());

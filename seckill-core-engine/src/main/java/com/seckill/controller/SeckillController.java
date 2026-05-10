@@ -1,7 +1,11 @@
 package com.seckill.controller;
 
+import com.seckill.dto.OrderQueryRequest;
+import com.seckill.dto.OrderQueryResponse;
 import com.seckill.dto.SeckillRequest;
 import com.seckill.dto.SeckillResponse;
+import com.seckill.enums.OrderStatus;
+import com.seckill.service.OrderQueryService;
 import com.seckill.service.SeckillService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +39,7 @@ import jakarta.servlet.http.HttpServletRequest;
 public class SeckillController {
 
     private final SeckillService seckillService;
+    private final OrderQueryService orderQueryService;
 
     /**
      * ============================================================================
@@ -81,18 +86,59 @@ public class SeckillController {
      * ============================================================================
      * 检查秒杀结果
      * ============================================================================
-     * 
+     *
+     * 【P2-17修复】实现秒杀结果查询功能
      * 用户查询自己的秒杀结果
+     *
+     * @param userId 用户ID
+     * @param seckillId 秒杀活动ID
+     * @return 秒杀结果响应
      */
     @GetMapping("/result")
     public SeckillResultResponse checkResult(
             @RequestParam Long userId,
             @RequestParam Long seckillId) {
 
-        // 查询订单状态（从ES或数据库）
-        // 实现略...
+        log.info("查询秒杀结果: userId={}, seckillId={}", userId, seckillId);
 
-        return new SeckillResultResponse();
+        // 【P2-17修复】调用 OrderQueryService 查询订单
+        OrderQueryRequest request = new OrderQueryRequest();
+        request.setUserId(userId);
+        request.setSeckillId(seckillId);
+        request.setQueryType("USER_ACTIVITY");
+
+        OrderQueryResponse response = orderQueryService.query(request);
+
+        SeckillResultResponse resultResponse = new SeckillResultResponse();
+
+        if (response.isSuccess() && response.getOrder() != null) {
+            // 订单存在
+            OrderQueryResponse.OrderDetail order = response.getOrder();
+            resultResponse.setOrderNo(order.getOrderNo());
+
+            // 状态映射：OrderStatus -> SeckillResultResponse.status
+            // 0=排队中(PENDING_PAYMENT), 1=成功(PAID), 2=失败(CANCELLED/REFUNDED)
+            Integer orderStatus = order.getStatus();
+            if (orderStatus == OrderStatus.PENDING_PAYMENT.getCode()) {
+                resultResponse.setStatus(0);
+                resultResponse.setMessage("订单排队中，等待支付");
+            } else if (orderStatus == OrderStatus.PAID.getCode()) {
+                resultResponse.setStatus(1);
+                resultResponse.setMessage("秒杀成功，已支付");
+            } else {
+                resultResponse.setStatus(2);
+                resultResponse.setMessage("秒杀失败或已退款");
+            }
+        } else {
+            // 订单不存在，可能还在排队或未成功
+            resultResponse.setStatus(2);
+            resultResponse.setMessage("未找到订单，可能秒杀失败");
+        }
+
+        log.info("秒杀结果查询完成: userId={}, seckillId={}, status={}, orderNo={}",
+                userId, seckillId, resultResponse.getStatus(), resultResponse.getOrderNo());
+
+        return resultResponse;
     }
 
     /**

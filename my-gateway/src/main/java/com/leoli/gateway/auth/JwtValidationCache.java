@@ -6,7 +6,9 @@ import io.jsonwebtoken.Claims;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.util.DigestUtils;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -186,15 +188,18 @@ public class JwtValidationCache {
     }
 
     /**
-     * Hash token for cache key (use last 32 chars to save memory).
+     * Hash token for cache key.
+     * FIX (M1): Changed from substring (collision risk) to MD5 hash.
+     * Before: Used last 32 chars of JWT signature as hash (collision possible)
+     * After: Uses MD5 digest for unique hash (collision-resistant for cache purposes)
      */
     private String hashToken(String token) {
         if (token == null) {
             return "";
         }
-        // Use last 32 characters as a simple hash
-        // This is sufficient for cache key purposes and saves memory
-        return token.length() > 32 ? token.substring(token.length() - 32) : token;
+        // Use MD5 hash for unique cache key (collision-resistant)
+        // MD5 is sufficient for cache key purposes (not used for security)
+        return DigestUtils.md5DigestAsHex(token.getBytes(StandardCharsets.UTF_8));
     }
 
     /**

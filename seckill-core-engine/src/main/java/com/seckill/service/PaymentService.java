@@ -6,6 +6,7 @@ import com.seckill.entity.SeckillOrder;
 import com.seckill.entity.TransactionLog;
 import com.seckill.enums.OrderStatus;
 import com.seckill.enums.PaymentStatus;
+import com.seckill.enums.TransactionStatus;
 import com.seckill.mapper.OrderMapper;
 import com.seckill.mapper.TransactionLogMapper;
 import lombok.RequiredArgsConstructor;
@@ -166,12 +167,13 @@ public class PaymentService {
             // Step 2: 更新事务日志状态
             TransactionLog transactionLog = transactionLogMapper.selectByUserAndSeckill(
                     order.getUserId(), order.getSeckillId());
-            if (transactionLog != null && transactionLog.getStatus() == 0) {
-                transactionLog.setStatus(1); // 成功
+            if (transactionLog != null && transactionLog.getStatus() == TransactionStatus.PROCESSING.getCode()) {
+                // 【P1-16修复】使用枚举而非魔法数字
+                transactionLog.setStatus(TransactionStatus.SUCCESS.getCode());
                 transactionLog.setUpdateTime(LocalDateTime.now());
                 transactionLogMapper.updateById(transactionLog);
-                log.info("事务日志状态更新成功: transactionId={}, status=1, traceId={}",
-                        transactionLog.getTransactionId(), traceId);
+                log.info("事务日志状态更新成功: transactionId={}, status={}, traceId={}",
+                        transactionLog.getTransactionId(), TransactionStatus.SUCCESS.getDescription(), traceId);
             }
 
             // Step 3: 同步ES索引
@@ -217,12 +219,13 @@ public class PaymentService {
             TransactionLog transactionLog = transactionLogMapper.selectByUserAndSeckill(
                     order.getUserId(), order.getSeckillId());
             if (transactionLog != null) {
-                transactionLog.setStatus(2); // 失败
+                // 【P1-16修复】使用枚举而非魔法数字
+                transactionLog.setStatus(TransactionStatus.FAILED.getCode());
                 transactionLog.setErrorMsg("支付失败: " + request.getPaymentStatus());
                 transactionLog.setUpdateTime(LocalDateTime.now());
                 transactionLogMapper.updateById(transactionLog);
-                log.info("事务日志状态更新: transactionId={}, status=2, traceId={}",
-                        transactionLog.getTransactionId(), traceId);
+                log.info("事务日志状态更新: transactionId={}, status={}, traceId={}",
+                        transactionLog.getTransactionId(), TransactionStatus.FAILED.getDescription(), traceId);
             }
 
             // Step 3: 回补Redis库存（需要调用库存回补服务）

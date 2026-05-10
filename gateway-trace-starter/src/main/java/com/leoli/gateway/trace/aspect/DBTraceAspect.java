@@ -48,6 +48,11 @@ public class DBTraceAspect {
      * Internal tracing logic
      */
     private Object traceDBInternal(ProceedingJoinPoint pjp, String dbType) throws Throwable {
+        // Check if tracing is enabled (master switch)
+        if (!properties.isEnabled()) {
+            return pjp.proceed();
+        }
+
         // Check if DB tracing is enabled
         if (!properties.isTraceDB()) {
             return pjp.proceed();

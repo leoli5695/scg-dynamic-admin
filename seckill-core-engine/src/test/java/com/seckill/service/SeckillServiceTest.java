@@ -75,6 +75,9 @@ class SeckillServiceTest {
     private Counter seckillNotWarmedCounter;
 
     @Mock
+    private Counter seckillDegradeCounter;
+
+    @Mock
     private SeckillConfig seckillConfig;
 
     @Mock
@@ -88,6 +91,9 @@ class SeckillServiceTest {
 
     @Mock
     private MQDegradeService mqDegradeService;
+
+    @Mock
+    private LocalTransactionService localTransactionService;
 
     private SeckillService seckillService;
 
@@ -110,11 +116,13 @@ class SeckillServiceTest {
                 mqDegradeService,
                 seckillConfig,
                 objectMapper,
+                localTransactionService,
                 seckillRequestCounter,
                 seckillSuccessCounter,
                 seckillStockInsufficientCounter,
                 seckillAlreadyBoughtCounter,
-                seckillNotWarmedCounter
+                seckillNotWarmedCounter,
+                seckillDegradeCounter
         );
 
         // 准备测试数据
@@ -151,7 +159,7 @@ class SeckillServiceTest {
     @DisplayName("正常秒杀流程 - 库存充足，返回成功")
     void testDoSeckill_Success() {
         when(activityMapper.selectById(1L)).thenReturn(activity);
-        when(seckillDeductLua.deductStock(1L, 10001L, 1)).thenReturn(5L);
+        when(seckillDeductLua.deductStock(1L, 10001L, 1)).thenReturn(1005L);
         when(productMapper.selectById(1L)).thenReturn(product);
         when(snowflakeIdGenerator.nextId()).thenReturn(123456789L, 987654321L);
         when(transactionLogMapper.insert(any(TransactionLog.class))).thenReturn(1);
@@ -249,7 +257,7 @@ class SeckillServiceTest {
     @DisplayName("traceId 传递验证")
     void testTraceIdPropagation() {
         when(activityMapper.selectById(1L)).thenReturn(activity);
-        when(seckillDeductLua.deductStock(1L, 10001L, 1)).thenReturn(5L);
+        when(seckillDeductLua.deductStock(1L, 10001L, 1)).thenReturn(1005L);
         when(productMapper.selectById(1L)).thenReturn(product);
         when(snowflakeIdGenerator.nextId()).thenReturn(123456789L, 987654321L);
         when(transactionLogMapper.insert(any(TransactionLog.class))).thenReturn(1);

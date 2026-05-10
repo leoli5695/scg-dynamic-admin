@@ -83,6 +83,11 @@ public class RedisDegradeService {
      * 检查 Redis 是否可用
      * ============================================================================
      *
+     * 【P1-12修复】健康检查应使用连接池：
+     * - 原问题：直接使用 getConnection().ping() 会创建新连接，不归还连接池
+     * - 频繁调用可能耗尽连接
+     * - 修复：使用 RedisTemplate.execute() 执行 PING 命令，使用连接池
+     *
      * @return true: 可用, false: 不可用
      */
     public boolean isRedisAvailable() {
@@ -91,10 +96,11 @@ public class RedisDegradeService {
         }
 
         try {
-            // 简单的健康检查：PING
-            String result = redisTemplate.getConnectionFactory()
-                    .getConnection()
-                    .ping();
+            // 【P1-12修复】使用 RedisTemplate.execute() 执行 PING，使用连接池
+            // 而非直接调用 getConnection().ping() 创建新连接
+            String result = redisTemplate.execute((org.springframework.data.redis.connection.RedisConnection connection) -> {
+                return connection.ping();
+            });
             return "PONG".equals(result);
         } catch (Exception e) {
             log.warn("Redis健康检查失败: {}", e.getMessage());

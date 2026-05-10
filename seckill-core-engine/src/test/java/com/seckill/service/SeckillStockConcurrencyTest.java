@@ -225,10 +225,95 @@ class SeckillStockConcurrencyTest {
         );
     }
 
-    /**
-     * 这个测试的最小 Spring Boot 上下文：只有 Redis + Lua + seckill config。
-     * 没有 web 层、没有 MQ、没有 ShardingSphere、没有 MyBatis。
-     */
+    @Test
+    @DisplayName("同一用户 100 次并发请求：只有 1 次成功，其余全部被防重拦截")
+    void sameUser_concurrentRequests_onlyOneSucceeds() throws InterruptedException {
+        final long SINGLE_USER = 42L;
+        final int  ATTEMPTS = 100;
+
+        ExecutorService pool = Executors.newFixedThreadPool(50);
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done  = new CountDownLatch(ATTEMPTS);
+
+        AtomicInteger success      = new AtomicInteger();
+        AtomicInteger alreadyBought = new AtomicInteger();
+        AtomicInteger other        = new AtomicInteger();
+
+        for (int i = 0; i < ATTEMPTS; i++) {
+            pool.submit(() -> {
+                try {
+                    start.await();
+                    long code = deductLua.deductStock(SECKILL_ID, SINGLE_USER, 1);
+                    if (code >= 1000) {
+                        success.incrementAndGet();
+                    } else if (code == -1) {
+                        alreadyBought.incrementAndGet();
+                    } else {
+                        other.incrementAndGet();
+                    }
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                } catch (Exception e) {
+                    other.incrementAndGet();
+                } finally {
+                    done.countDown();
+                }
+            });
+        }
+
+        start.countDown();
+        boolean finished = done.await(30, TimeUnit.SECONDS);
+        pool.shutdownNow();
+        assertTrue(finished, "未在 30s 内完成");
+
+        Long boughtSetSize = redis.opsForSet().size("seckill:bought:" + SECKILL_ID);
+        int  remainingStock = deductLua.getTotalStock(SECKILL_ID);
+
+        System.out.println("\n=== 防重复购买测试 ===");
+        System.out.println("  同一用户并发次数  = " + ATTEMPTS);
+        System.out.println("  成功              = " + success.get());
+        System.out.println("  已购买拦截        = " + alreadyBought.get());
+        System.out.println("  其他              = " + other.get());
+        System.out.println("  boughtSetSize     = " + boughtSetSize);
+        System.out.println("  remainingStock    = " + remainingStock);
+        System.out.println();
+
+        assertAll("防重复购买不变量",
+                () -> assertEquals(1, success.get(),
+                        "同一用户只能成功 1 次"),
+                () -> assertEquals(ATTEMPTS - 1, alreadyBought.get(),
+                        "其余请求必须被防重拦截"),
+                () -> assertEquals(1, boughtSetSize.intValue(),
+                        "bought-set 里只有 1 个用户"),
+                () -> assertEquals(TOTAL_STOCK - 1, remainingStock,
+                        "只扣了 1 个库存")
+        );
+    }
+
+    @Test
+    @DisplayName("库存回补后用户可以再次购买")
+    void rollbackThenRebuy_succeeds() {
+        final long USER = 77L;
+
+        // 第一次购买
+        long code1 = deductLua.deductStock(SECKILL_ID, USER, 1);
+        assertTrue(code1 >= 1000, "首次购买应成功");
+
+        // 再次购买应被拦截
+        long code2 = deductLua.deductStock(SECKILL_ID, USER, 1);
+        assertEquals(-1, code2, "重复购买应返回 -1");
+
+        // 回补
+        long rollback = deductLua.rollbackStock(SECKILL_ID, USER, 1);
+        assertTrue(rollback >= 1000, "回补应成功");
+
+        // 回补后再次购买应成功
+        long code3 = deductLua.deductStock(SECKILL_ID, USER, 1);
+        assertTrue(code3 >= 1000, "回补后再次购买应成功");
+
+        // 库存守恒：扣了 1 个
+        assertEquals(TOTAL_STOCK - 1, deductLua.getTotalStock(SECKILL_ID));
+    }
     @SpringBootApplication(
             scanBasePackages = {
                     "com.seckill.redis.lua",

@@ -44,6 +44,11 @@ public class MQTraceAspect {
      * Internal tracing logic
      */
     private Object traceMQInternal(ProceedingJoinPoint pjp, String mqType) throws Throwable {
+        // Check if tracing is enabled (master switch)
+        if (!properties.isEnabled()) {
+            return pjp.proceed();
+        }
+
         // Check if MQ tracing is enabled
         if (!properties.isTraceMQ()) {
             return pjp.proceed();

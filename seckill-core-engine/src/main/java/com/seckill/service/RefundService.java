@@ -5,6 +5,7 @@ import com.seckill.dto.RefundResponse;
 import com.seckill.entity.SeckillOrder;
 import com.seckill.entity.TransactionLog;
 import com.seckill.enums.OrderStatus;
+import com.seckill.enums.TransactionStatus;
 import com.seckill.mapper.OrderMapper;
 import com.seckill.mapper.TransactionLogMapper;
 import lombok.RequiredArgsConstructor;
@@ -172,12 +173,13 @@ public class RefundService {
             TransactionLog transactionLog = transactionLogMapper.selectByUserAndSeckill(
                     order.getUserId(), order.getSeckillId());
             if (transactionLog != null) {
-                transactionLog.setStatus(2); // 标记为失败（已退款）
+                // 【P1-16修复】使用枚举而非魔法数字
+                transactionLog.setStatus(TransactionStatus.FAILED.getCode());
                 transactionLog.setErrorMsg("用户退款: " + request.getRefundReason());
                 transactionLog.setUpdateTime(LocalDateTime.now());
                 transactionLogMapper.updateById(transactionLog);
-                log.info("事务日志状态更新: transactionId={}, status=2, reason={}, traceId={}",
-                        transactionLog.getTransactionId(), request.getRefundReason(), traceId);
+                log.info("事务日志状态更新: transactionId={}, status={}, reason={}, traceId={}",
+                        transactionLog.getTransactionId(), TransactionStatus.FAILED.getDescription(), request.getRefundReason(), traceId);
             }
 
             // Step 4: 同步ES索引
@@ -212,7 +214,9 @@ public class RefundService {
         }
 
         try {
-            String stockKey = "seckill:stock:" + seckillId + ":" + shardIndex;
+            // 【P0-2修复】正确的stockKey格式应该是 seckill:stock:{seckillId}:shard:{shardIndex}
+            // 原问题：缺少 ":shard:" 中间段，导致回补到错误的Redis Key
+            String stockKey = "seckill:stock:" + seckillId + ":shard:" + shardIndex;
             redisTemplate.opsForValue().increment(stockKey, quantity);
             log.info("Redis库存回补成功（退款）: key={}, quantity={}, traceId={}", stockKey, quantity, traceId);
         } catch (Exception e) {

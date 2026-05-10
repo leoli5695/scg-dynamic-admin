@@ -2,6 +2,7 @@ package com.leoli.gateway.trace.interceptor;
 
 import com.leoli.gateway.trace.TraceContextHolder;
 import com.leoli.gateway.trace.model.DistributedTrace;
+import com.leoli.gateway.trace.properties.GatewayTraceProperties;
 import com.leoli.gateway.trace.reporter.AsyncTraceReporter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -22,15 +23,23 @@ import org.springframework.web.servlet.HandlerInterceptor;
 public class TraceReportInterceptor implements HandlerInterceptor {
 
     private final AsyncTraceReporter traceReporter;
+    private final GatewayTraceProperties properties;
 
-    public TraceReportInterceptor(AsyncTraceReporter traceReporter) {
+    public TraceReportInterceptor(AsyncTraceReporter traceReporter, GatewayTraceProperties properties) {
         this.traceReporter = traceReporter;
+        this.properties = properties;
     }
 
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response,
                                 Object handler, Exception ex) {
         try {
+            // Check if tracing is enabled (master switch)
+            if (!properties.isEnabled()) {
+                TraceContextHolder.clear();
+                return;
+            }
+
             // Check if reporting is needed (sampling)
             if (!TraceContextHolder.isSampled()) {
                 log.debug("Request not sampled, skip reporting");

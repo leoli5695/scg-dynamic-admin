@@ -3,6 +3,9 @@ package com.leoli.gateway.trace.properties;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Gateway Trace Starter configuration properties
  * <p>
@@ -87,6 +90,29 @@ public class GatewayTraceProperties {
      * Default: 1000ms
      */
     private int reportTimeoutMs = 1000;
+
+    // ==================== Security Configuration (Optional) ====================
+
+    /**
+     * Trusted proxy IP list for X-Forwarded-For validation.
+     * SECURITY FIX (H3): Only trust X-Forwarded-For header from configured proxies.
+     * Prevents IP spoofing attacks where malicious clients forge header to bypass
+     * IP-based access controls or audit trails.
+     * <p>
+     * Default: empty list (no proxies trusted)
+     * Example: ["10.0.0.1", "192.168.1.100", "172.16.0.0/12"]
+     * Supports CIDR notation for network ranges.
+     */
+    private List<String> trustedProxyIps = new ArrayList<>();
+
+    /**
+     * Trust private network IPs as proxies.
+     * SECURITY: If your infrastructure uses private network load balancers,
+     * enable this to automatically trust them.
+     * Private networks: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8
+     * Default: true (trust private networks by default for convenience)
+     */
+    private boolean trustPrivateNetworks = true;
 
     // ==================== Middleware Metadata Configuration (Optional) ====================
 

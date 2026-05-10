@@ -230,19 +230,31 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
             }
         }
 
-        return DataBufferUtils.join(request.getBody())
+        // SECURITY: 在流级别限制累计字节数，避免客户端伪造 Content-Length 后
+        // DataBufferUtils.join 把整个 body 载入内存造成 OOM。
+        java.util.concurrent.atomic.AtomicLong totalBytes = new java.util.concurrent.atomic.AtomicLong(0);
+        return DataBufferUtils.join(
+                request.getBody().handle((dataBuffer, sink) -> {
+                    long newTotal = totalBytes.addAndGet(dataBuffer.readableByteCount());
+                    if (newTotal > MAX_BODY_SIZE_BYTES) {
+                        DataBufferUtils.release(dataBuffer);
+                        sink.error(new org.springframework.core.io.buffer.DataBufferLimitException(
+                                "Body exceeded max size " + MAX_BODY_SIZE_BYTES + " bytes"));
+                        return;
+                    }
+                    sink.next(dataBuffer);
+                })
+        )
+                .onErrorResume(org.springframework.core.io.buffer.DataBufferLimitException.class, e -> {
+                    log.error("Request body exceeded max size for route {}: {}",
+                            RouteUtils.getRouteId(exchange), e.getMessage());
+                    return writeTooLargeResponse(exchange.getResponse(),
+                            "Request body too large. Maximum allowed: " + (MAX_BODY_SIZE_BYTES / 1024 / 1024) + "MB")
+                            .then(Mono.empty());
+                })
                 .defaultIfEmpty(exchange.getResponse().bufferFactory().wrap(new byte[0]))
                 .flatMap(dataBuffer -> {
-                    // SECURITY: Check actual body size after reading
                     int readableBytes = dataBuffer.readableByteCount();
-                    if (readableBytes > MAX_BODY_SIZE_BYTES) {
-                        DataBufferUtils.release(dataBuffer);
-                        log.error("Request body size exceeds limit for route {}: {} bytes (max {} bytes)",
-                                RouteUtils.getRouteId(exchange), readableBytes, MAX_BODY_SIZE_BYTES);
-                        return writeTooLargeResponse(exchange.getResponse(),
-                                "Request body too large. Maximum allowed: " + (MAX_BODY_SIZE_BYTES / 1024 / 1024) + "MB");
-                    }
-
                     byte[] bytes = new byte[readableBytes];
                     dataBuffer.read(bytes);
                     DataBufferUtils.release(dataBuffer);

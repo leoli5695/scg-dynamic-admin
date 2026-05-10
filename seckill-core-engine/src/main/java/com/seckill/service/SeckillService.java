@@ -71,11 +71,13 @@ public class SeckillService {
     private final MQDegradeService mqDegradeService;
     private final SeckillConfig seckillConfig;
     private final ObjectMapper objectMapper;
+    private final LocalTransactionService localTransactionService;
     private final Counter seckillRequestCounter;
     private final Counter seckillSuccessCounter;
     private final Counter seckillStockInsufficientCounter;
     private final Counter seckillAlreadyBoughtCounter;
     private final Counter seckillNotWarmedCounter;
+    private final Counter seckillDegradeCounter;
 
     // RocketMQ事务消息生产者（通过 setter 注入，由 RocketMQProducerConfig 管理）
     private TransactionMQProducer transactionMQProducer;
@@ -155,6 +157,7 @@ public class SeckillService {
 
             if (redisDegradeService.isDegraded()) {
                 // Redis 降级模式：使用本地库存计数器
+                seckillDegradeCounter.increment();
                 log.warn("Redis降级模式，使用本地库存扣减: seckillId={}, userId={}", seckillId, userId);
                 int localResult = localFallbackService.deductStockLocal(seckillId, userId, quantity);
                 isDegradeMode = true;
@@ -237,8 +240,16 @@ public class SeckillService {
                 log.warn("MQ降级模式，订单写入缓冲队列: orderNo={}", orderNo);
                 localFallbackService.bufferOrder(orderNo, orderMessage);
                 
-                // 直接执行本地事务（写事务日志）
-                executeLocalTransaction(orderMessage);
+                // 【P0-1修复】调用 LocalTransactionService.processOrderDirectly()
+                // 完整处理订单：写事务日志 + 写订单表 + 写ES + 更新事务状态
+                // 原问题：只调用 executeLocalTransaction() 导致订单未创建，被补偿服务误回滚
+                boolean success = localTransactionService.processOrderDirectly(orderMessage);
+                if (!success) {
+                    log.error("MQ降级模式本地事务处理失败: orderNo={}", orderNo);
+                    // 回补库存
+                    seckillDeductLua.rollbackStock(seckillId, userId, quantity);
+                    return SeckillResponse.systemError("系统繁忙，请稍后再试");
+                }
                 
             } else {
                 // 正常模式：发送 RocketMQ 事务消息

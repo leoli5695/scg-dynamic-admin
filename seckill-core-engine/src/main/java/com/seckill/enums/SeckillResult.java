@@ -39,8 +39,9 @@ public enum SeckillResult {
 
     /**
      * 活动未开始
+     * 【P1-9修复】修改 code 为 -6，避免与 STOCK_NOT_WARMED(-2) 冲突
      */
-    ACTIVITY_NOT_STARTED(-2, "秒杀活动未开始"),
+    ACTIVITY_NOT_STARTED(-6, "秒杀活动未开始"),
 
     /**
      * 活动已结束

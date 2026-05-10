@@ -1,31 +1,21 @@
 # ============================================================================
-# 开发环境配置 - 简化版（可启动）
+# 开发环境配置 - ShardingSphere分库分表
 # ============================================================================
 
 spring:
+  main:
+    allow-circular-references: true  # 允许循环依赖（MQ降级服务需要）
+
   cloud:
     nacos:
       config:
         enabled: false  # 开发环境关闭Nacos
-
-  # 使用H2内存数据库（开发模式）
-  datasource:
-    driver-class-name: org.h2.Driver
-    url: jdbc:h2:mem:seckill;DB_CLOSE_DELAY=-1;MODE=MySQL
-    username: sa
-    password: 
-  
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
 
   # Redis配置（连接K8s已有Redis）
   data:
     redis:
       host: localhost
       port: 30379
-      password: 
       database: 0
 
 # RocketMQ配置
@@ -39,13 +29,18 @@ redisson:
   config: |
     singleServerConfig:
       address: "redis://localhost:30379"
-      password: null
       connectionPoolSize: 50
       connectionMinimumIdleSize: 10
 
-# 禁用ShardingSphere（开发模式）
-spring.shardingsphere:
-  enabled: false
+# Gateway Trace配置（开发环境禁用，避免optional依赖问题）
+gateway:
+  trace:
+    enabled: false
+    trace-redis: false
+    trace-mq: false
+    trace-db: false
+    async-trace-enabled: false
+    report-middleware: false
 
 logging:
   level:

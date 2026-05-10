@@ -3,6 +3,7 @@ package com.seckill.service;
 import com.zaxxer.hikari.HikariDataSource;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -54,6 +55,85 @@ public class DataSourceMonitorService {
      */
     private static final double POOL_USAGE_THRESHOLD = 0.8;  // 80%
     private static final int WAIT_THREAD_THRESHOLD = 10;     // 等待线程数
+
+    /**
+     * ============================================================================
+     * 【P2-20修复】应用启动时自动注册监控指标
+     * ============================================================================
+     *
+     * 尝试从 DataSource 中提取 HikariDataSource 并注册监控指标
+     * 支持 ShardingSphere 包装的 DataSource
+     */
+    @PostConstruct
+    public void autoRegisterMetrics() {
+        log.info("自动注册数据源监控指标...");
+
+        try {
+            // 尝试从 DataSource 中获取 HikariDataSource
+            // ShardingSphere 包装了原始 DataSource，需要解包
+            HikariDataSource hikariDataSource = unwrapHikariDataSource(dataSource);
+
+            if (hikariDataSource != null) {
+                String poolName = hikariDataSource.getPoolName();
+                if (poolName == null || poolName.isEmpty()) {
+                    poolName = "default";
+                }
+                registerMetrics(poolName, hikariDataSource);
+                log.info("数据源监控指标自动注册成功: pool={}", poolName);
+            } else {
+                log.warn("无法从 DataSource 中提取 HikariDataSource，监控指标未注册");
+            }
+        } catch (Exception e) {
+            log.warn("自动注册数据源监控指标失败: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * ============================================================================
+     * 解包获取 HikariDataSource
+     * ============================================================================
+     *
+     * 支持从 ShardingSphere 包装的 DataSource 中提取原始 HikariDataSource
+     */
+    private HikariDataSource unwrapHikariDataSource(DataSource dataSource) {
+        // 如果本身就是 HikariDataSource
+        if (dataSource instanceof HikariDataSource) {
+            return (HikariDataSource) dataSource;
+        }
+
+        // 尝试通过反射解包 ShardingSphere DataSource
+        try {
+            // ShardingSphere 的 ShardingSphereDataSource 包含实际的数据源
+            if (dataSource.getClass().getName().contains("ShardingSphereDataSource")) {
+                // 通过反射获取 context -> dataSourceMap
+                java.lang.reflect.Field contextField = dataSource.getClass().getDeclaredField("context");
+                contextField.setAccessible(true);
+                Object context = contextField.get(dataSource);
+
+                if (context != null) {
+                    // 获取 dataSourceMap
+                    java.lang.reflect.Field dataSourceMapField = context.getClass().getDeclaredField("dataSourceMap");
+                    dataSourceMapField.setAccessible(true);
+                    Object dataSourceMap = dataSourceMapField.get(context);
+
+                    if (dataSourceMap instanceof Map) {
+                        Map<?, ?> map = (Map<?, ?>) dataSourceMap;
+                        if (!map.isEmpty()) {
+                            // 取第一个数据源作为监控目标
+                            Object firstDataSource = map.values().iterator().next();
+                            if (firstDataSource instanceof HikariDataSource) {
+                                return (HikariDataSource) firstDataSource;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.debug("解包 DataSource 失败: {}", e.getMessage());
+        }
+
+        return null;
+    }
 
     /**
      * ============================================================================

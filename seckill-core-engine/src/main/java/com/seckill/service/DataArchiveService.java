@@ -76,11 +76,15 @@ public class DataArchiveService {
      * 归档条件:
      * - 订单状态为已支付(PAID)、已取消(CANCELLED)、已退款(REFUNDED)
      * - 创建时间超过保留天数
+     *
+     * 【P1-6修复】大事务风险：
+     * - 移除方法级别的 @Transactional
+     * - 每批处理独立事务，避免长时间持有事务锁
+     * - 防止连接池耗尽和数据库性能崩溃
      */
     @Scheduled(cron = "0 0 2 * * ?")
     @SchedulerLock(name = "DataArchiveService_archiveOrders",
             lockAtMostFor = "2h", lockAtLeastFor = "10m")
-    @Transactional(rollbackFor = Exception.class)
     public void archiveOrders() {
         if (!archiveEnabled) {
             log.info("数据归档功能已禁用");
@@ -96,7 +100,7 @@ public class DataArchiveService {
             int archivedCount = 0;
             int batchCount = 0;
 
-            // 分批次处理
+            // 分批次处理（每批独立事务）
             while (true) {
                 // 查询需要归档的订单（全路由查询，仅归档场景使用）
                 List<SeckillOrder> orders = orderMapper.selectForArchive(
@@ -106,21 +110,12 @@ public class DataArchiveService {
                     break;
                 }
 
-                for (SeckillOrder order : orders) {
-                    // 1. 写入归档表（需要创建 order_archive 表）
-                    archiveOrderToHistory(order);
-
-                    // 2. 删除原订单
-                    orderMapper.deleteById(order.getId());
-
-                    // 3. 更新 ES 索引标记为已归档
-                    markESIndexAsArchived(order.getOrderNo());
-
-                    archivedCount++;
-                }
+                // 【P1-6修复】每批独立事务处理
+                int batchArchived = archiveBatchTransactional(orders);
+                archivedCount += batchArchived;
 
                 batchCount++;
-                log.info("订单归档批次 {}: 归档 {} 条", batchCount, orders.size());
+                log.info("订单归档批次 {}: 归档 {} 条", batchCount, batchArchived);
 
                 // 防止长时间阻塞
                 if (batchCount > 100) {
@@ -134,6 +129,36 @@ public class DataArchiveService {
         } catch (Exception e) {
             log.error("订单归档异常: {}", e.getMessage(), e);
         }
+    }
+
+    /**
+     * ============================================================================
+     * 【P1-6修复】每批归档独立事务
+     * ============================================================================
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public int archiveBatchTransactional(List<SeckillOrder> orders) {
+        int archivedCount = 0;
+
+        for (SeckillOrder order : orders) {
+            try {
+                // 1. 写入归档表（需要创建 order_archive 表）
+                archiveOrderToHistory(order);
+
+                // 2. 删除原订单
+                orderMapper.deleteById(order.getId());
+
+                // 3. 更新 ES 索引标记为已归档
+                markESIndexAsArchived(order.getOrderNo());
+
+                archivedCount++;
+            } catch (Exception e) {
+                log.warn("单个订单归档失败: orderNo={}, error={}", order.getOrderNo(), e.getMessage());
+                // 单个订单失败不影响整批，继续处理其他订单
+            }
+        }
+
+        return archivedCount;
     }
 
     /**

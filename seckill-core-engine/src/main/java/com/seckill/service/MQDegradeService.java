@@ -1,9 +1,9 @@
 package com.seckill.service;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.client.producer.TransactionMQProducer;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -34,11 +34,21 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class MQDegradeService {
 
     private final AlertService alertService;
     private final TransactionMQProducer transactionMQProducer;
+
+    /**
+     * 构造器注入（使用 @Lazy 打破循环依赖）
+     * 循环依赖链: rocketMQProducerConfig -> seckillTransactionListener -> seckillService -> MQDegradeService -> rocketMQProducerConfig
+     */
+    public MQDegradeService(
+            AlertService alertService,
+            @Lazy TransactionMQProducer transactionMQProducer) {
+        this.alertService = alertService;
+        this.transactionMQProducer = transactionMQProducer;
+    }
 
     /**
      * MQ 状态

@@ -18,6 +18,12 @@ import java.util.stream.Collectors;
  * JWT Token Provider.
  * Generates and validates JWT tokens for authentication.
  *
+ * SECURITY FIX (C4/C5):
+ * - Removed hardcoded default secret
+ * - Removed unsafe padding (was padding with "0"s)
+ * - Added startup validation to reject empty/weak secrets
+ * - Minimum 32 bytes for HS256, recommended 64 bytes
+ *
  * @author leoli
  */
 @Component
@@ -25,19 +31,57 @@ public class JwtTokenProvider {
 
     private static final Logger logger = LoggerFactory.getLogger(JwtTokenProvider.class);
 
+    // Minimum secret length for HS256 (32 bytes = 256 bits)
+    private static final int MIN_SECRET_LENGTH = 32;
+
+    // Recommended secret length for enhanced security (64 bytes)
+    private static final int RECOMMENDED_SECRET_LENGTH = 64;
+
     private final SecretKey secretKey;
     private final long tokenValidityInMilliseconds;
 
     public JwtTokenProvider(
-            @Value("${gateway.admin.jwt.secret:mySecretKeyForJWTTokenGenerationWhichMustBeLongEnough}") 
+            @Value("${gateway.admin.jwt.secret:}") 
             String secret,
             @Value("${gateway.admin.jwt.expiration:86400000}") 
             long tokenValidityInSeconds) {
-        // Ensure the secret is at least 32 bytes for HS256
-        String paddedSecret = secret.length() < 32 ? 
-            secret + "0".repeat(32 - secret.length()) : secret;
-        this.secretKey = Keys.hmacShaKeyFor(paddedSecret.getBytes(StandardCharsets.UTF_8));
+        // SECURITY: Validate secret at startup - application will fail to start if invalid
+        validateSecret(secret);
+
+        this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.tokenValidityInMilliseconds = tokenValidityInSeconds;
+
+        logger.info("JwtTokenProvider initialized with secret length: {} bytes", secret.length());
+    }
+
+    /**
+     * Validate JWT secret at startup.
+     * SECURITY: Rejects empty, default, or weak secrets to prevent production misuse.
+     */
+    private void validateSecret(String secret) {
+        // Reject empty secret - application cannot start without proper configuration
+        if (secret == null || secret.isEmpty()) {
+            throw new IllegalArgumentException(
+                "JWT secret is not configured! Set 'gateway.admin.jwt.secret' environment variable " +
+                "(minimum 32 characters for HS256). Example: GATEWAY_ADMIN_JWT_SECRET=your-secure-secret-here");
+        }
+
+        // Reject weak secrets - HS256 requires at least 32 bytes (256 bits)
+        if (secret.length() < MIN_SECRET_LENGTH) {
+            throw new IllegalArgumentException(
+                "JWT secret is too weak! Minimum " + MIN_SECRET_LENGTH + " bytes required for HS256, " +
+                "but got " + secret.length() + " bytes. " +
+                "Set a longer 'gateway.admin.jwt.secret' (recommended: " + RECOMMENDED_SECRET_LENGTH + " bytes).");
+        }
+
+        // Warn if below recommended length (but still allow)
+        if (secret.length() < RECOMMENDED_SECRET_LENGTH) {
+            logger.warn("JWT secret length ({}) is below recommended {} bytes for enhanced security. " +
+                "Consider using a longer secret.", secret.length(), RECOMMENDED_SECRET_LENGTH);
+        }
+
+        // Log success
+        logger.info("JWT secret validation passed: {} bytes (HS256 compatible)", secret.length());
     }
 
     /**

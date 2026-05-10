@@ -1,6 +1,7 @@
 package com.leoli.gateway.trace.aspect;
 
 import com.leoli.gateway.trace.TraceContextHolder;
+import com.leoli.gateway.trace.properties.GatewayTraceProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -17,6 +18,12 @@ import org.aspectj.lang.annotation.Aspect;
 @Aspect
 public class ServiceTraceAspect {
 
+    private final GatewayTraceProperties properties;
+
+    public ServiceTraceAspect(GatewayTraceProperties properties) {
+        this.properties = properties;
+    }
+
     /**
      * Trace all Service methods
      * <p>
@@ -29,6 +36,11 @@ public class ServiceTraceAspect {
             "execution(* com..services.*.*(..)) || " +
             "@within(org.springframework.stereotype.Service)")
     public Object traceService(ProceedingJoinPoint pjp) throws Throwable {
+        // Check if tracing is enabled (master switch)
+        if (!properties.isEnabled()) {
+            return pjp.proceed();
+        }
+
         // Check if TraceId exists
         if (!TraceContextHolder.hasTraceId()) {
             return pjp.proceed();

@@ -20,21 +20,25 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * DistributedTrace 异步缓冲服务
- * 
+ *
  * 解决 Starter 批量上报时的同步阻塞风险：
  * - Starter 异步批量上报，Admin 端同步落库会导致 Tomcat 线程池耗尽
  * - 高 QPS 场景下，几千个服务同时上报，控制台接口会卡死
- * 
+ *
  * 设计：
  * 1. 接收接口极速入队（<1ms）
  * 2. 返回 202 Accepted，不阻塞 Starter
  * 3. 后台定时批量落库（每100ms）
  * 4. 批量插入提升 DB 性能（~10倍）
- * 
+ *
+ * FIX (H5):
+ * - offer() 返回 OfferResult 包含队列健康信息，支持 backpressure
+ * - scheduledFlush() 使用 executor.submit() 避免与 triggerFlush() 并发竞争
+ *
  * 效果：
  * - 无论压测多猛，接口永远是毫秒级响应
  * - 数据库压力通过批量插入大幅降低
- * 
+ *
  * @author leoli
  */
 @Slf4j
@@ -50,7 +54,7 @@ public class DistributedTraceBufferService {
     private final BlockingQueue<DistributedTraceEntity> traceQueue;
 
     /**
-     * 后台批量落库线程
+     * 后台批量落库线程（单线程保证串行执行）
      */
     private final ExecutorService executor;
 
@@ -95,48 +99,96 @@ public class DistributedTraceBufferService {
         this.traceRepository = traceRepository;
         this.objectMapper = objectMapper;
         this.traceQueue = new LinkedBlockingQueue<>(QUEUE_SIZE);
+        // 单线程 executor 保证 flushBatch 串行执行，避免并发竞争
         this.executor = Executors.newSingleThreadExecutor(r -> {
             Thread t = new Thread(r, "distributed-trace-buffer");
             t.setDaemon(false);
             return t;
         });
 
-        log.info("DistributedTraceBufferService initialized: queueSize={}, batchSize={}", 
+        log.info("DistributedTraceBufferService initialized: queueSize={}, batchSize={}",
             QUEUE_SIZE, BATCH_SIZE);
     }
 
     /**
-     * 接收 Trace 数据（极速入队）
+     * OfferResult - offer() 返回结果，包含队列健康信息。
+     * FIX (H5): 支持调用方进行 backpressure 控制。
      */
-    public boolean offer(DistributedTraceEntity trace) {
-        receivedCount.incrementAndGet();
+    public static class OfferResult {
+        private final boolean success;
+        private final int queuePercent;      // 队列使用率 0-100
+        private final long totalDropped;     // 累计丢弃数
 
-        if (!traceQueue.offer(trace)) {
-            droppedCount.incrementAndGet();
-            log.warn("DistributedTrace queue full, dropping: traceId={}, dropped={}", 
-                trace.getTraceId(), droppedCount.get());
-            return false;
+        public OfferResult(boolean success, int queuePercent, long totalDropped) {
+            this.success = success;
+            this.queuePercent = queuePercent;
+            this.totalDropped = totalDropped;
         }
 
+        public boolean isSuccess() {
+            return success;
+        }
+
+        public int getQueuePercent() {
+            return queuePercent;
+        }
+
+        public long getTotalDropped() {
+            return totalDropped;
+        }
+
+        /**
+         * 是否需要减速（队列使用率 >= 80%）
+         */
+        public boolean shouldSlowDown() {
+            return queuePercent >= 80;
+        }
+
+        /**
+         * 是否需要暂停（队列满或使用率 >= 95%）
+         */
+        public boolean shouldPause() {
+            return !success || queuePercent >= 95;
+        }
+    }
+
+    /**
+     * 接收 Trace 数据（极速入队）
+     * FIX (H5): 返回 OfferResult 支持 backpressure
+     */
+    public OfferResult offer(DistributedTraceEntity trace) {
+        receivedCount.incrementAndGet();
+
+        boolean success = traceQueue.offer(trace);
+
+        if (!success) {
+            droppedCount.incrementAndGet();
+            log.warn("DistributedTrace queue full, dropping: traceId={}, dropped={}",
+                trace.getTraceId(), droppedCount.get());
+        }
+
+        // 计算队列使用率
+        int queueSize = traceQueue.size();
+        int queuePercent = (queueSize * 100) / QUEUE_SIZE;
+
         // 达到阈值时立即触发批量落库
-        if (traceQueue.size() >= BATCH_SIZE) {
+        if (success && queueSize >= BATCH_SIZE) {
             triggerFlush();
         }
 
-        return true;
+        return new OfferResult(success, queuePercent, droppedCount.get());
     }
 
     /**
      * 批量接收（高性能版本）
+     * FIX (H5): 返回 OfferResult 数组供调用方决策
      */
-    public int offerBatch(List<DistributedTraceEntity> traces) {
-        int successCount = 0;
+    public List<OfferResult> offerBatch(List<DistributedTraceEntity> traces) {
+        List<OfferResult> results = new ArrayList<>();
         for (DistributedTraceEntity trace : traces) {
-            if (offer(trace)) {
-                successCount++;
-            }
+            results.add(offer(trace));
         }
-        return successCount;
+        return results;
     }
 
     /**
@@ -160,6 +212,8 @@ public class DistributedTraceBufferService {
 
     /**
      * 定时批量落库（每100ms）
+     * FIX (H5): 使用 executor.submit() 避免与 triggerFlush() 并发竞争
+     * 单线程 executor 保证 flushBatch 串行执行
      */
     @Scheduled(fixedRate = 100)
     public void scheduledFlush() {
@@ -167,7 +221,8 @@ public class DistributedTraceBufferService {
         long elapsed = now - lastFlushTime;
 
         if (traceQueue.size() > 0 && elapsed >= MAX_BATCH_WAIT_MS) {
-            flushBatch();
+            // 使用 executor.submit() 保证与 triggerFlush() 串行执行
+            executor.submit(this::flushBatch);
         }
     }
 

@@ -33,47 +33,45 @@
     </dependencyManagement>
 
     <dependencies>
+        <!-- ==================== Core Dependencies (transitive to consumers) ==================== -->
+
         <!-- Spring Boot Web (required for WebInterceptor) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
-            <optional>true</optional>
         </dependency>
 
         <!-- Spring Boot AOP (required for tracing aspects) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-aop</artifactId>
-            <optional>true</optional>
-        </dependency>
-
-        <!-- Spring Boot Configuration Processor -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-configuration-processor</artifactId>
-            <optional>true</optional>
         </dependency>
 
         <!-- Spring WebFlux (for WebClient async reporting) -->
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-webflux</artifactId>
-            <optional>true</optional>
         </dependency>
 
         <!-- Reactor Netty (for WebClient connection pool configuration) -->
         <dependency>
             <groupId>io.projectreactor.netty</groupId>
             <artifactId>reactor-netty-http</artifactId>
-            <optional>true</optional>
         </dependency>
 
         <!-- Jackson (for JSON serialization) -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <optional>true</optional>
         </dependency>
+
+        <!-- SLF4J (logging API) -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+
+        <!-- ==================== Optional Dependencies (only needed when consumer uses these middleware) ==================== -->
 
         <!-- Redis (optional, auto-trace when present) -->
         <dependency>
@@ -112,17 +110,20 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- Lombok -->
+        <!-- ==================== Build-time Dependencies (not transitive) ==================== -->
+
+        <!-- Spring Boot Configuration Processor (generates metadata for IDE auto-completion) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Lombok (compile-time only) -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <optional>true</optional>
-        </dependency>
-
-        <!-- SLF4J -->
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
         </dependency>
 
         <!-- Test dependencies -->

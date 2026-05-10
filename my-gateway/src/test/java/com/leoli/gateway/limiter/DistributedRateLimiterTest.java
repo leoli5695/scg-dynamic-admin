@@ -55,7 +55,8 @@ class DistributedRateLimiterTest {
             assertTrue(result.isAllowed());
             assertTrue(result.isRedisAvailable());
             assertFalse(result.isShouldFallback());
-            assertEquals(100, result.getRemainingRequests());
+            // allowed(burstCapacity)：2-参数重载的 burstCapacity 默认 = maxRequests * 2 = 200
+            assertEquals(200, result.getRemainingRequests());
         }
 
         @Test

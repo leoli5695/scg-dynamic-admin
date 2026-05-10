@@ -113,7 +113,7 @@ class MultiDimRateLimiterFilterTest {
             Map<String, Object> config = createMultiDimConfig(true, 100, true, 50, true, 10, true, 5);
             lenient().when(strategyManager.getMultiDimRateLimiterConfig(anyString())).thenReturn(config);
             lenient().when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(true);
-            lenient().when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyLong()))
+            lenient().when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyInt(), anyLong()))
                     .thenReturn(RateLimitResult.allowed(99));
             when(chain.filter(any())).thenReturn(Mono.empty());
 
@@ -132,7 +132,7 @@ class MultiDimRateLimiterFilterTest {
             Map<String, Object> config = createMultiDimConfig(true, 100, false, 0, false, 0, false, 0);
             lenient().when(strategyManager.getMultiDimRateLimiterConfig(anyString())).thenReturn(config);
             lenient().when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(true);
-            lenient().when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyLong()))
+            lenient().when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyInt(), anyLong()))
                     .thenReturn(RateLimitResult.denied(0));
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -174,7 +174,7 @@ class MultiDimRateLimiterFilterTest {
             Map<String, Object> config = createMultiDimConfig(false, 0, true, 50, false, 0, false, 0);
             lenient().when(strategyManager.getMultiDimRateLimiterConfig(anyString())).thenReturn(config);
             lenient().when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(true);
-            lenient().when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyLong()))
+            lenient().when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyInt(), anyLong()))
                     .thenReturn(RateLimitResult.allowed(49));
             when(chain.filter(any())).thenReturn(Mono.empty());
 
@@ -182,7 +182,7 @@ class MultiDimRateLimiterFilterTest {
                     .expectComplete()
                     .verify();
 
-            verify(distributedRateLimiter).tryAcquireWithFallback(contains("tenant-001"), eq(50), anyLong());
+            verify(distributedRateLimiter).tryAcquireWithFallback(contains("tenant-001"), eq(50), anyInt(), anyLong());
         }
 
         @Test
@@ -194,7 +194,7 @@ class MultiDimRateLimiterFilterTest {
             Map<String, Object> config = createMultiDimConfig(false, 0, false, 0, true, 10, false, 0);
             lenient().when(strategyManager.getMultiDimRateLimiterConfig(anyString())).thenReturn(config);
             lenient().when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(true);
-            lenient().when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyLong()))
+            lenient().when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyInt(), anyLong()))
                     .thenReturn(RateLimitResult.allowed(9));
             when(chain.filter(any())).thenReturn(Mono.empty());
 
@@ -202,7 +202,7 @@ class MultiDimRateLimiterFilterTest {
                     .expectComplete()
                     .verify();
 
-            verify(distributedRateLimiter).tryAcquireWithFallback(contains("user-123"), eq(10), anyLong());
+            verify(distributedRateLimiter).tryAcquireWithFallback(contains("user-123"), eq(10), anyInt(), anyLong());
         }
     }
 

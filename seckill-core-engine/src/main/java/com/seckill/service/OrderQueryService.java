@@ -138,6 +138,11 @@ public class OrderQueryService {
      * 按用户查询订单列表
      * ============================================================================
      *
+     * 【P1-8修复】：
+     * - userId 是分片键，可以精确路由到对应库表
+     * - 使用正确的分页查询方法 selectByUserIdPage()
+     * - 原问题：使用 selectById(userId) 是按主键查询，传入的是 userId 不是 orderId，逻辑完全错误
+     *
      * 注意：userId是分片键，可精确路由到指定库表
      */
     private OrderQueryResponse queryByUserList(Long userId, Integer pageSize, Integer pageOffset, String traceId) {
@@ -153,23 +158,27 @@ public class OrderQueryService {
         }
 
         try {
-            // 查询MySQL（userId是分片键）
-            // 实际需要实现分页查询方法
-            // 这里简化实现：先查询是否有订单
-            SeckillOrder order = orderMapper.selectById(userId); // 简化
+            // 【P1-8修复】使用正确的分页查询方法
+            // userId 是分片键，可以精确路由
+            List<SeckillOrder> orders = orderMapper.selectByUserIdPage(userId, pageOffset, pageSize);
 
-            if (order == null) {
+            if (orders == null || orders.isEmpty()) {
                 log.info("用户无订单记录: userId={}, traceId={}", userId, traceId);
                 return OrderQueryResponse.successList(Collections.emptyList(), 0);
             }
 
+            // 获取总数（用于分页）
+            int totalCount = orderMapper.countByUserId(userId);
+
             // 转换为列表
-            OrderQueryResponse.OrderDetail detail = convertToDetail(order);
-            List<OrderQueryResponse.OrderDetail> orders = Collections.singletonList(detail);
+            List<OrderQueryResponse.OrderDetail> orderDetails = orders.stream()
+                    .map(this::convertToDetail)
+                    .toList();
 
-            log.info("用户订单列表查询成功: userId={}, count={}, traceId={}", userId, orders.size(), traceId);
+            log.info("用户订单列表查询成功: userId={}, count={}, total={}, traceId={}",
+                    userId, orderDetails.size(), totalCount, traceId);
 
-            return OrderQueryResponse.successList(orders, orders.size());
+            return OrderQueryResponse.successList(orderDetails, totalCount);
 
         } catch (Exception e) {
             log.error("用户订单列表查询异常: userId={}, error={}, traceId={}", userId, e.getMessage(), traceId, e);

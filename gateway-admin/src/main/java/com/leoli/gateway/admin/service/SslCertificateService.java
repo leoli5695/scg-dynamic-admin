@@ -8,11 +8,13 @@ import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
 import com.leoli.gateway.admin.repository.SslCertificateRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.annotation.PostConstruct;
 import javax.crypto.Cipher;
+import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
@@ -25,6 +27,12 @@ import java.util.stream.Collectors;
 /**
  * Service for managing SSL certificates.
  * Supports PEM and JKS/P12 certificate formats.
+ *
+ * SECURITY FIX (C6/C7):
+ * - Encryption key externalized via configuration
+ * - AES-ECB replaced with AES-GCM (authenticated encryption)
+ * - Random IV (12 bytes) per encryption for semantic security
+ * - Startup validation for encryption key
  *
  * @author leoli
  */
@@ -39,6 +47,34 @@ public class SslCertificateService {
     private final GatewayInstanceRepository gatewayInstanceRepository;
 
     /**
+     * Encryption key for password protection (externalized configuration).
+     * SECURITY: Must be at least 16 bytes (128 bits) for AES-128.
+     * Recommended: 32 bytes (256 bits) for AES-256.
+     */
+    @Value("${gateway.admin.ssl.encryption-key:}")
+    private String encryptionKey;
+
+    /**
+     * Secure random for IV generation.
+     */
+    private final SecureRandom secureRandom = new SecureRandom();
+
+    /**
+     * AES-GCM parameters: IV length (12 bytes recommended by NIST).
+     */
+    private static final int GCM_IV_LENGTH = 12;
+
+    /**
+     * AES-GCM parameters: Authentication tag length (128 bits).
+     */
+    private static final int GCM_TAG_LENGTH = 128;
+
+    /**
+     * Minimum encryption key length (16 bytes for AES-128).
+     */
+    private static final int MIN_KEY_LENGTH = 16;
+
+    /**
      * Get Nacos namespace from instance ID.
      * Returns null for default namespace if instance not found.
      */
@@ -51,16 +87,43 @@ public class SslCertificateService {
                 .orElse(null);
     }
 
-    // Secret key for encrypting passwords (should be externalized in production)
-    private static final String ENCRYPTION_KEY = "GatewaySSLKey123";
-
     private static final String CERTIFICATE_PREFIX = "ssl-certificate-";
     private static final String CERTIFICATES_INDEX = "config.gateway.metadata.ssl-certificates-index";
 
     @PostConstruct
     public void init() {
+        // SECURITY: Validate encryption key at startup
+        validateEncryptionKey();
         loadCertificatesFromDatabase();
-        log.info("SslCertificateService initialized with Nacos sync");
+        log.info("SslCertificateService initialized with Nacos sync and AES-GCM encryption");
+    }
+
+    /**
+     * Validate encryption key at startup.
+     * SECURITY: Rejects empty or weak keys to prevent production misuse.
+     */
+    private void validateEncryptionKey() {
+        if (encryptionKey == null || encryptionKey.isEmpty()) {
+            throw new IllegalArgumentException(
+                "SSL encryption key is not configured! Set 'gateway.admin.ssl.encryption-key' " +
+                "environment variable (minimum 16 characters for AES-128). " +
+                "Example: GATEWAY_ADMIN_SSL_ENCRYPTION_KEY=your-secure-key-here");
+        }
+
+        if (encryptionKey.length() < MIN_KEY_LENGTH) {
+            throw new IllegalArgumentException(
+                "SSL encryption key is too weak! Minimum " + MIN_KEY_LENGTH + " bytes required for AES-128, " +
+                "but got " + encryptionKey.length() + " bytes. " +
+                "Set a longer key (recommended: 32 bytes for AES-256).");
+        }
+
+        // Warn if key length is not standard AES length (16, 24, or 32 bytes)
+        if (encryptionKey.length() != 16 && encryptionKey.length() != 24 && encryptionKey.length() != 32) {
+            log.warn("SSL encryption key length ({}) is not a standard AES key length (16/24/32 bytes). " +
+                "Key will be used as-is but consider using a standard length.", encryptionKey.length());
+        }
+
+        log.info("SSL encryption key validated: {} bytes", encryptionKey.length());
     }
 
     /**
@@ -487,35 +550,126 @@ public class SslCertificateService {
     }
 
     /**
-     * Encrypt password
+     * Encrypt password using AES-GCM (authenticated encryption).
+     * SECURITY FIX (C7): ECB replaced with GCM mode.
+     *
+     * Output format: Base64(IV[12 bytes] + ciphertext + authTag[16 bytes])
+     * Each encryption uses a fresh random IV for semantic security.
      */
     private String encryptPassword(String password) {
         try {
-            SecretKeySpec key = new SecretKeySpec(ENCRYPTION_KEY.getBytes(StandardCharsets.UTF_8), "AES");
-            Cipher cipher = Cipher.getInstance("AES");
-            cipher.init(Cipher.ENCRYPT_MODE, key);
+            // Generate random IV (12 bytes recommended for GCM)
+            byte[] iv = new byte[GCM_IV_LENGTH];
+            secureRandom.nextBytes(iv);
+
+            // Create secret key from configured encryption key
+            byte[] keyBytes = encryptionKey.getBytes(StandardCharsets.UTF_8);
+            // Pad or truncate key to valid AES key length (16, 24, or 32 bytes)
+            byte[] aesKey = normalizeAesKey(keyBytes);
+            SecretKeySpec key = new SecretKeySpec(aesKey, "AES");
+
+            // Initialize cipher with GCM parameters
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
+            cipher.init(Cipher.ENCRYPT_MODE, key, spec);
+
+            // Encrypt and get ciphertext + auth tag
             byte[] encrypted = cipher.doFinal(password.getBytes(StandardCharsets.UTF_8));
-            return Base64.getEncoder().encodeToString(encrypted);
+
+            // Combine IV + ciphertext + authTag and encode as Base64
+            byte[] combined = new byte[iv.length + encrypted.length];
+            System.arraycopy(iv, 0, combined, 0, iv.length);
+            System.arraycopy(encrypted, 0, combined, iv.length, encrypted.length);
+
+            return Base64.getEncoder().encodeToString(combined);
         } catch (Exception e) {
-            log.error("Failed to encrypt password", e);
-            return password;
+            log.error("Failed to encrypt password with AES-GCM", e);
+            throw new RuntimeException("Password encryption failed", e);
         }
     }
 
     /**
-     * Decrypt password
+     * Decrypt password using AES-GCM.
+     * SECURITY FIX (C7): Supports new GCM format and validates auth tag.
+     *
+     * Input format: Base64(IV[12 bytes] + ciphertext + authTag[16 bytes])
      */
     public String decryptPassword(String encryptedPassword) {
         try {
-            SecretKeySpec key = new SecretKeySpec(ENCRYPTION_KEY.getBytes(StandardCharsets.UTF_8), "AES");
-            Cipher cipher = Cipher.getInstance("AES");
-            cipher.init(Cipher.DECRYPT_MODE, key);
-            byte[] decrypted = cipher.doFinal(Base64.getDecoder().decode(encryptedPassword));
+            // Decode Base64 and extract IV + ciphertext + authTag
+            byte[] combined = Base64.getDecoder().decode(encryptedPassword);
+
+            // Validate minimum length (IV + authTag = 12 + 16 = 28 bytes minimum)
+            if (combined.length < GCM_IV_LENGTH + 16) {
+                throw new IllegalArgumentException("Encrypted data too short for GCM format");
+            }
+
+            // Extract IV (first 12 bytes)
+            byte[] iv = new byte[GCM_IV_LENGTH];
+            System.arraycopy(combined, 0, iv, 0, GCM_IV_LENGTH);
+
+            // Extract ciphertext + authTag (remaining bytes)
+            byte[] ciphertextWithTag = new byte[combined.length - GCM_IV_LENGTH];
+            System.arraycopy(combined, GCM_IV_LENGTH, ciphertextWithTag, 0, ciphertextWithTag.length);
+
+            // Create secret key from configured encryption key
+            byte[] keyBytes = encryptionKey.getBytes(StandardCharsets.UTF_8);
+            byte[] aesKey = normalizeAesKey(keyBytes);
+            SecretKeySpec key = new SecretKeySpec(aesKey, "AES");
+
+            // Initialize cipher with GCM parameters
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
+            cipher.init(Cipher.DECRYPT_MODE, key, spec);
+
+            // Decrypt (auth tag validation happens automatically)
+            byte[] decrypted = cipher.doFinal(ciphertextWithTag);
             return new String(decrypted, StandardCharsets.UTF_8);
         } catch (Exception e) {
-            log.error("Failed to decrypt password", e);
-            return encryptedPassword;
+            log.error("Failed to decrypt password with AES-GCM", e);
+            throw new RuntimeException("Password decryption failed", e);
         }
+    }
+
+    /**
+     * Normalize key to valid AES key length (16, 24, or 32 bytes).
+     * If key is longer, truncate to nearest valid length.
+     * If key is shorter, pad with zeros (with warning).
+     */
+    private byte[] normalizeAesKey(byte[] keyBytes) {
+        int keyLength = keyBytes.length;
+
+        // Already valid length
+        if (keyLength == 16 || keyLength == 24 || keyLength == 32) {
+            return keyBytes;
+        }
+
+        // Truncate if longer than 32 bytes
+        if (keyLength > 32) {
+            byte[] truncated = new byte[32];
+            System.arraycopy(keyBytes, 0, truncated, 0, 32);
+            log.debug("Encryption key truncated to 32 bytes for AES-256");
+            return truncated;
+        }
+
+        // Pad if between 16 and 24 bytes
+        if (keyLength > 16 && keyLength < 24) {
+            byte[] padded = new byte[24];
+            System.arraycopy(keyBytes, 0, padded, 0, keyLength);
+            log.debug("Encryption key padded to 24 bytes for AES-192");
+            return padded;
+        }
+
+        // Pad if between 24 and 32 bytes
+        if (keyLength > 24 && keyLength < 32) {
+            byte[] padded = new byte[32];
+            System.arraycopy(keyBytes, 0, padded, 0, keyLength);
+            log.debug("Encryption key padded to 32 bytes for AES-256");
+            return padded;
+        }
+
+        // Key was already validated at startup to be >= MIN_KEY_LENGTH (16)
+        return keyBytes;
     }
 
     /**

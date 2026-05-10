@@ -18,7 +18,6 @@ import java.net.InetAddress;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
-import reactor.core.publisher.Mono;
 
 /**
  * Heartbeat Reporter.
@@ -149,9 +148,11 @@ public class HeartbeatReporter {
             retries++;
             if (retries < properties.getMaxRetries()) {
                 try {
-                    // Use Mono.delay for non-blocking wait, then block to maintain synchronous API
-                    Mono.delay(java.time.Duration.ofMillis(properties.getRetryIntervalMs())).block();
-                } catch (Exception ie) {
+                    // 这里已经是 @Scheduled 线程（非 event-loop），直接 sleep 即可。
+                    // 用 Mono.delay().block() 只会绕一圈并生产 ScheduledExecutorService 线程。
+                    Thread.sleep(properties.getRetryIntervalMs());
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
                     log.debug("Heartbeat retry delay interrupted");
                     break;
                 }

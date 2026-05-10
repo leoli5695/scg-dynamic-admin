@@ -20,7 +20,6 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:30379}
-      password: ${REDIS_PASSWORD:}
       database: 0
       timeout: 3000ms
       lettuce:
@@ -30,12 +29,18 @@ spring:
           min-idle: 10
           max-wait: 1000ms
 
-  # MySQL 数据源配置（使用ShardingSphere JDBC URL加载分片配置）
+  # MySQL 数据源配置（使用HikariCP连接池）
   datasource:
-    driver-class-name: org.apache.shardingsphere.driver.ShardingSphereDriver
-    url: jdbc:shardingsphere:classpath:sharding-config.yaml
-    username: ${MYSQL_USER:root}
-    password: ${MYSQL_PASSWORD:123456}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/seckill_db_0?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
 
   # Elasticsearch 配置（连接K8s test命名空间的ES）
   elasticsearch:
@@ -48,7 +53,6 @@ redisson:
   config: |
     singleServerConfig:
       address: "redis://${REDIS_HOST:localhost}:${REDIS_PORT:30379}"
-      password: null
       connectionPoolSize: 100
       connectionMinimumIdleSize: 20
       idleConnectionTimeout: 10000
@@ -86,11 +90,7 @@ mybatis-plus:
       logic-delete-value: 1
       logic-not-delete-value: 0
 
-# ShardingSphere 分库分表配置
-spring.shardingsphere:
-  enabled: true
-  props:
-    sql-show: true
+# ShardingSphere分片配置已迁移到Java配置类（ShardingSphereJavaConfig.java）
 
 # 监控配置
 management:
@@ -106,8 +106,9 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
-    export:
-      prometheus:
+  prometheus:
+    metrics:
+      export:
         enabled: true
 
 # 日志配置

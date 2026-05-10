@@ -149,13 +149,14 @@ class ShadowQuotaManagerTest {
         }
 
         @Test
-        @DisplayName("Should return configured quota when shadow quota disabled")
+        @DisplayName("Should return conservative quota when shadow quota disabled (Fail-Closed)")
         void testGetShadowQuota_disabled() {
             ReflectionTestUtils.setField(shadowQuotaManager, "shadowQuotaEnabled", false);
 
             long quota = shadowQuotaManager.getShadowQuota("test-route", 100);
 
-            assertEquals(100, quota); // Returns configQps directly
+            // Fail-Closed：禁用时返回 configQps / 2（保守配额），而非放行
+            assertEquals(50, quota);
         }
 
         @Test
@@ -174,10 +175,13 @@ class ShadowQuotaManagerTest {
                     )
             );
 
-            // Update cluster node count
+            // 触发 node count 刷新（fallback 路径需要 lastNodeCountUpdateTime 过期）
+            ReflectionTestUtils.setField(shadowQuotaManager, "lastNodeCountUpdateTime",
+                    new java.util.concurrent.atomic.AtomicLong(0));
+            shadowQuotaManager.fallbackUpdateNodeCount();
             shadowQuotaManager.updateShadowQuotas();
 
-            int nodeCount = shadowQuotaManager.getClusterNodeCount();
+            int nodeCount = shadowQuotaManager.getStatus().getCachedNodeCount();
             assertTrue(nodeCount >= 1);
         }
     }
@@ -196,12 +200,16 @@ class ShadowQuotaManagerTest {
             ShadowQuotaManager manager = new ShadowQuotaManager();
             ReflectionTestUtils.setField(manager, "discoveryClient", null);
             ReflectionTestUtils.setField(manager, "minNodeCount", 2);
+            ReflectionTestUtils.setField(manager, "fallbackNodeCount", 2);
             ReflectionTestUtils.setField(manager, "shadowQuotaEnabled", true);
             ReflectionTestUtils.setField(manager, "applicationName", "gateway");
+            // 强制 fallback 路径触发：把 lastNodeCountUpdateTime 设为 0（远古时间）
+            ReflectionTestUtils.setField(manager, "lastNodeCountUpdateTime",
+                    new java.util.concurrent.atomic.AtomicLong(0));
 
-            manager.updateShadowQuotas();
+            manager.fallbackUpdateNodeCount();
 
-            assertEquals(2, manager.getClusterNodeCount());
+            assertEquals(2, manager.getStatus().getCachedNodeCount());
         }
 
         @Test
@@ -214,30 +222,36 @@ class ShadowQuotaManagerTest {
                             mock(org.springframework.cloud.client.ServiceInstance.class)
                     )
             );
+            ReflectionTestUtils.setField(shadowQuotaManager, "lastNodeCountUpdateTime",
+                    new java.util.concurrent.atomic.AtomicLong(0));
 
-            shadowQuotaManager.updateShadowQuotas();
+            shadowQuotaManager.fallbackUpdateNodeCount();
 
-            assertEquals(3, shadowQuotaManager.getClusterNodeCount());
+            assertEquals(3, shadowQuotaManager.getStatus().getCachedNodeCount());
         }
 
         @Test
         @DisplayName("Should use minNodeCount when discovery returns empty")
         void testClusterNodeCount_emptyDiscovery() {
             when(discoveryClient.getInstances("gateway")).thenReturn(Collections.emptyList());
+            ReflectionTestUtils.setField(shadowQuotaManager, "lastNodeCountUpdateTime",
+                    new java.util.concurrent.atomic.AtomicLong(0));
 
-            shadowQuotaManager.updateShadowQuotas();
+            shadowQuotaManager.fallbackUpdateNodeCount();
 
-            assertEquals(1, shadowQuotaManager.getClusterNodeCount()); // minNodeCount
+            assertEquals(1, shadowQuotaManager.getStatus().getCachedNodeCount()); // minNodeCount
         }
 
         @Test
         @DisplayName("Should handle discovery exception gracefully")
         void testClusterNodeCount_discoveryException() {
             when(discoveryClient.getInstances("gateway")).thenThrow(new RuntimeException("Discovery error"));
+            ReflectionTestUtils.setField(shadowQuotaManager, "lastNodeCountUpdateTime",
+                    new java.util.concurrent.atomic.AtomicLong(0));
 
-            shadowQuotaManager.updateShadowQuotas();
+            shadowQuotaManager.fallbackUpdateNodeCount();
 
-            assertEquals(1, shadowQuotaManager.getClusterNodeCount()); // minNodeCount
+            assertEquals(1, shadowQuotaManager.getStatus().getCachedNodeCount()); // minNodeCount
         }
     }
 
@@ -338,7 +352,7 @@ class ShadowQuotaManagerTest {
         @DisplayName("Status toString should contain key information")
         void testStatusToString() {
             ShadowQuotaManager.ShadowQuotaStatus status =
-                    new ShadowQuotaManager.ShadowQuotaStatus(true, 3, 75, 5);
+                    new ShadowQuotaManager.ShadowQuotaStatus(true, 3, 75, 5, System.currentTimeMillis());
 
             String str = status.toString();
 
@@ -393,7 +407,7 @@ class ShadowQuotaManagerTest {
             t2.join();
 
             // Should complete without exception
-            assertTrue(shadowQuotaManager.getClusterNodeCount() >= 1);
+            assertTrue(shadowQuotaManager.getStatus().getCachedNodeCount() >= 1);
         }
     }
 }

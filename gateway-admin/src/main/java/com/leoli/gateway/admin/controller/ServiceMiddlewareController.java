@@ -79,23 +79,29 @@ public class ServiceMiddlewareController {
 
     /**
      * 接收单条Trace上报（异步）
-     * 
+     *
      * 极速解析入队，返回 202 Accepted
+     * FIX (H5): 适配 OfferResult 返回类型，检查 isSuccess()
      */
     @PostMapping("/traces")
     public ResponseEntity<Void> receiveTrace(@RequestBody Map<String, Object> traceData) {
         try {
             DistributedTraceEntity entity = convertToEntity(traceData);
-            
-            boolean success = traceBufferService.offer(entity);
-            
-            if (success) {
+
+            DistributedTraceBufferService.OfferResult result = traceBufferService.offer(entity);
+
+            if (result.isSuccess()) {
+                // Log warning if queue is getting full (for monitoring)
+                if (result.shouldSlowDown()) {
+                    log.warn("Trace queue at {}% capacity, consider reducing report frequency", result.getQueuePercent());
+                }
                 return ResponseEntity.accepted().build();
             } else {
-                log.warn("Trace queue full, returning 503: traceId={}", entity.getTraceId());
+                log.warn("Trace queue full, returning 503: traceId={}, queuePercent={}, totalDropped={}",
+                        entity.getTraceId(), result.getQueuePercent(), result.getTotalDropped());
                 return ResponseEntity.status(503).build();
             }
-            
+
         } catch (Exception e) {
             log.error("Failed to parse trace: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().build();
@@ -104,26 +110,46 @@ public class ServiceMiddlewareController {
 
     /**
      * 接收批量Trace上报（异步 + 高性能）
-     * 
+     *
      * Starter异步批量上报使用此接口
      * 极速解析入队，返回 202 Accepted
+     * FIX (H5): 适配 OfferResult 返回类型
      */
     @PostMapping("/traces/batch")
     public ResponseEntity<Void> receiveBatchTraces(@RequestBody List<Map<String, Object>> traces) {
         try {
             log.debug("Received batch traces: count={}", traces.size());
-            
+
             List<DistributedTraceEntity> entities = traces.stream()
                 .map(this::convertToEntity)
                 .toList();
-            
-            int successCount = traceBufferService.offerBatch(entities);
-            
-            log.debug("Batch received: success={}, fail={}", successCount, traces.size() - successCount);
-            
+
+            List<DistributedTraceBufferService.OfferResult> results = traceBufferService.offerBatch(entities);
+
+            // Count successes and check for backpressure warnings
+            int successCount = 0;
+            int slowDownWarningCount = 0;
+            for (DistributedTraceBufferService.OfferResult result : results) {
+                if (result.isSuccess()) {
+                    successCount++;
+                    if (result.shouldSlowDown()) {
+                        slowDownWarningCount++;
+                    }
+                }
+            }
+
+            log.debug("Batch received: success={}, fail={}, slowDownWarnings={}",
+                    successCount, traces.size() - successCount, slowDownWarningCount);
+
+            // Log backpressure warning if many items trigger slow-down threshold
+            if (slowDownWarningCount > results.size() / 2) {
+                log.warn("Batch received with high backpressure: {} items at slow-down threshold. Starter should reduce frequency.",
+                        slowDownWarningCount);
+            }
+
             // 立刻返回 202 Accepted，不阻塞 Starter
             return ResponseEntity.accepted().build();
-            
+
         } catch (Exception e) {
             log.error("Failed to parse batch traces: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().build();

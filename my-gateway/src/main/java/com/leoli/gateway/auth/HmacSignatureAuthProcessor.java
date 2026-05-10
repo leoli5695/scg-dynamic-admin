@@ -379,6 +379,6 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
      */
     public void cleanupExpiredNonces() {
         long currentTime = System.currentTimeMillis();
-        nonceCache.entrySet().removeIf(entry -> currentTime - entry.getValue() > NONCE_EXPIRY_MS);
+        localNonceCache.entrySet().removeIf(entry -> currentTime - entry.getValue() > NONCE_EXPIRY_MS);
     }
 }

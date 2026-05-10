@@ -176,9 +176,10 @@ public class ShadowQuotaManager implements ApplicationListener<HeartbeatEvent> {
                      elapsedSinceLastUpdate);
 
             if (!updateNodeCountFromDiscovery()) {
-                // Discovery failed, use YAML fallback (Level 3)
-                cachedNodeCount.set(fallbackNodeCount);
-                log.warn("Discovery client failed, using YAML fallback node count: {}", fallbackNodeCount);
+                // Discovery failed: updateNodeCountFromDiscovery 自身已经设置了
+                // max(minNodeCount, fallbackNodeCount)，此处无需再次覆盖。
+                log.warn("Discovery client failed, using fallback node count: {}",
+                        cachedNodeCount.get());
             }
         }
     }
@@ -189,8 +190,9 @@ public class ShadowQuotaManager implements ApplicationListener<HeartbeatEvent> {
      */
     private boolean updateNodeCountFromDiscovery() {
         if (discoveryClient == null) {
-            cachedNodeCount.set(fallbackNodeCount);
-            log.debug("Discovery client not available, using fallback: {}", fallbackNodeCount);
+            cachedNodeCount.set(Math.max(minNodeCount, fallbackNodeCount));
+            log.debug("Discovery client not available, using fallback: {}",
+                    Math.max(minNodeCount, fallbackNodeCount));
             return false;
         }
 
@@ -202,7 +204,7 @@ public class ShadowQuotaManager implements ApplicationListener<HeartbeatEvent> {
             return true;
         } catch (Exception e) {
             log.warn("Failed to get node count from discovery: {}", e.getMessage());
-            cachedNodeCount.set(fallbackNodeCount);
+            cachedNodeCount.set(Math.max(minNodeCount, fallbackNodeCount));
             return false;
         }
     }

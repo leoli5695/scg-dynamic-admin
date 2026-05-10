@@ -148,13 +148,14 @@ class TraceIdGlobalFilterTest {
     class FilterOrderTests {
 
         @Test
-        @DisplayName("Should have high priority order (-300)")
+        @DisplayName("Should have HIGHEST_PRECEDENCE order")
         void shouldHaveCorrectOrder() {
             // When
             int order = filter.getOrder();
 
             // Then
-            assertEquals(-300, order);
+            // TraceId filter 必须最先执行，以便 traceId 对所有下游 filter 可见
+            assertEquals(org.springframework.core.Ordered.HIGHEST_PRECEDENCE, order);
         }
     }
 

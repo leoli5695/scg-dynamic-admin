@@ -14,6 +14,8 @@ import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -269,9 +271,10 @@ public class HybridHealthChecker {
 
     /**
      * Queue health status for batch push to admin.
+     * FIX (H5): Changed from synchronized ArrayList to ConcurrentLinkedQueue for better concurrency.
+     * No lock contention - concurrent add and drain operations.
      */
-    private final List<InstanceHealth> batchPushQueue = new ArrayList<>();
-    private final Object batchLock = new Object();
+    private final Queue<InstanceHealth> batchPushQueue = new ConcurrentLinkedQueue<>();
 
     private void queueForBatchPush(String serviceId, String ip, int port, boolean healthy) {
         InstanceHealth health = new InstanceHealth();
@@ -281,23 +284,25 @@ public class HybridHealthChecker {
         health.setHealthy(healthy);
         health.setLastActiveCheckTime(System.currentTimeMillis());
 
-        synchronized (batchLock) {
-            batchPushQueue.add(health);
-        }
+        // ConcurrentLinkedQueue.offer() is thread-safe, no synchronized needed
+        batchPushQueue.add(health);
     }
 
     /**
      * Push batched health status to admin (BATCH PROCESSING).
+     * FIX (H5): No-lock drain using while(poll()) to avoid potential data loss from copy+clear.
      */
     public void pushBatchHealthStatusToAdmin() {
-        List<InstanceHealth> toPush;
+        List<InstanceHealth> toPush = new ArrayList<>();
 
-        synchronized (batchLock) {
-            if (batchPushQueue.isEmpty()) {
-                return;
-            }
-            toPush = new ArrayList<>(batchPushQueue);
-            batchPushQueue.clear();
+        // Drain queue without lock - poll() is thread-safe
+        InstanceHealth health;
+        while ((health = batchPushQueue.poll()) != null) {
+            toPush.add(health);
+        }
+
+        if (toPush.isEmpty()) {
+            return;
         }
 
         // Split into batches and push separately
@@ -319,9 +324,8 @@ public class HybridHealthChecker {
                 log.warn("Failed to push batch {}/{} to admin, will retry next cycle",
                         i + 1, batchCount, e);
                 // Re-add failed items to queue for retry
-                synchronized (batchLock) {
-                    batchPushQueue.addAll(0, batch); // Add to front for priority retry
-                }
+                // ConcurrentLinkedQueue.add() is thread-safe, no synchronized needed
+                batchPushQueue.addAll(batch);
                 // Stop pushing remaining batches on error
                 break;
             }
@@ -418,37 +422,36 @@ public class HybridHealthChecker {
 
     /**
      * Check if this might be a network flap (sudden mass state changes).
+     * FIX (H5): No synchronized needed - Queue.size() and stream() are thread-safe reads.
      */
     private boolean isPotentialNetworkFlap(boolean becomingHealthy) {
-        synchronized (batchLock) {
-            int queueSize = batchPushQueue.size();
+        int queueSize = batchPushQueue.size();
 
-            // Count how many are changing to the same state
-            long sameStateCount = batchPushQueue.stream()
-                    .filter(h -> h.isHealthy() == becomingHealthy)
-                    .count();
+        // Count how many are changing to the same state
+        // Stream snapshot is thread-safe for ConcurrentLinkedQueue
+        long sameStateCount = batchPushQueue.stream()
+                .filter(h -> h.isHealthy() == becomingHealthy)
+                .count();
 
-            // If more than threshold instances are changing to the same state,
-            // it might be a network flap
-            if (sameStateCount + 1 >= networkFlapThreshold) {
-                log.warn("NETWORK FLAP ALERT: {} instances {} at once (threshold={})",
-                        sameStateCount + 1,
-                        becomingHealthy ? "recovering" : "failing",
-                        networkFlapThreshold);
-                return true;
-            }
-
-            return false;
+        // If more than threshold instances are changing to the same state,
+        // it might be a network flap
+        if (sameStateCount + 1 >= networkFlapThreshold) {
+            log.warn("NETWORK FLAP ALERT: {} instances {} at once (threshold={})",
+                    sameStateCount + 1,
+                    becomingHealthy ? "recovering" : "failing",
+                    networkFlapThreshold);
+            return true;
         }
+
+        return false;
     }
 
     /**
      * Get current batch queue size (for debugging).
+     * FIX (H5): No synchronized needed - Queue.size() is thread-safe.
      */
     public int getBatchQueueSize() {
-        synchronized (batchLock) {
-            return batchPushQueue.size();
-        }
+        return batchPushQueue.size();
     }
 
     /**

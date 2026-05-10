@@ -236,7 +236,10 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
             RateLimitResult redisResult = distributedRateLimiter.tryAcquireWithFallback(
                     dimKey.getKey(), quota.getQps(), quota.getBurstCapacity(), quota.getWindowSizeMs());
 
-            if (redisResult.isAllowed()) {
+            // 防御性判空：不应该发生但 mock/异常场景下保护主流程
+            if (redisResult == null) {
+                log.warn("DistributedRateLimiter returned null for key={}, falling back to local", dimKey.getKey());
+            } else if (redisResult.isAllowed()) {
                 result.setAllowed(true);
                 result.setRemaining(redisResult.getRemainingRequests());
                 return result;
@@ -246,7 +249,7 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
                 result.setRemaining(0);
                 return result;
             }
-            // Redis unavailable, fall through to local
+            // Redis unavailable 或 null，fall through to local
         }
 
         // Use local rate limiter (shared utility class)

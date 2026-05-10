@@ -100,6 +100,13 @@ public class RedisConfig {
     }
 
     @Bean
+    public Counter seckillDegradeCounter() {
+        return Counter.builder("seckill.degrade")
+                .description("Redis降级模式命中次数")
+                .register(meterRegistry);
+    }
+
+    @Bean
     public Timer luaScriptTimer() {
         return Timer.builder("seckill.lua")
                 .description("Lua脚本执行耗时")

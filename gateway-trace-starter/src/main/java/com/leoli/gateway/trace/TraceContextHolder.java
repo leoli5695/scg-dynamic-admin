@@ -199,7 +199,7 @@ public class TraceContextHolder {
         TRACE_ID.remove();
         TRACE.remove();
         SAMPLED.remove();
-        MDC.clear();
+        MDC.remove("traceId");
     }
 
     /**

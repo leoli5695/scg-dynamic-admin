@@ -18,8 +18,12 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -65,14 +69,22 @@ public class BatchInsertService {
     private final SeckillConfig seckillConfig;
     private final AlertService alertService;
     private final TransactionLogMapper transactionLogMapper;
+    private final io.micrometer.core.instrument.MeterRegistry meterRegistry;
 
     /**
      * 攒批队列 - 使用有界队列防止内存膨胀
-     * 
+     *
      * 原问题：ConcurrentLinkedQueue 无界，秒杀流量洪峰时内存无限膨胀
      * 修复：改用 ArrayBlockingQueue，队列满时触发告警 + 强制刷新
      */
     private final ArrayBlockingQueue<SeckillOrder> orderQueue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
+
+    @jakarta.annotation.PostConstruct
+    void registerMetrics() {
+        io.micrometer.core.instrument.Gauge.builder("seckill.batch_queue.size", orderQueue, ArrayBlockingQueue::size)
+                .description("攒批队列当前深度")
+                .register(meterRegistry);
+    }
 
     /**
      * 队列容量上限（防止内存膨胀）
@@ -89,6 +101,12 @@ public class BatchInsertService {
      * 最大攒批时间（超过此时间强制刷新，单位：毫秒）
      */
     private static final long MAX_BATCH_WAIT_MS = 100;
+
+    /**
+     * 【P1-7修复】专用线程池，避免使用 ForkJoinPool.commonPool()
+     * 用于异步更新事务状态，防止耗尽 JVM 公共线程池
+     */
+    private final ExecutorService asyncExecutor = Executors.newFixedThreadPool(4);
 
     /**
      * 上次刷新时间
@@ -176,6 +194,10 @@ public class BatchInsertService {
      * 2. 成功后异步更新事务状态为 SUCCESS
      * 3. 失败时逐条重试，成功的更新状态，失败的保持 PROCESSING
      *
+     * 【P0-4修复】ShardingSphere跨分片批量插入问题：
+     * - 按 user_id 分组后再批量插入，每个分片一组单独执行
+     * - 避免 ShardingSphere 5.x 对跨分片批量 INSERT 的路由问题
+     *
      * 这样保证了：只有真正落库的事务才标记成功
      */
     public void flushBatch() {
@@ -197,21 +219,59 @@ public class BatchInsertService {
 
         log.info("批量写入订单: batchSize={}", batch.size());
 
-        // 执行批量写入
-        try {
-            int inserted = orderMapper.insertBatch(batch);
-            lastFlushTime = System.currentTimeMillis();
+        // 【P0-4修复】按 user_id 分组后再批量插入
+        // ShardingSphere 根据 user_id 路由到不同库表，同一 user_id 的订单路由到同一分片
+        Map<Long, List<SeckillOrder>> groupedByUser = batch.stream()
+                .collect(Collectors.groupingBy(SeckillOrder::getUserId));
 
-            log.info("批量写入成功: batchSize={}, inserted={}", batch.size(), inserted);
+        int totalInserted = 0;
+        int totalFailed = 0;
+        List<SeckillOrder> allSuccessOrders = new ArrayList<>();
 
-            // 【关键】落库成功后，异步批量更新事务状态
-            asyncUpdateTransactionStatus(batch, true);
+        for (Map.Entry<Long, List<SeckillOrder>> entry : groupedByUser.entrySet()) {
+            Long userId = entry.getKey();
+            List<SeckillOrder> userOrders = entry.getValue();
 
-        } catch (Exception e) {
-            log.error("批量写入失败: batchSize={}, error={}", batch.size(), e.getMessage());
+            try {
+                // 同一 user_id 的订单可以批量插入（路由到同一分片）
+                int inserted = orderMapper.insertBatch(userOrders);
+                totalInserted += inserted;
+                allSuccessOrders.addAll(userOrders);
 
-            // 批量写入失败，尝试逐条重试
-            retryInsertOneByOne(batch);
+                log.debug("分片批量写入成功: userId={}, count={}", userId, inserted);
+
+            } catch (Exception e) {
+                log.error("分片批量写入失败: userId={}, count={}, error={}",
+                        userId, userOrders.size(), e.getMessage());
+
+                // 该分片失败，尝试逐条重试
+                for (SeckillOrder order : userOrders) {
+                    try {
+                        orderMapper.insert(order);
+                        allSuccessOrders.add(order);
+                        totalInserted++;
+                        log.debug("单条写入成功: orderNo={}, userId={}", order.getOrderNo(), userId);
+                    } catch (Exception singleEx) {
+                        totalFailed++;
+                        log.error("单条写入失败: orderNo={}, userId={}, error={}",
+                                order.getOrderNo(), userId, singleEx.getMessage());
+                    }
+                }
+            }
+        }
+
+        lastFlushTime = System.currentTimeMillis();
+
+        log.info("批量写入完成: total={}, inserted={}, failed={}", batch.size(), totalInserted, totalFailed);
+
+        // 【关键】落库成功后，异步批量更新事务状态
+        if (!allSuccessOrders.isEmpty()) {
+            asyncUpdateTransactionStatus(allSuccessOrders, true);
+        }
+
+        if (totalFailed > 0) {
+            alertService.sendAlert("批量写入部分失败",
+                    "成功: " + totalInserted + "，失败: " + totalFailed + "，失败订单由 transaction_log 补偿");
         }
     }
 
@@ -222,6 +282,10 @@ public class BatchInsertService {
      *
      * 只有订单真正落库后才更新 transaction_log.status = SUCCESS
      *
+     * 【P1-7修复】：
+     * - 使用专用线程池 asyncExecutor，而非 ForkJoinPool.commonPool()
+     * - 避免高并发下耗尽 JVM 公共线程池
+     *
      * 设计原则：
      * - 异步执行，不阻塞攒批流程
      * - 失败不影响主流程，由定时任务兜底
@@ -230,7 +294,7 @@ public class BatchInsertService {
      * @param success 是否批量写入成功
      */
     private void asyncUpdateTransactionStatus(List<SeckillOrder> batch, boolean success) {
-        // 异步执行，不阻塞攒批线程
+        // 【P1-7修复】使用专用线程池 asyncExecutor，而非 ForkJoinPool.commonPool()
         CompletableFuture.runAsync(() -> {
             int successCount = 0;
             int failCount = 0;
@@ -268,7 +332,7 @@ public class BatchInsertService {
                 alertService.sendAlert("事务状态更新异常",
                         "批量更新事务状态失败数量: " + failCount + "，由定时任务兜底");
             }
-        }).exceptionally(ex -> {
+        }, asyncExecutor).exceptionally(ex -> {  // 【P1-7修复】使用 asyncExecutor
             log.error("异步更新事务状态异常: {}", ex.getMessage());
             return null;
         });
@@ -352,12 +416,28 @@ public class BatchInsertService {
      * - 多次刷新确保队列完全清空
      * - 超时保护：最多等待 30 秒
      *
+     * 【P1-7修复】：
+     * - 同时关闭专用线程池 asyncExecutor
+     * - 防止线程池泄漏
+     *
      * 注意：kill -9 无法触发 @PreDestroy，需要外部信号（SIGTERM）
      * Docker/K8s 默认发送 SIGTERM，等待 terminationGracePeriodSeconds
      */
     @PreDestroy
     public void shutdown() {
         log.info("=== BatchInsertService 优雅停机开始 ===");
+
+        // 【P1-7修复】先关闭专用线程池
+        asyncExecutor.shutdown();
+        try {
+            if (!asyncExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                asyncExecutor.shutdownNow();
+                log.warn("asyncExecutor 强制关闭");
+            }
+        } catch (InterruptedException e) {
+            asyncExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
         
         int remainingOrders = orderQueue.size();
         if (remainingOrders == 0) {

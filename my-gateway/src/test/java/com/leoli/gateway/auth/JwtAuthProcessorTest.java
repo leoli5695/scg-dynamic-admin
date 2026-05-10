@@ -317,18 +317,23 @@ class JwtAuthProcessorTest {
     class SecretKeyTests {
 
         @Test
-        @DisplayName("Should pad short secret key for HS256")
-        void testShortSecretKey() {
+        @DisplayName("Should derive short secret via PBKDF2 for HS256")
+        void testShortSecretKey() throws Exception {
             AuthConfig config = new AuthConfig();
             config.setEnabled(true);
             config.setSecretKey("short-key");
             config.setJwtAlgorithm("HS256");
 
-            // Processor pads "short-key" (9 chars) to 32 chars: "short-key" + 23 zeros
-            String paddedKey = "short-key" + "0".repeat(23);
+            // Processor 用 PBKDF2 派生 short key：与 JwtAuthProcessor.deriveKeyWithPBKDF2 保持一致
+            byte[] salt = "GatewayJWTKeyDerivationSalt".getBytes(StandardCharsets.UTF_8);
+            javax.crypto.spec.PBEKeySpec spec = new javax.crypto.spec.PBEKeySpec(
+                    "short-key".toCharArray(), salt, 10000, 32 * 8);
+            javax.crypto.SecretKeyFactory factory =
+                    javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+            byte[] derivedKey = factory.generateSecret(spec).getEncoded();
             String token = Jwts.builder()
                     .subject("user-test")
-                    .signWith(Keys.hmacShaKeyFor(paddedKey.getBytes(StandardCharsets.UTF_8)))
+                    .signWith(Keys.hmacShaKeyFor(derivedKey))
                     .compact();
 
             MockServerWebExchange exchange = createExchangeWithToken(token);

@@ -1,7 +1,11 @@
 package com.seckill.controller;
 
+import com.seckill.dto.OrderQueryRequest;
+import com.seckill.dto.OrderQueryResponse;
 import com.seckill.dto.PaymentCallbackRequest;
 import com.seckill.dto.PaymentCallbackResponse;
+import com.seckill.enums.OrderStatus;
+import com.seckill.service.OrderQueryService;
 import com.seckill.service.PaymentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +38,7 @@ import jakarta.servlet.http.HttpServletRequest;
 public class PaymentController {
 
     private final PaymentService paymentService;
+    private final OrderQueryService orderQueryService;
 
     /**
      * ============================================================================
@@ -78,6 +83,7 @@ public class PaymentController {
      * 查询支付状态
      * ============================================================================
      *
+     * 【P2-18修复】实现支付状态查询功能
      * 用户或前端查询订单支付状态
      *
      * @param orderNo 订单号
@@ -85,13 +91,47 @@ public class PaymentController {
      */
     @GetMapping("/query")
     public PaymentQueryResponse queryPaymentStatus(@RequestParam String orderNo) {
-        // 查询订单状态（实际实现需要调用订单服务）
-        PaymentQueryResponse response = new PaymentQueryResponse();
-        response.setOrderNo(orderNo);
-        // 状态查询逻辑待实现（可从ES查询）
-        response.setStatus("QUERY_PENDING");
-        response.setMessage("请使用订单查询接口");
-        return response;
+        log.info("查询支付状态: orderNo={}", orderNo);
+
+        // 【P2-18修复】调用 OrderQueryService 查询订单
+        OrderQueryRequest request = new OrderQueryRequest();
+        request.setOrderNo(orderNo);
+        request.setQueryType("ORDER_NO");
+
+        OrderQueryResponse response = orderQueryService.query(request);
+
+        PaymentQueryResponse queryResponse = new PaymentQueryResponse();
+        queryResponse.setOrderNo(orderNo);
+
+        if (response.isSuccess() && response.getOrder() != null) {
+            OrderQueryResponse.OrderDetail order = response.getOrder();
+            Integer status = order.getStatus();
+
+            // 状态映射
+            if (status == OrderStatus.PENDING_PAYMENT.getCode()) {
+                queryResponse.setStatus("PENDING_PAYMENT");
+                queryResponse.setMessage("等待支付");
+            } else if (status == OrderStatus.PAID.getCode()) {
+                queryResponse.setStatus("PAID");
+                queryResponse.setMessage("已支付");
+            } else if (status == OrderStatus.CANCELLED.getCode()) {
+                queryResponse.setStatus("CANCELLED");
+                queryResponse.setMessage("订单已取消");
+            } else if (status == OrderStatus.REFUNDED.getCode()) {
+                queryResponse.setStatus("REFUNDED");
+                queryResponse.setMessage("已退款");
+            } else {
+                queryResponse.setStatus("UNKNOWN");
+                queryResponse.setMessage("状态未知");
+            }
+        } else {
+            queryResponse.setStatus("NOT_FOUND");
+            queryResponse.setMessage("订单不存在");
+        }
+
+        log.info("支付状态查询完成: orderNo={}, status={}", orderNo, queryResponse.getStatus());
+
+        return queryResponse;
     }
 
     /**

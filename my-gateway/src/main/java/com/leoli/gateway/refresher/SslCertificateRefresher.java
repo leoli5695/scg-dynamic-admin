@@ -242,8 +242,8 @@ public class SslCertificateRefresher {
             }
             return Mono.empty();
         })
-        .repeatWhenEmpty(maxRetries, attempts -> 
-            attempts.delayElements(java.time.Duration.ofMillis(100 * attempts.incrementAndGet()))
+        .repeatWhenEmpty(maxRetries, attempts ->
+            attempts.concatMap(i -> Mono.delay(java.time.Duration.ofMillis(100L * (i + 1))))
         )
         .onErrorResume(e -> {
             log.debug("Retry delay interrupted for certificate: {}", domain);

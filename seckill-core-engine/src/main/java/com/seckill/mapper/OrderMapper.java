@@ -81,4 +81,27 @@ public interface OrderMapper extends BaseMapper<SeckillOrder> {
      * - MyBatis-Plus 的 insertBatch 已支持分片路由
      */
     int insertBatch(@Param("list") List<SeckillOrder> list);
+
+    /**
+     * ============================================================================
+     * 【P1-8修复】按用户ID分页查询订单列表
+     * ============================================================================
+     *
+     * userId 是分片键，可以精确路由到对应库表
+     *
+     * @param userId 用户ID（分片键）
+     * @param offset 偏移量
+     * @param limit 每页数量
+     * @return 订单列表
+     */
+    @Select("SELECT * FROM seckill_order WHERE user_id = #{userId} ORDER BY create_time DESC LIMIT #{offset}, #{limit}")
+    List<SeckillOrder> selectByUserIdPage(@Param("userId") Long userId, @Param("offset") int offset, @Param("limit") int limit);
+
+    /**
+     * ============================================================================
+     * 【P1-8修复】按用户ID统计订单数量
+     * ============================================================================
+     */
+    @Select("SELECT COUNT(*) FROM seckill_order WHERE user_id = #{userId}")
+    int countByUserId(@Param("userId") Long userId);
 }

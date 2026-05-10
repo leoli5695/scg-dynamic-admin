@@ -233,8 +233,10 @@ public class RouteRefresher {
             }
             return Mono.empty();
         })
-        .repeatWhenEmpty(maxRetries, attempts -> 
-            attempts.delayElements(java.time.Duration.ofMillis(100 * attempts.incrementAndGet()))
+        .repeatWhenEmpty(maxRetries, attempts ->
+            // attempts 是 Flux<Long>，元素值是当前重试次数（从 0 开始）。
+            // 用元素值做指数退避：100ms, 200ms, 400ms...
+            attempts.concatMap(i -> Mono.delay(java.time.Duration.ofMillis(100L * (i + 1))))
         )
         .onErrorResume(e -> {
             log.debug("Retry delay interrupted for route: {}", routeId);

@@ -301,6 +301,10 @@ public class RouteService {
 
         // Fallback: preserve serviceNamespace/serviceGroup if frontend sends null/empty
         // This is a defensive measure - the frontend should send correct values
+        // TODO: TECH_DEBT - Frontend should properly handle null fields instead of clearing them
+        //       This backend workaround adds overhead and should be removed once frontend is fixed.
+        //       Consider: 1) Frontend validation to prevent null for required fields
+        //                 2) Backend DTO to separate API model from domain model
         RouteDefinition originalRoute = routeConverter.toDefinition(entity);
         if ((route.getServiceNamespace() == null || route.getServiceNamespace().isEmpty())
                 && originalRoute.getServiceNamespace() != null && !originalRoute.getServiceNamespace().isEmpty()) {

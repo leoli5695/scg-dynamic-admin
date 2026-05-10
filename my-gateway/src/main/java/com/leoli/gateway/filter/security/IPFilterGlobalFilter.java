@@ -1,5 +1,7 @@
 package com.leoli.gateway.filter.security;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.leoli.gateway.config.TrustedProxyProperties;
 import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.manager.StrategyManager;
@@ -18,6 +20,7 @@ import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * IP Filter Global Filter
@@ -25,6 +28,10 @@ import java.util.Map;
  * Supports blacklist and whitelist modes with CIDR notation.
  * Implements trusted proxy validation for X-Forwarded-For header.
  * </p>
+ *
+ * FIX (M4): Added Caffeine cache for IP-to-long conversion.
+ * Hot IPs (common IPs from repeated requests) are cached to avoid
+ * repeated parsing overhead in high QPS scenarios.
  *
  * @author leoli
  */
@@ -35,6 +42,17 @@ public class IPFilterGlobalFilter implements GlobalFilter, Ordered {
 
     private final StrategyManager strategyManager;
     private final TrustedProxyProperties trustedProxyProperties;
+
+    /**
+     * FIX (M4): Caffeine cache for IPv4-to-long conversion.
+     * Cache size: 10000 entries (covers common IPs)
+     * TTL: 10 minutes (refresh stale entries)
+     * Purpose: Avoid repeated split parsing for hot IPs
+     */
+    private final Cache<String, Long> ipLongCache = Caffeine.newBuilder()
+            .maximumSize(10000)
+            .expireAfterWrite(10, TimeUnit.MINUTES)
+            .build();
 
     /**
      * Check if IP is in the list (supports CIDR notation)
@@ -140,6 +158,7 @@ public class IPFilterGlobalFilter implements GlobalFilter, Ordered {
 
     /**
      * Convert IPv4 address to long
+     * FIX (M4): Added Caffeine cache for hot IPs
      */
     private long ipv4ToLong(String ipAddress) {
         // Handle IPv6-mapped IPv4 addresses
@@ -157,6 +176,13 @@ public class IPFilterGlobalFilter implements GlobalFilter, Ordered {
             return 0;
         }
 
+        // FIX (M4): Check cache first for hot IPs
+        Long cached = ipLongCache.getIfPresent(ipAddress);
+        if (cached != null) {
+            return cached;
+        }
+
+        // Parse and cache the result
         String[] octets = ipAddress.split("\\.");
         if (octets.length != 4) {
             log.warn("Invalid IPv4 address format: {}", ipAddress);
@@ -172,6 +198,9 @@ public class IPFilterGlobalFilter implements GlobalFilter, Ordered {
                 return 0;
             }
         }
+
+        // Cache the parsed result for future requests
+        ipLongCache.put(ipAddress, result);
 
         return result;
     }

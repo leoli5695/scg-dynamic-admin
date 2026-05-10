@@ -1,6 +1,7 @@
 package com.leoli.gateway.trace.feign;
 
 import com.leoli.gateway.trace.TraceContextHolder;
+import com.leoli.gateway.trace.properties.GatewayTraceProperties;
 import feign.RequestInterceptor;
 import feign.RequestTemplate;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +27,12 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class FeignTraceInterceptor implements RequestInterceptor {
 
+    private final GatewayTraceProperties properties;
+
+    public FeignTraceInterceptor(GatewayTraceProperties properties) {
+        this.properties = properties;
+    }
+
     /**
      * TraceId Header name
      */
@@ -38,6 +45,11 @@ public class FeignTraceInterceptor implements RequestInterceptor {
 
     @Override
     public void apply(RequestTemplate template) {
+        // Check if tracing is enabled (master switch)
+        if (!properties.isEnabled()) {
+            return;
+        }
+
         // Get current TraceId
         String traceId = TraceContextHolder.getTraceId();
 
@@ -48,10 +60,9 @@ public class FeignTraceInterceptor implements RequestInterceptor {
         }
 
         // 传递采样标记（下游服务可以根据此标记决定是否追踪）
-        Boolean sampled = TraceContextHolder.isSampled();
-        if (sampled != null) {
-            template.header(SAMPLED_HEADER, sampled.toString());
-        }
+        // isSampled() 返回 boolean 基本类型，直接传递
+        boolean sampled = TraceContextHolder.isSampled();
+        template.header(SAMPLED_HEADER, String.valueOf(sampled));
 
         // Optional: propagate other context info (e.g., userId, tenantId)
         // String userId = TraceContextHolder.getUserId();

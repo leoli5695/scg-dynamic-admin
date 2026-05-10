@@ -1,7 +1,11 @@
 package com.seckill.controller;
 
+import com.seckill.dto.OrderQueryRequest;
+import com.seckill.dto.OrderQueryResponse;
 import com.seckill.dto.RefundRequest;
 import com.seckill.dto.RefundResponse;
+import com.seckill.enums.OrderStatus;
+import com.seckill.service.OrderQueryService;
 import com.seckill.service.RefundService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +39,7 @@ import jakarta.servlet.http.HttpServletRequest;
 public class RefundController {
 
     private final RefundService refundService;
+    private final OrderQueryService orderQueryService;
 
     /**
      * ============================================================================
@@ -82,17 +87,54 @@ public class RefundController {
      * 查询退款状态
      * ============================================================================
      *
+     * 【P2-19修复】实现退款状态查询功能
+     *
      * @param orderNo 订单号
      * @return 退款状态响应
      */
     @GetMapping("/query")
     public RefundQueryResponse queryRefundStatus(@RequestParam String orderNo) {
-        RefundQueryResponse response = new RefundQueryResponse();
-        response.setOrderNo(orderNo);
-        // 状态查询逻辑（可从ES查询）
-        response.setStatus("QUERY_PENDING");
-        response.setMessage("请使用订单查询接口");
-        return response;
+        log.info("查询退款状态: orderNo={}", orderNo);
+
+        // 【P2-19修复】调用 OrderQueryService 查询订单
+        OrderQueryRequest request = new OrderQueryRequest();
+        request.setOrderNo(orderNo);
+        request.setQueryType("ORDER_NO");
+
+        OrderQueryResponse response = orderQueryService.query(request);
+
+        RefundQueryResponse queryResponse = new RefundQueryResponse();
+        queryResponse.setOrderNo(orderNo);
+
+        if (response.isSuccess() && response.getOrder() != null) {
+            OrderQueryResponse.OrderDetail order = response.getOrder();
+            Integer status = order.getStatus();
+
+            // 状态映射
+            if (status == OrderStatus.PAID.getCode()) {
+                queryResponse.setStatus("PAID");
+                queryResponse.setMessage("已支付，未退款");
+            } else if (status == OrderStatus.REFUNDED.getCode()) {
+                queryResponse.setStatus("REFUNDED");
+                queryResponse.setMessage("已退款");
+            } else if (status == OrderStatus.CANCELLED.getCode()) {
+                queryResponse.setStatus("CANCELLED");
+                queryResponse.setMessage("订单已取消");
+            } else if (status == OrderStatus.PENDING_PAYMENT.getCode()) {
+                queryResponse.setStatus("PENDING_PAYMENT");
+                queryResponse.setMessage("等待支付，不可退款");
+            } else {
+                queryResponse.setStatus("UNKNOWN");
+                queryResponse.setMessage("状态未知");
+            }
+        } else {
+            queryResponse.setStatus("NOT_FOUND");
+            queryResponse.setMessage("订单不存在");
+        }
+
+        log.info("退款状态查询完成: orderNo={}, status={}", orderNo, queryResponse.getStatus());
+
+        return queryResponse;
     }
 
     /**

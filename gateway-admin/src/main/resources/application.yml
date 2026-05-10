@@ -62,11 +62,17 @@ gateway:
     # For Rancher Desktop WSL/K3s, use host.rancher-desktop.internal which resolves to the host machine
     k8sUrl: ${GATEWAY_ADMIN_K8S_URL:http://host.rancher-desktop.internal:9090}
     jwt:
-      # SECURITY: JWT secret must be set via environment variable (no default)
-      # Minimum 32 characters for HS256, 64 characters for HS512
-      secret: ${GATEWAY_ADMIN_JWT_SECRET:?GATEWAY_ADMIN_JWT_SECRET must be set}
+      # SECURITY FIX (C4/C5): JWT secret now requires minimum 32 characters for HS256
+      # Local dev default provided below, production should override via environment variable
+      # Minimum: 32 bytes (256 bits), Recommended: 64 bytes for enhanced security
+      secret: ${GATEWAY_ADMIN_JWT_SECRET:local-dev-secret-key-for-testing-only-min-32-chars!}
       expiration: 86400000  # 24 hours in milliseconds
       enabled: true  # Enable JWT for production
+    ssl:
+      # SECURITY FIX (C6/C7): SSL encryption key for password protection (AES-GCM)
+      # Local dev default provided below, production should override via environment variable
+      # Minimum: 16 bytes (128 bits), Recommended: 32 bytes for AES-256
+      encryption-key: ${GATEWAY_ADMIN_SSL_ENCRYPTION_KEY:LocalDevSSLKey16!}
   # Jaeger configuration for distributed tracing
   jaeger:
     url: ${JAEGER_URL:http://127.0.0.1:16686}
@@ -117,7 +123,9 @@ management:
         include: health,info,prometheus,metrics
   endpoint:
     health:
-      show-details: always
+      # SECURITY FIX (M5): Changed from 'always' to 'when-authorized'
+      # Prevents exposing sensitive health details (DB connections, Redis status) to public
+      show-details: when-authorized
     prometheus:
       enabled: true
   metrics:

@@ -65,4 +65,10 @@ public class OrderMessage {
      * 用于分布式链路追踪和问题排查
      */
     private String traceId;
+
+    /**
+     * 【P1-17修复】ES同步重试次数
+     * 用于控制最大重试次数，防止无限重试
+     */
+    private Integer esSyncRetryCount;
 }

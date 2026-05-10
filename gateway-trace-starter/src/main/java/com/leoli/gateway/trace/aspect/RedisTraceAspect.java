@@ -33,6 +33,11 @@ public class RedisTraceAspect {
             "execution(* org.springframework.data.redis.core.StringRedisTemplate.*(..)) || " +
             "execution(* org.springframework.data.redis.core.RedisOperations.*(..))")
     public Object traceRedis(ProceedingJoinPoint pjp) throws Throwable {
+        // Check if tracing is enabled (master switch)
+        if (!properties.isEnabled()) {
+            return pjp.proceed();
+        }
+
         // Check if Redis tracing is enabled
         if (!properties.isTraceRedis()) {
             return pjp.proceed();

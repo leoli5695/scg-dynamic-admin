@@ -1,5 +1,6 @@
 package com.seckill.service;
 
+import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,6 +11,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
  * ============================================================================
@@ -159,5 +161,28 @@ public class AlertService {
         INFO,
         WARNING,
         CRITICAL
+    }
+
+    /**
+     * ============================================================================
+     * 【P1-11修复】优雅停机：关闭线程池
+     * ============================================================================
+     *
+     * 防止 JVM 无法正常退出
+     */
+    @PreDestroy
+    public void shutdown() {
+        log.info("AlertService 优雅停机开始");
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+                log.warn("AlertService 线程池强制关闭");
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+        log.info("AlertService 优雅停机完成");
     }
 }

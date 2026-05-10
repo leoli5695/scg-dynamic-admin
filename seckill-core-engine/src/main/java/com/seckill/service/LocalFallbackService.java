@@ -132,38 +132,27 @@ public class LocalFallbackService {
      * - -3: 系统繁忙（库存过低，拒绝扣减）
      */
     public int deductStockLocal(Long seckillId, Long userId, int quantity) {
-        // Step 1: 防重检查
+        // Step 1: 防重检查（CAS 保证原子性）
         String boughtKey = seckillId + ":" + userId;
         AtomicInteger boughtCount = localBoughtMap.computeIfAbsent(boughtKey, k -> new AtomicInteger(0));
 
-        int currentBought = boughtCount.get();
-        // FIX: Use dedicated maxBuyCount config, NOT shardCount (they are different concepts!)
-        int maxBuyCount = seckillConfig.getMaxBuyCount();  // User purchase limit per activity
-
-        if (currentBought >= maxBuyCount) {
-            log.warn("本地防重检查：已购买过, seckillId={}, userId={}", seckillId, userId);
-            return -2;
+        int maxBuyCount = seckillConfig.getMaxBuyCount();
+        while (true) {
+            int currentBought = boughtCount.get();
+            if (currentBought >= maxBuyCount) {
+                log.warn("本地防重检查：已购买过, seckillId={}, userId={}", seckillId, userId);
+                return -2;
+            }
+            if (boughtCount.compareAndSet(currentBought, currentBought + quantity)) {
+                break;
+            }
         }
 
         // Step 2: 库存扣减
         AtomicInteger stock = localStockMap.get(seckillId);
         if (stock == null) {
             log.error("本地库存未初始化: seckillId={}", seckillId);
-            return -1;
-        }
-
-        // 【多实例超卖防护】库存过低时直接拒绝
-        int remaining = stock.get();
-        if (remaining <= minStockThreshold) {
-            log.warn("本地库存过低，拒绝扣减: seckillId={}, remaining={}, threshold={}", 
-                    seckillId, remaining, minStockThreshold);
-            alertService.sendAlert("降级模式库存不足", 
-                    "seckillId=" + seckillId + " 本地库存剩余 " + remaining + "，拒绝新请求");
-            return -3;
-        }
-
-        if (remaining < quantity) {
-            log.warn("本地库存不足: seckillId={}, remaining={}, request={}", seckillId, remaining, quantity);
+            boughtCount.addAndGet(-quantity);  // 回退防重计数
             return -1;
         }
 
@@ -171,15 +160,20 @@ public class LocalFallbackService {
         while (true) {
             int oldVal = stock.get();
             if (oldVal <= minStockThreshold) {
-                return -3;  // 再次检查，防止并发穿透
+                boughtCount.addAndGet(-quantity);  // 回退防重计数
+                log.warn("本地库存过低，拒绝扣减: seckillId={}, remaining={}, threshold={}",
+                        seckillId, oldVal, minStockThreshold);
+                alertService.sendAlert("降级模式库存不足",
+                        "seckillId=" + seckillId + " 本地库存剩余 " + oldVal + "，拒绝新请求");
+                return -3;
             }
             if (oldVal < quantity) {
+                boughtCount.addAndGet(-quantity);  // 回退防重计数
+                log.warn("本地库存不足: seckillId={}, remaining={}, request={}", seckillId, oldVal, quantity);
                 return -1;
             }
             int newVal = oldVal - quantity;
             if (stock.compareAndSet(oldVal, newVal)) {
-                // 更新购买记录
-                boughtCount.addAndGet(quantity);
                 log.warn("本地库存扣减成功: seckillId={}, userId={}, remaining={}（降级模式，{}比例）",
                         seckillId, userId, newVal, (int)(fallbackStockRatio * 100) + "%");
                 return newVal;

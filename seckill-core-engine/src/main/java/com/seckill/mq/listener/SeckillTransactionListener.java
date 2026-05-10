@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seckill.dto.OrderMessage;
 import com.seckill.enums.TransactionStatus;
 import com.seckill.service.SeckillService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.client.producer.LocalTransactionState;
 import org.apache.rocketmq.client.producer.TransactionListener;
@@ -17,11 +16,11 @@ import org.springframework.stereotype.Component;
  * ============================================================================
  * RocketMQ 事务消息监听器
  * ============================================================================
- * 
+ * <p>
  * 功能:
  * 1. executeLocalTransaction: 发送半消息后，执行本地事务
  * 2. checkLocalTransaction: Broker回查时，检查本地事务状态
- * 
+ * <p>
  * 流程:
  * - 发送半消息 → executeLocalTransaction → 写事务日志 → 提交/回滚
  * - 超时未确认 → checkLocalTransaction → 查事务日志 → 返回状态
@@ -43,22 +42,22 @@ public class SeckillTransactionListener implements TransactionListener {
      * ============================================================================
      * 执行本地事务
      * ============================================================================
-     * 
+     * <p>
      * 在发送半消息后，Broker返回半消息ID时执行
-     * 
+     *
      * @param msg 消息内容（包含OrderMessage）
      * @param arg 参数（可为空）
      * @return 本地事务状态:
-     *         COMMIT_MESSAGE: 提交消息，消费者可消费
-     *         ROLLBACK_MESSAGE: 回滚消息，消息丢弃 + 回补库存
-     *         UNKNOW: 等待回查
+     * COMMIT_MESSAGE: 提交消息，消费者可消费
+     * ROLLBACK_MESSAGE: 回滚消息，消息丢弃 + 回补库存
+     * UNKNOW: 等待回查
      */
     @Override
     public LocalTransactionState executeLocalTransaction(Message msg, Object arg) {
         try {
             // 解析消息内容
             OrderMessage orderMessage = deserializeOrderMessage(msg.getBody());
-            log.info("执行本地事务: transactionId={}, orderNo={}", 
+            log.info("执行本地事务: transactionId={}, orderNo={}",
                     orderMessage.getTransactionId(), orderMessage.getOrderNo());
 
             // 执行本地事务：写事务日志表（状态为 PROCESSING）
@@ -89,10 +88,10 @@ public class SeckillTransactionListener implements TransactionListener {
      * ============================================================================
      * 检查本地事务状态（事务回查）
      * ============================================================================
-     * 
+     * <p>
      * 当Broker超时未收到事务确认时，会调用此方法
      * 默认60秒后回查
-     * 
+     *
      * @param msg 消息内容
      * @return 本地事务状态
      */

@@ -43,7 +43,12 @@ public class MiddlewareMetadataReporter {
     }
 
     /**
-     * Auto-report middleware metadata at service startup
+     * Auto-report middleware metadata at service startup.
+     *
+     * <p>异步执行，避免阻塞 Spring 启动：
+     * - collectMetadata() 里 InetAddress.getLocalHost() 在 DNS 不通时可能阻塞几秒
+     * - doReport() 的 WebClient 是异步的，但 collect 是同步的
+     * - 任何抛出的异常都不会影响应用启动
      */
     @PostConstruct
     public void reportMiddlewareMetadata() {
@@ -59,16 +64,21 @@ public class MiddlewareMetadataReporter {
             return;
         }
 
-        // Collect middleware information
-        MiddlewareMetadata metadata = collectMetadata();
-
-        if (metadata.getMiddlewares().isEmpty()) {
-            log.info("No middleware detected, skip reporting");
-            return;
-        }
-
-        // Async reporting (doesn't block service startup)
-        doReport(metadata);
+        // 异步执行，不阻塞 Spring 启动
+        Thread reportThread = new Thread(() -> {
+            try {
+                MiddlewareMetadata metadata = collectMetadata();
+                if (metadata.getMiddlewares().isEmpty()) {
+                    log.info("No middleware detected, skip reporting");
+                    return;
+                }
+                doReport(metadata);
+            } catch (Exception e) {
+                log.warn("Failed to collect/report middleware metadata: {}", e.getMessage());
+            }
+        }, "middleware-metadata-reporter");
+        reportThread.setDaemon(true);
+        reportThread.start();
     }
 
     /**
@@ -167,13 +177,23 @@ public class MiddlewareMetadataReporter {
                 exporterUrl = "rocketmq-exporter:5557";
             }
 
-            // Parse namesrv address (format: host:port or host1:port1;host2:port2)
-            String[] parts = namesrv.split(";")[0].split(":");
-            String host = parts[0];
-            int port = parts.length > 1 ? Integer.parseInt(parts[1]) : 9876;
+            try {
+                String[] parts = namesrv.split(";")[0].split(":");
+                String host = parts[0];
+                int port = 9876;
+                if (parts.length > 1) {
+                    try {
+                        port = Integer.parseInt(parts[1]);
+                    } catch (NumberFormatException e) {
+                        log.warn("Invalid RocketMQ port in '{}', using default 9876", namesrv);
+                    }
+                }
 
-            metadata.addMiddleware("rocketmq", host, port, exporterUrl);
-            log.debug("Detected RocketMQ: {}", namesrv);
+                metadata.addMiddleware("rocketmq", host, port, exporterUrl);
+                log.debug("Detected RocketMQ: {}", namesrv);
+            } catch (Exception e) {
+                log.warn("Failed to parse RocketMQ name-server address '{}': {}", namesrv, e.getMessage());
+            }
         }
     }
 

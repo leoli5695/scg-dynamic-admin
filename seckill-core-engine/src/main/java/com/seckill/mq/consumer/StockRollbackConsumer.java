@@ -21,16 +21,16 @@ import java.util.concurrent.TimeUnit;
  * ============================================================================
  * 库存回补消费者（延迟队列）
  * ============================================================================
- * 
+ * <p>
  * 功能:
  * 1. 消费20分钟延迟消息
  * 2. 查询订单状态
  * 3. 未支付则回补库存 + 取消订单
- * 
+ * <p>
  * 关键设计:
  * - 从订单表读取shard_index，精确回补到原分片
  * - 避免分片库存溢出
- * 
+ * <p>
  * 幂等性:
  * - Redis SETNX 快速幂等检查（防止消息重复投递）
  * - 订单状态检查（已取消则跳过）
@@ -117,7 +117,7 @@ public class StockRollbackConsumer implements RocketMQListener<String> {
 
                     log.info("订单取消完成: orderNo={}", orderNo);
                 } else {
-                    log.error("库存回补失败: seckillId={}, userId={}, result={}", 
+                    log.error("库存回补失败: seckillId={}, userId={}, result={}",
                             seckillId, userId, rollbackResult);
                     // 需要人工处理或补偿
                 }

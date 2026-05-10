@@ -78,17 +78,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     /**
      * Check if the endpoint is public (no authentication required).
+     * SECURITY: Removed dangerous white-list endpoints:
+     * - /actuator/**: now requires authentication (C1 fix)
+     * - /h2-console/: database console must not be public (C2 fix)
+     * - /api/gateway/health/sync: sync operation requires auth (C8 fix)
+     * - /api/kubernetes/: K8s control operations require auth (C3 fix)
+     * - /api/stress-test/run: stress test trigger requires auth (H5 fix)
      */
     private boolean isPublicEndpoint(String requestURI) {
         return requestURI.startsWith("/api/auth/") ||      // Login/register
-               requestURI.startsWith("/actuator/") ||       // Health checks
-               requestURI.startsWith("/h2-console/") ||     // Database console
-               requestURI.equals("/api/gateway/health/sync") || // Gateway health sync
-               requestURI.startsWith("/api/gateway/health") || // Gateway health query
+               requestURI.equals("/actuator/health") ||    // Only basic health endpoint (not all actuator)
+               requestURI.startsWith("/api/gateway/health") || // Gateway health query (read-only)
                requestURI.startsWith("/api/instances/heartbeat") || // Instance heartbeat (monitoring)
-               requestURI.startsWith("/api/nacos/") ||      // Nacos discovery queries
-               requestURI.startsWith("/api/kubernetes/") || // Kubernetes queries (public read)
-               requestURI.startsWith("/api/stress-test/run"); // Stress test trigger (internal)
+               requestURI.startsWith("/api/nacos/");       // Nacos discovery queries
     }
 
     /**

@@ -38,7 +38,7 @@ public class LuaScriptService {
 
     private final Counter luaSuccessCounter;
     private final Counter luaFailureCounter;
-    private final Timer   luaLatencyTimer;
+    private final Timer luaLatencyTimer;
 
     public LuaScriptService(
             StringRedisTemplate redisTemplate,

@@ -273,7 +273,7 @@ class RetryGlobalFilterTest {
         void testMaxAttemptsReached() {
             MockServerWebExchange exchange = createMockExchange("/api/test", "test-route");
             when(strategyManager.isStrategyEnabled(anyString(), eq(StrategyDefinition.TYPE_RETRY))).thenReturn(true);
-            // maxAttempts=2 means: 1 initial attempt + up to 2 retries = 3 total calls
+            // maxAttempts=2 总共尝试 2 次（初次 + 1 重试），与主流框架 (Resilience4j, Spring Retry) 语义一致
             when(strategyManager.getRetryConfig(anyString())).thenReturn(createConfigWithMaxAttempts(2));
 
             // Always fail
@@ -284,8 +284,8 @@ class RetryGlobalFilterTest {
                     .expectError(java.net.ConnectException.class)
                     .verify();
 
-            // Should call chain.filter (maxAttempts + 1) times = 3 times
-            verify(chain, times(3)).filter(any());
+            // chain.filter 应被调用 maxAttempts = 2 次
+            verify(chain, times(2)).filter(any());
         }
     }
 
@@ -351,7 +351,7 @@ class RetryGlobalFilterTest {
         @Test
         @DisplayName("Filter order should be 9999")
         void testFilterOrder() {
-            assertEquals(9999, filter.getOrder());
+            assertEquals(com.leoli.gateway.constants.FilterOrderConstants.RETRY, filter.getOrder());
         }
     }
 

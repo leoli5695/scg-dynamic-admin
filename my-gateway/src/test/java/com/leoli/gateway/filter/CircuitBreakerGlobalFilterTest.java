@@ -216,9 +216,9 @@ class CircuitBreakerGlobalFilterTest {
     // ============================================================
 
     @Test
-    @DisplayName("Filter order should be -100")
+    @DisplayName("Filter order should match FilterOrderConstants.CIRCUIT_BREAKER")
     void testGetOrder() {
-        assertEquals(-100, filter.getOrder());
+        assertEquals(com.leoli.gateway.constants.FilterOrderConstants.CIRCUIT_BREAKER, filter.getOrder());
     }
 
     // ============================================================

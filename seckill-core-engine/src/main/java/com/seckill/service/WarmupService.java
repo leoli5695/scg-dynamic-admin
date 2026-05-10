@@ -148,12 +148,15 @@ public class WarmupService {
      * ============================================================================
      * 清理预热数据（活动结束后）
      * ============================================================================
+     *
+     * 【P2-23修复】活动结束后清理所有预热数据
+     * 使用专门的 cleanupActivity 方法，明确清空库存、购买记录和分片记录
      */
     public void cleanupWarmup(Long seckillId) {
         log.info("清理预热数据: seckillId={}", seckillId);
 
-        // 清理Redis数据
-        seckillDeductLua.warmupStock(seckillId, 0);
+        // 【P2-23修复】使用专门的清理方法，明确清空所有数据
+        seckillDeductLua.cleanupActivity(seckillId);
     }
 
     /**

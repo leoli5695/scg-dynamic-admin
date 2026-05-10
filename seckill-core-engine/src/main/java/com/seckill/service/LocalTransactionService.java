@@ -3,6 +3,7 @@ package com.seckill.service;
 import com.seckill.dto.OrderMessage;
 import com.seckill.entity.SeckillOrder;
 import com.seckill.enums.OrderStatus;
+import com.seckill.enums.TransactionStatus;
 import com.seckill.mapper.OrderMapper;
 import com.seckill.mapper.TransactionLogMapper;
 import lombok.RequiredArgsConstructor;
@@ -73,7 +74,7 @@ public class LocalTransactionService {
             transactionLog.setTotalAmount(orderMessage.getTotalAmount());
             transactionLog.setOrderNo(orderMessage.getOrderNo());
             transactionLog.setShardIndex(orderMessage.getShardIndex());
-            transactionLog.setStatus(0); // 处理中
+            transactionLog.setStatus(TransactionStatus.PROCESSING.getCode()); // 处理中
             transactionLog.setRetryCount(0);
             transactionLog.setCreateTime(LocalDateTime.now());
             transactionLog.setUpdateTime(LocalDateTime.now());
@@ -101,7 +102,7 @@ public class LocalTransactionService {
             elasticsearchService.indexOrder(orderMessage);
 
             // Step 4: 更新事务状态为成功
-            transactionLog.setStatus(1); // 成功
+            transactionLog.setStatus(TransactionStatus.SUCCESS.getCode()); // 成功
             transactionLog.setUpdateTime(LocalDateTime.now());
             transactionLogMapper.updateById(transactionLog);
 
