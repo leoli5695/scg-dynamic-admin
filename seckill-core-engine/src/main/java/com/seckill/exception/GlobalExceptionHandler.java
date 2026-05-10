@@ -87,12 +87,13 @@ public class GlobalExceptionHandler {
 
     /**
      * 商品不存在
+     * FIX: 保持与其他 NotFound 类一致，使用 SeckillResult.PRODUCT_NOT_FOUND
      */
     @ExceptionHandler(ProductNotFoundException.class)
     @ResponseStatus(HttpStatus.OK)
     public SeckillResponse handleProductNotFound(ProductNotFoundException e) {
         log.warn("商品不存在: {}", e.getMessage());
-        return SeckillResponse.systemError("商品不存在");
+        return SeckillResponse.fail(SeckillResult.PRODUCT_NOT_FOUND);
     }
 
     /**

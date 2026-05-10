@@ -136,15 +136,18 @@ public class AntiScrapingService {
         }
 
         // Check rate limit using Lua sliding window
+        // FIX: 添加 random value 避免同毫秒去重
         String key = IP_RATE_KEY_PREFIX + clientIp;
         long currentTime = System.currentTimeMillis();
+        String randomValue = java.util.UUID.randomUUID().toString().substring(0, 8);
 
         Long result = redisTemplate.execute(
             rateLimitScript,
             Collections.singletonList(key),
             String.valueOf(RATE_WINDOW_MS),
             String.valueOf(ipRateLimitPerSecond),
-            String.valueOf(currentTime)
+            String.valueOf(currentTime),
+            randomValue  // FIX: 添加唯一标识避免同毫秒去重
         );
 
         if (result != null && result == -1) {
@@ -181,15 +184,18 @@ public class AntiScrapingService {
             return true;
         }
 
+        // FIX: 添加 random value 避免同毫秒去重
         String key = USER_RATE_KEY_PREFIX + userId;
         long currentTime = System.currentTimeMillis();
+        String randomValue = java.util.UUID.randomUUID().toString().substring(0, 8);
 
         Long result = redisTemplate.execute(
             rateLimitScript,
             Collections.singletonList(key),
             String.valueOf(RATE_WINDOW_MS),
             String.valueOf(userRateLimitPerSecond),
-            String.valueOf(currentTime)
+            String.valueOf(currentTime),
+            randomValue  // FIX: 添加唯一标识避免同毫秒去重
         );
 
         if (result != null && result == -1) {

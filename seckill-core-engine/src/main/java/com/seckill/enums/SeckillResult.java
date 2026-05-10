@@ -54,6 +54,12 @@ public enum SeckillResult {
     ACTIVITY_NOT_FOUND(-4, "秒杀活动不存在"),
 
     /**
+     * 商品不存在
+     * FIX: 补充 PRODUCT_NOT_FOUND 枚举，保持与其他 NotFound 类一致
+     */
+    PRODUCT_NOT_FOUND(-7, "商品不存在"),
+
+    /**
      * 参数错误
      */
     PARAM_ERROR(-5, "参数错误");
