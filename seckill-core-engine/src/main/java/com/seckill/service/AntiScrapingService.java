@@ -4,12 +4,16 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import jakarta.annotation.PostConstruct;
+import java.util.Collections;
+import java.util.List;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 
 /**
  * ============================================================================
@@ -19,14 +23,14 @@ import java.util.concurrent.TimeUnit;
  * SECURITY FIX (P1): Comprehensive anti-scraping mechanism
  *
  * Features:
- * 1. IP-level rate limiting (same IP max requests per second)
+ * 1. IP-level rate limiting (sliding window with Lua)
  * 2. IP blacklist management (block malicious IPs)
- * 3. User-level rate limiting (same user max requests per second)
+ * 3. User-level rate limiting (sliding window with Lua)
  * 4. Auto-blacklist trigger (auto-block IPs exceeding threshold)
  *
  * Implementation:
- * - Redis-based rate counting (sliding window)
- * - Redis-based blacklist storage
+ * - Redis Lua sliding window (精确限流，避免边界突刺)
+ * - Redis-based blacklist storage (Set)
  * - Automatic cleanup of stale data
  *
  * Monitoring:
@@ -65,13 +69,16 @@ public class AntiScrapingService {
     @Value("${seckill.anti-scraping.blacklist-ttl-hours:24}")
     private int blacklistTtlHours;
 
-    // Rate limit window in seconds
-    private static final int RATE_WINDOW_SECONDS = 1;
+    // Rate limit window in milliseconds
+    private static final int RATE_WINDOW_MS = 1000;
 
     // Metrics
     private final Counter ipBlockedCounter;
     private final Counter ipRateLimitCounter;
     private final Counter userRateLimitCounter;
+
+    // Lua script for sliding window rate limiting
+    private DefaultRedisScript<Long> rateLimitScript;
 
     public AntiScrapingService(
             StringRedisTemplate redisTemplate,
@@ -94,9 +101,24 @@ public class AntiScrapingService {
     }
 
     /**
+     * Load Lua script at startup for sliding window rate limiting
+     */
+    @PostConstruct
+    public void loadLuaScript() {
+        rateLimitScript = new DefaultRedisScript<>();
+        rateLimitScript.setLocation(new ClassPathResource("lua/rate_limit.lua"));
+        rateLimitScript.setResultType(Long.class);
+        log.info("AntiScrapingService initialized with Lua sliding window rate limiting");
+    }
+
+    /**
      * ============================================================================
      * Check if IP is allowed (not blacklisted and within rate limit)
      * ============================================================================
+     * 
+     * OPTIMIZATION: 使用 Lua 滑动窗口替代固定窗口计数器
+     * - 精确限流，避免边界突刺问题
+     * - 原子操作，INCR + EXPIRE 一次完成
      *
      * @param clientIp Client IP address
      * @return true: allowed, false: blocked
@@ -113,31 +135,42 @@ public class AntiScrapingService {
             return false;
         }
 
-        // Check rate limit
-        if (isIpRateLimited(clientIp)) {
+        // Check rate limit using Lua sliding window
+        String key = IP_RATE_KEY_PREFIX + clientIp;
+        long currentTime = System.currentTimeMillis();
+
+        Long result = redisTemplate.execute(
+            rateLimitScript,
+            Collections.singletonList(key),
+            String.valueOf(RATE_WINDOW_MS),
+            String.valueOf(ipRateLimitPerSecond),
+            String.valueOf(currentTime)
+        );
+
+        if (result != null && result == -1) {
             ipRateLimitCounter.increment();
+            log.warn("IP rate limited (sliding window): ip={}, max={}", clientIp, ipRateLimitPerSecond);
 
             // Check auto-blacklist threshold
-            long totalRequests = getIpTotalRequests(clientIp);
-            if (totalRequests >= autoBlacklistThreshold) {
+            // For sliding window, we need to check the count in the key
+            long currentCount = getCurrentIpCount(clientIp);
+            if (currentCount >= autoBlacklistThreshold) {
                 addToBlacklist(clientIp);
                 ipBlockedCounter.increment();
-                log.warn("IP auto-blacklisted: ip={}, totalRequests={}", clientIp, totalRequests);
+                log.warn("IP auto-blacklisted: ip={}, requestsInWindow={}", clientIp, currentCount);
                 alertService.sendCriticalAlert("IP自动封禁",
-                    "IP: " + clientIp + " 在短时间内请求 " + totalRequests + " 次，已自动封禁");
+                    "IP: " + clientIp + " 滑动窗口内请求 " + currentCount + " 次，已自动封禁");
             }
 
             return false;
         }
 
-        // Record request
-        recordIpRequest(clientIp);
         return true;
     }
 
     /**
      * ============================================================================
-     * Check if user is within rate limit
+     * Check if user is within rate limit (sliding window)
      * ============================================================================
      *
      * @param userId User ID
@@ -149,18 +182,22 @@ public class AntiScrapingService {
         }
 
         String key = USER_RATE_KEY_PREFIX + userId;
-        String countStr = redisTemplate.opsForValue().get(key);
+        long currentTime = System.currentTimeMillis();
 
-        int count = countStr != null ? Integer.parseInt(countStr) : 0;
-        if (count >= userRateLimitPerSecond) {
+        Long result = redisTemplate.execute(
+            rateLimitScript,
+            Collections.singletonList(key),
+            String.valueOf(RATE_WINDOW_MS),
+            String.valueOf(userRateLimitPerSecond),
+            String.valueOf(currentTime)
+        );
+
+        if (result != null && result == -1) {
             userRateLimitCounter.increment();
-            log.warn("User rate limited: userId={}, count={}", userId, count);
+            log.warn("User rate limited (sliding window): userId={}, max={}", userId, userRateLimitPerSecond);
             return false;
         }
 
-        // Increment count with TTL
-        redisTemplate.opsForValue().increment(key);
-        redisTemplate.expire(key, RATE_WINDOW_SECONDS, TimeUnit.SECONDS);
         return true;
     }
 
@@ -220,28 +257,13 @@ public class AntiScrapingService {
 
     /**
      * ============================================================================
-     * Internal methods
+     * Get current IP request count in window (for monitoring)
      * ============================================================================
      */
-
-    private boolean isIpRateLimited(String clientIp) {
+    private long getCurrentIpCount(String clientIp) {
         String key = IP_RATE_KEY_PREFIX + clientIp;
-        String countStr = redisTemplate.opsForValue().get(key);
-
-        int count = countStr != null ? Integer.parseInt(countStr) : 0;
-        return count >= ipRateLimitPerSecond;
-    }
-
-    private void recordIpRequest(String clientIp) {
-        String key = IP_RATE_KEY_PREFIX + clientIp;
-        redisTemplate.opsForValue().increment(key);
-        redisTemplate.expire(key, RATE_WINDOW_SECONDS, TimeUnit.SECONDS);
-    }
-
-    private long getIpTotalRequests(String clientIp) {
-        String key = IP_RATE_KEY_PREFIX + clientIp;
-        String countStr = redisTemplate.opsForValue().get(key);
-        return countStr != null ? Long.parseLong(countStr) : 0;
+        Long count = redisTemplate.opsForZSet().zCard(key);
+        return count != null ? count : 0;
     }
 
     /**
@@ -266,7 +288,7 @@ public class AntiScrapingService {
 
         // Note: Redis Set doesn't support TTL per member
         // For proper TTL, we would need a different structure
-        // This is a simplified approach - blacklist entries are cleared manually or by restart
+        // Sliding window keys have TTL automatically
     }
 
     /**
