@@ -30,7 +30,7 @@ import {
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import axios from "axios";
+import api from "../utils/api";
 import "./InstancesPage.css";
 
 const { Text } = Typography;
@@ -87,8 +87,8 @@ const InstancesPage: React.FC = () => {
     setLoading(true);
     try {
       const [instancesRes, clustersRes] = await Promise.all([
-        axios.get("/api/instances"),
-        axios.get("/api/kubernetes/clusters"),
+        api.get("/api/instances"),
+        api.get("/api/kubernetes/clusters"),
       ]);
       setInstances(instancesRes.data.data || []);
       setClusters(clustersRes.data.data || []);
@@ -102,7 +102,7 @@ const InstancesPage: React.FC = () => {
 
   const handleStartInstance = async (id: number) => {
     try {
-      const response = await axios.post(`/api/instances/${id}/start`);
+      const response = await api.post(`/api/instances/${id}/start`);
       if (response.data.code === 200) {
         message.success(t("instance.start_success"));
         fetchData();
@@ -114,7 +114,7 @@ const InstancesPage: React.FC = () => {
 
   const handleStopInstance = async (id: number) => {
     try {
-      const response = await axios.post(`/api/instances/${id}/stop`);
+      const response = await api.post(`/api/instances/${id}/stop`);
       if (response.data.code === 200) {
         message.success(t("instance.stop_success"));
         fetchData();
@@ -126,7 +126,7 @@ const InstancesPage: React.FC = () => {
 
   const handleDeleteInstance = async (id: number) => {
     try {
-      const response = await axios.delete(`/api/instances/${id}`);
+      const response = await api.delete(`/api/instances/${id}`);
       if (response.data.code === 200) {
         message.success(t("instance.delete_success"));
         fetchData();
@@ -138,7 +138,7 @@ const InstancesPage: React.FC = () => {
 
   const handleRefreshStatus = async (id: number) => {
     try {
-      await axios.post(`/api/instances/${id}/refresh`);
+      await api.post(`/api/instances/${id}/refresh`);
       fetchData();
     } catch (error) {
       message.error(t("common.refresh_failed"));

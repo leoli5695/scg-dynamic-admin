@@ -220,7 +220,7 @@ public class AsyncTraceReporter {
             return;
         }
 
-        String url = properties.getAdminUrl() + "/api/traces/distributed/batch";
+        String url = properties.getAdminUrl() + "/api/services/traces/batch";
 
         webClient.post()
                 .uri(url)
@@ -360,7 +360,7 @@ public class AsyncTraceReporter {
             log.info("Shutdown: attempting to report {} remaining traces", remaining.size());
             try {
                 // Synchronously report remaining data (block waiting for result)
-                String url = properties.getAdminUrl() + "/api/traces/distributed/batch";
+                String url = properties.getAdminUrl() + "/api/services/traces/batch";
                 webClient.post()
                         .uri(url)
                         .bodyValue(remaining)

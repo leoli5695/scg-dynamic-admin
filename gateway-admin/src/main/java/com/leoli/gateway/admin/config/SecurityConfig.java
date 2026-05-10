@@ -55,6 +55,14 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         // Public endpoints - login, register, health check
                         .requestMatchers("/api/auth/login", "/api/auth/register", "/actuator/health").permitAll()
+                        // Gateway instance heartbeat endpoints (called by gateway pods, no JWT)
+                        .requestMatchers("/api/instances/heartbeat", "/api/instances/started").permitAll()
+                        // Gateway health sync endpoint (called by gateway pods for health status reporting, no JWT)
+                        .requestMatchers("/api/gateway/health/**").permitAll()
+                        // Gateway trace data endpoints (called by gateway pods for trace/filter execution data, no JWT)
+                        .requestMatchers("/api/traces/internal", "/api/traces/internal/batch", "/api/filter-executions/internal").permitAll()
+                        // Gateway-trace-starter endpoints (called by services with trace-starter, no JWT)
+                        .requestMatchers("/api/services/traces", "/api/services/traces/batch", "/api/services/middleware-metadata").permitAll()
                         // Swagger/OpenAPI documentation (optional - can be restricted in production)
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         // All other requests require authentication

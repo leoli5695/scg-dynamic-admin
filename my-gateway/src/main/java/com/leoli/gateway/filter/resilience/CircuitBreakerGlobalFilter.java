@@ -169,12 +169,15 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
 
     /**
      * Find a circuit breaker by name from the registry.
-     * FIX: Changed from O(n) stream.filter() to O(1) map.get()
-     * Before: Stream through all circuit breakers to find by name
-     * After: Direct lookup from registry's internal map
+     * Uses stream filter to find by name (Resilience4j Registry doesn't have direct getByName).
+     * Returns null if circuit breaker doesn't exist.
      */
     private CircuitBreaker findCircuitBreaker(String name) {
-        return circuitBreakerRegistry.getAllCircuitBreakers().asMap().get(name);
+        return circuitBreakerRegistry.getAllCircuitBreakers()
+                .stream()
+                .filter(cb -> cb.getName().equals(name))
+                .findFirst()
+                .orElse(null);
     }
 
     /**

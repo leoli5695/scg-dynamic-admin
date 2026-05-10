@@ -90,6 +90,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                requestURI.equals("/actuator/health") ||    // Only basic health endpoint (not all actuator)
                requestURI.startsWith("/api/gateway/health") || // Gateway health query (read-only)
                requestURI.startsWith("/api/instances/heartbeat") || // Instance heartbeat (monitoring)
+               requestURI.startsWith("/api/instances/started") || // Instance startup notification
+               requestURI.equals("/api/traces/internal") || // Trace data from gateway (internal API)
+               requestURI.equals("/api/traces/internal/batch") || // Batch trace upload
+               requestURI.equals("/api/filter-executions/internal") || // Filter execution data from gateway
+               requestURI.equals("/api/services/traces") || // Distributed trace from trace-starter
+               requestURI.equals("/api/services/traces/batch") || // Batch distributed trace upload
+               requestURI.equals("/api/services/middleware-metadata") || // Middleware metadata from trace-starter
                requestURI.startsWith("/api/nacos/");       // Nacos discovery queries
     }
 

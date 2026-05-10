@@ -27,7 +27,7 @@ import {
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import axios from "axios";
+import api from "../utils/api";
 import "../styles/form-page.css";
 
 const { Option } = Select;
@@ -91,8 +91,8 @@ const InstanceCreatePage: React.FC = () => {
     setLoading(true);
     try {
       const [clustersRes, specsRes] = await Promise.all([
-        axios.get("/api/kubernetes/clusters"),
-        axios.get("/api/instances/specs"),
+        api.get("/api/kubernetes/clusters"),
+        api.get("/api/instances/specs"),
       ]);
       setClusters(clustersRes.data.data || []);
       setSpecs(specsRes.data.data || []);
@@ -107,7 +107,7 @@ const InstanceCreatePage: React.FC = () => {
   const loadLocalImages = async (clusterId: number) => {
     setLoadingImages(true);
     try {
-      const res = await axios.get(`/api/kubernetes/clusters/${clusterId}/images`);
+      const res = await api.get(`/api/kubernetes/clusters/${clusterId}/images`);
       if (res.data.code === 200) {
         const rawImages = res.data.data || [];
         // Parse image names into structured format
@@ -162,7 +162,7 @@ const InstanceCreatePage: React.FC = () => {
   const handleSubmit = async (values: any) => {
     setSubmitting(true);
     try {
-      const response = await axios.post("/api/instances", values);
+      const response = await api.post("/api/instances", values);
       if (response.data.code === 200) {
         message.success(t("instance.create_success"));
         navigate("/instances");

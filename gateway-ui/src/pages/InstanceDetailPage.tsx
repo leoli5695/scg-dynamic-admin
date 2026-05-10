@@ -60,7 +60,7 @@ import {
 } from "@ant-design/icons";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import axios from "axios";
+import api from "../utils/api";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import ErrorBoundary from "../components/ErrorBoundary";
 
@@ -297,7 +297,7 @@ const InstanceDetailPage: React.FC = () => {
 
   const fetchConfig = async () => {
     try {
-      const response = await axios.get("/api/instances/config");
+      const response = await api.get("/api/instances/config");
       if (response.data.code === 200 && response.data.data?.nacosServerAddr) {
         setGlobalNacosAddr(response.data.data.nacosServerAddr);
       }
@@ -310,7 +310,7 @@ const InstanceDetailPage: React.FC = () => {
     if (!instanceId) return;
     setLoading(true);
     try {
-      const response = await axios.get(`/api/instances/by-instance-id/${instanceId}`);
+      const response = await api.get(`/api/instances/by-instance-id/${instanceId}`);
       if (response.data.code === 200) {
         setInstance(response.data.data);
       } else {
@@ -330,7 +330,7 @@ const InstanceDetailPage: React.FC = () => {
     if (!instance) return;
     setEventsLoading(true);
     try {
-      const response = await axios.get(`/api/instances/${instance.id}/events`, {
+      const response = await api.get(`/api/instances/${instance.id}/events`, {
         params: {
           sinceSeconds: 3600, // Last 1 hour
           limit: 50,
@@ -356,7 +356,7 @@ const InstanceDetailPage: React.FC = () => {
     if (!instance) return;
     setHealthLoading(true);
     try {
-      const response = await axios.get(`/api/instances/${instance.id}/health-score`);
+      const response = await api.get(`/api/instances/${instance.id}/health-score`);
       if (response.data.code === 200) {
         const data = response.data.data;
         setHealthScore(data.score);
@@ -376,7 +376,7 @@ const InstanceDetailPage: React.FC = () => {
     if (!instance) return;
     setResourceLoading(true);
     try {
-      const response = await axios.get(`/api/instances/${instance.id}/resource-metrics`);
+      const response = await api.get(`/api/instances/${instance.id}/resource-metrics`);
       if (response.data.code === 200) {
         setResourceMetrics(response.data.data);
       }
@@ -391,7 +391,7 @@ const InstanceDetailPage: React.FC = () => {
   const handleStart = async () => {
     if (!instance) return;
     try {
-      const response = await axios.post(`/api/instances/${instance.id}/start`);
+      const response = await api.post(`/api/instances/${instance.id}/start`);
       if (response.data.code === 200) {
         message.success(t("instance.start_success"));
         fetchInstance();
@@ -404,7 +404,7 @@ const InstanceDetailPage: React.FC = () => {
   const handleStop = async () => {
     if (!instance) return;
     try {
-      const response = await axios.post(`/api/instances/${instance.id}/stop`);
+      const response = await api.post(`/api/instances/${instance.id}/stop`);
       if (response.data.code === 200) {
         message.success(t("instance.stop_success"));
         fetchInstance();
@@ -431,7 +431,7 @@ const InstanceDetailPage: React.FC = () => {
         }
       }
 
-      const response = await axios.put(`/api/instances/${instance.id}/scale`, requestBody);
+      const response = await api.put(`/api/instances/${instance.id}/scale`, requestBody);
       if (response.data.code === 200) {
         let successMsg = t("instance.scale_success");
         if (scaleSpecType && scaleSpecType !== instance.specType) {

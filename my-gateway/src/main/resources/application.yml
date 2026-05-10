@@ -28,22 +28,32 @@ spring:
     loadbalancer:
       enabled: true
     
-    # Nacos Discovery (config is pulled manually, not via Spring Cloud Nacos Config)
+    # ============================================================================
+# Nacos Discovery (config is pulled manually, not via Spring Cloud Nacos Config)
+# ============================================================================
+# K8s NodePort 映射：Nacos(8848) -> 30848
+# 本地开发连接 K8s test 命名空间的 Nacos
+# ============================================================================
     nacos:
       # Direct properties for NacosCenterAutoConfiguration (must be at this level, not under discovery)
-      serverAddr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+      serverAddr: ${NACOS_SERVER_ADDR:localhost:30848}
       # Namespace - defaults to empty (public namespace) if not set
       namespace: ${NACOS_NAMESPACE:}
       discovery:
-        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        server-addr: ${NACOS_SERVER_ADDR:localhost:30848}
         # Namespace - defaults to empty (public namespace) if not set
         namespace: ${NACOS_NAMESPACE:}
         ip: 127.0.0.1  # Force registration with localhost IP
 
+    # ============================================================================
     # Consul Configuration (alternative to Nacos)
+    # ============================================================================
+    # K8s NodePort 映射：Consul(8500) -> 30500
+    # 本地开发禁用 Consul
+    # ============================================================================
     consul:
       host: ${CONSUL_HOST:localhost}
-      port: ${CONSUL_PORT:8500}
+      port: ${CONSUL_PORT:30500}
       config:
         enabled: false
         import-check:
@@ -69,9 +79,13 @@ spring:
     # Note: Actuator endpoints are available on management port (8081)
     # Access http://gateway:8081/actuator/health or http://gateway:8081/actuator/prometheus
 
+  # ============================================================================
   # Redis Configuration (for distributed rate limiting)
+  # ============================================================================
+  # K8s NodePort 映射：Redis(6379) -> 30379
   # Redis is optional - set REDIS_ENABLED=true or REDIS_HOST to enable
   # Supports three deployment modes: single (default), sentinel, cluster
+  # ============================================================================
   redis:
     # Deployment mode: single, sentinel, cluster
     # Default: single (standalone instance)
@@ -83,8 +97,8 @@ spring:
     timeout: ${REDIS_TIMEOUT:2000}
 
     # --- Single Node Configuration (mode=single) ---
-    host: ${REDIS_HOST:127.0.0.1}
-    port: ${REDIS_PORT:6379}
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:30379}
 
     # --- Sentinel Configuration (mode=sentinel) ---
     # Uncomment below for sentinel mode
@@ -251,14 +265,19 @@ management:
     tags:
       application: ${spring.application.name}
       gateway_instance_id: ${GATEWAY_INSTANCE_ID:unknown}
+  # ============================================================================
   # OpenTelemetry Tracing Configuration
+  # ============================================================================
+  # K8s NodePort 映射：OTLP HTTP(4318) -> 30263
+  # 连接 K8s test 命名空间的 Jaeger
+  # ============================================================================
   tracing:
     enabled: ${OTEL_TRACING_ENABLED:true}
     sampling:
       probability: ${OTEL_SAMPLING_PROBABILITY:1.0}  # 1.0 = 100% sampling
   otlp:
     tracing:
-      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:30263/v1/traces}
     metrics:
       export:
         enabled: ${OTEL_METRICS_EXPORT_ENABLED:true}
@@ -281,7 +300,11 @@ management:
 #     path: /swagger-ui.html
 #   show-actuator: true
 
+# ============================================================================
 # OpenTelemetry SDK Configuration
+# ============================================================================
+# K8s NodePort 映射：OTLP HTTP(4318) -> 30263
+# ============================================================================
 otel:
   sdk:
     disabled: ${OTEL_SDK_DISABLED:false}
@@ -289,7 +312,7 @@ otel:
     name: ${spring.application.name:my-gateway}
   exporter:
     otlp:
-      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:30263}
       protocol: ${OTEL_EXPORTER_OTLP_PROTOCOL:http/protobuf}
   traces:
     exporter: ${OTEL_TRACES_EXPORTER:otlp}

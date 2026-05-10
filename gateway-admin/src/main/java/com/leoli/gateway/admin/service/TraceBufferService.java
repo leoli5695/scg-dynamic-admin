@@ -8,7 +8,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -17,20 +19,20 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Trace 异步缓冲服务
- * 
+ * <p>
  * 解决 Admin 控制台接收 Trace 数据时的同步阻塞风险。
  * Starter 端是异步批量上报，Admin 端接收后也应异步缓冲 + 批量落库，
  * 防止高 QPS 场景下 Tomcat 线程池耗尽。
- * 
+ * <p>
  * 设计：
  * 1. 接收接口极速入队（<1ms）
  * 2. 后台定时批量落库（每100ms）
  * 3. 批量插入提升 DB 性能（~10倍）
- * 
+ * <p>
  * 效果：
  * - 无论压测多猛，接口永远是毫秒级响应
  * - 数据库压力通过批量插入大幅降低
- * 
+ *
  * @author leoli
  */
 @Slf4j
@@ -93,15 +95,15 @@ public class TraceBufferService {
             return t;
         });
 
-        log.info("TraceBufferService initialized: queueSize={}, batchSize={}, maxWaitMs={}", 
-            QUEUE_SIZE, BATCH_SIZE, MAX_BATCH_WAIT_MS);
+        log.info("TraceBufferService initialized: queueSize={}, batchSize={}, maxWaitMs={}",
+                QUEUE_SIZE, BATCH_SIZE, MAX_BATCH_WAIT_MS);
     }
 
     /**
      * 接收 Trace 数据（极速入队）
-     * 
+     * <p>
      * 此方法由 Controller 调用，耗时 <1ms，不阻塞 Starter 端
-     * 
+     *
      * @param trace Trace 数据
      * @return 是否成功入队
      */
@@ -110,8 +112,8 @@ public class TraceBufferService {
 
         if (!traceQueue.offer(trace)) {
             droppedCount.incrementAndGet();
-            log.warn("Trace queue full, dropping trace: traceId={}, queueSize={}, dropped={}", 
-                trace.getTraceId(), QUEUE_SIZE, droppedCount.get());
+            log.warn("Trace queue full, dropping trace: traceId={}, queueSize={}, dropped={}",
+                    trace.getTraceId(), QUEUE_SIZE, droppedCount.get());
             return false;
         }
 
@@ -134,7 +136,7 @@ public class TraceBufferService {
      * 获取统计信息
      */
     public Map<String, Long> getStats() {
-        Map<String, Long> stats = new java.util.HashMap<>();
+        Map<String, Long> stats = new HashMap<>();
         stats.put("received", receivedCount.get());
         stats.put("saved", savedCount.get());
         stats.put("dropped", droppedCount.get());
@@ -188,12 +190,12 @@ public class TraceBufferService {
             List<RequestTrace> saved = requestTraceRepository.saveAll(batch);
             savedCount.addAndGet(saved.size());
 
-            log.info("Batch saved {} traces, queue remaining {}, totalSaved={}", 
-                saved.size(), traceQueue.size(), savedCount.get());
+            log.info("Batch saved {} traces, queue remaining {}, totalSaved={}",
+                    saved.size(), traceQueue.size(), savedCount.get());
 
         } catch (Exception e) {
             log.error("Failed to batch save traces: batchSize={}, error={}", batch.size(), e.getMessage());
-            
+
             // 失败时尝试逐条保存
             retryOneByOne(batch);
         }
@@ -213,8 +215,8 @@ public class TraceBufferService {
                 savedCount.incrementAndGet();
             } catch (Exception e) {
                 failCount++;
-                log.warn("Failed to save trace individually: traceId={}, error={}", 
-                    trace.getTraceId(), e.getMessage());
+                log.warn("Failed to save trace individually: traceId={}, error={}",
+                        trace.getTraceId(), e.getMessage());
             }
         }
 
@@ -223,7 +225,7 @@ public class TraceBufferService {
 
     /**
      * 优雅关闭
-     * 
+     * <p>
      * 确保服务关闭时落库剩余数据
      */
     @PreDestroy
@@ -241,9 +243,8 @@ public class TraceBufferService {
         }
 
         executor.shutdown();
-        log.info("TraceBufferService shutdown complete. Stats: received={}, saved={}, dropped={}", 
-            receivedCount.get(), savedCount.get(), droppedCount.get());
+        log.info("TraceBufferService shutdown complete. Stats: received={}, saved={}, dropped={}",
+                receivedCount.get(), savedCount.get(), droppedCount.get());
     }
-}public class TraceBufferService {
-    
+
 }

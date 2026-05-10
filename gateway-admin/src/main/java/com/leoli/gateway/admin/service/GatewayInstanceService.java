@@ -143,7 +143,7 @@ public class GatewayInstanceService {
     @Value("${gateway.jaeger.k8s-service-name:jaeger}")
     private String jaegerK8sServiceName;
 
-    @Value("${gateway.jaeger.k8s-port:4317}")
+    @Value("${gateway.jaeger.k8s-port:4318}")  // OTLP HTTP port (4317 is gRPC, use 4318 for http/protobuf protocol)
     private Integer jaegerK8sPort;
 
     @Value("${gateway.prometheus.k8s-server-addr:}")
