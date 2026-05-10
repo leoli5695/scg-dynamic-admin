@@ -1,7 +1,6 @@
 package com.seckill.mq.consumer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.util.concurrent.RateLimiter;
 import com.seckill.config.RocketMQConfig;
 import com.seckill.config.SeckillConfig;
 import com.seckill.dto.OrderMessage;
@@ -9,6 +8,7 @@ import com.seckill.entity.SeckillOrder;
 import com.seckill.enums.OrderStatus;
 import com.seckill.mapper.OrderMapper;
 import com.seckill.service.BatchInsertService;
+import com.seckill.service.DistributedRateLimiterService;
 import com.seckill.service.SeckillService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,8 +36,9 @@ import java.util.concurrent.TimeUnit;
  * 4. 发送延迟消息（20分钟未支付回补）
  * <p>
  * 限流策略:
- * - RateLimiter控制消费速率（默认1000 TPS）
- * - 避免数据库被打满
+ * - 分布式限流（Redis Lua 滑动窗口）
+ * - 控制消费速率（默认1000 TPS）
+ * - 多实例共享配额，避免超限
  * <p>
  * 幂等性（三层防护）:
  * - Layer 1: Redis SETNX 快速幂等检查
@@ -61,11 +62,12 @@ public class OrderCreateConsumer implements RocketMQListener<String> {
     private final RocketMQTemplate rocketMQTemplate;
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate redisTemplate;
+    private final DistributedRateLimiterService distributedRateLimiter;
 
     /**
-     * 限流器：控制消费速率
+     * 限流 Key：用于分布式限流
      */
-    private RateLimiter rateLimiter;
+    private static final String RATE_LIMIT_KEY = "order_create";
 
     /**
      * Redis 幂等 Key 前缀
@@ -86,7 +88,8 @@ public class OrderCreateConsumer implements RocketMQListener<String> {
 
     @jakarta.annotation.PostConstruct
     public void init() {
-        this.rateLimiter = RateLimiter.create(seckillConfig.getConsumer().getOrderCreateRate());
+        log.info("OrderCreateConsumer initialized with distributed rate limiting: rate={}",
+                seckillConfig.getConsumer().getOrderCreateRate());
     }
 
     /**
@@ -96,8 +99,13 @@ public class OrderCreateConsumer implements RocketMQListener<String> {
      */
     @Override
     public void onMessage(String message) {
-        // 限流：等待获取许可
-        rateLimiter.acquire();
+        // 分布式限流：等待获取许可（多实例共享配额）
+        int ratePerSecond = seckillConfig.getConsumer().getOrderCreateRate();
+        if (!distributedRateLimiter.acquire(RATE_LIMIT_KEY, ratePerSecond)) {
+            log.warn("Consumer rate limited, message deferred: rate={}", ratePerSecond);
+            // 限流时抛出异常，让 RocketMQ 重投
+            throw new RuntimeException("Consumer rate limited");
+        }
 
         try {
             OrderMessage orderMessage = objectMapper.readValue(message, OrderMessage.class);

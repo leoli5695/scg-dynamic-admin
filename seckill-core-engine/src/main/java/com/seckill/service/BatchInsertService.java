@@ -340,43 +340,6 @@ public class BatchInsertService {
 
     /**
      * ============================================================================
-     * 批量写入失败时，逐条重试
-     * ============================================================================
-     *
-     * 【关键设计】：
-     * - 成功写入的订单：更新事务状态为 SUCCESS
-     * - 失败的订单：保持 PROCESSING，由定时任务兜底
-     */
-    private void retryInsertOneByOne(List<SeckillOrder> batch) {
-        List<SeckillOrder> successOrders = new ArrayList<>();
-        int failCount = 0;
-
-        for (SeckillOrder order : batch) {
-            try {
-                orderMapper.insert(order);
-                successOrders.add(order);
-                log.debug("单条写入成功: orderNo={}", order.getOrderNo());
-            } catch (Exception e) {
-                failCount++;
-                log.error("单条写入失败: orderNo={}, error={}", order.getOrderNo(), e.getMessage());
-            }
-        }
-
-        log.warn("逐条重试完成: success={}, fail={}", successOrders.size(), failCount);
-
-        // 【关键】成功的订单更新事务状态
-        if (!successOrders.isEmpty()) {
-            asyncUpdateTransactionStatus(successOrders, true);
-        }
-
-        if (failCount > 0) {
-            alertService.sendAlert("批量写入失败",
-                    "批量写入失败后逐条重试，成功: " + successOrders.size() + "，失败: " + failCount + "，失败订单由 transaction_log 补偿");
-        }
-    }
-
-    /**
-     * ============================================================================
      * 获取队列大小（用于监控）
      * ============================================================================
      */

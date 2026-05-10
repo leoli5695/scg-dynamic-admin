@@ -198,12 +198,20 @@
             <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
 
-        <!-- Gateway Trace Starter (暂时禁用，optional依赖问题) -->
+        <!-- Gateway Trace Starter - 分布式链路追踪 -->
+        <!-- TODO: 待 starter 发布到 Maven 中央仓库后重新接入 -->
+        <!-- 收益：立即可见的 TraceId 传播、异步线程追踪、压测分析 -->
         <!--
         <dependency>
             <groupId>com.leoli.gateway</groupId>
             <artifactId>gateway-trace-starter</artifactId>
             <version>1.0.0</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-web</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         -->
 
@@ -223,6 +231,22 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Testcontainers for Redis Lua integration tests -->
+        <!-- ⚠️ CRITICAL: Embedded Redis 不支持所有 Lua 命令，必须用真实 Redis -->
+        <!-- 使用 GenericContainer("redis:7-alpine") 方式启动 Redis 容器 -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
+            <version>1.19.8</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>1.19.8</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

@@ -8,11 +8,38 @@
 -- - score 仍为 timestamp（用于窗口过滤）
 -- - member 为 timestamp:random（保证唯一性）
 --
+-- ============================================================================
+-- ⚠️ RANDOM BITS COLLISION WARNING（生日悖论分析）
+-- ============================================================================
+--
+-- 当前 random_value 为 Java 侧传入的 UUID 前 8 位 = 32 bit 随机
+--
+-- 生日悖论计算：
+-- - 32 bit 随机 = 2^32 ≈ 4.3 × 10^9 种组合
+-- - 碰撞概率公式：P(n) ≈ n² / (2 × 2^32)
+-- - 65000 次请求：P ≈ 65000² / (2 × 2^32) ≈ 0.5（50% 碰撞概率）
+--
+-- 适用场景分析：
+-- ┌─────────────────────┬─────────────────┬─────────────────────────┐
+-- │ 限流粒度            │ 单 Key QPS 预估 │ 安全性                  │
+-- ├─────────────────────┼─────────────────┼─────────────────────────┤
+-- │ IP 级别限流         │ < 100/s         │ ✅ 安全（远低于 65000） │
+-- │ User 级别限流       │ < 50/s          │ ✅ 安全                  │
+-- │ 全站级别限流        │ 可能 > 65000/s  │ ⚠️ 需加长 random bits   │
+-- └─────────────────────┴─────────────────┴─────────────────────────┘
+--
+-- 安全建议：
+-- 1. 秒杀场景：IP/User 级别限流，32 bit 足够安全
+-- 2. 全站限流：建议改用 16 位 random（64 bit），或用 nanotime
+-- 3. 极端场景：使用 timestamp:UUID:sequence（128 bit）
+--
+-- ============================================================================
+--
 -- KEYS[1]: rate limit key (e.g., "seckill:anti:ip_rate:192.168.1.1")
 -- ARGV[1]: window size in milliseconds (e.g., 1000 for 1 second)
 -- ARGV[2]: max requests in window (e.g., 10)
 -- ARGV[3]: current timestamp in milliseconds
--- ARGV[4]: random value for uniqueness (e.g., UUID or nanotime)
+-- ARGV[4]: random value for uniqueness (UUID[0:8] = 32 bit, or nanotime)
 --
 -- Returns:
 -- -1: rate limited (too many requests)
