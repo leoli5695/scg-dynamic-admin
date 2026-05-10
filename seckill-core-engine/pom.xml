@@ -206,9 +206,8 @@
         </dependency>
 
         <!-- Gateway Trace Starter - 分布式链路追踪 -->
-        <!-- TODO: 待 starter 发布到 Maven 中央仓库后重新接入 -->
+        <!-- 已通过 mvn install 安装到本地仓库 -->
         <!-- 收益：立即可见的 TraceId 传播、异步线程追踪、压测分析 -->
-        <!--
         <dependency>
             <groupId>com.leoli.gateway</groupId>
             <artifactId>gateway-trace-starter</artifactId>
@@ -220,7 +219,6 @@
                 </exclusion>
             </exclusions>
         </dependency>
-        -->
 
         <!-- ShedLock 分布式定时任务锁 -->
         <dependency>
