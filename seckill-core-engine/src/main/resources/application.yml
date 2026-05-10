@@ -128,11 +128,34 @@ logging:
 # ============================================================================
 # Gateway Trace Starter 配置
 # ============================================================================
+# 开发环境配置：100%采样，完整追踪
+# 压测环境配置：降低采样率，增大队列，防止数据丢失
 gateway:
   trace:
-    admin-url: http://127.0.0.1:9090  # Gateway Admin console URL
-    sample-rate: 1.0                  # Sampling rate (100% for dev)
-    async-trace-enabled: true         # Enable async thread TraceId propagation
+    admin-url: ${GATEWAY_ADMIN_URL:http://127.0.0.1:9090}
+    enabled: true                     # 启用分布式链路追踪
+
+    # ==================== 采样配置 ====================
+    # 开发环境: 100% 采样，便于调试
+    # 压测环境: 设置 GATEWAY_TRACE_SAMPLE_RATE=0.05 (5%采样)
+    sample-rate: ${GATEWAY_TRACE_SAMPLE_RATE:1.0}
+
+    # ==================== 异步线程追踪 ====================
+    async-trace-enabled: true         # 启用异步线程 TraceId 传播
+
+    # ==================== 压测调优参数 ====================
+    # 开发环境默认值，压测时通过环境变量调整
+    # 压测建议: GATEWAY_TRACE_ASYNC_QUEUE_SIZE=5000
+    #           GATEWAY_TRACE_REPORT_BATCH_SIZE=200
+    async-queue-size: ${GATEWAY_TRACE_ASYNC_QUEUE_SIZE:1000}
+    report-batch-size: ${GATEWAY_TRACE_REPORT_BATCH_SIZE:100}
+    report-interval-ms: ${GATEWAY_TRACE_REPORT_INTERVAL_MS:100}
+
+    # ==================== 中间件追踪开关 ====================
+    trace-redis: true                 # Redis 操作追踪
+    trace-mq: true                    # RocketMQ 操作追踪
+    trace-db: true                    # MyBatis/JDBC 操作追踪
+    report-middleware: true           # 启动时上报中间件依赖
 
 # ============================================================================
 # 秒杀引擎核心配置
