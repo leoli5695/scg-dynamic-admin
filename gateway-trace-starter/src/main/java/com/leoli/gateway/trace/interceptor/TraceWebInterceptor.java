@@ -18,7 +18,7 @@ import java.util.UUID;
  * <p>
  * TraceId propagation chain:
  * Gateway generates → X-Trace-Id Header → downstream services → Starter extracts
- *
+ * <p>
  * SECURITY FIX (H3): X-Forwarded-For IP spoofing prevention.
  * Only trust X-Forwarded-For header from configured trusted proxies.
  * This prevents malicious clients from forging IP addresses to bypass
@@ -31,8 +31,8 @@ public class TraceWebInterceptor implements HandlerInterceptor {
 
     private static final String TRACE_ID_HEADER = "X-Trace-Id";
 
-    private final GatewayTraceProperties properties;
     private final String serviceName;
+    private final GatewayTraceProperties properties;
 
     public TraceWebInterceptor(GatewayTraceProperties properties, String serviceName) {
         this.properties = properties;

@@ -11,7 +11,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * ============================================================================
  * Web MVC 配置
  * ============================================================================
- *
+ * <p>
  * 功能：
  * 1. 注册 InternalApiInterceptor 拦截器
  * 2. 配置拦截路径（/warmup/**、/admin/** 等内部接口）

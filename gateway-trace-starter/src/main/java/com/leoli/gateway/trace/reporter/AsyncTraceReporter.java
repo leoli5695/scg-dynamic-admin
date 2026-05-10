@@ -20,12 +20,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -47,11 +42,11 @@ public class AsyncTraceReporter {
 
     private final WebClient webClient;
     private final ExecutorService executor;
-    private final ExecutorService fallbackExecutor;  // 【新增】独立的磁盘 IO 线程池
-    private final ScheduledExecutorService retryScheduler;  // 【新增】延迟重试调度器（指数退避）
     private final ObjectMapper objectMapper;
+    private final ExecutorService fallbackExecutor;  // 【新增】独立的磁盘 IO 线程池
     private final GatewayTraceProperties properties;
     private final BlockingQueue<DistributedTrace> queue;
+    private final ScheduledExecutorService retryScheduler;  // 【新增】延迟重试调度器（指数退避）
 
     /**
      * Local disk log directory
@@ -252,7 +247,7 @@ public class AsyncTraceReporter {
      * FIX: Uses exponential backoff to prevent retry storms
      * - retry count < MAX_RETRY_COUNT: schedule delayed retry with exponential backoff
      * - retry count >= MAX_RETRY_COUNT: write to local disk log
-     * 
+     * <p>
      * Backoff formula: delay = min(baseDelay * 2^retryCount, maxDelay)
      * Example: retry 1 -> 1s, retry 2 -> 2s, retry 3 -> 4s, ... max 60s
      */
@@ -304,7 +299,7 @@ public class AsyncTraceReporter {
 
     /**
      * Write to local disk log (degraded handling)
-     *
+     * <p>
      * 【背压修复】：使用独立的异步 IO 线程池写入磁盘
      * - 防止磁盘 IO 阻塞上报线程
      * - 磁盘抖动时 Trace 队列不会积压

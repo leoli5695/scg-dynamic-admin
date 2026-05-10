@@ -5,7 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
-import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.TimeUnit;
 
@@ -13,18 +12,18 @@ import java.util.concurrent.TimeUnit;
  * ============================================================================
  * 支付安全验证服务
  * ============================================================================
- *
+ * <p>
  * 功能:
  * 1. 签名验证 - 验证支付平台回调签名
  * 2. 金额校验 - 验证支付金额与订单金额一致
  * 3. 时间戳验证 - 防止回调重放攻击
  * 4. 幂等性控制 - 防止重复处理同一回调
- *
+ * <p>
  * 安全措施:
  * 1. 签名算法: HMAC-SHA256 或 RSA
  * 2. 时间戳有效期: 5分钟
  * 3. 回调幂等Key: 支付流水号
- *
+ * <p>
  * 生产对接:
  * - 支付宝: 使用支付宝SDK验签
  * - 微信支付: 使用微信支付SDK验签
@@ -57,7 +56,7 @@ public class PaymentSecurityService {
      * 验证支付回调签名
      * ============================================================================
      *
-     * @param sign 签名值
+     * @param sign   签名值
      * @param params 所有参数（不含sign）
      * @param secret 密钥或公钥
      * @return 签名是否有效
@@ -114,7 +113,7 @@ public class PaymentSecurityService {
      * ============================================================================
      * 幂等性检查
      * ============================================================================
-     *
+     * <p>
      * 防止同一支付回调被重复处理
      *
      * @param transactionId 支付流水号
@@ -158,7 +157,7 @@ public class PaymentSecurityService {
      * ============================================================================
      *
      * @param orderAmount 订单金额
-     * @param paidAmount 支付金额
+     * @param paidAmount  支付金额
      * @return 金额是否一致
      */
     public boolean verifyAmount(java.math.BigDecimal orderAmount, java.math.BigDecimal paidAmount) {
@@ -185,7 +184,7 @@ public class PaymentSecurityService {
      * 商户订单号校验
      * ============================================================================
      *
-     * @param orderNo 商户订单号
+     * @param orderNo         商户订单号
      * @param expectedOrderNo 期望订单号
      * @return 订单号是否一致
      */
@@ -208,15 +207,15 @@ public class PaymentSecurityService {
      * 综合安全验证
      * ============================================================================
      *
-     * @param sign 签名
-     * @param params 参数
-     * @param secret 密钥
-     * @param timestamp 时间戳
+     * @param sign          签名
+     * @param params        参数
+     * @param secret        密钥
+     * @param timestamp     时间戳
      * @param transactionId 支付流水号
      * @return 是否全部验证通过
      */
     public boolean comprehensiveVerify(String sign, String params, String secret,
-                                        long timestamp, String transactionId) {
+                                       long timestamp, String transactionId) {
         // 1. 签名验证
         if (!verifySignature(sign, params, secret)) {
             return false;

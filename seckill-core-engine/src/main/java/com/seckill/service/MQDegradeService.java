@@ -14,19 +14,19 @@ import java.util.concurrent.atomic.AtomicLong;
  * ============================================================================
  * RocketMQ 故障降级服务
  * ============================================================================
- *
+ * <p>
  * 功能:
  * 1. MQ 健康检查（定时检测）
  * 2. 降级开关控制（手动/自动）
  * 3. 故障告警（与告警服务联动）
  * 4. 自动恢复检测
- *
+ * <p>
  * 降级策略:
  * - MQ 故障时，启用本地事务直接处理模式
  * - 直接写入事务日志表，然后创建订单
  * - 使用补偿服务处理超时订单
  * - 降低异步处理能力，但保证业务可用性
- *
+ * <p>
  * 监控指标:
  * - seckill.mq.status: MQ 状态（0=正常，1=降级，2=故障）
  * - seckill.mq.health_check: 健康检查次数
@@ -43,9 +43,7 @@ public class MQDegradeService {
      * 构造器注入（使用 @Lazy 打破循环依赖）
      * 循环依赖链: rocketMQProducerConfig -> seckillTransactionListener -> seckillService -> MQDegradeService -> rocketMQProducerConfig
      */
-    public MQDegradeService(
-            AlertService alertService,
-            @Lazy TransactionMQProducer transactionMQProducer) {
+    public MQDegradeService(AlertService alertService, @Lazy TransactionMQProducer transactionMQProducer) {
         this.alertService = alertService;
         this.transactionMQProducer = transactionMQProducer;
     }
@@ -264,8 +262,8 @@ public class MQDegradeService {
      * ============================================================================
      *
      * @param operation MQ 操作
-     * @param fallback 降级操作
-     * @param <T> 返回类型
+     * @param fallback  降级操作
+     * @param <T>       返回类型
      * @return 操作结果
      */
     public <T> T executeWithFallback(MQOperation<T> operation, FallbackOperation<T> fallback) {

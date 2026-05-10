@@ -21,31 +21,31 @@ import java.util.stream.Collectors;
  * ============================================================================
  * 本地兜底服务（Redis/MQ 故障时的降级处理）
  * ============================================================================
- *
+ * <p>
  * 功能:
  * 1. 本地库存计数器（Redis 故障时的简易扣减）
  * 2. 本地购买记录（简易防重）
  * 3. 本地订单缓冲队列（MQ 故障时的异步处理）
  * 4. 缓冲队列持久化（应用重启后恢复）
- *
+ * <p>
  * 使用场景:
  * - Redis 故障时，启用本地库存计数器
  * - MQ 故障时，先写入本地缓冲队列，后续补偿
- *
+ * <p>
  * 【多实例超卖防护】:
  * - 降级模式下，本地库存只分配 10% 的总库存
  * - 目的：宁愿少卖，绝不超卖
  * - 假设部署 N 个实例，每个实例最多卖 totalStock * 0.1
- *
+ * <p>
  * 【缓冲队列持久化】:
  * - 写入本地磁盘文件（追加写入）
  * - 应用启动时读取未发送的订单重新处理
  * - 避免应用崩溃时订单丢失
- *
+ * <p>
  * 注意:
  * - 本地兜底仅用于极端情况，存在少卖风险（刻意设计）
  * - 需配合对账服务进行数据修正
- *
+ * <p>
  * 监控指标:
  * - seckill.fallback.stock_deduct: 本地库存扣减次数
  * - seckill.fallback.queue_size: 本地缓冲队列大小
@@ -55,9 +55,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class LocalFallbackService {
 
-    private final SeckillConfig seckillConfig;
     private final AlertService alertService;
     private final ObjectMapper objectMapper;  // 【修复】注入 ObjectMapper 进行 JSON 序列化
+    private final SeckillConfig seckillConfig;
 
     /**
      * 本地库存计数器
@@ -102,7 +102,7 @@ public class LocalFallbackService {
      * ============================================================================
      * 初始化本地库存（从预热数据或数据库加载）
      * ============================================================================
-     *
+     * <p>
      * 【多实例超卖防护】：
      * - 只分配 totalStock * fallbackStockRatio 的库存
      * - 宁愿少卖，绝不超卖
@@ -111,19 +111,19 @@ public class LocalFallbackService {
         // 降级模式下只分配部分库存（避免多实例超卖）
         int fallbackStock = (int) Math.ceil(totalStock * fallbackStockRatio);
         localStockMap.put(seckillId, new AtomicInteger(fallbackStock));
-        log.warn("本地库存初始化: seckillId={}, totalStock={}, fallbackStock={}（降级模式，{}比例）", 
-                seckillId, totalStock, fallbackStock, (int)(fallbackStockRatio * 100) + "%");
+        log.warn("本地库存初始化: seckillId={}, totalStock={}, fallbackStock={}（降级模式，{}比例）",
+                seckillId, totalStock, fallbackStock, (int) (fallbackStockRatio * 100) + "%");
     }
 
     /**
      * ============================================================================
      * 本地库存扣减（Redis 故障时的兜底）
      * ============================================================================
-     *
+     * <p>
      * 【多实例超卖防护】：
      * - 当本地库存低于 minStockThreshold 时，返回"系统繁忙"
      * - 避免最后几个库存并发扣减时超卖
-     *
+     * <p>
      * 返回值:
      * - > 0: 扣减成功，返回剩余库存
      * - 0: 扣减成功，库存归零
@@ -175,7 +175,7 @@ public class LocalFallbackService {
             int newVal = oldVal - quantity;
             if (stock.compareAndSet(oldVal, newVal)) {
                 log.warn("本地库存扣减成功: seckillId={}, userId={}, remaining={}（降级模式，{}比例）",
-                        seckillId, userId, newVal, (int)(fallbackStockRatio * 100) + "%");
+                        seckillId, userId, newVal, (int) (fallbackStockRatio * 100) + "%");
                 return newVal;
             }
         }
@@ -206,7 +206,7 @@ public class LocalFallbackService {
      * ============================================================================
      * 订单缓冲队列写入（MQ 故障时的兜底）
      * ============================================================================
-     *
+     * <p>
      * 【缓冲队列持久化】：
      * - 同时写入内存 Map 和磁盘文件
      * - 应用崩溃后可从文件恢复
@@ -220,14 +220,14 @@ public class LocalFallbackService {
 
         // 写入内存
         orderBuffer.put(orderNo, item);
-        
+
         // 【持久化】写入磁盘文件
         persistBufferToFile(item);
-        
+
         log.warn("订单已缓冲（降级模式）: orderNo={}, bufferSize={}", orderNo, orderBuffer.size());
 
         // 告警
-        alertService.sendAlert("订单缓冲", 
+        alertService.sendAlert("订单缓冲",
                 "订单已写入本地缓冲队列，等待MQ恢复后处理: " + orderNo + ", 当前队列大小: " + orderBuffer.size());
     }
 
@@ -235,7 +235,7 @@ public class LocalFallbackService {
      * ============================================================================
      * 【持久化】将缓冲订单写入磁盘文件
      * ============================================================================
-     *
+     * <p>
      * 【修复】：使用 ObjectMapper 序列化为 JSON，不能用 toString()
      * toString() 生成的是 "OrderMessage(transactionId=...)" 格式，无法反序列化
      */
@@ -276,7 +276,7 @@ public class LocalFallbackService {
      * ============================================================================
      * 【持久化】应用启动时加载未发送的缓冲订单
      * ============================================================================
-     *
+     * <p>
      * 【修复】：使用 ObjectMapper 反序列化 JSON 为 OrderMessage 对象
      */
     @jakarta.annotation.PostConstruct
@@ -355,7 +355,7 @@ public class LocalFallbackService {
     public void clearBufferedOrder(String orderNo) {
         orderBuffer.remove(orderNo);
         log.info("缓冲订单已清除: orderNo={}", orderNo);
-        
+
         // 更新文件（标记已处理）
         try {
             Path path = Paths.get(bufferFilePath);

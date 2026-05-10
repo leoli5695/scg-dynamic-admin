@@ -15,7 +15,6 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.concurrent.TimeUnit;
 
@@ -23,14 +22,14 @@ import java.util.concurrent.TimeUnit;
  * ============================================================================
  * 支付服务
  * ============================================================================
- *
+ * <p>
  * 功能:
  * 1. 处理支付回调
  * 2. 更新订单状态
  * 3. 更新事务日志
  * 4. 同步ES索引
  * 5. 幂等性控制
- *
+ * <p>
  * 安全措施:
  * 1. 签名验证（简化实现，生产环境需要对接支付平台SDK）
  * 2. 金额校验
@@ -42,9 +41,9 @@ import java.util.concurrent.TimeUnit;
 public class PaymentService {
 
     private final OrderMapper orderMapper;
+    private final StringRedisTemplate redisTemplate;
     private final TransactionLogMapper transactionLogMapper;
     private final ElasticsearchService elasticsearchService;
-    private final StringRedisTemplate redisTemplate;
 
     /**
      * 幂等性控制Redis Key前缀
@@ -60,7 +59,7 @@ public class PaymentService {
      * ============================================================================
      * 处理支付回调
      * ============================================================================
-     *
+     * <p>
      * 流程:
      * 1. 验证签名（简化实现）
      * 2. 幂等性检查（Redis SETNX）
@@ -150,7 +149,7 @@ public class PaymentService {
      * ============================================================================
      */
     private PaymentCallbackResponse processPaymentSuccess(SeckillOrder order,
-            PaymentCallbackRequest request, String processedKey) {
+                                                          PaymentCallbackRequest request, String processedKey) {
         String orderNo = order.getOrderNo();
         String traceId = request.getTraceId();
 
@@ -196,14 +195,14 @@ public class PaymentService {
      * ============================================================================
      * 处理支付失败
      * ============================================================================
-     *
+     * <p>
      * 支付失败时需要:
      * 1. 更新订单状态为已取消
      * 2. 回补Redis库存
      * 3. 更新事务日志状态
      */
     private PaymentCallbackResponse processPaymentFailed(SeckillOrder order,
-            PaymentCallbackRequest request, String processedKey) {
+                                                         PaymentCallbackRequest request, String processedKey) {
         String orderNo = order.getOrderNo();
         String traceId = request.getTraceId();
 
@@ -249,7 +248,7 @@ public class PaymentService {
      * ============================================================================
      * 验证签名（简化实现）
      * ============================================================================
-     *
+     * <p>
      * 生产环境需要对接支付平台SDK进行验签
      * 这里简化为校验必要字段不为空
      */
@@ -275,7 +274,7 @@ public class PaymentService {
      * ============================================================================
      * 回补Redis库存
      * ============================================================================
-     *
+     * <p>
      * 使用Lua脚本原子回补库存到指定分片
      */
     private void rollbackRedisStock(Long seckillId, Integer shardIndex, Integer quantity, String traceId) {

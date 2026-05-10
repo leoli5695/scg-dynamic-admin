@@ -23,23 +23,23 @@ import java.util.List;
  * ============================================================================
  * 历史数据归档服务
  * ============================================================================
- *
+ * <p>
  * 功能:
  * 1. 定时归档历史订单数据
  * 2. 将已完成订单迁移到历史表
  * 3. 清理过期的事务日志
  * 4. ES 索引数据归档
- *
+ * <p>
  * 归档策略:
  * - 订单数据: 活动结束后30天归档
  * - 事务日志: 创建后60天清理
  * - ES 索引: 同步归档标记
- *
+ * <p>
  * 性能优化:
  * - 分批次处理，每批1000条
  * - 使用 ShedLock 防止多实例重复执行
  * - 避免高峰期执行（凌晨执行）
- *
+ * <p>
  * 监控指标:
  * - seckill.archive.orders: 归档订单数量
  * - seckill.archive.logs: 清理日志数量
@@ -72,11 +72,11 @@ public class DataArchiveService {
      * ============================================================================
      * 定时归档订单数据（每天凌晨2点执行）
      * ============================================================================
-     *
+     * <p>
      * 归档条件:
      * - 订单状态为已支付(PAID)、已取消(CANCELLED)、已退款(REFUNDED)
      * - 创建时间超过保留天数
-     *
+     * <p>
      * 【P1-6修复】大事务风险：
      * - 移除方法级别的 @Transactional
      * - 每批处理独立事务，避免长时间持有事务锁
@@ -165,7 +165,7 @@ public class DataArchiveService {
      * ============================================================================
      * 定时清理事务日志（每天凌晨3点执行）
      * ============================================================================
-     *
+     * <p>
      * 清理条件:
      * - 状态为成功(SUCCESS)或失败(FAILED)
      * - 创建时间超过保留天数
@@ -303,23 +303,76 @@ public class DataArchiveService {
         private java.time.LocalDateTime createTime;
         private java.time.LocalDateTime archiveTime;
 
-        public String getOrderNo() { return orderNo; }
-        public void setOrderNo(String orderNo) { this.orderNo = orderNo; }
-        public Long getUserId() { return userId; }
-        public void setUserId(Long userId) { this.userId = userId; }
-        public Long getSeckillId() { return seckillId; }
-        public void setSeckillId(Long seckillId) { this.seckillId = seckillId; }
-        public Long getProductId() { return productId; }
-        public void setProductId(Long productId) { this.productId = productId; }
-        public Integer getQuantity() { return quantity; }
-        public void setQuantity(Integer quantity) { this.quantity = quantity; }
-        public java.math.BigDecimal getTotalAmount() { return totalAmount; }
-        public void setTotalAmount(java.math.BigDecimal totalAmount) { this.totalAmount = totalAmount; }
-        public Integer getStatus() { return status; }
-        public void setStatus(Integer status) { this.status = status; }
-        public java.time.LocalDateTime getCreateTime() { return createTime; }
-        public void setCreateTime(java.time.LocalDateTime createTime) { this.createTime = createTime; }
-        public java.time.LocalDateTime getArchiveTime() { return archiveTime; }
-        public void setArchiveTime(java.time.LocalDateTime archiveTime) { this.archiveTime = archiveTime; }
+        public String getOrderNo() {
+            return orderNo;
+        }
+
+        public void setOrderNo(String orderNo) {
+            this.orderNo = orderNo;
+        }
+
+        public Long getUserId() {
+            return userId;
+        }
+
+        public void setUserId(Long userId) {
+            this.userId = userId;
+        }
+
+        public Long getSeckillId() {
+            return seckillId;
+        }
+
+        public void setSeckillId(Long seckillId) {
+            this.seckillId = seckillId;
+        }
+
+        public Long getProductId() {
+            return productId;
+        }
+
+        public void setProductId(Long productId) {
+            this.productId = productId;
+        }
+
+        public Integer getQuantity() {
+            return quantity;
+        }
+
+        public void setQuantity(Integer quantity) {
+            this.quantity = quantity;
+        }
+
+        public java.math.BigDecimal getTotalAmount() {
+            return totalAmount;
+        }
+
+        public void setTotalAmount(java.math.BigDecimal totalAmount) {
+            this.totalAmount = totalAmount;
+        }
+
+        public Integer getStatus() {
+            return status;
+        }
+
+        public void setStatus(Integer status) {
+            this.status = status;
+        }
+
+        public java.time.LocalDateTime getCreateTime() {
+            return createTime;
+        }
+
+        public void setCreateTime(java.time.LocalDateTime createTime) {
+            this.createTime = createTime;
+        }
+
+        public java.time.LocalDateTime getArchiveTime() {
+            return archiveTime;
+        }
+
+        public void setArchiveTime(java.time.LocalDateTime archiveTime) {
+            this.archiveTime = archiveTime;
+        }
     }
 }

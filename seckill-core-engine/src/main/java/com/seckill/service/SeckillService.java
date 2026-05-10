@@ -2,14 +2,12 @@ package com.seckill.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seckill.config.RocketMQConfig;
-import com.seckill.config.SeckillConfig;
 import com.seckill.dto.OrderMessage;
 import com.seckill.dto.SeckillRequest;
 import com.seckill.dto.SeckillResponse;
 import com.seckill.entity.SeckillActivity;
 import com.seckill.entity.SeckillProduct;
 import com.seckill.entity.TransactionLog;
-import com.seckill.enums.OrderStatus;
 import com.seckill.enums.SeckillResult;
 import com.seckill.enums.TransactionStatus;
 import com.seckill.mapper.ActivityMapper;
@@ -18,7 +16,6 @@ import com.seckill.mapper.TransactionLogMapper;
 import com.seckill.redis.lua.SeckillDeductLua;
 import com.seckill.util.SnowflakeIdGenerator;
 import io.micrometer.core.instrument.Counter;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.client.producer.TransactionMQProducer;
@@ -27,30 +24,28 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
-import java.util.concurrent.TimeUnit;
 
 /**
  * ============================================================================
  * 秒杀核心服务
  * ============================================================================
- * 
+ * <p>
  * 核心流程（简化为2层防重）:
  * 1. Lua脚本原子操作（Redis层快速失败）
- *    - SISMEMBER 防重检查
- *    - 分片库存扣减
- *    - HSET 记录分片索引
- *    - SADD 记录购买
- * 
+ * - SISMEMBER 防重检查
+ * - 分片库存扣减
+ * - HSET 记录分片索引
+ * - SADD 记录购买
+ * <p>
  * 2. RocketMQ事务消息
- *    - 发送半消息
- *    - 执行本地事务（写事务日志）
- *    - 提交/回滚消息
- * 
+ * - 发送半消息
+ * - 执行本地事务（写事务日志）
+ * - 提交/回滚消息
+ * <p>
  * 3. 数据库唯一索引（Layer 2防重）
- *    - 最终一致性保障
- * 
+ * - 最终一致性保障
+ * <p>
  * 去掉的设计:
  * - Redisson分布式锁：Lua脚本已保证原子性
  * - Caffeine本地缓存库存：会导致超卖
@@ -60,53 +55,52 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class SeckillService {
 
-    private final SeckillDeductLua seckillDeductLua;
-    private final SnowflakeIdGenerator snowflakeIdGenerator;
-    private final ActivityMapper activityMapper;
-    private final ProductMapper productMapper;
-    private final TransactionLogMapper transactionLogMapper;
-    private final LocalCacheService localCacheService;
-    private final RedisDegradeService redisDegradeService;
-    private final LocalFallbackService localFallbackService;
-    private final MQDegradeService mqDegradeService;
-    private final SeckillConfig seckillConfig;
     private final ObjectMapper objectMapper;
-    private final LocalTransactionService localTransactionService;
+    private final ProductMapper productMapper;
+    private final ActivityMapper activityMapper;
     private final Counter seckillRequestCounter;
     private final Counter seckillSuccessCounter;
-    private final Counter seckillStockInsufficientCounter;
-    private final Counter seckillAlreadyBoughtCounter;
-    private final Counter seckillNotWarmedCounter;
     private final Counter seckillDegradeCounter;
+    private final Counter seckillNotWarmedCounter;
+    private final SeckillDeductLua seckillDeductLua;
+    private final MQDegradeService mqDegradeService;
+    private final Counter seckillAlreadyBoughtCounter;
+    private final LocalCacheService localCacheService;
+    private final Counter seckillStockInsufficientCounter;
+    private final RedisDegradeService redisDegradeService;
+    private final SnowflakeIdGenerator snowflakeIdGenerator;
+    private final TransactionLogMapper transactionLogMapper;
+    private final LocalFallbackService localFallbackService;
+    private final LocalTransactionService localTransactionService;
 
     // RocketMQ事务消息生产者（通过 setter 注入，由 RocketMQProducerConfig 管理）
     private TransactionMQProducer transactionMQProducer;
 
     /**
      * 设置事务消息生产者（由 RocketMQProducerConfig 在 @PostConstruct 中调用）
-     * 
+     * <p>
      * 重要修复：Producer 已在 RocketMQProducerConfig.transactionMQProducer() Bean 创建时启动，
      * 此处仅设置引用，不再重复启动。避免了 Bean 生命周期反模式问题。
-     * 
+     * <p>
      * 原问题：Setter 不是生命周期方法，可能被多次调用或提前调用，
      * 导致 Producer 重复启动抛异常或空指针。
      */
     public void setTransactionMQProducer(TransactionMQProducer producer) {
         this.transactionMQProducer = producer;
-        log.info("TransactionMQProducer set in SeckillService: producer={}", 
+        log.info("TransactionMQProducer set in SeckillService: producer={}",
                 producer != null ? "configured" : "null");
     }
 
     /**
      * SeckillService 初始化完成后的检查
-     * 
+     * <p>
      * 注意：不在此处启动 producer，因为：
      * 1. Producer 已在 RocketMQProducerConfig 中启动
      * 2. 避免 Bean 生命周期反模式
      */
     @jakarta.annotation.PostConstruct
     public void init() {
-        log.info("SeckillService initialized: producerStatus={}", 
+        log.info("SeckillService initialized: producerStatus={}",
                 transactionMQProducer != null ? "available" : "disabled");
     }
 
@@ -123,7 +117,7 @@ public class SeckillService {
         Long productId = request.getProductId();
         int quantity = request.getQuantity();
 
-        log.info("秒杀请求: userId={}, seckillId={}, productId={}, quantity={}", 
+        log.info("秒杀请求: userId={}, seckillId={}, productId={}, quantity={}",
                 userId, seckillId, productId, quantity);
 
         try {
@@ -161,7 +155,7 @@ public class SeckillService {
                 log.warn("Redis降级模式，使用本地库存扣减: seckillId={}, userId={}", seckillId, userId);
                 int localResult = localFallbackService.deductStockLocal(seckillId, userId, quantity);
                 isDegradeMode = true;
-                
+
                 if (localResult == -2) {
                     seckillAlreadyBoughtCounter.increment();
                     log.warn("本地防重检查：已购买过: userId={}, seckillId={}", userId, seckillId);
@@ -171,9 +165,9 @@ public class SeckillService {
                     log.warn("本地库存不足: userId={}, seckillId={}", userId, seckillId);
                     return SeckillResponse.fail(SeckillResult.STOCK_INSUFFICIENT);
                 }
-                
+
                 luaResult = 1000;  // 本地扣减成功，模拟 shard 0
-                
+
             } else {
                 // 正常模式：Redis Lua 脚本原子扣减
                 luaResult = seckillDeductLua.deductStock(seckillId, userId, quantity);
@@ -239,7 +233,7 @@ public class SeckillService {
                 // MQ 降级模式：先写入本地缓冲队列
                 log.warn("MQ降级模式，订单写入缓冲队列: orderNo={}", orderNo);
                 localFallbackService.bufferOrder(orderNo, orderMessage);
-                
+
                 // 【P0-1修复】调用 LocalTransactionService.processOrderDirectly()
                 // 完整处理订单：写事务日志 + 写订单表 + 写ES + 更新事务状态
                 // 原问题：只调用 executeLocalTransaction() 导致订单未创建，被补偿服务误回滚
@@ -250,7 +244,7 @@ public class SeckillService {
                     seckillDeductLua.rollbackStock(seckillId, userId, quantity);
                     return SeckillResponse.systemError("系统繁忙，请稍后再试");
                 }
-                
+
             } else {
                 // 正常模式：发送 RocketMQ 事务消息
                 sendTransactionMessage(orderMessage);
@@ -261,7 +255,7 @@ public class SeckillService {
             // ========================================================================
             seckillSuccessCounter.increment();
 
-            log.info("秒杀成功: traceId={}, userId={}, seckillId={}, orderNo={}, shardIndex={}", 
+            log.info("秒杀成功: traceId={}, userId={}, seckillId={}, orderNo={}, shardIndex={}",
                     request.getTraceId(), userId, seckillId, orderNo, shardIndex);
 
             return SeckillResponse.success(orderNo);
@@ -284,7 +278,7 @@ public class SeckillService {
      * ============================================================================
      * 发送RocketMQ事务消息
      * ============================================================================
-     * 
+     * <p>
      * 开发模式下（RocketMQ禁用）会跳过发送，仅记录日志
      */
     private void sendTransactionMessage(OrderMessage orderMessage) {
@@ -310,7 +304,7 @@ public class SeckillService {
             log.info("事务消息发送成功: transactionId={}", orderMessage.getTransactionId());
 
         } catch (Exception e) {
-            log.error("事务消息发送失败: transactionId={}, error={}", 
+            log.error("事务消息发送失败: transactionId={}, error={}",
                     orderMessage.getTransactionId(), e.getMessage(), e);
             throw new RuntimeException("消息发送失败", e);
         }
@@ -320,7 +314,7 @@ public class SeckillService {
      * ============================================================================
      * 执行本地事务（写事务日志表）
      * ============================================================================
-     * 
+     * <p>
      * 这是RocketMQ事务消息的本地事务执行逻辑
      * 由 TransactionListener 调用
      */
@@ -345,12 +339,12 @@ public class SeckillService {
 
             transactionLogMapper.insert(transactionLog);
 
-            log.info("本地事务执行成功: traceId={}, transactionId={}", 
+            log.info("本地事务执行成功: traceId={}, transactionId={}",
                     orderMessage.getTraceId(), orderMessage.getTransactionId());
             return true;
 
         } catch (Exception e) {
-            log.error("本地事务执行失败: traceId={}, transactionId={}, error={}", 
+            log.error("本地事务执行失败: traceId={}, transactionId={}, error={}",
                     orderMessage.getTraceId(), orderMessage.getTransactionId(), e.getMessage(), e);
             return false;
         }

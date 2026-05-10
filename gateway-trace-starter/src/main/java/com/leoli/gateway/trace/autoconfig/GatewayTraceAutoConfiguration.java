@@ -5,9 +5,12 @@ import com.leoli.gateway.trace.aspect.MQTraceAspect;
 import com.leoli.gateway.trace.aspect.RedisTraceAspect;
 import com.leoli.gateway.trace.aspect.ServiceTraceAspect;
 import com.leoli.gateway.trace.config.TraceThreadPoolConfig;
+import com.leoli.gateway.trace.feign.FeignTraceInterceptor;
 import com.leoli.gateway.trace.interceptor.TraceReportInterceptor;
 import com.leoli.gateway.trace.interceptor.TraceWebInterceptor;
 import com.leoli.gateway.trace.properties.GatewayTraceProperties;
+import com.leoli.gateway.trace.reporter.AsyncTraceReporter;
+import com.leoli.gateway.trace.reporter.MiddlewareMetadataReporter;
 import lombok.RequiredArgsConstructor;
 import org.aspectj.lang.annotation.Aspect;
 import org.springframework.beans.factory.ObjectProvider;
@@ -176,9 +179,8 @@ class WebClientTraceConfiguration {
     @Bean
     @ConditionalOnProperty(prefix = "gateway.trace", name = "report-middleware", havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
-    public com.leoli.gateway.trace.reporter.MiddlewareMetadataReporter middlewareMetadataReporter(
-            GatewayTraceProperties properties,
-            org.springframework.core.env.Environment environment) {
+    public MiddlewareMetadataReporter middlewareMetadataReporter(
+            GatewayTraceProperties properties, Environment environment) {
         return new com.leoli.gateway.trace.reporter.MiddlewareMetadataReporter(properties, environment);
     }
 
@@ -187,8 +189,7 @@ class WebClientTraceConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean
-    public com.leoli.gateway.trace.reporter.AsyncTraceReporter asyncTraceReporter(
-            GatewayTraceProperties properties) {
+    public AsyncTraceReporter asyncTraceReporter(GatewayTraceProperties properties) {
         return new com.leoli.gateway.trace.reporter.AsyncTraceReporter(properties);
     }
 
@@ -197,10 +198,8 @@ class WebClientTraceConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean
-    public com.leoli.gateway.trace.interceptor.TraceReportInterceptor traceReportInterceptor(
-            com.leoli.gateway.trace.reporter.AsyncTraceReporter reporter,
-            GatewayTraceProperties properties) {
-        return new com.leoli.gateway.trace.interceptor.TraceReportInterceptor(reporter, properties);
+    public TraceReportInterceptor traceReportInterceptor(AsyncTraceReporter reporter, GatewayTraceProperties properties) {
+        return new TraceReportInterceptor(reporter, properties);
     }
 }
 
@@ -224,8 +223,7 @@ class FeignTraceConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean
-    public com.leoli.gateway.trace.feign.FeignTraceInterceptor feignTraceInterceptor(
-            GatewayTraceProperties properties) {
-        return new com.leoli.gateway.trace.feign.FeignTraceInterceptor(properties);
+    public FeignTraceInterceptor feignTraceInterceptor(GatewayTraceProperties properties) {
+        return new FeignTraceInterceptor(properties);
     }
 }

@@ -1,5 +1,6 @@
 package com.seckill.service;
 
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
@@ -7,7 +8,6 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
-import jakarta.annotation.PostConstruct;
 import java.util.Collections;
 import java.util.UUID;
 
@@ -15,22 +15,22 @@ import java.util.UUID;
  * ============================================================================
  * Distributed Rate Limiter Service - 分布式限流服务
  * ============================================================================
- *
+ * <p>
  * 用于 Consumer 等需要分布式限流的场景
- *
+ * <p>
  * FEATURES:
  * - Redis Lua 滑动窗口限流（避免边界突刺）
  * - 分布式限流（多实例共享限流配额）
  * - 可配置限流速率
- *
+ * <p>
  * IMPLEMENTATION:
  * - 复用 rate_limit.lua Lua 脚本
  * - timestamp:random 避免 ZSET 同毫秒去重
- *
+ * <p>
  * USAGE:
  * - OrderCreateConsumer: 控制消息消费速率
  * - 其他需要分布式限流的场景
- *
+ * <p>
  * ADVANTAGES over Guava RateLimiter:
  * - 多实例共享配额（不会超限）
  * - 可动态调整速率
@@ -80,7 +80,7 @@ public class DistributedRateLimiterService {
      * Try to acquire a permit (分布式限流)
      * ============================================================================
      *
-     * @param key 限流 Key（区分不同的限流场景）
+     * @param key           限流 Key（区分不同的限流场景）
      * @param ratePerSecond 每秒允许的请求数
      * @return true: 允许通过, false: 被限流
      */
@@ -94,12 +94,12 @@ public class DistributedRateLimiterService {
         String randomValue = UUID.randomUUID().toString().substring(0, 8);
 
         Long result = redisTemplate.execute(
-            rateLimitScript,
-            Collections.singletonList(fullKey),
-            String.valueOf(RATE_WINDOW_MS),
-            String.valueOf(ratePerSecond),
-            String.valueOf(currentTime),
-            randomValue
+                rateLimitScript,
+                Collections.singletonList(fullKey),
+                String.valueOf(RATE_WINDOW_MS),
+                String.valueOf(ratePerSecond),
+                String.valueOf(currentTime),
+                randomValue
         );
 
         if (result != null && result == -1) {
@@ -126,12 +126,12 @@ public class DistributedRateLimiterService {
      * ============================================================================
      * Blocking acquire (等待直到获取许可)
      * ============================================================================
-     *
+     * <p>
      * 模拟 Guava RateLimiter.acquire() 的阻塞行为
      * - 如果被限流，会短暂等待后重试
      * - 最多等待 100ms，避免阻塞太久
      *
-     * @param key 限流 Key
+     * @param key           限流 Key
      * @param ratePerSecond 每秒允许的请求数
      * @return true: 成功获取许可, false: 超时未获取
      */

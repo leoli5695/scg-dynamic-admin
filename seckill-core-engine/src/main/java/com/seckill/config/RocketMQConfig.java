@@ -2,9 +2,8 @@ package com.seckill.config;
 
 import lombok.Data;
 import org.apache.rocketmq.spring.autoconfigure.RocketMQAutoConfiguration;
-import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.Bean;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 
@@ -12,12 +11,12 @@ import org.springframework.context.annotation.Import;
  * ============================================================================
  * RocketMQ 配置类
  * ============================================================================
- * 
+ * <p>
  * 配置内容:
  * 1. Nameserver地址
  * 2. Producer Group
  * 3. 事务消息配置
- * 
+ * <p>
  * Topic定义:
  * - SECKILL_ORDER_TOPIC: 订单创建消息
  * - SECKILL_ROLLBACK_TOPIC: 库存回补延迟消息
@@ -104,7 +103,7 @@ public class RocketMQConfig {
     /**
      * RocketMQ延迟级别
      * Level 17 = 20分钟（未支付订单回滚）
-     * 
+     * <p>
      * 官方延迟级别对照：
      * Level 1-4: 1s, 5s, 10s, 30s
      * Level 5-12: 1m, 2m, 3m, 4m, 5m, 6m, 7m, 8m

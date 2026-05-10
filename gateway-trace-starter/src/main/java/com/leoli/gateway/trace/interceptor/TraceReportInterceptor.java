@@ -6,6 +6,7 @@ import com.leoli.gateway.trace.properties.GatewayTraceProperties;
 import com.leoli.gateway.trace.reporter.AsyncTraceReporter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.servlet.HandlerInterceptor;
 
@@ -20,15 +21,11 @@ import org.springframework.web.servlet.HandlerInterceptor;
  * @author leoli
  */
 @Slf4j
+@RequiredArgsConstructor
 public class TraceReportInterceptor implements HandlerInterceptor {
 
     private final AsyncTraceReporter traceReporter;
     private final GatewayTraceProperties properties;
-
-    public TraceReportInterceptor(AsyncTraceReporter traceReporter, GatewayTraceProperties properties) {
-        this.traceReporter = traceReporter;
-        this.properties = properties;
-    }
 
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response,

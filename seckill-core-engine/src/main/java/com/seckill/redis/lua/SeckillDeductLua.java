@@ -42,7 +42,7 @@ public class SeckillDeductLua {
      * ============================================================================
      * OPTIMIZATION (P2): Magic numbers extracted to constants
      * ============================================================================
-     *
+     * <p>
      * Lua script return codes:
      * - -1: User already bought (duplicate)
      * - 0: Stock insufficient

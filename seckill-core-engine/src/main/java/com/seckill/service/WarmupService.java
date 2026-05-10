@@ -16,12 +16,12 @@ import java.util.List;
  * ============================================================================
  * 库存预热服务
  * ============================================================================
- * 
+ * <p>
  * 功能:
  * 1. 系统启动时预热已开启的秒杀活动库存
  * 2. 活动开始前定时预热
  * 3. 管理员手动触发预热
- * 
+ * <p>
  * 预热流程:
  * 1. 加载活动信息
  * 2. 计算分片库存
@@ -33,9 +33,9 @@ import java.util.List;
 @RequiredArgsConstructor
 public class WarmupService {
 
+    private final SeckillConfig seckillConfig;
     private final ActivityMapper activityMapper;
     private final SeckillDeductLua seckillDeductLua;
-    private final SeckillConfig seckillConfig;
     private final LocalCacheService localCacheService;
 
     /**
@@ -148,7 +148,7 @@ public class WarmupService {
      * ============================================================================
      * 清理预热数据（活动结束后）
      * ============================================================================
-     *
+     * <p>
      * 【P2-23修复】活动结束后清理所有预热数据
      * 使用专门的 cleanupActivity 方法，明确清空库存、购买记录和分片记录
      */
@@ -206,17 +206,52 @@ public class WarmupService {
         }
 
         // getters and setters
-        public Long getSeckillId() { return seckillId; }
-        public void setSeckillId(Long seckillId) { this.seckillId = seckillId; }
-        public int getExpectedStock() { return expectedStock; }
-        public void setExpectedStock(int expectedStock) { this.expectedStock = expectedStock; }
-        public int getActualStock() { return actualStock; }
-        public void setActualStock(int actualStock) { this.actualStock = actualStock; }
-        public List<Integer> getShardStocks() { return shardStocks; }
-        public void setShardStocks(List<Integer> shardStocks) { this.shardStocks = shardStocks; }
-        public boolean isSuccess() { return success; }
-        public void setSuccess(boolean success) { this.success = success; }
-        public int getDiff() { return diff; }
-        public void setDiff(int diff) { this.diff = diff; }
+        public Long getSeckillId() {
+            return seckillId;
+        }
+
+        public void setSeckillId(Long seckillId) {
+            this.seckillId = seckillId;
+        }
+
+        public int getExpectedStock() {
+            return expectedStock;
+        }
+
+        public void setExpectedStock(int expectedStock) {
+            this.expectedStock = expectedStock;
+        }
+
+        public int getActualStock() {
+            return actualStock;
+        }
+
+        public void setActualStock(int actualStock) {
+            this.actualStock = actualStock;
+        }
+
+        public List<Integer> getShardStocks() {
+            return shardStocks;
+        }
+
+        public void setShardStocks(List<Integer> shardStocks) {
+            this.shardStocks = shardStocks;
+        }
+
+        public boolean isSuccess() {
+            return success;
+        }
+
+        public void setSuccess(boolean success) {
+            this.success = success;
+        }
+
+        public int getDiff() {
+            return diff;
+        }
+
+        public void setDiff(int diff) {
+            this.diff = diff;
+        }
     }
 }

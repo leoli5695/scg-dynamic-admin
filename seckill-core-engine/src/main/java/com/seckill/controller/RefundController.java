@@ -7,27 +7,26 @@ import com.seckill.dto.RefundResponse;
 import com.seckill.enums.OrderStatus;
 import com.seckill.service.OrderQueryService;
 import com.seckill.service.RefundService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
-import jakarta.servlet.http.HttpServletRequest;
-
 /**
  * ============================================================================
  * 退款 Controller
  * ============================================================================
- *
+ * <p>
  * 接口:
  * 1. POST /refund/apply - 申请退款
  * 2. GET /refund/query - 查询退款状态
- *
+ * <p>
  * 注意:
  * - 秒杀场景一般只支持全额退款
  * - 退款后需要回补库存供其他用户购买
  * - 需要校验订单归属（防止恶意退款）
- *
+ * <p>
  * 网关传递的Header:
  * - X-Trace-Id: 链路追踪ID
  * - X-User-Id: 用户ID（网关认证后）
@@ -45,7 +44,7 @@ public class RefundController {
      * ============================================================================
      * 申请退款
      * ============================================================================
-     *
+     * <p>
      * 处理流程:
      * 1. 校验订单状态（必须是已支付）
      * 2. 校验退款金额（秒杀场景只支持全额退款）
@@ -54,7 +53,7 @@ public class RefundController {
      * 5. 回补Redis库存
      * 6. 同步ES索引
      *
-     * @param request 退款请求
+     * @param request     退款请求
      * @param httpRequest HTTP请求（获取traceId和userId）
      * @return 处理结果
      */
@@ -86,7 +85,7 @@ public class RefundController {
      * ============================================================================
      * 查询退款状态
      * ============================================================================
-     *
+     * <p>
      * 【P2-19修复】实现退款状态查询功能
      *
      * @param orderNo 订单号
@@ -147,11 +146,28 @@ public class RefundController {
         private String status;
         private String message;
 
-        public String getOrderNo() { return orderNo; }
-        public void setOrderNo(String orderNo) { this.orderNo = orderNo; }
-        public String getStatus() { return status; }
-        public void setStatus(String status) { this.status = status; }
-        public String getMessage() { return message; }
-        public void setMessage(String message) { this.message = message; }
+        public String getOrderNo() {
+            return orderNo;
+        }
+
+        public void setOrderNo(String orderNo) {
+            this.orderNo = orderNo;
+        }
+
+        public String getStatus() {
+            return status;
+        }
+
+        public void setStatus(String status) {
+            this.status = status;
+        }
+
+        public String getMessage() {
+            return message;
+        }
+
+        public void setMessage(String message) {
+            this.message = message;
+        }
     }
 }

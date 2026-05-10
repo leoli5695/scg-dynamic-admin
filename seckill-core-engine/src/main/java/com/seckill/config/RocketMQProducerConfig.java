@@ -15,12 +15,12 @@ import org.springframework.context.annotation.Configuration;
  * ============================================================================
  * RocketMQ 事务消息生产者配置
  * ============================================================================
- * 
+ * <p>
  * 功能:
  * 1. 创建TransactionMQProducer
  * 2. 设置事务监听器
  * 3. 通过 @PostConstruct 注入到SeckillService（保持 Spring 依赖注入完整性）
- *
+ * <p>
  * 【P0-3修复】：
  * - 使用 @Autowired 注入 Bean，而非在 @PostConstruct 中直接调用 Bean 方法
  * - 原问题：直接调用 transactionMQProducer() 会绕过 Spring Bean 生命周期
@@ -33,15 +33,15 @@ import org.springframework.context.annotation.Configuration;
 public class RocketMQProducerConfig {
 
     private final RocketMQConfig rocketMQConfig;
-    private final SeckillTransactionListener transactionListener;
     private final SeckillService seckillService;
+    private final SeckillTransactionListener transactionListener;
 
     // 【P0-3修复】通过 @Autowired 注入 Bean，避免直接调用 Bean 方法
     private TransactionMQProducer transactionMQProducer;
 
     /**
      * 创建事务消息生产者
-     * 
+     * <p>
      * 注意：destroyMethod="shutdown" 确保应用关闭时正确释放资源
      */
     @Bean(destroyMethod = "shutdown")
@@ -63,7 +63,7 @@ public class RocketMQProducerConfig {
         // 启动生产者（在 Bean 创建时启动，而非 setter 中）
         try {
             producer.start();
-            log.info("RocketMQ TransactionMQProducer started successfully: group={}", 
+            log.info("RocketMQ TransactionMQProducer started successfully: group={}",
                     RocketMQConfig.TRANSACTION_PRODUCER_GROUP);
         } catch (Exception e) {
             log.error("Failed to start TransactionMQProducer: {}", e.getMessage(), e);
@@ -75,7 +75,7 @@ public class RocketMQProducerConfig {
 
     /**
      * 注入事务生产者到 SeckillService
-     *
+     * <p>
      * 【P0-3修复】：
      * - 使用 @Autowired 注入已创建的 Bean 实例
      * - 避免 @PostConstruct 中直接调用 @Bean 方法

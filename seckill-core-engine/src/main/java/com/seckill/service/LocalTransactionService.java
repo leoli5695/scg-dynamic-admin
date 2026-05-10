@@ -17,19 +17,19 @@ import java.time.LocalDateTime;
  * ============================================================================
  * 本地事务直接处理服务
  * ============================================================================
- *
+ * <p>
  * 功能:
  * 1. MQ 故障时的降级订单处理
  * 2. 直接写入事务日志表和订单表
  * 3. 使用数据库事务保证一致性
- *
+ * <p>
  * 降级流程:
  * 1. 写入事务日志表（status = PROCESSING）
  * 2. 写入订单表（status = PENDING_PAYMENT）
  * 3. 写入 ES 索引
  * 4. 更新事务日志表（status = SUCCESS）
  * 5. 提交事务
- *
+ * <p>
  * 注意:
  * - 此服务仅在 MQ 故障时使用
  * - 性能较低，不适合高并发场景
@@ -40,15 +40,15 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class LocalTransactionService {
 
-    private final TransactionLogMapper transactionLogMapper;
     private final OrderMapper orderMapper;
+    private final TransactionLogMapper transactionLogMapper;
     private final ElasticsearchService elasticsearchService;
 
     /**
      * ============================================================================
      * 本地事务直接处理订单（MQ 降级模式）
      * ============================================================================
-     *
+     * <p>
      * 流程:
      * 1. 写入事务日志
      * 2. 写入订单表

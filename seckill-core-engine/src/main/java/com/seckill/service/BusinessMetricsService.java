@@ -2,8 +2,8 @@ package com.seckill.service;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
-import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -14,9 +14,9 @@ import java.util.concurrent.atomic.AtomicLong;
  * ============================================================================
  * Business Metrics Service - 业务监控指标
  * ============================================================================
- *
+ * <p>
  * OPTIMIZATION (P2): Comprehensive business metrics for monitoring
- *
+ * <p>
  * Key metrics added:
  * - seckill.order.queue.wait_time: Order queue waiting time
  * - seckill.batch.flush.duration: Batch flush duration
@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * - seckill.transaction.timeout.count: Transaction timeout count
  * - seckill.stock.rollback.count: Stock rollback count
  * - seckill.order.create.latency: Order creation latency
- *
+ * <p>
  * Integration:
  * - Prometheus-compatible metrics
  * - Grafana dashboard visualization
@@ -39,15 +39,15 @@ public class BusinessMetricsService {
     private final MeterRegistry meterRegistry;
 
     // Business counters
-    private final Counter transactionTimeoutCounter;
     private final Counter stockRollbackCounter;
     private final Counter orderCreatedCounter;
     private final Counter orderCancelledCounter;
+    private final Counter transactionTimeoutCounter;
 
     // Business timers
-    private final Timer orderCreateLatencyTimer;
-    private final Timer batchFlushTimer;
     private final Timer queueWaitTimer;
+    private final Timer batchFlushTimer;
+    private final Timer orderCreateLatencyTimer;
 
     // Gauges (atomic values for real-time monitoring)
     private final AtomicLong redisDegradeStartTime = new AtomicLong(0);
@@ -98,17 +98,17 @@ public class BusinessMetricsService {
         // Gauges - Real-time values
         // ============================================================================
         Gauge.builder("seckill.redis.degrade.duration", this,
-                svc -> svc.getRedisDegradeDurationMillis())
+                        svc -> svc.getRedisDegradeDurationMillis())
                 .description("Redis degradation duration in milliseconds")
                 .register(meterRegistry);
 
         Gauge.builder("seckill.batch.queue.size", currentQueueSize,
-                AtomicLong::get)
+                        AtomicLong::get)
                 .description("Current batch queue size")
                 .register(meterRegistry);
 
         Gauge.builder("seckill.transaction.active.count", activeTransactionCount,
-                AtomicLong::get)
+                        AtomicLong::get)
                 .description("Active transaction count")
                 .register(meterRegistry);
 
@@ -223,21 +223,21 @@ public class BusinessMetricsService {
      */
     public String getMetricsSummary() {
         return String.format(
-            "Business Metrics Summary:\n" +
-            "  Orders Created: %s\n" +
-            "  Orders Cancelled: %s\n" +
-            "  Transaction Timeout: %s\n" +
-            "  Stock Rollback: %s\n" +
-            "  Queue Size: %s\n" +
-            "  Active Transactions: %s\n" +
-            "  Redis Degrade Duration: %.0fms",
-            orderCreatedCounter.count(),
-            orderCancelledCounter.count(),
-            transactionTimeoutCounter.count(),
-            stockRollbackCounter.count(),
-            currentQueueSize.get(),
-            activeTransactionCount.get(),
-            getRedisDegradeDurationMillis()
+                "Business Metrics Summary:\n" +
+                        "  Orders Created: %s\n" +
+                        "  Orders Cancelled: %s\n" +
+                        "  Transaction Timeout: %s\n" +
+                        "  Stock Rollback: %s\n" +
+                        "  Queue Size: %s\n" +
+                        "  Active Transactions: %s\n" +
+                        "  Redis Degrade Duration: %.0fms",
+                orderCreatedCounter.count(),
+                orderCancelledCounter.count(),
+                transactionTimeoutCounter.count(),
+                stockRollbackCounter.count(),
+                currentQueueSize.get(),
+                activeTransactionCount.get(),
+                getRedisDegradeDurationMillis()
         );
     }
 }

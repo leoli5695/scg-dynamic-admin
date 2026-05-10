@@ -19,19 +19,19 @@ import java.util.concurrent.ConcurrentHashMap;
  * ============================================================================
  * 数据库连接池监控服务
  * ============================================================================
- *
+ * <p>
  * 监控指标:
  * 1. 活动连接数 - 当前正在使用的连接
  * 2. 空闲连接数 - 连接池中的空闲连接
  * 3. 总连接数 - 连接池中的总连接数
  * 4. 等待连接数 - 正在等待获取连接的线程
  * 5. 连接获取耗时 - 获取连接的平均耗时
- *
+ * <p>
  * 健康检查:
  * - 每30秒检查一次连接池状态
  * - 连接数超过阈值时告警
  * - 连接获取失败时触发告警
- *
+ * <p>
  * 生产建议:
  * - 配置HikariCP的metricRegistry
  * - 使用Prometheus采集指标
@@ -42,8 +42,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class DataSourceMonitorService {
 
-    private final MeterRegistry meterRegistry;
     private final DataSource dataSource;
+    private final MeterRegistry meterRegistry;
 
     /**
      * 数据源缓存（支持多数据源）
@@ -60,7 +60,7 @@ public class DataSourceMonitorService {
      * ============================================================================
      * 【P2-20修复】应用启动时自动注册监控指标
      * ============================================================================
-     *
+     * <p>
      * 尝试从 DataSource 中提取 HikariDataSource 并注册监控指标
      * 支持 ShardingSphere 包装的 DataSource
      */
@@ -92,7 +92,7 @@ public class DataSourceMonitorService {
      * ============================================================================
      * 解包获取 HikariDataSource
      * ============================================================================
-     *
+     * <p>
      * 支持从 ShardingSphere 包装的 DataSource 中提取原始 HikariDataSource
      */
     private HikariDataSource unwrapHikariDataSource(DataSource dataSource) {
@@ -285,13 +285,33 @@ public class DataSourceMonitorService {
             return (double) activeConnections / maxPoolSize;
         }
 
-        public String getPoolName() { return poolName; }
-        public int getActiveConnections() { return activeConnections; }
-        public int getIdleConnections() { return idleConnections; }
-        public int getTotalConnections() { return totalConnections; }
-        public int getThreadsAwaiting() { return threadsAwaiting; }
-        public int getMaxPoolSize() { return maxPoolSize; }
-        public int getMinIdle() { return minIdle; }
+        public String getPoolName() {
+            return poolName;
+        }
+
+        public int getActiveConnections() {
+            return activeConnections;
+        }
+
+        public int getIdleConnections() {
+            return idleConnections;
+        }
+
+        public int getTotalConnections() {
+            return totalConnections;
+        }
+
+        public int getThreadsAwaiting() {
+            return threadsAwaiting;
+        }
+
+        public int getMaxPoolSize() {
+            return maxPoolSize;
+        }
+
+        public int getMinIdle() {
+            return minIdle;
+        }
 
         @Override
         public String toString() {

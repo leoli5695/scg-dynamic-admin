@@ -9,9 +9,9 @@ import org.aspectj.lang.annotation.Aspect;
 
 /**
  * Database operation tracing aspect
- * 
+ * <p>
  * Automatically traces MyBatis Mapper/JDBC operations
- * 
+ *
  * @author leoli
  */
 @Slf4j
@@ -26,7 +26,7 @@ public class DBTraceAspect {
 
     /**
      * Trace MyBatis Mapper operations
-     * 
+     * <p>
      * Matches: all methods in com.xxx.mapper package
      */
     @Around("execution(* com..mapper.*.*(..)) || " +

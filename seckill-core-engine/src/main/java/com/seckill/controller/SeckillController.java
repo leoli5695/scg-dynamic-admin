@@ -11,30 +11,28 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
-import jakarta.servlet.http.HttpServletRequest;
-
 /**
  * ============================================================================
  * 秒杀入口 Controller
  * ============================================================================
- *
+ * <p>
  * 接口:
  * 1. POST /seckill/do - 秒杀入口
- *
+ * <p>
  * 注意:
  * - 网关已处理鉴权和IP限流
  * - userId由网关注入，不信任前端传递
  * - traceId由网关生成并传递(X-Trace-Id header)
- *
+ * <p>
  * 网关传递的Header:
  * - X-Trace-Id: 链路追踪ID
  * - X-Client-Ip: 客户端真实IP
@@ -54,13 +52,13 @@ public class SeckillController {
      * ============================================================================
      * 秒杀入口
      * ============================================================================
-     *
+     * <p>
      * 流程:
      * 1. Lua脚本原子库存扣减（含防重）
      * 2. 发送RocketMQ事务消息
      * 3. 返回排队中状态
      *
-     * @param request 秒杀请求
+     * @param request     秒杀请求
      * @param httpRequest HTTP请求（用于获取网关传递的header）
      * @return 秒杀响应
      */
@@ -83,24 +81,24 @@ public class SeckillController {
             @Parameter(description = "秒杀请求", required = true)
             @Valid @RequestBody SeckillRequest request,
             HttpServletRequest httpRequest) {
-        
+
         // 从网关传递的header中获取traceId
         String traceId = httpRequest.getHeader("X-Trace-Id");
         if (traceId == null || traceId.isEmpty()) {
             traceId = java.util.UUID.randomUUID().toString(); // 兜底：自己生成
         }
         request.setTraceId(traceId);
-        
+
         // 从网关传递的header中获取真实IP（如果前端传递的ipAddress为空）
         String clientIp = httpRequest.getHeader("X-Client-Ip");
         if (clientIp != null && !clientIp.isEmpty() && request.getIpAddress() == null) {
             request.setIpAddress(clientIp);
         }
-        
+
         // 设置请求时间戳
         request.setTimestamp(System.currentTimeMillis());
 
-        log.info("秒杀请求: traceId={}, userId={}, seckillId={}, productId={}, ip={}", 
+        log.info("秒杀请求: traceId={}, userId={}, seckillId={}, productId={}, ip={}",
                 traceId, request.getUserId(), request.getSeckillId(), request.getProductId(), request.getIpAddress());
 
         return seckillService.doSeckill(request);
@@ -110,11 +108,11 @@ public class SeckillController {
      * ============================================================================
      * 检查秒杀结果
      * ============================================================================
-     *
+     * <p>
      * 【P2-17修复】实现秒杀结果查询功能
      * 用户查询自己的秒杀结果
      *
-     * @param userId 用户ID
+     * @param userId    用户ID
      * @param seckillId 秒杀活动ID
      * @return 秒杀结果响应
      */
@@ -191,11 +189,28 @@ public class SeckillController {
         private String message;
 
         // getters and setters
-        public String getOrderNo() { return orderNo; }
-        public void setOrderNo(String orderNo) { this.orderNo = orderNo; }
-        public Integer getStatus() { return status; }
-        public void setStatus(Integer status) { this.status = status; }
-        public String getMessage() { return message; }
-        public void setMessage(String message) { this.message = message; }
+        public String getOrderNo() {
+            return orderNo;
+        }
+
+        public void setOrderNo(String orderNo) {
+            this.orderNo = orderNo;
+        }
+
+        public Integer getStatus() {
+            return status;
+        }
+
+        public void setStatus(Integer status) {
+            this.status = status;
+        }
+
+        public String getMessage() {
+            return message;
+        }
+
+        public void setMessage(String message) {
+            this.message = message;
+        }
     }
 }

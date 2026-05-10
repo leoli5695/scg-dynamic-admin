@@ -14,7 +14,6 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -23,7 +22,7 @@ import java.util.concurrent.TimeUnit;
  * ============================================================================
  * 退款服务
  * ============================================================================
- *
+ * <p>
  * 功能:
  * 1. 处理退款请求
  * 2. 校验订单状态和金额
@@ -31,7 +30,7 @@ import java.util.concurrent.TimeUnit;
  * 4. 回补Redis库存
  * 5. 更新事务日志
  * 6. 同步ES索引
- *
+ * <p>
  * 注意:
  * - 秒杀场景一般只支持全额退款
  * - 退款后需要回补库存
@@ -43,9 +42,9 @@ import java.util.concurrent.TimeUnit;
 public class RefundService {
 
     private final OrderMapper orderMapper;
+    private final StringRedisTemplate redisTemplate;
     private final TransactionLogMapper transactionLogMapper;
     private final ElasticsearchService elasticsearchService;
-    private final StringRedisTemplate redisTemplate;
 
     /**
      * 退款处理标记Redis Key前缀
@@ -61,7 +60,7 @@ public class RefundService {
      * ============================================================================
      * 处理退款请求
      * ============================================================================
-     *
+     * <p>
      * 流程:
      * 1. 幂等性检查
      * 2. 查询订单并校验状态
@@ -204,7 +203,7 @@ public class RefundService {
      * ============================================================================
      * 回补Redis库存
      * ============================================================================
-     *
+     * <p>
      * 使用指定分片回补库存
      */
     private void rollbackRedisStock(Long seckillId, Integer shardIndex, Integer quantity, String traceId) {

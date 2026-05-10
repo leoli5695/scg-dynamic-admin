@@ -16,19 +16,19 @@ import java.util.BitSet;
  * ============================================================================
  * 本地缓存服务（热点Key优化）
  * ============================================================================
- *
+ * <p>
  * 功能:
  * 1. 库存状态缓存 - 快速判断是否有库存（不缓存具体数量）
  * 2. 活动信息缓存 - 减少数据库查询
  * 3. 商品信息缓存 - 提高查询性能
  * 4. 用户购买状态缓存 - 防重优化
  * 5. 分片库存位图缓存 - 快速定位有库存的分片
- *
+ * <p>
  * 设计原则:
  * - 本地缓存只用于"状态查询"，不用于"库存扣减"
  * - 库存扣减必须走Redis Lua脚本保证原子性
  * - 缓存过期时间短，避免数据偏差太大
- *
+ * <p>
  * 性能优化:
  * - 热点Key场景下，减少90%的Redis查询
  * - 本地缓存命中率监控，便于调优
@@ -38,22 +38,22 @@ import java.util.BitSet;
 @RequiredArgsConstructor
 public class LocalCacheService {
 
-    private final com.github.benmanes.caffeine.cache.Cache<String, Boolean> stockStatusCache;
-    private final com.github.benmanes.caffeine.cache.Cache<Long, Object> activityCache;
-    private final com.github.benmanes.caffeine.cache.Cache<Long, Object> productCache;
-    private final com.github.benmanes.caffeine.cache.Cache<String, Boolean> userBoughtCache;
-    private final com.github.benmanes.caffeine.cache.Cache<Long, BitSet> shardStockCache;
-
-    private final ActivityMapper activityMapper;
     private final ProductMapper productMapper;
-    private final SeckillDeductLua seckillDeductLua;
     private final SeckillConfig seckillConfig;
+    private final ActivityMapper activityMapper;
+    private final SeckillDeductLua seckillDeductLua;
+
+    private final com.github.benmanes.caffeine.cache.Cache<Long, Object> productCache;
+    private final com.github.benmanes.caffeine.cache.Cache<Long, Object> activityCache;
+    private final com.github.benmanes.caffeine.cache.Cache<Long, BitSet> shardStockCache;
+    private final com.github.benmanes.caffeine.cache.Cache<String, Boolean> userBoughtCache;
+    private final com.github.benmanes.caffeine.cache.Cache<String, Boolean> stockStatusCache;
 
     /**
      * ============================================================================
      * 检查分片是否有库存（本地缓存）
      * ============================================================================
-     *
+     * <p>
      * 注意: 返回的是"是否有库存"的布尔值，不是具体库存数量
      * 原因: 避免本地缓存与实际库存偏差太大
      */
@@ -88,7 +88,7 @@ public class LocalCacheService {
      * ============================================================================
      * 批量检查各分片库存状态（返回位图）
      * ============================================================================
-     *
+     * <p>
      * 返回 BitSet，每一位表示对应分片是否有库存
      * 用于快速选择有库存的分片
      */
@@ -163,7 +163,7 @@ public class LocalCacheService {
      * ============================================================================
      * 检查用户是否已购买（本地缓存）
      * ============================================================================
-     *
+     * <p>
      * 先查本地缓存，缓存未命中再查Redis
      * 用于快速防重，减少Redis SISMEMBER请求
      */
@@ -190,7 +190,7 @@ public class LocalCacheService {
      * ============================================================================
      * 更新用户购买状态缓存
      * ============================================================================
-     *
+     * <p>
      * 在用户成功购买后调用，将缓存更新为true
      */
     public void markUserBought(Long seckillId, Long userId) {
@@ -203,7 +203,7 @@ public class LocalCacheService {
      * ============================================================================
      * 清除库存状态缓存
      * ============================================================================
-     *
+     * <p>
      * 在库存变化后调用（如库存回补）
      */
     public void clearStockStatusCache(Long seckillId) {
@@ -296,14 +296,37 @@ public class LocalCacheService {
             this.userSize = userSize;
         }
 
-        public double getStockHitRate() { return stockHitRate; }
-        public double getActivityHitRate() { return activityHitRate; }
-        public double getProductHitRate() { return productHitRate; }
-        public double getUserHitRate() { return userHitRate; }
-        public long getStockSize() { return stockSize; }
-        public long getActivitySize() { return activitySize; }
-        public long getProductSize() { return productSize; }
-        public long getUserSize() { return userSize; }
+        public double getStockHitRate() {
+            return stockHitRate;
+        }
+
+        public double getActivityHitRate() {
+            return activityHitRate;
+        }
+
+        public double getProductHitRate() {
+            return productHitRate;
+        }
+
+        public double getUserHitRate() {
+            return userHitRate;
+        }
+
+        public long getStockSize() {
+            return stockSize;
+        }
+
+        public long getActivitySize() {
+            return activitySize;
+        }
+
+        public long getProductSize() {
+            return productSize;
+        }
+
+        public long getUserSize() {
+            return userSize;
+        }
 
         @Override
         public String toString() {

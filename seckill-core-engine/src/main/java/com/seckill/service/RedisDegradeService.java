@@ -2,7 +2,6 @@ package com.seckill.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -14,18 +13,18 @@ import java.util.concurrent.atomic.AtomicLong;
  * ============================================================================
  * Redis 故障降级服务
  * ============================================================================
- *
+ * <p>
  * 功能:
  * 1. Redis 健康检查（定时检测）
  * 2. 降级开关控制（手动/自动）
  * 3. 故障告警（与告警服务联动）
  * 4. 自动恢复检测
- *
+ * <p>
  * 降级策略:
  * - Redis 故障时，启用数据库库存扣减模式
  * - 使用分布式锁（数据库悲观锁或 Redisson 等待恢复）保证原子性
  * - 降低并发能力，但保证业务可用性
- *
+ * <p>
  * 监控指标:
  * - seckill.redis.status: Redis 状态（0=正常，1=降级，2=故障）
  * - seckill.redis.health_check: 健康检查次数
@@ -36,9 +35,8 @@ import java.util.concurrent.atomic.AtomicLong;
 @RequiredArgsConstructor
 public class RedisDegradeService {
 
-    private final StringRedisTemplate redisTemplate;
-    private final RedisConnectionFactory redisConnectionFactory;
     private final AlertService alertService;
+    private final StringRedisTemplate redisTemplate;
 
     /**
      * Redis 状态
@@ -82,7 +80,7 @@ public class RedisDegradeService {
      * ============================================================================
      * 检查 Redis 是否可用
      * ============================================================================
-     *
+     * <p>
      * 【P1-12修复】健康检查应使用连接池：
      * - 原问题：直接使用 getConnection().ping() 会创建新连接，不归还连接池
      * - 频繁调用可能耗尽连接
@@ -131,7 +129,7 @@ public class RedisDegradeService {
      * ============================================================================
      * 手动启用降级模式
      * ============================================================================
-     *
+     * <p>
      * 用于运维紧急降级
      */
     public void manualDegrade() {
@@ -245,7 +243,7 @@ public class RedisDegradeService {
      * ============================================================================
      * 定时健康检查（每60秒）
      * ============================================================================
-     *
+     * <p>
      * OPTIMIZATION (P2): Reduced frequency from 30s to 60s
      * - Reduces unnecessary Redis PING commands
      * - Still fast enough to detect failures
@@ -283,8 +281,8 @@ public class RedisDegradeService {
      * ============================================================================
      *
      * @param operation Redis 操作
-     * @param fallback 降级操作
-     * @param <T> 返回类型
+     * @param fallback  降级操作
+     * @param <T>       返回类型
      * @return 操作结果
      */
     public <T> T executeWithFallback(RedisOperation<T> operation, FallbackOperation<T> fallback) {

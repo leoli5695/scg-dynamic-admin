@@ -16,23 +16,23 @@ import java.util.concurrent.locks.ReentrantLock;
  * ============================================================================
  * 数据库库存扣减服务
  * ============================================================================
- *
+ * <p>
  * 功能:
  * 1. Redis 故障时的降级库存扣减
  * 2. 使用数据库悲观锁保证原子性
  * 3. 防重检查（基于数据库唯一索引）
- *
+ * <p>
  * 性能说明:
  * - 并发能力远低于 Redis（约100-500 TPS）
  * - 适合作为 Redis 故障时的兜底方案
  * - 不适合作为常态使用
- *
+ * <p>
  * 降级策略:
  * 1. 查询活动库存（加悲观锁）
  * 2. 校验库存充足
  * 3. 更新库存
  * 4. 提交事务
- *
+ * <p>
  * 注意:
  * - 此服务仅在 RedisDegradeService 判断 Redis 故障时使用
  * - 需要配合分布式锁（如数据库锁或 Redisson 等待恢复）
@@ -55,7 +55,7 @@ public class DatabaseStockService {
      * ============================================================================
      * 数据库库存扣减（降级模式）
      * ============================================================================
-     *
+     * <p>
      * 返回值:
      * - 正数: 扣减成功，返回剩余库存
      * - -1: 库存不足
@@ -63,8 +63,8 @@ public class DatabaseStockService {
      * - -3: 系统异常
      *
      * @param seckillId 秒杀活动ID
-     * @param userId 用户ID
-     * @param quantity 购买数量
+     * @param userId    用户ID
+     * @param quantity  购买数量
      * @return 扣减结果
      */
     @Transactional(rollbackFor = Exception.class)
@@ -129,7 +129,7 @@ public class DatabaseStockService {
      * ============================================================================
      *
      * @param seckillId 秒杀活动ID
-     * @param quantity 回补数量
+     * @param quantity  回补数量
      */
     @Transactional(rollbackFor = Exception.class)
     public void rollbackStockToDatabase(Long seckillId, int quantity) {

@@ -1,5 +1,6 @@
 package com.seckill.config;
 
+import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
@@ -47,7 +48,7 @@ public class CaffeineConfig {
      * - 减少Redis GET请求
      */
     @Bean
-    public com.github.benmanes.caffeine.cache.Cache<String, Boolean> stockStatusCache(MeterRegistry meterRegistry) {
+    public Cache<String, Boolean> stockStatusCache(MeterRegistry meterRegistry) {
         return Caffeine.newBuilder()
                 .expireAfterWrite(1, TimeUnit.MINUTES)  // 1分钟过期
                 .maximumSize(10000)                      // 最大10000个Key
@@ -72,7 +73,7 @@ public class CaffeineConfig {
      * - 避免频繁查询数据库
      */
     @Bean
-    public com.github.benmanes.caffeine.cache.Cache<Long, Object> activityCache() {
+    public Cache<Long, Object> activityCache() {
         return Caffeine.newBuilder()
                 .expireAfterWrite(5, TimeUnit.MINUTES)
                 .maximumSize(1000)
@@ -90,7 +91,7 @@ public class CaffeineConfig {
      * 最大容量: 500个商品
      */
     @Bean
-    public com.github.benmanes.caffeine.cache.Cache<Long, Object> productCache() {
+    public Cache<Long, Object> productCache() {
         return Caffeine.newBuilder()
                 .expireAfterWrite(10, TimeUnit.MINUTES)
                 .maximumSize(500)
@@ -112,7 +113,7 @@ public class CaffeineConfig {
      * - 减少Redis SISMEMBER请求
      */
     @Bean
-    public com.github.benmanes.caffeine.cache.Cache<String, Boolean> userBoughtCache() {
+    public Cache<String, Boolean> userBoughtCache() {
         return Caffeine.newBuilder()
                 .expireAfterWrite(2, TimeUnit.HOURS)
                 .maximumSize(50000)  // 支持大量用户
@@ -135,7 +136,7 @@ public class CaffeineConfig {
      * - 减少对Redis的多分片查询
      */
     @Bean
-    public com.github.benmanes.caffeine.cache.Cache<Long, java.util.BitSet> shardStockCache() {
+    public Cache<Long, java.util.BitSet> shardStockCache() {
         return Caffeine.newBuilder()
                 .expireAfterWrite(30, TimeUnit.SECONDS)  // 30秒过期，快速更新
                 .maximumSize(100)

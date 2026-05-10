@@ -21,38 +21,38 @@ import java.util.concurrent.TimeUnit;
  * ============================================================================
  * 库存预扣减异步确认服务
  * ============================================================================
- *
+ * <p>
  * 功能:
  * 1. 定时检查预扣减的库存是否已确认（订单创建成功）
  * 2. 未确认的预扣减自动回补（防止库存泄漏）
  * 3. Redis临时标记与MySQL事务日志对账
- *
+ * <p>
  * 设计原理:
  * - Redis Lua脚本扣减库存后，记录临时标记
  * - RocketMQ消费成功后，确认标记
  * - 如果超时未确认，自动回补库存
- *
+ * <p>
  * 防止的问题:
  * 1. MQ消息丢失导致库存不回补
  * 2. Consumer宕机导致库存泄漏
  * 3. 数据库写入失败但Redis已扣减
- *
+ * <p>
  * 数据结构:
  * - Redis临时标记: seckill:pending:{seckillId}:{orderNo}
- *   Value: {userId, quantity, shardIndex, createTime}
- *   TTL: 5分钟
- *
+ * Value: {userId, quantity, shardIndex, createTime}
+ * TTL: 5分钟
+ * <p>
  * - MySQL事务日志: transaction_log表
- *   用于对账和最终确认
+ * 用于对账和最终确认
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class StockConfirmService {
 
-    private final TransactionLogMapper transactionLogMapper;
     private final SeckillDeductLua seckillDeductLua;
     private final StringRedisTemplate redisTemplate;
+    private final TransactionLogMapper transactionLogMapper;
 
     /**
      * Redis临时标记Key前缀
@@ -68,7 +68,7 @@ public class StockConfirmService {
      * ============================================================================
      * 创建预扣减临时标记
      * ============================================================================
-     *
+     * <p>
      * 在Lua脚本扣减库存后调用
      * 用于后续确认或回补
      */
@@ -98,7 +98,7 @@ public class StockConfirmService {
      * ============================================================================
      * 确认预扣减（订单创建成功后调用）
      * ============================================================================
-     *
+     * <p>
      * 删除Redis临时标记，表示库存扣减已确认
      */
     public void confirmPendingMark(Long seckillId, String orderNo) {
@@ -120,13 +120,13 @@ public class StockConfirmService {
      * ============================================================================
      * 定时检查未确认的预扣减（每分钟）
      * ============================================================================
-     *
+     * <p>
      * 流程:
      * 1. 查询处理中的事务日志
      * 2. 检查是否超时（超过5分钟）
      * 3. 检查Redis临时标记是否存在
      * 4. 未确认的自动回补库存
-     *
+     * <p>
      * 分布式锁: 使用ShedLock防止多实例重复执行
      */
     @Scheduled(fixedRate = 60000)
@@ -170,7 +170,7 @@ public class StockConfirmService {
      * ============================================================================
      * 处理单个预扣减事务
      * ============================================================================
-     *
+     * <p>
      * 返回值:
      * - true: 需要回补库存
      * - false: 已确认或不需要处理
@@ -262,7 +262,7 @@ public class StockConfirmService {
      * ============================================================================
      * 对账检查（每5分钟）
      * ============================================================================
-     *
+     * <p>
      * 对比Redis临时标记与MySQL事务日志
      * 发现不一致的数据进行修正
      */

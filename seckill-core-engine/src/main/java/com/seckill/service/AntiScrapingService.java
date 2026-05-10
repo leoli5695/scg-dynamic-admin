@@ -2,6 +2,7 @@ package com.seckill.service;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
@@ -10,29 +11,27 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import jakarta.annotation.PostConstruct;
 import java.util.Collections;
-import java.util.List;
 import java.util.Set;
 
 /**
  * ============================================================================
  * Anti-Scraping Service - 防刷机制
  * ============================================================================
- *
+ * <p>
  * SECURITY FIX (P1): Comprehensive anti-scraping mechanism
- *
+ * <p>
  * Features:
  * 1. IP-level rate limiting (sliding window with Lua)
  * 2. IP blacklist management (block malicious IPs)
  * 3. User-level rate limiting (sliding window with Lua)
  * 4. Auto-blacklist trigger (auto-block IPs exceeding threshold)
- *
+ * <p>
  * Implementation:
  * - Redis Lua sliding window (精确限流，避免边界突刺)
  * - Redis-based blacklist storage (Set)
  * - Automatic cleanup of stale data
- *
+ * <p>
  * Monitoring:
  * - seckill.anti_scraping.ip_blocked: IP blocked count
  * - seckill.anti_scraping.ip_rate_limit: IP rate limit trigger count
@@ -44,9 +43,9 @@ import java.util.Set;
 @Service
 public class AntiScrapingService {
 
-    private final StringRedisTemplate redisTemplate;
     private final AlertService alertService;
     private final MeterRegistry meterRegistry;
+    private final StringRedisTemplate redisTemplate;
 
     // Redis key prefixes
     private static final String IP_RATE_KEY_PREFIX = "seckill:anti:ip_rate:";
@@ -115,7 +114,7 @@ public class AntiScrapingService {
      * ============================================================================
      * Check if IP is allowed (not blacklisted and within rate limit)
      * ============================================================================
-     * 
+     * <p>
      * OPTIMIZATION: 使用 Lua 滑动窗口替代固定窗口计数器
      * - 精确限流，避免边界突刺问题
      * - 原子操作，INCR + EXPIRE 一次完成
@@ -142,12 +141,12 @@ public class AntiScrapingService {
         String randomValue = java.util.UUID.randomUUID().toString().substring(0, 8);
 
         Long result = redisTemplate.execute(
-            rateLimitScript,
-            Collections.singletonList(key),
-            String.valueOf(RATE_WINDOW_MS),
-            String.valueOf(ipRateLimitPerSecond),
-            String.valueOf(currentTime),
-            randomValue  // FIX: 添加唯一标识避免同毫秒去重
+                rateLimitScript,
+                Collections.singletonList(key),
+                String.valueOf(RATE_WINDOW_MS),
+                String.valueOf(ipRateLimitPerSecond),
+                String.valueOf(currentTime),
+                randomValue  // FIX: 添加唯一标识避免同毫秒去重
         );
 
         if (result != null && result == -1) {
@@ -162,7 +161,7 @@ public class AntiScrapingService {
                 ipBlockedCounter.increment();
                 log.warn("IP auto-blacklisted: ip={}, requestsInWindow={}", clientIp, currentCount);
                 alertService.sendCriticalAlert("IP自动封禁",
-                    "IP: " + clientIp + " 滑动窗口内请求 " + currentCount + " 次，已自动封禁");
+                        "IP: " + clientIp + " 滑动窗口内请求 " + currentCount + " 次，已自动封禁");
             }
 
             return false;
@@ -190,12 +189,12 @@ public class AntiScrapingService {
         String randomValue = java.util.UUID.randomUUID().toString().substring(0, 8);
 
         Long result = redisTemplate.execute(
-            rateLimitScript,
-            Collections.singletonList(key),
-            String.valueOf(RATE_WINDOW_MS),
-            String.valueOf(userRateLimitPerSecond),
-            String.valueOf(currentTime),
-            randomValue  // FIX: 添加唯一标识避免同毫秒去重
+                rateLimitScript,
+                Collections.singletonList(key),
+                String.valueOf(RATE_WINDOW_MS),
+                String.valueOf(userRateLimitPerSecond),
+                String.valueOf(currentTime),
+                randomValue  // FIX: 添加唯一标识避免同毫秒去重
         );
 
         if (result != null && result == -1) {
@@ -214,7 +213,7 @@ public class AntiScrapingService {
      */
     public boolean isIpBlacklisted(String clientIp) {
         return Boolean.TRUE.equals(
-            redisTemplate.opsForSet().isMember(IP_BLACKLIST_KEY, clientIp));
+                redisTemplate.opsForSet().isMember(IP_BLACKLIST_KEY, clientIp));
     }
 
     /**
@@ -276,7 +275,7 @@ public class AntiScrapingService {
      * ============================================================================
      * Scheduled cleanup - Clean stale blacklist entries
      * ============================================================================
-     *
+     * <p>
      * Runs every hour to clean up old blacklist entries
      */
     @Scheduled(fixedRate = 3600000) // 1 hour

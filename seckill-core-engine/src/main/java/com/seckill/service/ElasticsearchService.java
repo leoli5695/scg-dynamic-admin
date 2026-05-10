@@ -21,16 +21,16 @@ import java.util.List;
  * ============================================================================
  * Elasticsearch 服务（异构索引查询）
  * ============================================================================
- * 
+ * <p>
  * 功能:
  * 1. 索引订单（异构索引）
  * 2. 更新订单状态
  * 3. 多条件组合查询（解决非分片键查询问题）
  * 4. 分页查询（解决跨库分页问题）
  * 5. 统计分析（活动效果统计）
- * 
+ * <p>
  * 索引名称: order_index
- * 
+ * <p>
  * 设计原理:
  * - ShardingSphere 分库分表后，非分片键查询需要扫描所有库，性能极差
  * - ES 作为异构索引，存储订单副本，支持任意条件查询
@@ -52,7 +52,7 @@ public class ElasticsearchService {
      * ============================================================================
      * 索引订单
      * ============================================================================
-     * 
+     * <p>
      * 使用 orderNo 作为文档 ID，保证后续更新操作可以正确匹配
      */
     public void indexOrder(OrderMessage orderMessage) {
@@ -68,13 +68,13 @@ public class ElasticsearchService {
             document.setCreateTime(java.time.LocalDateTime.now());
 
             IndexCoordinates index = IndexCoordinates.of(ORDER_INDEX);
-            
+
             // 先检查是否存在（避免覆盖）
             if (elasticsearchOperations.exists(orderMessage.getOrderNo(), index)) {
                 log.info("ES文档已存在，跳过: orderNo={}", orderMessage.getOrderNo());
                 return;
             }
-            
+
             elasticsearchOperations.save(document, index);
             log.info("ES索引创建成功: orderNo={}", orderMessage.getOrderNo());
 
@@ -88,7 +88,7 @@ public class ElasticsearchService {
      * ============================================================================
      * 更新订单状态
      * ============================================================================
-     * 
+     * <p>
      * 使用 orderNo 作为文档 ID 进行更新
      */
     public void updateOrderStatus(String orderNo, int status) {
@@ -110,7 +110,7 @@ public class ElasticsearchService {
      * ============================================================================
      * 按活动查询订单（简单查询）
      * ============================================================================
-     * 
+     * <p>
      * 用于运营后台查看活动效果
      */
     public List<OrderDocument> queryBySeckillId(Long seckillId, int size) {
@@ -134,23 +134,23 @@ public class ElasticsearchService {
      * ============================================================================
      * 多条件组合查询（解决非分片键查询问题）
      * ============================================================================
-     * 
+     * <p>
      * 支持以下查询条件：
      * - seckillId: 活动ID
      * - userId: 用户ID（非分片键查询）
      * - productId: 商品ID（非分片键查询）
      * - status: 订单状态
      * - createTime 范围查询
-     * 
+     * <p>
      * 运营后台场景：
      * - 查询某活动的所有订单
      * - 查询某用户的购买记录
      * - 查询某商品的销量
      * - 查询待支付/已取消订单
      */
-    public List<OrderDocument> queryByConditions(Long seckillId, Long userId, Long productId, 
-                                                   Integer status, LocalDateTime startTime, 
-                                                   LocalDateTime endTime, int page, int size) {
+    public List<OrderDocument> queryByConditions(Long seckillId, Long userId, Long productId,
+                                                 Integer status, LocalDateTime startTime,
+                                                 LocalDateTime endTime, int page, int size) {
         try {
             Criteria criteria = new Criteria();
 
@@ -175,7 +175,7 @@ public class ElasticsearchService {
 
             var hits = elasticsearchOperations.search(query, OrderDocument.class, IndexCoordinates.of(ORDER_INDEX));
 
-            log.info("ES多条件查询: seckillId={}, userId={}, productId={}, status={}, resultCount={}", 
+            log.info("ES多条件查询: seckillId={}, userId={}, productId={}, status={}, resultCount={}",
                     seckillId, userId, productId, status, hits.getTotalHits());
 
             return hits.getSearchHits().stream()
@@ -191,10 +191,10 @@ public class ElasticsearchService {
      * ============================================================================
      * 分页查询（解决跨库分页问题）
      * ============================================================================
-     *
+     * <p>
      * ShardingSphere 分库分表后，ORDER BY + LIMIT 需要每个库都执行排序，
      * 然后在内存中合并，性能极差。
-     *
+     * <p>
      * ES 分页查询：
      * - 支持 from + size 分页（适合小数据量）
      * - 支持搜索_after 分页（适合大数据量滚动查询）
@@ -222,8 +222,8 @@ public class ElasticsearchService {
                     .map(hit -> hit.getContent())
                     .toList();
 
-            return new org.springframework.data.domain.PageImpl<>(content, 
-                    org.springframework.data.domain.PageRequest.of(page, size), 
+            return new org.springframework.data.domain.PageImpl<>(content,
+                    org.springframework.data.domain.PageRequest.of(page, size),
                     hits.getTotalHits());
         } catch (Exception e) {
             log.error("ES分页查询失败: error={}", e.getMessage());
@@ -235,29 +235,29 @@ public class ElasticsearchService {
      * ============================================================================
      * 【深分页】search_after 游标分页
      * ============================================================================
-     *
+     * <p>
      * ES from + size 分页限制：
      * - 默认最大 10000 条（index.max_result_window）
      * - 超过 10000 会报错："Result window is too large"
-     *
+     * <p>
      * search_after 原理：
      * - 使用上一页最后一条记录的排序值作为游标
      * - 每次查询从游标位置开始，避免深度分页的性能问题
      * - 需要唯一排序字段（如 orderNo）保证分页不重复/不遗漏
-     *
+     * <p>
      * 使用场景：
      * - 运营后台翻页超过 100 页时
      * - 大数据量导出时
      *
-     * @param seckillId 活动ID
-     * @param status 订单状态
+     * @param seckillId      活动ID
+     * @param status         订单状态
      * @param lastCreateTime 上一页最后一条记录的 createTime
-     * @param lastOrderNo 上一页最后一条记录的 orderNo（辅助排序，保证唯一性）
-     * @param size 每页大小
+     * @param lastOrderNo    上一页最后一条记录的 orderNo（辅助排序，保证唯一性）
+     * @param size           每页大小
      * @return 搜索结果（包含 search_after 游标信息）
      */
     public SearchAfterResult queryWithSearchAfter(Long seckillId, Integer status,
-                                                    LocalDateTime lastCreateTime, String lastOrderNo, int size) {
+                                                  LocalDateTime lastCreateTime, String lastOrderNo, int size) {
         try {
             // 构建 JSON 查询
             StringBuilder queryJson = new StringBuilder();
@@ -312,7 +312,7 @@ public class ElasticsearchService {
             String nextOrderNo = null;
             if (!content.isEmpty()) {
                 OrderDocument lastDoc = content.get(content.size() - 1);
-                nextCreateTime = lastDoc.getCreateTime() != null ? 
+                nextCreateTime = lastDoc.getCreateTime() != null ?
                         lastDoc.getCreateTime().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME) : null;
                 nextOrderNo = lastDoc.getOrderNo();
             }
@@ -324,7 +324,7 @@ public class ElasticsearchService {
             result.setLastCreateTime(nextCreateTime);
             result.setLastOrderNo(nextOrderNo);
 
-            log.info("ES深分页查询: seckillId={}, size={}, resultCount={}, hasMore={}", 
+            log.info("ES深分页查询: seckillId={}, size={}, resultCount={}, hasMore={}",
                     seckillId, size, content.size(), result.isHasMore());
 
             return result;
@@ -347,23 +347,52 @@ public class ElasticsearchService {
         private String lastCreateTime;  // 下次查询的游标
         private String lastOrderNo;     // 下次查询的游标
 
-        public List<OrderDocument> getContent() { return content; }
-        public void setContent(List<OrderDocument> content) { this.content = content; }
-        public long getTotalHits() { return totalHits; }
-        public void setTotalHits(long totalHits) { this.totalHits = totalHits; }
-        public boolean isHasMore() { return hasMore; }
-        public void setHasMore(boolean hasMore) { this.hasMore = hasMore; }
-        public String getLastCreateTime() { return lastCreateTime; }
-        public void setLastCreateTime(String lastCreateTime) { this.lastCreateTime = lastCreateTime; }
-        public String getLastOrderNo() { return lastOrderNo; }
-        public void setLastOrderNo(String lastOrderNo) { this.lastOrderNo = lastOrderNo; }
+        public List<OrderDocument> getContent() {
+            return content;
+        }
+
+        public void setContent(List<OrderDocument> content) {
+            this.content = content;
+        }
+
+        public long getTotalHits() {
+            return totalHits;
+        }
+
+        public void setTotalHits(long totalHits) {
+            this.totalHits = totalHits;
+        }
+
+        public boolean isHasMore() {
+            return hasMore;
+        }
+
+        public void setHasMore(boolean hasMore) {
+            this.hasMore = hasMore;
+        }
+
+        public String getLastCreateTime() {
+            return lastCreateTime;
+        }
+
+        public void setLastCreateTime(String lastCreateTime) {
+            this.lastCreateTime = lastCreateTime;
+        }
+
+        public String getLastOrderNo() {
+            return lastOrderNo;
+        }
+
+        public void setLastOrderNo(String lastOrderNo) {
+            this.lastOrderNo = lastOrderNo;
+        }
     }
 
     /**
      * ============================================================================
      * 活动效果统计（聚合查询）
      * ============================================================================
-     *
+     * <p>
      * 统计指标：
      * - 总订单数
      * - 待支付订单数
@@ -375,8 +404,8 @@ public class ElasticsearchService {
         try {
             // 使用 StringQuery 执行聚合查询
             String queryJson = String.format(
-                "{\"size\":0,\"query\":{\"term\":{\"seckillId\":%d}},\"aggs\":{\"status_count\":{\"terms\":{\"field\":\"status\"}},\"total_amount\":{\"sum\":{\"field\":\"totalAmount\"}}}}",
-                seckillId
+                    "{\"size\":0,\"query\":{\"term\":{\"seckillId\":%d}},\"aggs\":{\"status_count\":{\"terms\":{\"field\":\"status\"}},\"total_amount\":{\"sum\":{\"field\":\"totalAmount\"}}}}",
+                    seckillId
             );
 
             StringQuery query = StringQuery.builder(queryJson).build();
@@ -409,18 +438,53 @@ public class ElasticsearchService {
         private int cancelledOrders;
         private BigDecimal totalAmount;
 
-        public Long getSeckillId() { return seckillId; }
-        public void setSeckillId(Long seckillId) { this.seckillId = seckillId; }
-        public int getTotalOrders() { return totalOrders; }
-        public void setTotalOrders(int totalOrders) { this.totalOrders = totalOrders; }
-        public int getPendingPaymentOrders() { return pendingPaymentOrders; }
-        public void setPendingPaymentOrders(int pendingPaymentOrders) { this.pendingPaymentOrders = pendingPaymentOrders; }
-        public int getPaidOrders() { return paidOrders; }
-        public void setPaidOrders(int paidOrders) { this.paidOrders = paidOrders; }
-        public int getCancelledOrders() { return cancelledOrders; }
-        public void setCancelledOrders(int cancelledOrders) { this.cancelledOrders = cancelledOrders; }
-        public BigDecimal getTotalAmount() { return totalAmount; }
-        public void setTotalAmount(BigDecimal totalAmount) { this.totalAmount = totalAmount; }
+        public Long getSeckillId() {
+            return seckillId;
+        }
+
+        public void setSeckillId(Long seckillId) {
+            this.seckillId = seckillId;
+        }
+
+        public int getTotalOrders() {
+            return totalOrders;
+        }
+
+        public void setTotalOrders(int totalOrders) {
+            this.totalOrders = totalOrders;
+        }
+
+        public int getPendingPaymentOrders() {
+            return pendingPaymentOrders;
+        }
+
+        public void setPendingPaymentOrders(int pendingPaymentOrders) {
+            this.pendingPaymentOrders = pendingPaymentOrders;
+        }
+
+        public int getPaidOrders() {
+            return paidOrders;
+        }
+
+        public void setPaidOrders(int paidOrders) {
+            this.paidOrders = paidOrders;
+        }
+
+        public int getCancelledOrders() {
+            return cancelledOrders;
+        }
+
+        public void setCancelledOrders(int cancelledOrders) {
+            this.cancelledOrders = cancelledOrders;
+        }
+
+        public BigDecimal getTotalAmount() {
+            return totalAmount;
+        }
+
+        public void setTotalAmount(BigDecimal totalAmount) {
+            this.totalAmount = totalAmount;
+        }
     }
 
     /**
@@ -440,21 +504,68 @@ public class ElasticsearchService {
         private Integer status;
         private java.time.LocalDateTime createTime;
 
-        public String getOrderNo() { return orderNo; }
-        public void setOrderNo(String orderNo) { this.orderNo = orderNo; }
-        public Long getUserId() { return userId; }
-        public void setUserId(Long userId) { this.userId = userId; }
-        public Long getSeckillId() { return seckillId; }
-        public void setSeckillId(Long seckillId) { this.seckillId = seckillId; }
-        public Long getProductId() { return productId; }
-        public void setProductId(Long productId) { this.productId = productId; }
-        public Integer getQuantity() { return quantity; }
-        public void setQuantity(Integer quantity) { this.quantity = quantity; }
-        public java.math.BigDecimal getTotalAmount() { return totalAmount; }
-        public void setTotalAmount(java.math.BigDecimal totalAmount) { this.totalAmount = totalAmount; }
-        public Integer getStatus() { return status; }
-        public void setStatus(Integer status) { this.status = status; }
-        public java.time.LocalDateTime getCreateTime() { return createTime; }
-        public void setCreateTime(java.time.LocalDateTime createTime) { this.createTime = createTime; }
+        public String getOrderNo() {
+            return orderNo;
+        }
+
+        public void setOrderNo(String orderNo) {
+            this.orderNo = orderNo;
+        }
+
+        public Long getUserId() {
+            return userId;
+        }
+
+        public void setUserId(Long userId) {
+            this.userId = userId;
+        }
+
+        public Long getSeckillId() {
+            return seckillId;
+        }
+
+        public void setSeckillId(Long seckillId) {
+            this.seckillId = seckillId;
+        }
+
+        public Long getProductId() {
+            return productId;
+        }
+
+        public void setProductId(Long productId) {
+            this.productId = productId;
+        }
+
+        public Integer getQuantity() {
+            return quantity;
+        }
+
+        public void setQuantity(Integer quantity) {
+            this.quantity = quantity;
+        }
+
+        public java.math.BigDecimal getTotalAmount() {
+            return totalAmount;
+        }
+
+        public void setTotalAmount(java.math.BigDecimal totalAmount) {
+            this.totalAmount = totalAmount;
+        }
+
+        public Integer getStatus() {
+            return status;
+        }
+
+        public void setStatus(Integer status) {
+            this.status = status;
+        }
+
+        public java.time.LocalDateTime getCreateTime() {
+            return createTime;
+        }
+
+        public void setCreateTime(java.time.LocalDateTime createTime) {
+            this.createTime = createTime;
+        }
     }
 }

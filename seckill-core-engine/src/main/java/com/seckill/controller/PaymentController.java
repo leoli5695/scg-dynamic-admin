@@ -7,27 +7,26 @@ import com.seckill.dto.PaymentCallbackResponse;
 import com.seckill.enums.OrderStatus;
 import com.seckill.service.OrderQueryService;
 import com.seckill.service.PaymentService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
-import jakarta.servlet.http.HttpServletRequest;
-
 /**
  * ============================================================================
  * 支付回调 Controller
  * ============================================================================
- *
+ * <p>
  * 接口:
  * 1. POST /payment/callback - 支付回调入口
  * 2. GET /payment/query - 查询支付状态
- *
+ * <p>
  * 安全注意事项:
  * 1. 支付回调接口需要验签
  * 2. 必须处理幂等性（支付平台可能重复回调）
  * 3. 必须校验金额一致性
- *
+ * <p>
  * 网关传递的Header:
  * - X-Trace-Id: 链路追踪ID
  */
@@ -44,9 +43,9 @@ public class PaymentController {
      * ============================================================================
      * 支付回调入口
      * ============================================================================
-     *
+     * <p>
      * 接收第三方支付平台的回调通知
-     *
+     * <p>
      * 处理流程:
      * 1. 验签（安全性）
      * 2. 幂等性检查（防止重复处理）
@@ -56,7 +55,7 @@ public class PaymentController {
      * 6. 更新事务日志
      * 7. 同步ES索引
      *
-     * @param request 支付回调请求
+     * @param request     支付回调请求
      * @param httpRequest HTTP请求（获取traceId）
      * @return 处理结果
      */
@@ -82,7 +81,7 @@ public class PaymentController {
      * ============================================================================
      * 查询支付状态
      * ============================================================================
-     *
+     * <p>
      * 【P2-18修复】实现支付状态查询功能
      * 用户或前端查询订单支付状态
      *
@@ -144,11 +143,28 @@ public class PaymentController {
         private String status;
         private String message;
 
-        public String getOrderNo() { return orderNo; }
-        public void setOrderNo(String orderNo) { this.orderNo = orderNo; }
-        public String getStatus() { return status; }
-        public void setStatus(String status) { this.status = status; }
-        public String getMessage() { return message; }
-        public void setMessage(String message) { this.message = message; }
+        public String getOrderNo() {
+            return orderNo;
+        }
+
+        public void setOrderNo(String orderNo) {
+            this.orderNo = orderNo;
+        }
+
+        public String getStatus() {
+            return status;
+        }
+
+        public void setStatus(String status) {
+            this.status = status;
+        }
+
+        public String getMessage() {
+            return message;
+        }
+
+        public void setMessage(String message) {
+            this.message = message;
+        }
     }
 }

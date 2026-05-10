@@ -12,29 +12,29 @@ import java.util.concurrent.TimeUnit;
  * ============================================================================
  * 请求幂等Token服务
  * ============================================================================
- *
+ * <p>
  * 功能:
  * 1. 生成幂等Token - 用户秒杀前先获取Token
  * 2. 验证幂等Token - 秒杀请求必须携带有效Token
  * 3. 消费幂等Token - Token使用后立即失效
- *
+ * <p>
  * 工作流程:
  * 1. 用户点击"立即秒杀"按钮
  * 2. 前端调用 /seckill/token 获取幂等Token
  * 3. 前端携带Token发送秒杀请求
  * 4. 后端验证Token有效性
  * 5. Token消费后立即失效（防止重复请求）
- *
+ * <p>
  * 防止的问题:
  * 1. 用户重复点击秒杀按钮
  * 2. 前端网络超时重试
  * 3. 浏览器刷新重复提交
- *
+ * <p>
  * Token结构:
  * - Key: seckill:token:{seckillId}:{userId}:{tokenValue}
  * - Value: {createTime}
  * - TTL: 30秒（足够一次秒杀请求）
- *
+ * <p>
  * 注意:
  * - Token只用于请求级幂等，不是购买防重
  * - 购买防重由Lua脚本SISMEMBER实现
@@ -60,11 +60,11 @@ public class IdempotentTokenService {
      * ============================================================================
      * 生成幂等Token
      * ============================================================================
-     *
+     * <p>
      * 用户秒杀前调用此方法获取Token
      *
      * @param seckillId 秒杀活动ID
-     * @param userId 用户ID
+     * @param userId    用户ID
      * @return Token值
      */
     public String generateToken(Long seckillId, Long userId) {
@@ -91,12 +91,12 @@ public class IdempotentTokenService {
      * ============================================================================
      * 验证并消费幂等Token
      * ============================================================================
-     *
+     * <p>
      * 秒杀请求时验证Token有效性，并立即消费（删除）
      *
      * @param seckillId 秒杀活动ID
-     * @param userId 用户ID
-     * @param token Token值
+     * @param userId    用户ID
+     * @param token     Token值
      * @return Token是否有效
      */
     public boolean verifyAndConsumeToken(Long seckillId, Long userId, String token) {
@@ -134,12 +134,12 @@ public class IdempotentTokenService {
      * ============================================================================
      * 仅验证Token（不消费）
      * ============================================================================
-     *
+     * <p>
      * 用于预检查，不删除Token
      *
      * @param seckillId 秒杀活动ID
-     * @param userId 用户ID
-     * @param token Token值
+     * @param userId    用户ID
+     * @param token     Token值
      * @return Token是否有效
      */
     public boolean verifyToken(Long seckillId, Long userId, String token) {
@@ -157,7 +157,7 @@ public class IdempotentTokenService {
      * ============================================================================
      * 强制清除Token
      * ============================================================================
-     *
+     * <p>
      * 用于异常情况或测试
      */
     public void clearToken(Long seckillId, Long userId, String token) {
@@ -170,7 +170,7 @@ public class IdempotentTokenService {
      * ============================================================================
      * 清除用户所有Token
      * ============================================================================
-     *
+     * <p>
      * 用于用户取消秒杀或活动结束时清理
      */
     public void clearUserTokens(Long seckillId, Long userId) {
@@ -196,8 +196,8 @@ public class IdempotentTokenService {
      * ============================================================================
      *
      * @param seckillId 秒杀活动ID
-     * @param userId 用户ID
-     * @param token Token值
+     * @param userId    用户ID
+     * @param token     Token值
      * @return 剩余秒数，-1表示不存在
      */
     public long getTokenTTL(Long seckillId, Long userId, String token) {
@@ -213,8 +213,8 @@ public class IdempotentTokenService {
      * ============================================================================
      *
      * @param seckillId 秒杀活动ID
-     * @param userId 用户ID
-     * @param count 数量
+     * @param userId    用户ID
+     * @param count     数量
      * @return Token列表
      */
     public java.util.List<String> generateTokens(Long seckillId, Long userId, int count) {

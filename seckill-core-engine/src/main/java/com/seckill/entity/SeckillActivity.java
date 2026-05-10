@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
  * ============================================================================
  * 秒杀活动实体
  * ============================================================================
- * 
+ * <p>
  * 存储位置: ds_0（不分片）
  */
 @Data
@@ -82,7 +82,7 @@ public class SeckillActivity {
      * 判断活动是否进行中
      */
     public boolean isInProgress() {
-        return status == 1 
+        return status == 1
                 && LocalDateTime.now().isAfter(startTime)
                 && LocalDateTime.now().isBefore(endTime);
     }

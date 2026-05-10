@@ -74,12 +74,12 @@ public enum SeckillResult {
 
     /**
      * 根据Lua脚本返回值判断结果
-     *
+     * <p>
      * Lua返回值定义:
-     *   -2: 库存未预热
-     *   -1: 已购买
-     *    0: 库存不足
-     *   >= 1000: 成功，shardIndex = luaResult - 1000
+     * -2: 库存未预热
+     * -1: 已购买
+     * 0: 库存不足
+     * >= 1000: 成功，shardIndex = luaResult - 1000
      */
     public static SeckillResult fromLuaResult(long luaResult) {
         if (luaResult >= 1000) {

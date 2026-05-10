@@ -21,16 +21,16 @@ import java.util.List;
  * ============================================================================
  * 库存回补补偿服务
  * ============================================================================
- *
+ * <p>
  * 功能:
  * 1. 处理失败的事务消息（事务回查失败）
  * 2. 定时扫描待处理的事务
  * 3. 处理订单未支付超时（主动回补，不等延迟消息）
- *
+ * <p>
  * OPTIMIZATION (P1): Tiered timeout processing
  * - Short timeout (5-10 min): Fast discovery, quick rollback
  * - Long timeout (30+ min): Safety net, final rollback
- *
+ * <p>
  * This reduces unnecessary queries for long-running transactions
  */
 @Slf4j
@@ -38,9 +38,9 @@ import java.util.List;
 @RequiredArgsConstructor
 public class CompensationService {
 
-    private final TransactionLogMapper transactionLogMapper;
     private final OrderMapper orderMapper;
     private final SeckillDeductLua seckillDeductLua;
+    private final TransactionLogMapper transactionLogMapper;
 
     // OPTIMIZATION (P1): Tiered timeout thresholds
     private static final int SHORT_TIMEOUT_MINUTES = 5;
@@ -51,7 +51,7 @@ public class CompensationService {
      * ============================================================================
      * 短时超时处理（每分钟）- 快速发现问题
      * ============================================================================
-     *
+     * <p>
      * OPTIMIZATION (P1): Process 5-10 minute timeout transactions first
      * - Faster discovery of stuck transactions
      * - Reduces waiting time for users
@@ -92,7 +92,7 @@ public class CompensationService {
      * ============================================================================
      * 长时超时兜底处理（每5分钟）- 安全兜底
      * ============================================================================
-     *
+     * <p>
      * OPTIMIZATION (P1): Process 30+ minute timeout as safety net
      * - Reduced frequency (every 5 min instead of every 1 min)
      * - Catches transactions that missed short timeout processing
@@ -126,9 +126,9 @@ public class CompensationService {
 
     /**
      * 处理单个超时事务
-     *
+     * <p>
      * OPTIMIZATION (P1): Added source parameter for logging
-     *
+     * <p>
      * 【P1-5修复】避免与 StockConfirmService 冲突：
      * - StockConfirmService 处理 5 分钟内的超时事务（短时超时）
      * - CompensationService 处理 30 分钟以上的超时事务（长时超时兜底）
@@ -179,9 +179,9 @@ public class CompensationService {
      * ============================================================================
      * 定时扫描未支付订单（每5分钟）
      * ============================================================================
-     * 
+     * <p>
      * 主动检查未支付超时订单，不等延迟消息
-     * 
+     * <p>
      * 分布式锁: 使用 ShedLock 防止多实例重复执行
      */
     @Scheduled(fixedRate = 300000)
@@ -213,7 +213,7 @@ public class CompensationService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void cancelUnpaidOrder(SeckillOrder order) {
-        log.info("取消未支付订单: orderNo={}, userId={}, shardIndex={}", 
+        log.info("取消未支付订单: orderNo={}, userId={}, shardIndex={}",
                 order.getOrderNo(), order.getUserId(), order.getShardIndex());
 
         // 回补库存（精确恢复到原分片）

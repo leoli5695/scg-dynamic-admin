@@ -10,6 +10,7 @@ import org.apache.shardingsphere.sharding.api.config.ShardingRuleConfiguration;
 import org.apache.shardingsphere.sharding.api.config.rule.ShardingTableRuleConfiguration;
 import org.apache.shardingsphere.sharding.api.config.strategy.keygen.KeyGenerateStrategyConfiguration;
 import org.apache.shardingsphere.sharding.api.config.strategy.sharding.StandardShardingStrategyConfiguration;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -22,13 +23,13 @@ import java.util.*;
  * ============================================================================
  * ShardingSphere Java API 分库分表配置
  * ============================================================================
- *
+ * <p>
  * 使用 Java API 配置替代 YAML 配置，避免 SnakeYAML 2.x 版本兼容性问题
- *
+ * <p>
  * 分片策略:
  * - 分库: user_id % 8 (8个分库)
  * - 分表: user_id % 16 (每个库16张表)
- *
+ * <p>
  * Configuration:
  * - 测试阶段: yaml默认值 (root/123456)
  * - 生产环境: 必须设置环境变量 SECKILL_DB_USER/SECKILL_DB_PASSWORD
@@ -58,12 +59,12 @@ public class ShardingDataSourceConfig {
      * 测试阶段允许默认值，生产环境必须设置环境变量。
      */
     public ShardingDataSourceConfig(
-            @org.springframework.beans.factory.annotation.Value("${seckill.db.host:127.0.0.1}") String dbHost,
-            @org.springframework.beans.factory.annotation.Value("${seckill.db.port:3306}") int dbPort,
-            @org.springframework.beans.factory.annotation.Value("${seckill.db.user:root}") String dbUser,
-            @org.springframework.beans.factory.annotation.Value("${seckill.db.password:123456}") String dbPassword,
-            @org.springframework.beans.factory.annotation.Value("${seckill.sharding.sql-show:false}") boolean sqlShowEnabled,
-            @org.springframework.beans.factory.annotation.Value("${seckill.production-mode:false}") boolean isProduction) {
+            @Value("${seckill.db.host:127.0.0.1}") String dbHost,
+            @Value("${seckill.db.port:3306}") int dbPort,
+            @Value("${seckill.db.user:root}") String dbUser,
+            @Value("${seckill.db.password:123456}") String dbPassword,
+            @Value("${seckill.sharding.sql-show:false}") boolean sqlShowEnabled,
+            @Value("${seckill.production-mode:false}") boolean isProduction) {
 
         this.dbHost = dbHost;
         this.dbPort = dbPort;
@@ -88,18 +89,18 @@ public class ShardingDataSourceConfig {
         // 生产环境拒绝测试默认值
         if ("root".equals(dbUser) && "123456".equals(dbPassword)) {
             throw new IllegalArgumentException(
-                "生产环境禁止使用测试默认凭据！请设置环境变量: " +
-                "SECKILL_DB_USER 和 SECKILL_DB_PASSWORD");
+                    "生产环境禁止使用测试默认凭据！请设置环境变量: " +
+                            "SECKILL_DB_USER 和 SECKILL_DB_PASSWORD");
         }
 
         if (dbUser == null || dbUser.isEmpty()) {
             throw new IllegalArgumentException(
-                "生产环境必须设置 SECKILL_DB_USER 环境变量");
+                    "生产环境必须设置 SECKILL_DB_USER 环境变量");
         }
 
         if (dbPassword == null || dbPassword.isEmpty()) {
             throw new IllegalArgumentException(
-                "生产环境必须设置 SECKILL_DB_PASSWORD 环境变量");
+                    "生产环境必须设置 SECKILL_DB_PASSWORD 环境变量");
         }
 
         log.info("生产环境数据库配置验证通过: host={}, port={}, user={}", dbHost, dbPort, dbUser);
@@ -146,7 +147,7 @@ public class ShardingDataSourceConfig {
      */
     private ModeConfiguration createModeConfiguration() {
         // 使用 JDBC 存储的单机模式（官方文档推荐）
-        StandalonePersistRepositoryConfiguration repositoryConfig = 
+        StandalonePersistRepositoryConfiguration repositoryConfig =
                 new StandalonePersistRepositoryConfiguration("JDBC", new Properties());
         return new ModeConfiguration("Standalone", repositoryConfig);
     }

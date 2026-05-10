@@ -10,12 +10,12 @@ import org.springframework.web.bind.annotation.*;
  * ============================================================================
  * 告警管理 Controller
  * ============================================================================
- *
+ * <p>
  * 接口:
  * 1. POST /alert/send - 手动发送告警
  * 2. POST /alert/webhook - Webhook接收端（用于接收Prometheus Alertmanager告警）
  * 3. GET /alert/status - 查询告警服务状态
- *
+ * <p>
  * Webhook对接说明:
  * 1. Prometheus Alertmanager 配置 webhook receiver
  * 2. Alertmanager 发送告警到此接口
@@ -51,19 +51,19 @@ public class AlertController {
      * ============================================================================
      * Webhook接收端（Prometheus Alertmanager）
      * ============================================================================
-     *
+     * <p>
      * Alertmanager Webhook 数据格式:
      * {
-     *   "status": "firing" | "resolved",
-     *   "alerts": [
-     *     {
-     *       "status": "firing",
-     *       "labels": {"alertname": "...", "severity": "..."},
-     *       "annotations": {"summary": "...", "description": "..."},
-     *       "startsAt": "...",
-     *       "endsAt": "..."
-     *     }
-     *   ]
+     * "status": "firing" | "resolved",
+     * "alerts": [
+     * {
+     * "status": "firing",
+     * "labels": {"alertname": "...", "severity": "..."},
+     * "annotations": {"summary": "...", "description": "..."},
+     * "startsAt": "...",
+     * "endsAt": "..."
+     * }
+     * ]
      * }
      */
     @PostMapping("/webhook")
