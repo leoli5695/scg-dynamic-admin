@@ -2,6 +2,9 @@ package com.seckill.controller;
 
 import com.seckill.annotation.InternalApi;
 import com.seckill.service.WarmupService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -26,6 +29,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/warmup")
 @RequiredArgsConstructor
+@Tag(name = "stock", description = "库存管理接口 - 库存预热、状态查询、验证")
 public class WarmupController {
 
     private final WarmupService warmupService;
@@ -34,9 +38,15 @@ public class WarmupController {
      * 手动预热
      * 【内部接口】仅允许白名单 IP 调用
      */
+    @Operation(
+            summary = "手动预热库存",
+            description = "将秒杀活动库存从 MySQL 同步到 Redis，仅允许白名单 IP 访问"
+    )
     @InternalApi(description = "手动预热库存数据")
     @PostMapping("/manual")
-    public WarmupResponse manualWarmup(@RequestParam Long seckillId) {
+    public WarmupResponse manualWarmup(
+            @Parameter(description = "秒杀活动ID", required = true, example = "1")
+            @RequestParam Long seckillId) {
         boolean success = warmupService.manualWarmup(seckillId);
 
         WarmupResponse response = new WarmupResponse();
@@ -49,9 +59,15 @@ public class WarmupController {
      * 查询预热状态
      * 【内部接口】仅允许白名单 IP 调用
      */
+    @Operation(
+            summary = "查询预热状态",
+            description = "检查秒杀活动库存是否已预热到 Redis"
+    )
     @InternalApi(description = "查询预热状态")
     @GetMapping("/status")
-    public WarmupStatusResponse getWarmupStatus(@RequestParam Long seckillId) {
+    public WarmupStatusResponse getWarmupStatus(
+            @Parameter(description = "秒杀活动ID", required = true, example = "1")
+            @RequestParam Long seckillId) {
         boolean warmedUp = warmupService.isWarmedUp(seckillId);
 
         WarmupStatusResponse response = new WarmupStatusResponse();
@@ -64,9 +80,15 @@ public class WarmupController {
      * 验证预热结果
      * 【内部接口】仅允许白名单 IP 调用
      */
+    @Operation(
+            summary = "验证预热结果",
+            description = "验证 Redis 库存与 MySQL 库存一致性"
+    )
     @InternalApi(description = "验证预热结果")
     @GetMapping("/verify")
-    public WarmupService.WarmupResult verifyWarmup(@RequestParam Long seckillId) {
+    public WarmupService.WarmupResult verifyWarmup(
+            @Parameter(description = "秒杀活动ID", required = true, example = "1")
+            @RequestParam Long seckillId) {
         return warmupService.verifyWarmup(seckillId);
     }
 
@@ -74,9 +96,15 @@ public class WarmupController {
      * 清理预热数据
      * 【内部接口】仅允许白名单 IP 调用
      */
+    @Operation(
+            summary = "清理预热数据",
+            description = "清理 Redis 中的预热库存数据"
+    )
     @InternalApi(description = "清理预热数据")
     @PostMapping("/cleanup")
-    public WarmupResponse cleanupWarmup(@RequestParam Long seckillId) {
+    public WarmupResponse cleanupWarmup(
+            @Parameter(description = "秒杀活动ID", required = true, example = "1")
+            @RequestParam Long seckillId) {
         warmupService.cleanupWarmup(seckillId);
 
         WarmupResponse response = new WarmupResponse();

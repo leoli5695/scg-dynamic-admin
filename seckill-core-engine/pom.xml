@@ -198,6 +198,13 @@
             <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
 
+        <!-- Swagger/OpenAPI Documentation -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>2.3.0</version>
+        </dependency>
+
         <!-- Gateway Trace Starter - 分布式链路追踪 -->
         <!-- TODO: 待 starter 发布到 Maven 中央仓库后重新接入 -->
         <!-- 收益：立即可见的 TraceId 传播、异步线程追踪、压测分析 -->

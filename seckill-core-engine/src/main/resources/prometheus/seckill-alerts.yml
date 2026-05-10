@@ -153,3 +153,110 @@ groups:
         annotations:
           summary: "超时事务积压"
           description: "超时事务数量 {{ $value }}，请检查补偿服务是否正常运行"
+
+      # 事务超时速率飙升（新增）
+      - alert: TransactionTimeoutRateSpike
+        expr: rate(seckill_transaction_timeout_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: critical
+          service: seckill-core-engine
+        annotations:
+          summary: "事务超时速率飙升"
+          description: "事务超时速率 {{ $value }}/秒 超过阈值，可能存在系统性问题"
+
+  - name: seckill-batch-alerts
+    rules:
+      # 攒批队列接近上限（新增）
+      - alert: BatchQueueNearLimit
+        expr: seckill_batch_queue_size > 150
+        for: 1m
+        labels:
+          severity: warning
+          service: seckill-core-engine
+        annotations:
+          summary: "攒批队列接近上限"
+          description: "攒批队列大小 {{ $value }} 接近上限(200)，流量可能即将溢出"
+
+      # 攒批队列已满（新增）
+      - alert: BatchQueueFull
+        expr: seckill_batch_queue_size >= 200
+        for: 30s
+        labels:
+          severity: critical
+          service: seckill-core-engine
+        annotations:
+          summary: "攒批队列已满"
+          description: "攒批队列已满(200)，新订单可能被拒绝，请立即扩容或限流"
+
+  - name: seckill-degradation-alerts
+    rules:
+      # Redis降级持续时间过长（新增）
+      - alert: RedisDegradationPersisted
+        expr: seckill_redis_degrade_duration_milliseconds > 300000
+        for: 5m
+        labels:
+          severity: critical
+          service: seckill-core-engine
+        annotations:
+          summary: "Redis降级持续时间过长"
+          description: "Redis降级已持续 {{ $value | humanizeDuration }}，超过5分钟阈值，请尽快恢复"
+
+      # MQ降级持续时间过长（新增）
+      - alert: MQDegradationPersisted
+        expr: seckill_mq_degrade_duration_milliseconds > 300000
+        for: 5m
+        labels:
+          severity: critical
+          service: seckill-core-engine
+        annotations:
+          summary: "MQ降级持续时间过长"
+          description: "MQ降级已持续 {{ $value | humanizeDuration }}，超过5分钟阈值，请尽快恢复"
+
+  - name: seckill-latency-alerts
+    rules:
+      # P99延迟过高（新增，更严格阈值）
+      - alert: P99LatencyTooHigh
+        expr: histogram_quantile(0.99, rate(seckill_order_create_seconds_bucket[5m])) > 0.5
+        for: 3m
+        labels:
+          severity: warning
+          service: seckill-core-engine
+        annotations:
+          summary: "P99延迟过高"
+          description: "订单创建P99延迟 {{ $value | printf \"%.2f\" }}秒 超过500ms阈值，用户体验受影响"
+
+      # P99延迟严重过高（新增）
+      - alert: P99LatencyCritical
+        expr: histogram_quantile(0.99, rate(seckill_order_create_seconds_bucket[5m])) > 1
+        for: 2m
+        labels:
+          severity: critical
+          service: seckill-core-engine
+        annotations:
+          summary: "P99延迟严重过高"
+          description: "订单创建P99延迟 {{ $value | printf \"%.2f\" }}秒 超过1秒阈值，系统可能过载"
+
+  - name: seckill-anti-scraping-alerts
+    rules:
+      # IP封禁数量激增（新增）
+      - alert: IPBlockRateSpike
+        expr: rate(seckill_anti_scraping_ip_blocked[5m]) > 50
+        for: 2m
+        labels:
+          severity: warning
+          service: seckill-core-engine
+        annotations:
+          summary: "IP封禁数量激增"
+          description: "IP封禁速率 {{ $value }}/秒，可能遭受恶意攻击"
+
+      # IP限流触发率过高（新增）
+      - alert: IPRateLimitTriggerRateHigh
+        expr: rate(seckill_anti_scraping_ip_rate_limit[5m]) / rate(seckill_request_total[5m]) * 100 > 20
+        for: 5m
+        labels:
+          severity: warning
+          service: seckill-core-engine
+        annotations:
+          summary: "IP限流触发率过高"
+          description: "IP限流触发率 {{ $value | printf \"%.2f\" }}%，流量异常或配置需调整"
