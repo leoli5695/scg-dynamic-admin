@@ -26,6 +26,8 @@ import java.util.concurrent.TimeUnit;
  * <p>
  * 优化:
  * - 使用SHA缓存执行，减少网络传输（高QPS场景）
+ * <p>
+ * OPTIMIZATION (P2): Magic numbers extracted to constants
  */
 @Slf4j
 @Component
@@ -35,6 +37,38 @@ public class SeckillDeductLua {
     private final SeckillConfig seckillConfig;
     private final Timer luaScriptTimer;
     private final LuaScriptService luaScriptService;
+
+    /**
+     * ============================================================================
+     * OPTIMIZATION (P2): Magic numbers extracted to constants
+     * ============================================================================
+     *
+     * Lua script return codes:
+     * - -1: User already bought (duplicate)
+     * - 0: Stock insufficient
+     * - -2: Stock not warmed up
+     * - -99: Unknown error
+     * - >= LUA_SUCCESS_BASE: Success (returns 1000 + shardIndex)
+     */
+    public static final int LUA_ALREADY_BOUGHT = -1;
+    public static final int LUA_STOCK_INSUFFICIENT = 0;
+    public static final int LUA_STOCK_NOT_WARMED = -2;
+    public static final int LUA_ERROR = -99;
+    public static final int LUA_SUCCESS_BASE = 1000;
+
+    /**
+     * Check if Lua result indicates success
+     */
+    public static boolean isLuaSuccess(long result) {
+        return result >= LUA_SUCCESS_BASE;
+    }
+
+    /**
+     * Extract shard index from Lua success result
+     */
+    public static int extractShardIndex(long result) {
+        return (int) (result - LUA_SUCCESS_BASE);
+    }
 
     /**
      * 构造函数注入依赖

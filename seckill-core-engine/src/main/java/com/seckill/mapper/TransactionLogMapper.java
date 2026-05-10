@@ -39,6 +39,21 @@ public interface TransactionLogMapper extends BaseMapper<TransactionLog> {
     java.util.List<TransactionLog> selectTimeoutTransactions(@Param("status") int status, @Param("expireTime") java.time.LocalDateTime expireTime);
 
     /**
+     * OPTIMIZATION (P1): Query timeout transactions within a time range.
+     * Used for tiered timeout processing in CompensationService.
+     *
+     * @param status Transaction status
+     * @param startTime Start of time range (more recent)
+     * @param endTime End of time range (older)
+     * @return List of timeout transactions within the range
+     */
+    @Select("SELECT * FROM transaction_log WHERE status = #{status} AND create_time >= #{startTime} AND create_time < #{endTime} ORDER BY create_time ASC LIMIT 1000")
+    java.util.List<TransactionLog> selectTimeoutTransactionsRange(
+            @Param("status") int status,
+            @Param("startTime") java.time.LocalDateTime startTime,
+            @Param("endTime") java.time.LocalDateTime endTime);
+
+    /**
      * 统计指定秒杀活动的成功事务数量（用于对账）
      * 
      * @param seckillId 秒杀活动ID

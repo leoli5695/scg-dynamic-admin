@@ -115,10 +115,13 @@ management:
 logging:
   level:
     root: INFO
-    com.seckill: DEBUG
+    # OPTIMIZATION (P2): Changed from DEBUG to INFO for production
+    # Debug logs should only be enabled during troubleshooting
+    com.seckill: INFO
     org.apache.rocketmq: INFO
     org.apache.shardingsphere: WARN
-    com.baomidou.mybatisplus: DEBUG
+    # OPTIMIZATION (P2): Changed from DEBUG to WARN for production
+    com.baomidou.mybatisplus: WARN
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
 
@@ -137,6 +140,29 @@ gateway:
 seckill:
   # 热点Key分片数量（将库存分散到8个Key，避免单Key热点）
   shard-count: 8
+
+  # ============================================================================
+  # SECURITY FIX (P0): Database credentials externalized
+  # ============================================================================
+  db:
+    host: ${SECKILL_DB_HOST:127.0.0.1}
+    port: ${SECKILL_DB_PORT:3306}
+    user: ${SECKILL_DB_USER:}  # REQUIRED: Set environment variable
+    password: ${SECKILL_DB_PASSWORD:}  # REQUIRED: Set environment variable
+
+  # ShardingSphere SQL logging (disabled for production)
+  sharding:
+    sql-show: false  # OPTIMIZATION (P0): Disabled for performance
+
+  # ============================================================================
+  # SECURITY FIX (P1): Anti-scraping configuration
+  # ============================================================================
+  anti-scraping:
+    enabled: true  # Enable anti-scraping mechanism
+    ip-rate-limit: 10  # Max requests per IP per second
+    user-rate-limit: 5  # Max requests per user per second
+    auto-blacklist-threshold: 100  # Auto-blacklist after this many violations
+    blacklist-ttl-hours: 24  # Blacklist entry TTL
 
   # 库存预热配置
   warmup:
@@ -158,3 +184,11 @@ seckill:
   snowflake:
     datacenter-id: 1
     worker-id: 1
+
+  # ============================================================================
+  # Alert configuration
+  # ============================================================================
+  alert:
+    enabled: false  # Enable alerts in production
+    webhook-url: ${ALERT_WEBHOOK_URL:}
+    dingtalk-url: ${ALERT_DINGTALK_URL:}

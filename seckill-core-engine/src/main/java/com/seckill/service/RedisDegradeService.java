@@ -243,10 +243,15 @@ public class RedisDegradeService {
 
     /**
      * ============================================================================
-     * 定时健康检查（每30秒）
+     * 定时健康检查（每60秒）
      * ============================================================================
+     *
+     * OPTIMIZATION (P2): Reduced frequency from 30s to 60s
+     * - Reduces unnecessary Redis PING commands
+     * - Still fast enough to detect failures
+     * - Uses connection pool (fixed in P1-12)
      */
-    @Scheduled(fixedRate = 30000)
+    @Scheduled(fixedRate = 60000) // Changed from 30000 to 60000
     public void healthCheck() {
         // 检查手动降级标记
         try {

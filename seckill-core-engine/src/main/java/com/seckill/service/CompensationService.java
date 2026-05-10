@@ -21,11 +21,17 @@ import java.util.List;
  * ============================================================================
  * 库存回补补偿服务
  * ============================================================================
- * 
+ *
  * 功能:
  * 1. 处理失败的事务消息（事务回查失败）
  * 2. 定时扫描待处理的事务
  * 3. 处理订单未支付超时（主动回补，不等延迟消息）
+ *
+ * OPTIMIZATION (P1): Tiered timeout processing
+ * - Short timeout (5-10 min): Fast discovery, quick rollback
+ * - Long timeout (30+ min): Safety net, final rollback
+ *
+ * This reduces unnecessary queries for long-running transactions
  */
 @Slf4j
 @Service
@@ -36,26 +42,72 @@ public class CompensationService {
     private final OrderMapper orderMapper;
     private final SeckillDeductLua seckillDeductLua;
 
+    // OPTIMIZATION (P1): Tiered timeout thresholds
+    private static final int SHORT_TIMEOUT_MINUTES = 5;
+    private static final int MEDIUM_TIMEOUT_MINUTES = 10;
+    private static final int LONG_TIMEOUT_MINUTES = 30;
+
     /**
      * ============================================================================
-     * 定时扫描处理中的事务（每分钟）
+     * 短时超时处理（每分钟）- 快速发现问题
      * ============================================================================
-     * 
-     * 处理超时的PROCESSING状态事务
-     * 
-     * 分布式锁: 使用 ShedLock 防止多实例重复执行
+     *
+     * OPTIMIZATION (P1): Process 5-10 minute timeout transactions first
+     * - Faster discovery of stuck transactions
+     * - Reduces waiting time for users
      */
-    @Scheduled(fixedRate = 60000)
+    @Scheduled(fixedRate = 60000) // 1 minute
     @SchedulerLock(
-            name = "CompensationService_processTimeoutTransactions",
-            lockAtMostFor = "5m",   // 锁最大持有5分钟（任务本身不超过1分钟）
-            lockAtLeastFor = "30s"  // 锁最小持有30秒（防止短任务重复执行）
+            name = "CompensationService_processShortTimeoutTransactions",
+            lockAtMostFor = "2m",
+            lockAtLeastFor = "30s"
     )
-    public void processTimeoutTransactions() {
-        log.info("开始扫描超时事务...");
+    public void processShortTimeoutTransactions() {
+        log.debug("开始扫描短时超时事务...");
+
+        // Process 5-10 minute timeout transactions
+        LocalDateTime shortTimeoutTime = LocalDateTime.now().minusMinutes(SHORT_TIMEOUT_MINUTES);
+        LocalDateTime mediumTimeoutTime = LocalDateTime.now().minusMinutes(MEDIUM_TIMEOUT_MINUTES);
+
+        List<TransactionLog> shortTimeoutTransactions = transactionLogMapper.selectTimeoutTransactionsRange(
+                TransactionStatus.PROCESSING.getCode(),
+                shortTimeoutTime,
+                mediumTimeoutTime
+        );
+
+        for (TransactionLog tx : shortTimeoutTransactions) {
+            try {
+                processTimeoutTransaction(tx, "短时超时");
+            } catch (Exception e) {
+                log.error("处理短时超时事务失败: transactionId={}, error={}", tx.getTransactionId(), e.getMessage());
+            }
+        }
+
+        if (!shortTimeoutTransactions.isEmpty()) {
+            log.info("短时超时事务扫描完成: 处理数量={}", shortTimeoutTransactions.size());
+        }
+    }
+
+    /**
+     * ============================================================================
+     * 长时超时兜底处理（每5分钟）- 安全兜底
+     * ============================================================================
+     *
+     * OPTIMIZATION (P1): Process 30+ minute timeout as safety net
+     * - Reduced frequency (every 5 min instead of every 1 min)
+     * - Catches transactions that missed short timeout processing
+     */
+    @Scheduled(fixedRate = 300000) // 5 minutes
+    @SchedulerLock(
+            name = "CompensationService_processLongTimeoutTransactions",
+            lockAtMostFor = "5m",
+            lockAtLeastFor = "1m"
+    )
+    public void processLongTimeoutTransactions() {
+        log.info("开始扫描长时超时事务（兜底）...");
 
         // 查询超时的事务（超过30分钟）
-        LocalDateTime timeoutTime = LocalDateTime.now().minusMinutes(30);
+        LocalDateTime timeoutTime = LocalDateTime.now().minusMinutes(LONG_TIMEOUT_MINUTES);
         List<TransactionLog> timeoutTransactions = transactionLogMapper.selectTimeoutTransactions(
                 TransactionStatus.PROCESSING.getCode(),
                 timeoutTime
@@ -63,17 +115,19 @@ public class CompensationService {
 
         for (TransactionLog tx : timeoutTransactions) {
             try {
-                processTimeoutTransaction(tx);
+                processTimeoutTransaction(tx, "长时超时兜底");
             } catch (Exception e) {
-                log.error("处理超时事务失败: transactionId={}, error={}", tx.getTransactionId(), e.getMessage());
+                log.error("处理长时超时事务失败: transactionId={}, error={}", tx.getTransactionId(), e.getMessage());
             }
         }
 
-        log.info("超时事务扫描完成: 处理数量={}", timeoutTransactions.size());
+        log.info("长时超时事务扫描完成: 处理数量={}", timeoutTransactions.size());
     }
 
     /**
      * 处理单个超时事务
+     *
+     * OPTIMIZATION (P1): Added source parameter for logging
      *
      * 【P1-5修复】避免与 StockConfirmService 冲突：
      * - StockConfirmService 处理 5 分钟内的超时事务（短时超时）
@@ -81,9 +135,9 @@ public class CompensationService {
      * - 添加 Redis 处理标记，避免重复处理
      */
     @Transactional(rollbackFor = Exception.class)
-    public void processTimeoutTransaction(TransactionLog tx) {
-        log.info("处理超时事务: transactionId={}, seckillId={}, userId={}", 
-                tx.getTransactionId(), tx.getSeckillId(), tx.getUserId());
+    public void processTimeoutTransaction(TransactionLog tx, String source) {
+        log.info("处理超时事务[{}]: transactionId={}, seckillId={}, userId={}",
+                source, tx.getTransactionId(), tx.getSeckillId(), tx.getUserId());
 
         // 【P1-5修复】检查是否已被处理（事务状态可能已变更）
         TransactionLog currentTx = transactionLogMapper.selectByTransactionId(tx.getTransactionId());

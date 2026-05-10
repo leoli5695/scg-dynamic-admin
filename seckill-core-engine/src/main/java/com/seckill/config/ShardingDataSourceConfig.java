@@ -28,6 +28,11 @@ import java.util.*;
  * 分片策略:
  * - 分库: user_id % 8 (8个分库)
  * - 分表: user_id % 16 (每个库16张表)
+ *
+ * SECURITY FIX (P0):
+ * - Database credentials externalized via environment variables
+ * - No hardcoded passwords in source code
+ * - SQL logging disabled for production (performance + security)
  */
 @Slf4j
 @Configuration
@@ -36,10 +41,57 @@ public class ShardingDataSourceConfig {
 
     private static final int DB_COUNT = 8;
     private static final int TABLE_COUNT = 16;
-    private static final String DB_HOST = "127.0.0.1";
-    private static final int DB_PORT = 3306;
-    private static final String DB_USER = "root";
-    private static final String DB_PASSWORD = "123456";
+
+    /**
+     * Database configuration - externalized via environment variables.
+     * SECURITY: No hardcoded credentials in source code.
+     */
+    private final String dbHost;
+    private final int dbPort;
+    private final String dbUser;
+    private final String dbPassword;
+    private final boolean sqlShowEnabled;
+
+    /**
+     * Constructor with environment variable injection.
+     * SECURITY FIX (P0): Externalize all sensitive configuration.
+     */
+    public ShardingDataSourceConfig(
+            @org.springframework.beans.factory.annotation.Value("${seckill.db.host:127.0.0.1}") String dbHost,
+            @org.springframework.beans.factory.annotation.Value("${seckill.db.port:3306}") int dbPort,
+            @org.springframework.beans.factory.annotation.Value("${seckill.db.user:}") String dbUser,
+            @org.springframework.beans.factory.annotation.Value("${seckill.db.password:}") String dbPassword,
+            @org.springframework.beans.factory.annotation.Value("${seckill.sharding.sql-show:false}") boolean sqlShowEnabled) {
+
+        this.dbHost = dbHost;
+        this.dbPort = dbPort;
+        this.dbUser = dbUser;
+        this.dbPassword = dbPassword;
+        this.sqlShowEnabled = sqlShowEnabled;
+
+        // SECURITY: Validate credentials at startup
+        validateDatabaseCredentials();
+    }
+
+    /**
+     * Validate database credentials at startup.
+     * SECURITY: Reject empty credentials to prevent production misuse.
+     */
+    private void validateDatabaseCredentials() {
+        if (dbUser == null || dbUser.isEmpty()) {
+            throw new IllegalArgumentException(
+                "Database user is not configured! Set 'seckill.db.user' environment variable. " +
+                "Example: SECKILL_DB_USER=root");
+        }
+
+        if (dbPassword == null || dbPassword.isEmpty()) {
+            throw new IllegalArgumentException(
+                "Database password is not configured! Set 'seckill.db.password' environment variable. " +
+                "Example: SECKILL_DB_PASSWORD=your-secure-password");
+        }
+
+        log.info("Database credentials validated: host={}, port={}, user={}", dbHost, dbPort, dbUser);
+    }
 
     /**
      * 创建 ShardingSphere 数据源（替代 YAML 配置）
@@ -60,7 +112,9 @@ public class ShardingDataSourceConfig {
                 Collections.singletonList(shardingRuleConfig);
 
         Properties props = new Properties();
-        props.setProperty("sql-show", "true");
+        // PERFORMANCE FIX (P0): SQL logging disabled by default for production
+        // Enable only for debugging with 'seckill.sharding.sql-show=true'
+        props.setProperty("sql-show", String.valueOf(sqlShowEnabled));
         props.setProperty("sql-show-format", "true");
 
         DataSource dataSource = ShardingSphereDataSourceFactory.createDataSource(
@@ -98,9 +152,9 @@ public class ShardingDataSourceConfig {
             HikariDataSource ds = new HikariDataSource();
             ds.setDriverClassName("com.mysql.cj.jdbc.Driver");
             ds.setJdbcUrl(String.format("jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true",
-                    DB_HOST, DB_PORT, dbName));
-            ds.setUsername(DB_USER);
-            ds.setPassword(DB_PASSWORD);
+                    dbHost, dbPort, dbName));
+            ds.setUsername(dbUser);
+            ds.setPassword(dbPassword);
             ds.setMaximumPoolSize(20);
             ds.setMinimumIdle(5);
             ds.setConnectionTimeout(30000);
