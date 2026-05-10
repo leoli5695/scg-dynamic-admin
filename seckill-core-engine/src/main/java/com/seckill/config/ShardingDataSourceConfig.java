@@ -29,9 +29,9 @@ import java.util.*;
  * - 分库: user_id % 8 (8个分库)
  * - 分表: user_id % 16 (每个库16张表)
  *
- * SECURITY FIX (P0):
- * - Database credentials externalized via environment variables
- * - No hardcoded passwords in source code
+ * Configuration:
+ * - 测试阶段: yaml默认值 (root/123456)
+ * - 生产环境: 必须设置环境变量 SECKILL_DB_USER/SECKILL_DB_PASSWORD
  * - SQL logging disabled for production (performance + security)
  */
 @Slf4j
@@ -43,54 +43,66 @@ public class ShardingDataSourceConfig {
     private static final int TABLE_COUNT = 16;
 
     /**
-     * Database configuration - externalized via environment variables.
-     * SECURITY: No hardcoded credentials in source code.
+     * Database configuration.
+     * 测试阶段使用yaml默认值，生产环境使用环境变量。
      */
     private final String dbHost;
     private final int dbPort;
     private final String dbUser;
     private final String dbPassword;
     private final boolean sqlShowEnabled;
+    private final boolean isProduction;
 
     /**
-     * Constructor with environment variable injection.
-     * SECURITY FIX (P0): Externalize all sensitive configuration.
+     * Constructor with configuration injection.
+     * 测试阶段允许默认值，生产环境必须设置环境变量。
      */
     public ShardingDataSourceConfig(
             @org.springframework.beans.factory.annotation.Value("${seckill.db.host:127.0.0.1}") String dbHost,
             @org.springframework.beans.factory.annotation.Value("${seckill.db.port:3306}") int dbPort,
-            @org.springframework.beans.factory.annotation.Value("${seckill.db.user:}") String dbUser,
-            @org.springframework.beans.factory.annotation.Value("${seckill.db.password:}") String dbPassword,
-            @org.springframework.beans.factory.annotation.Value("${seckill.sharding.sql-show:false}") boolean sqlShowEnabled) {
+            @org.springframework.beans.factory.annotation.Value("${seckill.db.user:root}") String dbUser,
+            @org.springframework.beans.factory.annotation.Value("${seckill.db.password:123456}") String dbPassword,
+            @org.springframework.beans.factory.annotation.Value("${seckill.sharding.sql-show:false}") boolean sqlShowEnabled,
+            @org.springframework.beans.factory.annotation.Value("${seckill.production-mode:false}") boolean isProduction) {
 
         this.dbHost = dbHost;
         this.dbPort = dbPort;
         this.dbUser = dbUser;
         this.dbPassword = dbPassword;
         this.sqlShowEnabled = sqlShowEnabled;
+        this.isProduction = isProduction;
 
-        // SECURITY: Validate credentials at startup
-        validateDatabaseCredentials();
+        // 生产环境验证凭据
+        if (isProduction) {
+            validateProductionCredentials();
+        } else {
+            log.info("测试模式: 使用yaml默认数据库配置 user={}", dbUser);
+        }
     }
 
     /**
-     * Validate database credentials at startup.
-     * SECURITY: Reject empty credentials to prevent production misuse.
+     * Validate database credentials for production.
+     * 生产环境必须设置环境变量，拒绝硬编码默认值。
      */
-    private void validateDatabaseCredentials() {
+    private void validateProductionCredentials() {
+        // 生产环境拒绝测试默认值
+        if ("root".equals(dbUser) && "123456".equals(dbPassword)) {
+            throw new IllegalArgumentException(
+                "生产环境禁止使用测试默认凭据！请设置环境变量: " +
+                "SECKILL_DB_USER 和 SECKILL_DB_PASSWORD");
+        }
+
         if (dbUser == null || dbUser.isEmpty()) {
             throw new IllegalArgumentException(
-                "Database user is not configured! Set 'seckill.db.user' environment variable. " +
-                "Example: SECKILL_DB_USER=root");
+                "生产环境必须设置 SECKILL_DB_USER 环境变量");
         }
 
         if (dbPassword == null || dbPassword.isEmpty()) {
             throw new IllegalArgumentException(
-                "Database password is not configured! Set 'seckill.db.password' environment variable. " +
-                "Example: SECKILL_DB_PASSWORD=your-secure-password");
+                "生产环境必须设置 SECKILL_DB_PASSWORD 环境变量");
         }
 
-        log.info("Database credentials validated: host={}, port={}, user={}", dbHost, dbPort, dbUser);
+        log.info("生产环境数据库配置验证通过: host={}, port={}, user={}", dbHost, dbPort, dbUser);
     }
 
     /**
