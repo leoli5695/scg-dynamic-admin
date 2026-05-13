@@ -219,7 +219,7 @@ public class ReconciliationService {
         // 注意：处理中的事务可能最终失败，所以这里保守计算
         int mysqlStock = initialStock - successCount - processingCount;
 
-        log.debug("MySQL库存计算: seckillId={}, initialStock={}, successCount={}, processingCount={}, mysqlStock={}",
+        log.info("MySQL库存计算: seckillId={}, initialStock={}, successCount={}, processingCount={}, mysqlStock={}",
                 seckillId, initialStock, successCount, processingCount, mysqlStock);
 
         return Math.max(0, mysqlStock);  // 防止负数

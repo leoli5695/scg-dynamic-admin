@@ -146,7 +146,7 @@ public class BatchInsertService {
         }
 
         int currentSize = orderQueue.size();
-        log.debug("订单加入攒批队列: orderNo={}, transactionId={}, queueSize={}",
+        log.info("订单加入攒批队列: orderNo={}, transactionId={}, queueSize={}",
                 order.getOrderNo(), order.getTransactionId(), currentSize);
 
         // 达到阈值触发批量写入
@@ -172,7 +172,7 @@ public class BatchInsertService {
         // 队列有数据且超过最大攒批时间
         int queueSize = orderQueue.size();
         if (queueSize > 0 && elapsed >= MAX_BATCH_WAIT_MS) {
-            log.debug("定时刷新触发: queueSize={}, elapsedMs={}", queueSize, elapsed);
+            log.info("定时刷新触发: queueSize={}, elapsedMs={}", queueSize, elapsed);
             flushBatch();
         }
     }
@@ -231,7 +231,7 @@ public class BatchInsertService {
                 totalInserted += inserted;
                 allSuccessOrders.addAll(userOrders);
 
-                log.debug("分片批量写入成功: userId={}, count={}", userId, inserted);
+                log.info("分片批量写入成功: userId={}, count={}", userId, inserted);
 
             } catch (Exception e) {
                 log.error("分片批量写入失败: userId={}, count={}, error={}",

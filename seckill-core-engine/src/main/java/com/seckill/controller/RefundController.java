@@ -4,6 +4,7 @@ import com.seckill.dto.OrderQueryRequest;
 import com.seckill.dto.OrderQueryResponse;
 import com.seckill.dto.RefundRequest;
 import com.seckill.dto.RefundResponse;
+import com.seckill.dto.RefundQueryResponse;
 import com.seckill.enums.OrderStatus;
 import com.seckill.service.OrderQueryService;
 import com.seckill.service.RefundService;
@@ -134,40 +135,5 @@ public class RefundController {
         log.info("退款状态查询完成: orderNo={}, status={}", orderNo, queryResponse.getStatus());
 
         return queryResponse;
-    }
-
-    /**
-     * ============================================================================
-     * 退款状态查询响应
-     * ============================================================================
-     */
-    public static class RefundQueryResponse {
-        private String orderNo;
-        private String status;
-        private String message;
-
-        public String getOrderNo() {
-            return orderNo;
-        }
-
-        public void setOrderNo(String orderNo) {
-            this.orderNo = orderNo;
-        }
-
-        public String getStatus() {
-            return status;
-        }
-
-        public void setStatus(String status) {
-            this.status = status;
-        }
-
-        public String getMessage() {
-            return message;
-        }
-
-        public void setMessage(String message) {
-            this.message = message;
-        }
     }
 }

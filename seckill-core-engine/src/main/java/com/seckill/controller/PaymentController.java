@@ -4,6 +4,7 @@ import com.seckill.dto.OrderQueryRequest;
 import com.seckill.dto.OrderQueryResponse;
 import com.seckill.dto.PaymentCallbackRequest;
 import com.seckill.dto.PaymentCallbackResponse;
+import com.seckill.dto.PaymentQueryResponse;
 import com.seckill.enums.OrderStatus;
 import com.seckill.service.OrderQueryService;
 import com.seckill.service.PaymentService;
@@ -131,40 +132,5 @@ public class PaymentController {
         log.info("支付状态查询完成: orderNo={}, status={}", orderNo, queryResponse.getStatus());
 
         return queryResponse;
-    }
-
-    /**
-     * ============================================================================
-     * 支付状态查询响应
-     * ============================================================================
-     */
-    public static class PaymentQueryResponse {
-        private String orderNo;
-        private String status;
-        private String message;
-
-        public String getOrderNo() {
-            return orderNo;
-        }
-
-        public void setOrderNo(String orderNo) {
-            this.orderNo = orderNo;
-        }
-
-        public String getStatus() {
-            return status;
-        }
-
-        public void setStatus(String status) {
-            this.status = status;
-        }
-
-        public String getMessage() {
-            return message;
-        }
-
-        public void setMessage(String message) {
-            this.message = message;
-        }
     }
 }

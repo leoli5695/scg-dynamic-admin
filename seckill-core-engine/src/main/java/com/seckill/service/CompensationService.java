@@ -72,7 +72,7 @@ public class CompensationService {
             lockAtLeastFor = "30s"
     )
     public void processShortTimeoutTransactions() {
-        log.debug("开始扫描短时超时事务...");
+        log.info("开始扫描短时超时事务...");
 
         // Process 5-10 minute timeout transactions
         LocalDateTime shortTimeoutTime = LocalDateTime.now().minusMinutes(SHORT_TIMEOUT_MINUTES);

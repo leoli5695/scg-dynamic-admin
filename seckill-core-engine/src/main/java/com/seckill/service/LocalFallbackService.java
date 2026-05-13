@@ -27,10 +27,12 @@ import java.util.stream.Collectors;
  * 2. 本地购买记录（简易防重）
  * 3. 本地订单缓冲队列（MQ 故障时的异步处理）
  * 4. 缓冲队列持久化（应用重启后恢复）
+ * 5. 【OPTIMIZATION P2】Redis恢复后同步本地库存回Redis
  * <p>
  * 使用场景:
  * - Redis 故障时，启用本地库存计数器
  * - MQ 故障时，先写入本地缓冲队列，后续补偿
+ * - Redis 恢复后，调用 syncToRedis() 将本地剩余库存同步回Redis
  * <p>
  * 【多实例超卖防护】:
  * - 降级模式下，本地库存只分配 10% 的总库存
@@ -42,6 +44,12 @@ import java.util.stream.Collectors;
  * - 应用启动时读取未发送的订单重新处理
  * - 避免应用崩溃时订单丢失
  * <p>
+ * 【OPTIMIZATION P2 - Redis恢复同步】:
+ * - syncToRedis(seckillId): 将本地剩余库存同步到Redis分片
+ * - 使用 warmupStockOnly() 仅更新库存，不清空购买记录
+ * - 清理本地库存状态，释放内存
+ * - 记录同步日志，便于审计
+ * <p>
  * 注意:
  * - 本地兜底仅用于极端情况，存在少卖风险（刻意设计）
  * - 需配合对账服务进行数据修正
@@ -49,6 +57,7 @@ import java.util.stream.Collectors;
  * 监控指标:
  * - seckill.fallback.stock_deduct: 本地库存扣减次数
  * - seckill.fallback.queue_size: 本地缓冲队列大小
+ * - seckill.fallback.sync_to_redis: Redis恢复同步次数
  */
 @Slf4j
 @Service
@@ -381,6 +390,155 @@ public class LocalFallbackService {
     public int getLocalStock(Long seckillId) {
         AtomicInteger stock = localStockMap.get(seckillId);
         return stock != null ? stock.get() : -1;
+    }
+
+    /**
+     * ============================================================================
+     * 获取本地购买记录（用于审计）
+     * ============================================================================
+     */
+    public int getLocalBoughtCount(Long seckillId, Long userId) {
+        String boughtKey = seckillId + ":" + userId;
+        AtomicInteger boughtCount = localBoughtMap.get(boughtKey);
+        return boughtCount != null ? boughtCount.get() : 0;
+    }
+
+    /**
+     * ============================================================================
+     * 【OPTIMIZATION P2】Redis恢复后同步本地库存回Redis
+     * ============================================================================
+     * <p>
+     * 功能：
+     * - 将本地剩余库存同步到Redis分片库存
+     * - 使用 warmupStockOnly() 仅更新库存，不清空购买记录
+     * - 清理本地库存状态，释放内存
+     * - 记录同步日志，便于审计
+     * <p>
+     * 使用场景：
+     * - RedisDegradeService检测到Redis恢复后调用
+     * - 手动触发同步（管理员操作）
+     * <p>
+     * 注意：
+     * - 调用前必须确保Redis已恢复正常
+     * - 同步后本地库存会被清空，无法再次扣减
+     * - 本地购买记录会被保留用于审计（直到活动结束）
+     * <p>
+     * 设计原则：
+     * - 不清空Redis中的购买记录（可能已有新用户在Redis购买）
+     * - 只同步剩余库存，避免库存丢失
+     * - 本地购买记录保留用于对账
+     *
+     * @param seckillDeductLua Lua脚本执行服务（由调用方传入，避免循环依赖）
+     * @param seckillId        秒杀活动ID
+     * @return 同步的库存数量，-1表示本地库存未初始化
+     */
+    public int syncToRedis(SeckillDeductLua seckillDeductLua, Long seckillId) {
+        AtomicInteger localStock = localStockMap.get(seckillId);
+
+        if (localStock == null) {
+            log.warn("syncToRedis: 本地库存未初始化, seckillId={}", seckillId);
+            return -1;
+        }
+
+        int remainingStock = localStock.get();
+
+        if (remainingStock <= 0) {
+            log.info("syncToRedis: 本地库存已耗尽, seckillId={}, 无需同步", seckillId);
+            // 清理本地库存
+            localStockMap.remove(seckillId);
+            return 0;
+        }
+
+        // 同步剩余库存到Redis（仅更新库存，不清空购买记录）
+        try {
+            seckillDeductLua.warmupStockOnly(seckillId, remainingStock);
+
+            log.info("syncToRedis成功: seckillId={}, remainingStock={}, 已同步到Redis分片",
+                    seckillId, remainingStock);
+
+            // 发送告警
+            alertService.sendAlert("Redis恢复库存同步",
+                    "seckillId=" + seckillId + " 本地剩余库存 " + remainingStock + " 已同步回Redis");
+
+            // 清理本地库存（释放内存）
+            localStockMap.remove(seckillId);
+
+            return remainingStock;
+
+        } catch (Exception e) {
+            log.error("syncToRedis失败: seckillId={}, remainingStock={}, error={}",
+                    seckillId, remainingStock, e.getMessage());
+
+            alertService.sendAlert("Redis恢复库存同步失败",
+                    "seckillId=" + seckillId + " 本地剩余库存 " + remainingStock + " 同步失败: " + e.getMessage());
+
+            // 同步失败，保留本地库存状态，下次重试
+            return -2;
+        }
+    }
+
+    /**
+     * ============================================================================
+     * 【OPTIMIZATION P2】批量同步所有本地库存回Redis
+     * ============================================================================
+     * <p>
+     * 功能：
+     * - 遍历所有本地库存，逐个同步到Redis
+     * - 返回同步结果汇总
+     * <p>
+     * 使用场景：
+     * - Redis全面恢复后批量同步
+     * - 应用关闭前优雅停机
+     *
+     * @param seckillDeductLua Lua脚本执行服务
+     * @return 同步结果Map: seckillId -> syncCount
+     */
+    public Map<Long, Integer> syncAllToRedis(SeckillDeductLua seckillDeductLua) {
+        Map<Long, Integer> syncResults = new ConcurrentHashMap<>();
+
+        for (Long seckillId : localStockMap.keySet()) {
+            int syncCount = syncToRedis(seckillDeductLua, seckillId);
+            syncResults.put(seckillId, syncCount);
+        }
+
+        int totalSynced = syncResults.values().stream()
+                .filter(v -> v > 0)
+                .mapToInt(Integer::intValue)
+                .sum();
+
+        log.info("syncAllToRedis完成: 活动数={}, 总同步库存={}", syncResults.size(), totalSynced);
+
+        if (totalSynced > 0) {
+            alertService.sendAlert("Redis恢复批量库存同步",
+                    "已同步 " + syncResults.size() + " 个活动，总库存 " + totalSynced);
+        }
+
+        return syncResults;
+    }
+
+    /**
+     * ============================================================================
+     * 【OPTIMIZATION P2】清理本地购买记录（活动结束后）
+     * ============================================================================
+     * <p>
+     * 功能：
+     * - 清理指定活动的本地购买记录
+     * - 释放内存
+     * <p>
+     * 使用场景：
+     * - 活动结束后清理
+     * - 对账完成后清理
+     *
+     * @param seckillId 秒杀活动ID
+     */
+    public void clearLocalBoughtRecords(Long seckillId) {
+        // 过滤并删除该活动的购买记录
+        localBoughtMap.entrySet().removeIf(entry -> {
+            String key = entry.getKey();
+            return key.startsWith(seckillId + ":");
+        });
+
+        log.info("本地购买记录已清理: seckillId={}", seckillId);
     }
 
     /**

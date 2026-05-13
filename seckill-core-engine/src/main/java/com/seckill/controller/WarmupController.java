@@ -1,6 +1,8 @@
 package com.seckill.controller;
 
 import com.seckill.annotation.InternalApi;
+import com.seckill.dto.WarmupResponse;
+import com.seckill.dto.WarmupStatusResponse;
 import com.seckill.service.WarmupService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -111,31 +113,5 @@ public class WarmupController {
         response.setSuccess(true);
         response.setMessage("清理成功");
         return response;
-    }
-
-    /**
-     * 预热响应
-     */
-    public static class WarmupResponse {
-        private boolean success;
-        private String message;
-
-        public boolean getSuccess() { return success; }
-        public void setSuccess(boolean success) { this.success = success; }
-        public String getMessage() { return message; }
-        public void setMessage(String message) { this.message = message; }
-    }
-
-    /**
-     * 预热状态响应
-     */
-    public static class WarmupStatusResponse {
-        private Long seckillId;
-        private boolean warmedUp;
-
-        public Long getSeckillId() { return seckillId; }
-        public void setSeckillId(Long seckillId) { this.seckillId = seckillId; }
-        public boolean isWarmedUp() { return warmedUp; }
-        public void setWarmedUp(boolean warmedUp) { this.warmedUp = warmedUp; }
     }
 }

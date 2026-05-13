@@ -189,7 +189,7 @@ public class DataSourceMonitorService {
 
                 double usage = (double) active / max;
 
-                log.debug("连接池状态: pool={}, active={}, idle={}, total={}, waiting={}, usage={}",
+                log.info("连接池状态: pool={}, active={}, idle={}, total={}, waiting={}, usage={}",
                         poolName, active, idle, total, waiting, String.format("%.2f%%", usage * 100));
 
                 // 检查告警

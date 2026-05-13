@@ -4,6 +4,7 @@ import com.seckill.dto.OrderQueryRequest;
 import com.seckill.dto.OrderQueryResponse;
 import com.seckill.dto.SeckillRequest;
 import com.seckill.dto.SeckillResponse;
+import com.seckill.dto.SeckillResultResponse;
 import com.seckill.enums.OrderStatus;
 import com.seckill.service.OrderQueryService;
 import com.seckill.service.SeckillService;
@@ -176,41 +177,5 @@ public class SeckillController {
                 userId, seckillId, resultResponse.getStatus(), resultResponse.getOrderNo());
 
         return resultResponse;
-    }
-
-    /**
-     * ============================================================================
-     * 秒杀结果响应
-     * ============================================================================
-     */
-    public static class SeckillResultResponse {
-        private String orderNo;
-        private Integer status; // 0:排队中 1:成功 2:失败
-        private String message;
-
-        // getters and setters
-        public String getOrderNo() {
-            return orderNo;
-        }
-
-        public void setOrderNo(String orderNo) {
-            this.orderNo = orderNo;
-        }
-
-        public Integer getStatus() {
-            return status;
-        }
-
-        public void setStatus(Integer status) {
-            this.status = status;
-        }
-
-        public String getMessage() {
-            return message;
-        }
-
-        public void setMessage(String message) {
-            this.message = message;
-        }
     }
 }

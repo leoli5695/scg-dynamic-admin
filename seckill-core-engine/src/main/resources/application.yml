@@ -30,11 +30,14 @@ spring:
           max-wait: 1000ms
 
   # MySQL 数据源配置（使用HikariCP连接池）
+  # SECURITY FIX (P1): 移除硬编码默认密码，强制使用环境变量
+  # 开发环境: 设置环境变量 SECKILL_DB_USER=root SECKILL_DB_PASSWORD=dev123456
+  # 生产环境: 必须设置 SECKILL_DB_USER 和 SECKILL_DB_PASSWORD
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://127.0.0.1:3306/seckill_db_0?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: root
-    password: 123456
+    url: jdbc:mysql://${SECKILL_DB_HOST:127.0.0.1}:${SECKILL_DB_PORT:3306}/seckill_db_0?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: ${SECKILL_DB_USER:}   # 必须设置环境变量，无默认值
+    password: ${SECKILL_DB_PASSWORD:}  # 必须设置环境变量，无默认值
     hikari:
       maximum-pool-size: 20
       minimum-idle: 5
@@ -97,12 +100,15 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus,metrics
+        # OPTIMIZATION (P2): 启用loggers端点，支持动态日志级别调整
+        include: health,info,prometheus,metrics,loggers
   endpoint:
     health:
       show-details: always
     prometheus:
       enabled: true
+    loggers:
+      enabled: true  # 启用动态日志级别调整端点
   metrics:
     tags:
       application: ${spring.application.name}

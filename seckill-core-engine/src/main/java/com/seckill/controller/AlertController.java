@@ -1,5 +1,7 @@
 package com.seckill.controller;
 
+import com.seckill.dto.AlertResponse;
+import com.seckill.dto.AlertStatusResponse;
 import com.seckill.service.AlertService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -151,7 +153,7 @@ public class AlertController {
 
     /**
      * ============================================================================
-     * 请求/响应 DTO
+     * 请求/响应 DTO（仅保留请求类，响应类已提取到dto包）
      * ============================================================================
      */
     @Data
@@ -161,21 +163,9 @@ public class AlertController {
         private String level;
     }
 
-    @Data
-    public static class AlertResponse {
-        private String code;
-        private String message;
-    }
-
-    @Data
-    public static class AlertStatusResponse {
-        private String status;
-        private boolean webhookEnabled;
-    }
-
     /**
      * ============================================================================
-     * Alertmanager Webhook Payload
+     * Alertmanager Webhook Payload（Webhook专用请求结构）
      * ============================================================================
      */
     @Data

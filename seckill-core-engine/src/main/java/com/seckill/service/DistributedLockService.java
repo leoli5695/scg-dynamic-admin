@@ -229,7 +229,7 @@ public class DistributedLockService {
         try {
             boolean acquired = lock.tryLock(WAIT_TIME_MS, LEASE_TIME_SEC, TimeUnit.MILLISECONDS);
             if (acquired) {
-                log.debug("成功获取锁: lockKey={}", lockKey);
+                log.info("成功获取锁: lockKey={}", lockKey);
             } else {
                 log.warn("获取锁失败（并发冲突）: lockKey={}", lockKey);
             }
@@ -246,7 +246,7 @@ public class DistributedLockService {
             RLock lock = redissonClient.getLock(lockKey);
             if (lock.isHeldByCurrentThread()) {
                 lock.unlock();
-                log.debug("释放锁成功: lockKey={}", lockKey);
+                log.info("释放锁成功: lockKey={}", lockKey);
             }
         } catch (Exception e) {
             log.error("释放锁异常: lockKey={}", lockKey, e);
