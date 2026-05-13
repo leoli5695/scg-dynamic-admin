@@ -15,7 +15,6 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import api from '../utils/api';
-import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 
 const { Title, Text } = Typography;
@@ -526,8 +525,8 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
     try {
       const params: Record<string, any> = { days: timelineDays, limit: 100 };
       if (timelineTargetType) params.targetType = timelineTargetType;
-      const response = await axios.get(`/api/audit-logs/timeline/${instanceId}`, { params });
-      setTimeline(response.data);
+      const response = await api.get(`/api/audit-logs/timeline/${instanceId}`, { params });
+      setTimeline(response.data?.data || response.data);
     } catch (e: any) {
       message.error(t('audit.load_failed') || 'Failed to load timeline');
     } finally {
@@ -628,7 +627,7 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
 
   const renderTimelineDiffTable = (diff: TimelineDiffEntry[]) => (
     <Table
-      dataSource={diff}
+      dataSource={diff || []}
       columns={[
         {
           title: t('audit.field') || 'Field',
@@ -1188,7 +1187,7 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
             <Card size="small">
               <Statistic
                 title={t('audit.days_shown') || '日期数'}
-                value={timeline.days.length}
+                value={timeline?.days?.length || 0}
                 valueStyle={{ fontSize: 20 }}
               />
             </Card>
@@ -1219,7 +1218,7 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
       <Card>
         {timelineLoading && !timeline ? (
           <div style={{ textAlign: 'center', padding: 60 }}><Spin size="large" /></div>
-        ) : timeline && timeline.days.length > 0 ? (
+        ) : timeline && (timeline.days?.length || 0) > 0 ? (
           <div style={{ maxHeight: 600, overflowY: 'auto' }}>
             {timeline.days.map(day => (
               <div key={day.date} style={{ marginBottom: 24 }}>
@@ -1270,7 +1269,7 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
           </Space>
         }
         placement="right"
-        width={600}
+        styles={{ wrapper: { width: 600 } }}
         open={diffModalVisible}
         onClose={() => setDiffModalVisible(false)}
         closeIcon={<CloseOutlined />}

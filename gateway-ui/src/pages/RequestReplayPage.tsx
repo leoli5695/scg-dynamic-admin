@@ -9,7 +9,6 @@ import {
   CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined,
   FileTextOutlined, ThunderboltOutlined, DeleteOutlined, ClearOutlined
 } from '@ant-design/icons';
-import axios from 'axios';
 import api from '../utils/api';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
@@ -222,7 +221,7 @@ const RequestReplayPage: React.FC<RequestReplayPageProps> = ({ instanceId }) => 
         { headers: { 'Content-Type': 'application/json' } }
       );
 
-      setReplayResult(response.data as ReplayResult);
+      setReplayResult((response.data?.data || response.data) as ReplayResult);
       setEditModalVisible(false);
       setResultModalVisible(true);
     } catch (e) {
@@ -653,7 +652,7 @@ const RequestReplayPage: React.FC<RequestReplayPageProps> = ({ instanceId }) => 
                 {replayResult.comparison.bodyDiff && replayResult.comparison.bodyDiff.length > 0 && (
                   <Card size="small" title={t('replay.body_differences')} style={{ marginTop: 16 }}>
                     <Table
-                      dataSource={replayResult.comparison.bodyDiff}
+                      dataSource={replayResult?.comparison?.bodyDiff || []}
                       columns={[
                         { title: t('replay.field'), dataIndex: 'field', key: 'field' },
                         {

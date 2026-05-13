@@ -10,7 +10,7 @@ import {
   StopOutlined, DatabaseOutlined, AimOutlined, LinkOutlined, EyeOutlined
 } from '@ant-design/icons';
 import * as echarts from 'echarts';
-import axios from 'axios';
+import api from '../utils/api';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import './TrafficTopologyPage.css';
@@ -102,10 +102,12 @@ const TrafficTopologyPage: React.FC<TrafficTopologyPageProps> = ({ instanceId })
     setError(null);
 
     try {
-      const response = await axios.get(`/api/topology/${instanceId}`, {
+      const response = await api.get(`/api/topology/${instanceId}`, {
         params: { minutes: timeRange }
       });
-      setTopology(response.data);
+      // API 返回格式: { code: 200, data: { nodes: [...], edges: [...] } }
+      // 需要取 response.data.data 获取实际拓扑数据
+      setTopology(response.data?.data || response.data);
     } catch (e: any) {
       setError(e.message || 'Failed to load topology');
     } finally {
@@ -201,7 +203,7 @@ const TrafficTopologyPage: React.FC<TrafficTopologyPageProps> = ({ instanceId })
 
   // Update chart when topology data or filter options change
   useEffect(() => {
-    if (!chartInstance.current || !topology || topology.nodes.length === 0) return;
+    if (!chartInstance.current || !topology || (topology.nodes?.length || 0) === 0) return;
 
     const option = buildChartOption(topology);
     if (option) {
@@ -211,7 +213,7 @@ const TrafficTopologyPage: React.FC<TrafficTopologyPageProps> = ({ instanceId })
 
   // Build chart option from topology data
   function buildChartOption(data: TopologyGraph): echarts.EChartsOption | null {
-    if (!data || data.nodes.length === 0) return null;
+    if (!data || (data.nodes?.length || 0) === 0) return null;
 
     // Helper: Get the Gateway node ID
     const gatewayNode = data.nodes.find(n => n.type === 'gateway');
@@ -1315,7 +1317,7 @@ const TrafficTopologyPage: React.FC<TrafficTopologyPageProps> = ({ instanceId })
           />
         )}
         {/* Empty state message - only show if no data after loading */}
-        {!loading && topology && topology.nodes.length === 0 && (
+        {!loading && topology && (topology.nodes?.length || 0) === 0 && (
           <div style={{
             position: 'absolute',
             top: 0,

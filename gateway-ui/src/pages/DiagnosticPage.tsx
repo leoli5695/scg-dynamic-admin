@@ -11,7 +11,7 @@ import {
   ApiOutlined, ThunderboltOutlined, RocketOutlined,
   HistoryOutlined, SyncOutlined, LineChartOutlined
 } from '@ant-design/icons';
-import axios from 'axios';
+import api from '../utils/api';
 import { useTranslation } from 'react-i18next';
 import ReactECharts from 'echarts-for-react';
 
@@ -92,9 +92,9 @@ const DiagnosticPage: React.FC<DiagnosticPageProps> = ({ instanceId }) => {
     setError(null);
     try {
       const params = instanceId ? `?instanceId=${instanceId}` : '';
-      const response = await axios.get(`/api/diagnostic/${type}${params}`);
+      const response = await api.get(`/api/diagnostic/${type}${params}`);
       if (response.data) {
-        setReport(response.data);
+        setReport(response.data?.data || response.data);
         // Fetch comparison after diagnostic
         fetchComparison();
         // Refresh history after diagnostic
@@ -117,10 +117,11 @@ const DiagnosticPage: React.FC<DiagnosticPageProps> = ({ instanceId }) => {
       });
       if (instanceId) params.append('instanceId', instanceId);
       
-      const response = await axios.get(`/api/diagnostic/history?${params}`);
+      const response = await api.get(`/api/diagnostic/history?${params}`);
       if (response.data) {
-        setHistory(response.data.history || []);
-        setTrend(response.data.trend || null);
+        const data = response.data?.data || response.data;
+        setHistory(data.history || []);
+        setTrend(data.trend || null);
       }
     } catch (e: any) {
       console.error('Failed to fetch history:', e);
@@ -129,9 +130,9 @@ const DiagnosticPage: React.FC<DiagnosticPageProps> = ({ instanceId }) => {
 
   const fetchComparison = async () => {
     try {
-      const response = await axios.get('/api/diagnostic/compare');
+      const response = await api.get('/api/diagnostic/compare');
       if (response.data) {
-        setComparison(response.data);
+        setComparison(response.data?.data || response.data);
       }
     } catch (e: any) {
       console.error('Failed to fetch comparison:', e);

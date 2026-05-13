@@ -1,0 +1,102 @@
+# ============================================================================
+# RocketMQ Exporter 部署 - 使用配置文件
+# ============================================================================
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rocketmq-exporter-config
+  namespace: test
+data:
+  application.yml: |
+    server:
+      port: 5557
+    spring:
+      main:
+        allow-circular-references: true
+    rocketmq:
+      config:
+        namesrvAddr: rocketmq-nameserver:9876
+        webTelemetryPath: /metrics
+      client:
+        timeout: 10000
+    task:
+      count: 5
+      collectTopicOffset:
+        cron: "0/5 * * * * ?"
+      collectBrokerStats:
+        cron: "0/5 * * * * ?"
+      collectBrokerStatsTopic:
+        cron: "0/5 * * * * ?"
+      collectBrokerTopicStats:
+        cron: "0/5 * * * * ?"
+      collectProducer:
+        cron: "0/5 * * * * ?"
+      collectConsumer:
+        cron: "0/5 * * * * ?"
+      collectBroker:
+        cron: "0/5 * * * * ?"
+      collectConsumerOffset:
+        cron: "0/5 * * * * ?"
+      collectBrokerRuntimeStats:
+        cron: "0/5 * * * * ?"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rocketmq-exporter
+  namespace: test
+  labels:
+    app: rocketmq-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rocketmq-exporter
+  template:
+    metadata:
+      labels:
+        app: rocketmq-exporter
+    spec:
+      containers:
+      - name: rocketmq-exporter
+        image: 05feb4b8a268e111bb3c4356701bf0c4.d.1ms.run/apache/rocketmq-exporter:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5557
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        command:
+        - java
+        - -jar
+        - /rocketmq-exporter.jar
+        - --spring.config.location=/config/application.yml
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
+      volumes:
+      - name: config
+        configMap:
+          name: rocketmq-exporter-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rocketmq-exporter
+  namespace: test
+spec:
+  type: ClusterIP
+  selector:
+    app: rocketmq-exporter
+  ports:
+  - port: 5557
+    targetPort: 5557
+    name: metrics

@@ -601,6 +601,7 @@ public class TrafficTopologyService {
             map.put("name", name);
             if (status != null) map.put("status", status);
             if (enabled != null) map.put("enabled", enabled);
+            if (instanceId != null) map.put("instanceId", instanceId);
             if (routeId != null) map.put("routeId", routeId);
             if (serviceId != null) map.put("serviceId", serviceId);
             if (serviceType != null) map.put("serviceType", serviceType);
