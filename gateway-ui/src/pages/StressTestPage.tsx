@@ -22,6 +22,7 @@ import {
   Select,
   Tooltip,
   Collapse,
+  Table,
 } from "antd";
 import {
   ThunderboltOutlined,
@@ -1104,8 +1105,40 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
               </Form.Item>
 
               <Form.Item name="body" label={t("stress_test.request_body")} help={t("stress_test.body_help")}>
-                <TextArea rows={4} placeholder='{"key": "value"}' />
+                <TextArea rows={4} placeholder='{"userId": {{randomInt:10000-100000}}, "token": "{{randomString:32}}"}' />
               </Form.Item>
+
+              {/* Placeholder Help */}
+              <Collapse ghost>
+                <Panel header={<Space><Tag color="blue">{t("stress_test.placeholders")}</Tag></Space>} key="placeholders">
+                  <Table
+                    size="small"
+                    pagination={false}
+                    dataSource={[
+                      { key: 'randomInt', syntax: '{{randomInt}}', desc: t("stress_test.placeholder_randomInt_default") },
+                      { key: 'randomIntRange', syntax: '{{randomInt:min-max}}', desc: t("stress_test.placeholder_randomInt_range") },
+                      { key: 'randomString', syntax: '{{randomString}}', desc: t("stress_test.placeholder_randomString_default") },
+                      { key: 'randomStringLength', syntax: '{{randomString:length}}', desc: t("stress_test.placeholder_randomString_length") },
+                      { key: 'randomUuid', syntax: '{{randomUuid}}', desc: t("stress_test.placeholder_randomUuid") },
+                      { key: 'timestamp', syntax: '{{timestamp}}', desc: t("stress_test.placeholder_timestamp") },
+                    ]}
+                    columns={[
+                      {
+                        title: t("stress_test.placeholder_syntax"),
+                        dataIndex: 'syntax',
+                        render: (s: string) => <Tag color="geekblue" style={{ fontFamily: 'monospace' }}>{s}</Tag>
+                      },
+                      {
+                        title: t("stress_test.placeholder_description"),
+                        dataIndex: 'desc',
+                      },
+                    ]}
+                  />
+                  <Typography.Text type="secondary" style={{ marginTop: 8, display: 'block' }}>
+                    {t("stress_test.placeholder_example")}: <code style={{ background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: 4 }}>{"{\"userId\": {{randomInt:10000-100000}}}"}</code>
+                  </Typography.Text>
+                </Panel>
+              </Collapse>
             </Panel>
           </Collapse>
 

@@ -42,6 +42,7 @@ public class StressTestService {
     private final GatewayInstanceRepository instanceRepository;
     private final AiAnalysisService aiAnalysisService;
     private final StressTestShareRepository shareRepository;
+    private final StressTestPlaceholderResolver placeholderResolver;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     // HttpClient and its executor
@@ -57,11 +58,13 @@ public class StressTestService {
     public StressTestService(StressTestRepository stressTestRepository,
                              GatewayInstanceRepository instanceRepository,
                              AiAnalysisService aiAnalysisService,
-                             StressTestShareRepository shareRepository) {
+                             StressTestShareRepository shareRepository,
+                             StressTestPlaceholderResolver placeholderResolver) {
         this.stressTestRepository = stressTestRepository;
         this.instanceRepository = instanceRepository;
         this.aiAnalysisService = aiAnalysisService;
         this.shareRepository = shareRepository;
+        this.placeholderResolver = placeholderResolver;
     }
 
     @PostConstruct
@@ -377,6 +380,7 @@ public class StressTestService {
 
     /**
      * Build an immutable HttpRequest from test configuration.
+     * Resolves placeholders in body for each request.
      */
     private HttpRequest buildHttpRequest(StressTest test, Map<String, String> headers, int timeoutSeconds) {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
@@ -390,6 +394,11 @@ public class StressTestService {
         String method = test.getMethod().toUpperCase();
         String body = test.getBody();
 
+        // Resolve placeholders in body (each request gets fresh random values)
+        if (body != null && !body.isEmpty()) {
+            body = placeholderResolver.resolve(body);
+        }
+
         switch (method) {
             case "POST" -> builder.POST(body != null ?
                     HttpRequest.BodyPublishers.ofString(body) :
@@ -397,7 +406,12 @@ public class StressTestService {
             case "PUT" -> builder.PUT(body != null ?
                     HttpRequest.BodyPublishers.ofString(body) :
                     HttpRequest.BodyPublishers.noBody());
-            case "DELETE" -> builder.DELETE();
+            case "DELETE" -> builder.method("DELETE", body != null ?
+                    HttpRequest.BodyPublishers.ofString(body) :
+                    HttpRequest.BodyPublishers.noBody());  // Fixed: support body
+            case "PATCH" -> builder.method("PATCH", body != null ?
+                    HttpRequest.BodyPublishers.ofString(body) :
+                    HttpRequest.BodyPublishers.noBody());  // Added: support PATCH
             default -> builder.GET();
         }
 
