@@ -1,11 +1,12 @@
 package com.leoli.gateway.admin.controller;
 
 import com.leoli.gateway.admin.center.NacosConfigCenterService;
+import com.leoli.gateway.admin.dto.ApiResponse;
 import com.leoli.gateway.admin.dto.InstanceHealthDTO;
 import com.leoli.gateway.admin.service.DatabaseHealthService;
 import com.leoli.gateway.admin.service.InstanceHealthService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,47 +21,37 @@ import java.util.Map;
 @Slf4j
 @RestController
 @RequestMapping("/api/gateway/health")
+@RequiredArgsConstructor
 public class HealthSyncController {
 
-    @Autowired
-    private InstanceHealthService instanceHealthService;
+    private final InstanceHealthService instanceHealthService;
+    private final DatabaseHealthService databaseHealthService;
 
-    @Autowired
-    private DatabaseHealthService databaseHealthService;
-
-    @Autowired(required = false)
-    private NacosConfigCenterService nacosConfigCenterService;
+    private final NacosConfigCenterService nacosConfigCenterService;
     
     /**
      * Sync health status from Gateway (BATCH MODE - supports multiple instances)
      */
     @PostMapping("/sync")
-    public ResponseEntity<Map<String, Object>> syncHealthStatus(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> syncHealthStatus(
             @RequestBody List<InstanceHealthDTO> healthList,
             @RequestHeader(value = "X-Gateway-Id", required = false) String gatewayId) {
         
-        Map<String, Object> result = new HashMap<>();
-        
         try {
-            // Batch process all health statuses
             instanceHealthService.syncHealthStatus(healthList, gatewayId);
             
-            // Calculate statistics
             int healthyCount = (int) healthList.stream().filter(InstanceHealthDTO::isHealthy).count();
             int unhealthyCount = healthList.size() - healthyCount;
             
-            result.put("code", 200);
-            result.put("message", "Health status synced successfully");
-            result.put("count", healthList.size());
-            result.put("healthyCount", healthyCount);
-            result.put("unhealthyCount", unhealthyCount);
+            Map<String, Object> data = new HashMap<>();
+            data.put("count", healthList.size());
+            data.put("healthyCount", healthyCount);
+            data.put("unhealthyCount", unhealthyCount);
             
-            return ResponseEntity.ok(result);
+            return ResponseEntity.ok(ApiResponse.success(data, "Health status synced successfully"));
         } catch (Exception e) {
             log.error("Failed to sync health status from gateway {}", gatewayId, e);
-            result.put("code", 500);
-            result.put("message", "Failed to sync: " + e.getMessage());
-            return ResponseEntity.status(500).body(result);
+            return ResponseEntity.status(500).body(ApiResponse.error("Failed to sync: " + e.getMessage()));
         }
     }
 
@@ -68,7 +59,7 @@ public class HealthSyncController {
      * Get system health status (database, nacos, etc.)
      */
     @GetMapping("/system")
-    public ResponseEntity<Map<String, Object>> getSystemHealth() {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getSystemHealth() {
         Map<String, Object> result = new HashMap<>();
 
         // Database health
@@ -107,6 +98,6 @@ public class HealthSyncController {
         result.put("healthy", overallHealthy);
         result.put("timestamp", System.currentTimeMillis());
 
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok(ApiResponse.success(result));
     }
 }

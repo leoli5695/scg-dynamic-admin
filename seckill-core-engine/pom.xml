@@ -113,6 +113,13 @@
             <artifactId>shardingsphere-database-connector-mysql</artifactId>
             <version>5.5.3</version>
         </dependency>
+        <!-- ShardingSphere MySQL SQL Parser Engine (提供 DialectSQLParserFacade SPI 实现) -->
+        <!-- 5.5.3 将 parser-sql-mysql 拆分为 parser-sql-engine-mysql + parser-sql-statement-mysql -->
+        <dependency>
+            <groupId>org.apache.shardingsphere</groupId>
+            <artifactId>shardingsphere-parser-sql-engine-mysql</artifactId>
+            <version>5.5.3</version>
+        </dependency>
         <!-- ShardingSphere HikariCP data source pool -->
         <dependency>
             <groupId>org.apache.shardingsphere</groupId>

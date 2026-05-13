@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Card, Spin, Alert, Typography, Tag, Descriptions, Divider, Button, Space } from "antd";
 import { CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, ThunderboltOutlined, DownloadOutlined } from "@ant-design/icons";
-import axios from "axios";
+import api from "../utils/api";
 import AiReportRenderer from "../components/AiReportRenderer";
 import "../styles/ai-report.css";
 
@@ -52,7 +52,7 @@ const StressTestSharePage: React.FC<Props> = ({ shareId }) => {
     setError(null);
 
     try {
-      const response = await axios.get(`/api/stress-test/share/${shareId}`);
+      const response = await api.get(`/api/stress-test/share/${shareId}`);
 
       if (response.data.success) {
         setTest(response.data.test);

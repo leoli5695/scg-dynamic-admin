@@ -32,6 +32,7 @@ const InstanceCreatePage = lazy(() => import("./pages/InstanceCreatePage"));
 const InstanceDetailPage = lazy(() => import("./pages/InstanceDetailPage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const StressTestSharePage = lazy(() => import("./pages/StressTestSharePage"));
+const MiddlewareDetailPage = lazy(() => import("./pages/MiddlewareDetailPage"));
 
 // Loading fallback component
 const PageLoadingFallback = () => (
@@ -307,6 +308,7 @@ const App: React.FC = () => {
                   <Route path="middleware" element={null} />
                 </Route>
                 <Route path="/kubernetes" element={<KubernetesPage />} />
+                <Route path="/middleware-detail" element={<MiddlewareDetailPage />} />
               </Routes>
             </Suspense>
           </Content>

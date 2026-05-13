@@ -63,8 +63,12 @@ const CertificatePage: React.FC<CertificatePageProps> = ({ instanceId }) => {
         api.get('/api/ssl', { params }),
         api.get('/api/ssl/stats', { params })
       ]);
-      setCertificates(certsRes.data || []);
-      setStats(statsRes.data || null);
+      if (certsRes.data.code === 200) {
+        setCertificates(certsRes.data.data || []);
+      }
+      if (statsRes.data.code === 200) {
+        setStats(statsRes.data.data || null);
+      }
     } catch (e) {
       console.error('Failed to load certificates:', e);
       message.error(t('cert.load_error'));

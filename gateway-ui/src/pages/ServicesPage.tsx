@@ -578,7 +578,7 @@ const ServicesPage: React.FC<ServicesPageProps> = ({ instanceId }) => {
       {/* Service Detail Drawer */}
       <Drawer
         placement="right"
-        width={480}
+        styles={{ wrapper: { width: 480 } }}
         open={detailDrawerVisible}
         closable={false}
         onClose={handleCloseDrawer}

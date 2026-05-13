@@ -116,12 +116,11 @@ const FilterExecutionDetailDrawer: React.FC<FilterExecutionDetailDrawerProps> = 
         </span>
       }
       placement="right"
-      width={500}
+      styles={{ wrapper: { width: 500 }, body: { padding: 16 } }}
       destroyOnClose
       maskClosable
       onClose={onClose}
       open={visible}
-      styles={{ body: { padding: 16 } }}
     >
       {/* 当前执行概览 */}
       <Card size="small" style={{ marginBottom: 16 }}>

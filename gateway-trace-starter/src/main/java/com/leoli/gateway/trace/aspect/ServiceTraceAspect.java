@@ -69,9 +69,9 @@ public class ServiceTraceAspect {
             long durationMs = (System.nanoTime() - start) / 1_000_000;
 
             // Record failed Span
-            TraceContextHolder.addFailedSpan(operation, durationMs, e.getMessage());
+            TraceContextHolder.addFailedSpan(operation, durationMs, e);
 
-            log.debug("Service traced: {} - {}ms - FAILED: {}", operation, durationMs, e.getMessage());
+            log.debug("Service traced: {} - {}ms - FAILED: {}", operation, durationMs, e.toString());
 
             throw e;
         }

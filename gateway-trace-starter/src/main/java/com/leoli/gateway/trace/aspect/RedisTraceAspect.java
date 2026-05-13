@@ -25,13 +25,29 @@ public class RedisTraceAspect {
     }
 
     /**
-     * Trace Redis operations
+     * Trace Redis data operations
      * <p>
-     * Matches all RedisTemplate methods
+     * FIX #6: Narrowed pointcut to only match actual data operation interfaces.
+     * Previous pointcut matched ALL RedisTemplate methods (including internal getters
+     * like getConnectionFactory(), getKeySerializer(), etc.), generating 3-4x trace noise.
+     * <p>
+     * Now matches:
+     * - ValueOperations (get/set/increment)
+     * - HashOperations (put/get/entries)
+     * - ListOperations (push/pop/range)
+     * - SetOperations (add/members/isMember)
+     * - ZSetOperations (add/range/score)
+     * - RedisTemplate.execute (Lua scripts, callbacks)
+     * - RedisTemplate.delete/expire (key management)
      */
-    @Around("execution(* org.springframework.data.redis.core.RedisTemplate.*(..)) || " +
-            "execution(* org.springframework.data.redis.core.StringRedisTemplate.*(..)) || " +
-            "execution(* org.springframework.data.redis.core.RedisOperations.*(..))")
+    @Around("execution(* org.springframework.data.redis.core.ValueOperations.*(..)) || " +
+            "execution(* org.springframework.data.redis.core.HashOperations.*(..)) || " +
+            "execution(* org.springframework.data.redis.core.ListOperations.*(..)) || " +
+            "execution(* org.springframework.data.redis.core.SetOperations.*(..)) || " +
+            "execution(* org.springframework.data.redis.core.ZSetOperations.*(..)) || " +
+            "execution(* org.springframework.data.redis.core.RedisTemplate.execute(..)) || " +
+            "execution(* org.springframework.data.redis.core.RedisTemplate.delete(..)) || " +
+            "execution(* org.springframework.data.redis.core.RedisTemplate.expire*(..))")
     public Object traceRedis(ProceedingJoinPoint pjp) throws Throwable {
         // Check if tracing is enabled (master switch)
         if (!properties.isEnabled()) {
@@ -71,9 +87,9 @@ public class RedisTraceAspect {
             long durationMs = (System.nanoTime() - start) / 1_000_000;
 
             // Record failed Span
-            TraceContextHolder.addFailedSpan(operation, durationMs, e.getMessage());
+            TraceContextHolder.addFailedSpan(operation, durationMs, e);
 
-            log.debug("Redis traced: {} - {}ms - FAILED: {}", operation, durationMs, e.getMessage());
+            log.debug("Redis traced: {} - {}ms - FAILED: {}", operation, durationMs, e.toString());
 
             throw e;
         }

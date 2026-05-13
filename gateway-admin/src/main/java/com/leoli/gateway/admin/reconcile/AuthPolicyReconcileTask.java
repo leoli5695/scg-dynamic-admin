@@ -7,8 +7,8 @@ import com.leoli.gateway.admin.model.AuthPolicyEntity;
 import com.leoli.gateway.admin.repository.AuthPolicyRepository;
 import com.leoli.gateway.admin.service.AlertService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -21,6 +21,7 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class AuthPolicyReconcileTask implements ReconcileTask<AuthPolicyEntity> {
 
     private static final String AUTH_POLICY_PREFIX = "config.gateway.auth-policy-";
@@ -28,20 +29,11 @@ public class AuthPolicyReconcileTask implements ReconcileTask<AuthPolicyEntity> 
     private static final String AUTH_ROUTES_PREFIX = "config.gateway.auth-routes-";
     private static final String GROUP = "DEFAULT_GROUP";
 
-    @Autowired
-    private AuthPolicyRepository authPolicyRepository;
-
-    @Autowired
-    private InstanceNamespaceCache namespaceCache;
-
-    @Autowired
-    private ConfigCenterService configCenterService;
-
-    @Autowired
-    private ObjectMapper objectMapper;
-
-    @Autowired
-    private AlertService alertService;
+    private final AuthPolicyRepository authPolicyRepository;
+    private final InstanceNamespaceCache namespaceCache;
+    private final ConfigCenterService configCenterService;
+    private final ObjectMapper objectMapper;
+    private final AlertService alertService;
 
     @Override
     public String getType() {

@@ -300,7 +300,7 @@ public class StressTestServiceTest {
 
         assertEquals(0, stats.getTotalCount());
         assertEquals(0, stats.getSuccessCount());
-        assertEquals(Long.MAX_VALUE, ((Object)stats.getMin() == 0 ? Long.MAX_VALUE : stats.getMin()));
+        assertEquals(Long.MAX_VALUE, (stats.getMin() == 0 ? Long.MAX_VALUE : stats.getMin()));
 
         System.out.println("[PASS] Statistics reset successful");
     }

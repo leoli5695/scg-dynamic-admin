@@ -29,53 +29,12 @@ public class StaticPromptProvider implements PromptProvider {
 
     @PostConstruct
     public void init() {
-        registerBasePrompts();
-        registerDomainPrompts();
-        registerTemplates();
-        registerKnowledge();
-        registerTaskPrompts();
-        
-        log.info("StaticPromptProvider initialized with {} prompts", staticPrompts.size());
-    }
-
-    private void registerBasePrompts() {
-        // Base system prompts
+        // Only register base system prompts as fallback
+        // All other prompts are managed in database
         staticPrompts.put("base.system.zh", AiCopilotPrompts.getBasePromptZh());
         staticPrompts.put("base.system.en", AiCopilotPrompts.getBasePromptEn());
-    }
-
-    private void registerDomainPrompts() {
-        // Domain prompts - Chinese
-        Map<String, String> domainZh = AiCopilotPrompts.getDomainPromptsZh();
-        if (domainZh != null) {
-            for (Map.Entry<String, String> entry : domainZh.entrySet()) {
-                staticPrompts.put("domain." + entry.getKey() + ".zh", entry.getValue());
-            }
-        }
-
-        // Domain prompts - English
-        Map<String, String> domainEn = AiCopilotPrompts.getDomainPromptsEn();
-        if (domainEn != null) {
-            for (Map.Entry<String, String> entry : domainEn.entrySet()) {
-                staticPrompts.put("domain." + entry.getKey() + ".en", entry.getValue());
-            }
-        }
-    }
-
-    private void registerTemplates() {
-        // Output templates
-        staticPrompts.put("template.performance.zh", AiCopilotPrompts.getPerformanceOutputTemplateZh());
-    }
-
-    private void registerKnowledge() {
-        // Knowledge base
-        staticPrompts.put("knowledge.filter.zh", AiCopilotPrompts.getFilterOptimizationKnowledgeZh());
-    }
-
-    private void registerTaskPrompts() {
-        // Task-specific prompts will be migrated later when we refactor AiCopilotService
-        // For now, these are kept as inline prompts in AiCopilotService
-        // TODO: Migrate analyzeError, generateRoute, suggestOptimizations prompts here
+        
+        log.info("StaticPromptProvider initialized with {} prompts (minimal fallback)", staticPrompts.size());
     }
 
     @Override

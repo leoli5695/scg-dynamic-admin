@@ -61,9 +61,9 @@ class PaymentServiceTest {
 
         paymentService = new PaymentService(
                 orderMapper,
+                redisTemplate,
                 transactionLogMapper,
-                elasticsearchService,
-                redisTemplate
+                elasticsearchService
         );
 
         request = new PaymentCallbackRequest();

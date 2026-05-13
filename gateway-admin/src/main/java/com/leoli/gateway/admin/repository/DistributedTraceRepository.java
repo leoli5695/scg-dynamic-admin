@@ -20,9 +20,19 @@ import java.util.Optional;
 public interface DistributedTraceRepository extends JpaRepository<DistributedTraceEntity, Long> {
 
     /**
-     * 根据TraceId查询
+     * 根据TraceId查询（单条）
      */
     Optional<DistributedTraceEntity> findByTraceId(String traceId);
+
+    /**
+     * 根据TraceId查询所有匹配记录（一个请求可能经过多个下游服务）
+     */
+    List<DistributedTraceEntity> findAllByTraceId(String traceId);
+
+    /**
+     * 批量根据TraceId查询（全链路列表页使用）
+     */
+    List<DistributedTraceEntity> findByTraceIdIn(List<String> traceIds);
 
     /**
      * 根据服务名称查询

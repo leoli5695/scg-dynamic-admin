@@ -23,6 +23,7 @@ import {
   Result,
   Select,
   Progress,
+  Alert,
 } from "antd";
 import type { MenuProps } from "antd";
 import {
@@ -82,6 +83,7 @@ const RequestReplayPage = lazy(() => import("./RequestReplayPage"));
 const AiCopilotPage = lazy(() => import("./AiCopilotPage"));
 const StressTestPage = lazy(() => import("./StressTestPage"));
 const ServiceMiddlewarePage = lazy(() => import("./ServiceMiddlewarePage"));
+const MiddlewareDetailPage = lazy(() => import("./MiddlewareDetailPage"));
 
 // Tab loading fallback component
 const TabLoading: React.FC = () => (
@@ -1334,6 +1336,15 @@ const InstanceDetailPage: React.FC = () => {
             ) : !resourceMetrics ? (
               <div style={{ textAlign: "center", padding: 40 }}>
                 <Text type="secondary">{t("resources.no_data") || "暂无资源数据"}</Text>
+              </div>
+            ) : resourceMetrics.mode === "local" ? (
+              <div style={{ textAlign: "center", padding: 40 }}>
+                <Alert
+                  type="info"
+                  showIcon
+                  message={t("resources.local_mode") || "本地运行模式"}
+                  description={t("resources.local_mode_desc") || "此网关实例为本地启动，未关联 Kubernetes 集群，无法获取资源指标"}
+                />
               </div>
             ) : (
               <>

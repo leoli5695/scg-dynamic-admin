@@ -1,17 +1,20 @@
 package com.leoli.gateway.admin.controller;
 
+import com.leoli.gateway.admin.dto.ApiResponse;
 import com.leoli.gateway.admin.service.DiagnosticService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
  * Diagnostic Controller.
  * Provides one-click diagnostic API endpoints for system health assessment.
+ * Uses ApiResponse for standardized response format.
  *
  * Endpoints:
  * - GET /api/diagnostic/full - Full comprehensive diagnostic
@@ -25,25 +28,24 @@ import java.util.Map;
 @Slf4j
 @RestController
 @RequestMapping("/api/diagnostic")
-public class DiagnosticController {
+@RequiredArgsConstructor
+public class DiagnosticController extends BaseController {
 
-    @Autowired
-    private DiagnosticService diagnosticService;
+    private final DiagnosticService diagnosticService;
 
     /**
      * Run full comprehensive diagnostic.
      * Checks all components and provides detailed health report.
      */
     @GetMapping("/full")
-    public ResponseEntity<Map<String, Object>> runFullDiagnostic() {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> runFullDiagnostic() {
         log.info("Running full system diagnostic");
         try {
             DiagnosticService.DiagnosticReport report = diagnosticService.runFullDiagnostic();
-            return ResponseEntity.ok(report.toMap());
+            return ResponseEntity.ok(ApiResponse.success(report.toMap()));
         } catch (Exception e) {
             log.error("Full diagnostic failed", e);
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "Diagnostic failed: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Diagnostic failed: " + e.getMessage()));
         }
     }
 
@@ -52,15 +54,14 @@ public class DiagnosticController {
      * Faster execution, checks only core components.
      */
     @GetMapping("/quick")
-    public ResponseEntity<Map<String, Object>> runQuickDiagnostic() {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> runQuickDiagnostic() {
         log.info("Running quick diagnostic");
         try {
             DiagnosticService.DiagnosticReport report = diagnosticService.runQuickDiagnostic();
-            return ResponseEntity.ok(report.toMap());
+            return ResponseEntity.ok(ApiResponse.success(report.toMap()));
         } catch (Exception e) {
             log.error("Quick diagnostic failed", e);
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "Diagnostic failed: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Diagnostic failed: " + e.getMessage()));
         }
     }
 
@@ -68,18 +69,21 @@ public class DiagnosticController {
      * Run database-only diagnostic.
      */
     @GetMapping("/database")
-    public ResponseEntity<Map<String, Object>> diagnoseDatabase() {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> diagnoseDatabase() {
         log.info("Running database diagnostic");
         try {
-            //直接调用单个诊断方法，避免执行完整诊断
-            DiagnosticService.ComponentDiagnostic diagnostic = 
-                    diagnosticService.diagnoseDatabase();
-            return ResponseEntity.ok(diagnostic != null ? diagnostic.toMap() : 
-                    Map.of("status", "UNKNOWN", "message", "Database diagnostic not available"));
+            DiagnosticService.ComponentDiagnostic diagnostic = diagnosticService.diagnoseDatabase();
+            if (diagnostic != null) {
+                return ResponseEntity.ok(ApiResponse.success(diagnostic.toMap()));
+            } else {
+                Map<String, Object> data = new HashMap<>();
+                data.put("status", "UNKNOWN");
+                data.put("message", "Database diagnostic not available");
+                return ResponseEntity.ok(ApiResponse.success(data));
+            }
         } catch (Exception e) {
             log.error("Database diagnostic failed", e);
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "Database diagnostic failed: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Database diagnostic failed: " + e.getMessage()));
         }
     }
 
@@ -87,18 +91,21 @@ public class DiagnosticController {
      * Run Redis-only diagnostic.
      */
     @GetMapping("/redis")
-    public ResponseEntity<Map<String, Object>> diagnoseRedis() {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> diagnoseRedis() {
         log.info("Running Redis diagnostic");
         try {
-            //直接调用单个诊断方法，避免执行完整诊断
-            DiagnosticService.ComponentDiagnostic diagnostic = 
-                    diagnosticService.diagnoseRedis();
-            return ResponseEntity.ok(diagnostic != null ? diagnostic.toMap() : 
-                    Map.of("status", "UNKNOWN", "message", "Redis diagnostic not available"));
+            DiagnosticService.ComponentDiagnostic diagnostic = diagnosticService.diagnoseRedis();
+            if (diagnostic != null) {
+                return ResponseEntity.ok(ApiResponse.success(diagnostic.toMap()));
+            } else {
+                Map<String, Object> data = new HashMap<>();
+                data.put("status", "UNKNOWN");
+                data.put("message", "Redis diagnostic not available");
+                return ResponseEntity.ok(ApiResponse.success(data));
+            }
         } catch (Exception e) {
             log.error("Redis diagnostic failed", e);
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "Redis diagnostic failed: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Redis diagnostic failed: " + e.getMessage()));
         }
     }
 
@@ -106,18 +113,21 @@ public class DiagnosticController {
      * Run config center-only diagnostic.
      */
     @GetMapping("/config-center")
-    public ResponseEntity<Map<String, Object>> diagnoseConfigCenter() {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> diagnoseConfigCenter() {
         log.info("Running config center diagnostic");
         try {
-            //直接调用单个诊断方法，避免执行完整诊断
-            DiagnosticService.ComponentDiagnostic diagnostic = 
-                    diagnosticService.diagnoseConfigCenter();
-            return ResponseEntity.ok(diagnostic != null ? diagnostic.toMap() : 
-                    Map.of("status", "UNKNOWN", "message", "Config center diagnostic not available"));
+            DiagnosticService.ComponentDiagnostic diagnostic = diagnosticService.diagnoseConfigCenter();
+            if (diagnostic != null) {
+                return ResponseEntity.ok(ApiResponse.success(diagnostic.toMap()));
+            } else {
+                Map<String, Object> data = new HashMap<>();
+                data.put("status", "UNKNOWN");
+                data.put("message", "Config center diagnostic not available");
+                return ResponseEntity.ok(ApiResponse.success(data));
+            }
         } catch (Exception e) {
             log.error("Config center diagnostic failed", e);
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "Config center diagnostic failed: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Config center diagnostic failed: " + e.getMessage()));
         }
     }
 
@@ -125,18 +135,21 @@ public class DiagnosticController {
      * Run routes-only diagnostic.
      */
     @GetMapping("/routes")
-    public ResponseEntity<Map<String, Object>> diagnoseRoutes() {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> diagnoseRoutes() {
         log.info("Running routes diagnostic");
         try {
-            //直接调用单个诊断方法，避免执行完整诊断
-            DiagnosticService.ComponentDiagnostic diagnostic = 
-                    diagnosticService.diagnoseRoutes();
-            return ResponseEntity.ok(diagnostic != null ? diagnostic.toMap() : 
-                    Map.of("status", "UNKNOWN", "message", "Routes diagnostic not available"));
+            DiagnosticService.ComponentDiagnostic diagnostic = diagnosticService.diagnoseRoutes();
+            if (diagnostic != null) {
+                return ResponseEntity.ok(ApiResponse.success(diagnostic.toMap()));
+            } else {
+                Map<String, Object> data = new HashMap<>();
+                data.put("status", "UNKNOWN");
+                data.put("message", "Routes diagnostic not available");
+                return ResponseEntity.ok(ApiResponse.success(data));
+            }
         } catch (Exception e) {
             log.error("Routes diagnostic failed", e);
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "Routes diagnostic failed: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Routes diagnostic failed: " + e.getMessage()));
         }
     }
 
@@ -144,18 +157,21 @@ public class DiagnosticController {
      * Run auth-only diagnostic.
      */
     @GetMapping("/auth")
-    public ResponseEntity<Map<String, Object>> diagnoseAuth() {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> diagnoseAuth() {
         log.info("Running auth diagnostic");
         try {
-            //直接调用单个诊断方法，避免执行完整诊断
-            DiagnosticService.ComponentDiagnostic diagnostic = 
-                    diagnosticService.diagnoseAuth();
-            return ResponseEntity.ok(diagnostic != null ? diagnostic.toMap() : 
-                    Map.of("status", "UNKNOWN", "message", "Auth diagnostic not available"));
+            DiagnosticService.ComponentDiagnostic diagnostic = diagnosticService.diagnoseAuth();
+            if (diagnostic != null) {
+                return ResponseEntity.ok(ApiResponse.success(diagnostic.toMap()));
+            } else {
+                Map<String, Object> data = new HashMap<>();
+                data.put("status", "UNKNOWN");
+                data.put("message", "Auth diagnostic not available");
+                return ResponseEntity.ok(ApiResponse.success(data));
+            }
         } catch (Exception e) {
             log.error("Auth diagnostic failed", e);
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "Auth diagnostic failed: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Auth diagnostic failed: " + e.getMessage()));
         }
     }
 
@@ -163,18 +179,21 @@ public class DiagnosticController {
      * Run gateway instances-only diagnostic.
      */
     @GetMapping("/instances")
-    public ResponseEntity<Map<String, Object>> diagnoseInstances() {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> diagnoseInstances() {
         log.info("Running gateway instances diagnostic");
         try {
-            //直接调用单个诊断方法，避免执行完整诊断
-            DiagnosticService.ComponentDiagnostic diagnostic = 
-                    diagnosticService.diagnoseGatewayInstances();
-            return ResponseEntity.ok(diagnostic != null ? diagnostic.toMap() : 
-                    Map.of("status", "UNKNOWN", "message", "Instances diagnostic not available"));
+            DiagnosticService.ComponentDiagnostic diagnostic = diagnosticService.diagnoseGatewayInstances();
+            if (diagnostic != null) {
+                return ResponseEntity.ok(ApiResponse.success(diagnostic.toMap()));
+            } else {
+                Map<String, Object> data = new HashMap<>();
+                data.put("status", "UNKNOWN");
+                data.put("message", "Instances diagnostic not available");
+                return ResponseEntity.ok(ApiResponse.success(data));
+            }
         } catch (Exception e) {
             log.error("Instances diagnostic failed", e);
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "Instances diagnostic failed: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Instances diagnostic failed: " + e.getMessage()));
         }
     }
 
@@ -182,18 +201,21 @@ public class DiagnosticController {
      * Run performance-only diagnostic.
      */
     @GetMapping("/performance")
-    public ResponseEntity<Map<String, Object>> diagnosePerformance() {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> diagnosePerformance() {
         log.info("Running performance diagnostic");
         try {
-            //直接调用单个诊断方法，避免执行完整诊断
-            DiagnosticService.ComponentDiagnostic diagnostic = 
-                    diagnosticService.diagnosePerformance();
-            return ResponseEntity.ok(diagnostic != null ? diagnostic.toMap() : 
-                    Map.of("status", "UNKNOWN", "message", "Performance diagnostic not available"));
+            DiagnosticService.ComponentDiagnostic diagnostic = diagnosticService.diagnosePerformance();
+            if (diagnostic != null) {
+                return ResponseEntity.ok(ApiResponse.success(diagnostic.toMap()));
+            } else {
+                Map<String, Object> data = new HashMap<>();
+                data.put("status", "UNKNOWN");
+                data.put("message", "Performance diagnostic not available");
+                return ResponseEntity.ok(ApiResponse.success(data));
+            }
         } catch (Exception e) {
             log.error("Performance diagnostic failed", e);
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "Performance diagnostic failed: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Performance diagnostic failed: " + e.getMessage()));
         }
     }
 
@@ -201,20 +223,19 @@ public class DiagnosticController {
      * Get overall health score.
      */
     @GetMapping("/score")
-    public ResponseEntity<Map<String, Object>> getHealthScore() {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getHealthScore() {
         log.info("Getting health score");
         try {
             DiagnosticService.DiagnosticReport report = diagnosticService.runQuickDiagnostic();
-            return ResponseEntity.ok(Map.of(
-                    "score", report.getOverallScore(),
-                    "status", report.getOverallScore() >= 80 ? "HEALTHY" : 
-                            report.getOverallScore() >= 50 ? "WARNING" : "CRITICAL",
-                    "duration", report.getDuration() + "ms"
-            ));
+            Map<String, Object> data = new HashMap<>();
+            data.put("score", report.getOverallScore());
+            data.put("status", report.getOverallScore() >= 80 ? "HEALTHY" :
+                    report.getOverallScore() >= 50 ? "WARNING" : "CRITICAL");
+            data.put("duration", report.getDuration() + "ms");
+            return ResponseEntity.ok(ApiResponse.success(data));
         } catch (Exception e) {
             log.error("Health score check failed", e);
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "Health score check failed: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Health score check failed: " + e.getMessage()));
         }
     }
 
@@ -224,7 +245,7 @@ public class DiagnosticController {
      * @param instanceId Optional instance ID filter
      */
     @GetMapping("/history")
-    public ResponseEntity<Map<String, Object>> getDiagnosticHistory(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getDiagnosticHistory(
             @RequestParam(defaultValue = "24") int hours,
             @RequestParam(required = false) String instanceId) {
         log.info("Getting diagnostic history for last {} hours", hours);
@@ -232,15 +253,14 @@ public class DiagnosticController {
             List<Map<String, Object>> history = diagnosticService.getDiagnosticHistory(hours, instanceId);
             Map<String, Object> trend = diagnosticService.getScoreTrend(hours);
 
-            return ResponseEntity.ok(Map.of(
-                    "history", history,
-                    "trend", trend,
-                    "hours", hours
-            ));
+            Map<String, Object> data = new HashMap<>();
+            data.put("history", history);
+            data.put("trend", trend);
+            data.put("hours", hours);
+            return ResponseEntity.ok(ApiResponse.success(data));
         } catch (Exception e) {
             log.error("Failed to get diagnostic history", e);
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "Failed to get diagnostic history: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Failed to get diagnostic history: " + e.getMessage()));
         }
     }
 
@@ -249,16 +269,15 @@ public class DiagnosticController {
      * @param hours Hours to look back (default 24)
      */
     @GetMapping("/trend")
-    public ResponseEntity<Map<String, Object>> getScoreTrend(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getScoreTrend(
             @RequestParam(defaultValue = "24") int hours) {
         log.info("Getting score trend for last {} hours", hours);
         try {
             Map<String, Object> trend = diagnosticService.getScoreTrend(hours);
-            return ResponseEntity.ok(trend);
+            return ResponseEntity.ok(ApiResponse.success(trend));
         } catch (Exception e) {
             log.error("Failed to get score trend", e);
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "Failed to get score trend: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Failed to get score trend: " + e.getMessage()));
         }
     }
 
@@ -266,16 +285,15 @@ public class DiagnosticController {
      * Compare current diagnostic with previous.
      */
     @GetMapping("/compare")
-    public ResponseEntity<Map<String, Object>> compareWithPrevious() {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> compareWithPrevious() {
         log.info("Comparing current diagnostic with previous");
         try {
             DiagnosticService.DiagnosticReport current = diagnosticService.runQuickDiagnostic();
             Map<String, Object> comparison = diagnosticService.compareWithPrevious(current);
-            return ResponseEntity.ok(comparison);
+            return ResponseEntity.ok(ApiResponse.success(comparison));
         } catch (Exception e) {
             log.error("Failed to compare diagnostics", e);
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "Failed to compare diagnostics: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Failed to compare diagnostics: " + e.getMessage()));
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.leoli.gateway.admin.controller;
 
+import com.leoli.gateway.admin.dto.ApiResponse;
 import com.leoli.gateway.admin.service.TrafficTopologyService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,7 +34,7 @@ public class TrafficTopologyController {
      * @param minutes Time range in minutes (default: 60)
      */
     @GetMapping("/{instanceId}")
-    public ResponseEntity<Map<String, Object>> getTopology(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getTopology(
             @PathVariable String instanceId,
             @RequestParam(defaultValue = "60") int minutes) {
         minutes = Math.max(1, Math.min(minutes, 1440));
@@ -41,11 +42,10 @@ public class TrafficTopologyController {
         
         try {
             TrafficTopologyService.TopologyGraph graph = topologyService.buildTopology(instanceId, minutes);
-            return ResponseEntity.ok(graph.toMap());
+            return ResponseEntity.ok(ApiResponse.success(graph.toMap()));
         } catch (Exception e) {
             log.error("Failed to build topology for instance: {}", instanceId, e);
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "Failed to build topology: " + e.getMessage()));
+            return ResponseEntity.ok(ApiResponse.error("Failed to build topology: " + e.getMessage()));
         }
     }
 
@@ -53,7 +53,7 @@ public class TrafficTopologyController {
      * Get traffic summary for an instance.
      */
     @GetMapping("/{instanceId}/summary")
-    public ResponseEntity<Map<String, Object>> getTrafficSummary(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getTrafficSummary(
             @PathVariable String instanceId,
             @RequestParam(defaultValue = "60") int minutes) {
         minutes = Math.max(1, Math.min(minutes, 1440));
@@ -61,11 +61,10 @@ public class TrafficTopologyController {
         
         try {
             TrafficTopologyService.TrafficSummary summary = topologyService.getTrafficSummary(instanceId, minutes);
-            return ResponseEntity.ok(summary.toMap());
+            return ResponseEntity.ok(ApiResponse.success(summary.toMap()));
         } catch (Exception e) {
             log.error("Failed to get traffic summary for instance: {}", instanceId, e);
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "Failed to get traffic summary: " + e.getMessage()));
+            return ResponseEntity.ok(ApiResponse.error("Failed to get traffic summary: " + e.getMessage()));
         }
     }
 }

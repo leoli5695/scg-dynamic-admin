@@ -32,6 +32,7 @@ import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -1131,6 +1132,11 @@ public class GatewayInstanceService {
             return instance;
         }
 
+        // Local startup compatibility: check cluster association
+        if (instance.getClusterId() == null) {
+            throw new IllegalStateException("Instance has no cluster association. Cannot perform K8s operations on locally started instances.");
+        }
+
         KubernetesCluster cluster = clusterRepository.findById(instance.getClusterId())
                 .orElseThrow(() -> new IllegalArgumentException("Cluster not found"));
 
@@ -1216,6 +1222,11 @@ public class GatewayInstanceService {
      * Scale instance replicas.
      */
     private GatewayInstanceEntity scaleInstance(GatewayInstanceEntity instance, int replicas) {
+        // Local startup compatibility: check cluster association
+        if (instance.getClusterId() == null) {
+            throw new IllegalStateException("Instance has no cluster association. Cannot perform K8s operations on locally started instances.");
+        }
+
         KubernetesCluster cluster = clusterRepository.findById(instance.getClusterId())
                 .orElseThrow(() -> new IllegalArgumentException("Cluster not found"));
 
@@ -1248,9 +1259,17 @@ public class GatewayInstanceService {
 
     /**
      * Get pods for an instance.
+     * Compatible with local startup (no cluster association).
      */
     public List<Map<String, Object>> getInstancePods(Long id) {
         GatewayInstanceEntity instance = getInstanceById(id);
+
+        // Compatible with local startup: if clusterId is null, return empty list
+        if (instance.getClusterId() == null) {
+            log.info("Instance {} has no cluster association (local startup), returning empty pod list", id);
+            return Collections.emptyList();
+        }
+
         KubernetesCluster cluster = clusterRepository.findById(instance.getClusterId())
                 .orElseThrow(() -> new IllegalArgumentException("Cluster not found"));
 
@@ -1303,6 +1322,13 @@ public class GatewayInstanceService {
     @Transactional
     public GatewayInstanceEntity refreshStatus(Long id) {
         GatewayInstanceEntity instance = getInstanceById(id);
+
+        // Local startup compatibility: return instance directly if no cluster
+        if (instance.getClusterId() == null) {
+            log.info("Instance {} has no cluster association, skipping K8s status refresh", id);
+            return instance;
+        }
+
         KubernetesCluster cluster = clusterRepository.findById(instance.getClusterId())
                 .orElseThrow(() -> new IllegalArgumentException("Cluster not found"));
 
@@ -1414,6 +1440,11 @@ public class GatewayInstanceService {
         }
 
         instance.setReplicas(replicas);
+
+        // Local startup compatibility: check cluster association
+        if (instance.getClusterId() == null) {
+            throw new IllegalStateException("Instance has no cluster association. Cannot perform K8s operations on locally started instances.");
+        }
 
         KubernetesCluster cluster = clusterRepository.findById(instance.getClusterId())
                 .orElseThrow(() -> new IllegalArgumentException("Cluster not found"));
@@ -1538,6 +1569,11 @@ public class GatewayInstanceService {
 
         instance.setImage(image);
 
+        // Local startup compatibility: check cluster association
+        if (instance.getClusterId() == null) {
+            throw new IllegalStateException("Instance has no cluster association. Cannot perform K8s operations on locally started instances.");
+        }
+
         KubernetesCluster cluster = clusterRepository.findById(instance.getClusterId())
                 .orElseThrow(() -> new IllegalArgumentException("Cluster not found"));
 
@@ -1584,6 +1620,11 @@ public class GatewayInstanceService {
      * Get pod count for an instance from Kubernetes.
      */
     public int getRunningPodCount(GatewayInstanceEntity instance) {
+        // Local startup compatibility: return 0 if no cluster association
+        if (instance.getClusterId() == null) {
+            return 0;
+        }
+
         KubernetesCluster cluster = clusterRepository.findById(instance.getClusterId())
                 .orElse(null);
         if (cluster == null) {
@@ -1731,6 +1772,20 @@ public class GatewayInstanceService {
      */
     public Map<String, Object> getInstanceEvents(Long id, Integer sinceSeconds, Integer limit) {
         GatewayInstanceEntity instance = getInstanceById(id);
+
+        // Local startup compatibility: return empty result if no cluster association
+        if (instance.getClusterId() == null) {
+            log.info("Instance {} has no cluster association (local startup), returning empty events", id);
+            Map<String, Object> result = new HashMap<>();
+            result.put("events", new ArrayList<>());
+            result.put("total", 0);
+            result.put("warningCount", 0);
+            result.put("normalCount", 0);
+            result.put("instanceId", instance.getInstanceId());
+            result.put("error", "No cluster association (local startup)");
+            return result;
+        }
+
         KubernetesCluster cluster = clusterRepository.findById(instance.getClusterId()).orElse(null);
         if (cluster == null) {
             log.warn("Cluster not found for instance {}: {}", id, instance.getClusterId());

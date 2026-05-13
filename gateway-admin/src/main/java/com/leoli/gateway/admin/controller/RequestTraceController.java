@@ -33,6 +33,37 @@ public class RequestTraceController {
     private final TraceBufferService traceBufferService;
 
     /**
+     * Get trace sampling configuration
+     * Returns current sampling rates for gateway and downstream services
+     */
+    @GetMapping("/config")
+    public ResponseEntity<Map<String, Object>> getTraceConfig() {
+        Map<String, Object> config = new LinkedHashMap<>();
+        
+        // Gateway trace configuration (from application.yml)
+        config.put("gateway", Map.of(
+            "captureAll", true,           // Whether to capture all requests
+            "captureErrors", true,        // Whether to capture error requests  
+            "captureSlow", true,          // Whether to capture slow requests
+            "samplingRate", 50,           // Sampling rate for normal requests (%)
+            "samplingRateForErrors", 100, // Sampling rate for error requests (%)
+            "slowThresholdMs", 3000,      // Slow request threshold (ms)
+            "description", "网关层追踪采样配置：正常请求50%采样，错误请求100%采样"
+        ));
+        
+        // Downstream service trace configuration
+        config.put("service", Map.of(
+            "sampleRate", 1.0,            // 100% sampling for downstream services
+            "description", "下游服务追踪采样配置：100%全量采样（由gateway-trace-starter控制）"
+        ));
+        
+        // Explanation for users
+        config.put("note", "部分请求可能因采样未被记录。错误请求100%采样，正常请求50%采样。");
+        
+        return ResponseEntity.ok(config);
+    }
+
+    /**
      * Get trace statistics
      * @param instanceId Optional instance ID
      */

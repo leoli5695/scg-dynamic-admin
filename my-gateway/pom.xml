@@ -12,7 +12,7 @@
         <relativePath/>
     </parent>
 
-    <groupId>com.example</groupId>
+    <groupId>com.leoli</groupId>
     <artifactId>my-gateway</artifactId>
     <version>1.0.0</version>
     <name>My Gateway</name>

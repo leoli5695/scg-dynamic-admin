@@ -9,7 +9,7 @@ import {
   CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined,
   SettingOutlined, DownloadOutlined, ThunderboltOutlined, PictureOutlined
 } from '@ant-design/icons';
-import axios from 'axios';
+import api from '../utils/api';
 import { useTranslation } from 'react-i18next';
 import html2canvas from 'html2canvas';
 
@@ -447,9 +447,9 @@ const FilterChainPage: React.FC<FilterChainPageProps> = ({ instanceId }) => {
     
     try {
       const [statsRes, recordsRes, historicalRes] = await Promise.all([
-        axios.get(`/api/filter-chain/${instanceId}/stats`),
-        axios.get(`/api/filter-chain/${instanceId}/records?limit=50`),
-        axios.get(`/api/filter-chain/${instanceId}/historical?minutes=30`)
+        api.get(`/api/filter-chain/${instanceId}/stats`),
+        api.get(`/api/filter-chain/${instanceId}/records?limit=50`),
+        api.get(`/api/filter-chain/${instanceId}/historical?minutes=30`)
       ]);
 
       if (statsRes.data.code === 200 && statsRes.data.data) {
@@ -531,7 +531,7 @@ const FilterChainPage: React.FC<FilterChainPageProps> = ({ instanceId }) => {
     
     setLoading(true);
     try {
-      const response = await axios.get(`/api/filter-chain/${instanceId}/trace/${searchTraceId.trim()}`);
+      const response = await api.get(`/api/filter-chain/${instanceId}/trace/${searchTraceId.trim()}`);
       if (response.data.code === 200 && response.data.data) {
         setSelectedRecord(response.data.data);
       } else {
@@ -548,7 +548,7 @@ const FilterChainPage: React.FC<FilterChainPageProps> = ({ instanceId }) => {
     if (!instanceId) return;
 
     try {
-      await axios.delete(`/api/filter-chain/${instanceId}/stats`);
+      await api.delete(`/api/filter-chain/${instanceId}/stats`);
       loadData();
       message.success('统计数据已清空');
     } catch (e: any) {
@@ -1285,7 +1285,7 @@ const FilterChainPage: React.FC<FilterChainPageProps> = ({ instanceId }) => {
           </Card>
 
           <Table
-            dataSource={selectedRecord.executions}
+            dataSource={selectedRecord?.executions || []}
             columns={executionColumns}
             rowKey="filter"
             pagination={false}

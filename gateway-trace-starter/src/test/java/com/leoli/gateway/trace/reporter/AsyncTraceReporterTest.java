@@ -120,7 +120,7 @@ class AsyncTraceReporterTest {
 
     @Test
     @DisplayName("获取统计信息")
-    void testGetStatistics() {
+    void testGetStatistics() throws InterruptedException {
         // 初始状态
         assertEquals(0, reporter.getQueueSize());
         assertEquals(0, reporter.getReportedCount());
@@ -130,6 +130,9 @@ class AsyncTraceReporterTest {
         // 添加一些trace
         reporter.report(createTestTrace("stats-001"));
         reporter.report(createTestTrace("stats-002"));
+
+        // Allow time for async processing (reportLoop + fallbackExecutor)
+        Thread.sleep(200);
 
         // 统计值应该更新
         assertTrue(reporter.getQueueSize() + reporter.getReportedCount() + reporter.getFallbackCount() >= 2);

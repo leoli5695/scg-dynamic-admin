@@ -46,6 +46,9 @@ data:
       evaluation_interval: 15s
 
     scrape_configs:
+      # ============================================================
+      # 应用服务监控
+      # ============================================================
       - job_name: 'gateway'
         metrics_path: '/actuator/prometheus'
         kubernetes_sd_configs:
@@ -89,6 +92,62 @@ data:
           - source_labels: [__meta_kubernetes_pod_ip]
             target_label: __address__
             replacement: ${1}:9000
+
+      - job_name: 'seckill-service'
+        metrics_path: '/actuator/prometheus'
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names:
+                - test
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            regex: seckill-service
+            action: keep
+
+      # ============================================================
+      # 中间件监控 - Exporters
+      # ============================================================
+      - job_name: 'redis'
+        static_configs:
+          - targets: ['redis-exporter:9121']
+            labels:
+              middleware_type: 'redis'
+              component: 'cache'
+
+      - job_name: 'elasticsearch'
+        static_configs:
+          - targets: ['elasticsearch-exporter:9114']
+            labels:
+              middleware_type: 'elasticsearch'
+              component: 'search'
+
+      - job_name: 'mongodb'
+        static_configs:
+          - targets: ['mongodb-exporter:9216']
+            labels:
+              middleware_type: 'mongodb'
+              component: 'database'
+
+      - job_name: 'rabbitmq'
+        metrics_path: '/metrics'
+        static_configs:
+          - targets: ['rabbitmq-exporter:15692']
+            labels:
+              middleware_type: 'rabbitmq'
+              component: 'mq'
+
+      # RocketMQ 监控已迁移到 Console API（gateway-admin 使用 RocketMQConsoleClient）
+      # 不再使用 Prometheus exporter（v0.0.2 存在 bug，返回空数据）
+      # Console API: http://localhost:30808
+
+      # 本地 MySQL exporter（通过 host.docker.internal）
+      - job_name: 'mysql'
+        static_configs:
+          - targets: ['host.docker.internal:9104']
+            labels:
+              middleware_type: 'mysql'
+              component: 'database'
 
 ---
 # Prometheus PVC (数据持久化)

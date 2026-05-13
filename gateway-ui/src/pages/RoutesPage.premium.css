@@ -612,9 +612,12 @@
 /* ==================== Stats Bar ==================== */
 .stats-bar {
   display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: var(--space-6);
-  padding: var(--space-4) var(--space-5);
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  gap: 16px;
+  padding: 12px 20px;
   background: var(--bg-card);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
@@ -624,19 +627,22 @@
 .stat-item {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .stat-value {
-  font-size: var(--text-xl);
-  font-weight: var(--weight-bold);
+  font-size: 20px;
+  font-weight: 700;
   color: var(--text-primary);
-  line-height: var(--leading-tight);
+  line-height: 1.25;
 }
 
 .stat-label {
-  font-size: var(--text-xs);
+  font-size: 12px;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .stat-divider {

@@ -63,6 +63,18 @@ public class ClusterHealthService {
      * @return Map containing health score and details
      */
     public Map<String, Object> getClusterHealth(Long clusterId, String namespace) {
+        // 检查 clusterId 是否为 null（某些 Gateway 实例可能没有关联 K8s 集群）
+        if (clusterId == null) {
+            log.debug("Cluster ID is null, returning default health score");
+            Map<String, Object> result = new HashMap<>();
+            result.put("score", 100);
+            result.put("level", "Healthy");
+            result.put("message", "No K8s cluster associated with this instance");
+            result.put("clusterId", null);
+            result.put("namespace", namespace);
+            return result;
+        }
+
         KubernetesCluster cluster = clusterRepository.findById(clusterId).orElse(null);
         if (cluster == null) {
             log.warn("Cluster not found: {}", clusterId);
@@ -517,6 +529,18 @@ public class ClusterHealthService {
      * @return Map containing resource metrics
      */
     public Map<String, Object> getResourceMetrics(Long clusterId, String namespace, String instanceId) {
+        // 兼容本地启动的 gateway 实例（无关联集群）
+        if (clusterId == null) {
+            log.info("Instance {} has no cluster association (local mode)", instanceId);
+            Map<String, Object> result = new HashMap<>();
+            result.put("clusterId", null);
+            result.put("clusterName", "local");
+            result.put("namespace", namespace != null ? namespace : "default");
+            result.put("mode", "local");
+            result.put("nodes", Map.of("total", 0, "list", List.of()));
+            result.put("pods", Map.of("total", 0, "running", 0, "list", List.of()));
+            return result;
+        }
         KubernetesCluster cluster = clusterRepository.findById(clusterId).orElse(null);
         if (cluster == null) {
             log.warn("Cluster not found: {}", clusterId);

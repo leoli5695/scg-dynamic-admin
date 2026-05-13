@@ -8,9 +8,11 @@ import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 
 /**
- * MQ operation tracing aspect
+ * RocketMQ operation tracing aspect
  * <p>
- * Automatically traces RocketMQ/Kafka message sending operations
+ * Automatically traces RocketMQ message sending operations.
+ * Kafka tracing is handled by {@link KafkaMQTraceAspect} to avoid
+ * AspectJ parsing KafkaTemplate pointcut when Kafka is not on classpath.
  *
  * @author leoli
  */
@@ -30,14 +32,6 @@ public class MQTraceAspect {
     @Around("execution(* org.apache.rocketmq.spring.core.RocketMQTemplate.*(..))")
     public Object traceRocketMQ(ProceedingJoinPoint pjp) throws Throwable {
         return traceMQInternal(pjp, "rocketmq");
-    }
-
-    /**
-     * Trace Kafka sending (if enabled)
-     */
-    @Around("execution(* org.springframework.kafka.core.KafkaTemplate.*(..))")
-    public Object traceKafka(ProceedingJoinPoint pjp) throws Throwable {
-        return traceMQInternal(pjp, "kafka");
     }
 
     /**
@@ -82,9 +76,9 @@ public class MQTraceAspect {
             long durationMs = (System.nanoTime() - start) / 1_000_000;
 
             // Record failed Span
-            TraceContextHolder.addFailedSpan(operation, durationMs, e.getMessage());
+            TraceContextHolder.addFailedSpan(operation, durationMs, e);
 
-            log.debug("{} traced: {} - {}ms - FAILED: {}", mqType, operation, durationMs, e.getMessage());
+            log.debug("{} traced: {} - {}ms - FAILED: {}", mqType, operation, durationMs, e.toString());
 
             throw e;
         }

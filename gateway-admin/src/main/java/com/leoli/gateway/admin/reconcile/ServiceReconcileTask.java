@@ -7,8 +7,8 @@ import com.leoli.gateway.admin.center.ConfigCenterService;
 import com.leoli.gateway.admin.model.ServiceDefinition;
 import com.leoli.gateway.admin.service.AlertService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -20,26 +20,18 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
 
     private static final String SERVICE_PREFIX = "config.gateway.service-";
     private static final String SERVICES_INDEX = "config.gateway.metadata.services-index";
     private static final String GROUP = "DEFAULT_GROUP";
 
-    @Autowired
-    private ServiceRepository serviceRepository;
-
-    @Autowired
-    private InstanceNamespaceCache namespaceCache;
-
-    @Autowired
-    private ConfigCenterService configCenterService;
-
-    @Autowired
-    private ObjectMapper objectMapper;
-
-    @Autowired
-    private AlertService alertService;
+    private final ServiceRepository serviceRepository;
+    private final InstanceNamespaceCache namespaceCache;
+    private final ConfigCenterService configCenterService;
+    private final ObjectMapper objectMapper;
+    private final AlertService alertService;
 
     @Override
     public String getType() {

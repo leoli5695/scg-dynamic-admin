@@ -35,7 +35,7 @@ import {
   ExclamationCircleOutlined,
   WarningOutlined,
 } from "@ant-design/icons";
-import axios from "axios";
+import api from "../utils/api";
 import AiReportRenderer from "../components/AiReportRenderer";
 import "../styles/ai-report.css";
 import { useTranslation } from "react-i18next";
@@ -220,7 +220,7 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
   // Load providers on mount
   const loadProviders = async () => {
     try {
-      const response = await axios.get("/api/copilot/providers");
+      const response = await api.get("/api/copilot/providers");
       setProviders(response.data);
 
       // Auto-select first valid provider
@@ -240,7 +240,7 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
   const loadServices = async () => {
     try {
       // Load database services
-      const dbResponse = await axios.get(`/api/services?instanceId=${instanceId}`);
+      const dbResponse = await api.get(`/api/services?instanceId=${instanceId}`);
       const dbServiceList = dbResponse.data?.data || [];
       setDbServices(dbServiceList.map((s: any) => ({
         serviceId: s.serviceId || s.name,
@@ -248,7 +248,7 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
       })));
 
       // Load Nacos discovery services
-      const nacosResponse = await axios.get("/api/services/nacos-discovery");
+      const nacosResponse = await api.get("/api/services/nacos-discovery");
       const nacosServiceList = nacosResponse.data?.data || [];
       setNacosServices(nacosServiceList.map((s: any) => ({
         serviceName: s.serviceName,
@@ -265,7 +265,7 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
   // Load models when provider changes
   const loadModels = async (provider: string) => {
     try {
-      const response = await axios.get(`/api/copilot/providers/${provider}/models`);
+      const response = await api.get(`/api/copilot/providers/${provider}/models`);
       setAvailableModels(response.data);
     } catch (error) {
       console.error("Failed to load models", error);
@@ -303,7 +303,7 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
 
     setValidating(true);
     try {
-      const response = await axios.post("/api/copilot/validate", {
+      const response = await api.post("/api/copilot/validate", {
         provider: selectedProvider,
         apiKey,
         baseUrl: baseUrl || null,
@@ -332,7 +332,7 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
     }
 
     try {
-      await axios.post("/api/copilot/config", {
+      await api.post("/api/copilot/config", {
         provider: selectedProvider,
         model: selectedModel,
         apiKey,
@@ -361,7 +361,7 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
     setLoading(true);
 
     try {
-      const response = await axios.post("/api/copilot/chat", {
+      const response = await api.post("/api/copilot/chat", {
         sessionId,
         message: userMessage.content,
         // context 不传递，让后端根据消息内容自动识别意图
@@ -411,7 +411,7 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
 
     setConfirmLoading(true);
     try {
-      const response = await axios.post("/api/copilot/chat", {
+      const response = await api.post("/api/copilot/chat", {
         sessionId,
         message: `确认执行 ${pendingConfirmation.toolName} 操作`,
         // context 不传递，让后端根据消息内容自动识别意图
@@ -464,7 +464,7 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
   // Clear conversation
   const handleClearConversation = async () => {
     try {
-      await axios.delete(`/api/copilot/chat/${sessionId}`);
+      await api.delete(`/api/copilot/chat/${sessionId}`);
       setMessages([]);
       setSessionId(`session-${Date.now()}`);
       message.success(t("copilot.conversation_cleared"));
@@ -508,7 +508,7 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
     setRouteLoading(true);
     setValidationResult(null); // Clear previous validation
     try {
-      const response = await axios.post("/api/copilot/generate-route", {
+      const response = await api.post("/api/copilot/generate-route", {
         description: serviceHint ? `${routeDescription}${serviceHint}` : routeDescription,
         instanceId,
         provider: selectedProvider || undefined,
@@ -536,7 +536,7 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
 
     setValidatingRoute(true);
     try {
-      const response = await axios.post("/api/copilot/validate-route", {
+      const response = await api.post("/api/copilot/validate-route", {
         routeJson: generatedRoute,
       });
 
@@ -566,7 +566,7 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
 
     setApplyingRoute(true);
     try {
-      const response = await axios.post("/api/copilot/apply-route", {
+      const response = await api.post("/api/copilot/apply-route", {
         routeJson: generatedRoute,
         instanceId,
       });
@@ -596,7 +596,7 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
 
     setErrorLoading(true);
     try {
-      const response = await axios.post("/api/copilot/analyze-error", {
+      const response = await api.post("/api/copilot/analyze-error", {
         errorMessage,
         instanceId,
         provider: selectedProvider || undefined,
@@ -623,7 +623,7 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
       if (selectedProvider) params.append("provider", selectedProvider);
       if (selectedModel) params.append("model", selectedModel);
 
-      const response = await axios.get(
+      const response = await api.get(
         `/api/copilot/optimizations/${instanceId}?${params.toString()}`
       );
 
@@ -653,7 +653,7 @@ const AiCopilotPage: React.FC<Props> = ({ instanceId }) => {
       if (selectedProvider) params.append("provider", selectedProvider);
       if (selectedModel) params.append("model", selectedModel);
 
-      const response = await axios.get(`/api/copilot/explain?${params.toString()}`);
+      const response = await api.get(`/api/copilot/explain?${params.toString()}`);
 
       if (response.data.success) {
         setConceptExplanation(response.data.explanation);

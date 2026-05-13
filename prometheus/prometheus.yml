@@ -7,13 +7,20 @@ scrape_configs:
   # 应用服务监控
   # ============================================================
 
-  # my-gateway metrics - actuator on same port (80) to avoid multi-port HttpHandler conflict
+  # my-gateway metrics - actuator on same port to avoid multi-port HttpHandler conflict
+  # Prometheus scrapes from /actuator/prometheus endpoint
   - job_name: 'my-gateway'
     metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['host.docker.internal:8081']
+      # Local dev: port 81 (your current setup)
+      - targets: ['host.docker.internal:81']
         labels:
           application: 'my-gateway'
+      # Alternative: port 80 (default config)
+      - targets: ['host.docker.internal:80']
+        labels:
+          application: 'my-gateway'
+      # K8s: will use http_sd_configs for dynamic discovery
 
   # gateway-admin 指标
   - job_name: 'gateway-admin'
@@ -32,11 +39,40 @@ scrape_configs:
           application: 'seckill-service'
 
   # ============================================================
-  # 中间件监控 - Docker Compose 环境
+  # 中间件监控 - 动态服务发现（从 gateway-admin API 获取）
   # ============================================================
+  # 新服务上报中间件后，Prometheus 自动发现并开始采集
+  # 无需手动配置每个 exporter
+
+  - job_name: 'middleware-exporters'
+    http_sd_configs:
+      - url: 'http://host.docker.internal:9090/api/prometheus/sd/exporters'
+        refresh_interval: 30s
+    relabel_configs:
+      # 将 middleware_type label 映射到 application
+      - source_labels: [middleware_type]
+        target_label: application
+      # 设置 component label
+      - source_labels: [middleware_type]
+        regex: '(redis|mysql|postgresql|mongodb)'
+        target_label: component
+        replacement: 'database'
+      - source_labels: [middleware_type]
+        regex: '(rocketmq|kafka|rabbitmq)'
+        target_label: component
+        replacement: 'mq'
+      - source_labels: [middleware_type]
+        regex: '(elasticsearch)'
+        target_label: component
+        replacement: 'search'
+
+  # ============================================================
+  # 中间件监控 - 静态配置（备用/兜底）
+  # ============================================================
+  # 当 gateway-admin 不可用时，仍可采集基础中间件
 
   # MySQL Exporter - 数据库性能监控
-  - job_name: 'mysql'
+  - job_name: 'mysql-static'
     static_configs:
       - targets: ['mysqld-exporter:9104']
         labels:
@@ -44,7 +80,7 @@ scrape_configs:
           component: 'database'
 
   # Redis Exporter - 缓存性能监控
-  - job_name: 'redis'
+  - job_name: 'redis-static'
     static_configs:
       - targets: ['redis-exporter:9121']
         labels:

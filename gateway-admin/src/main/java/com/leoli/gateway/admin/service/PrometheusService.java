@@ -4,8 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.model.GatewayInstanceEntity;
 import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -19,6 +19,7 @@ import java.util.*;
  */
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class PrometheusService {
 
     @Value("${gateway.prometheus.url:http://localhost:9091}")
@@ -26,17 +27,10 @@ public class PrometheusService {
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
-
-    @Autowired
-    private GatewayInstanceRepository instanceRepository;
+    private final GatewayInstanceRepository instanceRepository;
 
     // ThreadLocal to store timestamp context for historical queries
     private static final ThreadLocal<Long> timestampContext = new ThreadLocal<>();
-
-    public PrometheusService(RestTemplate restTemplate) {
-        this.restTemplate = restTemplate;
-        this.objectMapper = new ObjectMapper();
-    }
 
     /**
      * Check if Prometheus is available.

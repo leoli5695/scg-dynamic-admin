@@ -2,9 +2,9 @@ package com.leoli.gateway.admin.schedule;
 
 import com.leoli.gateway.admin.reconcile.ReconcileResult;
 import com.leoli.gateway.admin.reconcile.ReconcileTask;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -19,10 +19,10 @@ import java.util.List;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class ReconcileScheduler {
 
-    @Autowired
-    private List<ReconcileTask<?>> reconcileTasks;
+    private final List<ReconcileTask<?>> reconcileTasks;
 
     /**
      * Execute reconciliation for all entity types every 5 minutes.

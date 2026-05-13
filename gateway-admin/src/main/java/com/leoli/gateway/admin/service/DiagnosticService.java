@@ -6,6 +6,7 @@ import com.leoli.gateway.admin.repository.DiagnosticHistoryRepository;
 import com.leoli.gateway.admin.repository.RouteAuthBindingRepository;
 import com.leoli.gateway.admin.repository.RouteRepository;
 import com.leoli.gateway.admin.repository.AuthPolicyRepository;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -34,46 +35,25 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class DiagnosticService {
 
-    @Autowired
-    private DataSource dataSource;
+    private final DataSource dataSource;
+    private final JdbcTemplate jdbcTemplate;
+    private final DatabaseHealthService databaseHealthService;
+    private final ConfigCenterService configCenterService;
+    private final RouteAuthBindingRepository routeAuthBindingRepository;
+    private final RouteRepository routeRepository;
+    private final AuthPolicyRepository authPolicyRepository;
+    private final RestTemplate restTemplate;
+    private final InstanceHealthService instanceHealthService;
+    private final GatewayInstanceService gatewayInstanceService;
+    private final PrometheusService prometheusService;
+    private final DiagnosticHistoryRepository diagnosticHistoryRepository;
 
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
-
-    @Autowired
-    private DatabaseHealthService databaseHealthService;
-
+    // Optional dependency - may not be configured
     @Autowired(required = false)
     private RedisConnectionFactory redisConnectionFactory;
-
-    @Autowired
-    private ConfigCenterService configCenterService;
-
-    @Autowired
-    private RouteAuthBindingRepository routeAuthBindingRepository;
-
-    @Autowired
-    private RouteRepository routeRepository;
-
-    @Autowired
-    private AuthPolicyRepository authPolicyRepository;
-
-    @Autowired
-    private RestTemplate restTemplate;
-
-    @Autowired
-    private InstanceHealthService instanceHealthService;
-
-    @Autowired
-    private GatewayInstanceService gatewayInstanceService;
-
-    @Autowired
-    private PrometheusService prometheusService;
-
-    @Autowired
-    private DiagnosticHistoryRepository diagnosticHistoryRepository;
 
     /**
      * Run comprehensive diagnostics.

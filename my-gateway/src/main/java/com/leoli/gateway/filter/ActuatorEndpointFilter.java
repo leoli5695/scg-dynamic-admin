@@ -2,6 +2,7 @@ package com.leoli.gateway.filter;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -16,13 +17,14 @@ import reactor.core.publisher.Mono;
 /**
  * WebFilter that handles actuator endpoint requests on the main gateway port.
  * <p>
- * Since actuator endpoints are configured on a separate management port (8081),
- * this filter intercepts requests to /actuator/** on the main port (80) and
- * either forwards them or returns a helpful message.
+ * Only active when a separate management port is explicitly configured.
+ * When actuator runs on the same port as the gateway, this filter is disabled
+ * to avoid blocking Prometheus scraping and other actuator access.
  */
 @Slf4j
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 10)
+@ConditionalOnProperty(name = "management.server.port")
 public class ActuatorEndpointFilter implements WebFilter {
 
     @Value("${management.server.port:8081}")

@@ -1,5 +1,5 @@
 # ============================================================================
-# RocketMQ K8s 部署 - 使用备用镜像源
+# RocketMQ K8s 部署 - 使用镜像仓库
 # ============================================================================
 
 ---
@@ -21,8 +21,7 @@ spec:
     spec:
       containers:
         - name: nameserver
-          # 使用ghcr镜像源
-          image: ghcr.io/apache/rocketmq-nameserver:5.1.4
+          image: 05feb4b8a268e111bb3c4356701bf0c4.d.1ms.run/apache/rocketmq:5.1.0
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 9876
@@ -36,6 +35,10 @@ spec:
             limits:
               cpu: "500m"
               memory: "512Mi"
+          command:
+            - sh
+            - -c
+            - "mkdir -p /home/rocketmq/logs && ./mqnamesrv"
 ---
 apiVersion: v1
 kind: Service
@@ -53,6 +56,7 @@ spec:
 
 ---
 # Broker Deployment
+# 监控方式：使用 RocketMQ Console (单独部署)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -70,16 +74,72 @@ spec:
     spec:
       containers:
         - name: broker
-          image: ghcr.io/apache/rocketmq-broker:5.1.4
+          image: 05feb4b8a268e111bb3c4356701bf0c4.d.1ms.run/apache/rocketmq:5.1.0
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 10911
           env:
+            - name: NAMESRV_ADDR
+              value: "rocketmq-nameserver:9876"
             - name: JAVA_OPT_EXT
-              value: "-Xms512m -Xmx512m -Drocketmq.namesrv.addr=rocketmq-nameserver:9876 -Drocketmq.broker.transactionMessageEnable=true"
+              value: "-Xms512m -Xmx512m"
           resources:
             requests:
               cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          command:
+            - sh
+            - -c
+            - "mkdir -p /home/rocketmq/logs /home/rocketmq/store && ./mqbroker -n rocketmq-nameserver:9876"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rocketmq-broker
+  namespace: test
+spec:
+  type: ClusterIP
+  ports:
+    - port: 10911
+      targetPort: 10911
+      name: broker
+  selector:
+    app: rocketmq-broker
+
+---
+# RocketMQ Console Deployment
+# 官方管理界面，提供 HTTP API 获取集群状态、Topic、消费组等信息
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rocketmq-console
+  namespace: test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rocketmq-console
+  template:
+    metadata:
+      labels:
+        app: rocketmq-console
+    spec:
+      containers:
+        - name: console
+          image: 05feb4b8a268e111bb3c4356701bf0c4.d.1ms.run/styletang/rocketmq-console-ng:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: JAVA_OPTS
+              value: "-Drocketmq.namesrv.addr=rocketmq-nameserver:9876 -Dcom.rocketmq.sendMessageWithTimeout=5000"
+          resources:
+            requests:
+              cpu: "100m"
               memory: "512Mi"
             limits:
               cpu: "500m"
@@ -88,14 +148,14 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: rocketmq-broker
+  name: rocketmq-console
   namespace: test
 spec:
   type: NodePort
   ports:
-    - port: 10911
-      targetPort: 10911
-      nodePort: 30911
-      name: broker
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30808
+      name: http
   selector:
-    app: rocketmq-broker
+    app: rocketmq-console

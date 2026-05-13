@@ -104,25 +104,25 @@ class SeckillServiceTest {
     @BeforeEach
     void setUp() {
         // 手动创建 SeckillService 实例，直接注入 Mock 对象
+        // 参数顺序遵循 @RequiredArgsConstructor 生成的构造函数顺序
         seckillService = new SeckillService(
-                seckillDeductLua,
-                snowflakeIdGenerator,
-                activityMapper,
-                productMapper,
-                transactionLogMapper,
-                localCacheService,
-                redisDegradeService,
-                localFallbackService,
-                mqDegradeService,
-                seckillConfig,
                 objectMapper,
-                localTransactionService,
+                productMapper,
+                activityMapper,
                 seckillRequestCounter,
                 seckillSuccessCounter,
-                seckillStockInsufficientCounter,
-                seckillAlreadyBoughtCounter,
+                seckillDegradeCounter,
                 seckillNotWarmedCounter,
-                seckillDegradeCounter
+                seckillDeductLua,
+                mqDegradeService,
+                seckillAlreadyBoughtCounter,
+                localCacheService,
+                seckillStockInsufficientCounter,
+                redisDegradeService,
+                snowflakeIdGenerator,
+                transactionLogMapper,
+                localFallbackService,
+                localTransactionService
         );
 
         // 准备测试数据

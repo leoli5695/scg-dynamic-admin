@@ -1,11 +1,13 @@
 package com.leoli.gateway.admin.controller;
 
+import com.leoli.gateway.admin.dto.ApiResponse;
 import com.leoli.gateway.admin.service.SmartAlertService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -28,18 +30,18 @@ public class SmartAlertController {
      * Get alert statistics.
      */
     @GetMapping("/stats")
-    public ResponseEntity<Map<String, Object>> getStats() {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getStats() {
         log.info("Getting smart alert statistics");
         
         SmartAlertService.AlertStats stats = smartAlertService.getStats();
-        return ResponseEntity.ok(stats.toMap());
+        return ResponseEntity.ok(ApiResponse.success(stats.toMap()));
     }
 
     /**
      * Get all suppression rules.
      */
     @GetMapping("/suppressions")
-    public ResponseEntity<List<Map<String, Object>>> getSuppressionRules() {
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getSuppressionRules() {
         log.info("Getting suppression rules");
         
         List<SmartAlertService.SuppressionRule> rules = smartAlertService.getSuppressionRules();
@@ -47,14 +49,14 @@ public class SmartAlertController {
                 .map(SmartAlertService.SuppressionRule::toMap)
                 .collect(Collectors.toList());
         
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok(ApiResponse.success(result));
     }
 
     /**
      * Add a suppression rule.
      */
     @PostMapping("/suppressions")
-    public ResponseEntity<Map<String, Object>> addSuppressionRule(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> addSuppressionRule(
             @RequestParam String key,
             @RequestParam(defaultValue = "60") int durationMinutes,
             @RequestParam(required = false) String reason) {
@@ -62,26 +64,22 @@ public class SmartAlertController {
         
         smartAlertService.addSuppressionRule(key, durationMinutes, reason != null ? reason : "Manual suppression");
         
-        return ResponseEntity.ok(Map.of(
-                "code", 200,
-                "message", "Suppression rule added",
-                "key", key,
-                "durationMinutes", durationMinutes
-        ));
+        Map<String, Object> data = new HashMap<>();
+        data.put("key", key);
+        data.put("durationMinutes", durationMinutes);
+        
+        return ResponseEntity.ok(ApiResponse.success(data, "Suppression rule added"));
     }
 
     /**
      * Remove a suppression rule.
      */
     @DeleteMapping("/suppressions/{key}")
-    public ResponseEntity<Map<String, Object>> removeSuppressionRule(@PathVariable String key) {
+    public ResponseEntity<ApiResponse<Void>> removeSuppressionRule(@PathVariable String key) {
         log.info("Removing suppression rule: {}", key);
         
         smartAlertService.removeSuppressionRule(key);
         
-        return ResponseEntity.ok(Map.of(
-                "code", 200,
-                "message", "Suppression rule removed"
-        ));
+        return ResponseEntity.ok(ApiResponse.success("Suppression rule removed"));
     }
 }

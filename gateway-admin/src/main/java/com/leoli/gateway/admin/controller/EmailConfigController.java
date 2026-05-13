@@ -1,5 +1,6 @@
 package com.leoli.gateway.admin.controller;
 
+import com.leoli.gateway.admin.dto.ApiResponse;
 import com.leoli.gateway.admin.model.EmailConfig;
 import com.leoli.gateway.admin.service.EmailConfigService;
 import com.leoli.gateway.admin.service.EmailSenderService;
@@ -32,37 +33,30 @@ public class EmailConfigController {
      * Get all email configurations
      */
     @GetMapping("/configs")
-    public ResponseEntity<Map<String, Object>> getAllConfigs() {
-        Map<String, Object> result = new HashMap<>();
+    public ResponseEntity<ApiResponse<List<EmailConfig>>> getAllConfigs() {
         try {
             List<EmailConfig> configs = emailConfigService.getAllConfigs();
             // Mask passwords
             configs.forEach(c -> c.setSmtpPassword("******"));
             
-            result.put("code", 200);
-            result.put("message", "success");
-            result.put("data", configs);
+            return ResponseEntity.ok(ApiResponse.success(configs));
         } catch (Exception e) {
             log.error("Failed to get email configs", e);
-            result.put("code", 500);
-            result.put("message", "Failed to get configs: " + e.getMessage());
+            return ResponseEntity.ok(ApiResponse.error("Failed to get configs: " + e.getMessage()));
         }
-        return ResponseEntity.ok(result);
     }
 
     /**
      * Get current active SMTP configuration info (without password)
      */
     @GetMapping("/info")
-    public ResponseEntity<Map<String, Object>> getSmtpInfo() {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getSmtpInfo() {
         try {
             Map<String, Object> info = emailSenderService.getSmtpInfo();
-            info.put("code", 200);
-            info.put("message", "success");
-            return ResponseEntity.ok(info);
+            return ResponseEntity.ok(ApiResponse.success(info));
         } catch (Exception e) {
             log.error("Failed to get SMTP info", e);
-            return ResponseEntity.ok(Map.of("code", 500, "message", e.getMessage()));
+            return ResponseEntity.ok(ApiResponse.error(e.getMessage()));
         }
     }
 
@@ -70,51 +64,37 @@ public class EmailConfigController {
      * Get email config by ID
      */
     @GetMapping("/configs/{id}")
-    public ResponseEntity<Map<String, Object>> getConfigById(@PathVariable Long id) {
-        Map<String, Object> result = new HashMap<>();
+    public ResponseEntity<ApiResponse<EmailConfig>> getConfigById(@PathVariable Long id) {
         try {
             Optional<EmailConfig> configOpt = emailConfigService.getConfigById(id);
             if (configOpt.isPresent()) {
                 EmailConfig config = configOpt.get();
                 config.setSmtpPassword("******"); // Mask password
-                
-                result.put("code", 200);
-                result.put("message", "success");
-                result.put("data", config);
+                return ResponseEntity.ok(ApiResponse.success(config));
             } else {
-                result.put("code", 404);
-                result.put("message", "Config not found");
+                return ResponseEntity.ok(ApiResponse.notFound("Config not found"));
             }
         } catch (Exception e) {
             log.error("Failed to get email config", e);
-            result.put("code", 500);
-            result.put("message", "Failed to get config: " + e.getMessage());
+            return ResponseEntity.ok(ApiResponse.error("Failed to get config: " + e.getMessage()));
         }
-        return ResponseEntity.ok(result);
     }
 
     /**
      * Create new email configuration
      */
     @PostMapping("/configs")
-    public ResponseEntity<Map<String, Object>> createConfig(@RequestBody EmailConfig config) {
-        Map<String, Object> result = new HashMap<>();
+    public ResponseEntity<ApiResponse<Map<String, Long>>> createConfig(@RequestBody EmailConfig config) {
         try {
             // Validate required fields
             if (config.getSmtpHost() == null || config.getSmtpHost().isEmpty()) {
-                result.put("code", 400);
-                result.put("message", "SMTP host is required");
-                return ResponseEntity.ok(result);
+                return ResponseEntity.ok(ApiResponse.badRequest("SMTP host is required"));
             }
             if (config.getSmtpUsername() == null || config.getSmtpUsername().isEmpty()) {
-                result.put("code", 400);
-                result.put("message", "SMTP username is required");
-                return ResponseEntity.ok(result);
+                return ResponseEntity.ok(ApiResponse.badRequest("SMTP username is required"));
             }
             if (config.getSmtpPassword() == null || config.getSmtpPassword().isEmpty()) {
-                result.put("code", 400);
-                result.put("message", "SMTP password is required");
-                return ResponseEntity.ok(result);
+                return ResponseEntity.ok(ApiResponse.badRequest("SMTP password is required"));
             }
 
             EmailConfig saved = emailConfigService.saveConfig(config);
@@ -122,33 +102,25 @@ public class EmailConfigController {
             // Reload email sender with new config
             emailSenderService.reloadConfig();
             
-            result.put("code", 200);
-            result.put("message", "Configuration created successfully");
-            result.put("data", Map.of("id", saved.getId()));
-            
             log.info("Created email config: {}", saved.getId());
+            return ResponseEntity.ok(ApiResponse.success(Map.of("id", saved.getId()), "Configuration created successfully"));
         } catch (Exception e) {
             log.error("Failed to create email config", e);
-            result.put("code", 500);
-            result.put("message", "Failed to create config: " + e.getMessage());
+            return ResponseEntity.ok(ApiResponse.error("Failed to create config: " + e.getMessage()));
         }
-        return ResponseEntity.ok(result);
     }
 
     /**
      * Update email configuration
      */
     @PutMapping("/configs/{id}")
-    public ResponseEntity<Map<String, Object>> updateConfig(
+    public ResponseEntity<ApiResponse<Map<String, Long>>> updateConfig(
             @PathVariable Long id,
             @RequestBody EmailConfig config) {
-        Map<String, Object> result = new HashMap<>();
         try {
             Optional<EmailConfig> existingOpt = emailConfigService.getConfigById(id);
             if (existingOpt.isEmpty()) {
-                result.put("code", 404);
-                result.put("message", "Config not found");
-                return ResponseEntity.ok(result);
+                return ResponseEntity.ok(ApiResponse.notFound("Config not found"));
             }
 
             EmailConfig existing = existingOpt.get();
@@ -173,31 +145,23 @@ public class EmailConfigController {
             // Reload email sender with updated config
             emailSenderService.reloadConfig();
             
-            result.put("code", 200);
-            result.put("message", "Configuration updated successfully");
-            result.put("data", Map.of("id", saved.getId()));
-            
             log.info("Updated email config: {}", saved.getId());
+            return ResponseEntity.ok(ApiResponse.success(Map.of("id", saved.getId()), "Configuration updated successfully"));
         } catch (Exception e) {
             log.error("Failed to update email config", e);
-            result.put("code", 500);
-            result.put("message", "Failed to update config: " + e.getMessage());
+            return ResponseEntity.ok(ApiResponse.error("Failed to update config: " + e.getMessage()));
         }
-        return ResponseEntity.ok(result);
     }
 
     /**
      * Delete email configuration
      */
     @DeleteMapping("/configs/{id}")
-    public ResponseEntity<Map<String, Object>> deleteConfig(@PathVariable Long id) {
-        Map<String, Object> result = new HashMap<>();
+    public ResponseEntity<ApiResponse<Void>> deleteConfig(@PathVariable Long id) {
         try {
             Optional<EmailConfig> configOpt = emailConfigService.getConfigById(id);
             if (configOpt.isEmpty()) {
-                result.put("code", 404);
-                result.put("message", "Config not found");
-                return ResponseEntity.ok(result);
+                return ResponseEntity.ok(ApiResponse.notFound("Config not found"));
             }
 
             emailConfigService.deleteConfig(id);
@@ -205,30 +169,23 @@ public class EmailConfigController {
             // Reload email sender
             emailSenderService.reloadConfig();
             
-            result.put("code", 200);
-            result.put("message", "Configuration deleted successfully");
-            
             log.info("Deleted email config: {}", id);
+            return ResponseEntity.ok(ApiResponse.success("Configuration deleted successfully"));
         } catch (Exception e) {
             log.error("Failed to delete email config", e);
-            result.put("code", 500);
-            result.put("message", "Failed to delete config: " + e.getMessage());
+            return ResponseEntity.ok(ApiResponse.error("Failed to delete config: " + e.getMessage()));
         }
-        return ResponseEntity.ok(result);
     }
 
     /**
      * Send test email to specific address
      */
     @PostMapping("/test")
-    public ResponseEntity<Map<String, Object>> sendTestEmail(@RequestBody Map<String, String> request) {
-        Map<String, Object> result = new HashMap<>();
+    public ResponseEntity<ApiResponse<Void>> sendTestEmail(@RequestBody Map<String, String> request) {
         try {
             String to = request.get("to");
             if (to == null || to.isEmpty()) {
-                result.put("code", 400);
-                result.put("message", "Recipient email is required");
-                return ResponseEntity.ok(result);
+                return ResponseEntity.ok(ApiResponse.badRequest("Recipient email is required"));
             }
 
             boolean success = emailSenderService.sendEmail(
@@ -246,48 +203,38 @@ public class EmailConfigController {
             });
 
             if (success) {
-                result.put("code", 200);
-                result.put("message", "Test email sent to " + to);
+                return ResponseEntity.ok(ApiResponse.success("Test email sent to " + to));
             } else {
-                result.put("code", 500);
-                result.put("message", "Failed to send email. Check SMTP configuration.");
+                return ResponseEntity.ok(ApiResponse.error("Failed to send email. Check SMTP configuration."));
             }
         } catch (Exception e) {
             log.error("Failed to send test email", e);
-            result.put("code", 500);
-            result.put("message", "Failed to send test email: " + e.getMessage());
+            return ResponseEntity.ok(ApiResponse.error("Failed to send test email: " + e.getMessage()));
         }
-        return ResponseEntity.ok(result);
     }
 
     /**
      * Check if email is configured
      */
     @GetMapping("/status")
-    public ResponseEntity<Map<String, Object>> getStatus() {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getStatus() {
         boolean configured = emailSenderService.isConfigured();
-        return ResponseEntity.ok(Map.of(
-            "code", 200,
-            "configured", configured,
-            "message", configured ? "Email is configured" : "Email is not configured"
-        ));
+        Map<String, Object> data = new HashMap<>();
+        data.put("configured", configured);
+        return ResponseEntity.ok(ApiResponse.success(data, configured ? "Email is configured" : "Email is not configured"));
     }
 
     /**
      * Reload email configuration from database
      */
     @PostMapping("/reload")
-    public ResponseEntity<Map<String, Object>> reloadConfig() {
-        Map<String, Object> result = new HashMap<>();
+    public ResponseEntity<ApiResponse<Void>> reloadConfig() {
         try {
             emailSenderService.reloadConfig();
-            result.put("code", 200);
-            result.put("message", "Configuration reloaded successfully");
+            return ResponseEntity.ok(ApiResponse.success("Configuration reloaded successfully"));
         } catch (Exception e) {
             log.error("Failed to reload config", e);
-            result.put("code", 500);
-            result.put("message", "Failed to reload: " + e.getMessage());
+            return ResponseEntity.ok(ApiResponse.error("Failed to reload: " + e.getMessage()));
         }
-        return ResponseEntity.ok(result);
     }
 }

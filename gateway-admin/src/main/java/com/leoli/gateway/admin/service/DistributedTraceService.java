@@ -4,7 +4,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.client.PrometheusClient;
 import com.leoli.gateway.admin.model.DistributedTraceEntity;
+import com.leoli.gateway.admin.model.StressTest;
 import com.leoli.gateway.admin.repository.DistributedTraceRepository;
+import com.leoli.gateway.admin.repository.StressTestRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -14,11 +16,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 分布式链路追踪Service
@@ -31,6 +37,7 @@ import java.util.Optional;
 public class DistributedTraceService {
 
     private final DistributedTraceRepository traceRepository;
+    private final StressTestRepository stressTestRepository;
     private final ObjectMapper objectMapper;
     private final ServiceMiddlewareService middlewareService;
     private final PrometheusClient prometheusClient;
@@ -352,6 +359,7 @@ public class DistributedTraceService {
             case "rocketmq":
                 return prometheusClient.queryRocketMQMetrics(exporterUrl, null);
             case "mysql":
+            case "mariadb":
                 return prometheusClient.queryMySQLMetrics(exporterUrl);
             case "elasticsearch":
             case "es":
@@ -435,5 +443,185 @@ public class DistributedTraceService {
             thresholdMs, 
             PageRequest.of(0, top, Sort.by("totalDurationMs").descending())
         );
+    }
+
+    // ===================== 压测 + 中间件关联分析 =====================
+
+    /**
+     * 分析压测期间中间件的性能表现
+     * 
+     * 自动根据压测时间窗口（±30s扩展）查询所有关联中间件的指标趋势
+     *
+     * @param testId              压测ID
+     * @param serviceNameOverride 服务名称覆盖（可为null，自动检测）
+     * @return 关联分析结果
+     */
+    public Map<String, Object> analyzeStressTestWithMiddleware(long testId, String serviceNameOverride) {
+        // 1. 加载压测记录
+        Optional<StressTest> testOpt = stressTestRepository.findById(testId);
+        if (testOpt.isEmpty()) {
+            return Map.of("error", "Stress test not found: " + testId);
+        }
+
+        StressTest test = testOpt.get();
+
+        // 2. 验证压测状态
+        if (!"COMPLETED".equals(test.getStatus())) {
+            return Map.of("error", "Stress test is not completed (status: " + test.getStatus() + "). Only completed tests can be analyzed.");
+        }
+        if (test.getStartTime() == null || test.getEndTime() == null) {
+            return Map.of("error", "Stress test missing startTime or endTime");
+        }
+
+        // 3. 计算时间窗口（±30s扩展）
+        long start = test.getStartTime().toEpochSecond(ZoneOffset.of("+8")) - 30;
+        long end = test.getEndTime().toEpochSecond(ZoneOffset.of("+8")) + 30;
+
+        // 4. 解析服务名
+        String serviceName = resolveServiceName(test, serviceNameOverride);
+        if (serviceName == null) {
+            return Map.of(
+                "error", "Unable to determine service name. Please provide serviceName parameter.",
+                "hint", "You can get service names using get_all_services_with_middlewares tool"
+            );
+        }
+
+        // 5. 获取中间件Exporter映射
+        Map<String, String> exporterMapping = middlewareService.getExporterMapping(serviceName);
+        if (exporterMapping.isEmpty()) {
+            return Map.of(
+                "error", "No middleware exporters found for service: " + serviceName,
+                "hint", "Ensure the service has reported middleware metadata via gateway-trace-starter"
+            );
+        }
+
+        // 6. 并行查询各中间件指标
+        Map<String, Object> middlewareMetrics = queryAllMiddlewareDuringPeriod(exporterMapping, start, end);
+
+        // 7. 组装结果
+        Map<String, Object> result = new HashMap<>();
+        result.put("testId", testId);
+        result.put("testName", test.getTestName());
+        result.put("testPeriod", Map.of(
+            "start", start + 30,  // 返回实际压测时间
+            "end", end - 30,
+            "queryStart", start,  // 返回扩展后的查询时间
+            "queryEnd", end,
+            "durationSeconds", (end - 30) - (start + 30)
+        ));
+        result.put("serviceName", serviceName);
+
+        // 压测摘要
+        Map<String, Object> testSummary = new HashMap<>();
+        testSummary.put("targetUrl", test.getTargetUrl());
+        testSummary.put("concurrentUsers", test.getConcurrentUsers());
+        testSummary.put("requestsPerSecond", test.getRequestsPerSecond());
+        testSummary.put("avgResponseTimeMs", test.getAvgResponseTimeMs());
+        testSummary.put("p99ResponseTimeMs", test.getP99ResponseTimeMs());
+        testSummary.put("errorRate", test.getErrorRate());
+        testSummary.put("totalRequests", test.getActualRequests());
+        testSummary.put("successfulRequests", test.getSuccessfulRequests());
+        testSummary.put("failedRequests", test.getFailedRequests());
+        result.put("testSummary", testSummary);
+
+        result.put("middlewareMetrics", middlewareMetrics);
+
+        return result;
+    }
+
+    /**
+     * 解析压测对应的服务名
+     */
+    private String resolveServiceName(StressTest test, String serviceNameOverride) {
+        // 优先使用显式传入的服务名
+        if (serviceNameOverride != null && !serviceNameOverride.isBlank()) {
+            return serviceNameOverride;
+        }
+
+        // 尝试从targetUrl推断：如果URL包含已注册服务的路径特征
+        String targetUrl = test.getTargetUrl();
+        if (targetUrl != null) {
+            List<String> allServices = middlewareService.getAllServiceNames();
+            for (String svc : allServices) {
+                // 简单匹配：URL中包含服务名（如 /api/seckill → seckill-service）
+                String svcPrefix = svc.replace("-service", "").replace("-", "");
+                if (targetUrl.toLowerCase().contains(svcPrefix.toLowerCase())) {
+                    return svc;
+                }
+            }
+            // 如果只有一个注册的服务，直接使用
+            if (allServices.size() == 1) {
+                return allServices.get(0);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 并行查询所有中间件在指定时间段内的指标
+     * 每个中间件独立查询，单个失败不影响其他
+     */
+    private Map<String, Object> queryAllMiddlewareDuringPeriod(
+            Map<String, String> exporterMapping, long start, long end) {
+
+        Map<String, Object> middlewareMetrics = new ConcurrentHashMap<>();
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
+
+        for (Map.Entry<String, String> entry : exporterMapping.entrySet()) {
+            String middlewareType = entry.getKey();
+            String exporterUrl = entry.getValue();
+
+            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                try {
+                    Map<String, Object> metrics = queryMiddlewareDuringPeriod(
+                            middlewareType, exporterUrl, start, end);
+                    metrics.put("status", "OK");
+                    metrics.put("exporterUrl", exporterUrl);
+                    middlewareMetrics.put(middlewareType, metrics);
+                } catch (Exception e) {
+                    log.warn("Failed to query {} metrics from {}: {}",
+                            middlewareType, exporterUrl, e.getMessage());
+                    middlewareMetrics.put(middlewareType, Map.of(
+                        "status", "ERROR",
+                        "exporterUrl", exporterUrl,
+                        "error", e.getMessage() != null ? e.getMessage() : "Unknown error"
+                    ));
+                }
+            });
+            futures.add(future);
+        }
+
+        // 等待所有查询完成，最多15秒
+        try {
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                    .orTimeout(15, TimeUnit.SECONDS)
+                    .join();
+        } catch (Exception e) {
+            log.warn("Some middleware queries timed out: {}", e.getMessage());
+            // 超时的已有部分结果在map中，未完成的不影响
+        }
+
+        return new HashMap<>(middlewareMetrics);
+    }
+
+    /**
+     * 根据中间件类型查询时间段指标
+     * 
+     * 支持类型：redis, mysql, mariadb, postgresql, rocketmq, mongodb, rabbitmq
+     * 未支持的类型（oracle, sqlserver等）返回 UNSUPPORTED 状态
+     */
+    private Map<String, Object> queryMiddlewareDuringPeriod(
+            String type, String exporterUrl, long start, long end) {
+        return switch (type.toLowerCase()) {
+            case "redis" -> prometheusClient.queryRedisDuringPeriod(exporterUrl, start, end, null);
+            case "mysql", "mariadb" -> prometheusClient.queryMysqlDuringPeriod(exporterUrl, start, end, null);
+            case "postgresql" -> prometheusClient.queryPostgresqlDuringPeriod(exporterUrl, start, end, null);
+            case "rocketmq" -> prometheusClient.queryRocketmqDuringPeriod(exporterUrl, start, end, null, null);
+            case "mongodb" -> prometheusClient.queryMongodbDuringPeriod(exporterUrl, start, end, null);
+            case "rabbitmq" -> prometheusClient.queryRabbitmqDuringPeriod(exporterUrl, start, end, null, null);
+            default -> Map.of("status", "UNSUPPORTED", "type", type,
+                    "hint", "Time-period query not yet supported for " + type + ". Use instant query tools or check Grafana.");
+        };
     }
 }

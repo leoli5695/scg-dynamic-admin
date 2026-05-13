@@ -35,10 +35,10 @@ public class ServiceMiddlewareService {
     private final ObjectMapper objectMapper;
 
     /**
-     * 保存中间件元数据
+     * 保存中间件元数据（按服务实例隔离）
      * 
      * @param serviceName 服务名称
-     * @param instanceAddress 实例地址
+     * @param instanceAddress 实例地址（IP:port）
      * @param middlewareType 中间件类型
      * @param middlewareHost 中间件主机
      * @param middlewarePort 中间件端口
@@ -48,23 +48,22 @@ public class ServiceMiddlewareService {
     public void saveMiddleware(String serviceName, String instanceAddress,
                                String middlewareType, String middlewareHost,
                                Integer middlewarePort, String exporterUrl) {
-        
-        // 查找是否已存在
+
+        // 按服务实例隔离：查找 serviceName + instanceAddress + middlewareType
         Optional<ServiceMiddlewareEntity> existing = middlewareRepository
-            .findByServiceNameAndMiddlewareType(serviceName, middlewareType);
-        
+            .findByServiceNameAndInstanceAddressAndMiddlewareType(serviceName, instanceAddress, middlewareType);
+
         ServiceMiddlewareEntity entity;
         if (existing.isPresent()) {
-            // 更新现有记录
+            // 更新现有记录（同一服务实例的同一中间件类型）
             entity = existing.get();
-            entity.setInstanceAddress(instanceAddress);
             entity.setMiddlewareHost(middlewareHost);
             entity.setMiddlewarePort(middlewarePort);
             entity.setExporterUrl(exporterUrl);
             entity.setLastReportTime(LocalDateTime.now());
-            log.debug("Updating middleware mapping: {} -> {}", serviceName, middlewareType);
+            log.debug("Updating middleware mapping: {} ({}) -> {}", serviceName, instanceAddress, middlewareType);
         } else {
-            // 创建新记录
+            // 创建新记录（新的服务实例或新的中间件类型）
             entity = new ServiceMiddlewareEntity();
             entity.setServiceName(serviceName);
             entity.setInstanceAddress(instanceAddress);
@@ -74,18 +73,44 @@ public class ServiceMiddlewareService {
             entity.setExporterUrl(exporterUrl);
             entity.setMonitoringEnabled(true);
             entity.setLastReportTime(LocalDateTime.now());
-            log.info("Creating middleware mapping: {} -> {} ({})", serviceName, middlewareType, exporterUrl);
+            log.info("Creating middleware mapping: {} ({}) -> {} ({})",
+                serviceName, instanceAddress, middlewareType, exporterUrl);
         }
-        
+
         middlewareRepository.save(entity);
     }
 
     /**
-     * 批量保存中间件元数据
+     * 批量保存中间件元数据（支持增量更新和清理）
+     * <p>
+     * 服务重启时调用此方法：
+     * 1. 更新已配置中间件的 exporter URL
+     * 2. 新增新配置的中间件
+     * 3. 清理不再配置的中间件（配置驱动方式）
      */
     @Transactional
     public void saveBatch(String serviceName, String instanceAddress, 
                           List<Map<String, Object>> middlewares) {
+        
+        // 获取当前配置的中间件类型列表
+        List<String> configuredTypes = middlewares.stream()
+            .map(mw -> (String) mw.get("type"))
+            .toList();
+        
+        // 查询该服务实例现有的中间件
+        List<ServiceMiddlewareEntity> existingMiddlewares = middlewareRepository
+            .findByServiceNameAndInstanceAddress(serviceName, instanceAddress);
+        
+        // 清理不再配置的中间件
+        for (ServiceMiddlewareEntity existing : existingMiddlewares) {
+            if (!configuredTypes.contains(existing.getMiddlewareType())) {
+                log.info("Removing middleware that is no longer configured: {} ({}) -> {}",
+                    serviceName, instanceAddress, existing.getMiddlewareType());
+                middlewareRepository.delete(existing);
+            }
+        }
+        
+        // 保存/更新配置的中间件
         for (Map<String, Object> mw : middlewares) {
             String type = (String) mw.get("type");
             String host = (String) mw.get("host");
@@ -94,18 +119,63 @@ public class ServiceMiddlewareService {
             
             saveMiddleware(serviceName, instanceAddress, type, host, port, exporter);
         }
+        
+        log.info("Middleware metadata updated for {} ({}): {} configured, {} cleaned",
+            serviceName, instanceAddress, middlewares.size(), 
+            existingMiddlewares.size() - configuredTypes.size());
     }
 
     /**
-     * 获取服务的所有中间件
+     * 获取服务的所有中间件（所有实例）
      */
     public List<ServiceMiddlewareEntity> getServiceMiddlewares(String serviceName) {
         return middlewareRepository.findByServiceName(serviceName);
     }
 
     /**
-     * 获取服务的Exporter地址映射
-     * 
+     * 获取服务实例的所有中间件（按实例隔离）
+     *
+     * @param serviceName 服务名称
+     * @param instanceAddress 实例地址（IP:port）
+     * @return 该服务实例的中间件列表
+     */
+    public List<ServiceMiddlewareEntity> getServiceInstanceMiddlewares(String serviceName, String instanceAddress) {
+        return middlewareRepository.findByServiceNameAndInstanceAddress(serviceName, instanceAddress);
+    }
+
+    /**
+     * 获取服务实例的 Exporter 地址映射（按实例隔离）
+     *
+     * @param serviceName 服务名称
+     * @param instanceAddress 实例地址（IP:port）
+     * @return Map<中间件类型, Exporter地址>
+     */
+    public Map<String, String> getExporterMappingByInstance(String serviceName, String instanceAddress) {
+        List<ServiceMiddlewareEntity> middlewares = middlewareRepository
+            .findByServiceNameAndInstanceAddress(serviceName, instanceAddress);
+
+        Map<String, String> mapping = new HashMap<>();
+        for (ServiceMiddlewareEntity mw : middlewares) {
+            if (mw.getExporterUrl() != null && mw.getMonitoringEnabled()) {
+                mapping.put(mw.getMiddlewareType(), mw.getExporterUrl());
+            }
+        }
+        return mapping;
+    }
+
+    /**
+     * 获取服务的所有实例地址列表
+     *
+     * @param serviceName 服务名称
+     * @return 实例地址列表
+     */
+    public List<String> getServiceInstanceAddresses(String serviceName) {
+        return middlewareRepository.findAllInstanceAddressesByServiceName(serviceName);
+    }
+
+    /**
+     * 获取服务的Exporter地址映射（所有实例合并，兼容旧 API）
+     *
      * @return Map<中间件类型, Exporter地址>
      */
     public Map<String, String> getExporterMapping(String serviceName) {

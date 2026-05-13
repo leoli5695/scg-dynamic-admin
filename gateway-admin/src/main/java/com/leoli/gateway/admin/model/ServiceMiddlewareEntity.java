@@ -20,10 +20,12 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "service_middleware", indexes = {
     @Index(name = "idx_service_name", columnList = "service_name"),
+    @Index(name = "idx_instance_address", columnList = "instance_address"),
     @Index(name = "idx_service_middleware_type", columnList = "service_name, middleware_type"),
     @Index(name = "idx_updated_at", columnList = "updated_at")
 }, uniqueConstraints = {
-    @UniqueConstraint(columnNames = {"service_name", "middleware_type"})
+    // 按服务实例隔离：同一服务同一实例同一中间件类型只能有一条记录
+    @UniqueConstraint(columnNames = {"service_name", "instance_address", "middleware_type"})
 })
 public class ServiceMiddlewareEntity {
 

@@ -86,7 +86,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
      * - /api/stress-test/run: stress test trigger requires auth (H5 fix)
      */
     private boolean isPublicEndpoint(String requestURI) {
-        return requestURI.startsWith("/api/auth/") ||      // Login/register
+        return requestURI.equals("/api/auth/login") ||     // Login only (not all /api/auth/*)
+               requestURI.equals("/api/auth/register") ||   // Register only
                requestURI.equals("/actuator/health") ||    // Only basic health endpoint (not all actuator)
                requestURI.startsWith("/api/gateway/health") || // Gateway health query (read-only)
                requestURI.startsWith("/api/instances/heartbeat") || // Instance heartbeat (monitoring)

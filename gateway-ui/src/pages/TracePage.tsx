@@ -4,7 +4,7 @@ import {
   message, Typography, Badge, Tooltip, Popconfirm,
   Statistic, Drawer, Progress, Alert, Collapse,
   Select, DatePicker, Input, Segmented, Dropdown,
-  Modal, Form, Tabs, Tree, Descriptions, Empty
+  Tabs, Descriptions, Spin
 } from 'antd';
 import {
   ApiOutlined, ReloadOutlined, PlayCircleOutlined,
@@ -14,18 +14,18 @@ import {
   DownloadOutlined, SettingOutlined, SearchOutlined,
   ExpandOutlined, CompressOutlined, LinkOutlined,
   BranchesOutlined, ShareAltOutlined, RightOutlined,
-  DownOutlined, BugOutlined, InfoCircleOutlined,
-  UnorderedListOutlined, ApartmentOutlined, ThunderboltOutlined
+  DownOutlined, InfoCircleOutlined,
+  UnorderedListOutlined, ApartmentOutlined, ThunderboltOutlined,
+  CloudServerOutlined, ExclamationCircleOutlined
 } from '@ant-design/icons';
 import FilterWaterfallChart from '../components/FilterWaterfallChart';
 import FilterExecutionDetailDrawer from '../components/FilterExecutionDetailDrawer';
-import type { DataNode } from 'antd/es/tree';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import api from '../utils/api';
 import { useTranslation } from 'react-i18next';
 
-const { Title, Text, Paragraph, Link } = Typography;
+const { Title, Text, Link } = Typography;
 const { RangePicker } = DatePicker;
 const { Panel } = Collapse;
 
@@ -142,17 +142,17 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
   const [selectedFilterExecution, setSelectedFilterExecution] = useState<FilterExecutionBar | null>(null);
   const [filterDetailDrawerVisible, setFilterDetailDrawerVisible] = useState(false);
 
-  // Jaeger distributed tracing state
-  const [jaegerAvailable, setJaegerAvailable] = useState(false);
-  const [jaegerLoading, setJaegerLoading] = useState(false);
-  const [jaegerServices, setJaegerServices] = useState<string[]>([]);
-  const [selectedService, setSelectedService] = useState<string>('');
-  const [selectedOperation, setSelectedOperation] = useState<string>('');
-  const [jaegerOperations, setJaegerOperations] = useState<string[]>([]);
-  const [jaegerTraces, setJaegerTraces] = useState<any[]>([]);
-  const [selectedJaegerTrace, setSelectedJaegerTrace] = useState<any | null>(null);
-  const [jaegerDetailDrawerVisible, setJaegerDetailDrawerVisible] = useState(false);
-  const [jumpTraceId, setJumpTraceId] = useState<string>(''); // for traceId jump
+  // Full-chain tracing state (unified view: gateway + downstream services)
+  const [fullChainLoading, setFullChainLoading] = useState(false);
+  const [fullChainTraces, setFullChainTraces] = useState<any[]>([]);
+  const [fullChainTotal, setFullChainTotal] = useState(0);
+  const [fullChainPage, setFullChainPage] = useState(0);
+  const [selectedFullChain, setSelectedFullChain] = useState<any | null>(null);
+  const [fullChainDetailVisible, setFullChainDetailVisible] = useState(false);
+  const [fullChainDetailLoading, setFullChainDetailLoading] = useState(false);
+
+  // Trace sampling config state
+  const [traceConfig, setTraceConfig] = useState<any | null>(null);
 
   const { t } = useTranslation();
 
@@ -181,6 +181,9 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
         api.get(endpoint, { params }),
         api.get('/api/traces/stats', { params: instanceId ? { instanceId } : {} })
       ]);
+
+      // Load trace config separately (non-blocking)
+      api.get('/api/traces/config').then(res => setTraceConfig(res.data)).catch(() => {});
 
       let traceData = tracesRes.data?.content || [];
 
@@ -215,13 +218,6 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
     loadTraces();
   }, [instanceId, activeTab, timeRange, customTimeRange]);
 
-  // Load Jaeger traces when jumpTraceId is set or tab is distributed
-  useEffect(() => {
-    if (activeTab === 'distributed' && selectedService) {
-      loadJaegerTraces();
-    }
-  }, [activeTab, selectedService, selectedOperation, jumpTraceId]);
-
   // Filter traces by time range on client side (for preset ranges)
   const filteredTraces = useMemo(() => {
     if (!customTimeRange && timeRange) {
@@ -237,84 +233,45 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
   const handleTabChange = (key: string) => {
     setActiveTab(key);
     setSearchFilters({ path: '', method: '', statusCode: '', traceId: '' });
-    // Load Jaeger data when switching to distributed tracing tab
     if (key === 'distributed') {
-      loadJaegerServices();
+      loadFullChainTraces();
     }
   };
 
-  // Jaeger distributed tracing functions
-  const loadJaegerServices = async () => {
-    try {
-      setJaegerLoading(true);
-      const res = await api.get('/api/tracing/services');
-      if (res.data.code === 200) {
-        setJaegerServices(res.data.data || []);
-        setJaegerAvailable(res.data.jaegerAvailable);
-        if (res.data.data?.length > 0 && !selectedService) {
-          setSelectedService(res.data.data[0]);
-          loadJaegerOperations(res.data.data[0]);
-        }
-      }
-    } catch (e) {
-      console.error('Failed to load Jaeger services:', e);
-      setJaegerAvailable(false);
-    } finally {
-      setJaegerLoading(false);
-    }
-  };
-
-  const loadJaegerOperations = async (service: string) => {
-    try {
-      const res = await api.get(`/api/tracing/services/${service}/operations`);
-      if (res.data.code === 200) {
-        setJaegerOperations(res.data.data || []);
-      }
-    } catch (e) {
-      console.error('Failed to load operations:', e);
-      setJaegerOperations([]);
-    }
-  };
-
-  const loadJaegerTraces = async () => {
-    if (!selectedService) return;
-    try {
-      setJaegerLoading(true);
-      const params: any = { service: selectedService, limit: 50, lookback: timeRange };
-      if (selectedOperation) params.operation = selectedOperation;
-      if (jumpTraceId) params.traceId = jumpTraceId;
-      
-      const res = await api.get('/api/tracing/traces', { params });
-      if (res.data.code === 200) {
-        setJaegerTraces(res.data.data || []);
-        setJaegerAvailable(res.data.jaegerAvailable);
-      }
-      // Clear jumpTraceId after search
-      if (jumpTraceId) setJumpTraceId('');
-    } catch (e) {
-      console.error('Failed to load Jaeger traces:', e);
-      message.error('加载分布式追踪失败');
-    } finally {
-      setJaegerLoading(false);
-    }
-  };
-
-  const handleServiceChange = (service: string) => {
-    setSelectedService(service);
-    setSelectedOperation('');
-    loadJaegerOperations(service);
-  };
-
-  const handleViewJaegerTrace = (trace: any) => {
-    setSelectedJaegerTrace(trace);
-    setJaegerDetailDrawerVisible(true);
-  };
-
-  const handleJumpToDistributed = (uuidTraceId: string) => {
+  const handleJumpToDistributed = (traceId: string) => {
     setActiveTab('distributed');
-    setSelectedService('my-gateway'); // default to gateway service
-    setJumpTraceId(uuidTraceId);
-    // Will search automatically when tab content renders
+    loadFullChainTraces();
+  };
+
+  // ======================== Full-chain tracing functions ========================
+
+  const loadFullChainTraces = async (page = 0) => {
+    try {
+      setFullChainLoading(true);
+      const res = await api.get('/api/traces/full-chain/recent', { params: { page, size: 20 } });
+      setFullChainTraces(res.data?.chains || []);
+      setFullChainTotal(res.data?.totalElements || 0);
+      setFullChainPage(page);
+    } catch (e: any) {
+      console.error('Failed to load full-chain traces:', e);
+      message.error(t('trace.load_fullchain_failed') || '加载全链路追踪失败');
+    } finally {
+      setFullChainLoading(false);
+    }
+  };
+
+  const loadFullChainDetail = async (traceId: string) => {
+    try {
+      setFullChainDetailLoading(true);
+      const res = await api.get(`/api/traces/full-chain/${traceId}`);
+      setSelectedFullChain(res.data);
+      setFullChainDetailVisible(true);
+    } catch (e: any) {
+      console.error('Failed to load full chain detail:', e);
+      message.error(t('trace.load_fullchain_detail_failed') || '加载链路详情失败');
+    } finally {
+      setFullChainDetailLoading(false);
+    }
   };
 
   const handleTimeRangeChange = (value: number | 'custom') => {
@@ -699,14 +656,6 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
     return '';
   };
 
-  // Helper function to calculate span depth (for hierarchical display)
-  const getSpanDepth = (span: any, allSpans: any[]): number => {
-    if (!span.parentSpanId || span.parentSpanId === '') return 0;
-    const parent = allSpans.find(s => s.spanId === span.parentSpanId);
-    if (!parent) return 0;
-    return getSpanDepth(parent, allSpans) + 1;
-  };
-
   return (
     <div style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -910,108 +859,155 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
           />
         )}
 
-        {/* Distributed tracing content */}
+        {/* Distributed tracing content - Full-chain view */}
         {activeTab === 'distributed' && (
           <div>
-            {!jaegerAvailable && (
-              <Alert
-                message={t('trace.jaeger_unavailable')}
-                description={t('trace.jaeger_unavailable_desc')}
-                type="warning"
-                showIcon
-                style={{ marginBottom: 16 }}
-              />
-            )}
-            
-            {/* Jaeger filters */}
-            <Space style={{ marginBottom: 16 }} wrap>
-              <Select
-                placeholder={t('trace.select_service')}
-                value={selectedService}
-                onChange={handleServiceChange}
-                options={jaegerServices.map(s => ({ value: s, label: s }))}
-                style={{ width: 200 }}
-                loading={jaegerLoading}
-              />
-              <Select
-                placeholder={t('trace.select_operation')}
-                value={selectedOperation}
-                onChange={setSelectedOperation}
-                options={jaegerOperations.map(o => ({ value: o, label: o }))}
-                style={{ width: 250 }}
-                allowClear
-              />
-              <Button icon={<ReloadOutlined />} onClick={loadJaegerTraces} loading={jaegerLoading}>
-                {t('common.refresh')}
-              </Button>
-            </Space>
-
-            {/* Jaeger traces table */}
-            <Table
-              loading={jaegerLoading}
-              dataSource={jaegerTraces}
-              rowKey="traceId"
-              size="small"
-              pagination={{ pageSize: 20 }}
-              columns={[
-                {
-                  title: t('trace.trace_id'),
-                  dataIndex: 'traceId',
-                  key: 'traceId',
-                  width: 150,
-                  render: (id: string) => (
-                    <Tooltip title={id}>
-                      <Text copyable={{ text: id, tooltips: false }} style={{ fontSize: 12 }}>
-                        {id?.substring(0, 16)}...
-                      </Text>
-                    </Tooltip>
-                  )
-                },
-                {
-                  title: t('trace.spans'),
-                  dataIndex: 'spanCount',
-                  key: 'spanCount',
-                  width: 80,
-                  render: (count: number) => <Badge count={count} style={{ backgroundColor: '#1890ff' }} />
-                },
-                {
-                  title: t('trace.duration'),
-                  dataIndex: 'durationMs',
-                  key: 'durationMs',
-                  width: 100,
-                  render: (ms: number) => {
-                    const color = ms > 1000 ? '#cf1322' : ms > 500 ? '#faad14' : undefined;
-                    return <Text style={{ color }}>{ms}ms</Text>;
-                  }
-                },
-                {
-                  title: t('trace.services'),
-                  key: 'services',
-                  render: (_: any, record: any) => {
-                    const processes = record.processes || {};
-                    const serviceNames = Object.values(processes).map((p: any) => p.serviceName);
-                    return (
-                      <Space size={4}>
-                        {serviceNames.slice(0, 3).map((name: string) => (
-                          <Tag key={name} color="blue" style={{ fontSize: 11 }}>{name}</Tag>
-                        ))}
-                        {serviceNames.length > 3 && <Text type="secondary">+{serviceNames.length - 3}</Text>}
+                {/* Sampling info alert */}
+                {traceConfig && (
+                  <Alert
+                    type="info"
+                    showIcon
+                    style={{ marginBottom: 12 }}
+                    message={
+                      <Space>
+                        <span>采样配置提示</span>
+                        <Tag color="blue">正常请求 {traceConfig.gateway?.samplingRate}% 采样</Tag>
+                        <Tag color="green">错误请求 100% 采样</Tag>
                       </Space>
-                    );
-                  }
-                },
-                {
-                  title: '',
-                  key: 'actions',
-                  width: 60,
-                  render: (_: any, record: any) => (
-                    <Button size="small" type="link" icon={<EyeOutlined />} onClick={() => handleViewJaegerTrace(record)}>
-                      {t('trace.view_details')}
-                    </Button>
-                  )
-                }
-              ]}
-            />
+                    }
+                    description={traceConfig.note || '部分请求可能因采样未被记录'}
+                  />
+                )}
+                <Space style={{ marginBottom: 16 }}>
+                  <Button icon={<ReloadOutlined />} onClick={() => loadFullChainTraces(fullChainPage)} loading={fullChainLoading}>
+                    {t('common.refresh')}
+                  </Button>
+                </Space>
+
+                <Table
+                  loading={fullChainLoading}
+                  dataSource={fullChainTraces}
+                  rowKey="traceId"
+                  size="small"
+                  pagination={{
+                    current: fullChainPage + 1,
+                    pageSize: 20,
+                    total: fullChainTotal,
+                    onChange: (p) => loadFullChainTraces(p - 1),
+                    showTotal: (total) => `${total} items`
+                  }}
+                  columns={[
+                    {
+                      title: t('trace.trace_id'),
+                      dataIndex: 'traceId',
+                      key: 'traceId',
+                      width: 150,
+                      render: (id: string) => (
+                        <Tooltip title={id}>
+                          <Text copyable={{ text: id, tooltips: false }} style={{ fontSize: 12 }}>
+                            {id?.substring(0, 12)}...
+                          </Text>
+                        </Tooltip>
+                      )
+                    },
+                    {
+                      title: t('trace.method'),
+                      dataIndex: 'method',
+                      key: 'method',
+                      width: 70,
+                      render: (m: string) => <Tag color={m === 'GET' ? 'green' : m === 'POST' ? 'blue' : 'orange'}>{m}</Tag>
+                    },
+                    {
+                      title: t('trace.path'),
+                      dataIndex: 'path',
+                      key: 'path',
+                      ellipsis: true,
+                      render: (p: string) => <Tooltip title={p}><Text style={{ fontSize: 12 }}>{p}</Text></Tooltip>
+                    },
+                    {
+                      title: t('trace.status'),
+                      dataIndex: 'statusCode',
+                      key: 'statusCode',
+                      width: 70,
+                      render: (code: number) => {
+                        const color = code >= 500 ? 'error' : code >= 400 ? 'warning' : 'success';
+                        return <Badge status={color} text={code} />;
+                      }
+                    },
+                    {
+                      title: t('trace.latency'),
+                      dataIndex: 'latencyMs',
+                      key: 'latencyMs',
+                      width: 90,
+                      sorter: (a: any, b: any) => (a.latencyMs || 0) - (b.latencyMs || 0),
+                      render: (ms: number) => {
+                        const color = ms > 1000 ? '#cf1322' : ms > 500 ? '#faad14' : undefined;
+                        return <Text style={{ color }}>{ms}ms</Text>;
+                      }
+                    },
+                    {
+                      title: t('trace.chain_status') || '链路状态',
+                      dataIndex: 'chainStatus',
+                      key: 'chainStatus',
+                      width: 130,
+                      render: (status: string, record: any) => {
+                        if (status === 'COMPLETE' || status === 'COMPLETE_WITH_ERRORS') {
+                          return (
+                            <Space size={4}>
+                              <CheckCircleOutlined style={{ color: status === 'COMPLETE' ? '#52c41a' : '#faad14' }} />
+                              <Text style={{ fontSize: 12 }}>
+                                {record.serviceCount || 0} {t('trace.service_count_label') || '个服务'}
+                              </Text>
+                            </Space>
+                          );
+                        }
+                        return (
+                          <Space size={4}>
+                            <ExclamationCircleOutlined style={{ color: '#d9d9d9' }} />
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                              {t('trace.gateway_only') || '仅网关'}
+                            </Text>
+                          </Space>
+                        );
+                      }
+                    },
+                    {
+                      title: t('trace.downstream_services') || '下游服务',
+                      key: 'services',
+                      width: 180,
+                      render: (_: any, record: any) => {
+                        const services = record.services || [];
+                        if (services.length === 0) return <Text type="secondary">-</Text>;
+                        return (
+                          <Space size={4} wrap>
+                            {services.map((s: any, idx: number) => (
+                              <Tag key={idx} color={s.success ? 'blue' : 'error'} style={{ fontSize: 10 }}>
+                                {s.serviceName} ({s.durationMs}ms)
+                              </Tag>
+                            ))}
+                          </Space>
+                        );
+                      }
+                    },
+                    {
+                      title: t('trace.time'),
+                      dataIndex: 'traceTime',
+                      key: 'traceTime',
+                      width: 140,
+                      render: (time: string) => <Text style={{ fontSize: 11 }}>{dayjs(time).format('MM-DD HH:mm:ss')}</Text>
+                    },
+                    {
+                      title: '',
+                      key: 'actions',
+                      width: 80,
+                      render: (_: any, record: any) => (
+                        <Button size="small" type="link" icon={<EyeOutlined />} onClick={() => loadFullChainDetail(record.traceId)}>
+                          {t('trace.view_details')}
+                        </Button>
+                      )
+                    }
+                  ]}
+                />
           </div>
         )}
       </Card>
@@ -1029,12 +1025,11 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
           </Space>
         }
         placement="right"
-        width={900}
+        styles={{ wrapper: { width: 900 }, body: { padding: 16 } }}
         destroyOnClose
         maskClosable
         onClose={() => setDetailDrawerVisible(false)}
         open={detailDrawerVisible}
-        styles={{ body: { padding: 16 } }}
         extra={
           <Segmented
             options={[
@@ -1285,7 +1280,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                       children: (
                         <Table
                           size="small"
-                          dataSource={selectedTrace.filterChain.executions}
+                          dataSource={selectedTrace.filterChain?.executions || []}
                           columns={filterColumns}
                           rowKey={(record, index) => `${record.filterName}_${record.filterOrder}_${index}`}
                           pagination={false}
@@ -1357,324 +1352,357 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
         )}
       </Drawer>
 
-      {/* Jaeger Detail Drawer */}
+      {/* Full-Chain Detail Drawer */}
       <Drawer
         title={
           <Space>
-            <BranchesOutlined />
-            <Text>{t('trace.distributed_detail')}</Text>
-            {selectedJaegerTrace && (
-              <>
-                <Tag color="blue">{selectedJaegerTrace.spanCount} spans</Tag>
-                {selectedJaegerTrace.spans?.some((s: any) => s.hasErrors || s.status === 'error') && (
-                  <Tag color="error"><BugOutlined /> {t('trace.has_errors')}</Tag>
-                )}
-              </>
+            <ApartmentOutlined />
+            <Text>{t('trace.full_chain_detail') || '全链路详情'}</Text>
+            {selectedFullChain && (
+              <Tag color={
+                selectedFullChain.chainStatus === 'COMPLETE' ? 'success' :
+                selectedFullChain.chainStatus === 'COMPLETE_WITH_ERRORS' ? 'warning' :
+                selectedFullChain.chainStatus === 'GATEWAY_ONLY' ? 'default' : 'error'
+              }>
+                {selectedFullChain.chainStatus === 'COMPLETE' ? (t('trace.chain_complete') || '链路完整') :
+                 selectedFullChain.chainStatus === 'GATEWAY_ONLY' ? (t('trace.gateway_only') || '仅网关') :
+                 selectedFullChain.chainStatus}
+              </Tag>
             )}
           </Space>
         }
         placement="right"
-        width={1000}
+        width={950}
         destroyOnClose
         onClose={() => {
-          setJaegerDetailDrawerVisible(false);
-          setSelectedJaegerTrace(null);
+          setFullChainDetailVisible(false);
+          setSelectedFullChain(null);
         }}
-        open={jaegerDetailDrawerVisible}
+        open={fullChainDetailVisible}
         styles={{ body: { padding: 16 } }}
       >
-        {selectedJaegerTrace && (
+        {fullChainDetailLoading && <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>}
+        {selectedFullChain && !fullChainDetailLoading && (
           <div>
-            {/* Trace Summary */}
+            {/* TraceId */}
             <Card size="small" style={{ marginBottom: 16 }}>
-              <Row gutter={16}>
-                <Col span={6}>
-                  <Statistic title={t('trace.trace_id')} valueStyle={{ fontSize: 12 }}
-                    value={selectedJaegerTrace.traceId?.substring(0, 16) + '...'} />
+              <Row gutter={16} align="middle">
+                <Col span={16}>
+                  <Text strong>Trace ID: </Text>
+                  <Text copyable style={{ fontSize: 12 }}>{selectedFullChain.traceId}</Text>
                 </Col>
-                <Col span={6}>
-                  <Statistic title={t('trace.duration')} value={selectedJaegerTrace.durationMs} suffix="ms" />
-                </Col>
-                <Col span={6}>
-                  <Statistic title={t('trace.spans')} value={selectedJaegerTrace.spanCount} />
-                </Col>
-                <Col span={6}>
-                  <Statistic title={t('trace.services')} value={Object.keys(selectedJaegerTrace.processes || {}).length} />
+                <Col span={8} style={{ textAlign: 'right' }}>
+                  <Tag color={
+                    selectedFullChain.chainStatus === 'COMPLETE' ? 'success' :
+                    selectedFullChain.chainStatus === 'GATEWAY_ONLY' ? 'default' : 'warning'
+                  }>
+                    {selectedFullChain.chainStatus === 'COMPLETE' ? (t('trace.chain_complete') || '链路完整') :
+                     selectedFullChain.chainStatus === 'GATEWAY_ONLY' ? (t('trace.gateway_only') || '仅网关') :
+                     selectedFullChain.chainStatus}
+                  </Tag>
                 </Col>
               </Row>
             </Card>
 
-            {/* Error Summary - Show if there are errors */}
-            {selectedJaegerTrace.spans?.some((s: any) => s.hasErrors || s.status === 'error') && (
-              <Alert
-                type="error"
-                showIcon
-                icon={<BugOutlined />}
-                style={{ marginBottom: 16 }}
-                message={
-                  <Space direction="vertical" size={4}>
-                    <Text strong>{t('trace.error_spans_found')}</Text>
-                    {selectedJaegerTrace.spans
-                      .filter((s: any) => s.hasErrors || s.status === 'error')
-                      .map((s: any, idx: number) => (
-                        <Text key={idx} type="danger">
-                          - {s.operationName}: {s.errorMessage || 'Unknown error'}
-                        </Text>
-                      ))}
-                  </Space>
-                }
-              />
+            {/* Duration Breakdown */}
+            {selectedFullChain.durationBreakdown && (
+              <Card size="small" title={t('trace.duration_breakdown') || '耗时分布'} style={{ marginBottom: 16 }}>
+                <Row gutter={16}>
+                  <Col span={8}>
+                    <Statistic
+                      title={t('trace.total_latency') || '总耗时'}
+                      value={selectedFullChain.durationBreakdown.gatewayTotalMs}
+                      suffix="ms"
+                    />
+                  </Col>
+                  <Col span={8}>
+                    <Statistic
+                      title={t('trace.gateway_overhead') || '网关开销'}
+                      value={selectedFullChain.durationBreakdown.gatewayOverheadMs}
+                      suffix={`ms (${selectedFullChain.durationBreakdown.gatewayOverheadPercent}%)`}
+                      valueStyle={{ color: '#1890ff' }}
+                    />
+                  </Col>
+                  <Col span={8}>
+                    <Statistic
+                      title={t('trace.service_duration') || '服务耗时'}
+                      value={selectedFullChain.durationBreakdown.serviceMaxDurationMs}
+                      suffix={`ms (${selectedFullChain.durationBreakdown.servicePercent}%)`}
+                      valueStyle={{ color: '#52c41a' }}
+                    />
+                  </Col>
+                </Row>
+                <div style={{ marginTop: 12 }}>
+                  <Progress
+                    percent={100}
+                    success={{ percent: selectedFullChain.durationBreakdown.servicePercent || 0 }}
+                    strokeColor="#1890ff"
+                    format={() => ''}
+                    size="small"
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginTop: 4 }}>
+                    <Text type="secondary"><span style={{ display: 'inline-block', width: 8, height: 8, background: '#52c41a', marginRight: 4 }}></span>{t('trace.service_time') || '服务耗时'}</Text>
+                    <Text type="secondary"><span style={{ display: 'inline-block', width: 8, height: 8, background: '#1890ff', marginRight: 4 }}></span>{t('trace.gateway_time') || '网关开销'}</Text>
+                  </div>
+                </div>
+              </Card>
             )}
 
-            <Tabs
-              defaultActiveKey="timeline"
-              items={[
-                {
-                  key: 'timeline',
-                  label: <span><ClockCircleOutlined /> {t('trace.span_timeline')}</span>,
-                  children: (
-                    <div style={{ overflowX: 'auto' }}>
-                      {selectedJaegerTrace.spans && selectedJaegerTrace.spans.length > 0 ? (
-                        <div style={{ minWidth: 700 }}>
-                          {/* Legend */}
-                          <div style={{ marginBottom: 12, display: 'flex', gap: 16, fontSize: 12 }}>
-                            <span><span style={{ display: 'inline-block', width: 12, height: 12, background: '#ff4d4f', marginRight: 4 }}></span>{t('trace.legend_error')}</span>
-                            <span><span style={{ display: 'inline-block', width: 12, height: 12, background: '#722ed1', marginRight: 4 }}></span>{t('trace.legend_client')}</span>
-                            <span><span style={{ display: 'inline-block', width: 12, height: 12, background: '#1890ff', marginRight: 4 }}></span>{t('trace.legend_server')}</span>
-                            <span><span style={{ display: 'inline-block', width: 12, height: 12, background: '#52c41a', marginRight: 4 }}></span>{t('trace.legend_internal')}</span>
+            {/* Gateway Node */}
+            {selectedFullChain.hasGatewayTrace && selectedFullChain.gateway && (
+              <Card
+                size="small"
+                title={
+                  <Space>
+                    <ApiOutlined style={{ color: '#1890ff' }} />
+                    <Text strong>{t('trace.gateway_node') || '网关层'}</Text>
+                    <Tag color={selectedFullChain.gateway.statusCode >= 400 ? 'error' : 'success'}>
+                      {selectedFullChain.gateway.statusCode}
+                    </Tag>
+                    {selectedFullChain.gateway.errorType && (
+                      <Tag color="error">{selectedFullChain.gateway.errorType}</Tag>
+                    )}
+                    {selectedFullChain.gateway.traceType && selectedFullChain.gateway.traceType !== 'ALL' && (
+                      <Tag color={selectedFullChain.gateway.traceType === 'ERROR' ? 'error' : 'warning'}>
+                        {selectedFullChain.gateway.traceType}
+                      </Tag>
+                    )}
+                  </Space>
+                }
+                style={{ marginBottom: 16 }}
+              >
+                <Descriptions size="small" column={2} bordered>
+                  <Descriptions.Item label={t('trace.method') || '方法'}>
+                    <Tag color="blue">{selectedFullChain.gateway.method}</Tag>
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t('trace.gateway_overhead') || '网关开销'}>
+                    {selectedFullChain.durationBreakdown ? (
+                      <Text style={{ color: selectedFullChain.durationBreakdown.gatewayOverheadMs > 200 ? '#cf1322' : undefined }}>
+                        {selectedFullChain.durationBreakdown.gatewayOverheadMs}ms ({selectedFullChain.durationBreakdown.gatewayOverheadPercent}%)
+                      </Text>
+                    ) : (
+                      <Text>{selectedFullChain.gateway.latencyMs}ms</Text>
+                    )}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t('trace.path') || '路径'} span={2}>
+                    <Text copyable style={{ fontSize: 12 }}>{selectedFullChain.gateway.uri}</Text>
+                  </Descriptions.Item>
+                  {selectedFullChain.gateway.queryString && (
+                    <Descriptions.Item label={t('trace.query_string') || '查询参数'} span={2}>
+                      <Text copyable style={{ fontSize: 12 }}>{selectedFullChain.gateway.queryString}</Text>
+                    </Descriptions.Item>
+                  )}
+                  <Descriptions.Item label={t('trace.route_id') || '路由ID'}>
+                    <Text style={{ fontSize: 12 }}>{selectedFullChain.gateway.routeId || '-'}</Text>
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t('trace.target_instance') || '目标实例'}>
+                    <Text style={{ fontSize: 12 }}>{selectedFullChain.gateway.targetInstance || '-'}</Text>
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t('trace.client_ip') || '客户端IP'}>
+                    {selectedFullChain.gateway.clientIp || '-'}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t('trace.time') || '时间'}>
+                    {selectedFullChain.gateway.traceTime ? dayjs(selectedFullChain.gateway.traceTime).format('YYYY-MM-DD HH:mm:ss') : '-'}
+                  </Descriptions.Item>
+                  {selectedFullChain.gateway.userAgent && (
+                    <Descriptions.Item label="User-Agent" span={2}>
+                      <Text style={{ fontSize: 11 }} ellipsis={{ tooltip: selectedFullChain.gateway.userAgent }}>
+                        {selectedFullChain.gateway.userAgent}
+                      </Text>
+                    </Descriptions.Item>
+                  )}
+                  {selectedFullChain.gateway.errorMessage && (
+                    <Descriptions.Item label={t('trace.error') || '错误'} span={2}>
+                      <Text type="danger">{selectedFullChain.gateway.errorMessage}</Text>
+                    </Descriptions.Item>
+                  )}
+                </Descriptions>
+
+                {/* Request/Response collapsible panels */}
+                <Collapse size="small" style={{ marginTop: 12 }} items={[
+                  ...(selectedFullChain.gateway.requestHeaders || selectedFullChain.gateway.requestBody ? [{
+                    key: 'request',
+                    label: <Text strong style={{ fontSize: 12 }}>Request</Text>,
+                    children: (
+                      <div>
+                        {selectedFullChain.gateway.requestHeaders && (
+                          <div style={{ marginBottom: 8 }}>
+                            <Text type="secondary" style={{ fontSize: 11 }}>Headers</Text>
+                            <pre style={{ background: '#f5f5f5', padding: 8, borderRadius: 4, fontSize: 11, maxHeight: 150, overflow: 'auto', margin: '4px 0 0' }}>
+                              {formatJson(selectedFullChain.gateway.requestHeaders)}
+                            </pre>
                           </div>
-                          {/* Time scale */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 11, color: '#666', paddingLeft: 160 }}>
-                            <span>0ms</span>
-                            <span>{Math.round(selectedJaegerTrace.durationMs / 4)}ms</span>
-                            <span>{Math.round(selectedJaegerTrace.durationMs / 2)}ms</span>
-                            <span>{Math.round(selectedJaegerTrace.durationMs * 3 / 4)}ms</span>
-                            <span>{selectedJaegerTrace.durationMs}ms</span>
+                        )}
+                        {selectedFullChain.gateway.requestBody && (
+                          <div>
+                            <Text type="secondary" style={{ fontSize: 11 }}>Body</Text>
+                            <pre style={{ background: '#f5f5f5', padding: 8, borderRadius: 4, fontSize: 11, maxHeight: 200, overflow: 'auto', margin: '4px 0 0' }}>
+                              {formatJson(selectedFullChain.gateway.requestBody)}
+                            </pre>
                           </div>
+                        )}
+                      </div>
+                    )
+                  }] : []),
+                  ...(selectedFullChain.gateway.responseHeaders || selectedFullChain.gateway.responseBody ? [{
+                    key: 'response',
+                    label: <Text strong style={{ fontSize: 12 }}>Response</Text>,
+                    children: (
+                      <div>
+                        {selectedFullChain.gateway.responseHeaders && (
+                          <div style={{ marginBottom: 8 }}>
+                            <Text type="secondary" style={{ fontSize: 11 }}>Headers</Text>
+                            <pre style={{ background: '#f5f5f5', padding: 8, borderRadius: 4, fontSize: 11, maxHeight: 150, overflow: 'auto', margin: '4px 0 0' }}>
+                              {formatJson(selectedFullChain.gateway.responseHeaders)}
+                            </pre>
+                          </div>
+                        )}
+                        {selectedFullChain.gateway.responseBody && (
+                          <div>
+                            <Text type="secondary" style={{ fontSize: 11 }}>Body</Text>
+                            <pre style={{ background: '#f5f5f5', padding: 8, borderRadius: 4, fontSize: 11, maxHeight: 200, overflow: 'auto', margin: '4px 0 0' }}>
+                              {formatJson(selectedFullChain.gateway.responseBody)}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  }] : [])
+                ]} />
+              </Card>
+            )}
 
-                          {/* Spans Timeline */}
-                          {selectedJaegerTrace.spans.map((span: any, index: number) => {
-                            const startOffset = (span.startTime - selectedJaegerTrace.spans[0].startTime) / (selectedJaegerTrace.duration || 1) * 100;
-                            const widthPercent = (span.duration / (selectedJaegerTrace.duration || 1)) * 100;
-                            const minWidth = Math.max(widthPercent, 1);
-                            const depth = getSpanDepth(span, selectedJaegerTrace.spans);
-                            const indent = depth * 24;
-                            const hasError = span.hasErrors || span.status === 'error';
+            {/* Arrow */}
+            {selectedFullChain.hasGatewayTrace && selectedFullChain.hasServiceTrace && (
+              <div style={{ textAlign: 'center', margin: '8px 0' }}>
+                <DownOutlined style={{ fontSize: 20, color: '#1890ff' }} />
+              </div>
+            )}
 
-                            const barColor = hasError ? '#ff4d4f' :
-                                             span.kind === 'client' ? '#722ed1' :
-                                             span.kind === 'server' ? '#1890ff' : '#52c41a';
+            {/* Service Nodes */}
+            {selectedFullChain.hasServiceTrace && selectedFullChain.services?.map((service: any, idx: number) => (
+              <Card
+                key={idx}
+                size="small"
+                title={
+                  <Space>
+                    <CloudServerOutlined style={{ color: '#52c41a' }} />
+                    <Text strong>{service.serviceName}</Text>
+                    <Tag color={service.success ? 'success' : 'error'}>
+                      {service.statusCode || (service.success ? 'OK' : 'ERROR')}
+                    </Tag>
+                    <Text type="secondary">{service.totalDurationMs}ms</Text>
+                    {service.isSlow && <Tag color="warning">{t('trace.slow') || 'SLOW'}</Tag>}
+                  </Space>
+                }
+                style={{ marginBottom: 16 }}
+              >
+                <Descriptions size="small" column={2} bordered style={{ marginBottom: 12 }}>
+                  <Descriptions.Item label={t('trace.path') || '路径'}>
+                    <Text style={{ fontSize: 12 }}>{service.path}</Text>
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t('trace.method') || '方法'}>
+                    <Tag>{service.method}</Tag>
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t('trace.duration') || '耗时'}>
+                    {service.totalDurationMs}ms
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t('trace.spans') || 'Spans'}>
+                    {service.spanCount || 0}
+                  </Descriptions.Item>
+                  {service.errorMessage && (
+                    <Descriptions.Item label={t('trace.error') || '错误'} span={2}>
+                      <Text type="danger">{service.errorMessage}</Text>
+                    </Descriptions.Item>
+                  )}
+                </Descriptions>
 
-                            return (
-                              <div
-                                key={span.spanId || index}
-                                style={{
-                                  marginBottom: 4,
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  backgroundColor: hasError ? 'rgba(255, 77, 79, 0.08)' : 'transparent',
-                                  padding: '4px 0',
-                                  borderRadius: 4
-                                }}
-                              >
-                                {/* Operation name with indent */}
-                                <div style={{ width: 160 + indent, paddingLeft: indent, fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+                {/* Spans Detail */}
+                {service.spans && service.spans.length > 0 && (
+                  <div>
+                    {/* Span Waterfall Timeline */}
+                    <Text strong style={{ display: 'block', marginBottom: 8 }}>
+                      {t('trace.span_details') || 'Span 详情'} ({service.spans.length})
+                    </Text>
+                    <div style={{ marginBottom: 12 }}>
+                      {(() => {
+                        const maxDuration = Math.max(...service.spans.map((s: any) => s.durationMs || 0), 1);
+                        return service.spans.map((span: any, spanIdx: number) => {
+                          const widthPercent = Math.max(((span.durationMs || 0) / maxDuration) * 100, 2);
+                          const barColor = !span.success ? '#ff4d4f' :
+                            span.durationMs > 100 ? '#faad14' :
+                            span.durationMs > 50 ? '#1890ff' : '#52c41a';
+                          return (
+                            <div key={spanIdx} style={{ marginBottom: !span.success && span.errorMessage ? 0 : 3 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <Tooltip title={span.operation}>
+                                  <Text style={{ width: 200, fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 0 }}>
+                                    {span.operation}
+                                  </Text>
+                                </Tooltip>
+                                <div style={{ flex: 1, height: 18, background: '#f5f5f5', borderRadius: 2, position: 'relative' }}>
                                   <Tooltip title={
-                                    <div>
-                                      <div><strong>{span.operationName}</strong></div>
-                                      <div>Service: {span.serviceName}</div>
-                                      <div>Kind: {span.kind}</div>
-                                      {hasError && <div style={{ color: '#ffa39e' }}>Error: {span.errorMessage}</div>}
-                                    </div>
-                                  }>
-                                    <span style={{ cursor: 'pointer' }}>
-                                      {hasError && <BugOutlined style={{ color: '#ff4d4f', marginRight: 4 }} />}
-                                      <Tag color={hasError ? 'error' : 'blue'} style={{ fontSize: 10, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                        {span.operationName}
-                                      </Tag>
-                                    </span>
-                                  </Tooltip>
-                                </div>
-
-                                {/* Timeline bar */}
-                                <div style={{ flex: 1, position: 'relative', height: 24, background: '#fafafa', borderRadius: 2, border: '1px solid #f0f0f0' }}>
-                                  <Tooltip title={
-                                    <div>
-                                      <div><strong>{span.operationName}</strong></div>
-                                      <div>Duration: {span.durationMs}ms</div>
-                                      <div>Start: {span.startTime}</div>
-                                      {hasError && <div style={{ color: '#ffa39e' }}>Error: {span.errorMessage}</div>}
+                                    <div style={{ maxWidth: 400 }}>
+                                      <div><strong>{span.operation}</strong></div>
+                                      <div>{t('trace.duration') || '耗时'}: {span.durationMs}ms</div>
+                                      <div>{span.success ?
+                                        <span style={{ color: '#95de64' }}>SUCCESS</span> :
+                                        <span style={{ color: '#ffa39e' }}>FAILED</span>}
+                                      </div>
+                                      {!span.success && (
+                                        <div style={{ color: '#ffa39e', marginTop: 4, whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: 12 }}>
+                                          {span.errorMessage || `${span.operation} failed`}
+                                        </div>
+                                      )}
                                     </div>
                                   }>
                                     <div style={{
-                                      position: 'absolute',
-                                      left: `${Math.max(0, startOffset)}%`,
-                                      width: `${minWidth}%`,
+                                      width: `${widthPercent}%`,
                                       height: '100%',
                                       background: barColor,
                                       borderRadius: 2,
-                                      cursor: 'pointer',
                                       display: 'flex',
                                       alignItems: 'center',
-                                      justifyContent: 'center',
+                                      paddingLeft: 4,
                                       fontSize: 10,
                                       color: '#fff',
-                                      overflow: 'hidden',
-                                      fontWeight: hasError ? 'bold' : 'normal'
+                                      minWidth: 24
                                     }}>
-                                      {widthPercent > 15 && span.durationMs > 3 && `${span.durationMs}ms`}
+                                      {span.durationMs > 0 && `${span.durationMs}ms`}
                                     </div>
                                   </Tooltip>
                                 </div>
+                                <div style={{ width: 20, flexShrink: 0, textAlign: 'center' }}>
+                                  {span.success ? <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 12 }} /> :
+                                    <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 12 }} />}
+                                </div>
                               </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <Empty description={t('trace.no_spans')} />
-                      )}
+                            </div>
+                          );
+                        });
+                      })()}
+                      <div style={{ display: 'flex', gap: 12, fontSize: 10, marginTop: 6, color: '#999' }}>
+                        <span><span style={{ display: 'inline-block', width: 8, height: 8, background: '#52c41a', borderRadius: 1, marginRight: 3 }}></span>&lt;50ms</span>
+                        <span><span style={{ display: 'inline-block', width: 8, height: 8, background: '#1890ff', borderRadius: 1, marginRight: 3 }}></span>50-100ms</span>
+                        <span><span style={{ display: 'inline-block', width: 8, height: 8, background: '#faad14', borderRadius: 1, marginRight: 3 }}></span>&gt;100ms</span>
+                        <span><span style={{ display: 'inline-block', width: 8, height: 8, background: '#ff4d4f', borderRadius: 1, marginRight: 3 }}></span>{t('trace.error') || '错误'}</span>
+                      </div>
                     </div>
-                  )
-                },
-                {
-                  key: 'spans',
-                  label: <span><UnorderedListOutlined /> {t('trace.span_details')}</span>,
-                  children: (
-                    <Table
-                      size="small"
-                      dataSource={selectedJaegerTrace.spans || []}
-                      rowKey="spanId"
-                      pagination={false}
-                      scroll={{ y: 400 }}
-                      expandable={{
-                        expandedRowRender: (span: any) => (
-                          <div style={{ padding: '8px 0' }}>
-                            <Descriptions size="small" column={2} bordered>
-                              <Descriptions.Item label="Span ID" span={2}>
-                                <Text copyable style={{ fontSize: 11 }}>{span.spanId}</Text>
-                              </Descriptions.Item>
-                              <Descriptions.Item label="Parent ID">
-                                {span.parentSpanId || <Text type="secondary">root</Text>}
-                              </Descriptions.Item>
-                              <Descriptions.Item label="Kind">{span.kind || '-'}</Descriptions.Item>
-                              {span.tags && span.tags.length > 0 && (
-                                <Descriptions.Item label="Tags" span={2}>
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                                    {span.tags.map((tag: any, idx: number) => (
-                                      <Tag key={idx} style={{ fontSize: 10, marginBottom: 2 }}>
-                                        {tag.key}: <Text strong>{String(tag.value).substring(0, 50)}{String(tag.value).length > 50 ? '...' : ''}</Text>
-                                      </Tag>
-                                    ))}
-                                  </div>
-                                </Descriptions.Item>
-                              )}
-                              {span.hasErrors && (
-                                <Descriptions.Item label={<Text type="danger">Error</Text>} span={2}>
-                                  <Alert type="error" message={span.errorMessage || 'Unknown error'} style={{ fontSize: 11 }} />
-                                </Descriptions.Item>
-                              )}
-                            </Descriptions>
-                          </div>
-                        ),
-                        rowExpandable: (span: any) => span.tags?.length > 0 || span.hasErrors
-                      }}
-                      rowClassName={(record: any) => record.hasErrors || record.status === 'error' ? 'trace-row-error' : ''}
-                      columns={[
-                        {
-                          title: t('trace.operation'),
-                          dataIndex: 'operationName',
-                          key: 'operationName',
-                          ellipsis: true,
-                          render: (name: string, record: any) => (
-                            <Space>
-                              {(record.hasErrors || record.status === 'error') && <BugOutlined style={{ color: '#ff4d4f' }} />}
-                              <Tooltip title={name}><Text style={{ fontSize: 11 }}>{name}</Text></Tooltip>
-                            </Space>
-                          )
-                        },
-                        {
-                          title: t('trace.service'),
-                          dataIndex: 'serviceName',
-                          key: 'serviceName',
-                          width: 120,
-                          render: (name: string) => <Tag color="blue" style={{ fontSize: 10 }}>{name}</Tag>
-                        },
-                        {
-                          title: t('trace.duration'),
-                          dataIndex: 'durationMs',
-                          key: 'durationMs',
-                          width: 80,
-                          sorter: (a: any, b: any) => a.durationMs - b.durationMs,
-                          render: (ms: number) => {
-                            const color = ms > 100 ? '#cf1322' : ms > 50 ? '#faad14' : undefined;
-                            return <Text style={{ color, fontSize: 11 }}>{ms}ms</Text>;
-                          }
-                        },
-                        {
-                          title: t('trace.status'),
-                          dataIndex: 'status',
-                          key: 'status',
-                          width: 80,
-                          render: (status: string, record: any) =>
-                            record.hasErrors ? <Tag color="error">error</Tag> :
-                            status === 'error' ? <Tag color="error">error</Tag> :
-                            <Tag color="success">{status}</Tag>
-                        }
-                      ]}
-                    />
-                  )
-                },
-                {
-                  key: 'tree',
-                  label: <span><ApartmentOutlined /> {t('trace.call_chain')}</span>,
-                  children: (
-                    selectedJaegerTrace.spans && selectedJaegerTrace.spans.length > 0 ? (
-                      <Tree
-                        showLine
-                        defaultExpandAll
-                        treeData={(() => {
-                          const spanMap = new Map<string, any>();
-                          const rootSpans: any[] = [];
+                  </div>
+                )}
+              </Card>
+            ))}
 
-                          selectedJaegerTrace.spans.forEach((span: any) => {
-                            spanMap.set(span.spanId, {
-                              key: span.spanId,
-                              title: (
-                                <Space size={4}>
-                                  {(span.hasErrors || span.status === 'error') && <BugOutlined style={{ color: '#ff4d4f' }} />}
-                                  <Text style={{ fontSize: 12 }}>{span.operationName}</Text>
-                                  <Tag color={span.hasErrors || span.status === 'error' ? 'error' : 'blue'} style={{ fontSize: 10 }}>
-                                    {span.serviceName}
-                                  </Tag>
-                                  <Text type="secondary" style={{ fontSize: 11 }}>{span.durationMs}ms</Text>
-                                </Space>
-                              ),
-                              children: [],
-                              spanData: span
-                            });
-                          });
-
-                          selectedJaegerTrace.spans.forEach((span: any) => {
-                            const node = spanMap.get(span.spanId);
-                            if (span.parentSpanId && spanMap.has(span.parentSpanId)) {
-                              const parent = spanMap.get(span.parentSpanId);
-                              parent?.children?.push(node);
-                            } else if (node) {
-                              rootSpans.push(node);
-                            }
-                          });
-
-                          return rootSpans;
-                        })()}
-                        style={{ fontSize: 12 }}
-                      />
-                    ) : (
-                      <Empty description={t('trace.no_spans')} />
-                    )
-                  )
-                }
-              ]}
-            />
+            {/* No service trace hint */}
+            {!selectedFullChain.hasServiceTrace && selectedFullChain.hasGatewayTrace && (
+              <Alert
+                type="info"
+                showIcon
+                message={t('trace.no_service_trace') || '未找到下游服务追踪数据'}
+                description={t('trace.no_service_trace_desc') || '下游服务可能未集成 gateway-trace-starter，或该请求未被采样记录。'}
+                style={{ marginTop: 16 }}
+              />
+            )}
           </div>
         )}
       </Drawer>

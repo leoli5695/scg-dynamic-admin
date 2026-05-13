@@ -21,6 +21,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -47,6 +48,12 @@ public class AsyncTraceReporter {
     private final GatewayTraceProperties properties;
     private final BlockingQueue<DistributedTrace> queue;
     private final ScheduledExecutorService retryScheduler;  // 【新增】延迟重试调度器（指数退避）
+    private final ConnectionProvider connectionProvider;  // FIX #3: 保持引用以便 shutdown 时 dispose
+
+    /**
+     * FIX #1: Shutdown idempotency guard - prevents double-invocation of doShutdown()
+     */
+    private final AtomicBoolean shutdownComplete = new AtomicBoolean(false);
 
     /**
      * Local disk log directory
@@ -78,7 +85,8 @@ public class AsyncTraceReporter {
 
     public AsyncTraceReporter(GatewayTraceProperties properties) {
         this.properties = properties;
-        this.webClient = createHighPerformanceWebClient();
+        this.connectionProvider = createConnectionProvider();
+        this.webClient = createHighPerformanceWebClient(this.connectionProvider);
         this.queue = new LinkedBlockingQueue<>(properties.getAsyncQueueSize());
 
         // 主上报线程池
@@ -118,19 +126,23 @@ public class AsyncTraceReporter {
     }
 
     /**
+     * Create high-performance connection pool
+     */
+    private ConnectionProvider createConnectionProvider() {
+        return ConnectionProvider.builder("trace-reporter-pool")
+                .maxConnections(50)
+                .pendingAcquireTimeout(Duration.ofSeconds(5))
+                .pendingAcquireMaxCount(100)
+                .maxIdleTime(Duration.ofSeconds(60))
+                .build();
+    }
+
+    /**
      * Create high-performance WebClient (with connection pool configuration)
      * <p>
      * Resolves potential blocking issues with default connection pool under high concurrency
      */
-    private WebClient createHighPerformanceWebClient() {
-        // Configure high-performance connection pool
-        ConnectionProvider connectionProvider = ConnectionProvider.builder("trace-reporter-pool")
-                .maxConnections(50)                    // Max connections
-                .pendingAcquireTimeout(Duration.ofSeconds(5))  // Connection acquisition timeout
-                .pendingAcquireMaxCount(100)           // Max requests waiting for connection
-                .maxIdleTime(Duration.ofSeconds(60))   // Max idle time (connection pool retention time)
-                .build();
-
+    private WebClient createHighPerformanceWebClient(ConnectionProvider connectionProvider) {
         HttpClient httpClient = HttpClient.create(connectionProvider)
                 .responseTimeout(Duration.ofMillis(properties.getReportTimeoutMs()))
                 .compress(true);  // Enable compression
@@ -206,8 +218,9 @@ public class AsyncTraceReporter {
             }
         }
 
-        // Report remaining data before shutdown
-        doShutdown();
+        // FIX #1: Do NOT call doShutdown() here.
+        // The @PreDestroy shutdown() method is the sole owner of shutdown logic.
+        log.debug("Trace reporter loop exited");
     }
 
     /**
@@ -306,35 +319,37 @@ public class AsyncTraceReporter {
      */
     private void writeToFallbackLog(DistributedTrace trace, String reason) {
         // 提交到独立的磁盘 IO 线程池，不阻塞上报线程
-        fallbackExecutor.submit(() -> {
-            try {
-                fallbackCount.incrementAndGet();
+        fallbackExecutor.submit(() -> writeToFallbackLogSync(trace, reason));
+    }
 
-                // Split files by date for easier processing
-                String date = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-                String fileName = "trace-fallback-" + date + ".log";
-                Path logFile = Paths.get(FALLBACK_LOG_DIR, fileName);
+    /**
+     * Synchronous fallback log write (used during shutdown when executor may be unavailable)
+     */
+    private void writeToFallbackLogSync(DistributedTrace trace, String reason) {
+        try {
+            fallbackCount.incrementAndGet();
 
-                // Build log line: JSON + reason + timestamp
-                String json = objectMapper.writeValueAsString(trace);
-                String logLine = String.format("%s|%s|%s%n",
-                        LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
-                        reason,
-                        json);
+            String date = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+            String fileName = "trace-fallback-" + date + ".log";
+            Path logFile = Paths.get(FALLBACK_LOG_DIR, fileName);
 
-                // Write to file (append mode)
-                Files.writeString(logFile, logLine,
-                        StandardOpenOption.CREATE,
-                        StandardOpenOption.APPEND);
+            String json = objectMapper.writeValueAsString(trace);
+            String logLine = String.format("%s|%s|%s%n",
+                    LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+                    reason,
+                    json);
 
-                log.debug("Trace written to fallback log: traceId={}, reason={}, file={}",
-                        trace.getTraceId(), reason, fileName);
+            Files.writeString(logFile, logLine,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.APPEND);
 
-            } catch (IOException e) {
-                log.error("Failed to write trace to fallback log: traceId={}, error={}",
-                        trace.getTraceId(), e.getMessage());
-            }
-        });
+            log.debug("Trace written to fallback log: traceId={}, reason={}, file={}",
+                    trace.getTraceId(), reason, fileName);
+
+        } catch (IOException e) {
+            log.error("Failed to write trace to fallback log: traceId={}, error={}",
+                    trace.getTraceId(), e.getMessage());
+        }
     }
 
     /**
@@ -350,41 +365,48 @@ public class AsyncTraceReporter {
 
     /**
      * Execute shutdown logic
+     * <p>
+     * FIX #1: Uses AtomicBoolean CAS guard to ensure this method executes only once,
+     * preventing race condition between reportLoop exit and @PreDestroy.
      */
     private void doShutdown() {
+        // FIX #1: Idempotency guard - only the first caller executes shutdown
+        if (!shutdownComplete.compareAndSet(false, true)) {
+            log.debug("doShutdown() already executed, skipping");
+            return;
+        }
+
         // Report remaining data
         List<DistributedTrace> remaining = new ArrayList<>();
         queue.drainTo(remaining);
 
         if (!remaining.isEmpty()) {
             log.info("Shutdown: attempting to report {} remaining traces", remaining.size());
-            try {
-                // Synchronously report remaining data (block waiting for result)
-                String url = properties.getAdminUrl() + "/api/services/traces/batch";
-                webClient.post()
-                        .uri(url)
-                        .bodyValue(remaining)
-                        .retrieve()
-                        .bodyToMono(Void.class)
-                        .timeout(Duration.ofSeconds(5))
-                        .block();  // Synchronous block on shutdown
 
-                reportedCount.addAndGet(remaining.size());
-                log.info("Shutdown: reported {} remaining traces successfully", remaining.size());
-            } catch (Exception e) {
-                log.error("Failed to report remaining traces on shutdown: {}", e.getMessage());
-                // Write to local disk (同步写入，因为已在关闭阶段)
+            // FIX #2: Check adminUrl before attempting HTTP report
+            String adminUrl = properties.getAdminUrl();
+            if (adminUrl == null || adminUrl.isEmpty()) {
+                log.warn("Shutdown: adminUrl not configured, writing {} traces to fallback log", remaining.size());
                 for (DistributedTrace t : remaining) {
-                    try {
-                        String json = objectMapper.writeValueAsString(t);
-                        String date = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-                        Path logFile = Paths.get(FALLBACK_LOG_DIR, "trace-fallback-" + date + ".log");
-                        String logLine = String.format("%s|shutdown_failed|%s%n",
-                                LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME), json);
-                        Files.writeString(logFile, logLine, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-                        fallbackCount.incrementAndGet();
-                    } catch (IOException ioEx) {
-                        log.error("Failed to write fallback on shutdown: traceId={}", t.getTraceId());
+                    writeToFallbackLogSync(t, "shutdown_no_admin_url");
+                }
+            } else {
+                try {
+                    String url = adminUrl + "/api/services/traces/batch";
+                    webClient.post()
+                            .uri(url)
+                            .bodyValue(remaining)
+                            .retrieve()
+                            .bodyToMono(Void.class)
+                            .timeout(Duration.ofSeconds(5))
+                            .block();  // Synchronous block on shutdown
+
+                    reportedCount.addAndGet(remaining.size());
+                    log.info("Shutdown: reported {} remaining traces successfully", remaining.size());
+                } catch (Exception e) {
+                    log.error("Failed to report remaining traces on shutdown: {}", e.getMessage());
+                    for (DistributedTrace t : remaining) {
+                        writeToFallbackLogSync(t, "shutdown_failed");
                     }
                 }
             }
@@ -393,10 +415,9 @@ public class AsyncTraceReporter {
         // Shutdown thread pools
         executor.shutdown();
         fallbackExecutor.shutdown();
-        retryScheduler.shutdown();  // 【新增】关闭延迟重试调度器
+        retryScheduler.shutdown();
 
         try {
-            // Wait for thread pools to terminate (with timeout)
             if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
                 executor.shutdownNow();
             }
@@ -412,6 +433,14 @@ public class AsyncTraceReporter {
             fallbackExecutor.shutdownNow();
             retryScheduler.shutdownNow();
             Thread.currentThread().interrupt();
+        }
+
+        // FIX #3: Dispose connection provider to release native resources
+        try {
+            connectionProvider.dispose();
+            log.debug("ConnectionProvider disposed");
+        } catch (Exception e) {
+            log.warn("Error disposing ConnectionProvider: {}", e.getMessage());
         }
 
         // Output statistics

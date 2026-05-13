@@ -50,7 +50,7 @@ import {
   LinkOutlined,
   CopyOutlined,
 } from "@ant-design/icons";
-import axios from "axios";
+import api from "../utils/api";
 import AiReportRenderer from "../components/AiReportRenderer";
 import StressTestCharts from "../components/StressTestCharts";
 import "../styles/ai-report.css";
@@ -362,11 +362,12 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
   const loadTests = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(`/api/stress-test/instance/${instanceId}`);
-      setTests(response.data);
+      const response = await api.get(`/api/stress-test/instance/${instanceId}`);
+      const testData = response.data?.data || response.data || [];
+      setTests(Array.isArray(testData) ? testData : []);
 
       // Check if any test is running
-      const runningTest = response.data.find((t: StressTest) => t.status === "RUNNING");
+      const runningTest = (Array.isArray(testData) ? testData : []).find((t: StressTest) => t.status === "RUNNING");
       if (runningTest) {
         setRunningTestId(runningTest.id);
       }
@@ -382,8 +383,8 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
     try {
       // Fetch both status and metrics in parallel
       const [statusResponse, metricsResponse] = await Promise.all([
-        axios.get(`/api/stress-test/${testId}/status`),
-        axios.get(`/api/stress-test/${testId}/metrics`).catch(() => null)
+        api.get(`/api/stress-test/${testId}/status`),
+        api.get(`/api/stress-test/${testId}/metrics`).catch(() => null)
       ]);
 
       setRunningStatus(statusResponse.data);
@@ -448,7 +449,7 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
     console.log("Submit data:", JSON.stringify(submitData, null, 2));
     
     try {
-      const response = await axios.post("/api/stress-test/start", submitData, {
+      const response = await api.post("/api/stress-test/start", submitData, {
         params: { instanceId },
       });
 
@@ -470,7 +471,7 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
 
   const handleQuickTest = async () => {
     try {
-      const response = await axios.post("/api/stress-test/quick", null, {
+      const response = await api.post("/api/stress-test/quick", null, {
         params: {
           instanceId,
           requests: quickRequests,
@@ -493,7 +494,7 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
 
   const handleStopTest = async (testId: number) => {
     try {
-      const response = await axios.post(`/api/stress-test/${testId}/stop`);
+      const response = await api.post(`/api/stress-test/${testId}/stop`);
 
       if (response.data.success) {
         message.success(t("stress_test.test_stopped"));
@@ -514,7 +515,7 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
       content: t("stress_test.delete_confirm_content"),
       onOk: async () => {
         try {
-          await axios.delete(`/api/stress-test/${testId}`);
+          await api.delete(`/api/stress-test/${testId}`);
           message.success(t("stress_test.test_deleted"));
           loadTests();
         } catch (error) {
@@ -531,7 +532,7 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
     setAnalysisResult("");
 
     try {
-      const response = await axios.get(`/api/stress-test/${testId}/analyze`);
+      const response = await api.get(`/api/stress-test/${testId}/analyze`);
 
       if (response.data.success) {
         setAnalysisResult(response.data.analysis);
@@ -547,7 +548,7 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
 
   const handleExportReport = async (testId: number) => {
     try {
-      const response = await axios.get(`/api/stress-test/${testId}/export`, {
+      const response = await api.get(`/api/stress-test/${testId}/export`, {
         responseType: "blob",
       });
 
@@ -569,7 +570,7 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
   const handleShareReport = async (testId: number, expiresIn: number | null) => {
     try {
       const params = expiresIn ? { expiresIn } : {};
-      const response = await axios.post(`/api/stress-test/${testId}/share`, null, { params });
+      const response = await api.post(`/api/stress-test/${testId}/share`, null, { params });
 
       if (response.data.success) {
         const shareUrl = `${window.location.origin}/share/${response.data.shareId}`;
@@ -863,7 +864,7 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
 
       {/* Completed tests */}
       <Spin spinning={loading}>
-        {tests.length === 0 ? (
+        {(tests?.length || 0) === 0 ? (
           <Alert
             type="info"
             message={t("stress_test.no_tests")}
@@ -871,7 +872,7 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
             showIcon
           />
         ) : (
-          tests
+          (tests || [])
             .filter((t) => t.status !== "RUNNING")
             .map(renderCompletedTest)
         )}

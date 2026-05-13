@@ -2583,7 +2583,7 @@ const RoutesPage: React.FC<RoutesPageProps> = ({ instanceId }) => {
       {/* Route Detail Drawer */}
       <Drawer
         placement="right"
-        width={520}
+        styles={{ wrapper: { width: 520 } }}
         open={detailDrawerVisible}
         closable={false}
         onClose={() => { setDetailDrawerVisible(false); setSelectedRoute(null); }}

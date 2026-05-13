@@ -81,6 +81,8 @@ spec:
         env:
         - name: ES_URI
           value: "http://elasticsearch:9200"
+        args:
+        - "--es.uri=http://elasticsearch:9200"
         resources:
           requests:
             cpu: "50m"
@@ -130,15 +132,17 @@ spec:
         ports:
         - containerPort: 5557
         env:
-        - name: ROCKETMQ_NAMESRV_ADDR
+        - name: NAMESRV_ADDR
           value: "rocketmq-nameserver:9876"
+        args:
+        - "--rocketmq.namesrv.addr=rocketmq-nameserver:9876"
         resources:
           requests:
             cpu: "50m"
-            memory: "128Mi"
+            memory: "64Mi"
           limits:
-            cpu: "200m"
-            memory: "256Mi"
+            cpu: "100m"
+            memory: "128Mi"
 
 ---
 apiVersion: v1

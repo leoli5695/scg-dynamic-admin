@@ -1,5 +1,6 @@
 package com.leoli.gateway.admin.controller;
 
+import com.leoli.gateway.admin.dto.ApiResponse;
 import com.leoli.gateway.admin.dto.ClientStats;
 import com.leoli.gateway.admin.dto.MethodStats;
 import com.leoli.gateway.admin.dto.RouteStats;
@@ -34,25 +35,21 @@ public class AnalyticsController {
      * @return Overview statistics
      */
     @GetMapping("/overview")
-    public ResponseEntity<Map<String, Object>> getOverview(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getOverview(
             @RequestParam(defaultValue = "24") int hours) {
-        Map<String, Object> response = new HashMap<>();
-        
         try {
-            // Limit to 168 hours (1 week)
             int safeHours = Math.min(hours, 168);
             Map<String, Object> overview = analyticsService.getOverview(safeHours);
             
-            response.put("code", 200);
-            response.put("data", overview);
-            response.put("hours", safeHours);
+            Map<String, Object> data = new HashMap<>();
+            data.put("overview", overview);
+            data.put("hours", safeHours);
+            
+            return ResponseEntity.ok(ApiResponse.success(data));
         } catch (Exception e) {
             log.error("Failed to get overview statistics", e);
-            response.put("code", 500);
-            response.put("message", "Failed to get overview: " + e.getMessage());
+            return ResponseEntity.ok(ApiResponse.error("Failed to get overview: " + e.getMessage()));
         }
-        
-        return ResponseEntity.ok(response);
     }
 
     /**
@@ -63,27 +60,24 @@ public class AnalyticsController {
      * @return Route ranking list
      */
     @GetMapping("/routes/ranking")
-    public ResponseEntity<Map<String, Object>> getRouteRanking(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getRouteRanking(
             @RequestParam(defaultValue = "24") int hours,
             @RequestParam(defaultValue = "10") int limit) {
-        Map<String, Object> response = new HashMap<>();
-        
         try {
             int safeHours = Math.min(hours, 168);
             int safeLimit = Math.min(limit, 100);
             
             List<RouteStats> ranking = analyticsService.getRouteRanking(safeHours, safeLimit);
             
-            response.put("code", 200);
-            response.put("data", ranking);
-            response.put("hours", safeHours);
+            Map<String, Object> data = new HashMap<>();
+            data.put("ranking", ranking);
+            data.put("hours", safeHours);
+            
+            return ResponseEntity.ok(ApiResponse.success(data));
         } catch (Exception e) {
             log.error("Failed to get route ranking", e);
-            response.put("code", 500);
-            response.put("message", "Failed to get route ranking: " + e.getMessage());
+            return ResponseEntity.ok(ApiResponse.error("Failed to get route ranking: " + e.getMessage()));
         }
-        
-        return ResponseEntity.ok(response);
     }
 
     /**
@@ -94,27 +88,24 @@ public class AnalyticsController {
      * @return Client ranking list
      */
     @GetMapping("/clients/ranking")
-    public ResponseEntity<Map<String, Object>> getClientRanking(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getClientRanking(
             @RequestParam(defaultValue = "24") int hours,
             @RequestParam(defaultValue = "10") int limit) {
-        Map<String, Object> response = new HashMap<>();
-        
         try {
             int safeHours = Math.min(hours, 168);
             int safeLimit = Math.min(limit, 100);
             
             List<ClientStats> ranking = analyticsService.getClientRanking(safeHours, safeLimit);
             
-            response.put("code", 200);
-            response.put("data", ranking);
-            response.put("hours", safeHours);
+            Map<String, Object> data = new HashMap<>();
+            data.put("ranking", ranking);
+            data.put("hours", safeHours);
+            
+            return ResponseEntity.ok(ApiResponse.success(data));
         } catch (Exception e) {
             log.error("Failed to get client ranking", e);
-            response.put("code", 500);
-            response.put("message", "Failed to get client ranking: " + e.getMessage());
+            return ResponseEntity.ok(ApiResponse.error("Failed to get client ranking: " + e.getMessage()));
         }
-        
-        return ResponseEntity.ok(response);
     }
 
     /**
@@ -125,27 +116,24 @@ public class AnalyticsController {
      * @return Service statistics list
      */
     @GetMapping("/services/stats")
-    public ResponseEntity<Map<String, Object>> getServiceStats(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getServiceStats(
             @RequestParam(defaultValue = "24") int hours,
             @RequestParam(defaultValue = "10") int limit) {
-        Map<String, Object> response = new HashMap<>();
-        
         try {
             int safeHours = Math.min(hours, 168);
             int safeLimit = Math.min(limit, 100);
             
             List<ServiceStats> stats = analyticsService.getServiceStats(safeHours, safeLimit);
             
-            response.put("code", 200);
-            response.put("data", stats);
-            response.put("hours", safeHours);
+            Map<String, Object> data = new HashMap<>();
+            data.put("stats", stats);
+            data.put("hours", safeHours);
+            
+            return ResponseEntity.ok(ApiResponse.success(data));
         } catch (Exception e) {
             log.error("Failed to get service stats", e);
-            response.put("code", 500);
-            response.put("message", "Failed to get service stats: " + e.getMessage());
+            return ResponseEntity.ok(ApiResponse.error("Failed to get service stats: " + e.getMessage()));
         }
-        
-        return ResponseEntity.ok(response);
     }
 
     /**
@@ -155,25 +143,22 @@ public class AnalyticsController {
      * @return Request trends list
      */
     @GetMapping("/trends")
-    public ResponseEntity<Map<String, Object>> getTrends(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getTrends(
             @RequestParam(defaultValue = "24") int hours) {
-        Map<String, Object> response = new HashMap<>();
-        
         try {
             int safeHours = Math.min(hours, 168);
             
             List<Map<String, Object>> trends = analyticsService.getRequestTrends(safeHours);
             
-            response.put("code", 200);
-            response.put("data", trends);
-            response.put("hours", safeHours);
+            Map<String, Object> data = new HashMap<>();
+            data.put("trends", trends);
+            data.put("hours", safeHours);
+            
+            return ResponseEntity.ok(ApiResponse.success(data));
         } catch (Exception e) {
             log.error("Failed to get trends", e);
-            response.put("code", 500);
-            response.put("message", "Failed to get trends: " + e.getMessage());
+            return ResponseEntity.ok(ApiResponse.error("Failed to get trends: " + e.getMessage()));
         }
-        
-        return ResponseEntity.ok(response);
     }
 
     /**
@@ -183,25 +168,22 @@ public class AnalyticsController {
      * @return Error breakdown map
      */
     @GetMapping("/errors/breakdown")
-    public ResponseEntity<Map<String, Object>> getErrorBreakdown(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getErrorBreakdown(
             @RequestParam(defaultValue = "24") int hours) {
-        Map<String, Object> response = new HashMap<>();
-        
         try {
             int safeHours = Math.min(hours, 168);
             
             Map<Integer, Long> breakdown = analyticsService.getErrorBreakdown(safeHours);
             
-            response.put("code", 200);
-            response.put("data", breakdown);
-            response.put("hours", safeHours);
+            Map<String, Object> data = new HashMap<>();
+            data.put("breakdown", breakdown);
+            data.put("hours", safeHours);
+            
+            return ResponseEntity.ok(ApiResponse.success(data));
         } catch (Exception e) {
             log.error("Failed to get error breakdown", e);
-            response.put("code", 500);
-            response.put("message", "Failed to get error breakdown: " + e.getMessage());
+            return ResponseEntity.ok(ApiResponse.error("Failed to get error breakdown: " + e.getMessage()));
         }
-        
-        return ResponseEntity.ok(response);
     }
 
     /**
@@ -211,25 +193,22 @@ public class AnalyticsController {
      * @return Error type breakdown map
      */
     @GetMapping("/errors/types")
-    public ResponseEntity<Map<String, Object>> getErrorTypes(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getErrorTypes(
             @RequestParam(defaultValue = "24") int hours) {
-        Map<String, Object> response = new HashMap<>();
-        
         try {
             int safeHours = Math.min(hours, 168);
             
             Map<String, Long> breakdown = analyticsService.getErrorTypeBreakdown(safeHours);
             
-            response.put("code", 200);
-            response.put("data", breakdown);
-            response.put("hours", safeHours);
+            Map<String, Object> data = new HashMap<>();
+            data.put("breakdown", breakdown);
+            data.put("hours", safeHours);
+            
+            return ResponseEntity.ok(ApiResponse.success(data));
         } catch (Exception e) {
             log.error("Failed to get error types", e);
-            response.put("code", 500);
-            response.put("message", "Failed to get error types: " + e.getMessage());
+            return ResponseEntity.ok(ApiResponse.error("Failed to get error types: " + e.getMessage()));
         }
-        
-        return ResponseEntity.ok(response);
     }
 
     /**
@@ -239,24 +218,21 @@ public class AnalyticsController {
      * @return Method statistics list
      */
     @GetMapping("/methods/stats")
-    public ResponseEntity<Map<String, Object>> getMethodStats(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getMethodStats(
             @RequestParam(defaultValue = "24") int hours) {
-        Map<String, Object> response = new HashMap<>();
-        
         try {
             int safeHours = Math.min(hours, 168);
             
             List<MethodStats> stats = analyticsService.getMethodStats(safeHours);
             
-            response.put("code", 200);
-            response.put("data", stats);
-            response.put("hours", safeHours);
+            Map<String, Object> data = new HashMap<>();
+            data.put("stats", stats);
+            data.put("hours", safeHours);
+            
+            return ResponseEntity.ok(ApiResponse.success(data));
         } catch (Exception e) {
             log.error("Failed to get method stats", e);
-            response.put("code", 500);
-            response.put("message", "Failed to get method stats: " + e.getMessage());
+            return ResponseEntity.ok(ApiResponse.error("Failed to get method stats: " + e.getMessage()));
         }
-        
-        return ResponseEntity.ok(response);
     }
 }

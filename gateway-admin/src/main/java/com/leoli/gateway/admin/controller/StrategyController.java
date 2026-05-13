@@ -1,64 +1,42 @@
 package com.leoli.gateway.admin.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leoli.gateway.admin.dto.ApiResponse;
 import com.leoli.gateway.admin.model.StrategyDefinition;
 import com.leoli.gateway.admin.model.StrategyEntity;
 import com.leoli.gateway.admin.service.AuditLogService;
 import com.leoli.gateway.admin.service.StrategyService;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Strategy management controller.
  * Supports global and route-bound strategies.
+ * Uses ApiResponse for standardized response format.
  *
  * @author leoli
  */
 @Slf4j
 @RestController
 @RequestMapping("/api/strategies")
-public class StrategyController {
+@RequiredArgsConstructor
+public class StrategyController extends BaseController {
 
-    @Autowired
-    private StrategyService strategyService;
-
-    @Autowired
-    private AuditLogService auditLogService;
-
-    @Autowired
-    private ObjectMapper objectMapper;
-
-    private String getOperator() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        return auth != null && auth.isAuthenticated() ? auth.getName() : "anonymous";
-    }
-
-    private String getIpAddress(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("X-Real-IP");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getRemoteAddr();
-        }
-        return ip;
-    }
+    private final StrategyService strategyService;
+    private final AuditLogService auditLogService;
+    private final ObjectMapper objectMapper;
 
     /**
      * Get all strategies.
      * @param instanceId Optional instance ID to filter strategies
      */
     @GetMapping
-    public ResponseEntity<Map<String, Object>> getAllStrategies(
+    public ResponseEntity<ApiResponse<List<StrategyDefinition>>> getAllStrategies(
             @RequestParam(required = false) String instanceId) {
         List<StrategyDefinition> strategies;
         if (instanceId != null && !instanceId.isEmpty()) {
@@ -66,46 +44,46 @@ public class StrategyController {
         } else {
             strategies = strategyService.getAllStrategies();
         }
-        return ok(strategies);
+        return ResponseEntity.ok(ApiResponse.success(strategies));
     }
 
     /**
      * Get strategy by ID.
      */
     @GetMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> getStrategyById(@PathVariable String id) {
+    public ResponseEntity<ApiResponse<StrategyDefinition>> getStrategyById(@PathVariable String id) {
         StrategyDefinition strategy = strategyService.getStrategy(id);
         if (strategy == null) {
-            return notFound("Strategy not found: " + id);
+            return ResponseEntity.status(404).body(ApiResponse.notFound("Strategy not found: " + id));
         }
-        return ok(strategy);
+        return ResponseEntity.ok(ApiResponse.success(strategy));
     }
 
     /**
      * Get strategies by type.
      */
     @GetMapping("/type/{type}")
-    public ResponseEntity<Map<String, Object>> getStrategiesByType(@PathVariable String type) {
+    public ResponseEntity<ApiResponse<List<StrategyDefinition>>> getStrategiesByType(@PathVariable String type) {
         List<StrategyDefinition> strategies = strategyService.getStrategiesByType(type.toUpperCase());
-        return ok(strategies);
+        return ResponseEntity.ok(ApiResponse.success(strategies));
     }
 
     /**
      * Get global strategies.
      */
     @GetMapping("/global")
-    public ResponseEntity<Map<String, Object>> getGlobalStrategies() {
+    public ResponseEntity<ApiResponse<List<StrategyDefinition>>> getGlobalStrategies() {
         List<StrategyDefinition> strategies = strategyService.getGlobalStrategies();
-        return ok(strategies);
+        return ResponseEntity.ok(ApiResponse.success(strategies));
     }
 
     /**
      * Get strategies for a route.
      */
     @GetMapping("/route/{routeId}")
-    public ResponseEntity<Map<String, Object>> getStrategiesForRoute(@PathVariable String routeId) {
+    public ResponseEntity<ApiResponse<List<StrategyDefinition>>> getStrategiesForRoute(@PathVariable String routeId) {
         List<StrategyDefinition> strategies = strategyService.getStrategiesForRoute(routeId);
-        return ok(strategies);
+        return ResponseEntity.ok(ApiResponse.success(strategies));
     }
 
     /**
@@ -113,7 +91,7 @@ public class StrategyController {
      * @param instanceId Optional instance ID for configuration isolation
      */
     @PostMapping
-    public ResponseEntity<Map<String, Object>> createStrategy(
+    public ResponseEntity<ApiResponse<StrategyDefinition>> createStrategy(
             @RequestBody StrategyDefinition strategy,
             @RequestParam(required = false) String instanceId,
             HttpServletRequest request) {
@@ -126,13 +104,13 @@ public class StrategyController {
             auditLogService.recordAuditLog(instanceId, getOperator(), "CREATE", "STRATEGY", entity.getStrategyId(),
                     strategy.getStrategyName(), null, newValue, getIpAddress(request));
 
-            return ok(strategy, "Strategy created successfully");
+            return ResponseEntity.ok(ApiResponse.success(strategy, "Strategy created successfully"));
         } catch (IllegalArgumentException e) {
             log.warn("Failed to create strategy: {}", e.getMessage());
-            return badRequest(e.getMessage());
+            return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
         } catch (Exception e) {
             log.error("Failed to create strategy", e);
-            return error("Failed to create strategy: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Failed to create strategy: " + e.getMessage()));
         }
     }
 
@@ -140,7 +118,7 @@ public class StrategyController {
      * Update a strategy.
      */
     @PutMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> updateStrategy(
+    public ResponseEntity<ApiResponse<StrategyDefinition>> updateStrategy(
             @PathVariable String id,
             @RequestParam(required = false) String instanceId,
             @RequestBody StrategyDefinition strategy,
@@ -159,13 +137,13 @@ public class StrategyController {
             auditLogService.recordAuditLog(instanceId, getOperator(), "UPDATE", "STRATEGY", id,
                     strategy.getStrategyName(), oldValue, newValue, getIpAddress(request));
 
-            return ok(strategy, "Strategy updated successfully");
+            return ResponseEntity.ok(ApiResponse.success(strategy, "Strategy updated successfully"));
         } catch (IllegalArgumentException e) {
             log.warn("Failed to update strategy: {}", e.getMessage());
-            return notFound(e.getMessage());
+            return ResponseEntity.status(404).body(ApiResponse.notFound(e.getMessage()));
         } catch (Exception e) {
             log.error("Failed to update strategy", e);
-            return error("Failed to update strategy: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Failed to update strategy: " + e.getMessage()));
         }
     }
 
@@ -173,7 +151,7 @@ public class StrategyController {
      * Delete a strategy.
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> deleteStrategy(
+    public ResponseEntity<ApiResponse<Void>> deleteStrategy(
             @PathVariable String id,
             @RequestParam(required = false) String instanceId,
             HttpServletRequest request) {
@@ -191,13 +169,13 @@ public class StrategyController {
             auditLogService.recordAuditLog(instanceId, getOperator(), "DELETE", "STRATEGY", id,
                     targetName, oldValue, null, getIpAddress(request));
 
-            return ok(null, "Strategy deleted successfully");
+            return ResponseEntity.ok(ApiResponse.success("Strategy deleted successfully"));
         } catch (IllegalArgumentException e) {
             log.warn("Failed to delete strategy: {}", e.getMessage());
-            return notFound(e.getMessage());
+            return ResponseEntity.status(404).body(ApiResponse.notFound(e.getMessage()));
         } catch (Exception e) {
             log.error("Failed to delete strategy", e);
-            return error("Failed to delete strategy: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Failed to delete strategy: " + e.getMessage()));
         }
     }
 
@@ -205,7 +183,7 @@ public class StrategyController {
      * Enable a strategy.
      */
     @PostMapping("/{id}/enable")
-    public ResponseEntity<Map<String, Object>> enableStrategy(
+    public ResponseEntity<ApiResponse<Void>> enableStrategy(
             @PathVariable String id,
             @RequestParam(required = false) String instanceId,
             HttpServletRequest request) {
@@ -227,13 +205,13 @@ public class StrategyController {
             auditLogService.recordAuditLog(instanceId, getOperator(), "ENABLE", "STRATEGY", id,
                     targetName, oldValue, newValue, getIpAddress(request));
 
-            return ok(null, "Strategy enabled successfully");
+            return ResponseEntity.ok(ApiResponse.success("Strategy enabled successfully"));
         } catch (IllegalArgumentException e) {
             log.warn("Failed to enable strategy: {}", e.getMessage());
-            return notFound(e.getMessage());
+            return ResponseEntity.status(404).body(ApiResponse.notFound(e.getMessage()));
         } catch (Exception e) {
             log.error("Failed to enable strategy", e);
-            return error("Failed to enable strategy: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Failed to enable strategy: " + e.getMessage()));
         }
     }
 
@@ -241,7 +219,7 @@ public class StrategyController {
      * Disable a strategy.
      */
     @PostMapping("/{id}/disable")
-    public ResponseEntity<Map<String, Object>> disableStrategy(
+    public ResponseEntity<ApiResponse<Void>> disableStrategy(
             @PathVariable String id,
             @RequestParam(required = false) String instanceId,
             HttpServletRequest request) {
@@ -263,54 +241,13 @@ public class StrategyController {
             auditLogService.recordAuditLog(instanceId, getOperator(), "DISABLE", "STRATEGY", id,
                     targetName, oldValue, newValue, getIpAddress(request));
 
-            return ok(null, "Strategy disabled successfully");
+            return ResponseEntity.ok(ApiResponse.success("Strategy disabled successfully"));
         } catch (IllegalArgumentException e) {
             log.warn("Failed to disable strategy: {}", e.getMessage());
-            return notFound(e.getMessage());
+            return ResponseEntity.status(404).body(ApiResponse.notFound(e.getMessage()));
         } catch (Exception e) {
             log.error("Failed to disable strategy", e);
-            return error("Failed to disable strategy: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Failed to disable strategy: " + e.getMessage()));
         }
-    }
-
-    // ============================================================
-    // Helper methods
-    // ============================================================
-
-    private ResponseEntity<Map<String, Object>> ok(Object data) {
-        Map<String, Object> result = new HashMap<>();
-        result.put("code", 200);
-        result.put("message", "success");
-        result.put("data", data);
-        return ResponseEntity.ok(result);
-    }
-
-    private ResponseEntity<Map<String, Object>> ok(Object data, String message) {
-        Map<String, Object> result = new HashMap<>();
-        result.put("code", 200);
-        result.put("message", message);
-        result.put("data", data);
-        return ResponseEntity.ok(result);
-    }
-
-    private ResponseEntity<Map<String, Object>> notFound(String message) {
-        Map<String, Object> result = new HashMap<>();
-        result.put("code", 404);
-        result.put("message", message);
-        return ResponseEntity.status(404).body(result);
-    }
-
-    private ResponseEntity<Map<String, Object>> badRequest(String message) {
-        Map<String, Object> result = new HashMap<>();
-        result.put("code", 400);
-        result.put("message", message);
-        return ResponseEntity.badRequest().body(result);
-    }
-
-    private ResponseEntity<Map<String, Object>> error(String message) {
-        Map<String, Object> result = new HashMap<>();
-        result.put("code", 500);
-        result.put("message", message);
-        return ResponseEntity.status(500).body(result);
     }
 }

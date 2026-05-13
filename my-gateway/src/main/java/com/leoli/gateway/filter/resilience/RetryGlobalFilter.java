@@ -6,8 +6,8 @@ import com.leoli.gateway.filter.TraceCaptureGlobalFilter;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.StrategyDefinition;
 import com.leoli.gateway.util.RouteUtils;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
@@ -38,13 +38,11 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class RetryGlobalFilter implements GlobalFilter, Ordered {
 
-    @Autowired
-    private StrategyManager strategyManager;
-
-    @Autowired
-    private RetryProperties retryProperties;
+    private final StrategyManager strategyManager;
+    private final RetryProperties retryProperties;
 
     // Cache for retry configurations
     private final Map<String, RetryConfig> configCache = new ConcurrentHashMap<>();

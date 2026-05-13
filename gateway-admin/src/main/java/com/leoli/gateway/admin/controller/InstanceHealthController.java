@@ -1,8 +1,9 @@
 package com.leoli.gateway.admin.controller;
 
+import com.leoli.gateway.admin.dto.ApiResponse;
 import com.leoli.gateway.admin.service.GatewayInstanceService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,10 +19,10 @@ import java.util.Map;
 @Slf4j
 @RestController
 @RequestMapping("/api/instances")
+@RequiredArgsConstructor
 public class InstanceHealthController {
 
-    @Autowired
-    private GatewayInstanceService instanceService;
+    private final GatewayInstanceService instanceService;
 
     /**
      * Heartbeat endpoint for gateway instances.
@@ -37,7 +38,7 @@ public class InstanceHealthController {
      * @return Simple acknowledgment
      */
     @PostMapping("/heartbeat")
-    public ResponseEntity<Map<String, Object>> heartbeat(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> heartbeat(
             @RequestParam String instanceId,
             @RequestBody(required = false) HeartbeatRequest request) {
         
@@ -57,30 +58,26 @@ public class InstanceHealthController {
         
         instanceService.handleHeartbeat(instanceId, metrics, accessUrl, serverPort, managementPort);
         
-        Map<String, Object> response = new HashMap<>();
-        response.put("code", 200);
-        response.put("message", "Heartbeat received");
-        response.put("timestamp", System.currentTimeMillis());
+        Map<String, Object> data = new HashMap<>();
+        data.put("timestamp", System.currentTimeMillis());
         
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponse.success(data, "Heartbeat received"));
     }
 
     /**
      * Simple heartbeat with just instance ID (GET version for convenience).
      */
     @GetMapping("/heartbeat")
-    public ResponseEntity<Map<String, Object>> heartbeatGet(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> heartbeatGet(
             @RequestParam String instanceId) {
         
         log.debug("Received GET heartbeat from instance: {}", instanceId);
         instanceService.handleHeartbeat(instanceId, null, null, null, null);
         
-        Map<String, Object> response = new HashMap<>();
-        response.put("code", 200);
-        response.put("message", "Heartbeat received");
-        response.put("timestamp", System.currentTimeMillis());
+        Map<String, Object> data = new HashMap<>();
+        data.put("timestamp", System.currentTimeMillis());
         
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponse.success(data, "Heartbeat received"));
     }
 
     /**
@@ -88,18 +85,14 @@ public class InstanceHealthController {
      * Called by gateway instance when it has fully started.
      */
     @PostMapping("/started")
-    public ResponseEntity<Map<String, Object>> notifyStarted(
+    public ResponseEntity<ApiResponse<Void>> notifyStarted(
             @RequestParam String instanceId) {
         
         log.info("Instance {} has started", instanceId);
         
         instanceService.handleHeartbeat(instanceId, null, null, null, null);
         
-        Map<String, Object> response = new HashMap<>();
-        response.put("code", 200);
-        response.put("message", "Startup acknowledged");
-        
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponse.success("Startup acknowledged"));
     }
 
     /**

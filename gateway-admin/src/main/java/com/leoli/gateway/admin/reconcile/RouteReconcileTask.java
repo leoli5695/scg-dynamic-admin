@@ -7,8 +7,8 @@ import com.leoli.gateway.admin.model.RouteEntity;
 import com.leoli.gateway.admin.repository.RouteRepository;
 import com.leoli.gateway.admin.service.AlertService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -21,26 +21,18 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class RouteReconcileTask implements ReconcileTask<RouteEntity> {
 
     private static final String ROUTE_PREFIX = "config.gateway.route-";
     private static final String ROUTES_INDEX = "config.gateway.metadata.routes-index";
     private static final String GROUP = "DEFAULT_GROUP";
 
-    @Autowired
-    private RouteRepository routeRepository;
-
-    @Autowired
-    private InstanceNamespaceCache namespaceCache;
-
-    @Autowired
-    private ConfigCenterService configCenterService;
-
-    @Autowired
-    private ObjectMapper objectMapper;
-
-    @Autowired
-    private AlertService alertService;
+    private final RouteRepository routeRepository;
+    private final InstanceNamespaceCache namespaceCache;
+    private final ConfigCenterService configCenterService;
+    private final ObjectMapper objectMapper;
+    private final AlertService alertService;
 
     @Override
     public String getType() {
@@ -98,8 +90,7 @@ public class RouteReconcileTask implements ReconcileTask<RouteEntity> {
         RouteDefinition route = null;
         if (entity.getMetadata() != null && !entity.getMetadata().isEmpty()) {
             try {
-                route = new com.fasterxml.jackson.databind.ObjectMapper()
-                    .readValue(entity.getMetadata(), RouteDefinition.class);
+                route = objectMapper.readValue(entity.getMetadata(), RouteDefinition.class);
             } catch (Exception e) {
                 log.warn("Failed to deserialize route config, using fallback", e);
             }

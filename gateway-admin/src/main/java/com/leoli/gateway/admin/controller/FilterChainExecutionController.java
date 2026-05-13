@@ -1,5 +1,6 @@
 package com.leoli.gateway.admin.controller;
 
+import com.leoli.gateway.admin.dto.ApiResponse;
 import com.leoli.gateway.admin.service.FilterChainExecutionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,22 +28,19 @@ public class FilterChainExecutionController {
      * Gateway calls this API when capturing traces with filter chain details.
      */
     @PostMapping("/internal")
-    public ResponseEntity<Map<String, Object>> saveFilterExecutions(@RequestBody List<Map<String, Object>> executions) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> saveFilterExecutions(@RequestBody List<Map<String, Object>> executions) {
         log.info("Received {} filter execution records", executions.size());
 
         try {
             int saved = filterChainExecutionService.saveFromRawData(executions);
-            return ResponseEntity.ok(Map.of(
-                    "code", 200,
-                    "saved", saved,
-                    "message", "Filter executions saved successfully"
-            ));
+            
+            Map<String, Object> data = new HashMap<>();
+            data.put("saved", saved);
+            
+            return ResponseEntity.ok(ApiResponse.success(data, "Filter executions saved successfully"));
         } catch (Exception e) {
             log.error("Failed to save filter executions", e);
-            return ResponseEntity.ok(Map.of(
-                    "code", 500,
-                    "message", "Failed to save filter executions: " + e.getMessage()
-            ));
+            return ResponseEntity.ok(ApiResponse.error("Failed to save filter executions: " + e.getMessage()));
         }
     }
 
@@ -50,19 +48,16 @@ public class FilterChainExecutionController {
      * Get filter execution summary for a specific trace.
      */
     @GetMapping("/trace/{traceId}")
-    public ResponseEntity<Map<String, Object>> getTraceSummary(@PathVariable String traceId) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getTraceSummary(@PathVariable String traceId) {
         Map<String, Object> summary = filterChainExecutionService.getTraceExecutionSummary(traceId);
-        return ResponseEntity.ok(Map.of(
-                "code", 200,
-                "data", summary
-        ));
+        return ResponseEntity.ok(ApiResponse.success(summary));
     }
 
     /**
      * Get filter statistics.
      */
     @GetMapping("/stats")
-    public ResponseEntity<Map<String, Object>> getFilterStats(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getFilterStats(
             @RequestParam(defaultValue = "1") int hoursAgo,
             @RequestParam(required = false) String instanceId) {
 
@@ -73,43 +68,38 @@ public class FilterChainExecutionController {
             stats = filterChainExecutionService.getFilterStats(hoursAgo);
         }
 
-        return ResponseEntity.ok(Map.of(
-                "code", 200,
-                "data", Map.of(
-                        "totalExecutions", filterChainExecutionService.countTotalExecutions(hoursAgo),
-                        "failedExecutions", filterChainExecutionService.countFailedExecutions(hoursAgo),
-                        "filterStats", stats
-                )
-        ));
+        Map<String, Object> data = new HashMap<>();
+        data.put("totalExecutions", filterChainExecutionService.countTotalExecutions(hoursAgo));
+        data.put("failedExecutions", filterChainExecutionService.countFailedExecutions(hoursAgo));
+        data.put("filterStats", stats);
+
+        return ResponseEntity.ok(ApiResponse.success(data));
     }
 
     /**
      * Get slowest filters.
      */
     @GetMapping("/slowest")
-    public ResponseEntity<Map<String, Object>> getSlowestFilters(
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getSlowestFilters(
             @RequestParam(defaultValue = "1") int hoursAgo,
             @RequestParam(defaultValue = "10") int limit) {
 
         List<Map<String, Object>> slowest = filterChainExecutionService.getSlowestFilters(hoursAgo, limit);
-        return ResponseEntity.ok(Map.of(
-                "code", 200,
-                "data", slowest
-        ));
+        return ResponseEntity.ok(ApiResponse.success(slowest));
     }
 
     /**
      * Delete old filter execution records.
      */
     @DeleteMapping("/old")
-    public ResponseEntity<Map<String, Object>> deleteOldExecutions(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> deleteOldExecutions(
             @RequestParam(defaultValue = "7") int daysToKeep) {
 
         int deleted = filterChainExecutionService.deleteOldExecutions(daysToKeep);
-        return ResponseEntity.ok(Map.of(
-                "code", 200,
-                "deleted", deleted,
-                "message", "Deleted " + deleted + " old filter execution records"
-        ));
+        
+        Map<String, Object> data = new HashMap<>();
+        data.put("deleted", deleted);
+        
+        return ResponseEntity.ok(ApiResponse.success(data, "Deleted " + deleted + " old filter execution records"));
     }
 }

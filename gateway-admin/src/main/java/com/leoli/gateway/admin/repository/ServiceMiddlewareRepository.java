@@ -18,14 +18,35 @@ import java.util.Optional;
 public interface ServiceMiddlewareRepository extends JpaRepository<ServiceMiddlewareEntity, Long> {
 
     /**
-     * 根据服务名称查询所有中间件
+     * 根据服务名称查询所有中间件（所有实例）
      */
     List<ServiceMiddlewareEntity> findByServiceName(String serviceName);
 
     /**
-     * 根据服务名称和中间件类型查询
+     * 根据服务实例地址查询所有中间件
+     * 用于按实例隔离查询
      */
-    Optional<ServiceMiddlewareEntity> findByServiceNameAndMiddlewareType(
+    List<ServiceMiddlewareEntity> findByInstanceAddress(String instanceAddress);
+
+    /**
+     * 根据服务名称和实例地址查询中间件
+     * 用于精确定位某个服务实例的中间件
+     */
+    List<ServiceMiddlewareEntity> findByServiceNameAndInstanceAddress(
+        String serviceName, String instanceAddress);
+
+    /**
+     * 根据服务名称、实例地址和中间件类型查询
+     * 用于唯一约束检查
+     */
+    Optional<ServiceMiddlewareEntity> findByServiceNameAndInstanceAddressAndMiddlewareType(
+        String serviceName, String instanceAddress, String middlewareType);
+
+    /**
+     * 根据服务名称和中间件类型查询（保留用于兼容）
+     * 注意：同一服务可能有多个实例，返回多个记录
+     */
+    List<ServiceMiddlewareEntity> findByServiceNameAndMiddlewareType(
         String serviceName, String middlewareType);
 
     /**
@@ -33,6 +54,12 @@ public interface ServiceMiddlewareRepository extends JpaRepository<ServiceMiddle
      */
     @Query("SELECT DISTINCT m.serviceName FROM ServiceMiddlewareEntity m")
     List<String> findAllServiceNames();
+
+    /**
+     * 查询指定服务下的所有实例地址
+     */
+    @Query("SELECT DISTINCT m.instanceAddress FROM ServiceMiddlewareEntity m WHERE m.serviceName = :serviceName")
+    List<String> findAllInstanceAddressesByServiceName(String serviceName);
 
     /**
      * 查询指定类型的中间件

@@ -29,7 +29,6 @@ class GatewayTracePropertiesTest {
         assertEquals(100, properties.getReportBatchSize());
         assertEquals(100, properties.getReportIntervalMs());
         assertEquals(1000, properties.getReportTimeoutMs());
-        assertTrue(properties.isReportMiddleware());
         assertFalse(properties.isAsyncTraceEnabled());
     }
 
@@ -190,9 +189,6 @@ class GatewayTracePropertiesTest {
     @DisplayName("禁用中间件元数据上报")
     void testDisableMiddlewareReporting() {
         GatewayTraceProperties properties = new GatewayTraceProperties();
-        properties.setReportMiddleware(false);
-
-        assertFalse(properties.isReportMiddleware());
     }
 
     @Test
@@ -358,13 +354,11 @@ class GatewayTracePropertiesTest {
         properties.setTraceRedis(false);
         properties.setTraceMQ(false);
         properties.setTraceDB(false);
-        properties.setReportMiddleware(false);
 
         assertFalse(properties.isEnabled());
         assertFalse(properties.isTraceRedis());
         assertFalse(properties.isTraceMQ());
         assertFalse(properties.isTraceDB());
-        assertFalse(properties.isReportMiddleware());
     }
 
     // ==================== 边界值测试 ====================

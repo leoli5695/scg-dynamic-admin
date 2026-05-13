@@ -1,11 +1,13 @@
 package com.leoli.gateway.admin.controller;
 
+import com.leoli.gateway.admin.dto.ApiResponse;
 import com.leoli.gateway.admin.service.RequestReplayService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -27,28 +29,22 @@ public class RequestReplayController {
      * Prepare a trace for replay - returns editable request details.
      */
     @GetMapping("/prepare/{traceId}")
-    public ResponseEntity<Map<String, Object>> prepareReplay(@PathVariable Long traceId) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> prepareReplay(@PathVariable Long traceId) {
         log.info("Preparing trace for replay: {}", traceId);
         
         RequestReplayService.ReplayableRequest request = replayService.prepareReplay(traceId);
         if (request == null) {
-            return ResponseEntity.ok(Map.of(
-                    "code", 404,
-                    "message", "Trace not found or not replayable"
-            ));
+            return ResponseEntity.ok(ApiResponse.notFound("Trace not found or not replayable"));
         }
 
-        return ResponseEntity.ok(Map.of(
-                "code", 200,
-                "data", toRequestMap(request)
-        ));
+        return ResponseEntity.ok(ApiResponse.success(toRequestMap(request)));
     }
 
     /**
      * Execute a single replay.
      */
     @PostMapping("/execute/{traceId}")
-    public ResponseEntity<Map<String, Object>> executeReplay(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> executeReplay(
             @PathVariable Long traceId,
             @RequestParam String instanceId,
             @RequestBody(required = false) RequestReplayService.ReplayOptions options) {
@@ -56,15 +52,10 @@ public class RequestReplayController {
         
         try {
             RequestReplayService.ReplayResult result = replayService.executeReplay(traceId, instanceId, options);
-            return ResponseEntity.ok(result.toMap());
+            return ResponseEntity.ok(ApiResponse.success(result.toMap()));
         } catch (Exception e) {
             log.error("Replay execution failed for trace {}: {}", traceId, e.getMessage(), e);
-            return ResponseEntity.ok(Map.of(
-                    "success", false,
-                    "traceId", traceId,
-                    "error", e.getMessage(),
-                    "errorType", "INTERNAL_ERROR"
-            ));
+            return ResponseEntity.ok(ApiResponse.error("Replay execution failed: " + e.getMessage()));
         }
     }
 
@@ -72,21 +63,21 @@ public class RequestReplayController {
      * Execute a quick replay (no modifications).
      */
     @PostMapping("/quick/{traceId}")
-    public ResponseEntity<Map<String, Object>> quickReplay(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> quickReplay(
             @PathVariable Long traceId,
             @RequestParam String instanceId) {
         log.info("Quick replay for trace: {} on instance: {}", traceId, instanceId);
         
         RequestReplayService.ReplayResult result = replayService.executeReplay(traceId, instanceId, null);
         
-        return ResponseEntity.ok(result.toMap());
+        return ResponseEntity.ok(ApiResponse.success(result.toMap()));
     }
 
     /**
      * Start batch replay for multiple traces.
      */
     @PostMapping("/batch/start")
-    public ResponseEntity<Map<String, Object>> startBatchReplay(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> startBatchReplay(
             @RequestParam String instanceId,
             @RequestBody List<Long> traceIds,
             @RequestBody(required = false) RequestReplayService.ReplayOptions options) {
@@ -94,49 +85,43 @@ public class RequestReplayController {
         
         String sessionId = replayService.startBatchReplay(traceIds, instanceId, options);
         
-        return ResponseEntity.ok(Map.of(
-                "code", 200,
-                "sessionId", sessionId,
-                "message", "Batch replay started"
-        ));
+        Map<String, Object> data = new HashMap<>();
+        data.put("sessionId", sessionId);
+        
+        return ResponseEntity.ok(ApiResponse.success(data, "Batch replay started"));
     }
 
     /**
      * Get batch replay status.
      */
     @GetMapping("/batch/status/{sessionId}")
-    public ResponseEntity<Map<String, Object>> getBatchStatus(@PathVariable String sessionId) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getBatchStatus(@PathVariable String sessionId) {
         log.info("Getting batch replay status: {}", sessionId);
         
         RequestReplayService.ReplaySession session = replayService.getBatchStatus(sessionId);
         if (session == null) {
-            return ResponseEntity.ok(Map.of(
-                    "code", 404,
-                    "message", "Session not found"
-            ));
+            return ResponseEntity.ok(ApiResponse.notFound("Session not found"));
         }
 
-        return ResponseEntity.ok(session.toMap());
+        return ResponseEntity.ok(ApiResponse.success(session.toMap()));
     }
 
     /**
      * Cancel batch replay.
      */
     @DeleteMapping("/batch/cancel/{sessionId}")
-    public ResponseEntity<Map<String, Object>> cancelBatch(@PathVariable String sessionId) {
+    public ResponseEntity<ApiResponse<Void>> cancelBatch(@PathVariable String sessionId) {
         log.info("Cancelling batch replay: {}", sessionId);
         
         boolean cancelled = replayService.cancelBatch(sessionId);
         
-        return ResponseEntity.ok(Map.of(
-                "code", cancelled ? 200 : 400,
-                "message", cancelled ? "Batch replay cancelled" : "Cannot cancel session"
-        ));
+        if (cancelled) {
+            return ResponseEntity.ok(ApiResponse.success("Batch replay cancelled"));
+        } else {
+            return ResponseEntity.ok(ApiResponse.badRequest("Cannot cancel session"));
+        }
     }
 
-    /**
-     * Convert ReplayableRequest to Map for JSON serialization.
-     */
     private Map<String, Object> toRequestMap(RequestReplayService.ReplayableRequest request) {
         Map<String, Object> map = new java.util.LinkedHashMap<>();
         map.put("traceId", request.getTraceId());

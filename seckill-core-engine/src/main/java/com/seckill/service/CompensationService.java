@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 /**
@@ -46,6 +47,14 @@ public class CompensationService {
     private static final int SHORT_TIMEOUT_MINUTES = 5;
     private static final int MEDIUM_TIMEOUT_MINUTES = 10;
     private static final int LONG_TIMEOUT_MINUTES = 30;
+
+    /**
+     * RocketMQ 重投窗口期（与 OrderCreateConsumer.IDEMPOTENT_EXPIRE_MINUTES 保持一致）
+     * <p>
+     * 幂等锁 5 分钟过期，RocketMQ 消息重投周期 10s ~ 2h
+     * 在此窗口期内，应等待 RocketMQ 重投重建订单，而非直接回补库存
+     */
+    private static final int ROCKETMQ_RESEND_WINDOW_MINUTES = 5;
 
     /**
      * ============================================================================
@@ -151,10 +160,20 @@ public class CompensationService {
         SeckillOrder order = orderMapper.selectByOrderNo(tx.getOrderNo());
 
         if (order == null) {
-            // 订单不存在，回补库存
+            // 【关键优化】检查是否处于 RocketMQ 重投窗口期
+            // 避免与 RocketMQ 消息重投机制冲突
+            long minutesSinceCreate = ChronoUnit.MINUTES.between(tx.getCreateTime(), LocalDateTime.now());
+
+            if (minutesSinceCreate < ROCKETMQ_RESEND_WINDOW_MINUTES) {
+                log.info("事务处于 RocketMQ 重投窗口期，暂不回补，等待消息重投重建订单: transactionId={}, minutesSinceCreate={}",
+                        tx.getTransactionId(), minutesSinceCreate);
+                return;  // 跳过本次处理，等待下次定时任务扫描
+            }
+
+            // 超过重投窗口期，订单仍未创建，执行库存回补
             rollbackStock(tx);
             tx.setStatus(TransactionStatus.FAILED.getCode());
-            tx.setErrorMsg("订单不存在，超时回补");
+            tx.setErrorMsg("订单不存在，超过重投窗口期，超时回补");
         } else if (order.getStatus() == OrderStatus.PENDING_PAYMENT.getCode()) {
             // 订单待支付，回补库存
             rollbackStock(tx);

@@ -1,6 +1,7 @@
 package com.leoli.gateway.trace.autoconfig;
 
 import com.leoli.gateway.trace.aspect.DBTraceAspect;
+import com.leoli.gateway.trace.aspect.KafkaMQTraceAspect;
 import com.leoli.gateway.trace.aspect.MQTraceAspect;
 import com.leoli.gateway.trace.aspect.RedisTraceAspect;
 import com.leoli.gateway.trace.aspect.ServiceTraceAspect;
@@ -12,7 +13,6 @@ import com.leoli.gateway.trace.properties.GatewayTraceProperties;
 import com.leoli.gateway.trace.reporter.AsyncTraceReporter;
 import com.leoli.gateway.trace.reporter.MiddlewareMetadataReporter;
 import lombok.RequiredArgsConstructor;
-import org.aspectj.lang.annotation.Aspect;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -24,7 +24,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.env.Environment;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -50,7 +49,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnProperty(prefix = "gateway.trace", name = "enabled", havingValue = "true", matchIfMissing = true)
 @EnableConfigurationProperties(GatewayTraceProperties.class)
-@Import(TraceThreadPoolConfig.class)
+@Import({TraceThreadPoolConfig.class, WebClientTraceConfiguration.class, FeignTraceConfiguration.class})
 public class GatewayTraceAutoConfiguration implements WebMvcConfigurer {
 
     private final Environment environment;
@@ -105,7 +104,6 @@ public class GatewayTraceAutoConfiguration implements WebMvcConfigurer {
      * Service method tracing aspect
      */
     @Bean
-    @ConditionalOnClass(Aspect.class)
     @ConditionalOnMissingBean
     public ServiceTraceAspect serviceTraceAspect() {
         return new ServiceTraceAspect(properties);
@@ -115,7 +113,7 @@ public class GatewayTraceAutoConfiguration implements WebMvcConfigurer {
      * Redis operation tracing aspect
      */
     @Bean
-    @ConditionalOnClass(RedisTemplate.class)
+    @ConditionalOnClass(name = "org.springframework.data.redis.core.RedisTemplate")
     @ConditionalOnProperty(prefix = "gateway.trace", name = "trace-redis", havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public RedisTraceAspect redisTraceAspect() {
@@ -140,8 +138,8 @@ public class GatewayTraceAutoConfiguration implements WebMvcConfigurer {
     @ConditionalOnClass(name = "org.springframework.kafka.core.KafkaTemplate")
     @ConditionalOnProperty(prefix = "gateway.trace", name = "trace-mq", havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
-    public MQTraceAspect kafkaTraceAspect() {
-        return new MQTraceAspect(properties);
+    public KafkaMQTraceAspect kafkaTraceAspect() {
+        return new KafkaMQTraceAspect(properties);
     }
 
     /**
@@ -166,18 +164,20 @@ public class GatewayTraceAutoConfiguration implements WebMvcConfigurer {
  * 使用独立的配置类配合 @ConditionalOnClass，确保只有当 reactor-netty 存在时才加载此配置，
  * 避免 AsyncTraceReporter 类加载时触发 NoClassDefFoundError。
  * <p>
- * 这是 Spring Boot 处理 optional 依赖的标准模式。
+ * FIX #4: 移除对 async-trace-enabled 的依赖。Trace 上报功能应在 enabled=true 时始终可用，
+ * 不应与 @Async 线程池传播特性耦合。
  */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnClass(name = "reactor.netty.resources.ConnectionProvider")
-@ConditionalOnProperty(prefix = "gateway.trace", name = "async-trace-enabled", havingValue = "true", matchIfMissing = true)
 class WebClientTraceConfiguration {
 
     /**
      * Middleware metadata reporter (需要 WebClient)
+     * <p>
+     * 配置驱动方式：只要用户配置了 exporter URL 就会上报
+     * 不再依赖 report-middleware 属性
      */
     @Bean
-    @ConditionalOnProperty(prefix = "gateway.trace", name = "report-middleware", havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public MiddlewareMetadataReporter middlewareMetadataReporter(
             GatewayTraceProperties properties, Environment environment) {

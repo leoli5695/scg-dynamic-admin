@@ -13,18 +13,20 @@ import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.StrategyDefinition;
 import com.leoli.gateway.util.*;
 import lombok.Data;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpStatus;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -50,20 +52,20 @@ import java.util.concurrent.TimeUnit;
  */
 @Component
 @Slf4j
+@RequiredArgsConstructor
 public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
 
-    @Autowired
-    private StrategyManager strategyManager;
+    private final StrategyManager strategyManager;
+    private final ShadowQuotaManager shadowQuotaManager;
 
-    @Autowired(required = false)
-    private RedisHealthChecker redisHealthChecker;
+    /**
+     * Optional dependencies - may be null when Redis is disabled.
+     * Wrapped in Optional for safer usage.
+     */
+    private final @Nullable RedisHealthChecker redisHealthChecker;
+    private final @Nullable DistributedRateLimiter distributedRateLimiter;
 
-    @Autowired(required = false)
-    private DistributedRateLimiter distributedRateLimiter;
-
-    @Autowired
-    private ShadowQuotaManager shadowQuotaManager;
-
+    // @Value fields - keep setter injection for Spring configuration binding
     @Value("${gateway.rate-limiter.redis.enabled:true}")
     private boolean redisLimitEnabled;
 

@@ -1,0 +1,242 @@
+---
+# Redis Exporter
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-exporter
+  namespace: test
+  labels:
+    app: redis-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-exporter
+  template:
+    metadata:
+      labels:
+        app: redis-exporter
+    spec:
+      containers:
+      - name: redis-exporter
+        image: docker.1ms.run/oliver006/redis_exporter:v1.55.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 9121
+          name: metrics
+        env:
+        - name: REDIS_ADDR
+          value: "redis://redis:6379"
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-exporter
+  namespace: test
+  labels:
+    app: redis-exporter
+spec:
+  type: ClusterIP
+  selector:
+    app: redis-exporter
+  ports:
+  - name: metrics
+    port: 9121
+    targetPort: 9121
+
+---
+# Elasticsearch Exporter
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: es-exporter
+  namespace: test
+  labels:
+    app: es-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: es-exporter
+  template:
+    metadata:
+      labels:
+        app: es-exporter
+    spec:
+      containers:
+      - name: es-exporter
+        image: quay.io/prometheuscommunity/elasticsearch-exporter:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 9114
+          name: metrics
+        args:
+        - '--es.uri=http://elasticsearch:9200'
+        - '--es.all'
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: es-exporter
+  namespace: test
+  labels:
+    app: es-exporter
+spec:
+  type: ClusterIP
+  selector:
+    app: es-exporter
+  ports:
+  - name: metrics
+    port: 9114
+    targetPort: 9114
+
+---
+# MongoDB Exporter
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb-exporter
+  namespace: test
+  labels:
+    app: mongodb-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb-exporter
+  template:
+    metadata:
+      labels:
+        app: mongodb-exporter
+    spec:
+      containers:
+      - name: mongodb-exporter
+        image: docker.1ms.run/bitnami/mongodb-exporter:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 9216
+          name: metrics
+        env:
+        - name: MONGODB_URI
+          value: "mongodb://mongo:27017"
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-exporter
+  namespace: test
+  labels:
+    app: mongodb-exporter
+spec:
+  type: ClusterIP
+  selector:
+    app: mongodb-exporter
+  ports:
+  - name: metrics
+    port: 9216
+    targetPort: 9216
+
+---
+# RabbitMQ Exporter (使用 RabbitMQ 内置的 prometheus plugin)
+# RabbitMQ 3.8+ 内置 prometheus metrics at /metrics
+# 需要确保 rabbitmq management plugin 已启用
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq-exporter
+  namespace: test
+  labels:
+    app: rabbitmq-exporter
+spec:
+  type: ClusterIP
+  selector:
+    app: rabbitmq
+  ports:
+  - name: metrics
+    port: 15692  # RabbitMQ prometheus plugin port
+    targetPort: 15692
+
+---
+# RocketMQ Exporter
+# RocketMQ 需要单独的 exporter
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rocketmq-exporter
+  namespace: test
+  labels:
+    app: rocketmq-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rocketmq-exporter
+  template:
+    metadata:
+      labels:
+        app: rocketmq-exporter
+    spec:
+      tolerations:
+      - key: node.kubernetes.io/not-ready
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: rocketmq-exporter
+        image: docker.1ms.run/apache/rocketmq-exporter:0.0.2
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5557
+          name: metrics
+        env:
+        - name: ROCKETMQ_NAMESRV
+          value: "rocketmq-nameserver:9876"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "200m"
+            memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rocketmq-exporter
+  namespace: test
+  labels:
+    app: rocketmq-exporter
+spec:
+  type: ClusterIP
+  selector:
+    app: rocketmq-exporter
+  ports:
+  - name: metrics
+    port: 5557
+    targetPort: 5557
+
+---
+# MySQL Exporter (如果需要)
+# 本地 MySQL exporter 通过 NodePort 暴露
+# 这里假设 MySQL 在本地运行，exporter 在 host.docker.internal:9104
+# 对于 K8s 内的 MySQL，需要部署 mysqld-exporter

@@ -5,6 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Gateway Trace Starter configuration properties
@@ -114,53 +115,104 @@ public class GatewayTraceProperties {
      */
     private boolean trustPrivateNetworks = true;
 
-    // ==================== Middleware Metadata Configuration (Optional) ====================
+    // ==================== Middleware Exporter Configuration ====================
+    // 配置驱动：用户必须显式配置 exporter URL 才会上报该中间件
+    // 不再自动检测中间件信息，因为：
+    // 1. 中间件部署在用户服务器上，代码无法获取实际地址
+    // 2. 依赖 exporter，没有部署 exporter 则无法采集数据
+    // 3. Prometheus instance 标签可能与自动检测的地址不匹配
 
     /**
-     * Enable middleware metadata reporting
-     * Default: true
+     * Middleware exporter configuration
+     * <p>
+     * 配置方式（application.yml）:
+     * <pre>
+     * gateway:
+     *   trace:
+     *     middleware-exporters:
+     *       redis: redis-exporter:9121       # 配置后上报 Redis
+     *       elasticsearch: es-exporter:9114  # 配置后上报 ES
+     *       mysql: mysql-exporter:9104       # 配置后上报 MySQL
+     *       rocketmq-console: localhost:30808  # RocketMQ Console 地址（不是 exporter）
+     *       kafka: kafka-exporter:9308       # 配置后上报 Kafka
+     *       mongodb: mongodb-exporter:9216   # 配置后上报 MongoDB
+     *       rabbitmq: rabbitmq-exporter:9419 # 配置后上报 RabbitMQ
+     *       postgresql: postgres-exporter:9187 # 配置后上报 PostgreSQL
+     * </pre>
+     * <p>
+     * 注意：
+     * - 只有显式配置了 exporter URL 才会上报该中间件
+     * - exporter URL 必须与 Prometheus 配置中的 instance 标签一致
+     * - 例如 Prometheus 配置 targets: ['redis-exporter:9121']，则这里也配置 redis-exporter:9121
+     * - RocketMQ 使用 Console API 监控（exporter v0.0.2 存在 bug）
      */
-    private boolean reportMiddleware = true;
+    private MiddlewareExportersConfig middlewareExporters = new MiddlewareExportersConfig();
+
+    // ==================== Legacy Exporter URL Configuration (Deprecated) ====================
+    // 以下配置已废弃，请使用 middlewareExporters 嵌套配置
+    // 保留向后兼容，但建议迁移到新配置方式
 
     /**
-     * Redis Exporter URL
-     * Default: auto-detect (host:9121)
+     * @deprecated Use middlewareExporters.redis instead
      */
+    @Deprecated
     private String redisExporterUrl;
 
     /**
-     * RocketMQ Exporter URL
-     * Default: rocketmq-exporter:5557
+     * @deprecated Use middlewareExporters.rocketmq instead
      */
+    @Deprecated
     private String rocketmqExporterUrl;
 
     /**
-     * MySQL Exporter URL
-     * Default: auto-detect (host:9104)
+     * @deprecated Use middlewareExporters.mysql instead
      */
+    @Deprecated
     private String mysqlExporterUrl;
 
     /**
-     * Elasticsearch Exporter URL
-     * Default: es-exporter:9114
+     * @deprecated Use middlewareExporters.elasticsearch instead
      */
+    @Deprecated
     private String esExporterUrl;
 
     /**
-     * Kafka Exporter URL
-     * Default: kafka-exporter:9308
+     * @deprecated Use middlewareExporters.kafka instead
      */
+    @Deprecated
     private String kafkaExporterUrl;
+
+    /**
+     * @deprecated Use middlewareExporters.mongodb instead
+     */
+    @Deprecated
+    private String mongoExporterUrl;
+
+    /**
+     * @deprecated Use middlewareExporters.rabbitmq instead
+     */
+    @Deprecated
+    private String rabbitmqExporterUrl;
 
     // ==================== Async Thread Trace Propagation ====================
 
     /**
-     * Enable async thread Trace propagation
+     * Enable async thread pool with Trace propagation.
      * Default: false (must be explicitly enabled by user)
      * <p>
      * When enabled, automatically configures traceTaskExecutor thread pool,
      * for @Async annotated async methods.
+     * <p>
+     * Property: gateway.trace.async-thread-pool-enabled
      */
+    private boolean asyncThreadPoolEnabled = false;
+
+    /**
+     * @deprecated Use {@link #asyncThreadPoolEnabled} instead.
+     * This property previously controlled both trace reporting and thread pool,
+     * causing confusion. Now only controls thread pool as an alias.
+     */
+    @Deprecated
     private boolean asyncTraceEnabled = false;
 
     // ==================== Helper Methods ====================
@@ -180,6 +232,9 @@ public class GatewayTraceProperties {
 
     /**
      * Determine if this request should be sampled
+     * <p>
+     * FIX #5: Use ThreadLocalRandom instead of Math.random() to avoid
+     * CAS contention on the shared Random instance under high concurrency (10k+ TPS).
      *
      * @return Whether to sample
      */
@@ -190,6 +245,87 @@ public class GatewayTraceProperties {
         if (sampleRate <= 0.0) {
             return false;
         }
-        return Math.random() < sampleRate;
+        return ThreadLocalRandom.current().nextDouble() < sampleRate;
+    }
+
+    /**
+     * Get Redis exporter URL (with backward compatibility)
+     */
+    public String getRedisExporterUrlResolved() {
+        if (middlewareExporters.getRedis() != null && !middlewareExporters.getRedis().isEmpty()) {
+            return middlewareExporters.getRedis();
+        }
+        return redisExporterUrl; // backward compatibility
+    }
+
+    /**
+     * Get Elasticsearch exporter URL (with backward compatibility)
+     */
+    public String getElasticsearchExporterUrlResolved() {
+        if (middlewareExporters.getElasticsearch() != null && !middlewareExporters.getElasticsearch().isEmpty()) {
+            return middlewareExporters.getElasticsearch();
+        }
+        return esExporterUrl; // backward compatibility
+    }
+
+    /**
+     * Get MySQL exporter URL (with backward compatibility)
+     */
+    public String getMysqlExporterUrlResolved() {
+        if (middlewareExporters.getMysql() != null && !middlewareExporters.getMysql().isEmpty()) {
+            return middlewareExporters.getMysql();
+        }
+        return mysqlExporterUrl; // backward compatibility
+    }
+
+    /**
+     * Get RocketMQ Console URL (with backward compatibility)
+     * <p>
+     * 注意：RocketMQ 使用 Console API 监控，不是 Prometheus exporter
+     * <p>
+     * 优先级：
+     * 1. middlewareExporters.rocketmqConsole（新配置）
+     * 2. middlewareExporters.rocketmq（向后兼容）
+     * 3. rocketmqExporterUrl（已废弃）
+     */
+    public String getRocketmqExporterUrlResolved() {
+        return middlewareExporters.getRocketmqResolved();
+    }
+
+    /**
+     * Get Kafka exporter URL (with backward compatibility)
+     */
+    public String getKafkaExporterUrlResolved() {
+        if (middlewareExporters.getKafka() != null && !middlewareExporters.getKafka().isEmpty()) {
+            return middlewareExporters.getKafka();
+        }
+        return kafkaExporterUrl; // backward compatibility
+    }
+
+    /**
+     * Get MongoDB exporter URL (with backward compatibility)
+     */
+    public String getMongoExporterUrlResolved() {
+        if (middlewareExporters.getMongodb() != null && !middlewareExporters.getMongodb().isEmpty()) {
+            return middlewareExporters.getMongodb();
+        }
+        return mongoExporterUrl; // backward compatibility
+    }
+
+    /**
+     * Get RabbitMQ exporter URL (with backward compatibility)
+     */
+    public String getRabbitmqExporterUrlResolved() {
+        if (middlewareExporters.getRabbitmq() != null && !middlewareExporters.getRabbitmq().isEmpty()) {
+            return middlewareExporters.getRabbitmq();
+        }
+        return rabbitmqExporterUrl; // backward compatibility
+    }
+
+    /**
+     * Get PostgreSQL exporter URL
+     */
+    public String getPostgresqlExporterUrlResolved() {
+        return middlewareExporters.getPostgresql();
     }
 }

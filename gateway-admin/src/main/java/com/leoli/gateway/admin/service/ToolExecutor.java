@@ -176,6 +176,13 @@ public class ToolExecutor {
                 case "query_rocketmq_metrics" -> executeQueryRocketmqMetrics(arguments);
                 case "query_mysql_metrics" -> executeQueryMysqlMetrics(arguments);
                 case "query_es_metrics" -> executeQueryEsMetrics(arguments);
+                case "query_redis_during_period" -> executeQueryRedisDuringPeriod(arguments);
+                case "query_mysql_during_period" -> executeQueryMysqlDuringPeriod(arguments);
+                case "query_rocketmq_during_period" -> executeQueryRocketmqDuringPeriod(arguments);
+                case "query_postgresql_during_period" -> executeQueryPostgresqlDuringPeriod(arguments);
+                case "query_mongodb_during_period" -> executeQueryMongodbDuringPeriod(arguments);
+                case "query_rabbitmq_during_period" -> executeQueryRabbitmqDuringPeriod(arguments);
+                case "analyze_stress_test_with_middleware" -> executeAnalyzeStressTestWithMiddleware(arguments);
 
                 default -> Map.of("error", "Tool not implemented: " + toolName);
             };
@@ -1252,6 +1259,17 @@ public class ToolExecutor {
         }
         if (value instanceof String) {
             return Integer.parseInt((String) value);
+        }
+        return defaultValue;
+    }
+
+    private long getLongArg(Map<String, Object> args, String key, long defaultValue) {
+        Object value = args.get(key);
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+        if (value instanceof String) {
+            return Long.parseLong((String) value);
         }
         return defaultValue;
     }
@@ -3922,6 +3940,103 @@ public class ToolExecutor {
             return Map.of("error", "exporterUrl is required");
         }
         return prometheusClient.queryEsMetrics(exporterUrl);
+    }
+
+    // ===================== 时间段查询工具 =====================
+
+    private Object executeQueryRedisDuringPeriod(Map<String, Object> args) {
+        String exporterUrl = getStringArg(args, "exporterUrl");
+        if (exporterUrl == null) {
+            return Map.of("error", "exporterUrl is required");
+        }
+        long startTime = getLongArg(args, "startTime", 0);
+        long endTime = getLongArg(args, "endTime", 0);
+        if (startTime == 0 || endTime == 0) {
+            return Map.of("error", "startTime and endTime are required (Unix seconds)");
+        }
+        String step = getStringArg(args, "step"); // nullable, auto-calc
+        return prometheusClient.queryRedisDuringPeriod(exporterUrl, startTime, endTime, step);
+    }
+
+    private Object executeQueryMysqlDuringPeriod(Map<String, Object> args) {
+        String exporterUrl = getStringArg(args, "exporterUrl");
+        if (exporterUrl == null) {
+            return Map.of("error", "exporterUrl is required");
+        }
+        long startTime = getLongArg(args, "startTime", 0);
+        long endTime = getLongArg(args, "endTime", 0);
+        if (startTime == 0 || endTime == 0) {
+            return Map.of("error", "startTime and endTime are required (Unix seconds)");
+        }
+        String step = getStringArg(args, "step");
+        return prometheusClient.queryMysqlDuringPeriod(exporterUrl, startTime, endTime, step);
+    }
+
+    private Object executeQueryRocketmqDuringPeriod(Map<String, Object> args) {
+        String exporterUrl = getStringArg(args, "exporterUrl");
+        if (exporterUrl == null) {
+            return Map.of("error", "exporterUrl is required");
+        }
+        long startTime = getLongArg(args, "startTime", 0);
+        long endTime = getLongArg(args, "endTime", 0);
+        if (startTime == 0 || endTime == 0) {
+            return Map.of("error", "startTime and endTime are required (Unix seconds)");
+        }
+        String step = getStringArg(args, "step");
+        String topic = getStringArg(args, "topic");
+        return prometheusClient.queryRocketmqDuringPeriod(exporterUrl, startTime, endTime, step, topic);
+    }
+
+    private Object executeAnalyzeStressTestWithMiddleware(Map<String, Object> args) {
+        long testId = getLongArg(args, "testId", 0);
+        if (testId == 0) {
+            return Map.of("error", "testId is required");
+        }
+        String serviceName = getStringArg(args, "serviceName");
+        return distributedTraceService.analyzeStressTestWithMiddleware(testId, serviceName);
+    }
+
+    private Object executeQueryPostgresqlDuringPeriod(Map<String, Object> args) {
+        String exporterUrl = getStringArg(args, "exporterUrl");
+        if (exporterUrl == null) {
+            return Map.of("error", "exporterUrl is required");
+        }
+        long startTime = getLongArg(args, "startTime", 0);
+        long endTime = getLongArg(args, "endTime", 0);
+        if (startTime == 0 || endTime == 0) {
+            return Map.of("error", "startTime and endTime are required (Unix seconds)");
+        }
+        String step = getStringArg(args, "step");
+        return prometheusClient.queryPostgresqlDuringPeriod(exporterUrl, startTime, endTime, step);
+    }
+
+    private Object executeQueryMongodbDuringPeriod(Map<String, Object> args) {
+        String exporterUrl = getStringArg(args, "exporterUrl");
+        if (exporterUrl == null) {
+            return Map.of("error", "exporterUrl is required");
+        }
+        long startTime = getLongArg(args, "startTime", 0);
+        long endTime = getLongArg(args, "endTime", 0);
+        if (startTime == 0 || endTime == 0) {
+            return Map.of("error", "startTime and endTime are required (Unix seconds)");
+        }
+        String step = getStringArg(args, "step");
+        return prometheusClient.queryMongodbDuringPeriod(exporterUrl, startTime, endTime, step);
+    }
+
+    private Object executeQueryRabbitmqDuringPeriod(Map<String, Object> args) {
+        String exporterUrl = getStringArg(args, "exporterUrl");
+        if (exporterUrl == null) {
+            return Map.of("error", "exporterUrl is required");
+        }
+        long startTime = getLongArg(args, "startTime", 0);
+        long endTime = getLongArg(args, "endTime", 0);
+        if (startTime == 0 || endTime == 0) {
+            return Map.of("error", "startTime and endTime are required (Unix seconds)");
+        }
+        String step = getStringArg(args, "step");
+        String queue = getStringArg(args, "queue");
+        return prometheusClient.queryRabbitmqDuringPeriod(exporterUrl, startTime, endTime, step, queue);
     }
 
     // ===================== 工具结果类 =====================

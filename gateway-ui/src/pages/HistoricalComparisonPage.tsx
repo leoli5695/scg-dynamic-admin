@@ -503,7 +503,7 @@ const HistoricalComparisonPage: React.FC = () => {
           </Card>
 
           {/* Regression Alerts */}
-          {comparisonResult.regressionAlerts.length > 0 && (
+          {(comparisonResult?.regressionAlerts?.length || 0) > 0 && (
             <Alert
               type="warning"
               showIcon
@@ -519,11 +519,11 @@ const HistoricalComparisonPage: React.FC = () => {
           </Card>
 
           {/* Regression Alerts Table */}
-          {comparisonResult.regressionAlerts.length > 0 && (
+          {(comparisonResult?.regressionAlerts?.length || 0) > 0 && (
             <Card size="small" title={<span><WarningOutlined /> {t('comparison.alerts')}</span>} style={{ marginBottom: 16 }}>
               <Table
                 size="small"
-                dataSource={comparisonResult.regressionAlerts}
+                dataSource={comparisonResult?.regressionAlerts || []}
                 columns={alertColumns}
                 rowKey={(record, idx) => `${record.filterName}_${record.metricName}_${idx}`}
                 pagination={false}
@@ -535,7 +535,7 @@ const HistoricalComparisonPage: React.FC = () => {
           <Card size="small" title={<span><FilterOutlined /> {t('comparison.filter_details')}</span>}>
             <Table
               size="small"
-              dataSource={comparisonResult.filterComparisons}
+              dataSource={comparisonResult?.filterComparisons || []}
               columns={filterColumns}
               rowKey="filterName"
               scroll={{ x: 1000 }}

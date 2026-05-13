@@ -1,0 +1,83 @@
+# ============================================================================
+# Nacos 部署配置 - 配置中心
+# ============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nacos
+  namespace: test
+  labels:
+    app: nacos
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nacos
+  template:
+    metadata:
+      labels:
+        app: nacos
+    spec:
+      containers:
+      - name: nacos
+        image: 05feb4b8a268e111bb3c4356701bf0c4.d.1ms.run/nacos/nacos-server:v2.3.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8848
+          name: http
+        - containerPort: 9848
+          name: grpc-client
+        - containerPort: 9849
+          name: grpc-server
+        env:
+        - name: MODE
+          value: "standalone"
+        - name: PREFER_HOST_MODE
+          value: "hostname"
+        - name: NACOS_AUTH_ENABLE
+          value: "false"
+        # 使用内嵌数据库（derby），无需 MySQL
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "512Mi"
+          limits:
+            cpu: "500m"
+            memory: "1Gi"
+        volumeMounts:
+        - name: nacos-logs
+          mountPath: /home/nacos/logs
+      volumes:
+      - name: nacos-logs
+        emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nacos
+  namespace: test
+spec:
+  type: NodePort
+  selector:
+    app: nacos
+  ports:
+  - port: 8848
+    targetPort: 8848
+    nodePort: 30848
+    protocol: TCP
+    name: http
+  # Nacos 2.x gRPC 端口计算规则：HTTP端口 + 1000
+  # HTTP NodePort 30848 → gRPC client 期望 31848
+  - port: 9848
+    targetPort: 9848
+    nodePort: 31848
+    protocol: TCP
+    name: grpc-client
+  # gRPC server 端口 = gRPC client + 1
+  - port: 9849
+    targetPort: 9849
+    nodePort: 31849
+    protocol: TCP
+    name: grpc-server

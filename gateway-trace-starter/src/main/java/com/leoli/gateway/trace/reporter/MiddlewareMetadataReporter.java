@@ -3,33 +3,42 @@ package com.leoli.gateway.trace.reporter;
 import com.leoli.gateway.trace.model.MiddlewareInfo;
 import com.leoli.gateway.trace.model.MiddlewareMetadata;
 import com.leoli.gateway.trace.properties.GatewayTraceProperties;
-import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.InitializingBean;
 import org.springframework.core.env.Environment;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.net.InetAddress;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
- * Middleware metadata reporter
+ * Middleware metadata reporter (配置驱动方式)
  * <p>
- * Automatically detects middleware dependencies configuration at service startup,
- * and reports to gateway admin console.
- * Gateway admin stores mapping table, AI queries Prometheus as needed during analysis.
+ * 不再自动检测中间件信息，改为配置驱动：
+ * - 用户必须显式配置 exporter URL 才会上报该中间件
+ * - exporter URL 必须与 Prometheus 配置中的 instance 标签一致
  * <p>
- * Auto-detected middleware:
- * - Redis: spring.data.redis.host/port (SB3) or spring.redis.host/port (SB2 fallback)
- * - RocketMQ: rocketmq.name-server
- * - MySQL: spring.datasource.url
- * - Elasticsearch: spring.elasticsearch.uris
- * - Kafka: spring.kafka.bootstrap-servers
+ * 配置示例 (application.yml):
+ * <pre>
+ * gateway:
+ *   trace:
+ *     middleware-exporters:
+ *       redis: redis-exporter:9121
+ *       elasticsearch: elasticsearch-exporter:9114
+ *       mysql: mysql-exporter:9104
+ *       rocketmq: rocketmq-exporter:5557
+ * </pre>
+ * <p>
+ * 为什么不自动检测：
+ * 1. 中间件部署在用户服务器上，代码无法获取实际地址
+ * 2. 依赖 exporter，没有部署 exporter 则无法采集数据
+ * 3. Prometheus instance 标签可能与自动检测的地址不匹配
  *
  * @author leoli
  */
 @Slf4j
-public class MiddlewareMetadataReporter {
+public class MiddlewareMetadataReporter implements InitializingBean {
 
     private final WebClient webClient;
     private final Environment environment;
@@ -42,19 +51,20 @@ public class MiddlewareMetadataReporter {
         this.webClient = WebClient.create();
     }
 
+    @Override
+    public void afterPropertiesSet() {
+        reportMiddlewareMetadata();
+    }
+
     /**
-     * Auto-report middleware metadata at service startup.
-     *
-     * <p>异步执行，避免阻塞 Spring 启动：
-     * - collectMetadata() 里 InetAddress.getLocalHost() 在 DNS 不通时可能阻塞几秒
-     * - doReport() 的 WebClient 是异步的，但 collect 是同步的
-     * - 任何抛出的异常都不会影响应用启动
+     * Report middleware metadata at service startup (配置驱动方式)
+     * <p>
+     * 异步执行，避免阻塞 Spring 启动
      */
-    @PostConstruct
     public void reportMiddlewareMetadata() {
-        // Check if enabled
-        if (!properties.isEnabled() || !properties.isReportMiddleware()) {
-            log.info("Middleware metadata reporting disabled");
+        // Check if enabled (移除 reportMiddleware 配置，只要有配置就上报)
+        if (!properties.isEnabled()) {
+            log.info("Gateway trace disabled, skip middleware metadata reporting");
             return;
         }
 
@@ -64,17 +74,21 @@ public class MiddlewareMetadataReporter {
             return;
         }
 
+        // 检查是否有配置任何 exporter URL
+        Map<String, String> configuredExporters = collectConfiguredExporters();
+        if (configuredExporters.isEmpty()) {
+            log.info("No middleware exporter URL configured, skip reporting. " +
+                     "Please configure gateway.trace.middleware-exporters.* to enable middleware monitoring.");
+            return;
+        }
+
         // 异步执行，不阻塞 Spring 启动
         Thread reportThread = new Thread(() -> {
             try {
-                MiddlewareMetadata metadata = collectMetadata();
-                if (metadata.getMiddlewares().isEmpty()) {
-                    log.info("No middleware detected, skip reporting");
-                    return;
-                }
+                MiddlewareMetadata metadata = buildMetadata(configuredExporters);
                 doReport(metadata);
             } catch (Exception e) {
-                log.warn("Failed to collect/report middleware metadata: {}", e.getMessage());
+                log.warn("Failed to report middleware metadata: {}", e.getMessage());
             }
         }, "middleware-metadata-reporter");
         reportThread.setDaemon(true);
@@ -82,9 +96,43 @@ public class MiddlewareMetadataReporter {
     }
 
     /**
-     * Collect middleware metadata
+     * 收集用户配置的 exporter URL
+     *
+     * @return 配置的 exporter URL Map，key=中间件类型，value=exporter地址
      */
-    private MiddlewareMetadata collectMetadata() {
+    private Map<String, String> collectConfiguredExporters() {
+        Map<String, String> exporters = new LinkedHashMap<>();
+
+        // 从新的嵌套配置读取
+        addIfConfigured(exporters, "redis", properties.getRedisExporterUrlResolved());
+        addIfConfigured(exporters, "elasticsearch", properties.getElasticsearchExporterUrlResolved());
+        addIfConfigured(exporters, "mysql", properties.getMysqlExporterUrlResolved());
+        addIfConfigured(exporters, "rocketmq", properties.getRocketmqExporterUrlResolved());
+        addIfConfigured(exporters, "kafka", properties.getKafkaExporterUrlResolved());
+        addIfConfigured(exporters, "mongodb", properties.getMongoExporterUrlResolved());
+        addIfConfigured(exporters, "rabbitmq", properties.getRabbitmqExporterUrlResolved());
+        addIfConfigured(exporters, "postgresql", properties.getPostgresqlExporterUrlResolved());
+
+        return exporters;
+    }
+
+    /**
+     * 如果配置了 exporter URL，添加到 Map
+     */
+    private void addIfConfigured(Map<String, String> exporters, String type, String exporterUrl) {
+        if (exporterUrl != null && !exporterUrl.isEmpty()) {
+            exporters.put(type, exporterUrl);
+            log.debug("Configured exporter: {} -> {}", type, exporterUrl);
+        }
+    }
+
+    /**
+     * 构建中间件元数据
+     *
+     * @param configuredExporters 配置的 exporter URL Map
+     * @return 中间件元数据
+     */
+    private MiddlewareMetadata buildMetadata(Map<String, String> configuredExporters) {
         MiddlewareMetadata metadata = new MiddlewareMetadata();
 
         String serviceName = properties.getServiceName(
@@ -103,171 +151,60 @@ public class MiddlewareMetadataReporter {
             metadata.setInstanceAddress("unknown");
         }
 
-        // Detect Redis
-        detectRedis(metadata);
+        // 根据配置的 exporter URL 构建中间件信息
+        for (Map.Entry<String, String> entry : configuredExporters.entrySet()) {
+            String type = entry.getKey();
+            String exporterUrl = entry.getValue();
 
-        // Detect RocketMQ
-        detectRocketMQ(metadata);
+            // 中间件 host/port 信息对于监控不重要，因为数据是从 Prometheus 采集的
+            // 这里只记录 exporter URL 作为连接标识
+            // host/port 使用占位值，实际监控数据通过 exporter URL 从 Prometheus 获取
+            String host = extractHost(exporterUrl);
+            int port = extractPort(exporterUrl);
 
-        // Detect MySQL
-        detectMySQL(metadata);
+            metadata.addMiddleware(type, host, port, exporterUrl);
+            log.debug("Added middleware: type={}, exporterUrl={}", type, exporterUrl);
+        }
 
-        // Detect Elasticsearch
-        detectElasticsearch(metadata);
-
-        // Detect Kafka
-        detectKafka(metadata);
-
-        log.info("Detected {} middlewares for service {}: {}",
+        log.info("Reporting {} configured middleware exporters for service {}: {}",
                 metadata.getMiddlewares().size(), serviceName,
-                metadata.getMiddlewares().stream().map(MiddlewareInfo::getType).toList());
+                configuredExporters.keySet());
 
         return metadata;
     }
 
     /**
-     * Detect Redis configuration
-     * Supports both Spring Boot 3 (spring.data.redis.*) and Spring Boot 2 (spring.redis.*)
+     * 从 exporter URL 提取 host 部分
+     * 例如: "redis-exporter:9121" -> "redis-exporter"
      */
-    private void detectRedis(MiddlewareMetadata metadata) {
-        // Spring Boot 3 uses spring.data.redis.host/port
-        String host = environment.getProperty("spring.data.redis.host");
-        Integer port = environment.getProperty("spring.data.redis.port", Integer.class);
-
-        // Fallback to Spring Boot 2 style properties
-        if (host == null) {
-            host = environment.getProperty("spring.redis.host");
-            port = environment.getProperty("spring.redis.port", Integer.class);
+    private String extractHost(String exporterUrl) {
+        if (exporterUrl == null || exporterUrl.isEmpty()) {
+            return "unknown";
         }
-
-        // Compatible with Redis Sentinel/Cluster configuration
-        if (host == null) {
-            // Try detecting Sentinel (SB3 first, then SB2)
-            String sentinelHost = environment.getProperty("spring.data.redis.sentinel.master");
-            if (sentinelHost == null) {
-                sentinelHost = environment.getProperty("spring.redis.sentinel.master");
-            }
-            if (sentinelHost != null) {
-                host = "redis-sentinel";
-                port = 26379;
-            }
+        int colonIndex = exporterUrl.lastIndexOf(':');
+        if (colonIndex > 0) {
+            return exporterUrl.substring(0, colonIndex);
         }
-
-        if (host != null && port != null) {
-            String exporterUrl = properties.getRedisExporterUrl();
-            if (exporterUrl == null || exporterUrl.isEmpty()) {
-                // Default Exporter port: Redis port+1000 or fixed 9121
-                exporterUrl = host + ":9121";
-            }
-
-            metadata.addMiddleware("redis", host, port, exporterUrl);
-            log.debug("Detected Redis: {}:{}", host, port);
-        }
+        return exporterUrl;
     }
 
     /**
-     * Detect RocketMQ configuration
+     * 从 exporter URL 提取 port 部分
+     * 例如: "redis-exporter:9121" -> 9121
      */
-    private void detectRocketMQ(MiddlewareMetadata metadata) {
-        String namesrv = environment.getProperty("rocketmq.name-server");
-
-        if (namesrv != null && !namesrv.isEmpty()) {
-            String exporterUrl = properties.getRocketmqExporterUrl();
-            if (exporterUrl == null || exporterUrl.isEmpty()) {
-                exporterUrl = "rocketmq-exporter:5557";
-            }
-
+    private int extractPort(String exporterUrl) {
+        if (exporterUrl == null || exporterUrl.isEmpty()) {
+            return 0;
+        }
+        int colonIndex = exporterUrl.lastIndexOf(':');
+        if (colonIndex > 0 && colonIndex < exporterUrl.length() - 1) {
             try {
-                String[] parts = namesrv.split(";")[0].split(":");
-                String host = parts[0];
-                int port = 9876;
-                if (parts.length > 1) {
-                    try {
-                        port = Integer.parseInt(parts[1]);
-                    } catch (NumberFormatException e) {
-                        log.warn("Invalid RocketMQ port in '{}', using default 9876", namesrv);
-                    }
-                }
-
-                metadata.addMiddleware("rocketmq", host, port, exporterUrl);
-                log.debug("Detected RocketMQ: {}", namesrv);
-            } catch (Exception e) {
-                log.warn("Failed to parse RocketMQ name-server address '{}': {}", namesrv, e.getMessage());
+                return Integer.parseInt(exporterUrl.substring(colonIndex + 1));
+            } catch (NumberFormatException e) {
+                return 0;
             }
         }
-    }
-
-    /**
-     * Detect MySQL configuration
-     */
-    private void detectMySQL(MiddlewareMetadata metadata) {
-        String datasourceUrl = environment.getProperty("spring.datasource.url");
-
-        if (datasourceUrl != null && datasourceUrl.startsWith("jdbc:mysql://")) {
-            // Parse jdbc:mysql://host:port/database
-            Pattern pattern = Pattern.compile("jdbc:mysql://([^:]+):(\\d+)/");
-            Matcher matcher = pattern.matcher(datasourceUrl);
-
-            String host = "mysql";
-            int port = 3306;
-
-            if (matcher.find()) {
-                host = matcher.group(1);
-                port = Integer.parseInt(matcher.group(2));
-            }
-
-            String exporterUrl = properties.getMysqlExporterUrl();
-            if (exporterUrl == null || exporterUrl.isEmpty()) {
-                exporterUrl = host + ":9104";
-            }
-
-            metadata.addMiddleware("mysql", host, port, exporterUrl);
-            log.debug("Detected MySQL: {}:{}", host, port);
-        }
-    }
-
-    /**
-     * Detect Elasticsearch configuration
-     */
-    private void detectElasticsearch(MiddlewareMetadata metadata) {
-        String esUris = environment.getProperty("spring.elasticsearch.uris");
-
-        if (esUris != null && !esUris.isEmpty()) {
-            String exporterUrl = properties.getEsExporterUrl();
-            if (exporterUrl == null || exporterUrl.isEmpty()) {
-                exporterUrl = "es-exporter:9114";
-            }
-
-            // ES URIs may be multiple: http://es1:9200,http://es2:9200
-            String firstUri = esUris.split(",")[0];
-            String host = firstUri.replace("http://", "").replace("https://", "").split(":")[0];
-            int port = 9200;
-
-            metadata.addMiddleware("elasticsearch", host, port, exporterUrl);
-            log.debug("Detected Elasticsearch: {}", esUris);
-        }
-    }
-
-    /**
-     * Detect Kafka configuration
-     */
-    private void detectKafka(MiddlewareMetadata metadata) {
-        String brokers = environment.getProperty("spring.kafka.bootstrap-servers");
-
-        if (brokers != null && !brokers.isEmpty()) {
-            String exporterUrl = properties.getKafkaExporterUrl();
-            if (exporterUrl == null || exporterUrl.isEmpty()) {
-                exporterUrl = "kafka-exporter:9308";
-            }
-
-            // Kafka brokers may be multiple: host1:9092,host2:9092
-            String[] parts = brokers.split(",")[0].split(":");
-            String host = parts[0];
-            int port = parts.length > 1 ? Integer.parseInt(parts[1]) : 9092;
-
-            metadata.addMiddleware("kafka", host, port, exporterUrl);
-            log.debug("Detected Kafka: {}", brokers);
-        }
+        return 0;
     }
 
     /**

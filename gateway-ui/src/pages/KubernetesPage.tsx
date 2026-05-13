@@ -887,7 +887,7 @@ const KubernetesPage: React.FC = () => {
           </Space>
         }
         placement="right"
-        width={720}
+        styles={{ wrapper: { width: 720 } }}
         open={detailDrawerVisible}
         onClose={() => setDetailDrawerVisible(false)}
         destroyOnClose
@@ -1210,7 +1210,7 @@ const KubernetesPage: React.FC = () => {
                     {podDetail.conditions && podDetail.conditions.length > 0 && (
                       <Card size="small" className="pod-detail-card" title={t('k8s.conditions')} style={{ marginTop: 16 }}>
                         <Table
-                          dataSource={podDetail.conditions}
+                          dataSource={podDetail?.conditions || []}
                           rowKey="type"
                           size="small"
                           pagination={false}

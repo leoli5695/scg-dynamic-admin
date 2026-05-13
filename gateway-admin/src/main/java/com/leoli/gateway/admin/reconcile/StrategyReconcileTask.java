@@ -8,8 +8,8 @@ import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
 import com.leoli.gateway.admin.repository.StrategyRepository;
 import com.leoli.gateway.admin.service.AlertService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -26,29 +26,19 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class StrategyReconcileTask implements ReconcileTask<StrategyEntity> {
 
     private static final String STRATEGY_PREFIX = "config.gateway.strategy-";
     private static final String STRATEGIES_INDEX = "config.gateway.metadata.strategies-index";
     private static final String GROUP = "DEFAULT_GROUP";
 
-    @Autowired
-    private StrategyRepository strategyRepository;
-
-    @Autowired
-    private GatewayInstanceRepository gatewayInstanceRepository;
-
-    @Autowired
-    private InstanceNamespaceCache namespaceCache;
-
-    @Autowired
-    private ConfigCenterService configCenterService;
-
-    @Autowired
-    private ObjectMapper objectMapper;
-
-    @Autowired
-    private AlertService alertService;
+    private final StrategyRepository strategyRepository;
+    private final GatewayInstanceRepository gatewayInstanceRepository;
+    private final InstanceNamespaceCache namespaceCache;
+    private final ConfigCenterService configCenterService;
+    private final ObjectMapper objectMapper;
+    private final AlertService alertService;
 
     @Override
     public String getType() {

@@ -1,11 +1,13 @@
 package com.leoli.gateway.admin.controller;
 
+import com.leoli.gateway.admin.dto.ApiResponse;
 import com.leoli.gateway.admin.service.AiAnalysisService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -26,7 +28,7 @@ public class AiConfigController {
      * @param request contains provider, startTime, endTime, language
      */
     @PostMapping("/analyze/timerange")
-    public ResponseEntity<Map<String, Object>> analyzeTimeRange(@RequestBody Map<String, Object> request) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> analyzeTimeRange(@RequestBody Map<String, Object> request) {
         String provider = (String) request.get("provider");
         String language = (String) request.getOrDefault("language", "zh");
         
@@ -54,17 +56,14 @@ public class AiConfigController {
         
         try {
             String result = aiAnalysisService.analyzeTimeRange(provider, startTime, endTime, language);
-            return ResponseEntity.ok(Map.of(
-                "code", 200,
-                "data", Map.of("result", result),
-                "message", "时间段分析完成"
-            ));
+            
+            Map<String, Object> data = new HashMap<>();
+            data.put("result", result);
+            
+            return ResponseEntity.ok(ApiResponse.success(data, "时间段分析完成"));
         } catch (Exception e) {
             log.error("Time range AI analysis failed", e);
-            return ResponseEntity.ok(Map.of(
-                "code", 500,
-                "message", "AI时间段分析失败: " + e.getMessage()
-            ));
+            return ResponseEntity.ok(ApiResponse.error("AI时间段分析失败: " + e.getMessage()));
         }
     }
 }

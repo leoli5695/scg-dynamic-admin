@@ -61,9 +61,9 @@ class RefundServiceTest {
 
         refundService = new RefundService(
                 orderMapper,
+                redisTemplate,
                 transactionLogMapper,
-                elasticsearchService,
-                redisTemplate
+                elasticsearchService
         );
 
         request = new RefundRequest();

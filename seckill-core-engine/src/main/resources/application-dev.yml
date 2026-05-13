@@ -45,15 +45,24 @@ spring.elasticsearch:
   username:
   password:
 
-# Gateway Trace配置（开发环境禁用，避免optional依赖问题）
+# Gateway Trace配置
 gateway:
   trace:
-    enabled: false
-    trace-redis: false
-    trace-mq: false
-    trace-db: false
-    async-trace-enabled: false
-    report-middleware: false
+    enabled: true
+    admin-url: http://localhost:9090  # Gateway Admin 地址
+    trace-redis: true
+    trace-mq: true
+    trace-db: true
+    async-trace-enabled: true
+    # 中间件 Exporter 配置（配置驱动方式）
+    # 注意：exporter URL 必须与 Prometheus 配置中的 instance 标签一致
+    # 只有配置了 exporter URL 的中间件才会上报到 gateway-admin
+    # ⚠️ RocketMQ 使用 Console API 监控（exporter v0.0.2 存在 bug，返回空数据）
+    middleware-exporters:
+      redis: redis-exporter:9121                    # Redis Exporter
+      elasticsearch: elasticsearch-exporter:9114   # ES Exporter
+      mysql: mysql-exporter:9104                   # MySQL Exporter
+      rocketmq-console: localhost:30808            # RocketMQ Console 地址（K8s NodePort）
 
 logging:
   level:
@@ -71,4 +80,4 @@ seckill:
     user: root
     password: 123456
   warmup:
-    enabled: false  # 开发模式禁用预热
+    enabled: true  # 开发模式启用预热（服务启动后自动预热进行中的活动）

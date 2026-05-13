@@ -47,7 +47,7 @@ class LocalFallbackServiceConcurrencyTest {
         seckillConfig = new SeckillConfig();
         seckillConfig.setMaxBuyCount(1);
 
-        fallbackService = new LocalFallbackService(seckillConfig, alertService, new ObjectMapper());
+        fallbackService = new LocalFallbackService(alertService, new ObjectMapper(), seckillConfig);
         ReflectionTestUtils.setField(fallbackService, "fallbackStockRatio", 0.1);
         ReflectionTestUtils.setField(fallbackService, "minStockThreshold", 0);
 

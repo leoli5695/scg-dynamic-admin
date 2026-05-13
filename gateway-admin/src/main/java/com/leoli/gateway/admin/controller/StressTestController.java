@@ -1,6 +1,8 @@
 package com.leoli.gateway.admin.controller;
 
+import com.leoli.gateway.admin.dto.ApiResponse;
 import com.leoli.gateway.admin.model.StressTest;
+import com.leoli.gateway.admin.model.StressTestMetrics;
 import com.leoli.gateway.admin.service.StressTestService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -10,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -31,7 +34,7 @@ public class StressTestController {
      * Create and start a stress test.
      */
     @PostMapping("/start")
-    public ResponseEntity<Map<String, Object>> startTest(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> startTest(
             @RequestParam String instanceId,
             @RequestBody StressTestService.StressTestConfig config) {
 
@@ -40,18 +43,14 @@ public class StressTestController {
         try {
             StressTest test = stressTestService.createAndStartTest(instanceId, config);
 
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "testId", test.getId(),
-                    "status", test.getStatus(),
-                    "message", "Stress test started"
-            ));
+            Map<String, Object> data = new HashMap<>();
+            data.put("testId", test.getId());
+            data.put("status", test.getStatus());
+
+            return ResponseEntity.ok(ApiResponse.success(data, "Stress test started"));
         } catch (Exception e) {
             log.error("Failed to start stress test", e);
-            return ResponseEntity.badRequest().body(Map.of(
-                    "success", false,
-                    "error", e.getMessage()
-            ));
+            return ResponseEntity.ok(ApiResponse.error(e.getMessage()));
         }
     }
 
@@ -59,54 +58,50 @@ public class StressTestController {
      * Get test by ID.
      */
     @GetMapping("/{testId}")
-    public ResponseEntity<StressTest> getTest(@PathVariable Long testId) {
-        return ResponseEntity.ok(stressTestService.getTest(testId));
+    public ResponseEntity<ApiResponse<StressTest>> getTest(@PathVariable Long testId) {
+        return ResponseEntity.ok(ApiResponse.success(stressTestService.getTest(testId)));
     }
 
     /**
      * Get tests for an instance.
      */
     @GetMapping("/instance/{instanceId}")
-    public ResponseEntity<List<StressTest>> getTestsForInstance(@PathVariable String instanceId) {
-        return ResponseEntity.ok(stressTestService.getTestsForInstance(instanceId));
+    public ResponseEntity<ApiResponse<List<StressTest>>> getTestsForInstance(@PathVariable String instanceId) {
+        return ResponseEntity.ok(ApiResponse.success(stressTestService.getTestsForInstance(instanceId)));
     }
 
     /**
      * Get test status (with live progress).
      */
     @GetMapping("/{testId}/status")
-    public ResponseEntity<StressTestService.StressTestStatus> getTestStatus(@PathVariable Long testId) {
-        return ResponseEntity.ok(stressTestService.getTestStatus(testId));
+    public ResponseEntity<ApiResponse<StressTestService.StressTestStatus>> getTestStatus(@PathVariable Long testId) {
+        return ResponseEntity.ok(ApiResponse.success(stressTestService.getTestStatus(testId)));
     }
 
     /**
      * Get real-time metrics for chart visualization.
      */
     @GetMapping("/{testId}/metrics")
-    public ResponseEntity<com.leoli.gateway.admin.model.StressTestMetrics> getTestMetrics(@PathVariable Long testId) {
-        return ResponseEntity.ok(stressTestService.getTestMetrics(testId));
+    public ResponseEntity<ApiResponse<StressTestMetrics>> getTestMetrics(@PathVariable Long testId) {
+        return ResponseEntity.ok(ApiResponse.success(stressTestService.getTestMetrics(testId)));
     }
 
     /**
      * Stop a running test.
      */
     @PostMapping("/{testId}/stop")
-    public ResponseEntity<Map<String, Object>> stopTest(@PathVariable Long testId) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> stopTest(@PathVariable Long testId) {
         log.info("Stopping stress test: {}", testId);
 
         try {
             StressTest test = stressTestService.stopTest(testId);
 
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "status", test.getStatus(),
-                    "message", "Test stopped"
-            ));
+            Map<String, Object> data = new HashMap<>();
+            data.put("status", test.getStatus());
+
+            return ResponseEntity.ok(ApiResponse.success(data, "Test stopped"));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of(
-                    "success", false,
-                    "error", e.getMessage()
-            ));
+            return ResponseEntity.ok(ApiResponse.error(e.getMessage()));
         }
     }
 
@@ -114,7 +109,7 @@ public class StressTestController {
      * Get AI analysis of test results.
      */
     @GetMapping("/{testId}/analyze")
-    public ResponseEntity<Map<String, Object>> analyzeTestResults(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> analyzeTestResults(
             @PathVariable Long testId,
             @RequestParam(required = false, defaultValue = "BAILIAN") String provider,
             @RequestParam(required = false, defaultValue = "zh") String language) {
@@ -124,16 +119,13 @@ public class StressTestController {
         try {
             String analysis = stressTestService.analyzeTestResults(testId, provider, language);
 
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "analysis", analysis
-            ));
+            Map<String, Object> data = new HashMap<>();
+            data.put("analysis", analysis);
+
+            return ResponseEntity.ok(ApiResponse.success(data));
         } catch (Exception e) {
             log.error("Analysis failed", e);
-            return ResponseEntity.badRequest().body(Map.of(
-                    "success", false,
-                    "error", e.getMessage()
-            ));
+            return ResponseEntity.ok(ApiResponse.error(e.getMessage()));
         }
     }
 
@@ -141,21 +133,14 @@ public class StressTestController {
      * Delete a test.
      */
     @DeleteMapping("/{testId}")
-    public ResponseEntity<Map<String, Object>> deleteTest(@PathVariable Long testId) {
+    public ResponseEntity<ApiResponse<Void>> deleteTest(@PathVariable Long testId) {
         log.info("Deleting stress test: {}", testId);
 
         try {
             stressTestService.deleteTest(testId);
-
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "message", "Test deleted"
-            ));
+            return ResponseEntity.ok(ApiResponse.success("Test deleted"));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of(
-                    "success", false,
-                    "error", e.getMessage()
-            ));
+            return ResponseEntity.ok(ApiResponse.error(e.getMessage()));
         }
     }
 
@@ -163,7 +148,7 @@ public class StressTestController {
      * Quick stress test with minimal config.
      */
     @PostMapping("/quick")
-    public ResponseEntity<Map<String, Object>> quickTest(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> quickTest(
             @RequestParam String instanceId,
             @RequestParam(required = false, defaultValue = "100") int requests,
             @RequestParam(required = false, defaultValue = "10") int concurrent,
@@ -181,16 +166,13 @@ public class StressTestController {
         try {
             StressTest test = stressTestService.createAndStartTest(instanceId, config);
 
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "testId", test.getId(),
-                    "status", test.getStatus()
-            ));
+            Map<String, Object> data = new HashMap<>();
+            data.put("testId", test.getId());
+            data.put("status", test.getStatus());
+
+            return ResponseEntity.ok(ApiResponse.success(data));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of(
-                    "success", false,
-                    "error", e.getMessage()
-            ));
+            return ResponseEntity.ok(ApiResponse.error(e.getMessage()));
         }
     }
 
@@ -225,7 +207,7 @@ public class StressTestController {
      * Create a share link for the stress test report.
      */
     @PostMapping("/{testId}/share")
-    public ResponseEntity<Map<String, Object>> createShareLink(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> createShareLink(
             @PathVariable Long testId,
             @RequestParam(required = false) Integer expiresIn) {
 
@@ -236,18 +218,15 @@ public class StressTestController {
 
             String shareUrl = "/api/stress-test/share/" + shareId;
 
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "shareId", shareId,
-                    "shareUrl", shareUrl,
-                    "expiresIn", expiresIn != null ? expiresIn + " hours" : "permanent"
-            ));
+            Map<String, Object> data = new HashMap<>();
+            data.put("shareId", shareId);
+            data.put("shareUrl", shareUrl);
+            data.put("expiresIn", expiresIn != null ? expiresIn + " hours" : "permanent");
+
+            return ResponseEntity.ok(ApiResponse.success(data));
         } catch (Exception e) {
             log.error("Failed to create share link", e);
-            return ResponseEntity.badRequest().body(Map.of(
-                    "success", false,
-                    "error", e.getMessage()
-            ));
+            return ResponseEntity.ok(ApiResponse.error(e.getMessage()));
         }
     }
 
@@ -255,23 +234,20 @@ public class StressTestController {
      * Get shared stress test report.
      */
     @GetMapping("/share/{shareId}")
-    public ResponseEntity<Map<String, Object>> getSharedReport(@PathVariable String shareId) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getSharedReport(@PathVariable String shareId) {
         log.info("Accessing shared report: {}", shareId);
 
         try {
             StressTest test = stressTestService.getSharedReport(shareId);
 
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "test", test,
-                    "markdown", stressTestService.exportAsMarkdown(test.getId())
-            ));
+            Map<String, Object> data = new HashMap<>();
+            data.put("test", test);
+            data.put("markdown", stressTestService.exportAsMarkdown(test.getId()));
+
+            return ResponseEntity.ok(ApiResponse.success(data));
         } catch (Exception e) {
             log.error("Failed to get shared report", e);
-            return ResponseEntity.badRequest().body(Map.of(
-                    "success", false,
-                    "error", e.getMessage()
-            ));
+            return ResponseEntity.ok(ApiResponse.error(e.getMessage()));
         }
     }
 
@@ -279,21 +255,14 @@ public class StressTestController {
      * Delete a share link.
      */
     @DeleteMapping("/share/{shareId}")
-    public ResponseEntity<Map<String, Object>> deleteShareLink(@PathVariable String shareId) {
+    public ResponseEntity<ApiResponse<Void>> deleteShareLink(@PathVariable String shareId) {
         log.info("Deleting share link: {}", shareId);
 
         try {
             stressTestService.deleteShareLink(shareId);
-
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "message", "Share link deleted"
-            ));
+            return ResponseEntity.ok(ApiResponse.success("Share link deleted"));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of(
-                    "success", false,
-                    "error", e.getMessage()
-            ));
+            return ResponseEntity.ok(ApiResponse.error(e.getMessage()));
         }
     }
 }

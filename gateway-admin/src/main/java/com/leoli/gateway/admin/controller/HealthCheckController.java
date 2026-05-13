@@ -1,12 +1,10 @@
 package com.leoli.gateway.admin.controller;
 
 import com.leoli.gateway.admin.center.ConfigCenterService;
+import com.leoli.gateway.admin.dto.ApiResponse;
 import com.leoli.gateway.admin.service.DatabaseHealthService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.actuate.health.Health;
-import org.springframework.boot.actuate.health.HealthIndicator;
-import org.springframework.boot.actuate.health.Status;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -27,29 +25,23 @@ import java.util.Map;
 @Slf4j
 @RestController
 @RequestMapping("/api/health")
+@RequiredArgsConstructor
 public class HealthCheckController {
 
-    @Autowired
-    private DataSource dataSource;
+    private final DataSource dataSource;
+    private final DatabaseHealthService databaseHealthService;
+    private final ConfigCenterService configCenterService;
 
-    @Autowired
-    private DatabaseHealthService databaseHealthService;
-
-    @Autowired(required = false)
-    private RedisConnectionFactory redisConnectionFactory;
-
-    @Autowired
-    private ConfigCenterService configCenterService;
+    private final RedisConnectionFactory redisConnectionFactory;
 
     /**
      * Comprehensive health check endpoint.
      * Returns detailed status of all components.
      */
     @GetMapping
-    public Map<String, Object> health() {
+    public ApiResponse<Map<String, Object>> health() {
         Map<String, Object> health = new LinkedHashMap<>();
         
-        // Overall status
         boolean allHealthy = true;
         
         // Database health
@@ -63,7 +55,6 @@ public class HealthCheckController {
         Map<String, Object> redisHealth = checkRedis();
         health.put("redis", redisHealth);
         if (!"UP".equals(redisHealth.get("status"))) {
-            // Redis is optional, don't mark as unhealthy
             log.debug("Redis is not available: {}", redisHealth.get("message"));
         }
         
@@ -74,57 +65,56 @@ public class HealthCheckController {
             allHealthy = false;
         }
         
-        // Overall status
         health.put("status", allHealthy ? "UP" : "DOWN");
         health.put("timestamp", System.currentTimeMillis());
         
-        return health;
+        return ApiResponse.success(health);
     }
 
     /**
      * Liveness probe - check if the application is running.
      */
     @GetMapping("/liveness")
-    public Map<String, Object> liveness() {
-        Map<String, Object> health = new HashMap<>();
-        health.put("status", "UP");
-        health.put("timestamp", System.currentTimeMillis());
-        return health;
+    public ApiResponse<Map<String, Object>> liveness() {
+        Map<String, Object> data = new HashMap<>();
+        data.put("status", "UP");
+        data.put("timestamp", System.currentTimeMillis());
+        return ApiResponse.success(data);
     }
 
     /**
      * Readiness probe - check if the application is ready to serve traffic.
      */
     @GetMapping("/readiness")
-    public Map<String, Object> readiness() {
-        Map<String, Object> health = new HashMap<>();
-        
-        // Check if database is available
+    public ApiResponse<Map<String, Object>> readiness() {
         boolean dbReady = isDatabaseReady();
         
+        Map<String, Object> data = new HashMap<>();
+        
         if (dbReady) {
-            health.put("status", "UP");
+            data.put("status", "UP");
         } else {
-            health.put("status", "DOWN");
-            health.put("reason", "Database not ready");
+            data.put("status", "DOWN");
+            data.put("reason", "Database not ready");
         }
         
-        health.put("timestamp", System.currentTimeMillis());
-        return health;
+        data.put("timestamp", System.currentTimeMillis());
+        
+        return dbReady ? ApiResponse.success(data) : ApiResponse.error(500, "Database not ready");
     }
 
     /**
      * Component health - detailed status of each component.
      */
     @GetMapping("/components")
-    public Map<String, Object> components() {
+    public ApiResponse<Map<String, Object>> components() {
         Map<String, Object> components = new LinkedHashMap<>();
         
         components.put("database", getDatabaseDetails());
         components.put("redis", getRedisDetails());
         components.put("nacos", getNacosDetails());
         
-        return components;
+        return ApiResponse.success(components);
     }
 
     private Map<String, Object> checkDatabase() {
@@ -137,7 +127,6 @@ public class HealthCheckController {
                 health.put("database", connection.getCatalog());
                 health.put("readOnly", connection.isReadOnly());
                 
-                // Add pool info if available
                 DatabaseHealthService.ConnectionPoolInfo poolInfo = 
                     databaseHealthService.getConnectionPoolInfo();
                 if (poolInfo != null) {
@@ -170,7 +159,6 @@ public class HealthCheckController {
         }
         
         try {
-            // Try to get a connection and ping
             var connection = redisConnectionFactory.getConnection();
             String pong = connection.ping();
             connection.close();
@@ -193,7 +181,6 @@ public class HealthCheckController {
         Map<String, Object> health = new LinkedHashMap<>();
         
         try {
-            // Try to get a config to verify Nacos connectivity
             boolean available = configCenterService.isAvailable();
             if (available) {
                 health.put("status", "UP");
@@ -252,7 +239,6 @@ public class HealthCheckController {
             var connection = redisConnectionFactory.getConnection();
             details.put("connected", true);
             
-            // Get Redis info if possible
             try {
                 var info = connection.info();
                 if (info != null) {

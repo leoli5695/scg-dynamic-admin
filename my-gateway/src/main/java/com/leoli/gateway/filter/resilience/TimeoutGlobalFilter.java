@@ -4,9 +4,8 @@ import com.leoli.gateway.config.TimeoutProperties;
 import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.util.RouteUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.cloud.gateway.route.Route;
@@ -32,16 +31,13 @@ import static org.springframework.cloud.gateway.support.ServerWebExchangeUtils.G
  *
  * @author leoli
  */
+@Slf4j
 @Component
+@RequiredArgsConstructor
 public class TimeoutGlobalFilter implements GlobalFilter, Ordered {
 
-    private static final Logger logger = LoggerFactory.getLogger(TimeoutGlobalFilter.class);
-
-    @Autowired
-    private StrategyManager strategyManager;
-
-    @Autowired
-    private TimeoutProperties timeoutProperties;
+    private final StrategyManager strategyManager;
+    private final TimeoutProperties timeoutProperties;
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
@@ -68,7 +64,7 @@ public class TimeoutGlobalFilter implements GlobalFilter, Ordered {
                     : timeoutProperties.getDefaultResponseTimeout();
         }
 
-        logger.debug("Applying timeout for route {}: connect={}ms, response={}ms",
+        log.debug("Applying timeout for route {}: connect={}ms, response={}ms",
                 routeId, connectTimeout, responseTimeout);
 
         // Modify route metadata; NettyRoutingFilter will read these two keys

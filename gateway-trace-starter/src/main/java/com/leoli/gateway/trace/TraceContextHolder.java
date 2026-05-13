@@ -139,6 +139,63 @@ public class TraceContextHolder {
         addSpan(new ServiceSpan(operation, durationMs, false, errorMessage));
     }
 
+    /**
+     * Add failed Span with full exception details
+     * <p>
+     * Captures exception class name, message, and top stack frames
+     * for better debugging in the trace UI.
+     *
+     * @param operation  Operation name
+     * @param durationMs Duration
+     * @param cause      The exception that caused the failure
+     */
+    public static void addFailedSpan(String operation, long durationMs, Throwable cause) {
+        addSpan(new ServiceSpan(operation, durationMs, false, buildErrorMessage(cause)));
+    }
+
+    /**
+     * Build a rich error message from an exception.
+     * <p>
+     * Format: ExceptionClass: message\n  at StackFrame1\n  at StackFrame2\n...
+     * Truncated to 500 chars to avoid bloating the trace data.
+     */
+    private static String buildErrorMessage(Throwable e) {
+        if (e == null) return null;
+
+        StringBuilder sb = new StringBuilder();
+        // Exception class name + message
+        sb.append(e.getClass().getName());
+        if (e.getMessage() != null) {
+            sb.append(": ").append(e.getMessage());
+        }
+
+        // Append top stack frames (project code only, up to 5 frames)
+        StackTraceElement[] stack = e.getStackTrace();
+        int appended = 0;
+        for (StackTraceElement frame : stack) {
+            if (appended >= 5) break;
+            String className = frame.getClassName();
+            // Prioritize project code (com.leoli), skip Spring/proxy internals
+            if (className.startsWith("com.leoli") ||
+                    className.startsWith("com.baomidou") ||
+                    appended == 0) {
+                sb.append("\n  at ").append(frame);
+                appended++;
+            }
+        }
+        if (appended == 0 && stack.length > 0) {
+            // Fallback: show first frame if no project code found
+            sb.append("\n  at ").append(stack[0]);
+        }
+
+        // Truncate to 500 chars
+        if (sb.length() > 500) {
+            sb.setLength(497);
+            sb.append("...");
+        }
+        return sb.toString();
+    }
+
     // ==================== Sampling Flag Operations ====================
 
     /**

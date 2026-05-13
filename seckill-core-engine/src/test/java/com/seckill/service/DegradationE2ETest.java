@@ -115,7 +115,7 @@ class DegradationE2ETest {
 
         // 初始化本地降级服务
         localFallbackService = new LocalFallbackService(
-            seckillConfig, alertService, new com.fasterxml.jackson.databind.ObjectMapper());
+            alertService, new com.fasterxml.jackson.databind.ObjectMapper(), seckillConfig);
         ReflectionTestUtils.setField(localFallbackService, "fallbackStockRatio", 0.1);
         ReflectionTestUtils.setField(localFallbackService, "minStockThreshold", 0);
         localFallbackService.initLocalStock(SECKILL_ID, TOTAL_STOCK);

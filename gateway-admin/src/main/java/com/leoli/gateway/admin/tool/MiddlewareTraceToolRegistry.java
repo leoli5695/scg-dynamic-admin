@@ -34,6 +34,7 @@ public class MiddlewareTraceToolRegistry {
         registerMiddlewareTools();
         registerTraceTools();
         registerPrometheusQueryTools();
+        registerPeriodQueryTools();
         
         log.info("Middleware and trace tools registered: {} new tools", 
             countNewTools());
@@ -286,6 +287,201 @@ public class MiddlewareTraceToolRegistry {
      * 统计新增工具数量
      */
     private int countNewTools() {
-        return 14; // middleware(4) + trace(6) + prometheus(4)
+        return 21; // middleware(4) + trace(6) + prometheus(4) + period_query(7)
+    }
+
+    /**
+     * 注册时间段查询工具（Phase 1 MVP）
+     * 支持查询指定时间范围内的中间件指标趋势
+     */
+    private void registerPeriodQueryTools() {
+        // query_redis_during_period - 时间段Redis指标查询
+        toolRegistry.getTools().put("query_redis_during_period", ToolDefinition.create(
+            "query_redis_during_period",
+            "查询指定时间段内Redis的性能指标趋势（OPS、内存、连接数、P99延迟、命中率），使用rate()计算速率变化。适合压测期间或故障时段的Redis分析。返回timeSeries时间序列和summary统计摘要。",
+            Map.of(
+                "exporterUrl", Map.of(
+                    "type", "string",
+                    "description", "Redis Exporter地址，格式：host:port，如 redis-exporter:9121"
+                ),
+                "startTime", Map.of(
+                    "type", "integer",
+                    "description", "开始时间（Unix秒），可通过压测记录获取"
+                ),
+                "endTime", Map.of(
+                    "type", "integer",
+                    "description", "结束时间（Unix秒）"
+                ),
+                "step", Map.of(
+                    "type", "string",
+                    "description", "查询步长（可选，如15s/30s/1m/5m），不提供时根据时间范围自动计算"
+                )
+            ),
+            List.of("exporterUrl", "startTime", "endTime"),
+            "prometheus",
+            true
+        ));
+
+        // query_mysql_during_period - 时间段MySQL指标查询
+        toolRegistry.getTools().put("query_mysql_during_period", ToolDefinition.create(
+            "query_mysql_during_period",
+            "查询指定时间段内MySQL的性能指标趋势（QPS、连接数、慢查询速率、InnoDB缓冲池）。适合压测期间的数据库分析。返回timeSeries和summary。",
+            Map.of(
+                "exporterUrl", Map.of(
+                    "type", "string",
+                    "description", "MySQL Exporter地址，格式：host:port，如 mysqld-exporter:9104"
+                ),
+                "startTime", Map.of(
+                    "type", "integer",
+                    "description", "开始时间（Unix秒）"
+                ),
+                "endTime", Map.of(
+                    "type", "integer",
+                    "description", "结束时间（Unix秒）"
+                ),
+                "step", Map.of(
+                    "type", "string",
+                    "description", "查询步长（可选）"
+                )
+            ),
+            List.of("exporterUrl", "startTime", "endTime"),
+            "prometheus",
+            true
+        ));
+
+        // query_rocketmq_during_period - 时间段RocketMQ指标查询
+        toolRegistry.getTools().put("query_rocketmq_during_period", ToolDefinition.create(
+            "query_rocketmq_during_period",
+            "查询指定时间段内RocketMQ的性能指标趋势（Producer TPS、Consumer TPS、消费堆积Lag）。适合压测期间的消息队列分析。返回timeSeries和summary。",
+            Map.of(
+                "exporterUrl", Map.of(
+                    "type", "string",
+                    "description", "RocketMQ Exporter地址"
+                ),
+                "startTime", Map.of(
+                    "type", "integer",
+                    "description", "开始时间（Unix秒）"
+                ),
+                "endTime", Map.of(
+                    "type", "integer",
+                    "description", "结束时间（Unix秒）"
+                ),
+                "step", Map.of(
+                    "type", "string",
+                    "description", "查询步长（可选）"
+                ),
+                "topic", Map.of(
+                    "type", "string",
+                    "description", "Topic名称（可选，不提供时查询所有Topic）"
+                )
+            ),
+            List.of("exporterUrl", "startTime", "endTime"),
+            "prometheus",
+            true
+        ));
+
+        // analyze_stress_test_with_middleware - 压测中间件关联分析
+        toolRegistry.getTools().put("analyze_stress_test_with_middleware", ToolDefinition.create(
+            "analyze_stress_test_with_middleware",
+            "分析压测期间中间件的性能表现。自动根据压测时间窗口（±30s扩展）查询所有关联中间件（Redis/MySQL/RocketMQ）的指标趋势，生成关联分析报告。需要压测已完成。",
+            Map.of(
+                "testId", Map.of(
+                    "type", "integer",
+                    "description", "压测ID，可通过list_stress_test_history获取"
+                ),
+                "serviceName", Map.of(
+                    "type", "string",
+                    "description", "服务名称（可选），如果不提供则自动检测"
+                )
+            ),
+            List.of("testId"),
+            "analysis",
+            true
+        ));
+
+        // query_postgresql_during_period - 时间段PostgreSQL指标查询
+        toolRegistry.getTools().put("query_postgresql_during_period", ToolDefinition.create(
+            "query_postgresql_during_period",
+            "查询指定时间段内PostgreSQL的性能指标趋势（活跃连接、事务提交/回滚速率、缓存命中率、行获取速率）。适合压测期间的PG数据库分析。返回timeSeries和summary。",
+            Map.of(
+                "exporterUrl", Map.of(
+                    "type", "string",
+                    "description", "PostgreSQL Exporter地址，格式：host:port，如 pg-exporter:9187"
+                ),
+                "startTime", Map.of(
+                    "type", "integer",
+                    "description", "开始时间（Unix秒）"
+                ),
+                "endTime", Map.of(
+                    "type", "integer",
+                    "description", "结束时间（Unix秒）"
+                ),
+                "step", Map.of(
+                    "type", "string",
+                    "description", "查询步长（可选）"
+                )
+            ),
+            List.of("exporterUrl", "startTime", "endTime"),
+            "prometheus",
+            true
+        ));
+
+        // query_mongodb_during_period - 时间段MongoDB指标查询
+        toolRegistry.getTools().put("query_mongodb_during_period", ToolDefinition.create(
+            "query_mongodb_during_period",
+            "查询指定时间段内MongoDB的性能指标趋势（连接数、查询/插入OPS、WiredTiger缓存、锁等待队列）。适合压测期间的MongoDB分析。返回timeSeries和summary。",
+            Map.of(
+                "exporterUrl", Map.of(
+                    "type", "string",
+                    "description", "MongoDB Exporter地址，格式：host:port，如 mongodb-exporter:9216"
+                ),
+                "startTime", Map.of(
+                    "type", "integer",
+                    "description", "开始时间（Unix秒）"
+                ),
+                "endTime", Map.of(
+                    "type", "integer",
+                    "description", "结束时间（Unix秒）"
+                ),
+                "step", Map.of(
+                    "type", "string",
+                    "description", "查询步长（可选）"
+                )
+            ),
+            List.of("exporterUrl", "startTime", "endTime"),
+            "prometheus",
+            true
+        ));
+
+        // query_rabbitmq_during_period - 时间段RabbitMQ指标查询
+        toolRegistry.getTools().put("query_rabbitmq_during_period", ToolDefinition.create(
+            "query_rabbitmq_during_period",
+            "查询指定时间段内RabbitMQ的性能指标趋势（队列消息数、消费者数、发布/投递速率、连接数）。适合压测期间的消息队列分析。返回timeSeries和summary。",
+            Map.of(
+                "exporterUrl", Map.of(
+                    "type", "string",
+                    "description", "RabbitMQ Exporter地址，格式：host:port，如 rabbitmq-exporter:9419"
+                ),
+                "startTime", Map.of(
+                    "type", "integer",
+                    "description", "开始时间（Unix秒）"
+                ),
+                "endTime", Map.of(
+                    "type", "integer",
+                    "description", "结束时间（Unix秒）"
+                ),
+                "step", Map.of(
+                    "type", "string",
+                    "description", "查询步长（可选）"
+                ),
+                "queue", Map.of(
+                    "type", "string",
+                    "description", "队列名称（可选，不提供时查询所有队列汇总）"
+                )
+            ),
+            List.of("exporterUrl", "startTime", "endTime"),
+            "prometheus",
+            true
+        ));
     }
 }

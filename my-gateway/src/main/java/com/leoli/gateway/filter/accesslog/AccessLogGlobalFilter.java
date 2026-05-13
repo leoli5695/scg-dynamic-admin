@@ -18,10 +18,10 @@ import com.leoli.gateway.util.RouteUtils;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.Data;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.cloud.gateway.route.RouteDefinition;
@@ -72,32 +72,18 @@ import static com.leoli.gateway.filter.accesslog.constants.AccessLogConstants.*;
 @Slf4j
 @Component
 @DependsOn("nacosConfigServiceWrapper")
+@RequiredArgsConstructor
 public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
 
     // Dedicated logger for access logs (configured in logback-spring.xml)
     private static final Logger ACCESS_LOG_LOGGER = (Logger) LoggerFactory.getLogger(ACCESS_LOG_LOGGER_NAME);
 
-    @Autowired
-    private ConfigCenterService configCenterService;
-
-    @Autowired
-    private RouteManager routeManager;
-
-    @Autowired
-    private AuthBindingManager authBindingManager;
-
-    @Autowired
-    private BinaryContentDetector binaryContentDetector;
-
-    @Autowired
-    private SensitiveDataSanitizer sensitiveDataSanitizer;
-
+    private final ConfigCenterService configCenterService;
+    private final RouteManager routeManager;
+    private final AuthBindingManager authBindingManager;
+    private final BinaryContentDetector binaryContentDetector;
+    private final SensitiveDataSanitizer sensitiveDataSanitizer;
     private final ObjectMapper objectMapper;
-
-    @Autowired
-    public AccessLogGlobalFilter(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
-    }
 
     // Current config - uses external AccessLogConfig class
     private volatile AccessLogConfig config = new AccessLogConfig();

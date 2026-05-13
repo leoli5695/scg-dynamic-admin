@@ -15,7 +15,7 @@ import java.util.concurrent.Executor;
  * for automatic TraceContext propagation in @Async async tasks.
  * <p>
  * Usage:
- * 1. Enable configuration: gateway.trace.async-trace-enabled=true
+ * 1. Enable configuration: gateway.trace.async-thread-pool-enabled=true
  * 2. Use @Async("traceTaskExecutor") on async methods
  * <p>
  * Example:
@@ -33,7 +33,7 @@ import java.util.concurrent.Executor;
  * }
  */
 @Configuration
-@ConditionalOnProperty(prefix = "gateway.trace", name = "async-trace-enabled", havingValue = "true")
+@ConditionalOnProperty(prefix = "gateway.trace", name = "async-thread-pool-enabled", havingValue = "true")
 public class TraceThreadPoolConfig {
 
     /**
