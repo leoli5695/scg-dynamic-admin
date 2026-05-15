@@ -1,7 +1,17 @@
 # Nacos Only Configuration
 server:
-  port: 9000
+  port: 9003
 
+management:
+  server:
+    port: 9004
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always
 
 spring:
   application:
@@ -19,23 +29,12 @@ spring:
         weight: 1.0
         instance-enabled: true
         discovery-enabled: true
-    
+
     # Consul 配置 - 完全禁用
     consul:
       enabled: false
       discovery:
         enabled: false
-  profiles:
-    active: nacos-only
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info
-  endpoint:
-    health:
-      show-details: always
 
 logging:
   level:

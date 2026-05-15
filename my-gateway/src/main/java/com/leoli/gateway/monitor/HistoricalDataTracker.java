@@ -10,12 +10,13 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 /**
  * Historical Data Tracker for Filter Chain Performance.
  * Stores historical snapshots for trend analysis and performance prediction.
- *
+ * <p>
  * Features:
  * - Automatic snapshot collection every 1 minute
  * - Keeps last 60 minutes of data (rolling window)
  * - Provides historical data for trend charts
  * - Supports performance prediction based on historical patterns
+ * - Tracks INCREMENTAL metrics (requests per minute, TPS, delta changes)
  *
  * @author leoli
  */
@@ -30,6 +31,11 @@ public class HistoricalDataTracker {
     // Reference to FilterChainTracker
     private final FilterChainTracker filterChainTracker;
 
+    // Previous snapshot values for calculating deltas
+    private volatile long prevTotalRecords = 0;
+    private volatile long prevSlowRequestCount = 0;
+    private volatile long prevTimestamp = 0;
+
     public HistoricalDataTracker(FilterChainTracker filterChainTracker) {
         this.filterChainTracker = filterChainTracker;
     }
@@ -37,35 +43,35 @@ public class HistoricalDataTracker {
     /**
      * Save historical snapshot every 1 minute.
      * Scheduled task runs automatically.
+     * Calculates INCREMENTAL metrics (requests per minute, TPS, deltas).
      */
     @Scheduled(fixedRate = 60000) // Every 1 minute
     public void saveHistoricalSnapshot() {
         try {
             Map<String, Object> currentStats = filterChainTracker.getSummaryReport();
-            
-            if (currentStats.isEmpty() || 
-                !(currentStats.get("totalRecords") instanceof Number) ||
-                ((Number) currentStats.get("totalRecords")).longValue() == 0) {
+
+            if (currentStats.isEmpty() ||
+                    !(currentStats.get("totalRecords") instanceof Number) ||
+                    ((Number) currentStats.get("totalRecords")).longValue() == 0) {
                 log.debug("No filter data available, skipping snapshot");
                 return;
             }
 
             // Calculate average metrics across all filters
             HistoricalSnapshot snapshot = calculateSnapshot(currentStats);
-            
+
             historicalSnapshots.addLast(snapshot);
-            
+
             // Maintain rolling window
             while (historicalSnapshots.size() > MAX_SNAPSHOTS) {
                 historicalSnapshots.removeFirst();
             }
 
-            log.debug("Historical snapshot saved: avgSelfTime={}ms, avgP95={}ms, avgP99={}ms, successRate={}%",
-                    snapshot.getAvgSelfTimeMs(),
-                    snapshot.getAvgP95Ms(),
-                    snapshot.getAvgP99Ms(),
-                    snapshot.getSuccessRate());
-                    
+            log.debug("Historical snapshot saved: deltaRequests={}, tps={}, avgSelfTime={}ms",
+                    snapshot.getDeltaRequests(),
+                    snapshot.getTps(),
+                    snapshot.getAvgSelfTimeMs());
+
         } catch (Exception e) {
             log.error("Failed to save historical snapshot", e);
         }
@@ -73,18 +79,19 @@ public class HistoricalDataTracker {
 
     /**
      * Calculate snapshot from current filter stats.
+     * Includes INCREMENTAL metrics for meaningful trend analysis.
      */
     private HistoricalSnapshot calculateSnapshot(Map<String, Object> currentStats) {
         long timestamp = System.currentTimeMillis();
-        
+
         // Extract filter list
         List<Map<String, Object>> filters = (List<Map<String, Object>>) currentStats.get("filters");
-        
+
         if (filters == null || filters.isEmpty()) {
-            return new HistoricalSnapshot(timestamp, 0, 0, 0, 100.0, 0, 0);
+            return new HistoricalSnapshot(timestamp, 0.0, 0.0, 0.0, 100.0, 0L, 0L, 0.0, 0L, 0L);
         }
 
-        // Calculate average metrics
+        // Calculate average metrics (using sliding window stats from FilterChainTracker)
         double avgSelfTime = filters.stream()
                 .mapToDouble(f -> ((Number) f.getOrDefault("avgSelfTimeMsRaw", 0)).doubleValue())
                 .average()
@@ -111,37 +118,58 @@ public class HistoricalDataTracker {
         long totalExecutions = ((Number) currentStats.getOrDefault("totalRecords", 0)).longValue();
         long slowRequestCount = ((Number) currentStats.getOrDefault("slowRequestCount", 0)).longValue();
 
+        // Calculate INCREMENTAL metrics
+        long deltaRequests = totalExecutions - prevTotalRecords;
+        long deltaSlowRequests = slowRequestCount - prevSlowRequestCount;
+
+        // Calculate TPS (requests per second in the last minute)
+        double tps = 0.0;
+        if (prevTimestamp > 0) {
+            long elapsedMs = timestamp - prevTimestamp;
+            if (elapsedMs > 0) {
+                tps = deltaRequests * 1000.0 / elapsedMs;
+            }
+        }
+
+        // Update previous values for next calculation
+        prevTotalRecords = totalExecutions;
+        prevSlowRequestCount = slowRequestCount;
+        prevTimestamp = timestamp;
+
         return new HistoricalSnapshot(
                 timestamp,
                 avgSelfTime,
                 avgP95,
                 avgP99,
                 successRate,
-                totalExecutions,
-                slowRequestCount
+                deltaRequests,         // INCREMENTAL: requests in this minute
+                deltaSlowRequests,     // INCREMENTAL: slow requests in this minute
+                tps,                   // NEW: throughput (requests per second)
+                totalExecutions,       // cumulative total (for reference)
+                slowRequestCount       // cumulative total (for reference)
         );
     }
 
     /**
      * Get historical data for trend analysis.
-     * 
+     *
      * @param minutes Number of minutes to retrieve (max 60)
      * @return List of historical snapshots
      */
     public List<HistoricalSnapshot> getHistoricalData(int minutes) {
         int limit = Math.min(minutes, MAX_SNAPSHOTS);
         List<HistoricalSnapshot> result = new ArrayList<>();
-        
+
         int count = 0;
         for (HistoricalSnapshot snapshot : historicalSnapshots) {
             if (count >= limit) break;
             result.add(snapshot);
             count++;
         }
-        
+
         // Reverse to show oldest to newest (for chart display)
         Collections.reverse(result);
-        
+
         return result;
     }
 
@@ -164,7 +192,7 @@ public class HistoricalDataTracker {
 
     /**
      * Get performance trend analysis.
-     * Analyzes historical data to detect trends.
+     * Analyzes historical data to detect trends using INCREMENTAL metrics.
      */
     public Map<String, Object> getTrendAnalysis() {
         if (historicalSnapshots.size() < 5) {
@@ -176,12 +204,12 @@ public class HistoricalDataTracker {
         }
 
         List<HistoricalSnapshot> recentSnapshots = new ArrayList<>(historicalSnapshots);
-        
-        // Calculate trend direction
+
+        // Calculate trend direction based on self time
         double firstSelfTime = recentSnapshots.get(0).getAvgSelfTimeMs();
         double lastSelfTime = recentSnapshots.get(recentSnapshots.size() - 1).getAvgSelfTimeMs();
         double selfTimeChange = lastSelfTime - firstSelfTime;
-        
+
         String trendDirection;
         if (selfTimeChange > 2) {
             trendDirection = "increasing";
@@ -207,21 +235,47 @@ public class HistoricalDataTracker {
                 .average()
                 .orElse(0);
 
-        return Map.of(
-                "status", "success",
-                "trendDirection", trendDirection,
-                "selfTimeChange", selfTimeChange,
-                "avgSelfTimeMs", avgSelfTime,
-                "avgP95Ms", avgP95,
-                "avgP99Ms", avgP99,
-                "dataPoints", recentSnapshots.size(),
-                "oldestTimestamp", recentSnapshots.get(0).getTimestamp(),
-                "newestTimestamp", recentSnapshots.get(recentSnapshots.size() - 1).getTimestamp()
-        );
+        // Calculate INCREMENTAL metrics: average throughput
+        double avgTps = recentSnapshots.stream()
+                .mapToDouble(HistoricalSnapshot::getTps)
+                .average()
+                .orElse(0);
+
+        // Calculate total requests in recent period
+        long totalDeltaRequests = recentSnapshots.stream()
+                .mapToLong(HistoricalSnapshot::getDeltaRequests)
+                .sum();
+
+        long totalDeltaSlowRequests = recentSnapshots.stream()
+                .mapToLong(HistoricalSnapshot::getDeltaSlowRequests)
+                .sum();
+
+        // Calculate peak TPS
+        double peakTps = recentSnapshots.stream()
+                .mapToDouble(HistoricalSnapshot::getTps)
+                .max()
+                .orElse(0);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("status", "success");
+        result.put("trendDirection", trendDirection);
+        result.put("selfTimeChange", selfTimeChange);
+        result.put("avgSelfTimeMs", avgSelfTime);
+        result.put("avgP95Ms", avgP95);
+        result.put("avgP99Ms", avgP99);
+        result.put("avgTps", avgTps);
+        result.put("peakTps", peakTps);
+        result.put("totalDeltaRequests", totalDeltaRequests);
+        result.put("totalDeltaSlowRequests", totalDeltaSlowRequests);
+        result.put("dataPoints", recentSnapshots.size());
+        result.put("oldestTimestamp", recentSnapshots.get(0).getTimestamp());
+        result.put("newestTimestamp", recentSnapshots.get(recentSnapshots.size() - 1).getTimestamp());
+        return result;
     }
 
     /**
      * Historical Snapshot Data Class.
+     * Contains both incremental metrics (for trend analysis) and cumulative metrics (for reference).
      */
     public static class HistoricalSnapshot {
         private final long timestamp;        // Unix timestamp (milliseconds)
@@ -229,29 +283,72 @@ public class HistoricalDataTracker {
         private final double avgP95Ms;       // Average P95 across all filters
         private final double avgP99Ms;       // Average P99 across all filters
         private final double successRate;    // Average success rate
-        private final long totalExecutions;  // Total execution count
-        private final long slowRequestCount; // Slow request count
+
+        // INCREMENTAL metrics (key for trend analysis)
+        private final long deltaRequests;    // Requests in this minute (incremental)
+        private final long deltaSlowRequests;// Slow requests in this minute (incremental)
+        private final double tps;            // Throughput: requests per second
+
+        // Cumulative metrics (for reference)
+        private final long totalExecutions;  // Cumulative total execution count
+        private final long slowRequestCount; // Cumulative slow request count
 
         public HistoricalSnapshot(long timestamp, double avgSelfTimeMs, double avgP95Ms,
-                                  double avgP99Ms, double successRate, 
+                                  double avgP99Ms, double successRate,
+                                  long deltaRequests, long deltaSlowRequests, double tps,
                                   long totalExecutions, long slowRequestCount) {
             this.timestamp = timestamp;
             this.avgSelfTimeMs = avgSelfTimeMs;
             this.avgP95Ms = avgP95Ms;
             this.avgP99Ms = avgP99Ms;
             this.successRate = successRate;
+            this.deltaRequests = deltaRequests;
+            this.deltaSlowRequests = deltaSlowRequests;
+            this.tps = tps;
             this.totalExecutions = totalExecutions;
             this.slowRequestCount = slowRequestCount;
         }
 
         // Getters
-        public long getTimestamp() { return timestamp; }
-        public double getAvgSelfTimeMs() { return avgSelfTimeMs; }
-        public double getAvgP95Ms() { return avgP95Ms; }
-        public double getAvgP99Ms() { return avgP99Ms; }
-        public double getSuccessRate() { return successRate; }
-        public long getTotalExecutions() { return totalExecutions; }
-        public long getSlowRequestCount() { return slowRequestCount; }
+        public long getTimestamp() {
+            return timestamp;
+        }
+
+        public double getAvgSelfTimeMs() {
+            return avgSelfTimeMs;
+        }
+
+        public double getAvgP95Ms() {
+            return avgP95Ms;
+        }
+
+        public double getAvgP99Ms() {
+            return avgP99Ms;
+        }
+
+        public double getSuccessRate() {
+            return successRate;
+        }
+
+        public long getDeltaRequests() {
+            return deltaRequests;
+        }
+
+        public long getDeltaSlowRequests() {
+            return deltaSlowRequests;
+        }
+
+        public double getTps() {
+            return tps;
+        }
+
+        public long getTotalExecutions() {
+            return totalExecutions;
+        }
+
+        public long getSlowRequestCount() {
+            return slowRequestCount;
+        }
 
         /**
          * Convert to Map for JSON serialization.
@@ -260,12 +357,22 @@ public class HistoricalDataTracker {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("timestamp", timestamp);
             map.put("datetime", new Date(timestamp).toString());
+
+            // Performance metrics (average across filters)
             map.put("avgSelfTimeMs", avgSelfTimeMs);
             map.put("avgP95Ms", avgP95Ms);
             map.put("avgP99Ms", avgP99Ms);
             map.put("successRate", successRate);
+
+            // INCREMENTAL metrics (key for trend charts)
+            map.put("deltaRequests", deltaRequests);      // Requests in this minute
+            map.put("deltaSlowRequests", deltaSlowRequests);// Slow requests in this minute
+            map.put("tps", tps);                          // Throughput (requests/sec)
+
+            // Cumulative metrics (for reference)
             map.put("totalExecutions", totalExecutions);
             map.put("slowRequestCount", slowRequestCount);
+
             return map;
         }
     }

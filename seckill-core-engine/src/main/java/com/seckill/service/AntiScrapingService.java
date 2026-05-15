@@ -12,7 +12,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -33,9 +32,9 @@ import java.util.stream.Collectors;
  * Implementation:
  * - Redis Lua sliding window (精确限流，避免边界突刺)
  * - Redis-based blacklist storage (Hash结构支持per-member TTL)
- *   - Key: seckill:anti:ip_blacklist
- *   - Field: IP地址
- *   - Value: 过期时间戳(毫秒)
+ * - Key: seckill:anti:ip_blacklist
+ * - Field: IP地址
+ * - Value: 过期时间戳(毫秒)
  * - Automatic cleanup of stale/expired blacklist entries
  * <p>
  * OPTIMIZATION (P2): Per-member TTL for blacklist
@@ -239,11 +238,11 @@ public class AntiScrapingService {
      */
     public boolean isIpBlacklisted(String clientIp) {
         // 从Hash中获取过期时间戳
-        String expireTimestamp = redisTemplate.opsForHash().get(IP_BLACKLIST_KEY, clientIp);
-
-        if (expireTimestamp == null) {
+        Object value = redisTemplate.opsForHash().get(IP_BLACKLIST_KEY, clientIp);
+        if (value == null) {
             return false;  // 不在黑名单中
         }
+        String expireTimestamp = value.toString();
 
         // 检查是否已过期
         long expireTime = Long.parseLong(expireTimestamp);
@@ -319,11 +318,11 @@ public class AntiScrapingService {
         return keys.stream()
                 .map(Object::toString)
                 .filter(ip -> {
-                    String expireTimestamp = redisTemplate.opsForHash().get(IP_BLACKLIST_KEY, ip);
-                    if (expireTimestamp == null) {
+                    Object value = redisTemplate.opsForHash().get(IP_BLACKLIST_KEY, ip);
+                    if (value == null) {
                         return false;
                     }
-                    long expireTime = Long.parseLong(expireTimestamp);
+                    long expireTime = Long.parseLong(value.toString());
                     return currentTime <= expireTime;  // 未过期
                 })
                 .collect(Collectors.toSet());

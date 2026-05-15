@@ -1,20 +1,30 @@
-FROM eclipse-temurin:17-jre-alpine
+FROM 05feb4b8a268e111bb3c4356701bf0c4.d.1ms.run/eclipse-temurin:17-jre
 WORKDIR /app
 
-RUN apk add --no-cache curl tzdata
+# Install curl for health check (Ubuntu-based)
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
-RUN addgroup -S demo && adduser -S demo -G demo
+# Create non-root user
+RUN groupadd -r demo && useradd -r -g demo -d /home/demo demo
+RUN mkdir -p /home/demo && chown -R demo:demo /home/demo
 
+# Copy pre-built jar
 COPY target/demo-service-1.0.0.jar app.jar
 
+# Set ownership
 RUN chown -R demo:demo /app
 
+# Switch to non-root user
 USER demo
 
-EXPOSE 9000
+# Expose ports: HTTP (9003), Management (9004)
+EXPOSE 9003 9004
 
+# JVM options for container environment
 ENV JAVA_OPTS="-Xms128m -Xmx256m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
 
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD curl -f http://localhost:9000/actuator/health || exit 1
+# Health check on management port
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD curl -f http://localhost:9004/actuator/health || exit 1
 
+# Entry point with nacos profile
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar --spring.profiles.active=nacos"]

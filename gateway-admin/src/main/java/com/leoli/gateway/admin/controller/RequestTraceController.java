@@ -2,6 +2,7 @@ package com.leoli.gateway.admin.controller;
 
 import com.leoli.gateway.admin.model.RequestTrace;
 import com.leoli.gateway.admin.service.FilterChainExecutionService;
+import com.leoli.gateway.admin.service.GatewayInstanceService;
 import com.leoli.gateway.admin.service.RequestTraceService;
 import com.leoli.gateway.admin.service.TraceBufferService;
 import lombok.RequiredArgsConstructor;
@@ -10,6 +11,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -31,6 +33,8 @@ public class RequestTraceController {
     private final RequestTraceService requestTraceService;
     private final FilterChainExecutionService filterChainExecutionService;
     private final TraceBufferService traceBufferService;
+    private final GatewayInstanceService gatewayInstanceService;
+    private final RestTemplate restTemplate;
 
     /**
      * Get trace sampling configuration
@@ -201,10 +205,41 @@ public class RequestTraceController {
         result.put("responseHeaders", trace.getResponseHeaders());
         result.put("responseBody", trace.getResponseBody());
 
-        // Add filter chain execution summary
-        Map<String, Object> filterSummary = filterChainExecutionService.getTraceExecutionSummary(traceId);
-        if (Boolean.TRUE.equals(filterSummary.get("hasFilterData"))) {
-            result.put("filterChain", filterSummary);
+        // Add filter chain execution summary - fetch from gateway real-time API for complete data
+        try {
+            String accessUrl = gatewayInstanceService.getAccessUrl(trace.getInstanceId());
+            if (accessUrl != null) {
+                // Get complete filter chain data from gateway's FilterChainTracker (34 filters)
+                // Gateway returns data directly without wrapper
+                String filterChainUrl = accessUrl + "/internal/filter-chain/trace/" + traceId;
+                @SuppressWarnings("unchecked")
+                Map<String, Object> gatewayFilterData = restTemplate.getForObject(filterChainUrl, Map.class);
+                if (gatewayFilterData != null && gatewayFilterData.containsKey("filterCount")) {
+                    // Gateway returns data directly (no success/data wrapper)
+                    result.put("filterChain", gatewayFilterData);
+                    log.debug("Got complete filter chain data from gateway: {} filters", gatewayFilterData.get("filterCount"));
+                } else {
+                    // Fallback to database data if gateway API fails
+                    log.debug("Gateway filter chain API returned no data for traceId: {}, using database fallback", traceId);
+                    Map<String, Object> filterSummary = filterChainExecutionService.getTraceExecutionSummary(traceId);
+                    if (Boolean.TRUE.equals(filterSummary.get("hasFilterData"))) {
+                        result.put("filterChain", filterSummary);
+                    }
+                }
+            } else {
+                // Gateway instance not available, use database data
+                log.debug("Gateway instance not found for instanceId: {}, using database data", trace.getInstanceId());
+                Map<String, Object> filterSummary = filterChainExecutionService.getTraceExecutionSummary(traceId);
+                if (Boolean.TRUE.equals(filterSummary.get("hasFilterData"))) {
+                    result.put("filterChain", filterSummary);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to get filter chain from gateway for traceId: {}, using database fallback: {}", traceId, e.getMessage());
+            Map<String, Object> filterSummary = filterChainExecutionService.getTraceExecutionSummary(traceId);
+            if (Boolean.TRUE.equals(filterSummary.get("hasFilterData"))) {
+                result.put("filterChain", filterSummary);
+            }
         }
 
         return ResponseEntity.ok(result);

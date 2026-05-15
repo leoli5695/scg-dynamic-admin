@@ -39,6 +39,9 @@ public class StrategyTypeService {
     // MOCK_RESPONSE subSchemas (multi-section configuration)
     private static final Map<String, Object> MOCK_RESPONSE_SUB_SCHEMAS = new HashMap<>();
 
+    // TOKEN_RATE_LIMITER subSchemas (AI Token quota configuration)
+    private static final Map<String, Object> TOKEN_RATE_LIMITER_SUB_SCHEMAS = new HashMap<>();
+
     static {
         // JWT subSchema
         Map<String, Object> jwtSchema = new HashMap<>();
@@ -283,6 +286,106 @@ public class StrategyTypeService {
         MOCK_RESPONSE_SUB_SCHEMAS.put("errorSimulation", errorSimulationSchema);
     }
 
+    // TOKEN_RATE_LIMITER subSchemas initialization (AI Token Quota)
+    static {
+        // Tenant Quotas Section (multiRule pattern for multiple tenants)
+        Map<String, Object> tenantQuotasSchema = new HashMap<>();
+        tenantQuotasSchema.put("sectionLabel", "租户配额配置");
+        tenantQuotasSchema.put("sectionDescription", "为不同租户配置Token配额，支持月度和日度双重限制");
+        tenantQuotasSchema.put("multiRule", true);
+        tenantQuotasSchema.put("ruleLabel", "租户");
+        tenantQuotasSchema.put("ruleKeyField", "tenantId");
+        tenantQuotasSchema.put("ruleFields", List.of(
+                createFieldWithPlaceholder("tenantId", "text", "租户ID", null, "如: tenant-001"),
+                createNumberField("monthlyQuota", "月配额", 1000000, 0, null, "tokens"),
+                createNumberField("dailyQuota", "日配额", 50000, 0, null, "tokens"),
+                createNumberField("burstQuota", "突发配额", 0, 0, null, "tokens"),
+                createSelectFieldWithLabels("quotaPeriod", "配额周期", "BOTH",
+                        List.of(Map.of("value", "MONTHLY", "label", "仅月度"),
+                                Map.of("value", "DAILY", "label", "仅日度"),
+                                Map.of("value", "BOTH", "label", "月度+日度")))
+        ));
+        TOKEN_RATE_LIMITER_SUB_SCHEMAS.put("tenantQuotas", tenantQuotasSchema);
+
+        // Default Quotas Section
+        Map<String, Object> defaultQuotasSchema = new HashMap<>();
+        defaultQuotasSchema.put("sectionLabel", "默认配额设置");
+        defaultQuotasSchema.put("sectionDescription", "新租户的默认配额值");
+        defaultQuotasSchema.put("fields", List.of(
+                createNumberField("defaultMonthlyQuota", "默认月配额", 1000000, 0, null, "tokens"),
+                createNumberField("defaultDailyQuota", "默认日配额", 50000, 0, null, "tokens")
+        ));
+        TOKEN_RATE_LIMITER_SUB_SCHEMAS.put("defaultQuotas", defaultQuotasSchema);
+
+        // Response Format Section
+        Map<String, Object> responseFormatSchema = new HashMap<>();
+        responseFormatSchema.put("sectionLabel", "响应格式配置");
+        responseFormatSchema.put("sectionDescription", "AI服务响应的usage字段解析格式");
+        responseFormatSchema.put("fields", List.of(
+                createSelectFieldWithLabels("responseFormat", "响应格式", "OPENAI",
+                        List.of(Map.of("value", "OPENAI", "label", "OpenAI标准"),
+                                Map.of("value", "ANTHROPIC", "label", "Anthropic格式"),
+                                Map.of("value", "CUSTOM", "label", "自定义格式"))),
+                createSwitchField("sseIncrementalTracking", "SSE增量追踪", true),
+                createNumberField("sseTimeoutMs", "SSE超时时间", 60000, 1000, 300000, "ms")
+        ));
+        TOKEN_RATE_LIMITER_SUB_SCHEMAS.put("responseFormat", responseFormatSchema);
+
+        // SSE Stream Handling Section
+        Map<String, Object> sseHandlingSchema = new HashMap<>();
+        sseHandlingSchema.put("sectionLabel", "SSE流处理配置");
+        sseHandlingSchema.put("sectionDescription", "流式响应的内存控制和中断处理策略");
+        sseHandlingSchema.put("fields", List.of(
+                createNumberField("sseMaxBufferSize", "最大缓冲大小", 1048576, 65536, 10485760, "bytes"),
+                createNumberField("sseMaxChunks", "最大chunk数", 200, 50, 1000, null),
+                createSwitchField("ssePartialBillingOnInterrupt", "中断部分计费", true),
+                createNumberField("sseMinChargeOnInterrupt", "中断最小计费", 100, 0, 10000, "tokens")
+        ));
+        TOKEN_RATE_LIMITER_SUB_SCHEMAS.put("sseHandling", sseHandlingSchema);
+
+        // Tenant ID Extraction Section
+        Map<String, Object> tenantIdExtractionSchema = new HashMap<>();
+        tenantIdExtractionSchema.put("sectionLabel", "租户识别配置");
+        tenantIdExtractionSchema.put("sectionDescription", "如何从请求中提取租户ID用于配额检查");
+        tenantIdExtractionSchema.put("fields", List.of(
+                createSelectFieldWithLabels("tenantIdSource", "租户ID来源", "combined",
+                        List.of(Map.of("value", "api_key_metadata", "label", "API Key元数据"),
+                                Map.of("value", "jwt_claim", "label", "JWT Claims"),
+                                Map.of("value", "header", "label", "HTTP Header"),
+                                Map.of("value", "combined", "label", "组合模式(优先级递减)"))),
+                createField("headerNames.tenantIdHeader", "text", "租户Header名", "X-Tenant-Id")
+        ));
+        TOKEN_RATE_LIMITER_SUB_SCHEMAS.put("tenantIdExtraction", tenantIdExtractionSchema);
+
+        // Alert Configuration Section
+        Map<String, Object> alertSchema = new HashMap<>();
+        alertSchema.put("sectionLabel", "告警配置");
+        alertSchema.put("sectionDescription", "配额接近耗尽时的告警设置");
+        alertSchema.put("fields", List.of(
+                createNumberField("alertThresholdPercent", "告警阈值", 80, 50, 100, "%"),
+                createSwitchField("localCacheFallback", "本地缓存降级", true),
+                createNumberField("fallbackQuotaPercent", "降级配额比例", 50, 10, 100, "%")
+        ));
+        TOKEN_RATE_LIMITER_SUB_SCHEMAS.put("alert", alertSchema);
+
+        // Pre-deduct Strategy Section
+        Map<String, Object> preDeductSchema = new HashMap<>();
+        preDeductSchema.put("sectionLabel", "预扣与退款策略");
+        preDeductSchema.put("sectionDescription", "请求开始时预扣Token配额及响应后结算退款策略");
+        preDeductSchema.put("fields", List.of(
+                createSelectFieldWithLabels("preDeductStrategy", "预扣策略", "NONE",
+                        List.of(Map.of("value", "NONE", "label", "不预扣(响应后扣减)"),
+                                Map.of("value", "ESTIMATE", "label", "预估预扣"),
+                                Map.of("value", "HYBRID", "label", "混合模式"))),
+                createNumberField("estimateMultiplier", "预估倍数", 2, 1, 5, "x"),
+                createNumberField("hybridThreshold", "混合模式阈值", 1000, 100, 10000, "tokens"),
+                createSwitchField("autoRefundEnabled", "自动退款", true),
+                createNumberField("refundThresholdPercent", "退款阈值", 10, 1, 50, "%"),
+                createNumberField("maxRefundPerRequest", "单次最大退款", 10000, 100, 100000, "tokens")
+        ));
+        TOKEN_RATE_LIMITER_SUB_SCHEMAS.put("preDeduct", preDeductSchema);
+    }
+
     private static Map<String, Object> createField(String name, String type, String label, Object defaultValue) {
         Map<String, Object> field = new HashMap<>();
         field.put("name", name);
@@ -408,6 +511,12 @@ public class StrategyTypeService {
         // For MOCK_RESPONSE type, add subSchemas
         if ("MOCK_RESPONSE".equals(typeCode) && Boolean.TRUE.equals(schema.get("hasSubSchemas"))) {
             schema.put("subSchemas", MOCK_RESPONSE_SUB_SCHEMAS);
+            schema.remove("hasSubSchemas");
+        }
+
+        // For TOKEN_RATE_LIMITER type, add subSchemas (AI Token quota)
+        if ("TOKEN_RATE_LIMITER".equals(typeCode) && Boolean.TRUE.equals(schema.get("hasSubSchemas"))) {
+            schema.put("subSchemas", TOKEN_RATE_LIMITER_SUB_SCHEMAS);
             schema.remove("hasSubSchemas");
         }
 

@@ -3,6 +3,7 @@ package com.seckill.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seckill.config.SeckillConfig;
 import com.seckill.dto.OrderMessage;
+import com.seckill.redis.lua.SeckillDeductLua;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;

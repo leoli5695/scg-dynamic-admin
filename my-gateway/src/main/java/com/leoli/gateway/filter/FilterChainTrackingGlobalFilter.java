@@ -80,8 +80,11 @@ public class FilterChainTrackingGlobalFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        // Run AFTER TraceIdGlobalFilter (-1000) to ensure traceId is available
-        // Use -999 so TraceIdGlobalFilter sets traceId first
-        return -999;
+        // Run BEFORE ALL other filters to capture the true chain start time
+        // Use Integer.MIN_VALUE + 1 to be second after RemoveCachedBody (-2147483648)
+        // but before all other filters to ensure accurate timing
+        // Note: RemoveCachedBody (-2147483648) runs first, but we capture startTime
+        // before any business logic starts
+        return Integer.MIN_VALUE + 2; // -2147483646, before all business filters
     }
 }

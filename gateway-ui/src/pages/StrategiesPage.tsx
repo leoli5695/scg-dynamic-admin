@@ -17,6 +17,7 @@ import api from '../utils/api';
 import { useTranslation } from 'react-i18next';
 import { useStrategyTypes, StrategyType } from '../hooks/useStrategyTypes';
 import DynamicConfigFields, { AuthSubSchemaFields, MultiDimRateLimiterFields, RequestTransformFields, ResponseTransformFields, MockResponseFields } from '../components/DynamicConfigFields';
+import { TokenRateLimiterFields } from '../components/TokenRateLimiterFields';
 import './StrategiesPage.premium.css';
 
 const { Text, Title } = Typography;
@@ -920,6 +921,11 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
     // Special handling for MOCK_RESPONSE with multiple sections
     if (strategyType === 'MOCK_RESPONSE' && schema.subSchemas) {
       return <MockResponseFields schema={schema} form={form} t={t} />;
+    }
+
+    // Special handling for TOKEN_RATE_LIMITER (AI Token quota)
+    if (strategyType === 'TOKEN_RATE_LIMITER' && schema.subSchemas) {
+      return <TokenRateLimiterFields schema={schema} form={form} t={t} />;
     }
 
     // Special handling for TIMEOUT with low value warning

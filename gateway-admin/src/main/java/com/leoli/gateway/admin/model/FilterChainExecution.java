@@ -43,16 +43,30 @@ public class FilterChainExecution {
     private Integer filterOrder;
 
     /**
-     * Execution duration in milliseconds
+     * Execution duration in milliseconds (cumulative, includes downstream time)
      */
     @Column(name = "duration_ms", nullable = false)
     private Long durationMs;
 
     /**
-     * Execution duration in microseconds (for precision)
+     * Execution duration in microseconds (cumulative, for precision)
      */
     @Column(name = "duration_micros", nullable = false)
     private Long durationMicros;
+
+    /**
+     * Self/independent duration in milliseconds (filter's own logic time only)
+     * Pre-logic time + Post-logic time, excluding downstream chain time.
+     * This is the key metric for identifying slow filters.
+     */
+    @Column(name = "self_time_ms")
+    private Long selfTimeMs;
+
+    /**
+     * Self/independent duration in microseconds (for precision)
+     */
+    @Column(name = "self_time_micros")
+    private Long selfTimeMicros;
 
     /**
      * Whether the filter execution succeeded

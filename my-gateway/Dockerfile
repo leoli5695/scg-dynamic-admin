@@ -1,34 +1,30 @@
 # Simple runtime image - uses pre-built jar
 # Build jar first: mvn clean package -DskipTests
-# Using graalvm (Oracle Linux based) with required tools
+# Using eclipse-temurin (Ubuntu-based) with required tools
 
-FROM ghcr.io/graalvm/graalvm-community:17
+FROM 05feb4b8a268e111bb3c4356701bf0c4.d.1ms.run/eclipse-temurin:17-jre
 WORKDIR /app
 
-# Install useful tools for debugging
-RUN microdnf install -y \
+# Install useful tools for debugging (Ubuntu-based)
+RUN apt-get update && apt-get install -y \
     curl \
     wget \
     unzip \
     tar \
     gzip \
     net-tools \
-    procps-ng \
-    vim-minimal \
+    procps \
+    vim \
     less \
-    nc \
-    iputils \
-    bind-utils \
+    netcat-openbsd \
+    iputils-ping \
+    dnsutils \
     lsof \
     strace \
     tcpdump \
     jq \
-    findutils \
-    diffutils \
-    patch \
     file \
-    which \
-    && microdnf clean all
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy local Arthas package (faster build, no network dependency)
 COPY arthas-bin.zip /tmp/arthas.zip

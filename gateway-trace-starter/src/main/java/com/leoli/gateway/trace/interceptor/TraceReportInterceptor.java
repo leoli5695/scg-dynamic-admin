@@ -46,10 +46,34 @@ public class TraceReportInterceptor implements HandlerInterceptor {
 
             // End Trace record
             int statusCode = response.getStatus();
-            boolean success = statusCode < 400 && ex == null;
+            
+            // Get actual exception - try multiple sources
+            // Spring MVC may pass null in 'ex' after GlobalExceptionHandler handles it
+            Throwable actualException = ex;
+            
+            // Fallback 1: Check request attributes for exception (Servlet standard)
+            if (actualException == null) {
+                Object attrEx = request.getAttribute("jakarta.servlet.error.exception");
+                if (attrEx instanceof Throwable) {
+                    actualException = (Throwable) attrEx;
+                }
+            }
+            
+            // Fallback 2: Check Spring's exception attribute
+            if (actualException == null) {
+                Object attrEx = request.getAttribute("org.springframework.web.servlet.DispatcherServlet.EXCEPTION");
+                if (attrEx instanceof Throwable) {
+                    actualException = (Throwable) attrEx;
+                }
+            }
+            
+            boolean success = statusCode < 400 && actualException == null;
 
-            if (ex != null) {
-                TraceContextHolder.endTrace(statusCode, ex.getMessage());
+            if (actualException != null) {
+                TraceContextHolder.endTrace(statusCode, actualException.getMessage());
+                // Add detailed error span with exception type and message
+                String errorOperation = actualException.getClass().getSimpleName();
+                TraceContextHolder.addFailedSpan(errorOperation, 0, actualException);
             } else {
                 TraceContextHolder.endTrace(statusCode, success);
             }
@@ -57,10 +81,24 @@ public class TraceReportInterceptor implements HandlerInterceptor {
             // Get complete Trace and report
             DistributedTrace trace = TraceContextHolder.getTrace();
 
-            if (trace != null && trace.getSpans().size() > 0) {
+            // FIX: Always report if trace exists, even with no spans
+            // Error cases (JSON parse, validation errors) should be captured
+            if (trace != null) {
+                // Add a fallback span if no spans exist (request failed before Controller)
+                if (trace.getSpans().isEmpty()) {
+                    if (statusCode >= 400) {
+                        // Error request without specific exception - add generic error span
+                        String errorMsg = request.getAttribute("jakarta.servlet.error.message") != null 
+                            ? request.getAttribute("jakarta.servlet.error.message").toString() 
+                            : "HTTP " + statusCode;
+                        TraceContextHolder.addFailedSpan("RequestError[" + statusCode + "]", 0, errorMsg);
+                    } else {
+                        TraceContextHolder.addSpan("RequestReceived", 0, true);
+                    }
+                }
                 traceReporter.report(trace);
-                log.debug("Trace reported: traceId={}, spans={}, duration={}ms",
-                        trace.getTraceId(), trace.getSpans().size(), trace.getTotalDurationMs());
+                log.debug("Trace reported: traceId={}, spans={}, duration={}ms, status={}",
+                        trace.getTraceId(), trace.getSpans().size(), trace.getTotalDurationMs(), statusCode);
             }
 
         } catch (Exception e) {

@@ -66,6 +66,15 @@ public interface FilterChainExecutionRepository extends JpaRepository<FilterChai
     int deleteOldExecutions(LocalDateTime before);
 
     /**
+     * 批量查询多个 trace 的第一个 filter 的 durationMs（总耗时）
+     * 用于列表页展示，确保与详情页数据一致
+     */
+    @Query("SELECT e.traceId, e.durationMs FROM FilterChainExecution e " +
+           "WHERE e.traceId IN :traceIds " +
+           "AND e.filterOrder = (SELECT MIN(e2.filterOrder) FROM FilterChainExecution e2 WHERE e2.traceId = e.traceId)")
+    List<Object[]> findFirstFilterDurationByTraceIds(List<String> traceIds);
+
+    /**
      * Count executions by trace ID
      */
     long countByTraceId(String traceId);
@@ -78,36 +87,42 @@ public interface FilterChainExecutionRepository extends JpaRepository<FilterChai
 
     /**
      * Get filter statistics (aggregated by filter name)
+     * Uses avgSelfTimeMs for ordering - this is the correct metric for identifying slow filters
+     * avgDurationMs includes downstream time and would incorrectly rank first filters as slowest
      */
     @Query("SELECT e.filterName, COUNT(e) as count, AVG(e.durationMs) as avgDuration, " +
-           "MAX(e.durationMs) as maxDuration, " +
+           "AVG(e.selfTimeMs) as avgSelfTime, MAX(e.durationMs) as maxDuration, " +
+           "MAX(e.selfTimeMs) as maxSelfTime, " +
            "SUM(CASE WHEN e.success = false THEN 1 ELSE 0 END) as failCount " +
            "FROM FilterChainExecution e " +
            "WHERE e.createdAt >= :startTime " +
            "GROUP BY e.filterName " +
-           "ORDER BY avgDuration DESC")
+           "ORDER BY avgSelfTime DESC")
     List<Object[]> findFilterStats(LocalDateTime startTime);
 
     /**
      * Get filter statistics by instance ID
+     * Uses avgSelfTimeMs for ordering - correct metric for slow filter identification
      */
     @Query("SELECT e.filterName, COUNT(e) as count, AVG(e.durationMs) as avgDuration, " +
-           "MAX(e.durationMs) as maxDuration, " +
+           "AVG(e.selfTimeMs) as avgSelfTime, MAX(e.durationMs) as maxDuration, " +
+           "MAX(e.selfTimeMs) as maxSelfTime, " +
            "SUM(CASE WHEN e.success = false THEN 1 ELSE 0 END) as failCount " +
            "FROM FilterChainExecution e " +
            "WHERE e.instanceId = :instanceId AND e.createdAt >= :startTime " +
            "GROUP BY e.filterName " +
-           "ORDER BY avgDuration DESC")
+           "ORDER BY avgSelfTime DESC")
     List<Object[]> findFilterStatsByInstanceId(String instanceId, LocalDateTime startTime);
 
     /**
-     * Get slowest filters (top N by average duration)
+     * Get slowest filters (top N by average self time)
+     * Uses selfTimeMs - filter's own logic time only
      */
-    @Query("SELECT e.filterName, AVG(e.durationMs) as avgDuration " +
+    @Query("SELECT e.filterName, AVG(e.selfTimeMs) as avgSelfTime " +
            "FROM FilterChainExecution e " +
            "WHERE e.createdAt >= :startTime " +
            "GROUP BY e.filterName " +
-           "ORDER BY avgDuration DESC")
+           "ORDER BY avgSelfTime DESC")
     List<Object[]> findSlowestFilters(LocalDateTime startTime);
 
     /**

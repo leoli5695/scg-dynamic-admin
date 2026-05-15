@@ -1,5 +1,6 @@
 package com.leoli.gateway.monitor;
 
+import com.leoli.gateway.filter.FilterChainTrackingGlobalFilter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
@@ -92,8 +93,15 @@ public class TrackedGlobalFilter implements GlobalFilter, Ordered {
                 traceId = "unknown-" + System.nanoTime();
             }
 
-            // Start tracking this filter execution (startTime is set here)
-            FilterChainTracker.FilterExecution execution = tracker.startFilter(traceId, filterName, order);
+            // FIX: Get chainStartTimeNanos from FilterChainTrackingGlobalFilter (order=-2147483646)
+            // This is the TRUE start time of the entire filter chain, ensuring consistent
+            // total duration calculation that matches gateway's latency measurement.
+            // Previously, we used min(startTime) which missed earlier untracked filters.
+            Long chainStartTimeNanos = exchange.getAttribute(FilterChainTrackingGlobalFilter.CHAIN_START_TIME_ATTR);
+            long chainStart = chainStartTimeNanos != null ? chainStartTimeNanos : 0L;
+
+            // Start tracking this filter execution with chainStartTimeNanos
+            FilterChainTracker.FilterExecution execution = tracker.startFilter(traceId, filterName, order, chainStart);
 
             // Create a wrapped chain that intercepts when delegate calls chain.filter()
             // This allows us to mark the TRUE preEndTime (when pre-logic actually ends)

@@ -81,7 +81,8 @@ public class AlertContentGenerator {
             return callAiApi(config, prompt);
 
         } catch (Exception e) {
-            log.error("Failed to generate AI content, using default", e);
+            // WARN level because fallback is available
+            log.warn("Failed to generate AI content, using default. Reason: {}", e.getMessage());
             return generateDefaultContent(alertType, metricName, currentValue, threshold, language);
         }
     }
@@ -232,7 +233,8 @@ public class AlertContentGenerator {
                 default -> throw new RuntimeException("Unsupported provider: " + provider);
             };
         } catch (Exception e) {
-            log.error("Failed to call AI API for provider: {}", provider, e);
+            // WARN level because generateAlertContent has fallback handling
+            log.warn("AI API call failed for provider: {}, will use fallback", provider, e);
             throw new RuntimeException("AI API call failed: " + e.getMessage());
         }
     }

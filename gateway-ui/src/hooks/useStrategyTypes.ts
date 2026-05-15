@@ -13,6 +13,7 @@ interface StrategyTypeField {
   placeholder?: string;
   required?: boolean;
   options?: Array<{ value: string; label: string }>;
+  colSpan?: number;
 }
 
 interface StrategyTypeSchema {
@@ -29,9 +30,11 @@ interface StrategyTypeSchema {
 interface StrategyTypeSubSchema {
   fields?: StrategyTypeField[];
   sectionLabel?: string;
+  sectionDescription?: string;
   // Multi-rule pattern (for fieldMapping, dataMasking)
   multiRule?: boolean;
   ruleLabel?: string;
+  ruleKeyField?: string;
   ruleFields?: StrategyTypeField[];
 }
 

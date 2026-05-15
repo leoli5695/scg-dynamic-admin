@@ -56,9 +56,7 @@ class TimeoutGlobalFilterTest {
 
     @BeforeEach
     void setUp() {
-        filter = new TimeoutGlobalFilter();
-        org.springframework.test.util.ReflectionTestUtils.setField(filter, "strategyManager", strategyManager);
-        org.springframework.test.util.ReflectionTestUtils.setField(filter, "timeoutProperties", timeoutProperties);
+        filter = new TimeoutGlobalFilter(strategyManager, timeoutProperties);
 
         lenient().when(timeoutProperties.getDefaultConnectTimeout()).thenReturn(1000);
         lenient().when(timeoutProperties.getDefaultResponseTimeout()).thenReturn(30000);

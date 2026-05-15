@@ -26,11 +26,13 @@ spec:
         command: ['sh', '-c', 'until nc -z nacos 8848; do echo waiting for nacos; sleep 2; done;']
       containers:
       - name: demo-nacos-1
-        image: demo-service-nacos:1.0.0
+        image: demo-nacos:latest
         imagePullPolicy: Never
         ports:
-        - containerPort: 9004
+        - containerPort: 9003
           name: http
+        - containerPort: 9004
+          name: management
         env:
         - name: SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR
           value: "nacos:8848"
@@ -39,9 +41,9 @@ spec:
             fieldRef:
               fieldPath: status.podIP
         - name: SPRING_CLOUD_NACOS_DISCOVERY_PORT
-          value: "9004"
+          value: "9003"
         - name: SERVER_PORT
-          value: "9004"
+          value: "9003"
         resources:
           requests:
             cpu: "200m"
@@ -92,11 +94,13 @@ spec:
         command: ['sh', '-c', 'until nc -z nacos 8848; do echo waiting for nacos; sleep 2; done;']
       containers:
       - name: demo-nacos-2
-        image: demo-service-nacos:1.0.0
+        image: demo-nacos:latest
         imagePullPolicy: Never
         ports:
-        - containerPort: 9005
+        - containerPort: 9003
           name: http
+        - containerPort: 9004
+          name: management
         env:
         - name: SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR
           value: "nacos:8848"
@@ -105,9 +109,9 @@ spec:
             fieldRef:
               fieldPath: status.podIP
         - name: SPRING_CLOUD_NACOS_DISCOVERY_PORT
-          value: "9005"
+          value: "9003"
         - name: SERVER_PORT
-          value: "9005"
+          value: "9003"
         resources:
           requests:
             cpu: "200m"
@@ -118,14 +122,14 @@ spec:
         livenessProbe:
           httpGet:
             path: /actuator/health
-            port: 9005
+            port: 9004
           initialDelaySeconds: 60
           periodSeconds: 15
           timeoutSeconds: 10
         readinessProbe:
           httpGet:
             path: /actuator/health
-            port: 9005
+            port: 9004
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
@@ -142,11 +146,11 @@ spec:
   selector:
     app: demo-nacos
   ports:
-  - name: http-1
+  - name: http
+    port: 9003
+    targetPort: 9003
+    nodePort: 30903
+  - name: management
     port: 9004
     targetPort: 9004
     nodePort: 30904
-  - name: http-2
-    port: 9005
-    targetPort: 9005
-    nodePort: 30905

@@ -1407,44 +1407,58 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
             {/* Duration Breakdown */}
             {selectedFullChain.durationBreakdown && (
               <Card size="small" title={t('trace.duration_breakdown') || '耗时分布'} style={{ marginBottom: 16 }}>
-                <Row gutter={16}>
-                  <Col span={8}>
+                <Row gutter={12}>
+                  <Col span={5}>
                     <Statistic
                       title={t('trace.total_latency') || '总耗时'}
                       value={selectedFullChain.durationBreakdown.gatewayTotalMs}
                       suffix="ms"
                     />
+                    <Text type="secondary" style={{ fontSize: 11 }}>首个Filter累积时间</Text>
                   </Col>
-                  <Col span={8}>
+                  <Col span={5}>
                     <Statistic
                       title={t('trace.gateway_overhead') || '网关开销'}
-                      value={selectedFullChain.durationBreakdown.gatewayOverheadMs}
-                      suffix={`ms (${selectedFullChain.durationBreakdown.gatewayOverheadPercent}%)`}
+                      value={selectedFullChain.durationBreakdown.gatewayOverheadMs || '-'}
+                      suffix={selectedFullChain.durationBreakdown.gatewayOverheadMs > 0 ?
+                        `ms (${selectedFullChain.durationBreakdown.gatewayOverheadPercent}%)` : ''}
                       valueStyle={{ color: '#1890ff' }}
                     />
+                    <Text type="secondary" style={{ fontSize: 11 }}>Σ各Filter自身时间</Text>
+                    {selectedFullChain.durationBreakdown.gatewayOverheadDataSource === 'NO_DATA' && (
+                      <Text type="secondary" style={{ fontSize: 11 }}>暂无数据</Text>
+                    )}
                   </Col>
-                  <Col span={8}>
+                  <Col span={5}>
                     <Statistic
                       title={t('trace.service_duration') || '服务耗时'}
-                      value={selectedFullChain.durationBreakdown.serviceMaxDurationMs}
-                      suffix={`ms (${selectedFullChain.durationBreakdown.servicePercent}%)`}
+                      value={selectedFullChain.durationBreakdown.serviceDurationMs || selectedFullChain.durationBreakdown.serviceMaxDurationMs || '-'}
+                      suffix={selectedFullChain.durationBreakdown.serviceDurationMs > 0 ?
+                        `ms (${selectedFullChain.durationBreakdown.servicePercent}%)` : ''}
                       valueStyle={{ color: '#52c41a' }}
                     />
+                    <Text type="secondary" style={{ fontSize: 11 }}>后端服务处理时间</Text>
+                  </Col>
+                  <Col span={5}>
+                    <Statistic
+                      title={t('trace.network_transfer') || '网络传输'}
+                      value={selectedFullChain.durationBreakdown.networkTransferMs || '-'}
+                      suffix={selectedFullChain.durationBreakdown.networkTransferMs > 0 ?
+                        `ms (${selectedFullChain.durationBreakdown.networkTransferPercent || 0}%)` : ''}
+                      valueStyle={{ color: '#faad14' }}
+                    />
+                    <Text type="secondary" style={{ fontSize: 11 }}>NettyWrite响应写入</Text>
+                  </Col>
+                  <Col span={4}>
+                    <Statistic
+                      title={t('trace.other_time') || '其他'}
+                      value={selectedFullChain.durationBreakdown.otherMs || 0}
+                      suffix={`ms (${selectedFullChain.durationBreakdown.otherPercent || 0}%)`}
+                      valueStyle={{ color: '#8c8c8c' }}
+                    />
+                    <Text type="secondary" style={{ fontSize: 11 }}>精度损失+未追踪</Text>
                   </Col>
                 </Row>
-                <div style={{ marginTop: 12 }}>
-                  <Progress
-                    percent={100}
-                    success={{ percent: selectedFullChain.durationBreakdown.servicePercent || 0 }}
-                    strokeColor="#1890ff"
-                    format={() => ''}
-                    size="small"
-                  />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginTop: 4 }}>
-                    <Text type="secondary"><span style={{ display: 'inline-block', width: 8, height: 8, background: '#52c41a', marginRight: 4 }}></span>{t('trace.service_time') || '服务耗时'}</Text>
-                    <Text type="secondary"><span style={{ display: 'inline-block', width: 8, height: 8, background: '#1890ff', marginRight: 4 }}></span>{t('trace.gateway_time') || '网关开销'}</Text>
-                  </div>
-                </div>
               </Card>
             )}
 

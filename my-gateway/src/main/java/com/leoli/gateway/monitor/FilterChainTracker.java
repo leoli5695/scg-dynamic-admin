@@ -80,11 +80,32 @@ public class FilterChainTracker {
     /**
      * Start tracking a filter execution.
      * Call this at the beginning of each filter.
+     *
+     * FIX: Added chainStartTimeNanos parameter for consistent total duration calculation.
+     * This is the TRUE start time from FilterChainTrackingGlobalFilter (order=-2147483646),
+     * not this filter's startTime. Storing it ensures getTotalDurationMs() uses the
+     * correct start point, matching gateway's latency calculation.
+     *
+     * @param traceId Trace ID for this request
+     * @param filterName Name of the filter being tracked
+     * @param order Execution order of this filter
+     * @param chainStartTimeNanos TRUE start time of entire chain (from FilterChainTrackingGlobalFilter)
+     *                            If 0, will fall back to min(startTime) in getTotalDurationMs()
      */
-    public FilterExecution startFilter(String traceId, String filterName, int order) {
+    public FilterExecution startFilter(String traceId, String filterName, int order, long chainStartTimeNanos) {
         FilterExecution execution = new FilterExecution(traceId, filterName, order);
         execution.setStartTime(System.nanoTime());
+        execution.setChainStartTimeNanos(chainStartTimeNanos);
         return execution;
+    }
+
+    /**
+     * Legacy method for backward compatibility.
+     * @deprecated Use startFilter(traceId, filterName, order, chainStartTimeNanos) instead
+     */
+    @Deprecated
+    public FilterExecution startFilter(String traceId, String filterName, int order) {
+        return startFilter(traceId, filterName, order, 0);
     }
 
     /**
@@ -284,7 +305,8 @@ public class FilterChainTracker {
      * Represents a single filter execution.
      *
      * Time measurement breakdown:
-     * - startTime: When filter's pre-logic starts (before chain.filter call)
+     * - chainStartTimeNanos: The TRUE start time of entire filter chain (from FilterChainTrackingGlobalFilter)
+     * - startTime: When this filter's pre-logic starts (before chain.filter call)
      * - preEndTime: When filter's pre-logic ends (just before delegating to chain)
      * - postStartTime: When filter's post-logic starts (after downstream completes)
      * - endTime: When filter's post-logic ends
@@ -293,11 +315,17 @@ public class FilterChainTracker {
      * - totalTime (cumulative): endTime - startTime = includes downstream service time
      * - selfTime (independent): (preEndTime - startTime) + (endTime - postStartTime)
      * - downstreamTime: postStartTime - preEndTime = time spent in downstream chain
+     *
+     * FIX: chainStartTimeNanos is stored to ensure consistent total duration calculation.
+     * Previously, getTotalDurationMs() used min(startTime) which missed earlier filters
+     * (TraceIdGlobalFilter, FilterChainTrackingGlobalFilter) that are not tracked.
+     * This caused the anomaly where filter chain duration > gateway total duration.
      */
     public static class FilterExecution {
         private final String traceId;
         private final String filterName;
         private final int order;
+        private long chainStartTimeNanos; // FIX: TRUE chain start time for consistent calculation
         private long startTime;       // Pre-logic start
         private long preEndTime;      // Pre-logic end (before chain.filter)
         private long postStartTime;   // Post-logic start (after downstream returns)
@@ -367,6 +395,9 @@ public class FilterChainTracker {
         public String getTraceId() { return traceId; }
         public String getFilterName() { return filterName; }
         public int getOrder() { return order; }
+        // FIX: chainStartTimeNanos getter/setter for consistent total duration
+        public long getChainStartTimeNanos() { return chainStartTimeNanos; }
+        public void setChainStartTimeNanos(long chainStartTimeNanos) { this.chainStartTimeNanos = chainStartTimeNanos; }
         public long getStartTime() { return startTime; }
         public void setStartTime(long startTime) { this.startTime = startTime; }
         public long getPreEndTime() { return preEndTime; }
@@ -397,11 +428,32 @@ public class FilterChainTracker {
             executions.add(execution);
         }
 
+        /**
+         * Get total duration of the entire filter chain.
+         *
+         * FIX: Use chainStartTimeNanos instead of min(startTime).
+         * Previously, this method used min(startTime) which only captured the first
+         * tracked filter (SecurityGlobalFilter at order=-500), missing earlier filters
+         * like TraceIdGlobalFilter (order=-2147483648) and FilterChainTrackingGlobalFilter.
+         * This caused the anomaly where filter chain duration > gateway total duration.
+         *
+         * Now we use chainStartTimeNanos (from FilterChainTrackingGlobalFilter) which
+         * is the TRUE start of the entire filter chain, ensuring consistent measurement
+         * with the gateway's total latency calculation.
+         */
         public long getTotalDurationMs() {
             if (executions.isEmpty()) return 0;
-            long minStart = executions.stream().mapToLong(e -> e.startTime).min().orElse(0);
             long maxEnd = executions.stream().mapToLong(e -> e.endTime).max().orElse(0);
-            return (maxEnd - minStart) / 1_000_000;
+
+            // FIX: Use chainStartTimeNanos for TRUE chain start time
+            // Fall back to min(startTime) only if chainStartTimeNanos not set (legacy data)
+            long chainStart = executions.stream()
+                    .filter(e -> e.chainStartTimeNanos > 0)
+                    .mapToLong(e -> e.chainStartTimeNanos)
+                    .findFirst()
+                    .orElse(executions.stream().mapToLong(e -> e.startTime).min().orElse(0));
+
+            return (maxEnd - chainStart) / 1_000_000;
         }
 
         public int getSuccessCount() {

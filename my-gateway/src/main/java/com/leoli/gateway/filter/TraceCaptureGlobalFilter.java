@@ -276,7 +276,17 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
             return;
         }
 
-        long duration = System.currentTimeMillis() - startTime;
+        // CRITICAL FIX: Calculate duration from true chain start time (order=-2147483646)
+        // NOT from this filter's startTime (order=100) which misses earlier filters
+        Long chainStartTimeNanos = exchange.getAttribute(FilterChainTrackingGlobalFilter.CHAIN_START_TIME_ATTR);
+        long duration;
+        if (chainStartTimeNanos != null) {
+            // Use nanoTime for precise measurement of entire filter chain
+            duration = (System.nanoTime() - chainStartTimeNanos) / 1_000_000;
+        } else {
+            // Fallback: use this filter's startTime (less accurate, misses earlier filters)
+            duration = System.currentTimeMillis() - startTime;
+        }
         int statusCode = exchange.getResponse().getStatusCode() != null ?
                 exchange.getResponse().getStatusCode().value() : 0;
 
@@ -380,7 +390,19 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
             trace.put("path", uriToRecord.getPath());
             trace.put("queryString", uriToRecord.getQuery());
             trace.put("statusCode", statusCode);
-            trace.put("latencyMs", duration);
+            
+            // CRITICAL FIX: Use FilterChainTracker's totalDurationMs as authoritative latencyMs
+            // This includes ALL filters from RemoveCachedBody (order=-2147483648) onwards
+            // NOT chainStartTimeNanos (order=-2147483646) which misses the first 2 filters
+            long correctLatencyMs = duration;  // Default to chainStartTimeNanos calculation
+            if (filterChainTracker != null) {
+                FilterChainTracker.FilterChainRecord record = filterChainTracker.getRecordForTrace(traceId);
+                if (record != null) {
+                    correctLatencyMs = record.getTotalDurationMs();  // Use min(startTime) to max(endTime)
+                }
+            }
+            trace.put("latencyMs", correctLatencyMs);
+            
             trace.put("clientIp", getClientIp(request));
             trace.put("userAgent", request.getHeaders().getFirst(HttpHeaders.USER_AGENT));
             trace.put("traceType", traceType);
@@ -436,7 +458,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
 
             // Add filter chain execution details if available and enabled
             if (includeFilterChain && filterChainTracker != null) {
-                addFilterChainDetails(trace, traceId, duration);
+                addFilterChainDetails(exchange, trace, traceId, duration);
             }
 
             // Send to admin service asynchronously
@@ -450,44 +472,160 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
     /**
      * Add filter chain execution details to trace.
      * Provides per-filter timing breakdown for performance analysis.
+     *
+     * CRITICAL FIX: Use FilterChainTracker.getTotalDurationMs() as authoritative source!
+     *
+     * Why NOT use chainStartTimeNanos?
+     * - chainStartTimeNanos is set by FilterChainTrackingGlobalFilter (order=-2147483646)
+     * - But RemoveCachedBody (order=-2147483648) runs BEFORE it!
+     * - So chainStartTimeNanos misses the first 2 filters' execution time
+     * - FilterChainTracker correctly uses min(startTime) from ALL filters including RemoveCachedBody
+     *
+     * Solution: Use record.getTotalDurationMs() which calculates from min(startTime) to max(endTime)
      */
-    private void addFilterChainDetails(Map<String, Object> trace, String traceId, long totalDurationMs) {
+    private void addFilterChainDetails(ServerWebExchange exchange, Map<String, Object> trace, String traceId, long selfCalculatedDuration) {
         FilterChainTracker.FilterChainRecord record = filterChainTracker.getRecordForTrace(traceId);
         if (record == null) {
             log.debug("No filter chain record found for traceId: {}", traceId);
             return;
         }
 
+        List<FilterChainTracker.FilterExecution> executions = record.getExecutions();
+        if (executions.isEmpty()) {
+            log.debug("No filter executions recorded for traceId: {}", traceId);
+            return;
+        }
+
+        // CRITICAL FIX: Use FilterChainTracker's totalDurationMs as authoritative value
+        // This is calculated from min(startTime) to max(endTime) across ALL filters
+        // RemoveCachedBody (order=-2147483648) has the earliest startTime
+        // This gives the TRUE total chain duration, not missing any filters
+        long filterChainDurationMs = record.getTotalDurationMs();
+
+        // Override latencyMs with the correct value from FilterChainTracker
+        // This ensures consistency: latencyMs == filterChainDurationMs
+        trace.put("latencyMs", filterChainDurationMs);
+
+        trace.put("filterChainDurationMs", filterChainDurationMs);
+        trace.put("filterChainDurationDataSource", "FILTER_CHAIN_TRACKER");
+
         // Add filter chain summary
-        trace.put("filterChainDurationMs", record.getTotalDurationMs());
-        trace.put("filterCount", record.getExecutions().size());
+        trace.put("filterCount", executions.size());
         trace.put("filterSuccessCount", record.getSuccessCount());
         trace.put("filterFailureCount", record.getFailureCount());
 
+        // Calculate gateway overhead: sum of all filter selfTimeMicros (filter's own logic time)
+        // CRITICAL FIX: Use FilterChainTracker's stored data directly!
+        //
+        // Problem: In doFinally callback, outer filters' endTime are NOT yet set
+        // - TraceCaptureGlobalFilter (order=100) is the LAST filter
+        // - doFinally runs IMMEDIATELY after chain.filter returns
+        // - Lower-order filters' endTime are NOT yet set at this moment
+        // - Calculating selfTime here gives WRONG (too small) values
+        //
+        // Solution: Use FilterChainTracker's getTraceDetail() which has complete data
+        // FilterChainTracker stores data when each filter's endFilter() is called
+        // At that moment, endTime IS set for each filter
+        // So we can trust the selfTimeMicros values in FilterChainTracker
+
+        // Get complete trace data from FilterChainTracker (most accurate)
+        Map<String, Object> traceDetail = filterChainTracker.getTraceDetail(traceId);
+        
+        // Extract executions list for use in both gatewayOverhead calculation and filterExecutions
+        List<Map<String, Object>> detailExecutions = null;
+        if (traceDetail != null && !traceDetail.containsKey("error")) {
+            detailExecutions = (List<Map<String, Object>>) traceDetail.get("executions");
+        }
+        
+        long gatewayOverheadMicros = 0;
+        if (detailExecutions != null) {
+            // Sum selfTimeMicros from all filters (this is accurate)
+            gatewayOverheadMicros = detailExecutions.stream()
+                    .mapToLong(e -> {
+                        Object micros = e.get("selfTimeMicros");
+                        if (micros instanceof Number) {
+                            return ((Number) micros).longValue();
+                        }
+                        return 0L;
+                    })
+                    .sum();
+        }
+        
+        long gatewayOverheadMs = gatewayOverheadMicros / 1000;  // Convert to milliseconds
+        
+        trace.put("gatewayOverheadMs", gatewayOverheadMs);
+        trace.put("gatewayOverheadMicros", gatewayOverheadMicros);
+        trace.put("gatewayOverheadDataStatus", "FILTER_CHAIN_TRACKER");
+
         // Add per-filter execution details with time breakdown
+        // CRITICAL FIX: Use traceDetail's executions (complete data) instead of record.getExecutions()!
+        //
+        // Problem: In doFinally callback, outer filters' endTime are NOT yet set
+        // - executions = record.getExecutions() has INCOMPLETE endTime for outer filters
+        // - traceDetail = filterChainTracker.getTraceDetail() returns record.toMap()
+        // - record.toMap() is called AFTER all endFilter() calls complete
+        // - So traceDetail's executions have COMPLETE endTime for all filters
+        //
+        // Solution: Use detailExecutions from traceDetail, which has correct selfTimeMicros
+
         List<Map<String, Object>> filterExecutions = new ArrayList<>();
-        record.getExecutions().stream()
-                .sorted((a, b) -> Long.compare(a.getStartTime(), b.getStartTime()))
-                .forEach(exec -> {
-                    Map<String, Object> execMap = new HashMap<>();
-                    execMap.put("filterName", exec.getFilterName());
-                    execMap.put("order", exec.getOrder());
-                    execMap.put("durationMs", exec.getDurationMs());
-                    execMap.put("durationMicros", exec.getDurationMicros());
-                    execMap.put("success", exec.isSuccess());
+        if (traceDetail != null && detailExecutions != null) {
+            // Use traceDetail's executions - complete and accurate
+            detailExecutions.forEach(exec -> {
+                Map<String, Object> execMap = new HashMap<>();
+                execMap.put("filterName", exec.get("filter"));
+                execMap.put("order", exec.get("order"));
+                execMap.put("durationMs", exec.get("totalDurationMs"));
+                execMap.put("durationMicros", exec.get("selfTimeMicros") != null 
+                        ? ((Number) exec.get("selfTimeMicros")).longValue() * 1000 : null);
+                execMap.put("selfTimeMs", exec.get("selfTimeMs"));
+                execMap.put("selfTimeMicros", exec.get("selfTimeMicros"));
+                execMap.put("success", exec.get("success"));
+                execMap.put("dataStatus", "COMPLETE_FROM_TRACE_DETAIL");
 
-                    // Calculate percentage of total time
-                    if (totalDurationMs > 0) {
-                        double percentage = (exec.getDurationMs() * 100.0) / totalDurationMs;
-                        execMap.put("timePercentage", String.format("%.1f%%", percentage));
-                    }
+                // Calculate percentage of total time
+                if (filterChainDurationMs > 0 && exec.get("totalDurationMs") != null) {
+                    Number durMs = (Number) exec.get("totalDurationMs");
+                    double percentage = durMs.longValue() * 100.0 / filterChainDurationMs;
+                    execMap.put("timePercentage", String.format("%.1f%%", percentage));
+                }
 
-                    if (exec.getError() != null) {
-                        execMap.put("error", exec.getError().getMessage());
-                    }
+                if (exec.get("error") != null) {
+                    execMap.put("error", exec.get("error"));
+                }
 
-                    filterExecutions.add(execMap);
-                });
+                filterExecutions.add(execMap);
+            });
+        } else {
+            // Fallback: Use executions from record (may have incomplete endTime)
+            log.warn("traceDetail not available for traceId={}, using fallback (may have incomplete data)", traceId);
+            executions.stream()
+                    .sorted((a, b) -> Long.compare(a.getStartTime(), b.getStartTime()))
+                    .forEach(exec -> {
+                        Map<String, Object> execMap = new HashMap<>();
+                        execMap.put("filterName", exec.getFilterName());
+                        execMap.put("order", exec.getOrder());
+                        execMap.put("success", exec.isSuccess());
+
+                        long execEndTime = exec.getEndTime();
+                        if (execEndTime > 0) {
+                            execMap.put("durationMs", exec.getDurationMs());
+                            execMap.put("selfTimeMs", exec.getSelfTimeMs());
+                            execMap.put("selfTimeMicros", exec.getSelfTimeMicros());
+                            execMap.put("dataStatus", "COMPLETE");
+                        } else {
+                            long preTimeMicros = exec.getPreEndTime() > 0 ? 
+                                    (exec.getPreEndTime() - exec.getStartTime()) / 1000 : 0;
+                            execMap.put("selfTimeMicros", preTimeMicros);
+                            execMap.put("dataStatus", "INCOMPLETE");
+                        }
+
+                        if (exec.getError() != null) {
+                            execMap.put("error", exec.getError().getMessage());
+                        }
+                        filterExecutions.add(execMap);
+                    });
+        }
         trace.put("filterExecutions", filterExecutions);
 
         // Identify the slowest filter
@@ -565,6 +703,8 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
                         data.put("filterOrder", exec.get("order"));
                         data.put("durationMs", exec.get("durationMs"));
                         data.put("durationMicros", exec.get("durationMicros"));
+                        data.put("selfTimeMs", exec.get("selfTimeMs"));        // Filter's own logic time
+                        data.put("selfTimeMicros", exec.get("selfTimeMicros")); // For precision
                         data.put("success", exec.get("success"));
 
                         // Calculate numeric percentage

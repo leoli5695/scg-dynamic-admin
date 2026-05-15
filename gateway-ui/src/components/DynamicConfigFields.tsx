@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Form, Input, InputNumber, Select, Switch, Row, Col, Card, Button, Space, Divider, Collapse } from 'antd';
-import { KeyOutlined, UserOutlined, PlusOutlined, DeleteOutlined, SyncOutlined, PlayCircleOutlined } from '@ant-design/icons';
+import { Form, Input, InputNumber, Select, Switch, Row, Col, Card, Button, Space, Divider, Collapse, Tooltip } from 'antd';
+import { KeyOutlined, UserOutlined, PlusOutlined, DeleteOutlined, SyncOutlined, PlayCircleOutlined, RobotOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import type { StrategyTypeField, StrategyTypeSchema, StrategyTypeSubSchema } from '../hooks/useStrategyTypes';
 
 interface DynamicConfigFieldsProps {

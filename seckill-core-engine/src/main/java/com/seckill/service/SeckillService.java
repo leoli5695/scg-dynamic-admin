@@ -280,6 +280,11 @@ public class SeckillService {
      * ============================================================================
      * <p>
      * 开发模式下（RocketMQ禁用）会跳过发送，仅记录日志
+     * <p>
+     * 【P1修复】MQ发送失败时触发降级：
+     * - 调用 mqDegradeService.recordFailure() 记录失败次数
+     * - 回退到本地事务处理，而不是直接抛出异常
+     * - 保证业务可用性（降级优先于报错）
      */
     private void sendTransactionMessage(OrderMessage orderMessage) {
         // 开发模式下RocketMQ可能禁用
@@ -302,11 +307,30 @@ public class SeckillService {
             transactionMQProducer.sendMessageInTransaction(message, null);
 
             log.info("事务消息发送成功: transactionId={}", orderMessage.getTransactionId());
+            // 记录成功，用于自动恢复判断
+            mqDegradeService.recordSuccess();
 
         } catch (Exception e) {
             log.error("事务消息发送失败: transactionId={}, error={}",
                     orderMessage.getTransactionId(), e.getMessage(), e);
-            throw new RuntimeException("消息发送失败", e);
+
+            // 【P1修复】记录失败次数，触发自动降级
+            mqDegradeService.recordFailure();
+
+            // 【P1修复】降级处理：回退到本地事务，而不是抛出异常
+            log.warn("MQ发送失败，降级到本地事务处理: transactionId={}", orderMessage.getTransactionId());
+
+            // 写入缓冲队列（用于补偿服务处理）
+            localFallbackService.bufferOrder(orderMessage.getOrderNo(), orderMessage);
+
+            // 调用 LocalTransactionService 完整处理订单
+            boolean success = localTransactionService.processOrderDirectly(orderMessage);
+            if (!success) {
+                log.error("MQ降级模式本地事务处理失败: orderNo={}", orderMessage.getOrderNo());
+                // 回补库存
+                seckillDeductLua.rollbackStock(orderMessage.getSeckillId(), orderMessage.getUserId(), orderMessage.getQuantity());
+                throw new RuntimeException("系统繁忙，请稍后再试");
+            }
         }
     }
 

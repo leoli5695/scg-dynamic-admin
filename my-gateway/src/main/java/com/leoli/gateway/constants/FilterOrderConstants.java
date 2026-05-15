@@ -140,6 +140,13 @@ public interface FilterOrderConstants {
      */
     int MULTI_DIM_RATE_LIMITER = Ordered.HIGHEST_PRECEDENCE + 21;
 
+    /**
+     * Token quota pre-check filter.
+     * Execute after multi-dimensional rate limiter.
+     * Checks token quota before processing AI requests.
+     */
+    int TOKEN_QUOTA_PRE_CHECK = Ordered.HIGHEST_PRECEDENCE + 22;
+
     // ============================================================
     // Post-Processing Filters
     // ============================================================
@@ -154,6 +161,13 @@ public interface FilterOrderConstants {
      * Trace capture filter - Capture trace info after request.
      */
     int TRACE_CAPTURE = 100;
+
+    /**
+     * Token usage collector filter.
+     * Execute after trace capture filter.
+     * Collects token usage from AI response and updates quota.
+     */
+    int TOKEN_USAGE_COLLECTOR = 101;
 
     // ============================================================
     // Load Balancing Filters (High Values)

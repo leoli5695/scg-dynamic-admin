@@ -318,8 +318,8 @@ const MonitorPage: React.FC<MonitorPageProps> = ({ instanceId, instanceDbId }) =
       const res = await api.get(`/api/monitor/metrics${params}`, { cancelToken: cancelToken.token });
       if (!res) return; // Request was cancelled
       if (res.data.code === 200) {
-        setMetrics(res.data.data);
-        setPrometheusAvailable(res.data.prometheusAvailable);
+        setMetrics(res.data.data?.metrics || res.data.data);
+        setPrometheusAvailable(res.data.data?.prometheusAvailable ?? false);
       } else setError(res.data.message || 'Failed to load metrics');
     } catch (e: any) {
       if (!isCancel(e)) setError(e.message || 'Failed to connect to server');
@@ -346,7 +346,7 @@ const MonitorPage: React.FC<MonitorPageProps> = ({ instanceId, instanceDbId }) =
 
       const res = await api.get(`/api/monitor/history?${params}`, { cancelToken: cancelToken.token });
       if (!res) return; // Request was cancelled
-      if (res.data.code === 200) setHistoryData(res.data.data);
+      if (res.data.code === 200) setHistoryData(res.data.data?.history || res.data.data);
     } catch (e) {
       if (!isCancel(e)) console.error('Failed to load history:', e);
     } finally {
@@ -367,7 +367,7 @@ const MonitorPage: React.FC<MonitorPageProps> = ({ instanceId, instanceDbId }) =
       if (selectedPodInstance) params = `${params}&podInstance=${selectedPodInstance}`;
       const res = await api.get(`/api/monitor/routes?${params}`, { cancelToken: cancelToken.token });
       if (!res) return; // Request was cancelled
-      if (res.data.code === 200) setRouteMetrics(res.data.data || []);
+      if (res.data.code === 200) setRouteMetrics(res.data.data?.routes || []);
     } catch (e) {
       if (!isCancel(e)) console.error('Failed to load route metrics:', e);
     } finally {
@@ -511,10 +511,13 @@ const MonitorPage: React.FC<MonitorPageProps> = ({ instanceId, instanceDbId }) =
       label: <Space><DashboardFilled />{t('monitor.tab_cpu') || 'CPU'}</Space>,
       children: historyLoading || !historyData || !historyData.processCpuUsage?.length ? renderHistoryContent() : (
         <Row gutter={[16, 16]}>
-          <Col xs={24} lg={12}>
+          <Col xs={24} lg={8}>
             <MetricChart title={t('monitor.process_cpu_history') || 'Process CPU Usage (Gateway)'} data={historyData?.processCpuUsage || []} colorKey="green" unit="%" yAxisLabel="%" valueTransform={(v) => v * 100} />
           </Col>
-          <Col xs={24} lg={12}>
+          <Col xs={24} lg={8}>
+            <MetricChart title={t('monitor.system_cpu_history') || 'System CPU Usage'} data={historyData?.systemCpuUsage || []} colorKey="purple" unit="%" yAxisLabel="%" valueTransform={(v) => v * 100} />
+          </Col>
+          <Col xs={24} lg={8}>
             <MetricChart title={t('monitor.system_load_history') || 'System Load Average (1m)'} data={historyData?.systemLoadAverage || []} colorKey="cyan" unit="" yAxisLabel="" />
           </Col>
         </Row>
