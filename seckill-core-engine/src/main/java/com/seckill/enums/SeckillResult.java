@@ -62,7 +62,53 @@ public enum SeckillResult {
     /**
      * 参数错误
      */
-    PARAM_ERROR(-5, "参数错误");
+    PARAM_ERROR(-5, "参数错误"),
+
+    // ============================================================================
+    // OPTIMIZATION (P3): 精细化错误码 - 系统级错误
+    // ============================================================================
+
+    /**
+     * Redis故障（降级模式）
+     * OPTIMIZATION (P3): Redis不可用时的特定错误码
+     */
+    REDIS_FAILURE(-100, "Redis服务异常，已启用降级模式"),
+
+    /**
+     * MQ故障（降级模式）
+     * OPTIMIZATION (P3): RocketMQ不可用时的特定错误码
+     */
+    MQ_FAILURE(-300, "消息队列服务异常，已启用降级模式"),
+
+    /**
+     * 请求被限流
+     * OPTIMIZATION (P3): IP/User限流触发时的错误码
+     */
+    RATE_LIMITED(-8, "请求过于频繁，请稍后再试"),
+
+    /**
+     * IP被封禁
+     * OPTIMIZATION (P3): IP进入黑名单时的错误码
+     */
+    IP_BLOCKED(-9, "您的IP已被暂时封禁，请联系客服"),
+
+    /**
+     * 事务超时
+     * OPTIMIZATION (P3): RocketMQ事务超时时的错误码
+     */
+    TRANSACTION_TIMEOUT(-101, "订单处理超时，请稍后查询结果"),
+
+    /**
+     * 数据库故障
+     * OPTIMIZATION (P3): 数据库不可用时的特定错误码
+     */
+    DB_FAILURE(-200, "数据库服务异常，请稍后再试"),
+
+    /**
+     * 降级模式库存不足
+     * OPTIMIZATION (P3): 降级模式下本地库存耗尽
+     */
+    DEGRADE_STOCK_INSUFFICIENT(-10, "系统繁忙，库存处理能力受限");
 
     private final int code;
     private final String message;

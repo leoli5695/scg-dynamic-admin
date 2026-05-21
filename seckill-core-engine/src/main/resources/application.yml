@@ -213,6 +213,20 @@ seckill:
     order-create-rate: 1000  # TPS
     batch-size: 50
 
+  # ============================================================================
+  # OPTIMIZATION (P2): 攒批队列动态配置
+  # ============================================================================
+  # 允许根据流量动态调整攒批参数，优化性能和内存使用
+  batch:
+    # 队列容量上限（防止内存膨胀）
+    queue-capacity: ${SECKILL_BATCH_QUEUE_CAPACITY:200}
+    # 批量写入阈值（达到此数量触发批量写入）
+    threshold: ${SECKILL_BATCH_THRESHOLD:50}
+    # 最大攒批时间（超过此时间强制刷新）
+    max-wait-ms: ${SECKILL_BATCH_MAX_WAIT_MS:100}
+    # 动态调整开关（根据系统负载自动调整阈值）
+    dynamic-adjust-enabled: ${SECKILL_BATCH_DYNAMIC_ADJUST:false}
+
   # 雪花ID配置（本地开发固定值）
   snowflake:
     datacenter-id: 1

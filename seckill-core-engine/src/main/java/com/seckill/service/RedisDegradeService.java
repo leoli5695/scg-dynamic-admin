@@ -1,11 +1,14 @@
 package com.seckill.service;
 
+import com.seckill.redis.lua.SeckillDeductLua;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -37,6 +40,12 @@ public class RedisDegradeService {
 
     private final AlertService alertService;
     private final StringRedisTemplate redisTemplate;
+
+    // OPTIMIZATION (P2): 注入本地兜底服务和Lua服务，用于Redis恢复后同步
+    // 使用@Lazy避免循环依赖
+    private final LocalFallbackService localFallbackService;
+    @Lazy
+    private final SeckillDeductLua seckillDeductLua;
 
     /**
      * Redis 状态
@@ -220,6 +229,11 @@ public class RedisDegradeService {
      * ============================================================================
      * 尝试自动恢复
      * ============================================================================
+     * <p>
+     * OPTIMIZATION (P2): Redis恢复后触发本地库存同步
+     * - 检测到Redis恢复后，调用LocalFallbackService.syncAllToRedis()
+     * - 将降级期间本地扣减的剩余库存同步回Redis
+     * - 避免库存丢失，保证数据一致性
      */
     private void attemptRecover() {
         // 先检查是否真的恢复了
@@ -228,6 +242,27 @@ public class RedisDegradeService {
             redisStatus = 0;
 
             log.info("Redis自动恢复成功: 连续成功次数={}", RECOVERY_THRESHOLD);
+
+            // OPTIMIZATION (P2): 触发本地库存同步回Redis
+            try {
+                Map<Long, Integer> syncResults = localFallbackService.syncAllToRedis(seckillDeductLua);
+                int totalSynced = syncResults.values().stream()
+                        .filter(v -> v > 0)
+                        .mapToInt(Integer::intValue)
+                        .sum();
+
+                log.info("Redis恢复后库存同步完成: 活动数={}, 总同步库存={}",
+                        syncResults.size(), totalSynced);
+
+                if (totalSynced > 0) {
+                    alertService.sendAlert("Redis恢复库存同步",
+                            "Redis恢复后同步本地库存: 活动" + syncResults.size() + "个, 库存" + totalSynced);
+                }
+            } catch (Exception e) {
+                log.error("Redis恢复后库存同步失败: error={}", e.getMessage());
+                alertService.sendAlert("Redis恢复库存同步失败",
+                        "Redis恢复后本地库存同步异常: " + e.getMessage());
+            }
 
             // 发送恢复通知
             alertService.sendAlert("Redis自动恢复",

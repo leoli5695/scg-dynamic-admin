@@ -386,10 +386,10 @@ public class AntiScrapingService {
      * Scheduled cleanup - Clean expired blacklist entries
      * ============================================================================
      * <p>
-     * OPTIMIZATION (P2): Hash结构清理过期条目
-     * - 定时扫描黑名单Hash
-     * - 删除过期的条目
-     * - 记录清理数量到监控指标
+     * OPTIMIZATION (P1): 使用SCAN替代HGETALL，避免阻塞Redis
+     * - 原问题：HGETALL获取全部条目，大黑名单时可能阻塞
+     * - 解决方案：使用Cursor迭代扫描，每次只取少量条目
+     * - 每批次100条，避免单次操作时间过长
      * <p>
      * Runs every hour to clean up expired blacklist entries
      */
@@ -399,18 +399,79 @@ public class AntiScrapingService {
             return;
         }
 
-        // 获取Hash中所有条目
+        long currentTime = System.currentTimeMillis();
+        int totalScanned = 0;
+        int expiredCount = 0;
+
+        try {
+            // OPTIMIZATION (P1): 使用SCAN迭代扫描，避免阻塞
+            org.springframework.data.redis.core.Cursor<Map.Entry<Object, Object>> cursor =
+                    redisTemplate.opsForHash().scan(IP_BLACKLIST_KEY,
+                            org.springframework.data.redis.core.ScanOptions.scanOptions()
+                                    .count(100)  // 每批次100条
+                                    .build());
+
+            while (cursor.hasNext()) {
+                Map.Entry<Object, Object> entry = cursor.next();
+                totalScanned++;
+
+                String ip = entry.getKey().toString();
+                String expireTimestamp = entry.getValue().toString();
+
+                try {
+                    long expireTime = Long.parseLong(expireTimestamp);
+
+                    if (currentTime > expireTime) {
+                        // 删除过期条目
+                        redisTemplate.opsForHash().delete(IP_BLACKLIST_KEY, ip);
+                        expiredCount++;
+                        blacklistExpiredCounter.increment();
+                        log.debug("Blacklist entry expired and removed: ip={}", ip);
+                    }
+                } catch (NumberFormatException e) {
+                    // 无效的过期时间格式，删除条目
+                    log.warn("Invalid expire timestamp in blacklist: ip={}, value={}", ip, expireTimestamp);
+                    redisTemplate.opsForHash().delete(IP_BLACKLIST_KEY, ip);
+                    expiredCount++;
+                }
+            }
+
+            // 关闭cursor
+            cursor.close();
+
+            if (expiredCount > 0) {
+                log.info("Blacklist SCAN cleanup completed: scanned={}, expired={}, removed={}",
+                        totalScanned, expiredCount, expiredCount);
+            } else {
+                log.info("Blacklist SCAN cleanup: scanned={}, all valid", totalScanned);
+            }
+
+        } catch (Exception e) {
+            log.error("Blacklist SCAN cleanup failed: error={}", e.getMessage());
+            // SCAN失败时回退到原有方法（小黑名单场景）
+            fallbackCleanupBlacklist();
+        }
+    }
+
+    /**
+     * ============================================================================
+     * SCAN失败时的降级清理方法
+     * ============================================================================
+     * <p>
+     * 仅在SCAN异常时使用，保证清理流程可靠性
+     */
+    private void fallbackCleanupBlacklist() {
+        log.warn("Blacklist cleanup fallback to HGETALL");
+
         Map<Object, Object> entries = redisTemplate.opsForHash().entries(IP_BLACKLIST_KEY);
 
         if (entries == null || entries.isEmpty()) {
-            log.info("Blacklist cleanup: no entries found");
             return;
         }
 
         long currentTime = System.currentTimeMillis();
         int expiredCount = 0;
 
-        // 遍历并删除过期条目
         for (Map.Entry<Object, Object> entry : entries.entrySet()) {
             String ip = entry.getKey().toString();
             String expireTimestamp = entry.getValue().toString();
@@ -419,24 +480,17 @@ public class AntiScrapingService {
                 long expireTime = Long.parseLong(expireTimestamp);
 
                 if (currentTime > expireTime) {
-                    // 删除过期条目
                     redisTemplate.opsForHash().delete(IP_BLACKLIST_KEY, ip);
                     expiredCount++;
                     blacklistExpiredCounter.increment();
-                    log.debug("Blacklist entry expired and removed: ip={}", ip);
                 }
             } catch (NumberFormatException e) {
-                // 无效的过期时间格式，删除条目
-                log.warn("Invalid expire timestamp in blacklist: ip={}, value={}", ip, expireTimestamp);
                 redisTemplate.opsForHash().delete(IP_BLACKLIST_KEY, ip);
+                expiredCount++;
             }
         }
 
-        if (expiredCount > 0) {
-            log.info("Blacklist cleanup completed: total={}, expired={}, removed={}",
-                    entries.size(), expiredCount, expiredCount);
-        } else {
-            log.info("Blacklist cleanup: total={}, all valid", entries.size());
-        }
+        log.info("Blacklist fallback cleanup completed: total={}, removed={}",
+                entries.size(), expiredCount);
     }
 }

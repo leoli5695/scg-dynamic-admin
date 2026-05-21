@@ -28,6 +28,7 @@ public class SeckillConfig {
     private SnowflakeConfig snowflake = new SnowflakeConfig();
     private ReconciliationConfig reconciliation = new ReconciliationConfig();
     private InternalApiConfig internalApi = new InternalApiConfig();
+    private BatchConfig batch = new BatchConfig();  // OPTIMIZATION (P2): 攒批配置
 
     @Data
     public static class WarmupConfig {
@@ -81,5 +82,45 @@ public class SeckillConfig {
          * - 多个：127.0.0.1,10.0.0.0/8,192.168.0.0/16
          */
         private String whitelist = "127.0.0.1,10.0.0.0/8,192.168.0.0/16";
+    }
+
+    /**
+     * ============================================================================
+     * OPTIMIZATION (P2): 攒批队列动态配置
+     * ============================================================================
+     * <p>
+     * 允许根据流量动态调整攒批参数，优化性能和内存使用
+     * <p>
+     * 配置说明：
+     * - queueCapacity: 队列容量上限，防止内存膨胀
+     * - threshold: 批量写入阈值，达到后触发批量写入
+     * - maxWaitMs: 最大攒批时间，超过后强制刷新
+     * - dynamicAdjustEnabled: 动态调整开关
+     */
+    @Data
+    public static class BatchConfig {
+        /**
+         * 队列容量上限（防止内存膨胀）
+         * 默认200，生产环境可根据流量调整
+         */
+        private int queueCapacity = 200;
+
+        /**
+         * 批量写入阈值（达到此数量触发批量写入）
+         * 默认50，平衡性能和风险
+         */
+        private int threshold = 50;
+
+        /**
+         * 最大攒批时间（超过此时间强制刷新）
+         * 默认100ms，防止积压太久
+         */
+        private long maxWaitMs = 100;
+
+        /**
+         * 动态调整开关（根据系统负载自动调整阈值）
+         * 默认false，生产环境可开启
+         */
+        private boolean dynamicAdjustEnabled = false;
     }
 }

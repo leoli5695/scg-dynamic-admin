@@ -1,5 +1,6 @@
 package com.seckill.service;
 
+import com.seckill.config.SeckillConfig;
 import com.seckill.dto.OrderMessage;
 import com.seckill.entity.SeckillOrder;
 import com.seckill.entity.TransactionLog;
@@ -10,6 +11,7 @@ import com.seckill.mapper.TransactionLogMapper;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -35,18 +37,10 @@ import java.util.stream.Collectors;
  * - 单条 insert: 每次 ~5ms，TPS ~2000
  * - 批量 insert: 每次 ~50ms（50条），TPS ~10000+
  * <p>
- * 设计原则:
- * - 幂等检查在攒批前完成（单条消息处理时）
- * - 攒批期间数据在内存，应用崩溃可能丢失（但已持久化到 transaction_log）
- * - 批量写入失败时，逐条重试或告警
- * - 【关键】只有真正落库后才更新事务状态为 SUCCESS
- * <p>
- * 风险控制（已修复内存膨胀问题）:
- * - 攒批超时时间：100ms（防止积压太久）
- * - 最大攒批数量：50 条（平衡性能和风险）
- * - 【新增】队列上限：200 条（防止内存无限膨胀）
- * - 【新增】满队列拒绝策略：触发告警 + 强制刷新
- * - 失败补偿：由 transaction_log 定时任务兜底
+ * OPTIMIZATION (P2): 动态配置支持
+ * - 队列容量、阈值、最大等待时间可通过配置调整
+ * - 支持根据队列填充率动态调整阈值
+ * - 配置项：seckill.batch.*
  * <p>
  * 【防止吞单设计】：
  * - 消费者入队时不标记事务成功
@@ -64,36 +58,57 @@ public class BatchInsertService {
     private final TransactionLogMapper transactionLogMapper;
     private final io.micrometer.core.instrument.MeterRegistry meterRegistry;
 
+    // OPTIMIZATION (P2): 动态配置（setter注入）
+    private SeckillConfig seckillConfig;
+
+    /**
+     * OPTIMIZATION (P2): 动态阈值
+     * 默认值与原常量一致，可通过配置覆盖
+     */
+    private int queueCapacity = 200;
+    private int batchThreshold = 50;
+    private long maxBatchWaitMs = 100;
+    private boolean dynamicAdjustEnabled = false;
+
     /**
      * 攒批队列 - 使用有界队列防止内存膨胀
-     * <p>
-     * 原问题：ConcurrentLinkedQueue 无界，秒杀流量洪峰时内存无限膨胀
-     * 修复：改用 ArrayBlockingQueue，队列满时触发告警 + 强制刷新
+     * OPTIMIZATION (P2): 队列容量从配置获取
      */
-    private final ArrayBlockingQueue<SeckillOrder> orderQueue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
+    private ArrayBlockingQueue<SeckillOrder> orderQueue;
+
+    @Autowired
+    public void setSeckillConfig(SeckillConfig seckillConfig) {
+        this.seckillConfig = seckillConfig;
+    }
 
     @jakarta.annotation.PostConstruct
-    void registerMetrics() {
+    void init() {
+        // OPTIMIZATION (P2): 从配置获取参数
+        if (seckillConfig != null && seckillConfig.getBatch() != null) {
+            SeckillConfig.BatchConfig batchConfig = seckillConfig.getBatch();
+            this.queueCapacity = batchConfig.getQueueCapacity();
+            this.batchThreshold = batchConfig.getThreshold();
+            this.maxBatchWaitMs = batchConfig.getMaxWaitMs();
+            this.dynamicAdjustEnabled = batchConfig.isDynamicAdjustEnabled();
+        }
+
+        // 初始化队列（使用配置容量）
+        this.orderQueue = new ArrayBlockingQueue<>(queueCapacity);
+
+        // 注册监控指标
         io.micrometer.core.instrument.Gauge.builder("seckill.batch_queue.size", orderQueue, ArrayBlockingQueue::size)
                 .description("攒批队列当前深度")
                 .register(meterRegistry);
+        io.micrometer.core.instrument.Gauge.builder("seckill.batch.threshold", () -> batchThreshold)
+                .description("批量写入阈值")
+                .register(meterRegistry);
+        io.micrometer.core.instrument.Gauge.builder("seckill.batch.queue_capacity", () -> queueCapacity)
+                .description("队列容量上限")
+                .register(meterRegistry);
+
+        log.info("BatchInsertService 初始化完成: queueCapacity={}, threshold={}, maxWaitMs={}, dynamicAdjust={}",
+                queueCapacity, batchThreshold, maxBatchWaitMs, dynamicAdjustEnabled);
     }
-
-    /**
-     * 队列容量上限（防止内存膨胀）
-     * 队列满时触发告警 + 强制刷新，拒绝新订单
-     */
-    private static final int QUEUE_CAPACITY = 200;
-
-    /**
-     * 批量写入阈值（达到此数量触发批量写入）
-     */
-    private static final int BATCH_THRESHOLD = 50;
-
-    /**
-     * 最大攒批时间（超过此时间强制刷新，单位：毫秒）
-     */
-    private static final long MAX_BATCH_WAIT_MS = 100;
 
     /**
      * 【P1-7修复】专用线程池，避免使用 ForkJoinPool.commonPool()
@@ -108,19 +123,39 @@ public class BatchInsertService {
 
     /**
      * ============================================================================
-     * 将订单加入攒批队列
+     * OPTIMIZATION (P2): 动态调整阈值
      * ============================================================================
      * <p>
-     * 【关键】order 对象携带 transactionId（非持久化字段）
-     * - 落库成功后用此字段更新事务状态
+     * 根据队列深度动态调整批量写入阈值：
+     * - 队列深度高时降低阈值，更快落库释放内存
+     * - 队列深度低时提高阈值，减少DB压力
      * <p>
-     * 返回值：
-     * - true: 加入成功
-     * - false: 加入失败（队列满，触发告警）
-     * <p>
-     * 【内存安全修复】：
-     * - 队列满时触发告警 + 强制刷新，拒绝新订单
-     * - 防止秒杀流量洪峰时内存无限膨胀
+     * 仅在 dynamicAdjustEnabled=true 时生效
+     */
+    private int getDynamicThreshold() {
+        if (!dynamicAdjustEnabled) {
+            return batchThreshold;  // 固定阈值
+        }
+
+        int queueSize = orderQueue.size();
+        double fillRatio = queueSize / (double) queueCapacity;
+
+        // 队列填充率 > 70%: 降低阈值到30，快速落库
+        if (fillRatio > 0.7) {
+            return Math.max(30, batchThreshold - 20);
+        }
+        // 队列填充率 < 30%: 提高阈值到70，减少DB压力
+        if (fillRatio < 0.3) {
+            return Math.min(70, batchThreshold + 20);
+        }
+        // 正常范围：使用默认阈值
+        return batchThreshold;
+    }
+
+    /**
+     * ============================================================================
+     * 将订单加入攒批队列
+     * ============================================================================
      */
     public boolean addToBatch(SeckillOrder order) {
         // 使用有界队列的 offer 方法，队列满时返回 false
@@ -149,8 +184,10 @@ public class BatchInsertService {
         log.info("订单加入攒批队列: orderNo={}, transactionId={}, queueSize={}",
                 order.getOrderNo(), order.getTransactionId(), currentSize);
 
-        // 达到阈值触发批量写入
-        if (currentSize >= BATCH_THRESHOLD) {
+        // OPTIMIZATION (P2): 使用动态阈值触发批量写入
+        int currentThreshold = getDynamicThreshold();
+        if (currentSize >= currentThreshold) {
+            log.debug("达到阈值触发批量写入: currentSize={}, threshold={}", currentSize, currentThreshold);
             flushBatch();
         }
 
@@ -162,7 +199,7 @@ public class BatchInsertService {
      * 定时刷新（每 100ms）
      * ============================================================================
      * <p>
-     * 目的：防止队列积压太久，即使未达到阈值也定期刷新
+     * OPTIMIZATION (P2): 使用配置的最大等待时间
      */
     @Scheduled(fixedRate = 100)
     public void scheduledFlush() {
@@ -171,7 +208,7 @@ public class BatchInsertService {
 
         // 队列有数据且超过最大攒批时间
         int queueSize = orderQueue.size();
-        if (queueSize > 0 && elapsed >= MAX_BATCH_WAIT_MS) {
+        if (queueSize > 0 && elapsed >= maxBatchWaitMs) {
             log.info("定时刷新触发: queueSize={}, elapsedMs={}", queueSize, elapsed);
             flushBatch();
         }
@@ -181,17 +218,6 @@ public class BatchInsertService {
      * ============================================================================
      * 批量写入订单
      * ============================================================================
-     * <p>
-     * 【关键设计】防止状态抢跑：
-     * 1. 执行批量写入
-     * 2. 成功后异步更新事务状态为 SUCCESS
-     * 3. 失败时逐条重试，成功的更新状态，失败的保持 PROCESSING
-     * <p>
-     * 【P0-4修复】ShardingSphere跨分片批量插入问题：
-     * - 按 user_id 分组后再批量插入，每个分片一组单独执行
-     * - 避免 ShardingSphere 5.x 对跨分片批量 INSERT 的路由问题
-     * <p>
-     * 这样保证了：只有真正落库的事务才标记成功
      */
     public void flushBatch() {
         // 检查队列是否有数据
@@ -199,9 +225,9 @@ public class BatchInsertService {
             return;
         }
 
-        // 取出所有订单（最多 BATCH_THRESHOLD * 2 条，防止一次取出太多）
+        // 取出所有订单（最多 threshold * 2 条，防止一次取出太多）
         List<SeckillOrder> batch = new ArrayList<>();
-        int maxBatchSize = BATCH_THRESHOLD * 2;
+        int maxBatchSize = batchThreshold * 2;
 
         // 使用 drainTo 更高效地批量取出
         orderQueue.drainTo(batch, maxBatchSize);
@@ -212,8 +238,7 @@ public class BatchInsertService {
 
         log.info("批量写入订单: batchSize={}", batch.size());
 
-        // 【P0-4修复】按 user_id 分组后再批量插入
-        // ShardingSphere 根据 user_id 路由到不同库表，同一 user_id 的订单路由到同一分片
+        // 按 user_id 分组后再批量插入
         Map<Long, List<SeckillOrder>> groupedByUser = batch.stream()
                 .collect(Collectors.groupingBy(SeckillOrder::getUserId));
 
@@ -272,22 +297,8 @@ public class BatchInsertService {
      * ============================================================================
      * 【关键】异步批量更新事务状态
      * ============================================================================
-     * <p>
-     * 只有订单真正落库后才更新 transaction_log.status = SUCCESS
-     * <p>
-     * 【P1-7修复】：
-     * - 使用专用线程池 asyncExecutor，而非 ForkJoinPool.commonPool()
-     * - 避免高并发下耗尽 JVM 公共线程池
-     * <p>
-     * 设计原则：
-     * - 异步执行，不阻塞攒批流程
-     * - 失败不影响主流程，由定时任务兜底
-     *
-     * @param batch   订单批次
-     * @param success 是否批量写入成功
      */
     private void asyncUpdateTransactionStatus(List<SeckillOrder> batch, boolean success) {
-        // 【P1-7修复】使用专用线程池 asyncExecutor，而非 ForkJoinPool.commonPool()
         CompletableFuture.runAsync(() -> {
             int successCount = 0;
             int failCount = 0;
@@ -325,7 +336,7 @@ public class BatchInsertService {
                 alertService.sendAlert("事务状态更新异常",
                         "批量更新事务状态失败数量: " + failCount + "，由定时任务兜底");
             }
-        }, asyncExecutor).exceptionally(ex -> {  // 【P1-7修复】使用 asyncExecutor
+        }, asyncExecutor).exceptionally(ex -> {
             log.error("异步更新事务状态异常: {}", ex.getMessage());
             return null;
         });
@@ -357,7 +368,7 @@ public class BatchInsertService {
         order.setShardIndex(orderMessage.getShardIndex());
         order.setCreateTime(java.time.LocalDateTime.now());
         order.setUpdateTime(java.time.LocalDateTime.now());
-        order.setTransactionId(orderMessage.getTransactionId());  // 【关键】传递 transactionId
+        order.setTransactionId(orderMessage.getTransactionId());
         return order;
     }
 
@@ -365,25 +376,12 @@ public class BatchInsertService {
      * ============================================================================
      * 【关键】优雅停机：应用关闭前强制刷新队列
      * ============================================================================
-     * <p>
-     * 防止 kill -9 或正常停机时丢失内存中的订单：
-     * - Spring 容器关闭时自动调用此方法
-     * - 强制刷新队列中所有待写入订单
-     * - 多次刷新确保队列完全清空
-     * - 超时保护：最多等待 30 秒
-     * <p>
-     * 【P1-7修复】：
-     * - 同时关闭专用线程池 asyncExecutor
-     * - 防止线程池泄漏
-     * <p>
-     * 注意：kill -9 无法触发 @PreDestroy，需要外部信号（SIGTERM）
-     * Docker/K8s 默认发送 SIGTERM，等待 terminationGracePeriodSeconds
      */
     @PreDestroy
     public void shutdown() {
         log.info("=== BatchInsertService 优雅停机开始 ===");
 
-        // 【P1-7修复】先关闭专用线程池
+        // 先关闭专用线程池
         asyncExecutor.shutdown();
         try {
             if (!asyncExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
@@ -413,7 +411,6 @@ public class BatchInsertService {
 
             flushBatch();
 
-            // 等待短暂时间让异步任务完成
             try {
                 TimeUnit.MILLISECONDS.sleep(500);
             } catch (InterruptedException e) {

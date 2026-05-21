@@ -54,6 +54,12 @@ public class BusinessMetricsService {
     private final AtomicLong currentQueueSize = new AtomicLong(0);
     private final AtomicLong activeTransactionCount = new AtomicLong(0);
 
+    // OPTIMIZATION (P3): 新增业务维度指标
+    private final AtomicLong mqDegradeStartTime = new AtomicLong(0);
+    private final AtomicLong localCacheHitRate = new AtomicLong(0);
+    private final AtomicLong transactionCacheHitRate = new AtomicLong(0);
+    private final AtomicLong shardBalanceRatio = new AtomicLong(0);  // 分片负载均衡度
+
     public BusinessMetricsService(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
 
@@ -110,6 +116,27 @@ public class BusinessMetricsService {
         Gauge.builder("seckill.transaction.active.count", activeTransactionCount,
                         AtomicLong::get)
                 .description("Active transaction count")
+                .register(meterRegistry);
+
+        // OPTIMIZATION (P3): 新增业务维度指标
+        Gauge.builder("seckill.mq.degrade.duration", this,
+                        svc -> svc.getMqDegradeDurationMillis())
+                .description("MQ degradation duration in milliseconds")
+                .register(meterRegistry);
+
+        Gauge.builder("seckill.cache.local.hit_rate", localCacheHitRate,
+                        AtomicLong::get)
+                .description("Local cache hit rate (percentage * 100)")
+                .register(meterRegistry);
+
+        Gauge.builder("seckill.cache.transaction.hit_rate", transactionCacheHitRate,
+                        AtomicLong::get)
+                .description("Transaction status cache hit rate (percentage * 100)")
+                .register(meterRegistry);
+
+        Gauge.builder("seckill.shard.balance_ratio", shardBalanceRatio,
+                        AtomicLong::get)
+                .description("Shard load balance ratio (ideal=100, range 0-200)")
                 .register(meterRegistry);
 
         log.info("BusinessMetricsService initialized with comprehensive metrics");
@@ -214,6 +241,47 @@ public class BusinessMetricsService {
             return 0;
         }
         return System.currentTimeMillis() - startTime;
+    }
+
+    /**
+     * ============================================================================
+     * OPTIMIZATION (P3): Calculate MQ degrade duration
+     * ============================================================================
+     */
+    private double getMqDegradeDurationMillis() {
+        long startTime = mqDegradeStartTime.get();
+        if (startTime == 0) {
+            return 0;
+        }
+        return System.currentTimeMillis() - startTime;
+    }
+
+    /**
+     * ============================================================================
+     * OPTIMIZATION (P3): 新增指标更新方法
+     * ============================================================================
+     */
+    public void setMqDegradeStart(long startTime) {
+        mqDegradeStartTime.set(startTime);
+    }
+
+    public void clearMqDegradeStart() {
+        mqDegradeStartTime.set(0);
+    }
+
+    public void updateLocalCacheHitRate(double hitRate) {
+        // hitRate is 0.0-1.0, store as percentage * 100 for precision
+        localCacheHitRate.set((long) (hitRate * 10000));
+    }
+
+    public void updateTransactionCacheHitRate(double hitRate) {
+        transactionCacheHitRate.set((long) (hitRate * 10000));
+    }
+
+    public void updateShardBalanceRatio(double ratio) {
+        // ideal ratio = 100 (perfect balance)
+        // range: 0-200, higher means more unbalanced
+        shardBalanceRatio.set((long) (ratio * 100));
     }
 
     /**

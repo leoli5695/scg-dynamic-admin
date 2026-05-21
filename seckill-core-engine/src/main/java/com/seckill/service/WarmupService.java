@@ -109,6 +109,16 @@ public class WarmupService {
      * ============================================================================
      * 预热单个活动
      * ============================================================================
+     * <p>
+     * OPTIMIZATION (P1): 完善预热流程
+     * - 预热Redis库存分片
+     * - 预热活动信息到本地缓存
+     * - 预热分片库存位图（新增）
+     * <p>
+     * 预热后秒杀请求可直接从本地缓存获取活动信息，
+     * 避免秒杀时查询数据库，减少响应时间
+     * <p>
+     * 注意：商品信息预热由秒杀请求时触发（因为Activity表不存储productId）
      */
     public void warmupActivity(Long seckillId, int totalStock) {
         log.info("开始预热库存: seckillId={}, totalStock={}", seckillId, totalStock);
@@ -117,17 +127,22 @@ public class WarmupService {
             // Step 1: 预热 Redis 库存分片（现有逻辑）
             seckillDeductLua.warmupStock(seckillId, totalStock);
 
-            // Step 2: 预热活动信息到本地缓存（新增）
+            // Step 2: 预热活动信息到本地缓存（现有逻辑）
             SeckillActivity activity = activityMapper.selectById(seckillId);
             if (activity != null) {
                 localCacheService.cacheActivity(seckillId, activity);
                 log.info("活动信息预热完成: seckillId={}", seckillId);
             }
 
-            // Step 3: 更新活动状态为预热完成（现有逻辑）
+            // OPTIMIZATION (P1): Step 3: 预热分片库存位图（新增）
+            // 用于快速判断哪些分片有库存
+            localCacheService.getShardStockBitset(seckillId);
+            log.info("分片库存位图预热完成: seckillId={}", seckillId);
+
+            // Step 4: 更新活动状态为预热完成（现有逻辑）
             activityMapper.updateWarmupStatus(seckillId, true);
 
-            log.info("库存预热完成: seckillId={}", seckillId);
+            log.info("库存预热完成: seckillId={}, 已预热活动信息、分片位图", seckillId);
 
         } catch (Exception e) {
             log.error("库存预热失败: seckillId={}, error={}", seckillId, e.getMessage(), e);
