@@ -779,7 +779,7 @@ const InstanceDetailPage: React.FC = () => {
               </Col>
               <Col xs={24} md={12} lg={6}>
                 <Card className="instance-stat-card">
-                  <div style={{ textAlign: 'center' }}>
+                  <div className="text-center">
                     <div style={{ marginBottom: 8, color: 'var(--text-muted)', fontSize: 12 }}>
                       {t("instance.health_score") || "集群健康评分"}
                     </div>
@@ -830,7 +830,7 @@ const InstanceDetailPage: React.FC = () => {
                                   padding: '10px 12px',
                                   border: '1px solid #b7eb8f'
                                 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
+                                  <div className="flex-items-center mb-2">
                                     <Badge status={healthDetails?.nodeHealth?.score === 100 ? "success" : "warning"} />
                                     <span style={{ fontSize: 12, fontWeight: 500, marginLeft: 6 }}>
                                       {t("instance.node_health") || "节点"}
@@ -857,7 +857,7 @@ const InstanceDetailPage: React.FC = () => {
                                   padding: '10px 12px',
                                   border: `1px solid ${healthDetails?.podHealth?.score >= 80 ? '#b7eb8f' : '#ffe58f'}`
                                 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
+                                  <div className="flex-items-center mb-2">
                                     <Badge status={healthDetails?.podHealth?.score >= 80 ? "success" : "warning"} />
                                     <span style={{ fontSize: 12, fontWeight: 500, marginLeft: 6 }}>
                                       {t("instance.pod_health") || "Pod"}
@@ -989,7 +989,7 @@ const InstanceDetailPage: React.FC = () => {
                                 padding: '10px 12px',
                                 border: '1px solid #91d5ff'
                               }}>
-                                <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
+                                <div className="flex-items-center mb-2">
                                   <SafetyOutlined style={{ color: '#1890ff', fontSize: 14 }} />
                                   <span style={{ fontWeight: 500, marginLeft: 8, color: '#1890ff' }}>
                                     {t("instance.recommendations") || "建议"}
@@ -1383,10 +1383,10 @@ const InstanceDetailPage: React.FC = () => {
                             <Text strong style={{ fontSize: 12 }}>{pod.name}</Text>
                             <Tag color={pod.phase === "Running" ? "success" : "warning"}>{pod.phase}</Tag>
                             {pod.podIP && (
-                              <Text type="secondary" style={{ fontSize: 11 }}>IP: {pod.podIP}</Text>
+                              <Text type="secondary" className="text-xs-tiny">IP: {pod.podIP}</Text>
                             )}
                             {pod.containers && (
-                              <Text type="secondary" style={{ fontSize: 11 }}>
+                              <Text type="secondary" className="text-xs-tiny">
                                 {t("resources.containers") || "容器"}: {pod.containers.length}
                               </Text>
                             )}

@@ -15,6 +15,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -312,5 +313,236 @@ class AntiScrapingServiceTest {
         assertTrue(finished, "并发测试未完成");
         assertEquals(userCount, allowed.get(), "所有用户应被允许");
         assertEquals(0, denied.get(), "无用户应被拒绝");
+    }
+
+    // ============================================================================
+    // OPTIMIZATION (P1): 黑名单SCAN清理测试
+    // ============================================================================
+
+    @Test
+    @DisplayName("SCAN清理: 禁用时跳过清理")
+    void cleanupBlacklist_disabled_skipped() {
+        ReflectionTestUtils.setField(antiScrapingService, "enabled", false);
+
+        antiScrapingService.cleanupBlacklist();
+
+        verify(redisTemplate, never()).opsForHash();
+    }
+
+    @Test
+    @DisplayName("SCAN清理: 清理过期条目并增加计数器")
+    void cleanupBlacklist_expiredEntries_removedAndCounted() {
+        ReflectionTestUtils.setField(antiScrapingService, "enabled", true);
+
+        // Mock Hash操作
+        var hashOps = mock(org.springframework.data.redis.core.HashOperations.class);
+        when(redisTemplate.opsForHash()).thenReturn(hashOps);
+
+        // Mock SCAN返回过期条目
+        java.util.List<Map.Entry<Object, Object>> expiredEntries = new java.util.ArrayList<>();
+        expiredEntries.add(new java.util.AbstractMap.SimpleEntry<>("10.0.0.1", "0")); // 已过期（时间戳为0）
+        expiredEntries.add(new java.util.AbstractMap.SimpleEntry<>("10.0.0.2", "1000")); // 已过期
+
+        // 使用Mock Iterator模拟Cursor
+        java.util.Iterator<Map.Entry<Object, Object>> iterator = expiredEntries.iterator();
+        org.springframework.data.redis.core.Cursor<Map.Entry<Object, Object>> mockCursor = 
+                mock(org.springframework.data.redis.core.Cursor.class);
+        when(mockCursor.hasNext()).thenAnswer(inv -> iterator.hasNext());
+        when(mockCursor.next()).thenAnswer(inv -> iterator.next());
+        when(hashOps.scan(anyString(), any())).thenReturn(mockCursor);
+
+        antiScrapingService.cleanupBlacklist();
+
+        // 验证删除过期条目
+        verify(hashOps, atLeast(1)).delete(anyString(), anyString());
+        
+        // 验证过期计数器增加
+        Counter expiredCounter = meterRegistry.find("seckill.anti_scraping.blacklist_expired").counter();
+        assertNotNull(expiredCounter);
+        assertTrue(expiredCounter.count() >= 1);
+    }
+
+    @Test
+    @DisplayName("SCAN清理: 有效条目保留不删除")
+    void cleanupBlacklist_validEntries_notDeleted() {
+        ReflectionTestUtils.setField(antiScrapingService, "enabled", true);
+
+        // Mock Hash操作
+        var hashOps = mock(org.springframework.data.redis.core.HashOperations.class);
+        when(redisTemplate.opsForHash()).thenReturn(hashOps);
+
+        // Mock SCAN返回有效条目（过期时间在未来）
+        long futureTime = System.currentTimeMillis() + 1000000L;
+        java.util.List<Map.Entry<Object, Object>> validEntries = new java.util.ArrayList<>();
+        validEntries.add(new java.util.AbstractMap.SimpleEntry<>("10.0.0.1", String.valueOf(futureTime)));
+        validEntries.add(new java.util.AbstractMap.SimpleEntry<>("10.0.0.2", String.valueOf(futureTime)));
+
+        java.util.Iterator<Map.Entry<Object, Object>> iterator = validEntries.iterator();
+        org.springframework.data.redis.core.Cursor<Map.Entry<Object, Object>> mockCursor = 
+                mock(org.springframework.data.redis.core.Cursor.class);
+        when(mockCursor.hasNext()).thenAnswer(inv -> iterator.hasNext());
+        when(mockCursor.next()).thenAnswer(inv -> iterator.next());
+        when(hashOps.scan(anyString(), any())).thenReturn(mockCursor);
+
+        antiScrapingService.cleanupBlacklist();
+
+        // 验证没有删除条目（都是有效的）
+        verify(hashOps, never()).delete(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("SCAN清理: SCAN失败时降级到HGETALL")
+    void cleanupBlacklist_scanFails_fallbackToHgetall() {
+        ReflectionTestUtils.setField(antiScrapingService, "enabled", true);
+
+        // Mock Hash操作
+        var hashOps = mock(org.springframework.data.redis.core.HashOperations.class);
+        when(redisTemplate.opsForHash()).thenReturn(hashOps);
+
+        // Mock SCAN抛出异常
+        when(hashOps.scan(anyString(), any())).thenThrow(new RuntimeException("SCAN failed"));
+
+        // Mock fallback HGETALL
+        java.util.Map<Object, Object> fallbackEntries = new java.util.HashMap<>();
+        fallbackEntries.put("10.0.0.1", "0"); // 过期
+        when(hashOps.entries(anyString())).thenReturn(fallbackEntries);
+
+        antiScrapingService.cleanupBlacklist();
+
+        // 验证降级到HGETALL
+        verify(hashOps).entries(anyString());
+        verify(hashOps).delete(anyString(), "10.0.0.1");
+    }
+
+    @Test
+    @DisplayName("SCAN清理: 无效时间戳格式条目被删除")
+    void cleanupBlacklist_invalidTimestamp_deleted() {
+        ReflectionTestUtils.setField(antiScrapingService, "enabled", true);
+
+        // Mock Hash操作
+        var hashOps = mock(org.springframework.data.redis.core.HashOperations.class);
+        when(redisTemplate.opsForHash()).thenReturn(hashOps);
+
+        // Mock SCAN返回无效时间戳条目
+        java.util.List<Map.Entry<Object, Object>> invalidEntries = new java.util.ArrayList<>();
+        invalidEntries.add(new java.util.AbstractMap.SimpleEntry<>("10.0.0.1", "invalid-timestamp"));
+        invalidEntries.add(new java.util.AbstractMap.SimpleEntry<>("10.0.0.2", "not-a-number"));
+
+        java.util.Iterator<Map.Entry<Object, Object>> iterator = invalidEntries.iterator();
+        org.springframework.data.redis.core.Cursor<Map.Entry<Object, Object>> mockCursor = 
+                mock(org.springframework.data.redis.core.Cursor.class);
+        when(mockCursor.hasNext()).thenAnswer(inv -> iterator.hasNext());
+        when(mockCursor.next()).thenAnswer(inv -> iterator.next());
+        when(hashOps.scan(anyString(), any())).thenReturn(mockCursor);
+
+        antiScrapingService.cleanupBlacklist();
+
+        // 验证无效条目被删除
+        verify(hashOps, atLeast(1)).delete(anyString(), anyString());
+    }
+
+    // ============================================================================
+    // OPTIMIZATION (P2): Per-member TTL黑名单测试
+    // ============================================================================
+
+    @Test
+    @DisplayName("Per-member TTL: 检查黑名单时验证过期时间")
+    void isIpBlacklisted_withTtl_checkExpiry() {
+        var hashOps = mock(org.springframework.data.redis.core.HashOperations.class);
+        when(redisTemplate.opsForHash()).thenReturn(hashOps);
+
+        // 已过期条目（时间戳在过去）
+        long pastTime = System.currentTimeMillis() - 10000L;
+        when(hashOps.get(anyString(), eq("10.0.0.1"))).thenReturn(String.valueOf(pastTime));
+
+        boolean result = antiScrapingService.isIpBlacklisted("10.0.0.1");
+
+        // 过期条目应返回false并自动删除
+        assertFalse(result);
+        verify(hashOps).delete(anyString(), eq("10.0.0.1"));
+        
+        // 验证过期计数器增加
+        Counter expiredCounter = meterRegistry.find("seckill.anti_scraping.blacklist_expired").counter();
+        assertNotNull(expiredCounter);
+        assertTrue(expiredCounter.count() >= 1);
+    }
+
+    @Test
+    @DisplayName("Per-member TTL: 未过期条目返回true")
+    void isIpBlacklisted_notExpired_returnsTrue() {
+        var hashOps = mock(org.springframework.data.redis.core.HashOperations.class);
+        when(redisTemplate.opsForHash()).thenReturn(hashOps);
+
+        // 未过期条目（时间戳在未来）
+        long futureTime = System.currentTimeMillis() + 1000000L;
+        when(hashOps.get(anyString(), eq("10.0.0.1"))).thenReturn(String.valueOf(futureTime));
+
+        boolean result = antiScrapingService.isIpBlacklisted("10.0.0.1");
+
+        assertTrue(result);
+        verify(hashOps, never()).delete(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("Per-member TTL: 添加黑名单时设置过期时间戳")
+    void addToBlacklist_setsExpireTimestamp() {
+        ReflectionTestUtils.setField(antiScrapingService, "blacklistTtlHours", 24);
+        
+        var hashOps = mock(org.springframework.data.redis.core.HashOperations.class);
+        when(redisTemplate.opsForHash()).thenReturn(hashOps);
+
+        antiScrapingService.addToBlacklist("10.0.0.5");
+
+        // 验证存入Hash，value为时间戳
+        verify(hashOps).put(anyString(), eq("10.0.0.5"), anyString());
+    }
+
+    @Test
+    @DisplayName("Per-member TTL: getBlacklistedIps过滤过期条目")
+    void getBlacklistedIps_filtersExpiredEntries() {
+        var hashOps = mock(org.springframework.data.redis.core.HashOperations.class);
+        when(redisTemplate.opsForHash()).thenReturn(hashOps);
+
+        java.util.Set<Object> allKeys = new java.util.HashSet<>();
+        allKeys.add("10.0.0.1");
+        allKeys.add("10.0.0.2");
+        when(hashOps.keys(anyString())).thenReturn(allKeys);
+
+        // 10.0.0.1 已过期，10.0.0.2 有效
+        long pastTime = System.currentTimeMillis() - 10000L;
+        long futureTime = System.currentTimeMillis() + 1000000L;
+        when(hashOps.get(anyString(), eq("10.0.0.1"))).thenReturn(String.valueOf(pastTime));
+        when(hashOps.get(anyString(), eq("10.0.0.2"))).thenReturn(String.valueOf(futureTime));
+
+        Set<String> result = antiScrapingService.getBlacklistedIps();
+
+        // 只返回有效条目
+        assertEquals(1, result.size());
+        assertTrue(result.contains("10.0.0.2"));
+        assertFalse(result.contains("10.0.0.1"));
+    }
+
+    @Test
+    @DisplayName("Per-member TTL: getValidBlacklistSize计算有效数量")
+    void getValidBlacklistSize_correctCount() {
+        var hashOps = mock(org.springframework.data.redis.core.HashOperations.class);
+        when(redisTemplate.opsForHash()).thenReturn(hashOps);
+
+        // 5个有效条目
+        java.util.Set<Object> validKeys = new java.util.HashSet<>();
+        for (int i = 1; i <= 5; i++) {
+            validKeys.add("10.0.0." + i);
+        }
+        when(hashOps.keys(anyString())).thenReturn(validKeys);
+
+        // 所有条目都有效
+        long futureTime = System.currentTimeMillis() + 1000000L;
+        for (int i = 1; i <= 5; i++) {
+            when(hashOps.get(anyString(), eq("10.0.0." + i))).thenReturn(String.valueOf(futureTime));
+        }
+
+        long size = antiScrapingService.getValidBlacklistSize();
+
+        assertEquals(5, size);
     }
 }

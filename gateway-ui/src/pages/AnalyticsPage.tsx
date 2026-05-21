@@ -103,7 +103,7 @@ const AnalyticsPage: React.FC = () => {
   }, [timeRange]);
 
   const routeColumns = [
-    { title: t('analytics.route'), dataIndex: 'routeId', key: 'routeId', width: 180, ellipsis: true, render: (text: string) => <span style={{ color: '#60a5fa', fontWeight: 600 }}>{text}</span> },
+    { title: t('analytics.route'), dataIndex: 'routeId', key: 'routeId', width: 180, ellipsis: true, render: (text: string) => <span className="text-route-id">{text}</span> },
     { title: t('analytics.requests'), dataIndex: 'requestCount', key: 'requestCount', width: 100, render: (text: number) => <span>{text?.toLocaleString() || '-'}</span> },
     { title: t('analytics.avg_latency'), dataIndex: 'avgLatencyMs', key: 'avgLatencyMs', width: 110, render: (text: number) => <span>{text?.toFixed(0) || '-'} ms</span> },
     { title: t('analytics.error_rate'), dataIndex: 'errorRate', key: 'errorRate', width: 100, render: (text: number) => <Tag color={text > 0.05 ? 'red' : text > 0.01 ? 'orange' : 'green'}>{((text || 0) * 100).toFixed(2)}%</Tag> },
@@ -112,14 +112,14 @@ const AnalyticsPage: React.FC = () => {
   ];
 
   const clientColumns = [
-    { title: t('analytics.client_ip'), dataIndex: 'clientIp', key: 'clientIp', width: 200, ellipsis: true, render: (text: string) => <span style={{ color: '#60a5fa', fontWeight: 600 }}>{text}</span> },
+    { title: t('analytics.client_ip'), dataIndex: 'clientIp', key: 'clientIp', width: 200, ellipsis: true, render: (text: string) => <span className="text-route-id">{text}</span> },
     { title: t('analytics.requests'), dataIndex: 'requestCount', key: 'requestCount', width: 150, render: (text: number) => <span>{text?.toLocaleString() || '-'}</span> },
     { title: t('analytics.avg_latency'), dataIndex: 'avgLatencyMs', key: 'avgLatencyMs', width: 150, render: (text: number) => <span>{text?.toFixed(0) || '-'} ms</span> },
-    { title: t('analytics.last_request'), dataIndex: 'lastRequestTime', key: 'lastRequestTime', width: 200, render: (text: string) => <span style={{ color: '#94a3b8' }}>{text ? new Date(text).toLocaleString() : '-'}</span> },
+    { title: t('analytics.last_request'), dataIndex: 'lastRequestTime', key: 'lastRequestTime', width: 200, render: (text: string) => <span className="text-timestamp">{text ? new Date(text).toLocaleString() : '-'}</span> },
   ];
 
   const serviceColumns = [
-    { title: t('analytics.service'), dataIndex: 'serviceInstance', key: 'serviceInstance', width: 250, ellipsis: true, render: (text: string) => <span style={{ color: '#8b5cf6', fontWeight: 600 }}>{text}</span> },
+    { title: t('analytics.service'), dataIndex: 'serviceInstance', key: 'serviceInstance', width: 250, ellipsis: true, render: (text: string) => <span className="text-service-name">{text}</span> },
     { title: t('analytics.requests'), dataIndex: 'requestCount', key: 'requestCount', width: 150, render: (text: number) => <span>{text?.toLocaleString() || '-'}</span> },
     { title: t('analytics.avg_latency'), dataIndex: 'avgLatencyMs', key: 'avgLatencyMs', width: 150, render: (text: number) => <span>{text?.toFixed(0) || '-'} ms</span> },
     { title: t('analytics.load'), dataIndex: 'loadPercent', key: 'loadPercent', width: 150, render: (text: number) => (

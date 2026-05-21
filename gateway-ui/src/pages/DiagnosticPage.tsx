@@ -172,15 +172,15 @@ const DiagnosticPage: React.FC<DiagnosticPageProps> = ({ instanceId }) => {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'HEALTHY':
-        return <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 20 }} />;
+        return <CheckCircleOutlined className="status-icon-success" />;
       case 'WARNING':
-        return <WarningOutlined style={{ color: '#faad14', fontSize: 20 }} />;
+        return <WarningOutlined className="status-icon-warning" />;
       case 'CRITICAL':
-        return <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 20 }} />;
+        return <CloseCircleOutlined className="status-icon-error" />;
       case 'NOT_CONFIGURED':
-        return <WarningOutlined style={{ color: '#8c8c8c', fontSize: 20 }} />;
+        return <WarningOutlined className="status-icon-muted" />;
       default:
-        return <WarningOutlined style={{ color: '#8c8c8c', fontSize: 20 }} />;
+        return <WarningOutlined className="status-icon-muted" />;
     }
   };
 

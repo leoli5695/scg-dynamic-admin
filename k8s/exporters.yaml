@@ -1,0 +1,160 @@
+# ============================================================================
+# Prometheus Exporters 部署 - 监控所有中间件
+# ============================================================================
+
+---
+# Redis Exporter
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-exporter
+  namespace: test
+  labels:
+    app: redis-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-exporter
+  template:
+    metadata:
+      labels:
+        app: redis-exporter
+    spec:
+      containers:
+      - name: redis-exporter
+        image: 05feb4b8a268e111bb3c4356701bf0c4.d.1ms.run/oliver006/redis_exporter:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 9121
+          name: metrics
+        env:
+        - name: REDIS_ADDR
+          value: "redis://redis:6379"
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-exporter
+  namespace: test
+spec:
+  type: ClusterIP
+  selector:
+    app: redis-exporter
+  ports:
+  - port: 9121
+    targetPort: 9121
+    name: metrics
+
+---
+# Elasticsearch Exporter
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: elasticsearch-exporter
+  namespace: test
+  labels:
+    app: elasticsearch-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: elasticsearch-exporter
+  template:
+    metadata:
+      labels:
+        app: elasticsearch-exporter
+    spec:
+      containers:
+      - name: elasticsearch-exporter
+        image: 05feb4b8a268e111bb3c4356701bf0c4.d.1ms.run/prometheuscommunity/elasticsearch-exporter:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 9114
+          name: metrics
+        env:
+        - name: ES_URI
+          value: "http://elasticsearch:9200"
+        args:
+        - "--es.uri=http://elasticsearch:9200"
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: elasticsearch-exporter
+  namespace: test
+spec:
+  type: ClusterIP
+  selector:
+    app: elasticsearch-exporter
+  ports:
+  - port: 9114
+    targetPort: 9114
+    name: metrics
+
+---
+# MySQL Exporter - 监控本地宿主机 MySQL
+# Rancher Desktop 访问宿主机: host.rancher-desktop.internal
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql-exporter
+  namespace: test
+  labels:
+    app: mysql-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql-exporter
+  template:
+    metadata:
+      labels:
+        app: mysql-exporter
+    spec:
+      containers:
+      - name: mysql-exporter
+        image: 05feb4b8a268e111bb3c4356701bf0c4.d.1ms.run/prom/mysqld-exporter:v0.15.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 9104
+          name: metrics
+        env:
+        # 使用 DATA_SOURCE_NAME 格式 (旧版本兼容)
+        - name: DATA_SOURCE_NAME
+          value: "root:123456@(host.rancher-desktop.internal:3306)/"
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-exporter
+  namespace: test
+spec:
+  type: ClusterIP
+  selector:
+    app: mysql-exporter
+  ports:
+  - port: 9104
+    targetPort: 9104
+    name: metrics

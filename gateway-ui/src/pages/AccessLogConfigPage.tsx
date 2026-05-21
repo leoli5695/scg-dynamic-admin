@@ -714,7 +714,7 @@ data:
       key: 'timestamp',
       width: 180,
       render: (ts: string) => (
-        <Text style={{ fontSize: 12 }}>
+        <Text className="text-xs-sm">
           <ClockCircleOutlined style={{ marginRight: 4 }} />
           {dayjs(ts).format('HH:mm:ss.SSS')}
         </Text>
@@ -751,7 +751,7 @@ data:
       key: 'durationMs',
       width: 100,
       render: (ms: number) => (
-        <Text style={{ fontSize: 12, color: ms > 1000 ? '#ff4d4f' : ms > 500 ? '#faad14' : '#52c41a' }}>
+        <Text className="text-xs-sm" style={{ color: ms > 1000 ? '#ff4d4f' : ms > 500 ? '#faad14' : '#52c41a' }}>
           {ms}ms
         </Text>
       ),
@@ -1593,7 +1593,7 @@ data:
                     <Text code style={{ fontSize: 12, wordBreak: 'break-all' }}>{record.path}</Text>
                   </Descriptions.Item>
                   <Descriptions.Item label={t('access_log.query_params')}>
-                    {record.query ? <Text code style={{ fontSize: 12, wordBreak: 'break-all' }}>{record.query}</Text> : '-'}
+                    {record.query ? <Text code className="text-xs-sm" style={{ wordBreak: 'break-all' }}>{record.query}</Text> : '-'}
                   </Descriptions.Item>
                 </Descriptions>
 

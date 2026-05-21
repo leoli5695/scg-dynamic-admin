@@ -1,0 +1,56 @@
+# ============================================================================
+# MySQL Exporter - 监控本地 MySQL
+# ============================================================================
+# 本地 MySQL 运行在宿主机 127.0.0.1:3306
+# Rancher Desktop 访问宿主机: host.rancher-desktop.internal
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql-exporter
+  namespace: test
+  labels:
+    app: mysql-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql-exporter
+  template:
+    metadata:
+      labels:
+        app: mysql-exporter
+    spec:
+      containers:
+      - name: mysql-exporter
+        image: 05feb4b8a268e111bb3c4356701bf0c4.d.1ms.run/prom/mysqld-exporter:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 9104
+          name: metrics
+        env:
+        # Rancher Desktop: 使用 host.rancher-desktop.internal 访问宿主机 MySQL
+        - name: DATA_SOURCE_NAME
+          value: "root:123456@(host.rancher-desktop.internal:3306)/"
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-exporter
+  namespace: test
+spec:
+  type: ClusterIP
+  selector:
+    app: mysql-exporter
+  ports:
+  - port: 9104
+    targetPort: 9104
+    name: metrics

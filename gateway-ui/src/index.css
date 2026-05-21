@@ -1,6 +1,7 @@
 /* Import CSS modules */
 @import './styles/variables.css';
 @import './styles/layout.css';
+@import './styles/animations.css';
 @import './styles/antd-overrides.css';
 @import './styles/premium-ui.css';
 

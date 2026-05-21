@@ -337,28 +337,13 @@
 .mb-8 { margin-bottom: var(--space-8); }
 
 /* ==================== Simple Animations ==================== */
+/* Animation classes - definitions moved to animations.css */
 .fade-in {
   animation: fadeIn var(--duration-normal) var(--ease-out);
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
 .slide-up {
   animation: slideUp var(--duration-normal) var(--ease-out);
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 /* Legacy class aliases for compatibility */

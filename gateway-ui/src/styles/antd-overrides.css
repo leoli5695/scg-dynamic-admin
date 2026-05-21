@@ -37,12 +37,17 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(8px);
 }
 
 .ant-select-item {
   color: var(--text-primary);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
+}
+
+.ant-select-item:hover {
+  background: var(--bg-hover);
 }
 
 .ant-select-item-option-active,
@@ -271,6 +276,10 @@
 .ant-dropdown-menu-item-selected {
   background: rgba(59, 130, 246, 0.08);
   color: var(--primary-color);
+}
+
+.ant-dropdown-menu-item-divider {
+  background: var(--border-subtle);
 }
 
 .ant-menu {
@@ -782,3 +791,180 @@
 }
 
 .ant-result-subtitle { color: var(--text-muted); }
+
+/* ==================== Status Icons ==================== */
+.status-icon {
+  font-size: 20px;
+}
+
+.status-icon-success {
+  color: var(--success-color);
+  font-size: 20px;
+}
+
+.status-icon-warning {
+  color: var(--warning-color);
+  font-size: 20px;
+}
+
+.status-icon-error {
+  color: var(--error-color);
+  font-size: 20px;
+}
+
+.status-icon-muted {
+  color: var(--text-muted);
+  font-size: 20px;
+}
+
+/* ==================== Text Utilities ==================== */
+.text-route-id {
+  color: var(--primary-light);
+  font-weight: var(--weight-semibold);
+}
+
+.text-service-name {
+  color: #8b5cf6;
+  font-weight: var(--weight-semibold);
+}
+
+.text-timestamp {
+  color: var(--text-secondary);
+}
+
+/* ==================== Code Block Styles ==================== */
+.code-block {
+  background: var(--bg-elevated);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  overflow: auto;
+  font-family: var(--font-mono);
+  margin-top: var(--space-1);
+}
+
+.code-block-sm {
+  max-height: 150px;
+}
+
+.code-block-md {
+  max-height: 200px;
+}
+
+.code-block-lg {
+  max-height: 500px;
+}
+
+.code-block-raw {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ==================== Text Size Utilities ==================== */
+.text-xs-sm {
+  font-size: var(--text-xs);
+}
+
+.text-xs-tiny {
+  font-size: 10px;
+}
+
+/* ==================== Ant Design Color Compatibility ==================== */
+.text-success-antd {
+  color: #52c41a;
+}
+
+.text-warning-antd {
+  color: #faad14;
+}
+
+.text-error-antd {
+  color: #ff4d4f;
+}
+
+.text-info-antd {
+  color: #1890ff;
+}
+
+/* ==================== Loading Center ==================== */
+.loading-center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 300px;
+}
+
+.loading-center-lg {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+}
+
+.loading-center-sm {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 200px;
+}
+
+/* ==================== Empty Center ==================== */
+.empty-center {
+  text-align: center;
+  padding: var(--space-10);
+}
+
+.empty-center-sm {
+  text-align: center;
+  padding: var(--space-6);
+}
+
+/* ==================== Layout Utilities ==================== */
+.text-center {
+  text-align: center;
+}
+
+.flex-center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* ==================== Margin Utilities ==================== */
+.mb-2 {
+  margin-bottom: var(--space-2);
+}
+
+.mb-4 {
+  margin-bottom: var(--space-4);
+}
+
+.mt-2 {
+  margin-top: var(--space-2);
+}
+
+.mt-4 {
+  margin-top: var(--space-4);
+}
+
+.mt-1 {
+  margin-top: var(--space-1);
+}
+
+.mb-3 {
+  margin-bottom: var(--space-3);
+}
+
+.mb-6 {
+  margin-bottom: var(--space-6);
+}
+
+/* ==================== Flex Utilities ==================== */
+.flex-items-center {
+  display: flex;
+  align-items: center;
+}
+
+.text-right {
+  text-align: right;
+}

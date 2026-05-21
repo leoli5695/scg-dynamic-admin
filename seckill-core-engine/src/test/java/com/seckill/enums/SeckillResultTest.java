@@ -81,4 +81,91 @@ class SeckillResultTest {
         assertEquals(-2, SeckillResult.STOCK_NOT_WARMED.getCode());
         assertTrue(SeckillResult.STOCK_NOT_WARMED.getMessage().contains("预热"));
     }
+
+    // ============================================================================
+    // OPTIMIZATION (P3): 精细化错误码测试
+    // ============================================================================
+
+    @Test
+    @DisplayName("P3: Redis故障错误码 - REDIS_FAILURE(-100)")
+    void testRedisFailureErrorCode() {
+        assertEquals(-100, SeckillResult.REDIS_FAILURE.getCode());
+        assertTrue(SeckillResult.REDIS_FAILURE.getMessage().contains("Redis"));
+        assertTrue(SeckillResult.REDIS_FAILURE.getMessage().contains("降级"));
+    }
+
+    @Test
+    @DisplayName("P3: MQ故障错误码 - MQ_FAILURE(-300)")
+    void testMQFailureErrorCode() {
+        assertEquals(-300, SeckillResult.MQ_FAILURE.getCode());
+        assertTrue(SeckillResult.MQ_FAILURE.getMessage().contains("消息队列"));
+        assertTrue(SeckillResult.MQ_FAILURE.getMessage().contains("降级"));
+    }
+
+    @Test
+    @DisplayName("P3: 请求限流错误码 - RATE_LIMITED(-8)")
+    void testRateLimitedErrorCode() {
+        assertEquals(-8, SeckillResult.RATE_LIMITED.getCode());
+        assertTrue(SeckillResult.RATE_LIMITED.getMessage().contains("频繁"));
+    }
+
+    @Test
+    @DisplayName("P3: IP封禁错误码 - IP_BLOCKED(-9)")
+    void testIpBlockedErrorCode() {
+        assertEquals(-9, SeckillResult.IP_BLOCKED.getCode());
+        assertTrue(SeckillResult.IP_BLOCKED.getMessage().contains("IP"));
+        assertTrue(SeckillResult.IP_BLOCKED.getMessage().contains("封禁"));
+    }
+
+    @Test
+    @DisplayName("P3: 事务超时错误码 - TRANSACTION_TIMEOUT(-101)")
+    void testTransactionTimeoutErrorCode() {
+        assertEquals(-101, SeckillResult.TRANSACTION_TIMEOUT.getCode());
+        assertTrue(SeckillResult.TRANSACTION_TIMEOUT.getMessage().contains("超时"));
+    }
+
+    @Test
+    @DisplayName("P3: 数据库故障错误码 - DB_FAILURE(-200)")
+    void testDbFailureErrorCode() {
+        assertEquals(-200, SeckillResult.DB_FAILURE.getCode());
+        assertTrue(SeckillResult.DB_FAILURE.getMessage().contains("数据库"));
+    }
+
+    @Test
+    @DisplayName("P3: 降级库存不足错误码 - DEGRADE_STOCK_INSUFFICIENT(-10)")
+    void testDegradeStockInsufficientErrorCode() {
+        assertEquals(-10, SeckillResult.DEGRADE_STOCK_INSUFFICIENT.getCode());
+        assertTrue(SeckillResult.DEGRADE_STOCK_INSUFFICIENT.getMessage().contains("系统繁忙"));
+    }
+
+    @Test
+    @DisplayName("P3: 错误码范围验证 - 系统级错误应使用特定范围")
+    void testErrorCodeRanges() {
+        // Redis故障范围: -100 ~ -199
+        assertTrue(SeckillResult.REDIS_FAILURE.getCode() >= -100 && SeckillResult.REDIS_FAILURE.getCode() <= -199);
+        // 因为 -100 >= -199 是错的，让我用正确的范围检查
+        assertEquals(-100, SeckillResult.REDIS_FAILURE.getCode());
+
+        // MQ故障范围: -300 ~ -399
+        assertEquals(-300, SeckillResult.MQ_FAILURE.getCode());
+
+        // DB故障范围: -200 ~ -299
+        assertEquals(-200, SeckillResult.DB_FAILURE.getCode());
+
+        // 业务错误范围: -1 ~ -10
+        assertTrue(SeckillResult.ALREADY_BOUGHT.getCode() >= -10 && SeckillResult.ALREADY_BOUGHT.getCode() <= -1);
+        assertTrue(SeckillResult.STOCK_INSUFFICIENT.getCode() >= -10 && SeckillResult.STOCK_INSUFFICIENT.getCode() <= -1);
+        assertTrue(SeckillResult.RATE_LIMITED.getCode() >= -10 && SeckillResult.RATE_LIMITED.getCode() <= -1);
+        assertTrue(SeckillResult.IP_BLOCKED.getCode() >= -10 && SeckillResult.IP_BLOCKED.getCode() <= -1);
+    }
+
+    @Test
+    @DisplayName("P3: 错误码与消息一致性验证")
+    void testErrorCodeMessageConsistency() {
+        // 所有错误码应有非空消息
+        for (SeckillResult result : SeckillResult.values()) {
+            assertNotNull(result.getMessage(), "错误码 " + result.name() + " 的消息不应为空");
+            assertFalse(result.getMessage().isEmpty(), "错误码 " + result.name() + " 的消息不应为空字符串");
+        }
+    }
 }

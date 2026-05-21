@@ -571,7 +571,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
       ellipsis: true,
       render: (text: string) => (
         <Tooltip title={text}>
-          <Text copyable={{ text, tooltips: false }} style={{ fontSize: 12 }}>
+          <Text copyable={{ text, tooltips: false }} className="text-xs-sm">
             {text?.substring(0, 8)}...
           </Text>
         </Tooltip>
@@ -592,7 +592,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
       ellipsis: true,
       render: (path: string, record: RequestTrace) => (
         <Tooltip title={record.uri} placement="topLeft">
-          <Text style={{ fontSize: 12 }}>{path || '-'}</Text>
+          <Text className="text-xs-sm">{path || '-'}</Text>
         </Tooltip>
       )
     },
@@ -601,7 +601,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
       dataIndex: 'statusCode',
       key: 'statusCode',
       width: 50,
-      render: (code: number) => <Badge status={getStatusColor(code)} text={<span style={{ fontSize: 12 }}>{code}</span>} />
+      render: (code: number) => <Badge status={getStatusColor(code)} text={<span className="text-xs-sm">{code}</span>} />
     },
     {
       title: t('trace.latency'),
@@ -620,7 +620,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
       key: 'clientIp',
       width: 90,
       ellipsis: true,
-      render: (ip: string) => <Text style={{ fontSize: 12 }}>{ip || '-'}</Text>
+      render: (ip: string) => <Text className="text-xs-sm">{ip || '-'}</Text>
     },
     {
       title: t('trace.time'),
@@ -628,7 +628,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
       key: 'traceTime',
       width: 110,
       sorter: (a: RequestTrace, b: RequestTrace) => new Date(a.traceTime).getTime() - new Date(b.traceTime).getTime(),
-      render: (time: string) => <Text style={{ fontSize: 12 }}>{time ? dayjs(time).format('MM-DD HH:mm:ss') : '-'}</Text>
+      render: (time: string) => <Text className="text-xs-sm">{time ? dayjs(time).format('MM-DD HH:mm:ss') : '-'}</Text>
     },
     {
       title: t('trace.replay_count'),
@@ -705,7 +705,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
       </Row>
 
       {/* Filters Row */}
-      <Card size="small" style={{ marginBottom: 16 }}>
+      <Card size="small" className="mb-4">
         <Row gutter={16} align="middle">
           <Col>
             <Segmented
@@ -796,7 +796,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                         }}
                         disabled={col === 'actions'}
                       />
-                      <Text style={{ fontSize: 12 }}>{t(`trace.${col}`)}</Text>
+                      <Text className="text-xs-sm">{t(`trace.${col}`)}</Text>
                     </label>
                   ))}
                 </div>
@@ -815,7 +815,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
       </Card>
 
       {/* Action Buttons */}
-      <Space style={{ marginBottom: 16 }}>
+      <Space className="mb-4">
         <Button icon={<ReloadOutlined />} onClick={loadTraces}>
           {t('common.refresh')}
         </Button>
@@ -878,7 +878,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                     description={traceConfig.note || '部分请求可能因采样未被记录'}
                   />
                 )}
-                <Space style={{ marginBottom: 16 }}>
+                <Space className="mb-4">
                   <Button icon={<ReloadOutlined />} onClick={() => loadFullChainTraces(fullChainPage)} loading={fullChainLoading}>
                     {t('common.refresh')}
                   </Button>
@@ -904,7 +904,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                       width: 150,
                       render: (id: string) => (
                         <Tooltip title={id}>
-                          <Text copyable={{ text: id, tooltips: false }} style={{ fontSize: 12 }}>
+                          <Text copyable={{ text: id, tooltips: false }} className="text-xs-sm">
                             {id?.substring(0, 12)}...
                           </Text>
                         </Tooltip>
@@ -922,7 +922,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                       dataIndex: 'path',
                       key: 'path',
                       ellipsis: true,
-                      render: (p: string) => <Tooltip title={p}><Text style={{ fontSize: 12 }}>{p}</Text></Tooltip>
+                      render: (p: string) => <Tooltip title={p}><Text className="text-xs-sm">{p}</Text></Tooltip>
                     },
                     {
                       title: t('trace.status'),
@@ -955,7 +955,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                           return (
                             <Space size={4}>
                               <CheckCircleOutlined style={{ color: status === 'COMPLETE' ? '#52c41a' : '#faad14' }} />
-                              <Text style={{ fontSize: 12 }}>
+                              <Text className="text-xs-sm">
                                 {record.serviceCount || 0} {t('trace.service_count_label') || '个服务'}
                               </Text>
                             </Space>
@@ -964,7 +964,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                         return (
                           <Space size={4}>
                             <ExclamationCircleOutlined style={{ color: '#d9d9d9' }} />
-                            <Text type="secondary" style={{ fontSize: 12 }}>
+                            <Text type="secondary" className="text-xs-sm">
                               {t('trace.gateway_only') || '仅网关'}
                             </Text>
                           </Space>
@@ -994,7 +994,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                       dataIndex: 'traceTime',
                       key: 'traceTime',
                       width: 140,
-                      render: (time: string) => <Text style={{ fontSize: 11 }}>{dayjs(time).format('MM-DD HH:mm:ss')}</Text>
+                      render: (time: string) => <Text className="text-xs-tiny">{dayjs(time).format('MM-DD HH:mm:ss')}</Text>
                     },
                     {
                       title: '',
@@ -1047,7 +1047,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
             {detailLoading && <div style={{ textAlign: 'center', padding: 20 }}>Loading...</div>}
 
             {/* Summary Bar */}
-            <Card size="small" style={{ marginBottom: 16 }}>
+            <Card size="small" className="mb-4">
               <Row gutter={16}>
                 <Col span={4}>
                   <Statistic title={t('trace.method')} />
@@ -1067,7 +1067,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                 <Col span={8}>
                   <Statistic title={t('trace.trace_id')} />
                   <Space>
-                    <Text copyable style={{ fontSize: 12 }}>{selectedTrace.traceId}</Text>
+                    <Text copyable className="text-xs-sm">{selectedTrace.traceId}</Text>
                     <Tooltip title={t('trace.view_distributed')}>
                       <Button 
                         size="small" 
@@ -1085,7 +1085,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
             </Card>
 
             {/* Path & Query Info */}
-            <Card size="small" style={{ marginBottom: 16 }}>
+            <Card size="small" className="mb-4">
               <Row gutter={16}>
                 <Col span={12}>
                   <Text strong>{t('trace.path')}: </Text>
@@ -1114,7 +1114,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
             {selectedTrace.statusCode >= 400 && (
               <Alert
                 type={selectedTrace.statusCode >= 500 ? 'error' : 'warning'}
-                style={{ marginBottom: 16 }}
+                className="mb-4"
                 message={
                   <Space>
                     {selectedTrace.errorType && <Tag color="error">{selectedTrace.errorType}</Tag>}
@@ -1132,7 +1132,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                   size="small"
                   title={<Space><Text strong>Request</Text></Space>}
                   extra={<Button size="small" icon={<CopyOutlined />} onClick={copyAllRequest}>Copy</Button>}
-                  style={{ marginBottom: 16 }}
+                  className="mb-4"
                 >
                   <Collapse bordered size="small" defaultActiveKey={['headers', 'body']}>
                     <Panel header={`Headers (${getHeadersCount(selectedTrace.requestHeaders)})`} key="headers">
@@ -1181,7 +1181,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                   size="small"
                   title={<Space><Text strong>Response</Text></Space>}
                   extra={<Button size="small" icon={<CopyOutlined />} onClick={copyAllResponse}>Copy</Button>}
-                  style={{ marginBottom: 16 }}
+                  className="mb-4"
                 >
                   <Collapse bordered size="small" defaultActiveKey={['headers', 'body']}>
                     <Panel header={`Headers (${getHeadersCount(selectedTrace.responseHeaders)})`} key="headers">
@@ -1385,11 +1385,11 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
         {selectedFullChain && !fullChainDetailLoading && (
           <div>
             {/* TraceId */}
-            <Card size="small" style={{ marginBottom: 16 }}>
+            <Card size="small" className="mb-4">
               <Row gutter={16} align="middle">
                 <Col span={16}>
                   <Text strong>Trace ID: </Text>
-                  <Text copyable style={{ fontSize: 12 }}>{selectedFullChain.traceId}</Text>
+                  <Text copyable className="text-xs-sm">{selectedFullChain.traceId}</Text>
                 </Col>
                 <Col span={8} style={{ textAlign: 'right' }}>
                   <Tag color={
@@ -1406,7 +1406,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
 
             {/* Duration Breakdown */}
             {selectedFullChain.durationBreakdown && (
-              <Card size="small" title={t('trace.duration_breakdown') || '耗时分布'} style={{ marginBottom: 16 }}>
+              <Card size="small" title={t('trace.duration_breakdown') || '耗时分布'} className="mb-4">
                 <Row gutter={12}>
                   <Col span={5}>
                     <Statistic
@@ -1414,7 +1414,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                       value={selectedFullChain.durationBreakdown.gatewayTotalMs}
                       suffix="ms"
                     />
-                    <Text type="secondary" style={{ fontSize: 11 }}>首个Filter累积时间</Text>
+                    <Text type="secondary" className="text-xs-tiny">首个Filter累积时间</Text>
                   </Col>
                   <Col span={5}>
                     <Statistic
@@ -1424,9 +1424,9 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                         `ms (${selectedFullChain.durationBreakdown.gatewayOverheadPercent}%)` : ''}
                       valueStyle={{ color: '#1890ff' }}
                     />
-                    <Text type="secondary" style={{ fontSize: 11 }}>Σ各Filter自身时间</Text>
+                    <Text type="secondary" className="text-xs-tiny">Σ各Filter自身时间</Text>
                     {selectedFullChain.durationBreakdown.gatewayOverheadDataSource === 'NO_DATA' && (
-                      <Text type="secondary" style={{ fontSize: 11 }}>暂无数据</Text>
+                      <Text type="secondary" className="text-xs-tiny">暂无数据</Text>
                     )}
                   </Col>
                   <Col span={5}>
@@ -1437,7 +1437,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                         `ms (${selectedFullChain.durationBreakdown.servicePercent}%)` : ''}
                       valueStyle={{ color: '#52c41a' }}
                     />
-                    <Text type="secondary" style={{ fontSize: 11 }}>后端服务处理时间</Text>
+                    <Text type="secondary" className="text-xs-tiny">后端服务处理时间</Text>
                   </Col>
                   <Col span={5}>
                     <Statistic
@@ -1447,7 +1447,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                         `ms (${selectedFullChain.durationBreakdown.networkTransferPercent || 0}%)` : ''}
                       valueStyle={{ color: '#faad14' }}
                     />
-                    <Text type="secondary" style={{ fontSize: 11 }}>NettyWrite响应写入</Text>
+                    <Text type="secondary" className="text-xs-tiny">NettyWrite响应写入</Text>
                   </Col>
                   <Col span={4}>
                     <Statistic
@@ -1456,7 +1456,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                       suffix={`ms (${selectedFullChain.durationBreakdown.otherPercent || 0}%)`}
                       valueStyle={{ color: '#8c8c8c' }}
                     />
-                    <Text type="secondary" style={{ fontSize: 11 }}>精度损失+未追踪</Text>
+                    <Text type="secondary" className="text-xs-tiny">精度损失+未追踪</Text>
                   </Col>
                 </Row>
               </Card>
@@ -1483,7 +1483,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                     )}
                   </Space>
                 }
-                style={{ marginBottom: 16 }}
+                className="mb-4"
               >
                 <Descriptions size="small" column={2} bordered>
                   <Descriptions.Item label={t('trace.method') || '方法'}>
@@ -1499,18 +1499,18 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                     )}
                   </Descriptions.Item>
                   <Descriptions.Item label={t('trace.path') || '路径'} span={2}>
-                    <Text copyable style={{ fontSize: 12 }}>{selectedFullChain.gateway.uri}</Text>
+                    <Text copyable className="text-xs-sm">{selectedFullChain.gateway.uri}</Text>
                   </Descriptions.Item>
                   {selectedFullChain.gateway.queryString && (
                     <Descriptions.Item label={t('trace.query_string') || '查询参数'} span={2}>
-                      <Text copyable style={{ fontSize: 12 }}>{selectedFullChain.gateway.queryString}</Text>
+                      <Text copyable className="text-xs-sm">{selectedFullChain.gateway.queryString}</Text>
                     </Descriptions.Item>
                   )}
                   <Descriptions.Item label={t('trace.route_id') || '路由ID'}>
-                    <Text style={{ fontSize: 12 }}>{selectedFullChain.gateway.routeId || '-'}</Text>
+                    <Text className="text-xs-sm">{selectedFullChain.gateway.routeId || '-'}</Text>
                   </Descriptions.Item>
                   <Descriptions.Item label={t('trace.target_instance') || '目标实例'}>
-                    <Text style={{ fontSize: 12 }}>{selectedFullChain.gateway.targetInstance || '-'}</Text>
+                    <Text className="text-xs-sm">{selectedFullChain.gateway.targetInstance || '-'}</Text>
                   </Descriptions.Item>
                   <Descriptions.Item label={t('trace.client_ip') || '客户端IP'}>
                     {selectedFullChain.gateway.clientIp || '-'}
@@ -1520,7 +1520,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                   </Descriptions.Item>
                   {selectedFullChain.gateway.userAgent && (
                     <Descriptions.Item label="User-Agent" span={2}>
-                      <Text style={{ fontSize: 11 }} ellipsis={{ tooltip: selectedFullChain.gateway.userAgent }}>
+                      <Text className="text-xs-tiny" ellipsis={{ tooltip: selectedFullChain.gateway.userAgent }}>
                         {selectedFullChain.gateway.userAgent}
                       </Text>
                     </Descriptions.Item>
@@ -1536,12 +1536,12 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                 <Collapse size="small" style={{ marginTop: 12 }} items={[
                   ...(selectedFullChain.gateway.requestHeaders || selectedFullChain.gateway.requestBody ? [{
                     key: 'request',
-                    label: <Text strong style={{ fontSize: 12 }}>Request</Text>,
+                    label: <Text strong className="text-xs-sm">Request</Text>,
                     children: (
                       <div>
                         {selectedFullChain.gateway.requestHeaders && (
                           <div style={{ marginBottom: 8 }}>
-                            <Text type="secondary" style={{ fontSize: 11 }}>Headers</Text>
+                            <Text type="secondary" className="text-xs-tiny">Headers</Text>
                             <pre style={{ background: '#f5f5f5', padding: 8, borderRadius: 4, fontSize: 11, maxHeight: 150, overflow: 'auto', margin: '4px 0 0' }}>
                               {formatJson(selectedFullChain.gateway.requestHeaders)}
                             </pre>
@@ -1549,7 +1549,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                         )}
                         {selectedFullChain.gateway.requestBody && (
                           <div>
-                            <Text type="secondary" style={{ fontSize: 11 }}>Body</Text>
+                            <Text type="secondary" className="text-xs-tiny">Body</Text>
                             <pre style={{ background: '#f5f5f5', padding: 8, borderRadius: 4, fontSize: 11, maxHeight: 200, overflow: 'auto', margin: '4px 0 0' }}>
                               {formatJson(selectedFullChain.gateway.requestBody)}
                             </pre>
@@ -1560,12 +1560,12 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                   }] : []),
                   ...(selectedFullChain.gateway.responseHeaders || selectedFullChain.gateway.responseBody ? [{
                     key: 'response',
-                    label: <Text strong style={{ fontSize: 12 }}>Response</Text>,
+                    label: <Text strong className="text-xs-sm">Response</Text>,
                     children: (
                       <div>
                         {selectedFullChain.gateway.responseHeaders && (
                           <div style={{ marginBottom: 8 }}>
-                            <Text type="secondary" style={{ fontSize: 11 }}>Headers</Text>
+                            <Text type="secondary" className="text-xs-tiny">Headers</Text>
                             <pre style={{ background: '#f5f5f5', padding: 8, borderRadius: 4, fontSize: 11, maxHeight: 150, overflow: 'auto', margin: '4px 0 0' }}>
                               {formatJson(selectedFullChain.gateway.responseHeaders)}
                             </pre>
@@ -1573,7 +1573,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                         )}
                         {selectedFullChain.gateway.responseBody && (
                           <div>
-                            <Text type="secondary" style={{ fontSize: 11 }}>Body</Text>
+                            <Text type="secondary" className="text-xs-tiny">Body</Text>
                             <pre style={{ background: '#f5f5f5', padding: 8, borderRadius: 4, fontSize: 11, maxHeight: 200, overflow: 'auto', margin: '4px 0 0' }}>
                               {formatJson(selectedFullChain.gateway.responseBody)}
                             </pre>
@@ -1609,11 +1609,11 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                     {service.isSlow && <Tag color="warning">{t('trace.slow') || 'SLOW'}</Tag>}
                   </Space>
                 }
-                style={{ marginBottom: 16 }}
+                className="mb-4"
               >
                 <Descriptions size="small" column={2} bordered style={{ marginBottom: 12 }}>
                   <Descriptions.Item label={t('trace.path') || '路径'}>
-                    <Text style={{ fontSize: 12 }}>{service.path}</Text>
+                    <Text className="text-xs-sm">{service.path}</Text>
                   </Descriptions.Item>
                   <Descriptions.Item label={t('trace.method') || '方法'}>
                     <Tag>{service.method}</Tag>
