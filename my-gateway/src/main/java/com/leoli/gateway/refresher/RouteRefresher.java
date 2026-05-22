@@ -12,8 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.route.RouteDefinition;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
+
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -187,61 +186,52 @@ public class RouteRefresher {
     /**
      * Add listener for a single route.
      * 
-     * REACTIVE FIX: Use reactive retry instead of block() to avoid blocking.
-     * Retry logic runs on boundedElastic scheduler to offload from main thread.
+     * FIX: Register listener FIRST, then load config.
+     * When enabling a disabled route:
+     * 1. gateway-admin publishes route config to Nacos
+     * 2. gateway-admin updates routes index
+     * 3. my-gateway receives index change -> addRouteListener
+     * 
+     * If we load config AFTER registering listener, the listener can catch
+     * any config changes that happen between registration and load.
+     * This fixes the issue where enabling a disabled route returns 404.
      */
     private void addRouteListener(String routeId) {
         String routeDataId = ROUTE_PREFIX + routeId;
 
-        // Try to load route config with retry using reactive approach
-        loadRouteWithRetry(routeId, routeDataId, 3)
-            .subscribeOn(Schedulers.boundedElastic())
-            .subscribe(
-                routeConfig -> {
-                    if (routeConfig != null && !routeConfig.isBlank()) {
-                        try {
-                            RouteDefinition route = parseRoute(routeConfig);
-                            routeManager.putRoute(routeId, route);
-                            log.info("✅ Loaded route: {} -> {} (route.id={}, predicates={})",
-                                    routeId, route.getUri(), route.getId(), route.getPredicates());
-                        } catch (Exception e) {
-                            log.error("Failed to parse route: {}", routeId, e);
-                        }
-                    } else {
-                        log.warn("⚠️  Route config not found in Nacos after retries: {}, listener will wait for config", routeDataId);
-                    }
-                    
-                    // Always register listener (even if config not found yet, it may come later)
-                    registerRouteListener(routeId, routeDataId);
-                },
-                error -> {
-                    log.error("Failed to load route: {}", routeId, error);
-                    // Still register listener for future updates
-                    registerRouteListener(routeId, routeDataId);
-                }
-            );
-    }
+        // STEP 1: Register listener FIRST (to catch any config changes)
+        registerRouteListener(routeId, routeDataId);
 
-    /**
-     * Load route with retry using reactive delay.
-     */
-    private Mono<String> loadRouteWithRetry(String routeId, String routeDataId, int maxRetries) {
-        return Mono.defer(() -> {
-            String routeConfig = configService.getConfig(routeDataId, GROUP);
+        // STEP 2: Load route config synchronously with retry
+        String routeConfig = null;
+        int maxRetries = 3;
+        for (int i = 0; i < maxRetries; i++) {
+            routeConfig = configService.getConfig(routeDataId, GROUP);
             if (routeConfig != null && !routeConfig.isBlank()) {
-                return Mono.just(routeConfig);
+                break;
             }
-            return Mono.empty();
-        })
-        .repeatWhenEmpty(maxRetries, attempts ->
-            // attempts 是 Flux<Long>，元素值是当前重试次数（从 0 开始）。
-            // 用元素值做指数退避：100ms, 200ms, 400ms...
-            attempts.concatMap(i -> Mono.delay(java.time.Duration.ofMillis(100L * (i + 1))))
-        )
-        .onErrorResume(e -> {
-            log.debug("Retry delay interrupted for route: {}", routeId);
-            return Mono.empty();
-        });
+            // Exponential backoff: 100ms, 200ms, 400ms
+            try {
+                Thread.sleep(100L * (i + 1));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+
+        // STEP 3: Load route into manager if config found
+        if (routeConfig != null && !routeConfig.isBlank()) {
+            try {
+                RouteDefinition route = parseRoute(routeConfig);
+                routeManager.putRoute(routeId, route);
+                log.info("✅ Loaded route: {} -> {} (route.id={}, predicates={})",
+                        routeId, route.getUri(), route.getId(), route.getPredicates());
+            } catch (Exception e) {
+                log.error("Failed to parse route: {}", routeId, e);
+            }
+        } else {
+            log.warn("⚠️  Route config not found in Nacos after {} retries: {}, listener will wait for future config", maxRetries, routeDataId);
+        }
     }
 
     /**
