@@ -145,12 +145,15 @@ public class RequestTransformFilter implements GlobalFilter, Ordered {
         return DataBufferUtils.join(request.getBody())
                 .defaultIfEmpty(new DefaultDataBufferFactory().wrap(new byte[0]))
                 .flatMap(dataBuffer -> {
+                    // Read body bytes with guaranteed release to prevent direct buffer memory leak
+                    final byte[] bytes = new byte[dataBuffer.readableByteCount()];
                     try {
-                        // Read body bytes
-                        byte[] bytes = new byte[dataBuffer.readableByteCount()];
                         dataBuffer.read(bytes);
+                    } finally {
                         DataBufferUtils.release(dataBuffer);
+                    }
 
+                    try {
                         // Check size limit
                         if (bytes.length > config.getMaxBodySize()) {
                             log.debug("Request body size {} exceeds limit {}, passing through unchanged",

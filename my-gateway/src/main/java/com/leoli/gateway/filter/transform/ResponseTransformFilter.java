@@ -104,16 +104,19 @@ public class ResponseTransformFilter implements GlobalFilter, Ordered {
                                 return super.writeWith(Flux.empty());
                             }
 
+                            // Merge all buffers with proper release tracking to prevent direct buffer memory leak
+                            int totalSize = buffers.stream().mapToInt(DataBuffer::readableByteCount).sum();
+                            byte[] allBytes = null;
+                            int releasedCount = 0;
                             try {
-                                // Merge all buffers
-                                int totalSize = buffers.stream().mapToInt(DataBuffer::readableByteCount).sum();
-                                byte[] allBytes = new byte[totalSize];
+                                allBytes = new byte[totalSize];
                                 int offset = 0;
                                 for (DataBuffer buffer : buffers) {
                                     int size = buffer.readableByteCount();
                                     buffer.read(allBytes, offset, size);
                                     offset += size;
                                     DataBufferUtils.release(buffer);
+                                    releasedCount++;
                                 }
 
                                 // Check size limit
@@ -135,13 +138,18 @@ public class ResponseTransformFilter implements GlobalFilter, Ordered {
 
                             } catch (Exception e) {
                                 log.error("Error transforming response body: {}", e.getMessage(), e);
-                                // Return original on error based on error handling strategy
-                                return super.writeWith(Flux.just(originalResponse.bufferFactory().wrap(allBytes)));
+                                // Release any remaining unreleased buffers to prevent direct buffer memory leak
+                                for (int i = releasedCount; i < buffers.size(); i++) {
+                                    DataBufferUtils.release(buffers.get(i));
+                                }
+                                // Return original data if available, otherwise empty response
+                                if (allBytes != null) {
+                                    return super.writeWith(Flux.just(originalResponse.bufferFactory().wrap(allBytes)));
+                                }
+                                return super.writeWith(Flux.empty());
                             }
                         });
             }
-
-            private byte[] allBytes;
         };
 
         return chain.filter(exchange.mutate().response(decoratedResponse).build());

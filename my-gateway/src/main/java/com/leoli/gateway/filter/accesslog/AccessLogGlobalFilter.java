@@ -320,25 +320,42 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
                                 return super.writeWith(Flux.empty());
                             }
 
+                            // Merge all buffers with proper release tracking to prevent direct buffer memory leak
                             int totalSize = buffers.stream().mapToInt(DataBuffer::readableByteCount).sum();
-                            byte[] allBytes = new byte[totalSize];
-                            int offset = 0;
-                            for (DataBuffer buffer : buffers) {
-                                int size = buffer.readableByteCount();
-                                buffer.read(allBytes, offset, size);
-                                offset += size;
-                                DataBufferUtils.release(buffer);
+                            byte[] allBytes = null;
+                            int releasedCount = 0;
+                            try {
+                                allBytes = new byte[totalSize];
+                                int offset = 0;
+                                for (DataBuffer buffer : buffers) {
+                                    int size = buffer.readableByteCount();
+                                    buffer.read(allBytes, offset, size);
+                                    offset += size;
+                                    DataBufferUtils.release(buffer);
+                                    releasedCount++;
+                                }
+
+                                // Use SensitiveDataSanitizer for masking and truncation
+                                String bodyContent = sensitiveDataSanitizer.sanitizeBody(
+                                        new String(allBytes, StandardCharsets.UTF_8),
+                                        getHeaders().getContentType() != null ?
+                                                getHeaders().getContentType().toString() : null,
+                                        config);
+                                exchange.getAttributes().put(RESPONSE_BODY_ATTR, bodyContent);
+
+                                return super.writeWith(Flux.just(bufferFactory.wrap(allBytes)));
+                            } catch (Exception e) {
+                                log.error("Error capturing response body for access log: {}", e.getMessage(), e);
+                                // Release any remaining unreleased buffers to prevent direct buffer memory leak
+                                for (int i = releasedCount; i < buffers.size(); i++) {
+                                    DataBufferUtils.release(buffers.get(i));
+                                }
+                                // Return original data if available, otherwise pass through
+                                if (allBytes != null) {
+                                    return super.writeWith(Flux.just(bufferFactory.wrap(allBytes)));
+                                }
+                                return super.writeWith(Flux.empty());
                             }
-
-                            // Use SensitiveDataSanitizer for masking and truncation
-                            String bodyContent = sensitiveDataSanitizer.sanitizeBody(
-                                    new String(allBytes, StandardCharsets.UTF_8),
-                                    getHeaders().getContentType() != null ?
-                                            getHeaders().getContentType().toString() : null,
-                                    config);
-                            exchange.getAttributes().put(RESPONSE_BODY_ATTR, bodyContent);
-
-                            return super.writeWith(Flux.just(bufferFactory.wrap(allBytes)));
                         });
             }
         };
@@ -357,9 +374,13 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
         return DataBufferUtils.join(request.getBody())
                 .defaultIfEmpty(new DefaultDataBufferFactory().wrap(new byte[0]))
                 .flatMap(dataBuffer -> {
-                    byte[] bytes = new byte[dataBuffer.readableByteCount()];
-                    dataBuffer.read(bytes);
-                    DataBufferUtils.release(dataBuffer);
+                    // Read body bytes with guaranteed release to prevent direct buffer memory leak
+                    final byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                    try {
+                        dataBuffer.read(bytes);
+                    } finally {
+                        DataBufferUtils.release(dataBuffer);
+                    }
 
                     // Use SensitiveDataSanitizer for masking and truncation
                     final String requestBody = sensitiveDataSanitizer.sanitizeBody(

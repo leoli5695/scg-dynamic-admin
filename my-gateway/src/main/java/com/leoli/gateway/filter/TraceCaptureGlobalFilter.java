@@ -198,12 +198,18 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
                     int readableBytes = dataBuffer.readableByteCount();
 
                     // 【OOM 防护】如果单个 buffer 超过限制，截断并标记
-                    if (readableBytes > maxBodySize) {
-                        byte[] truncatedBytes = new byte[maxBodySize];
-                        dataBuffer.read(truncatedBytes, 0, maxBodySize);
+                    final boolean truncated = readableBytes > maxBodySize;
+                    final int readSize = truncated ? maxBodySize : readableBytes;
+                    final byte[] bodyBytes = new byte[readSize];
+                    try {
+                        dataBuffer.read(bodyBytes, 0, readSize);
+                    } finally {
+                        // Ensure DataBuffer is always released to prevent direct buffer memory leak
                         DataBufferUtils.release(dataBuffer);
+                    }
 
-                        String bodyStr = new String(truncatedBytes, StandardCharsets.UTF_8) + "...[TRUNCATED]";
+                    if (truncated) {
+                        String bodyStr = new String(bodyBytes, StandardCharsets.UTF_8) + "...[TRUNCATED]";
                         log.debug("Request body truncated: traceId={}, originalSize={}, truncatedSize={}",
                                 traceId, readableBytes, maxBodySize);
 
@@ -216,11 +222,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
                                 });
                     }
 
-                    byte[] bytes = new byte[readableBytes];
-                    dataBuffer.read(bytes);
-                    DataBufferUtils.release(dataBuffer);
-
-                    String bodyStr = new String(bytes, StandardCharsets.UTF_8);
+                    String bodyStr = new String(bodyBytes, StandardCharsets.UTF_8);
                     final String requestBody = bodyStr;
 
                     // Store in exchange attributes for later use
@@ -230,7 +232,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
                     ServerHttpRequest newRequest = new ServerHttpRequestDecorator(request) {
                         @Override
                         public Flux<DataBuffer> getBody() {
-                            return Flux.just(exchange.getResponse().bufferFactory().wrap(bytes));
+                            return Flux.just(exchange.getResponse().bufferFactory().wrap(bodyBytes));
                         }
                     };
 
