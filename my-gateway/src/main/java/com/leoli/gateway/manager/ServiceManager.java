@@ -1,5 +1,6 @@
 package com.leoli.gateway.manager;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.leoli.gateway.health.HybridHealthChecker;
 import lombok.Data;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -45,7 +47,6 @@ public class ServiceManager {
     // Round-robin counter for load balancing
     private final Map<String, AtomicInteger> roundRobinCounters = new ConcurrentHashMap<>();
 
-    private final Random random = new Random();
 
     /**
      * Parse and cache service configuration.
@@ -287,7 +288,7 @@ public class ServiceManager {
             return instances.get(0);
         }
 
-        int index = random.nextInt(instances.size());
+        int index = ThreadLocalRandom.current().nextInt(instances.size());
         return instances.get(index);
     }
 
@@ -335,10 +336,12 @@ public class ServiceManager {
             return extractPort(address);
         }
 
+        @JsonIgnore
         public boolean isHealthy() {
             return true;
         }
 
+        @JsonIgnore
         public String getServiceName() {
             return serviceId;
         }

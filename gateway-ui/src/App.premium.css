@@ -1853,6 +1853,12 @@
   background: rgba(255, 255, 255, 0.03) !important;
 }
 
+/* Prevent flickering when hovering over button inside empty-card */
+.empty-card:hover .ant-btn-primary {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
 .empty-card .ant-card-body {
   padding: 60px 20px;
   text-align: center;

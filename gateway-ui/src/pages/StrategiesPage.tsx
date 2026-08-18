@@ -14,6 +14,7 @@ import {
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import api from '../utils/api';
+import logger from '../utils/logger';
 import { useTranslation } from 'react-i18next';
 import { useStrategyTypes, StrategyType } from '../hooks/useStrategyTypes';
 import DynamicConfigFields, { AuthSubSchemaFields, MultiDimRateLimiterFields, RequestTransformFields, ResponseTransformFields, MockResponseFields } from '../components/DynamicConfigFields';
@@ -97,8 +98,8 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
       if (response.data.code === 200) {
         setRoutes(response.data.data || []);
       }
-    } catch (error: any) {
-      console.error('Load routes error:', error);
+    } catch (error) {
+      logger.error('Load routes error:', error);
     }
   }, [instanceId]);
 
@@ -110,8 +111,9 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
       if (response.data.code === 200) {
         setStrategies(response.data.data || []);
       }
-    } catch (error: any) {
-      message.error(t('message.load_strategies_failed', { error: error.message }));
+    } catch (error) {
+      const err = error as { message?: string };
+      message.error(t('message.load_strategies_failed', { error: err.message }));
     } finally {
       setLoading(false);
     }
@@ -255,7 +257,8 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
     return `${windowSizeMs}毫秒`;
   };
 
-  const buildConfig = (values: any, strategyType: string) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const buildConfig = (values: Record<string, any>, strategyType: string) => {
     switch (strategyType) {
       case 'RATE_LIMITER':
         return {
@@ -279,7 +282,7 @@ const StrategiesPage: React.FC<StrategiesPageProps> = ({ instanceId }) => {
           }
         };
 
-        const config: any = {
+        const config: Record<string, any> = {
           enabled: true,
           globalQuota: { enabled: false, qps: 10000, burstCapacity: 20000, windowSizeMs: 1000 },
           tenantQuota: { enabled: false, qps: 1000, burstCapacity: 2000, windowSizeMs: 1000 },

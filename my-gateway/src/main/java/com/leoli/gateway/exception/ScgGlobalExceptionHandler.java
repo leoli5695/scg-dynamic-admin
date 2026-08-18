@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.resource.NoResourceFoundException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.ServerWebExchange;
@@ -42,6 +43,8 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
 
     private final ObjectMapper objectMapper;
     
+    private WebClient webClient;
+    
     @org.springframework.beans.factory.annotation.Value("${gateway.admin.url:http://127.0.0.1:9090}")
     private String adminUrl;
     
@@ -51,6 +54,11 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
     @Autowired
     public ScgGlobalExceptionHandler(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
+    }
+
+    @jakarta.annotation.PostConstruct
+    public void init() {
+        this.webClient = WebClient.builder().build();
     }
 
     @Override
@@ -434,7 +442,7 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
             // Use async execution to not block error response
             java.util.concurrent.CompletableFuture.runAsync(() -> {
                 try {
-                    org.springframework.web.reactive.function.client.WebClient.create()
+                    webClient
                             .post()
                             .uri(adminUrl + "/api/traces/internal")
                             .contentType(MediaType.APPLICATION_JSON)

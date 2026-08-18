@@ -22,6 +22,7 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  KeyOutlined,
 } from "@ant-design/icons";
 import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
 
@@ -31,6 +32,7 @@ const InstancesPage = lazy(() => import("./pages/InstancesPage"));
 const InstanceCreatePage = lazy(() => import("./pages/InstanceCreatePage"));
 const InstanceDetailPage = lazy(() => import("./pages/InstanceDetailPage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
+const LicensePage = lazy(() => import("./pages/LicensePage"));
 const StressTestSharePage = lazy(() => import("./pages/StressTestSharePage"));
 const MiddlewareDetailPage = lazy(() => import("./pages/MiddlewareDetailPage"));
 
@@ -78,6 +80,7 @@ const App: React.FC = () => {
     username: string;
     nickname: string;
     role: string;
+    licenseEdition: string;
   } | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const navigate = useNavigate();
@@ -89,37 +92,46 @@ const App: React.FC = () => {
     () => [
       getItem(t("menu.instances"), "instances", <CloudServerOutlined />),
       getItem(t("menu.kubernetes"), "kubernetes", <ClusterOutlined />),
+      getItem("License", "license", <KeyOutlined />),
     ],
     [t],
   );
 
-  // Check login status on mount
+  // Check login status on mount - use useState initializer instead of useEffect to avoid cascading renders
+  const [initialAuthChecked, setInitialAuthChecked] = useState(false);
+  
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    const username = localStorage.getItem("username");
-    const nickname = localStorage.getItem("nickname");
-    const role = localStorage.getItem("role");
+    if (!initialAuthChecked) {
+      const token = localStorage.getItem("token");
+      const username = localStorage.getItem("username");
+      const nickname = localStorage.getItem("nickname");
+      const role = localStorage.getItem("role");
+      const licenseEdition = localStorage.getItem("licenseEdition") || "BASIC";
 
-    if (token && username) {
-      setIsLoggedIn(true);
-      setUser({
-        username,
-        nickname: nickname || username,
-        role: role || "USER",
-      });
+      if (token && username) {
+        setIsLoggedIn(true);
+        setUser({
+          username,
+          nickname: nickname || username,
+          role: role || "USER",
+          licenseEdition,
+        });
+      }
+      setInitialAuthChecked(true);
     }
-  }, []);
+  }, [initialAuthChecked]);
 
-  // Update current menu selection based on URL
+  // Update current menu selection based on URL - memoize the calculation
   useEffect(() => {
     const path = location.pathname;
-    if (path.startsWith("/instances/")) {
-      setCurrent("instances");
-    } else if (path === "/instances") {
-      setCurrent("instances");
-    } else if (path === "/kubernetes") {
-      setCurrent("kubernetes");
+    let newCurrent = "instances"; // default
+    
+    if (path === "/kubernetes") {
+      newCurrent = "kubernetes";
     }
+    
+    // Only update if different to avoid unnecessary re-renders
+    setCurrent((prev) => (prev !== newCurrent ? newCurrent : prev));
   }, [location.pathname]);
 
   const onClick: MenuProps["onClick"] = (e) => {
@@ -132,6 +144,7 @@ const App: React.FC = () => {
     localStorage.removeItem("username");
     localStorage.removeItem("nickname");
     localStorage.removeItem("role");
+    localStorage.removeItem("licenseEdition");
     setIsLoggedIn(false);
     setUser(null);
     message.success("Logout successful");
@@ -306,8 +319,11 @@ const App: React.FC = () => {
                   <Route path="events" element={null} />
                   <Route path="resources" element={null} />
                   <Route path="middleware" element={null} />
+                  <Route path="plugins" element={null} />
+                  <Route path="plugin_bindings" element={null} />
                 </Route>
                 <Route path="/kubernetes" element={<KubernetesPage />} />
+                <Route path="/license" element={<LicensePage />} />
                 <Route path="/middleware-detail" element={<MiddlewareDetailPage />} />
               </Routes>
             </Suspense>

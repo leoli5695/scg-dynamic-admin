@@ -50,6 +50,9 @@ class RefundServiceTest {
     @Mock
     private ValueOperations<String, String> valueOperations;
 
+    @Mock
+    private DistributedLockService distributedLockService;
+
     private RefundService refundService;
 
     private RefundRequest request;
@@ -59,11 +62,19 @@ class RefundServiceTest {
     void setUp() {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
 
+        // Mock: executeWithLock 直接执行 action.execute()
+        when(distributedLockService.executeWithLock(anyString(), any(DistributedLockService.LockAction.class)))
+                .thenAnswer(invocation -> {
+                    DistributedLockService.LockAction<?> action = invocation.getArgument(1);
+                    return action.execute();
+                });
+
         refundService = new RefundService(
                 orderMapper,
                 redisTemplate,
                 transactionLogMapper,
-                elasticsearchService
+                elasticsearchService,
+                distributedLockService
         );
 
         request = new RefundRequest();

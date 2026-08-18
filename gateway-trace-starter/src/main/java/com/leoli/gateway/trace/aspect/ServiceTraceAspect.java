@@ -1,6 +1,8 @@
 package com.leoli.gateway.trace.aspect;
 
 import com.leoli.gateway.trace.TraceContextHolder;
+import com.leoli.gateway.trace.model.SpanTags;
+import com.leoli.gateway.trace.model.SpanType;
 import com.leoli.gateway.trace.properties.GatewayTraceProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -10,7 +12,8 @@ import org.aspectj.lang.annotation.Aspect;
 /**
  * Service method tracing aspect
  * <p>
- * Automatically traces all Spring Service annotated method execution time
+ * Automatically traces all Spring Service annotated method execution time.
+ * Enhanced with hierarchical spanId/parentSpanId for tree visualization.
  *
  * @author leoli
  */
@@ -52,26 +55,22 @@ public class ServiceTraceAspect {
         }
 
         String operation = buildOperationName(pjp);
-        long start = System.nanoTime();
+        
+        // Use enhanced enterSpan for hierarchy support
+        String spanId = TraceContextHolder.enterSpan(operation, SpanType.SERVICE);
 
         try {
             Object result = pjp.proceed();
-            long durationMs = (System.nanoTime() - start) / 1_000_000;
+            TraceContextHolder.exitSpan(spanId, true);
 
-            // Record successful Span
-            TraceContextHolder.addSpan(operation, durationMs, true);
-
-            log.debug("Service traced: {} - {}ms - SUCCESS", operation, durationMs);
+            log.debug("Service traced: {} - SUCCESS", operation);
 
             return result;
 
         } catch (Throwable e) {
-            long durationMs = (System.nanoTime() - start) / 1_000_000;
+            TraceContextHolder.exitSpanWithException(spanId, e);
 
-            // Record failed Span
-            TraceContextHolder.addFailedSpan(operation, durationMs, e);
-
-            log.debug("Service traced: {} - {}ms - FAILED: {}", operation, durationMs, e.toString());
+            log.debug("Service traced: {} - FAILED: {}", operation, e.toString());
 
             throw e;
         }

@@ -34,6 +34,10 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class ApiVersionGlobalFilter implements GlobalFilter, Ordered {
 
+    /** Pre-compiled pattern to avoid recompilation on every request (performance fix) */
+    private static final java.util.regex.Pattern VERSION_PATH_PATTERN =
+            java.util.regex.Pattern.compile("/(v\\d+)/");
+
     private final StrategyManager strategyManager;
 
     @Override
@@ -87,7 +91,7 @@ public class ApiVersionGlobalFilter implements GlobalFilter, Ordered {
         if ("PATH".equals(versionMode)) {
             // Rewrite path: /users -> /v1/users (if needed)
             String path = request.getURI().getPath();
-            if (!path.matches(".*/v\\d+/.*")) {
+            if (!VERSION_PATH_PATTERN.matcher(path).find()) {
                 String newPath = "/" + targetVersion + path;
                 try {
                     URI newUri = new URI(
@@ -173,9 +177,9 @@ public class ApiVersionGlobalFilter implements GlobalFilter, Ordered {
 
             case "PATH":
                 // Extract version from path: /v1/users -> v1
+                // BUGFIX: 使用预编译的 VERSION_PATH_PATTERN，避免每次请求重新编译正则
                 String path = request.getURI().getPath();
-                java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("/(v\\d+)/")
-                        .matcher(path);
+                java.util.regex.Matcher matcher = VERSION_PATH_PATTERN.matcher(path);
                 if (matcher.find()) {
                     version = matcher.group(1);
                 }

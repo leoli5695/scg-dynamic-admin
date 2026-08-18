@@ -2,7 +2,7 @@
 # Build jar first: mvn clean package -DskipTests
 # Using eclipse-temurin (Ubuntu-based) with required tools
 
-FROM 05feb4b8a268e111bb3c4356701bf0c4.d.1ms.run/eclipse-temurin:17-jre
+FROM eclipse-temurin:17-jre
 WORKDIR /app
 
 # Install useful tools for debugging (Ubuntu-based)
@@ -26,12 +26,8 @@ RUN apt-get update && apt-get install -y \
     file \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy local Arthas package (faster build, no network dependency)
-COPY arthas-bin.zip /tmp/arthas.zip
-RUN mkdir -p /opt/arthas && \
-    unzip -q /tmp/arthas.zip -d /opt/arthas && \
-    rm /tmp/arthas.zip && \
-    chmod +x /opt/arthas/*.jar
+# Arthas: mount at runtime via volume instead of baking into image
+# docker run -v /path/to/arthas:/opt/arthas ...
 
 # Create non-root user for security
 RUN groupadd -r gateway && useradd -r -g gateway -d /home/gateway gateway
@@ -42,8 +38,8 @@ RUN mkdir -p /home/gateway && chown -R gateway:gateway /home/gateway
 # Copy pre-built jar (build locally first)
 COPY target/my-gateway-1.0.0.jar app.jar
 
-# Set ownership (including Arthas directory)
-RUN chown -R gateway:gateway /app /opt/arthas
+# Set ownership
+RUN chown -R gateway:gateway /app
 
 # Switch to non-root user
 USER gateway

@@ -12,6 +12,7 @@ import {
   HistoryOutlined, SyncOutlined, LineChartOutlined
 } from '@ant-design/icons';
 import api from '../utils/api';
+import logger from '../utils/logger';
 import { useTranslation } from 'react-i18next';
 import ReactECharts from 'echarts-for-react';
 
@@ -65,6 +66,26 @@ interface TrendData {
   maxScore?: number;
 }
 
+interface ComparisonResult {
+  baseline: MetricData;
+  current: MetricData;
+  diff: MetricDiff;
+  previousScore?: number;
+  scoreChange?: number;
+  summary?: string;
+}
+
+interface MetricData {
+  score: number;
+  status: string;
+  timestamp: number;
+}
+
+interface MetricDiff {
+  scoreChange: number;
+  statusChange: string;
+}
+
 interface DiagnosticPageProps {
   instanceId?: string;
 }
@@ -75,7 +96,7 @@ const DiagnosticPage: React.FC<DiagnosticPageProps> = ({ instanceId }) => {
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryRecord[]>([]);
   const [trend, setTrend] = useState<TrendData | null>(null);
-  const [comparison, setComparison] = useState<any>(null);
+  const [comparison, setComparison] = useState<ComparisonResult | null>(null);
   
   // Auto refresh settings
   const [autoRefresh, setAutoRefresh] = useState(false);
@@ -102,8 +123,9 @@ const DiagnosticPage: React.FC<DiagnosticPageProps> = ({ instanceId }) => {
       } else {
         setError('Failed to get diagnostic report');
       }
-    } catch (e: any) {
-      setError(e.message || 'Failed to run diagnostic');
+    } catch (e) {
+      const err = e as { message?: string };
+      setError(err.message || 'Failed to run diagnostic');
       message.error(t('diagnostic.run_failed') || '诊断运行失败');
     } finally {
       setLoading(false);
@@ -123,8 +145,8 @@ const DiagnosticPage: React.FC<DiagnosticPageProps> = ({ instanceId }) => {
         setHistory(data.history || []);
         setTrend(data.trend || null);
       }
-    } catch (e: any) {
-      console.error('Failed to fetch history:', e);
+    } catch (e) {
+      logger.error('Failed to fetch history:', e);
     }
   };
 
@@ -134,8 +156,8 @@ const DiagnosticPage: React.FC<DiagnosticPageProps> = ({ instanceId }) => {
       if (response.data) {
         setComparison(response.data?.data || response.data);
       }
-    } catch (e: any) {
-      console.error('Failed to fetch comparison:', e);
+    } catch (e) {
+      logger.error('Failed to fetch comparison:', e);
     }
   };
 
@@ -223,7 +245,7 @@ const DiagnosticPage: React.FC<DiagnosticPageProps> = ({ instanceId }) => {
       },
       tooltip: {
         trigger: 'axis',
-        formatter: (params: any) => {
+        formatter: (params: Array<{ value: [string, number] }>) => {
           const date = new Date(params[0].value[0]).toLocaleString();
           const score = params[0].value[1];
           return `${date}<br/>评分: ${score}`;
@@ -691,13 +713,13 @@ const DiagnosticPage: React.FC<DiagnosticPageProps> = ({ instanceId }) => {
                   <Statistic
                     title={t('diagnostic.score_change') || '评分变化'}
                     value={comparison.scoreChange || 0}
-                    prefix={comparison.scoreChange > 0 ? '+' : ''}
-                    valueStyle={{ color: comparison.scoreChange > 0 ? '#52c41a' : comparison.scoreChange < 0 ? '#ff4d4f' : '#8c8c8c' }}
+                    prefix={(comparison.scoreChange ?? 0) > 0 ? '+' : ''}
+                    valueStyle={{ color: (comparison.scoreChange ?? 0) > 0 ? '#52c41a' : (comparison.scoreChange ?? 0) < 0 ? '#ff4d4f' : '#8c8c8c' }}
                   />
                 </Col>
                 <Col span={12}>
                   <Alert
-                    type={comparison.scoreChange > 0 ? 'success' : comparison.scoreChange < -5 ? 'warning' : 'info'}
+                    type={(comparison.scoreChange ?? 0) > 0 ? 'success' : (comparison.scoreChange ?? 0) < -5 ? 'warning' : 'info'}
                     message={comparison.summary || '系统健康度保持稳定'}
                     showIcon
                   />

@@ -52,6 +52,12 @@ spec:
           value: "6379"
         - name: GATEWAY_SSL_ENABLED
           value: "true"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://jaeger:4318"
+        - name: OTEL_TRACING_ENABLED
+          value: "true"
+        - name: OTEL_SDK_DISABLED
+          value: "false"
         resources:
           requests:
             cpu: "500m"

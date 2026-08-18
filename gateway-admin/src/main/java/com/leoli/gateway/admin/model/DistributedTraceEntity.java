@@ -113,4 +113,19 @@ public class DistributedTraceEntity {
      */
     @Column(name = "gateway_instance_id", length = 36)
     private String gatewayInstanceId;
+
+    /**
+     * 上游服务名称（调用方服务）
+     * 从 X-Caller-Service Header 获取，用于拓扑图生成
+     */
+    @Column(name = "upstream_service", length = 255)
+    private String upstreamService;
+
+    /**
+     * 下游服务名称列表（JSON格式）
+     * 从 Span metadata 的 SERVICE_TARGET 标签提取
+     * 用于拓扑图生成，示例: ["order-service", "inventory-service"]
+     */
+    @Column(name = "downstream_services", length = 1000)
+    private String downstreamServices;
 }

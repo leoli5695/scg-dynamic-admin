@@ -9,6 +9,7 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 
 import java.util.Collections;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Redis distributed rate limiter - Atomic operations via Lua script.
@@ -28,6 +29,11 @@ public class DistributedRateLimiter {
 
     @Autowired(required = false)
     private DefaultRedisScript<Long> rateLimitScript;
+
+    // 【P1-3修复】缓存 Redis 健康状态，避免每次请求都执行 GET 探测
+    private volatile boolean redisAvailableCache = false;
+    private final AtomicLong lastHealthCheckTime = new AtomicLong(0);
+    private static final long HEALTH_CHECK_INTERVAL_MS = 5000; // 每5秒探测一次
 
     /**
      * Try to acquire a permit with detailed result.
@@ -101,16 +107,28 @@ public class DistributedRateLimiter {
 
     /**
      * Check if Redis is available.
+     * 【P1-3修复】使用缓存健康状态，每5秒探测一次，避免每次请求都执行 Redis GET。
      */
     public boolean isRedisAvailable() {
         if (redisTemplate == null || rateLimitScript == null) {
             return false;
         }
 
+        long now = System.currentTimeMillis();
+        long lastCheck = lastHealthCheckTime.get();
+        if (now - lastCheck < HEALTH_CHECK_INTERVAL_MS) {
+            return redisAvailableCache;
+        }
+
+        // 超过间隔，尝试探测
         try {
             redisTemplate.opsForValue().get("health_check");
+            redisAvailableCache = true;
+            lastHealthCheckTime.set(now);
             return true;
         } catch (Exception e) {
+            redisAvailableCache = false;
+            lastHealthCheckTime.set(now);
             return false;
         }
     }

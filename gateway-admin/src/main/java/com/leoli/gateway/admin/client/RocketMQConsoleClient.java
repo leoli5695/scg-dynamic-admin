@@ -2,6 +2,7 @@ package com.leoli.gateway.admin.client;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
@@ -27,7 +28,14 @@ public class RocketMQConsoleClient {
     @Value("${gateway.middleware.rocketmq-console-url:http://localhost:30808}")
     private String consoleUrl;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate = createRestTemplate();
+
+    private static RestTemplate createRestTemplate() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(10000); // 10 seconds
+        factory.setReadTimeout(30000);    // 30 seconds
+        return new RestTemplate(factory);
+    }
 
     /**
      * 查询 RocketMQ 集群概览指标

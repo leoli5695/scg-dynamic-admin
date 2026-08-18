@@ -8,6 +8,7 @@ import {
   PlusOutlined, DeleteOutlined, SendOutlined, AlertOutlined, CloudServerOutlined
 } from '@ant-design/icons';
 import api from '../utils/api';
+import logger from '../utils/logger';
 import { useTranslation } from 'react-i18next';
 
 const { Title, Text } = Typography;
@@ -239,8 +240,9 @@ const AlertPage: React.FC<AlertPageProps> = ({ instanceId }) => {
       } else {
         message.error(res.data.message || t('alert.save_failed'));
       }
-    } catch (e: any) {
-      message.error(e.message || t('alert.save_failed'));
+    } catch (e) {
+      const err = e as { message?: string };
+      message.error(err.message || t('alert.save_failed'));
     }
   };
 
@@ -289,8 +291,9 @@ const AlertPage: React.FC<AlertPageProps> = ({ instanceId }) => {
       } else {
         message.error(res.data.message || t('alert.save_failed'));
       }
-    } catch (e: any) {
-      message.error(e.message || t('alert.save_failed'));
+    } catch (e) {
+      const err = e as { message?: string };
+      message.error(err.message || t('alert.save_failed'));
     } finally {
       setSaving(false);
     }
@@ -313,8 +316,9 @@ const AlertPage: React.FC<AlertPageProps> = ({ instanceId }) => {
       } else {
         message.error(res.data.message || t('alert.test_email_failed'));
       }
-    } catch (e: any) {
-      message.error(e.message || t('alert.test_email_failed'));
+    } catch (e) {
+      const err = e as { message?: string };
+      message.error(err.message || t('alert.test_email_failed'));
     }
   };
 
@@ -322,9 +326,9 @@ const AlertPage: React.FC<AlertPageProps> = ({ instanceId }) => {
   const handleClearHistory = async () => {
     try {
       const params = instanceId ? `?instanceId=${instanceId}` : '';
-      console.log('Clearing alert history with params:', params, 'instanceId:', instanceId);
+      logger.debug('Clearing alert history with params:', params, 'instanceId:', instanceId);
       const res = await api.delete(`/api/alerts/history${params}`);
-      console.log('Clear history response:', res.data);
+      logger.debug('Clear history response:', res.data);
       if (res.data.code === 200) {
         message.success(res.data.message || 'History cleared');
         setHistory([]);
@@ -332,9 +336,10 @@ const AlertPage: React.FC<AlertPageProps> = ({ instanceId }) => {
       } else {
         message.error(res.data.message || 'Failed to clear history');
       }
-    } catch (e: any) {
-      console.error('Clear history error:', e);
-      message.error(e.message || 'Failed to clear history');
+    } catch (e) {
+      const err = e as { message?: string };
+      logger.error('Clear history error:', e);
+      message.error(err.message || 'Failed to clear history');
     }
   };
 

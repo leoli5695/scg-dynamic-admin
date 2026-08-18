@@ -2,9 +2,11 @@ package com.leoli.gateway.admin.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.dto.ApiResponse;
+import com.leoli.gateway.admin.license.LicenseFeatureHelper;
 import com.leoli.gateway.admin.model.KubernetesCluster;
 import com.leoli.gateway.admin.service.AuditLogService;
 import com.leoli.gateway.admin.service.KubernetesService;
+import com.leoli.license.client.model.LicenseInfo;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,12 +31,16 @@ public class KubernetesController extends BaseController {
     private final KubernetesService kubernetesService;
     private final AuditLogService auditLogService;
     private final ObjectMapper objectMapper;
+    private final LicenseFeatureHelper licenseFeatureHelper;
 
     /**
      * Test kubeconfig connection without saving.
      */
     @PostMapping("/test-connection")
     public ResponseEntity<ApiResponse<Map<String, Object>>> testConnection(@RequestBody Map<String, Object> request) {
+        // License feature check - K8s integration requires ADVANCED edition
+        licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.K8S_INTEGRATION);
+
         try {
             String kubeconfig = (String) request.get("kubeconfig");
 
@@ -58,6 +64,9 @@ public class KubernetesController extends BaseController {
     public ResponseEntity<ApiResponse<KubernetesCluster>> importCluster(
             @RequestBody Map<String, Object> request,
             HttpServletRequest httpRequest) {
+        // License feature check
+        licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.K8S_INTEGRATION);
+
         try {
             String clusterName = (String) request.get("clusterName");
             String kubeconfig = (String) request.get("kubeconfig");
@@ -302,6 +311,9 @@ public class KubernetesController extends BaseController {
             @PathVariable Long id,
             @RequestBody Map<String, Object> request,
             HttpServletRequest httpRequest) {
+        // License feature check
+        licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.K8S_INTEGRATION);
+
         try {
             String namespace = (String) request.getOrDefault("namespace", "gateway");
             String appName = (String) request.getOrDefault("appName", "my-gateway");

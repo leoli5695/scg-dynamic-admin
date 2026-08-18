@@ -154,7 +154,10 @@ public class DistributedLockService {
 
         try {
             // 快速失败策略
-            if (lock.tryLock(WAIT_TIME_MS, LEASE_TIME_SEC, TimeUnit.MILLISECONDS)) {
+            // BUGFIX: LEASE_TIME_SEC 单位是秒，但原来传了 TimeUnit.MILLISECONDS，
+            // 导致锁实际 5ms 就过期，形同虚设。
+            // RLock.tryLock 只有 3 参数重载: tryLock(waitTime, leaseTime, unit)
+            if (lock.tryLock(WAIT_TIME_MS, LEASE_TIME_SEC, TimeUnit.SECONDS)) {
                 try {
                     return action.execute();
                 } finally {
@@ -190,7 +193,10 @@ public class DistributedLockService {
 
         for (int retry = 0; retry <= maxRetries; retry++) {
             try {
-                if (lock.tryLock(WAIT_TIME_MS, LEASE_TIME_SEC, TimeUnit.MILLISECONDS)) {
+                // BUGFIX: LEASE_TIME_SEC 单位是秒，但原来传了 TimeUnit.MILLISECONDS，
+                // 导致锁实际 5ms 就过期，形同虚设。
+                // RLock.tryLock 只有 3 参数重载: tryLock(waitTime, leaseTime, unit)
+                if (lock.tryLock(WAIT_TIME_MS, LEASE_TIME_SEC, TimeUnit.SECONDS)) {
                     try {
                         return action.execute();
                     } finally {
@@ -227,7 +233,8 @@ public class DistributedLockService {
         RLock lock = redissonClient.getLock(lockKey);
 
         try {
-            boolean acquired = lock.tryLock(WAIT_TIME_MS, LEASE_TIME_SEC, TimeUnit.MILLISECONDS);
+            // BUGFIX: LEASE_TIME_SEC 单位是秒，原来误传 TimeUnit.MILLISECONDS 导致锁 5ms 即过期
+            boolean acquired = lock.tryLock(WAIT_TIME_MS, LEASE_TIME_SEC, TimeUnit.SECONDS);
             if (acquired) {
                 log.info("成功获取锁: lockKey={}", lockKey);
             } else {

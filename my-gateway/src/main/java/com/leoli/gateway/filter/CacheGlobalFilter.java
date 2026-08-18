@@ -13,17 +13,21 @@ import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
+import org.reactivestreams.Publisher;
+import org.springframework.core.io.buffer.DataBufferUtils;
+import org.springframework.http.server.reactive.ServerHttpResponseDecorator;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Pattern;
 
 /**
  * Cache global filter for GET/HEAD requests.
@@ -40,10 +44,6 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
 
     // Cache instances per route: routeId -> cache
     private final Map<String, Cache<String, CachedResponse>> routeCaches = new java.util.concurrent.ConcurrentHashMap<>();
-
-    // Vary header pattern
-    private static final Pattern EXCLUDE_PATH_PATTERN = Pattern.compile(".*(login|logout|auth|payment|order).*",
-            Pattern.CASE_INSENSITIVE);
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
@@ -72,7 +72,8 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
         List<String> excludePaths = getStringListValue(config, "excludePaths");
         if (excludePaths != null && !excludePaths.isEmpty()) {
             for (String excludePath : excludePaths) {
-                if (path.matches(excludePath.replace("*", ".*"))) {
+                // Use simple wildcard matching instead of regex to prevent ReDoS
+                if (matchesWildcardPath(path, excludePath)) {
                     log.debug("Path {} excluded from cache", path);
                     return chain.filter(exchange);
                 }
@@ -94,36 +95,102 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
 
         log.debug("Cache miss for route {}, key: {}", routeId, cacheKey);
 
-        // Cache miss - execute request and cache response
-        return chain.filter(exchange).then(Mono.fromRunnable(() -> {
-            ServerHttpResponse response = exchange.getResponse();
+        // Cache miss - intercept response body for caching using decorator
+        ServerHttpResponse originalResponse = exchange.getResponse();
+        ServerHttpResponseDecorator decoratedResponse = new ServerHttpResponseDecorator(originalResponse) {
+            @Override
+            public Mono<Void> writeWith(Publisher<? extends DataBuffer> body) {
+                HttpStatusCode statusCode = getStatusCode();
 
-            // Only cache successful responses
-            if (response.getStatusCode() != null &&
-                    response.getStatusCode().is2xxSuccessful() &&
-                    response.getStatusCode() != HttpStatus.NO_CONTENT) {
-
-                // Check if response is cacheable
-                String cacheControl = response.getHeaders().getFirst(HttpHeaders.CACHE_CONTROL);
-                if (cacheControl != null && cacheControl.contains("no-cache")) {
-                    log.debug("Response marked as no-cache, skipping cache");
-                    return;
+                // Only cache successful responses with content
+                if (statusCode == null || !statusCode.is2xxSuccessful() || statusCode.value() == HttpStatus.NO_CONTENT.value()) {
+                    return super.writeWith(body);
                 }
 
-                // Cache the response
-                // Note: In a production system, you'd want to cache the body bytes
-                // For simplicity, we're caching metadata here
-                long ttlSeconds = getLongValue(config, "ttlSeconds", 60L);
-                CachedResponse cachedResponse = new CachedResponse(
-                        response.getStatusCode().value(),
-                        response.getHeaders(),
-                        System.currentTimeMillis() + (ttlSeconds * 1000)
-                );
+                // Check if response is cacheable
+                String cacheControl = getHeaders().getFirst(HttpHeaders.CACHE_CONTROL);
+                if (cacheControl != null && cacheControl.contains("no-cache")) {
+                    log.debug("Response marked as no-cache, skipping cache");
+                    return super.writeWith(body);
+                }
 
-                cache.put(cacheKey, cachedResponse);
-                log.debug("Cached response for route {}, key: {}", routeId, cacheKey);
+                // Intercept and cache response body with proper DataBuffer release tracking
+                return Flux.from(body)
+                        .collectList()
+                        .flatMap(buffers -> {
+                            if (buffers.isEmpty()) {
+                                return super.writeWith(Flux.empty());
+                            }
+
+                            int totalSize = buffers.stream().mapToInt(DataBuffer::readableByteCount).sum();
+
+                            // 【P1-2修复】限制缓存体大小，防止大响应体撑爆堆内存（OOM）
+                            long maxCacheBodySize = getLongValue(config, "maxCacheBodySize", 1024L * 1024); // 默认1MB
+                            if (totalSize > maxCacheBodySize) {
+                                log.debug("Response body {} bytes exceeds maxCacheBodySize {} bytes, skipping cache",
+                                        totalSize, maxCacheBodySize);
+                                return super.writeWith(Flux.fromIterable(buffers));
+                            }
+                            byte[] allBytes = new byte[totalSize];
+                            int offset = 0;
+                            int releasedCount = 0;
+                            try {
+                                for (DataBuffer buffer : buffers) {
+                                    int size = buffer.readableByteCount();
+                                    buffer.read(allBytes, offset, size);
+                                    offset += size;
+                                    DataBufferUtils.release(buffer);
+                                    releasedCount++;
+                                }
+
+                                // Cache the response with body bytes
+                                long ttlSeconds = getLongValue(config, "ttlSeconds", 60L);
+                                HttpHeaders copiedHeaders = new HttpHeaders();
+                                copiedHeaders.putAll(originalResponse.getHeaders());
+                                CachedResponse cachedResponse = new CachedResponse(
+                                        statusCode.value(),
+                                        copiedHeaders,
+                                        allBytes,
+                                        System.currentTimeMillis() + (ttlSeconds * 1000)
+                                );
+                                cache.put(cacheKey, cachedResponse);
+                                log.debug("Cached response for route {}, key: {}, size: {} bytes",
+                                        routeId, cacheKey, allBytes.length);
+
+                                return super.writeWith(Mono.just(originalResponse.bufferFactory().wrap(allBytes)));
+                            } catch (Exception e) {
+                                log.error("Error caching response body: {}", e.getMessage(), e);
+                                for (int i = releasedCount; i < buffers.size(); i++) {
+                                    DataBufferUtils.release(buffers.get(i));
+                                }
+                                if (allBytes != null) {
+                                    return super.writeWith(Mono.just(originalResponse.bufferFactory().wrap(allBytes)));
+                                }
+                                return super.writeWith(Flux.empty());
+                            }
+                        });
             }
-        }));
+        };
+
+        return chain.filter(exchange.mutate().response(decoratedResponse).build());
+    }
+
+    /**
+     * Simple wildcard path matching (supports * as wildcard).
+     * Safer than regex-based matching to prevent ReDoS attacks.
+     */
+    private boolean matchesWildcardPath(String path, String pattern) {
+        // Convert wildcard pattern to simple prefix/suffix matching
+        if (pattern.startsWith("*") && pattern.endsWith("*")) {
+            String middle = pattern.substring(1, pattern.length() - 1);
+            return path.contains(middle);
+        } else if (pattern.startsWith("*")) {
+            return path.endsWith(pattern.substring(1));
+        } else if (pattern.endsWith("*")) {
+            return path.startsWith(pattern.substring(0, pattern.length() - 1));
+        } else {
+            return path.equals(pattern);
+        }
     }
 
     /**
@@ -187,8 +254,8 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
         response.getHeaders().add("X-Cache", "HIT");
         response.getHeaders().add("Age", String.valueOf((System.currentTimeMillis() - cached.createdAt) / 1000));
 
-        // Write empty body (in production, you'd cache the actual body)
-        DataBuffer buffer = response.bufferFactory().wrap(new byte[0]);
+        // Write cached body bytes (actual response content)
+        DataBuffer buffer = response.bufferFactory().wrap(cached.body);
         return response.writeWith(Mono.just(buffer));
     }
 
@@ -250,12 +317,14 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
     private static class CachedResponse {
         final int statusCode;
         final HttpHeaders headers;
+        final byte[] body;
         final long expiresAt;
         final long createdAt;
 
-        CachedResponse(int statusCode, HttpHeaders headers, long expiresAt) {
+        CachedResponse(int statusCode, HttpHeaders headers, byte[] body, long expiresAt) {
             this.statusCode = statusCode;
             this.headers = headers;
+            this.body = body;
             this.expiresAt = expiresAt;
             this.createdAt = System.currentTimeMillis();
         }

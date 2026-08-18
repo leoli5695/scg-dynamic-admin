@@ -663,8 +663,9 @@ data:
       } else {
         message.error(res.data.message || t('access_log.save_failed'));
       }
-    } catch (e: any) {
-      message.error(e.message || t('access_log.save_failed'));
+    } catch (e) {
+      const err = e as { message?: string };
+      message.error(err.message || t('access_log.save_failed'));
     } finally {
       setSaving(false);
     }
@@ -681,8 +682,9 @@ data:
       } else {
         message.error(res.data.message || t('access_log.reset_failed'));
       }
-    } catch (e: any) {
-      message.error(e.message || t('access_log.reset_failed'));
+    } catch (e) {
+      const err = e as { message?: string };
+      message.error(err.message || t('access_log.reset_failed'));
     }
   };
 

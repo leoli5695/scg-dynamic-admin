@@ -26,6 +26,49 @@ import {
   Alert,
 } from "antd";
 import type { MenuProps } from "antd";
+
+// Type definitions for health and resource data
+interface HealthDetails {
+  score: number;
+  level: string;
+  clusterName: string;
+  namespace: string;
+  nodeHealth: NodeHealthMetrics;
+  podHealth: PodHealthMetrics;
+  issues?: HealthIssue[];
+  recommendations?: string[];
+}
+
+interface NodeHealthMetrics {
+  readyNodes: number;
+  totalNodes: number;
+  score: number;
+}
+
+interface PodHealthMetrics {
+  runningPods: number;
+  totalPods: number;
+  score: number;
+  totalRestarts: number;
+  problematicPods?: Array<{ name: string; restartCount: number }>;
+}
+
+interface HealthIssue {
+  severity: string;
+  message: string;
+}
+
+interface ResourceMetrics {
+  cpuUsage: number;
+  memoryUsage: number;
+  networkIn: number;
+  networkOut: number;
+  timestamp: number;
+  mode?: string;
+  nodes?: { total?: number; list?: Array<{ name: string; ready: boolean; allocatable?: { cpu: string; memory: string } }> };
+  pods?: { total?: number; running?: number; list?: Array<{ name: string; phase: string; podIP?: string; containers?: unknown[] }> };
+}
+
 import {
   ArrowLeftOutlined,
   ReloadOutlined,
@@ -58,6 +101,7 @@ import {
   RightOutlined,
   DownOutlined,
   DatabaseOutlined,
+  RocketOutlined,
 } from "@ant-design/icons";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -84,6 +128,8 @@ const AiCopilotPage = lazy(() => import("./AiCopilotPage"));
 const StressTestPage = lazy(() => import("./StressTestPage"));
 const ServiceMiddlewarePage = lazy(() => import("./ServiceMiddlewarePage"));
 const MiddlewareDetailPage = lazy(() => import("./MiddlewareDetailPage"));
+const PluginsPage = lazy(() => import("./PluginsPage"));
+const RoutePluginBindingsPage = lazy(() => import("./RoutePluginBindingsPage"));
 
 // Tab loading fallback component
 const TabLoading: React.FC = () => (
@@ -189,12 +235,12 @@ const InstanceDetailPage: React.FC = () => {
   // Health Score state
   const [healthScore, setHealthScore] = useState<number | null>(null);
   const [healthLevel, setHealthLevel] = useState<string>("");
-  const [healthDetails, setHealthDetails] = useState<any>(null);
+  const [healthDetails, setHealthDetails] = useState<HealthDetails | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
   const [healthExpanded, setHealthExpanded] = useState(false);
 
   // Resource metrics state
-  const [resourceMetrics, setResourceMetrics] = useState<any>(null);
+  const [resourceMetrics, setResourceMetrics] = useState<ResourceMetrics | null>(null);
   const [resourceLoading, setResourceLoading] = useState(false);
 
   // Spec options for scaling
@@ -550,6 +596,24 @@ const InstanceDetailPage: React.FC = () => {
       ),
     },
     {
+      key: "plugins",
+      label: (
+        <span>
+          <RocketOutlined />
+          {t("menu.plugins") || "插件管理"}
+        </span>
+      ),
+    },
+    {
+      key: "plugin_bindings",
+      label: (
+        <span>
+          <LinkOutlined />
+          {t("menu.plugin_bindings") || "插件绑定"}
+        </span>
+      ),
+    },
+    {
       key: "strategies",
       label: (
         <span>
@@ -852,18 +916,18 @@ const InstanceDetailPage: React.FC = () => {
                               {/* Pod Health */}
                               <Col span={12}>
                                 <div style={{ 
-                                  background: healthDetails?.podHealth?.score >= 80 ? '#f6ffed' : '#fffbe6', 
+                                  background: (healthDetails?.podHealth?.score ?? 0) >= 80 ? '#f6ffed' : '#fffbe6', 
                                   borderRadius: 8, 
                                   padding: '10px 12px',
-                                  border: `1px solid ${healthDetails?.podHealth?.score >= 80 ? '#b7eb8f' : '#ffe58f'}`
+                                  border: `1px solid ${(healthDetails?.podHealth?.score ?? 0) >= 80 ? '#b7eb8f' : '#ffe58f'}`
                                 }}>
                                   <div className="flex-items-center mb-2">
-                                    <Badge status={healthDetails?.podHealth?.score >= 80 ? "success" : "warning"} />
+                                    <Badge status={(healthDetails?.podHealth?.score ?? 0) >= 80 ? "success" : "warning"} />
                                     <span style={{ fontSize: 12, fontWeight: 500, marginLeft: 6 }}>
                                       {t("instance.pod_health") || "Pod"}
                                     </span>
                                   </div>
-                                  <div style={{ fontSize: 16, fontWeight: 'bold', color: healthDetails?.podHealth?.score >= 80 ? '#52c41a' : '#faad14' }}>
+                                  <div style={{ fontSize: 16, fontWeight: 'bold', color: (healthDetails?.podHealth?.score ?? 0) >= 80 ? '#52c41a' : '#faad14' }}>
                                     {healthDetails?.podHealth?.runningPods || 0}/{healthDetails?.podHealth?.totalPods || 0}
                                   </div>
                                   <div style={{ fontSize: 11, color: '#8c8c8c', marginTop: 4 }}>
@@ -873,15 +937,15 @@ const InstanceDetailPage: React.FC = () => {
                                     percent={healthDetails?.podHealth?.score || 0} 
                                     size="small" 
                                     showInfo={false}
-                                    strokeColor={healthDetails?.podHealth?.score >= 80 ? '#52c41a' : '#faad14'}
-                                    trailColor={healthDetails?.podHealth?.score >= 80 ? '#d9f7be' : '#fff1b8'}
+                                    strokeColor={(healthDetails?.podHealth?.score ?? 0) >= 80 ? '#52c41a' : '#faad14'}
+                                    trailColor={(healthDetails?.podHealth?.score ?? 0) >= 80 ? '#d9f7be' : '#fff1b8'}
                                   />
                                 </div>
                               </Col>
                             </Row>
                             
                             {/* Issues Section */}
-                            {healthDetails?.issues?.length > 0 && (
+                            {(healthDetails?.issues?.length ?? 0) > 0 && (
                               <div style={{ 
                                 marginBottom: 12,
                                 background: '#fff2f0',
@@ -892,11 +956,11 @@ const InstanceDetailPage: React.FC = () => {
                                 <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
                                   <AlertOutlined style={{ color: '#ff4d4f', fontSize: 14 }} />
                                   <span style={{ fontWeight: 500, marginLeft: 8, color: '#ff4d4f' }}>
-                                    {t("instance.issues") || "问题"} ({healthDetails.issues.length})
+                                    {t("instance.issues") || "问题"} ({healthDetails!.issues!.length})
                                   </span>
                                 </div>
                                 <div style={{ maxHeight: healthExpanded ? 200 : 80, overflowY: 'auto' }}>
-                                  {healthDetails.issues.slice(0, healthExpanded ? healthDetails.issues.length : 3).map((issue: any, idx: number) => (
+                                  {healthDetails!.issues!.slice(0, healthExpanded ? healthDetails!.issues!.length : 3).map((issue: any, idx: number) => (
                                     <div key={idx} style={{ 
                                       display: 'flex', 
                                       alignItems: 'center',
@@ -916,7 +980,7 @@ const InstanceDetailPage: React.FC = () => {
                                     </div>
                                   ))}
                                 </div>
-                                {healthDetails.issues.length > 3 && (
+                                {healthDetails!.issues!.length > 3 && (
                                   <div 
                                     style={{ 
                                       textAlign: 'center', 
@@ -931,7 +995,7 @@ const InstanceDetailPage: React.FC = () => {
                                     {healthExpanded ? (
                                       <>{t("instance.collapse") || "收起"} <DownOutlined style={{ marginLeft: 4 }} /></>
                                     ) : (
-                                      <>+{healthDetails.issues.length - 3} {t("instance.more_issues") || "更多"} <RightOutlined style={{ marginLeft: 4 }} /></>
+                                      <>+{healthDetails!.issues!.length - 3} {t("instance.more_issues") || "更多"} <RightOutlined style={{ marginLeft: 4 }} /></>
                                     )}
                                   </div>
                                 )}
@@ -939,7 +1003,7 @@ const InstanceDetailPage: React.FC = () => {
                             )}
                             
                             {/* Problematic Pods */}
-                            {healthDetails?.podHealth?.problematicPods?.length > 0 && (
+                            {(healthDetails?.podHealth?.problematicPods?.length ?? 0) > 0 && (
                               <div style={{ 
                                 marginBottom: 12,
                                 background: '#fafafa',
@@ -949,17 +1013,17 @@ const InstanceDetailPage: React.FC = () => {
                                 <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
                                   <BugOutlined style={{ color: '#fa8c16', fontSize: 14 }} />
                                   <span style={{ fontWeight: 500, marginLeft: 8, color: '#595959' }}>
-                                    {t("instance.problematic_pods") || "问题Pod"} ({healthDetails.podHealth.problematicPods.length})
+                                    {t("instance.problematic_pods") || "问题Pod"} ({healthDetails!.podHealth!.problematicPods!.length})
                                   </span>
                                 </div>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                                  {healthDetails.podHealth.problematicPods.slice(0, healthExpanded ? healthDetails.podHealth.problematicPods.length : 4).map((pod: any, idx: number) => (
+                                  {healthDetails!.podHealth!.problematicPods!.slice(0, healthExpanded ? healthDetails!.podHealth!.problematicPods!.length : 4).map((pod: any, idx: number) => (
                                     <Tag key={idx} style={{ fontSize: 11, borderRadius: 4 }}>
                                       {pod.name.substring(0, 20)}... ({pod.restartCount}{t("instance.times") || "次"})
                                     </Tag>
                                   ))}
                                 </div>
-                                {healthDetails.podHealth.problematicPods.length > 4 && (
+                                {healthDetails!.podHealth!.problematicPods!.length > 4 && (
                                   <div 
                                     style={{ 
                                       textAlign: 'center', 
@@ -974,7 +1038,7 @@ const InstanceDetailPage: React.FC = () => {
                                     {healthExpanded ? (
                                       <>{t("instance.collapse") || "收起"} <DownOutlined style={{ marginLeft: 4 }} /></>
                                     ) : (
-                                      <>+{healthDetails.podHealth.problematicPods.length - 4} {t("instance.more_pods") || "还有"} <RightOutlined style={{ marginLeft: 4 }} /></>
+                                      <>+{healthDetails!.podHealth!.problematicPods!.length - 4} {t("instance.more_pods") || "还有"} <RightOutlined style={{ marginLeft: 4 }} /></>
                                     )}
                                   </div>
                                 )}
@@ -982,7 +1046,7 @@ const InstanceDetailPage: React.FC = () => {
                             )}
                             
                             {/* Recommendations */}
-                            {healthDetails?.recommendations?.length > 0 && (
+                            {(healthDetails?.recommendations?.length ?? 0) > 0 && (
                               <div style={{ 
                                 background: '#e6f7ff',
                                 borderRadius: 8,
@@ -996,7 +1060,7 @@ const InstanceDetailPage: React.FC = () => {
                                   </span>
                                 </div>
                                 <ul style={{ margin: 0, paddingLeft: 18, fontSize: 11, color: '#595959' }}>
-                                  {healthDetails.recommendations.slice(0, 2).map((rec: string, idx: number) => (
+                                  {healthDetails!.recommendations!.slice(0, 2).map((rec: string, idx: number) => (
                                     <li key={idx} style={{ marginBottom: 2 }}>{rec}</li>
                                   ))}
                                 </ul>
@@ -1411,6 +1475,22 @@ const InstanceDetailPage: React.FC = () => {
           <ErrorBoundary>
             <Suspense fallback={<TabLoading />}>
               <ServiceMiddlewarePage instanceId={instance.instanceId} />
+            </Suspense>
+          </ErrorBoundary>
+        );
+      case "plugins":
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<TabLoading />}>
+              <PluginsPage instanceId={instance.instanceId} />
+            </Suspense>
+          </ErrorBoundary>
+        );
+      case "plugin_bindings":
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<TabLoading />}>
+              <RoutePluginBindingsPage instanceId={instance.instanceId} />
             </Suspense>
           </ErrorBoundary>
         );

@@ -1,5 +1,6 @@
 import { useRef, useCallback, useEffect } from 'react';
 import axios, { AxiosRequestConfig, AxiosResponse, CancelTokenSource, AxiosError } from 'axios';
+import logger from '../utils/logger';
 
 /**
  * Hook for making abortable HTTP requests
@@ -71,7 +72,7 @@ export function useAbortableRequest() {
       // If request was cancelled, don't throw error
       if (axios.isCancel(error)) {
         const cancelError = error as { message: string };
-        console.log(`Request ${id} cancelled:`, cancelError.message);
+        logger.debug(`Request ${id} cancelled:`, cancelError.message);
         return null;
       }
 

@@ -1,17 +1,24 @@
 package com.leoli.gateway.trace.aspect;
 
 import com.leoli.gateway.trace.TraceContextHolder;
+import com.leoli.gateway.trace.model.DistributedTrace;
+import com.leoli.gateway.trace.model.ServiceSpan;
+import com.leoli.gateway.trace.model.SpanTags;
+import com.leoli.gateway.trace.model.SpanType;
 import com.leoli.gateway.trace.properties.GatewayTraceProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 
+import java.util.Map;
+
 /**
  * Kafka MQ operation tracing aspect
  * <p>
  * Separated from MQTraceAspect to avoid AspectJ parsing KafkaTemplate
  * pointcut when Kafka is not on the classpath.
+ * Enhanced with hierarchical spanId/parentSpanId and standardized tags.
  *
  * @author leoli
  */
@@ -50,29 +57,61 @@ public class KafkaMQTraceAspect {
             return pjp.proceed();
         }
 
-        String operation = "kafka-" + pjp.getSignature().getName();
-        long start = System.nanoTime();
+        String methodName = pjp.getSignature().getName();
+        String operation = "kafka-" + methodName;
+        
+        // Use enhanced enterSpan for hierarchy support
+        String spanId = TraceContextHolder.enterSpan(operation, SpanType.MQ);
 
         try {
             Object result = pjp.proceed();
-            long durationMs = (System.nanoTime() - start) / 1_000_000;
+            
+            // Add standardized MQ tags
+            addKafkaTags(spanId, methodName, pjp.getArgs());
+            
+            TraceContextHolder.exitSpan(spanId, true);
 
-            // Record successful Span
-            TraceContextHolder.addSpan(operation, durationMs, true);
-
-            log.debug("kafka traced: {} - {}ms", operation, durationMs);
+            log.debug("kafka traced: {} - SUCCESS", operation);
 
             return result;
 
         } catch (Throwable e) {
-            long durationMs = (System.nanoTime() - start) / 1_000_000;
+            TraceContextHolder.exitSpanWithException(spanId, e);
 
-            // Record failed Span
-            TraceContextHolder.addFailedSpan(operation, durationMs, e);
-
-            log.debug("kafka traced: {} - {}ms - FAILED: {}", operation, durationMs, e.toString());
+            log.debug("kafka traced: {} - FAILED: {}", operation, e.toString());
 
             throw e;
+        }
+    }
+
+    /**
+     * Add standardized Kafka tags to span
+     */
+    private void addKafkaTags(String spanId, String methodName, Object[] args) {
+        DistributedTrace trace = TraceContextHolder.getTrace();
+        if (trace == null) return;
+        
+        for (ServiceSpan span : trace.getSpans()) {
+            if (span.getSpanId() != null && span.getSpanId().equals(spanId)) {
+                Map<String, Object> tags = span.getOrCreateTags();
+                tags.put(SpanTags.MQ_SYSTEM, "kafka");
+                
+                // Extract topic from args
+                if (args != null && args.length > 0 && args[0] != null) {
+                    String topic = args[0].toString();
+                    if (topic.length() > 100) {
+                        topic = topic.substring(0, 100) + "...";
+                    }
+                    tags.put(SpanTags.MQ_TOPIC, topic);
+                }
+                
+                // Extract partition if available
+                if (args != null && args.length > 1 && args[1] instanceof Integer) {
+                    tags.put(SpanTags.MQ_PARTITION, args[1]);
+                }
+                
+                break;
+            }
         }
     }
 }

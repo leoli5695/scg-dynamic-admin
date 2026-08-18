@@ -69,14 +69,24 @@ public class StressTestService {
 
     @PostConstruct
     private void initHttpClient() {
-        int poolSize = Math.max(16, Runtime.getRuntime().availableProcessors() * 2);
+        // Use bounded thread pools with reasonable limits
+        int poolSize = Math.min(32, Math.max(8, Runtime.getRuntime().availableProcessors() * 2));
         ThreadFactory daemonFactory = r -> {
             Thread t = new Thread(r);
             t.setDaemon(true);
             t.setName("stress-http-" + t.getId());
             return t;
         };
-        httpExecutor = Executors.newFixedThreadPool(poolSize, daemonFactory);
+        
+        // Use ThreadPoolExecutor with bounded queue to prevent OOM
+        httpExecutor = new ThreadPoolExecutor(
+                poolSize,
+                poolSize,
+                60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(1000), // Bounded queue
+                daemonFactory,
+                new ThreadPoolExecutor.CallerRunsPolicy() // Reject policy
+        );
 
         httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
@@ -85,14 +95,21 @@ public class StressTestService {
                 .executor(httpExecutor)
                 .build();
 
-        orchestrationExecutor = Executors.newFixedThreadPool(3, r -> {
-            Thread t = new Thread(r);
-            t.setDaemon(true);
-            t.setName("stress-orchestrator-" + t.getId());
-            return t;
-        });
+        orchestrationExecutor = new ThreadPoolExecutor(
+                3,
+                3,
+                60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(100), // Bounded queue for orchestration
+                r -> {
+                    Thread t = new Thread(r);
+                    t.setDaemon(true);
+                    t.setName("stress-orchestrator-" + t.getId());
+                    return t;
+                },
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
 
-        log.info("StressTestService initialized: HttpClient pool={}, HTTP/1.1", poolSize);
+        log.info("StressTestService initialized: HttpClient pool={}, HTTP/1.1, bounded queues", poolSize);
     }
 
     @PreDestroy
@@ -117,6 +134,9 @@ public class StressTestService {
      */
     @Transactional
     public StressTest createAndStartTest(String instanceId, StressTestConfig config) {
+        // Validate input parameters
+        validateStressTestConfig(config);
+        
         // Limit concurrent running tests
         if (runningTests.size() >= 3) {
             throw new RuntimeException("Maximum 3 concurrent tests allowed");
@@ -338,6 +358,89 @@ public class StressTestService {
     }
 
     // ============== Private Methods ==============
+
+    /**
+     * Validate stress test configuration to prevent DoS and SSRF attacks.
+     */
+    private void validateStressTestConfig(StressTestConfig config) {
+        if (config == null) {
+            throw new IllegalArgumentException("Test configuration cannot be null");
+        }
+        
+        // Validate concurrent users (prevent resource exhaustion)
+        Integer concurrentUsers = config.getConcurrentUsers();
+        if (concurrentUsers != null && (concurrentUsers < 1 || concurrentUsers > 1000)) {
+            throw new IllegalArgumentException("Concurrent users must be between 1 and 1000");
+        }
+        
+        // Validate duration (max 1 hour)
+        Integer durationSeconds = config.getDurationSeconds();
+        if (durationSeconds != null && (durationSeconds < 1 || durationSeconds > 3600)) {
+            throw new IllegalArgumentException("Duration must be between 1 and 3600 seconds");
+        }
+        
+        // Validate total requests
+        Integer totalRequests = config.getTotalRequests();
+        if (totalRequests != null && (totalRequests < 1 || totalRequests > 1000000)) {
+            throw new IllegalArgumentException("Total requests must be between 1 and 1,000,000");
+        }
+        
+        // Validate target URL if provided
+        String targetUrl = config.getTargetUrl();
+        if (targetUrl != null && !targetUrl.isEmpty()) {
+            validateTargetUrl(targetUrl);
+        }
+        
+        // Validate request timeout
+        Integer timeoutSeconds = config.getRequestTimeoutSeconds();
+        if (timeoutSeconds != null && (timeoutSeconds < 1 || timeoutSeconds > 300)) {
+            throw new IllegalArgumentException("Request timeout must be between 1 and 300 seconds");
+        }
+    }
+    
+    /**
+     * Validate target URL to prevent SSRF attacks.
+     */
+    private void validateTargetUrl(String urlString) {
+        try {
+            java.net.URI uri = new java.net.URI(urlString);
+            String scheme = uri.getScheme();
+            
+            // Only allow HTTP/HTTPS
+            if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
+                throw new IllegalArgumentException("Only HTTP/HTTPS URLs are allowed");
+            }
+            
+            String host = uri.getHost();
+            if (host == null || host.isEmpty()) {
+                throw new IllegalArgumentException("Invalid URL: missing host");
+            }
+            
+            // Prevent access to internal addresses
+            if (isInternalAddress(host)) {
+                throw new IllegalArgumentException("Internal addresses are not allowed for security reasons");
+            }
+            
+        } catch (java.net.URISyntaxException e) {
+            throw new IllegalArgumentException("Invalid URL format: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Check if address is internal/private.
+     */
+    private boolean isInternalAddress(String host) {
+        try {
+            java.net.InetAddress address = java.net.InetAddress.getByName(host);
+            return address.isLoopbackAddress() ||
+                   address.isSiteLocalAddress() ||
+                   address.isLinkLocalAddress() ||
+                   address.isAnyLocalAddress();
+        } catch (Exception e) {
+            // If we can't resolve, allow it (DNS will fail later if invalid)
+            return false;
+        }
+    }
 
     private String buildTargetUrl(GatewayInstanceEntity instance, StressTestConfig config) {
         String baseUrl;

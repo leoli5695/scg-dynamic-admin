@@ -12,11 +12,13 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 
+import jakarta.annotation.PostConstruct;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -63,6 +65,48 @@ public class TokenQuotaManager {
      * Returns: {remaining, isAllowed}
      */
     private DefaultRedisScript<List<Long>> quotaCheckScript;
+
+    @PostConstruct
+    @SuppressWarnings("unchecked")
+    public void init() {
+        // Lua script for atomic quota check and consume
+        // KEYS[1]=monthlyUsedKey, KEYS[2]=monthlyTotalKey, KEYS[3]=dailyUsedKey, KEYS[4]=dailyTotalKey
+        // ARGV[1]=tokens, ARGV[2]=monthlyQuota, ARGV[3]=dailyQuota, ARGV[4]=checkMonthly(1/0), ARGV[5]=checkDaily(1/0)
+        // ARGV[6]=monthlyTTL, ARGV[7]=dailyTTL
+        // Returns: {1/0, monthlyRemaining, dailyRemaining}
+        String script =
+            "local tokens = tonumber(ARGV[1])\n" +
+            "local checkMonthly = tonumber(ARGV[4])\n" +
+            "local checkDaily = tonumber(ARGV[5])\n" +
+            "if checkMonthly == 1 then\n" +
+            "  local monthlyUsed = tonumber(redis.call('GET', KEYS[1]) or '0')\n" +
+            "  local monthlyTotal = tonumber(redis.call('GET', KEYS[2]) or ARGV[2])\n" +
+            "  if monthlyUsed + tokens > monthlyTotal then return {0, 0, 0} end\n" +
+            "end\n" +
+            "if checkDaily == 1 then\n" +
+            "  local dailyUsed = tonumber(redis.call('GET', KEYS[3]) or '0')\n" +
+            "  local dailyTotal = tonumber(redis.call('GET', KEYS[4]) or ARGV[3])\n" +
+            "  if dailyUsed + tokens > dailyTotal then return {0, 0, 0} end\n" +
+            "end\n" +
+            "local monthlyRemaining = -1\n" +
+            "local dailyRemaining = -1\n" +
+            "if checkMonthly == 1 then\n" +
+            "  local newMonthlyUsed = redis.call('INCRBY', KEYS[1], tokens)\n" +
+            "  redis.call('EXPIRE', KEYS[1], tonumber(ARGV[6]))\n" +
+            "  local monthlyTotal = tonumber(redis.call('GET', KEYS[2]) or ARGV[2])\n" +
+            "  monthlyRemaining = monthlyTotal - newMonthlyUsed\n" +
+            "end\n" +
+            "if checkDaily == 1 then\n" +
+            "  local newDailyUsed = redis.call('INCRBY', KEYS[3], tokens)\n" +
+            "  redis.call('EXPIRE', KEYS[3], tonumber(ARGV[7]))\n" +
+            "  local dailyTotal = tonumber(redis.call('GET', KEYS[4]) or ARGV[3])\n" +
+            "  dailyRemaining = dailyTotal - newDailyUsed\n" +
+            "end\n" +
+            "return {1, monthlyRemaining, dailyRemaining}";
+        quotaCheckScript = new DefaultRedisScript<>();
+        quotaCheckScript.setScriptText(script);
+        quotaCheckScript.setResultType((Class) List.class);
+    }
 
     /**
      * Lua script for token consumption (no check).
@@ -193,7 +237,7 @@ public class TokenQuotaManager {
             // Update local cache snapshot
             updateLocalCacheSnapshot(tenantId, config);
 
-            log.info("Consumed {} tokens for tenant {}", tokens, tenantId);
+            log.debug("Consumed {} tokens for tenant {}", tokens, tenantId);
             return true;
 
         } catch (Exception e) {
@@ -211,29 +255,52 @@ public class TokenQuotaManager {
             return checkAndConsumeFromLocalCache(tenantId, tokens, config);
         }
 
+        if (tokens <= 0) {
+            return getRemainingTokens(tenantId, config);
+        }
+
         try {
             TenantTokenQuota quota = config.getTenantQuota(tenantId);
+            boolean checkMonthly = shouldCheckMonthly(quota, config);
+            boolean checkDaily = shouldCheckDaily(quota, config);
 
-            // Check monthly quota first
-            if (shouldCheckMonthly(quota, config)) {
-                QuotaCheckResult monthlyResult = checkMonthlyQuota(tenantId, quota);
-                if (!monthlyResult.isAllowed()) {
-                    return -1;
-                }
+            // Use Lua script for atomic check-and-consume to prevent TOCTOU race condition
+            List<String> keys = new ArrayList<>();
+            keys.add(buildKey("monthly", tenantId, "used"));
+            keys.add(buildKey("monthly", tenantId, "total"));
+            keys.add(buildKey("daily", tenantId, "used"));
+            keys.add(buildKey("daily", tenantId, "total"));
+
+            String[] args = {
+                String.valueOf(tokens),
+                String.valueOf(quota.getMonthlyQuota()),
+                String.valueOf(quota.getDailyQuota()),
+                checkMonthly ? "1" : "0",
+                checkDaily ? "1" : "0",
+                String.valueOf(calculateMonthlyTTLSeconds()),
+                String.valueOf(calculateDailyTTLSeconds())
+            };
+
+            @SuppressWarnings("unchecked")
+            List<Long> result = redisTemplate.execute(quotaCheckScript, keys, args);
+
+            if (result == null || result.isEmpty() || result.get(0) == 0) {
+                log.debug("Quota check failed (atomic) for tenant {}: tokens={}", tenantId, tokens);
+                return -1;
             }
 
-            // Check daily quota
-            if (shouldCheckDaily(quota, config)) {
-                QuotaCheckResult dailyResult = checkDailyQuota(tenantId, quota);
-                if (!dailyResult.isAllowed()) {
-                    return -1;
-                }
-            }
+            // Update local cache snapshot
+            updateLocalCacheSnapshot(tenantId, config);
 
-            // Both OK, consume tokens
-            consumeTokens(tenantId, tokens, config);
+            long monthlyRemaining = result.size() > 1 ? result.get(1) : -1;
+            long dailyRemaining = result.size() > 2 ? result.get(2) : -1;
+            long minRemaining = Math.min(
+                    monthlyRemaining >= 0 ? monthlyRemaining : Long.MAX_VALUE,
+                    dailyRemaining >= 0 ? dailyRemaining : Long.MAX_VALUE);
 
-            return getRemainingTokens(tenantId, config);
+            log.debug("Atomic check and consume: tenant={}, tokens={}, monthlyRemaining={}, dailyRemaining={}",
+                    tenantId, tokens, monthlyRemaining, dailyRemaining);
+            return minRemaining;
 
         } catch (Exception e) {
             log.error("Atomic check and consume failed for tenant {}: {}", tenantId, e.getMessage());
@@ -506,7 +573,7 @@ public class TokenQuotaManager {
         // Pre-deduct tokens
         boolean success = consumeTokens(tenantId, preDeductAmount, config);
         if (success) {
-            log.info("Pre-deducted {} tokens for tenant {} (estimated: {})",
+            log.debug("Pre-deducted {} tokens for tenant {} (estimated: {})",
                     preDeductAmount, tenantId, estimatedTokens);
             return preDeductAmount;
         }
@@ -542,7 +609,7 @@ public class TokenQuotaManager {
             // Actual exceeds pre-deducted, consume additional
             long additional = Math.abs(diff);
             consumeTokens(tenantId, additional, config);
-            log.info("Additional {} tokens consumed for tenant {} (actual > estimate)",
+            log.debug("Additional {} tokens consumed for tenant {} (actual > estimate)",
                     additional, tenantId);
         } else {
             log.debug("Token usage exactly matched estimate for tenant {}", tenantId);
@@ -681,7 +748,7 @@ public class TokenQuotaManager {
         snapshot.setDailyUsed(snapshot.getDailyUsed() + tokens);
         localCache.put(tenantId, snapshot);
 
-        log.info("Consumed {} tokens in local cache for tenant {}", tokens, tenantId);
+        log.debug("Consumed {} tokens in local cache for tenant {}", tokens, tenantId);
         return true;
     }
 

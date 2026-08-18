@@ -23,7 +23,11 @@ class ServiceSpanTest {
         metadata.put("command", "GET");
         metadata.put("key", "user:123");
 
-        ServiceSpan span = new ServiceSpan("redis-execute", 10, true, null, metadata);
+        ServiceSpan span = new ServiceSpan();
+        span.setOperation("redis-execute");
+        span.setDurationMs(10);
+        span.setSuccess(true);
+        span.setMetadata(metadata);
 
         assertEquals("redis-execute", span.getOperation());
         assertEquals(10, span.getDurationMs());
@@ -129,7 +133,11 @@ class ServiceSpanTest {
         metadata.put("key", "seckill:stock:1001");
         metadata.put("ttl", "3600");
 
-        ServiceSpan span = new ServiceSpan("redis-execute", 15, true, null, metadata);
+        ServiceSpan span = new ServiceSpan();
+        span.setOperation("redis-execute");
+        span.setDurationMs(15);
+        span.setSuccess(true);
+        span.setMetadata(metadata);
 
         assertEquals("SET", span.getMetadata().get("command"));
         assertEquals("seckill:stock:1001", span.getMetadata().get("key"));
@@ -144,7 +152,11 @@ class ServiceSpanTest {
         metadata.put("table", "orders");
         metadata.put("affectedRows", 1);
 
-        ServiceSpan span = new ServiceSpan("mysql-execute", 50, true, null, metadata);
+        ServiceSpan span = new ServiceSpan();
+        span.setOperation("mysql-execute");
+        span.setDurationMs(50);
+        span.setSuccess(true);
+        span.setMetadata(metadata);
 
         assertEquals("INSERT", span.getMetadata().get("sqlType"));
         assertEquals("orders", span.getMetadata().get("table"));
@@ -159,7 +171,11 @@ class ServiceSpanTest {
         metadata.put("tags", "payment");
         metadata.put("sendResult", "SEND_OK");
 
-        ServiceSpan span = new ServiceSpan("rocketmq-syncSend", 30, true, null, metadata);
+        ServiceSpan span = new ServiceSpan();
+        span.setOperation("rocketmq-syncSend");
+        span.setDurationMs(30);
+        span.setSuccess(true);
+        span.setMetadata(metadata);
 
         assertEquals("order-created", span.getMetadata().get("topic"));
         assertEquals("payment", span.getMetadata().get("tags"));
@@ -174,7 +190,11 @@ class ServiceSpanTest {
         metadata.put("queryType", "term");
         metadata.put("field", "category");
 
-        ServiceSpan span = new ServiceSpan("elasticsearch-search", 100, true, null, metadata);
+        ServiceSpan span = new ServiceSpan();
+        span.setOperation("elasticsearch-search");
+        span.setDurationMs(100);
+        span.setSuccess(true);
+        span.setMetadata(metadata);
 
         assertEquals("products", span.getMetadata().get("index"));
         assertEquals("term", span.getMetadata().get("queryType"));

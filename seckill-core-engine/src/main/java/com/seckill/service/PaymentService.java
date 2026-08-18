@@ -44,6 +44,7 @@ public class PaymentService {
     private final StringRedisTemplate redisTemplate;
     private final TransactionLogMapper transactionLogMapper;
     private final ElasticsearchService elasticsearchService;
+    private final DistributedLockService distributedLockService;
 
     /**
      * 幂等性控制Redis Key前缀
@@ -95,52 +96,72 @@ public class PaymentService {
             return PaymentCallbackResponse.duplicate(orderNo);
         }
 
-        // Step 3: 处理支付状态
-        PaymentStatus paymentStatus = PaymentStatus.fromCode(request.getPaymentStatus());
-        if (paymentStatus == null) {
-            log.warn("未知支付状态: orderNo={}, status={}, traceId={}",
-                    orderNo, request.getPaymentStatus(), traceId);
-            // 清除幂等标记，允许重试
-            redisTemplate.delete(processedKey);
-            return PaymentCallbackResponse.fail("未知支付状态");
-        }
+        // 【P1-6修复】使用分布式锁保护支付操作，防止并发支付回调
+        String lockKey = "seckill:payment:lock:" + orderNo;
+        return distributedLockService.executeWithLock(lockKey, new DistributedLockService.LockAction<PaymentCallbackResponse>() {
+            @Override
+            public PaymentCallbackResponse execute() {
+                try {
+                    // Step 3: 处理支付状态
+                    PaymentStatus paymentStatus = PaymentStatus.fromCode(request.getPaymentStatus());
+                    if (paymentStatus == null) {
+                        log.warn("未知支付状态: orderNo={}, status={}, traceId={}",
+                                orderNo, request.getPaymentStatus(), traceId);
+                        // 清除幂等标记，允许重试
+                        redisTemplate.delete(processedKey);
+                        return PaymentCallbackResponse.fail("未知支付状态");
+                    }
 
-        // Step 4: 查询订单
-        SeckillOrder order = orderMapper.selectByOrderNo(orderNo);
-        if (order == null) {
-            log.warn("订单不存在: orderNo={}, traceId={}", orderNo, traceId);
-            redisTemplate.delete(processedKey);
-            return PaymentCallbackResponse.fail("订单不存在");
-        }
+                    // Step 4: 查询订单
+                    SeckillOrder order = orderMapper.selectByOrderNo(orderNo);
+                    if (order == null) {
+                        log.warn("订单不存在: orderNo={}, traceId={}", orderNo, traceId);
+                        redisTemplate.delete(processedKey);
+                        return PaymentCallbackResponse.fail("订单不存在");
+                    }
 
-        // Step 5: 校验订单状态
-        if (order.getStatus() == OrderStatus.PAID.getCode()) {
-            // 已支付，直接返回成功（幂等）
-            log.info("订单已支付（幂等）: orderNo={}, traceId={}", orderNo, traceId);
-            return PaymentCallbackResponse.success(orderNo);
-        }
+                    // Step 5: 校验订单状态
+                    if (order.getStatus() == OrderStatus.PAID.getCode()) {
+                        // 已支付，直接返回成功（幂等）
+                        log.info("订单已支付（幂等）: orderNo={}, traceId={}", orderNo, traceId);
+                        return PaymentCallbackResponse.success(orderNo);
+                    }
 
-        if (order.getStatus() != OrderStatus.PENDING_PAYMENT.getCode()) {
-            log.warn("订单状态异常: orderNo={}, currentStatus={}, traceId={}",
-                    orderNo, order.getStatus(), traceId);
-            redisTemplate.delete(processedKey);
-            return PaymentCallbackResponse.fail("订单状态异常");
-        }
+                    if (order.getStatus() != OrderStatus.PENDING_PAYMENT.getCode()) {
+                        log.warn("订单状态异常: orderNo={}, currentStatus={}, traceId={}",
+                                orderNo, order.getStatus(), traceId);
+                        redisTemplate.delete(processedKey);
+                        return PaymentCallbackResponse.fail("订单状态异常");
+                    }
 
-        // Step 6: 校验金额
-        if (order.getTotalAmount().compareTo(request.getPaidAmount()) != 0) {
-            log.warn("金额不一致: orderNo={}, orderAmount={}, paidAmount={}, traceId={}",
-                    orderNo, order.getTotalAmount(), request.getPaidAmount(), traceId);
-            redisTemplate.delete(processedKey);
-            return PaymentCallbackResponse.fail("金额不一致");
-        }
+                    // Step 6: 校验金额
+                    if (order.getTotalAmount().compareTo(request.getPaidAmount()) != 0) {
+                        log.warn("金额不一致: orderNo={}, orderAmount={}, paidAmount={}, traceId={}",
+                                orderNo, order.getTotalAmount(), request.getPaidAmount(), traceId);
+                        redisTemplate.delete(processedKey);
+                        return PaymentCallbackResponse.fail("金额不一致");
+                    }
 
-        // Step 7: 根据支付状态更新订单
-        if (paymentStatus.isSuccess()) {
-            return processPaymentSuccess(order, request, processedKey);
-        } else {
-            return processPaymentFailed(order, request, processedKey);
-        }
+                    // Step 7: 根据支付状态更新订单
+                    if (paymentStatus.isSuccess()) {
+                        return processPaymentSuccess(order, request, processedKey);
+                    } else {
+                        return processPaymentFailed(order, request, processedKey);
+                    }
+                } catch (Exception e) {
+                    log.error("支付回调处理异常: orderNo={}, error={}, traceId={}", orderNo, e.getMessage(), traceId, e);
+                    redisTemplate.delete(processedKey);
+                    throw new RuntimeException("支付回调处理异常", e);
+                }
+            }
+
+            @Override
+            public PaymentCallbackResponse onLockFailed() {
+                log.warn("获取支付锁失败（可能正在处理）: orderNo={}, transactionId={}, traceId={}",
+                        orderNo, request.getTransactionId(), traceId);
+                return PaymentCallbackResponse.fail("支付正在处理中，请稍后查询结果");
+            }
+        });
     }
 
     /**

@@ -1,315 +1,108 @@
 version: '3.8'
 
 services:
-  # ============================================================
-  # 核心中间件 - 一键启动完整链路
-  # ============================================================
-
-  # MySQL 数据库
+  # MySQL Database
   mysql:
     image: mysql:8.0
-    container_name: mysql
+    container_name: gateway-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: gateway_admin
+      MYSQL_USER: gateway_user
+      MYSQL_PASSWORD: ${DB_PASSWORD:-gateway_password}
     ports:
       - "3306:3306"
-    environment:
-      # SECURITY: Use environment variable instead of hardcoded password
-      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set}
-      - MYSQL_DATABASE=gateway_admin
-      - MYSQL_CHARACTER_SET_SERVER=utf8mb4
-      - MYSQL_COLLATION_SERVER=utf8mb4_unicode_ci
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./scripts/mysql-init:/docker-entrypoint-initdb.d:ro
-    command: --default-authentication-plugin=mysql_native_password --max_connections=500
-    networks:
-      - gateway-network
+      - ./gateway-admin/src/main/resources/schema.sql:/docker-entrypoint-initdb.d/1-schema.sql:ro
+      - ./gateway-admin/src/main/resources/data.sql:/docker-entrypoint-initdb.d/2-data.sql:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 30s
-
-  # Redis 缓存（用于分布式限流、缓存）
-  redis:
-    image: redis:7-alpine
-    container_name: redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
-    networks:
-      - gateway-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
-  # RocketMQ NameServer
-  rocketmq-namesrv:
-    image: apache/rocketmq:5.1.0
-    container_name: rocketmq-namesrv
-    ports:
-      - "9876:9876"
-    environment:
-      - JAVA_OPT_EXT=-server -Xms128m -Xmx128m
-    command: sh mqnamesrv
-    networks:
-      - gateway-network
-    healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 9876 || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-  # RocketMQ Broker
-  rocketmq-broker:
-    image: apache/rocketmq:5.1.0
-    container_name: rocketmq-broker
-    ports:
-      - "10911:10911"
-      - "10909:10909"
-    environment:
-      - JAVA_OPT_EXT=-server -Xms256m -Xmx256m
-      - NAMESRV_ADDR=rocketmq-namesrv:9876
-    command: sh mqbroker -n rocketmq-namesrv:9876 -c /home/rocketmq/rocketmq-5.1.0/conf/broker.conf
-    volumes:
-      - rocketmq_data:/home/rocketmq/store
-    depends_on:
-      rocketmq-namesrv:
-        condition: service_started
-    networks:
-      - gateway-network
-    healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 10911 || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
-
-  # RocketMQ Dashboard（可选）
-  rocketmq-dashboard:
-    image: apacherocketmq/rocketmq-dashboard:latest
-    container_name: rocketmq-dashboard
-    ports:
-      - "8180:8080"
-    environment:
-      - "rocketmq.config.namesrvAddr=rocketmq-namesrv:9876"
-    depends_on:
-      - rocketmq-namesrv
+      retries: 5
     networks:
       - gateway-network
 
-  # Elasticsearch（日志存储、链路追踪）
-  # SECURITY: Enable xpack.security for production
-  # For development, set ES_SECURITY_ENABLED=false in .env
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.10.2
-    container_name: elasticsearch
-    ports:
-      - "9200:9200"
-      - "9300:9300"
-    environment:
-      - discovery.type=single-node
-      - ES_JAVA_OPTS=-Xms512m -Xmx512m
-      # SECURITY: Enable security by default, disable only for local dev via env var
-      - xpack.security.enabled=${ES_SECURITY_ENABLED:-true}
-      - xpack.security.enrollment.enabled=${ES_SECURITY_ENABLED:-true}
-      # Set elastic user password (required when security enabled)
-      - ELASTIC_PASSWORD=${ES_ELASTIC_PASSWORD:-elastic123}
-    volumes:
-      - es_data:/usr/share/elasticsearch/data
-    networks:
-      - gateway-network
-    healthcheck:
-      # Use elastic user for health check when security enabled
-      test: ["CMD-SHELL", "curl -s -u elastic:${ES_ELASTIC_PASSWORD:-elastic123} -f http://localhost:9200/_cluster/health || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 60s
-
-  # ============================================================
-  # 服务注册与配置中心
-  # ============================================================
-
-  # Nacos 服务
+  # Nacos Configuration Center
   nacos:
-    image: nacos/nacos-server:v2.2.3
-    container_name: nacos
+    image: nacos/nacos-server:v2.3.0
+    container_name: gateway-nacos
+    environment:
+      MODE: standalone
+      SPRING_DATASOURCE_PLATFORM: embedded
+      JVM_XMS: 512m
+      JVM_XMX: 512m
     ports:
       - "8848:8848"
       - "9848:9848"
-      - "9849:9849"
-    environment:
-      - MODE=standalone
-      - PREFER_HOST_MODE=hostname
-    networks:
-      - gateway-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/v1/ns/instance/list?serviceName=nacos"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 60s
-
-  # Consul 服务
-  consul:
-    image: hashicorp/consul:latest
-    container_name: consul
-    ports:
-      - "8500:8500"
-    command: agent -server -bootstrap-expect=1 -ui -client=0.0.0.0
-    networks:
-      - gateway-network
-
-  # ============================================================
-  # 监控组件
-  # ============================================================
-
-  # Prometheus 监控
-  # SECURITY: Disable admin API by default (allows deleting data, dangerous)
-  # For development, set PROM_ADMIN_API_ENABLED=true in .env
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: prometheus
-    ports:
-      - "9091:9090"
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.enable-lifecycle'
-      # SECURITY: Admin API disabled by default - enables dangerous operations
-      # Enable only via env var for development/debugging
-      - '--web.enable-admin-api=${PROM_ADMIN_API_ENABLED:-false}'
-    networks:
-      - gateway-network
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - nacos_data:/home/nacos/data
     healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://localhost:9090/-/healthy || exit 1"]
+      test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/"]
       interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 5
+    networks:
+      - gateway-network
 
-  # MySQL Exporter（为 Prometheus 提供 MySQL 指标）
-  mysqld-exporter:
-    image: prom/mysqld-exporter:latest
-    container_name: mysqld-exporter
-    ports:
-      - "9104:9104"
+  # Backend Service
+  backend:
+    build:
+      context: ./gateway-admin
+      dockerfile: Dockerfile
+    container_name: gateway-backend
     environment:
-      # SECURITY: Use environment variable for password
-      - DATA_SOURCE_NAME=root:${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set}@(mysql:3306)/
+      # Database Configuration
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: gateway_admin
+      DB_USERNAME: gateway_user
+      DB_PASSWORD: ${DB_PASSWORD:-gateway_password}
+      
+      # JWT Configuration (REQUIRED - generate a strong secret)
+      GATEWAY_ADMIN_JWT_SECRET: ${GATEWAY_ADMIN_JWT_SECRET:?JWT secret is required. Generate with: openssl rand -base64 64}
+      
+      # Nacos Configuration
+      NACOS_SERVER_ADDR: nacos:8848
+      
+      # Spring Profiles
+      SPRING_PROFILES_ACTIVE: prod
+    ports:
+      - "8080:8080"
     depends_on:
       mysql:
         condition: service_healthy
-    networks:
-      - gateway-network
-
-  # Redis Exporter（为 Prometheus 提供 Redis 指标）
-  redis-exporter:
-    image: oliver006/redis_exporter:latest
-    container_name: redis-exporter
-    ports:
-      - "9121:9121"
-    environment:
-      - REDIS_ADDR=redis://redis:6379
-    depends_on:
-      redis:
-        condition: service_healthy
-    networks:
-      - gateway-network
-
-  # ============================================================
-  # Demo 服务实例
-  # ============================================================
-
-  # Nacos 服务实例
-  demo-nacos-1:
-    image: demo-service-nacos:1.0.0
-    container_name: demo-nacos-1
-    ports:
-      - "9004:9000"
-    depends_on:
       nacos:
         condition: service_healthy
-    environment:
-      - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=nacos:8848
-      - SPRING_CLOUD_NACOS_DISCOVERY_IP=127.0.0.1
-      - SPRING_CLOUD_NACOS_DISCOVERY_PORT=9004
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 60s
     networks:
       - gateway-network
 
-  demo-nacos-2:
-    image: demo-service-nacos:1.0.0
-    container_name: demo-nacos-2
+  # Frontend Service
+  frontend:
+    build:
+      context: ./gateway-ui
+      dockerfile: Dockerfile
+    container_name: gateway-frontend
     ports:
-      - "9005:9000"
+      - "80:80"
     depends_on:
-      nacos:
-        condition: service_healthy
-    environment:
-      - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=nacos:8848
-      # FIX: Corrected typo 127.0.1 to 127.0.0.1
-      # NOTE: Using container IP for cross-container communication
-      - SPRING_CLOUD_NACOS_DISCOVERY_IP=127.0.0.1
-      - SPRING_CLOUD_NACOS_DISCOVERY_PORT=9005
+      - backend
     networks:
       - gateway-network
 
-  # Consul 服务实例
-  demo-consul-1:
-    image: demo-service-consul:1.0.0
-    container_name: demo-consul-1
-    ports:
-      - "9002:9000"
-    depends_on:
-      consul:
-        condition: service_started
-    environment:
-      - SPRING_CLOUD_CONSUL_HOST=consul
-      - SPRING_CLOUD_CONSUL_PORT=8500
-    networks:
-      - gateway-network
-
-  demo-consul-2:
-    image: demo-service-consul:1.0.0
-    container_name: demo-consul-2
-    ports:
-      - "9003:9000"
-    depends_on:
-      consul:
-        condition: service_started
-    environment:
-      - SPRING_CLOUD_CONSUL_HOST=consul
-      - SPRING_CLOUD_CONSUL_PORT=8500
-    networks:
-      - gateway-network
-
-# ============================================================
-# 数据持久化卷
-# ============================================================
 volumes:
   mysql_data:
     driver: local
-  redis_data:
-    driver: local
-  rocketmq_data:
-    driver: local
-  es_data:
-    driver: local
-  prometheus_data:
+  nacos_data:
     driver: local
 
-# ============================================================
-# 网络
-# ============================================================
 networks:
   gateway-network:
     driver: bridge

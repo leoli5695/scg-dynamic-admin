@@ -61,7 +61,7 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        log.info("Retry filter enabled for route {}, max attempts: {}, retryOnStatusCodes: {}", 
+        log.debug("Retry filter enabled for route {}, max attempts: {}, retryOnStatusCodes: {}", 
                 routeId, config.maxAttempts, config.retryOnStatusCodes);
 
         return executeWithRetry(exchange, chain, config, 0);
@@ -82,31 +82,27 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
             exchange.getAttributes().put("retry_count", 0);
         }
 
-        log.info("executeWithRetry called for route {}, attempt {}", RouteUtils.getRouteId(exchange), attempt);
+        log.debug("executeWithRetry called for route {}, attempt {}", RouteUtils.getRouteId(exchange), attempt);
 
         // Use AtomicBoolean to signal if retry is needed based on status code
         AtomicBoolean needRetry = new AtomicBoolean(false);
         AtomicInteger currentAttempt = new AtomicInteger(attempt);
         ServerHttpResponse originalResponse = exchange.getResponse();
         
-        log.info("Original response type: {}", originalResponse.getClass().getName());
-
+        
         // Wrap response with decorator to intercept status codes
         ServerHttpResponse decoratedResponse = new ServerHttpResponseDecorator(originalResponse) {
-            {
-                log.info("Decorator created for route {}", RouteUtils.getRouteId(exchange));
-            }
             @Override
             public Mono<Void> writeWith(org.reactivestreams.Publisher<? extends DataBuffer> body) {
                 // Use getDelegate() to get the original response's status code
                 HttpStatusCode status = getDelegate().getStatusCode();
                 int statusValue = status != null ? status.value() : 0;
-                log.info("writeWith called for route {}, status={}, statusValue={}, retryOnStatusCodes={}, attempt={}",
+                log.debug("writeWith called for route {}, status={}, statusValue={}, retryOnStatusCodes={}, attempt={}",
                         RouteUtils.getRouteId(exchange), status, statusValue, config.retryOnStatusCodes, attempt);
                 
                 if (status != null && config.retryOnStatusCodes.contains(statusValue)) {
                     if (attempt < config.maxAttempts) {
-                        log.info("Status code {} detected for route {}, will retry (attempt {}/{})",
+                        log.debug("Status code {} detected for route {}, will retry (attempt {}/{})",
                                 statusValue, RouteUtils.getRouteId(exchange), attempt + 1, config.maxAttempts);
                         needRetry.set(true);
                         currentAttempt.set(attempt);
@@ -132,12 +128,12 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
             public Mono<Void> writeAndFlushWith(org.reactivestreams.Publisher<? extends Publisher<? extends DataBuffer>> body) {
                 HttpStatusCode status = getDelegate().getStatusCode();
                 int statusValue = status != null ? status.value() : 0;
-                log.info("writeAndFlushWith called for route {}, status={}, statusValue={}, retryOnStatusCodes={}, attempt={}",
+                log.debug("writeAndFlushWith called for route {}, status={}, statusValue={}, retryOnStatusCodes={}, attempt={}",
                         RouteUtils.getRouteId(exchange), status, statusValue, config.retryOnStatusCodes, attempt);
                 
                 if (status != null && config.retryOnStatusCodes.contains(statusValue)) {
                     if (attempt < config.maxAttempts) {
-                        log.info("Status code {} detected in writeAndFlushWith for route {}, will retry (attempt {}/{})",
+                        log.debug("Status code {} detected in writeAndFlushWith for route {}, will retry (attempt {}/{})",
                                 statusValue, RouteUtils.getRouteId(exchange), attempt + 1, config.maxAttempts);
                         needRetry.set(true);
                         currentAttempt.set(attempt);
@@ -178,7 +174,7 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
                         return Mono.error(throwable);
                     }
 
-                    log.info("Retrying request for route {} due to exception, attempt {}/{}",
+                    log.debug("Retrying request for route {} due to exception, attempt {}/{}",
                             RouteUtils.getRouteId(exchange), attempt + 1, config.maxAttempts);
 
                     return doRetry(exchange, chain, config, attempt);
@@ -186,7 +182,7 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
                 .then(Mono.defer(() -> {
                     // Check if retry is needed due to status code
                     if (needRetry.get()) {
-                        log.info("Retrying request for route {} due to status code, attempt {}/{}",
+                        log.debug("Retrying request for route {} due to status code, attempt {}/{}",
                                 RouteUtils.getRouteId(exchange), attempt + 1, config.maxAttempts);
                         return doRetry(exchange, chain, config, attempt);
                     }

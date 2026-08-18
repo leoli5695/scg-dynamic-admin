@@ -187,6 +187,7 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
 
     /**
      * Handle multi-service mode routing with weight/gray rules.
+     * License check is performed in gateway-admin during route creation (control plane).
      */
     private Mono<Void> handleMultiServiceMode(ServerWebExchange exchange, GatewayFilterChain chain,
                                               String routeId, MultiServiceConfig config) {
@@ -323,6 +324,7 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
 
     /**
      * Match gray rules and return target version if matched.
+     * License check is performed in gateway-admin during route creation (control plane).
      */
     private String matchGrayRules(ServerWebExchange exchange, MultiServiceConfig config) {
         MultiServiceConfig.GrayRuleConfig grayRules = config.getGrayRules();
@@ -430,6 +432,8 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
         // Smooth weighted round-robin (Nginx style)
         Map<String, Double> routeWeights = smoothWeightState.computeIfAbsent(routeId, k -> new ConcurrentHashMap<>());
 
+        // Synchronize on routeWeights to ensure atomic read-modify-write for the three-step algorithm
+        synchronized (routeWeights) {
         // Initialize weights if not exists
         // Use version if present, otherwise use serviceId as unique identifier
         for (MultiServiceConfig.ServiceBinding binding : enabledServices) {
@@ -469,6 +473,7 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
         }
 
         return selectedKey;
+        }
     }
 
     /**

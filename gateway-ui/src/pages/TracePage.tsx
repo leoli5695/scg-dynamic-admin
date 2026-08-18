@@ -19,10 +19,12 @@ import {
   CloudServerOutlined, ExclamationCircleOutlined
 } from '@ant-design/icons';
 import FilterWaterfallChart from '../components/FilterWaterfallChart';
+import FullChainWaterfallChart from '../components/FullChainWaterfallChart';
 import FilterExecutionDetailDrawer from '../components/FilterExecutionDetailDrawer';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import api from '../utils/api';
+import logger from '../utils/logger';
 import { useTranslation } from 'react-i18next';
 
 const { Title, Text, Link } = Typography;
@@ -160,7 +162,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
   const loadTraces = async () => {
     try {
       setLoading(true);
-      const params: any = { page: 0, size: 100 };
+      const params: Record<string, unknown> = { page: 0, size: 100 };
       if (instanceId) params.instanceId = instanceId;
 
       // Apply time range filter
@@ -252,8 +254,8 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
       setFullChainTraces(res.data?.chains || []);
       setFullChainTotal(res.data?.totalElements || 0);
       setFullChainPage(page);
-    } catch (e: any) {
-      console.error('Failed to load full-chain traces:', e);
+    } catch (e) {
+      logger.error('Failed to load full-chain traces:', e);
       message.error(t('trace.load_fullchain_failed') || '加载全链路追踪失败');
     } finally {
       setFullChainLoading(false);
@@ -266,8 +268,8 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
       const res = await api.get(`/api/traces/full-chain/${traceId}`);
       setSelectedFullChain(res.data);
       setFullChainDetailVisible(true);
-    } catch (e: any) {
-      console.error('Failed to load full chain detail:', e);
+    } catch (e) {
+      logger.error('Failed to load full chain detail:', e);
       message.error(t('trace.load_fullchain_detail_failed') || '加载链路详情失败');
     } finally {
       setFullChainDetailLoading(false);
@@ -294,7 +296,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
 
   const handleDeleteOldTraces = async () => {
     try {
-      const params: any = { daysToKeep: 7 };
+      const params: Record<string, unknown> = { daysToKeep: 7 };
       if (instanceId) params.instanceId = instanceId;
       const res = await api.delete('/api/traces/old', { params });
       message.success(`${res.data.deleted} ${t('trace.deleted')}`);
@@ -307,7 +309,7 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
 
   const handleDeleteAllTraces = async () => {
     try {
-      const params: any = {};
+      const params: Record<string, unknown> = {};
       if (instanceId) params.instanceId = instanceId;
       const res = await api.delete('/api/traces/all', { params });
       message.success(`${res.data.deleted} ${t('trace.deleted')}`);
@@ -1631,78 +1633,33 @@ const TracePage: React.FC<TracePageProps> = ({ instanceId, onNavigateToReplay, o
                   )}
                 </Descriptions>
 
-                {/* Spans Detail */}
+                {/* Spans Detail - Enhanced Waterfall Chart */}
                 {service.spans && service.spans.length > 0 && (
-                  <div>
-                    {/* Span Waterfall Timeline */}
-                    <Text strong style={{ display: 'block', marginBottom: 8 }}>
-                      {t('trace.span_details') || 'Span 详情'} ({service.spans.length})
-                    </Text>
-                    <div style={{ marginBottom: 12 }}>
-                      {(() => {
-                        const maxDuration = Math.max(...service.spans.map((s: any) => s.durationMs || 0), 1);
-                        return service.spans.map((span: any, spanIdx: number) => {
-                          const widthPercent = Math.max(((span.durationMs || 0) / maxDuration) * 100, 2);
-                          const barColor = !span.success ? '#ff4d4f' :
-                            span.durationMs > 100 ? '#faad14' :
-                            span.durationMs > 50 ? '#1890ff' : '#52c41a';
-                          return (
-                            <div key={spanIdx} style={{ marginBottom: !span.success && span.errorMessage ? 0 : 3 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <Tooltip title={span.operation}>
-                                  <Text style={{ width: 200, fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 0 }}>
-                                    {span.operation}
-                                  </Text>
-                                </Tooltip>
-                                <div style={{ flex: 1, height: 18, background: '#f5f5f5', borderRadius: 2, position: 'relative' }}>
-                                  <Tooltip title={
-                                    <div style={{ maxWidth: 400 }}>
-                                      <div><strong>{span.operation}</strong></div>
-                                      <div>{t('trace.duration') || '耗时'}: {span.durationMs}ms</div>
-                                      <div>{span.success ?
-                                        <span style={{ color: '#95de64' }}>SUCCESS</span> :
-                                        <span style={{ color: '#ffa39e' }}>FAILED</span>}
-                                      </div>
-                                      {!span.success && (
-                                        <div style={{ color: '#ffa39e', marginTop: 4, whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: 12 }}>
-                                          {span.errorMessage || `${span.operation} failed`}
-                                        </div>
-                                      )}
-                                    </div>
-                                  }>
-                                    <div style={{
-                                      width: `${widthPercent}%`,
-                                      height: '100%',
-                                      background: barColor,
-                                      borderRadius: 2,
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      paddingLeft: 4,
-                                      fontSize: 10,
-                                      color: '#fff',
-                                      minWidth: 24
-                                    }}>
-                                      {span.durationMs > 0 && `${span.durationMs}ms`}
-                                    </div>
-                                  </Tooltip>
-                                </div>
-                                <div style={{ width: 20, flexShrink: 0, textAlign: 'center' }}>
-                                  {span.success ? <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 12 }} /> :
-                                    <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 12 }} />}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        });
-                      })()}
-                      <div style={{ display: 'flex', gap: 12, fontSize: 10, marginTop: 6, color: '#999' }}>
-                        <span><span style={{ display: 'inline-block', width: 8, height: 8, background: '#52c41a', borderRadius: 1, marginRight: 3 }}></span>&lt;50ms</span>
-                        <span><span style={{ display: 'inline-block', width: 8, height: 8, background: '#1890ff', borderRadius: 1, marginRight: 3 }}></span>50-100ms</span>
-                        <span><span style={{ display: 'inline-block', width: 8, height: 8, background: '#faad14', borderRadius: 1, marginRight: 3 }}></span>&gt;100ms</span>
-                        <span><span style={{ display: 'inline-block', width: 8, height: 8, background: '#ff4d4f', borderRadius: 1, marginRight: 3 }}></span>{t('trace.error') || '错误'}</span>
-                      </div>
-                    </div>
-                  </div>
+                  <Collapse size="small" style={{ marginTop: 12 }} items={[
+                    {
+                      key: 'spans',
+                      label: (
+                        <Space>
+                          <ThunderboltOutlined />
+                          <Text strong className="text-xs-sm">
+                            {t('trace.span_details') || 'Span 详情'} ({service.spans.length})
+                          </Text>
+                          {service.spans.some((s: any) => !s.success) && (
+                            <Tag color="error" style={{ fontSize: 10 }}>有错误</Tag>
+                          )}
+                        </Space>
+                      ),
+                      children: (
+                        <FullChainWaterfallChart
+                          serviceSpans={service.spans}
+                          serviceName={service.serviceName}
+                          gatewayTotalDurationMs={service.totalDurationMs}
+                          slowThreshold={50}
+                          showHierarchy={true}
+                        />
+                      )
+                    }
+                  ]} defaultActiveKey={['spans']} />
                 )}
               </Card>
             ))}

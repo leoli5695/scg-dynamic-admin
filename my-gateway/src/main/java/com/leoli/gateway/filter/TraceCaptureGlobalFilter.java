@@ -316,7 +316,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
         // Error requests: use samplingRateForErrors (default 100%)
         if (captureErrors && isError) {
             if (samplingRateForErrors >= 100 || random < samplingRateForErrors) {
-                log.info("Capturing ERROR trace: traceId={}", traceId);
+                log.debug("Capturing ERROR trace: traceId={}", traceId);
                 captureTrace(exchange, startTime, traceId, requestBody, responseBody, duration, statusCode,
                         true, false, replayType, replayable, "ERROR");
             }

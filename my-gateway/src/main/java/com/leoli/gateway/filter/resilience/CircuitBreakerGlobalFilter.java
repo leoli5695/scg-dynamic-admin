@@ -1,11 +1,13 @@
 package com.leoli.gateway.filter.resilience;
 
 import com.leoli.gateway.constants.FilterOrderConstants;
+import com.leoli.gateway.license.LicenseFeatureHelper;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.StrategyDefinition;
 import com.leoli.gateway.util.ConfigValueExtractor;
 import com.leoli.gateway.util.GatewayResponseHelper;
 import com.leoli.gateway.util.RouteUtils;
+import com.leoli.license.client.model.LicenseInfo;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
@@ -37,6 +39,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
 
     private final StrategyManager strategyManager;
+    private final LicenseFeatureHelper licenseFeatureHelper;
 
     private final CircuitBreakerRegistry circuitBreakerRegistry = CircuitBreakerRegistry.ofDefaults();
 
@@ -52,6 +55,15 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
+        // LICENSE CHECK: Circuit breaker requires CIRCUIT_BREAKER feature (ADVANCED+)
+        if (!licenseFeatureHelper.hasFeature(LicenseInfo.Feature.CIRCUIT_BREAKER)) {
+            log.warn("Circuit breaker blocked for route {} - CIRCUIT_BREAKER feature not licensed. Current edition: {}",
+                routeId, licenseFeatureHelper.getEdition(exchange));
+            // Return license error response
+            return licenseFeatureHelper.checkFeatureOrError(exchange, 
+                LicenseInfo.Feature.CIRCUIT_BREAKER, chain);
+        }
+
         // Get circuit breaker configuration
         Map<String, Object> config = strategyManager.getCircuitBreakerConfig(routeId);
         if (config == null) {
@@ -59,7 +71,7 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
         }
 
         if (log.isDebugEnabled()) {
-            log.debug("Applying circuit breaker for route {}", routeId);
+            log.debug("Applying circuit breaker for route {} (License: CIRCUIT_BREAKER OK)", routeId);
         }
 
         // Create or get circuit breaker from registry

@@ -45,6 +45,7 @@ public class RefundService {
     private final StringRedisTemplate redisTemplate;
     private final TransactionLogMapper transactionLogMapper;
     private final ElasticsearchService elasticsearchService;
+    private final DistributedLockService distributedLockService;
 
     /**
      * 退款处理标记Redis Key前缀
@@ -96,55 +97,68 @@ public class RefundService {
             return RefundResponse.fail("退款正在处理中，请稍后查询结果");
         }
 
-        try {
-            // Step 2: 查询订单
-            SeckillOrder order = orderMapper.selectByOrderNo(orderNo);
-            if (order == null) {
-                log.warn("订单不存在: orderNo={}, traceId={}", orderNo, traceId);
-                redisTemplate.delete(refundKey);
-                return RefundResponse.fail("订单不存在");
+        // 【P1-6修复】使用分布式锁保护退款操作，防止并发退款
+        String lockKey = "seckill:refund:lock:" + orderNo;
+        return distributedLockService.executeWithLock(lockKey, new DistributedLockService.LockAction<RefundResponse>() {
+            @Override
+            public RefundResponse execute() {
+                try {
+                    // Step 2: 查询订单
+                    SeckillOrder order = orderMapper.selectByOrderNo(orderNo);
+                    if (order == null) {
+                        log.warn("订单不存在: orderNo={}, traceId={}", orderNo, traceId);
+                        redisTemplate.delete(refundKey);
+                        return RefundResponse.fail("订单不存在");
+                    }
+
+                    // Step 3: 校验订单归属
+                    if (!order.getUserId().equals(request.getUserId())) {
+                        log.warn("订单归属不匹配: orderNo={}, orderUserId={}, requestUserId={}, traceId={}",
+                                orderNo, order.getUserId(), request.getUserId(), traceId);
+                        redisTemplate.delete(refundKey);
+                        return RefundResponse.fail("订单归属不匹配");
+                    }
+
+                    // Step 4: 校验订单状态
+                    if (order.getStatus() != OrderStatus.PAID.getCode()) {
+                        log.warn("订单状态不允许退款: orderNo={}, status={}, traceId={}",
+                                orderNo, order.getStatus(), traceId);
+                        redisTemplate.delete(refundKey);
+                        return RefundResponse.invalidStatus(orderNo, OrderStatus.fromCode(order.getStatus()).getDescription());
+                    }
+
+                    // Step 5: 校验退款金额
+                    if (request.getRefundAmount().compareTo(order.getTotalAmount()) > 0) {
+                        log.warn("退款金额超过订单金额: orderNo={}, orderAmount={}, refundAmount={}, traceId={}",
+                                orderNo, order.getTotalAmount(), request.getRefundAmount(), traceId);
+                        redisTemplate.delete(refundKey);
+                        return RefundResponse.amountExceeded(orderNo);
+                    }
+
+                    // Step 6: 秒杀场景只支持全额退款（可选校验）
+                    if (request.getRefundAmount().compareTo(order.getTotalAmount()) != 0) {
+                        log.warn("秒杀订单不支持部分退款: orderNo={}, orderAmount={}, refundAmount={}, traceId={}",
+                                orderNo, order.getTotalAmount(), request.getRefundAmount(), traceId);
+                        redisTemplate.delete(refundKey);
+                        return RefundResponse.fail("秒杀订单不支持部分退款");
+                    }
+
+                    // Step 7: 处理退款
+                    return processRefund(order, request, refundKey);
+
+                } catch (Exception e) {
+                    log.error("退款处理异常: orderNo={}, error={}, traceId={}", orderNo, e.getMessage(), traceId, e);
+                    redisTemplate.delete(refundKey);
+                    throw new RuntimeException("退款处理异常", e);
+                }
             }
 
-            // Step 3: 校验订单归属
-            if (!order.getUserId().equals(request.getUserId())) {
-                log.warn("订单归属不匹配: orderNo={}, orderUserId={}, requestUserId={}, traceId={}",
-                        orderNo, order.getUserId(), request.getUserId(), traceId);
-                redisTemplate.delete(refundKey);
-                return RefundResponse.fail("订单归属不匹配");
+            @Override
+            public RefundResponse onLockFailed() {
+                log.warn("获取退款锁失败（可能正在处理）: orderNo={}, traceId={}", orderNo, traceId);
+                return RefundResponse.fail("退款正在处理中，请稍后查询结果");
             }
-
-            // Step 4: 校验订单状态
-            if (order.getStatus() != OrderStatus.PAID.getCode()) {
-                log.warn("订单状态不允许退款: orderNo={}, status={}, traceId={}",
-                        orderNo, order.getStatus(), traceId);
-                redisTemplate.delete(refundKey);
-                return RefundResponse.invalidStatus(orderNo, OrderStatus.fromCode(order.getStatus()).getDescription());
-            }
-
-            // Step 5: 校验退款金额
-            if (request.getRefundAmount().compareTo(order.getTotalAmount()) > 0) {
-                log.warn("退款金额超过订单金额: orderNo={}, orderAmount={}, refundAmount={}, traceId={}",
-                        orderNo, order.getTotalAmount(), request.getRefundAmount(), traceId);
-                redisTemplate.delete(refundKey);
-                return RefundResponse.amountExceeded(orderNo);
-            }
-
-            // Step 6: 秒杀场景只支持全额退款（可选校验）
-            if (request.getRefundAmount().compareTo(order.getTotalAmount()) != 0) {
-                log.warn("秒杀订单不支持部分退款: orderNo={}, orderAmount={}, refundAmount={}, traceId={}",
-                        orderNo, order.getTotalAmount(), request.getRefundAmount(), traceId);
-                redisTemplate.delete(refundKey);
-                return RefundResponse.fail("秒杀订单不支持部分退款");
-            }
-
-            // Step 7: 处理退款
-            return processRefund(order, request, refundKey);
-
-        } catch (Exception e) {
-            log.error("退款处理异常: orderNo={}, error={}, traceId={}", orderNo, e.getMessage(), traceId, e);
-            redisTemplate.delete(refundKey);
-            throw new RuntimeException("退款处理异常", e);
-        }
+        });
     }
 
     /**

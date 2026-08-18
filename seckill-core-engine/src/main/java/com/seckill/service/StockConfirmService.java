@@ -12,6 +12,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -53,6 +54,7 @@ public class StockConfirmService {
     private final SeckillDeductLua seckillDeductLua;
     private final StringRedisTemplate redisTemplate;
     private final TransactionLogMapper transactionLogMapper;
+    private final TransactionTemplate transactionTemplate;
 
     /**
      * Redis临时标记Key前缀
@@ -150,7 +152,16 @@ public class StockConfirmService {
 
         for (TransactionLog tx : pendingTransactions) {
             try {
-                boolean processed = processPendingTransaction(tx);
+                // 【P0-4修复】原问题：自调用 processPendingTransaction()，@Transactional 代理不生效
+                // 修复：使用 TransactionTemplate 编程式事务包裹，确保事务语义生效
+                boolean processed = Boolean.TRUE.equals(transactionTemplate.execute(status -> {
+                    try {
+                        return processPendingTransaction(tx);
+                    } catch (Exception e) {
+                        status.setRollbackOnly();
+                        throw e;
+                    }
+                }));
                 if (processed) {
                     rollbackCount++;
                 } else {
@@ -245,9 +256,9 @@ public class StockConfirmService {
             // 使用Lua脚本精确回补到原分片
             long result = seckillDeductLua.rollbackStock(seckillId, userId, quantity);
 
-            if (result >= 1000) {
+            if (result >= SeckillDeductLua.LUA_SUCCESS_BASE) {
                 log.info("库存回补成功: seckillId={}, userId={}, quantity={}, shardIndex={}",
-                        seckillId, userId, quantity, result - 1000);
+                        seckillId, userId, quantity, SeckillDeductLua.extractShardIndex(result));
             } else {
                 log.error("库存回补失败: seckillId={}, userId={}, result={}",
                         seckillId, userId, result);

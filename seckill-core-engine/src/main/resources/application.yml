@@ -121,13 +121,13 @@ management:
 logging:
   level:
     root: INFO
-    # OPTIMIZATION (P2): Changed from DEBUG to INFO for production
-    # Debug logs should only be enabled during troubleshooting
-    com.seckill: INFO
-    org.apache.rocketmq: INFO
-    org.apache.shardingsphere: WARN
-    # OPTIMIZATION (P2): Changed from DEBUG to WARN for production
-    com.baomidou.mybatisplus: WARN
+    # P3-11: 生产环境建议WARN级别，减少日志量并提升性能
+    # 开发/调试时可设置为INFO或DEBUG
+    com.seckill: WARN
+    org.apache.rocketmq: WARN
+    org.apache.shardingsphere: ERROR
+    # MyBatis-Plus SQL日志在生产环境应关闭
+    com.baomidou.mybatisplus: ERROR
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
 

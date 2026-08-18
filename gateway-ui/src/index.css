@@ -83,3 +83,15 @@ code, pre, .monospace {
 .action-btn:hover {
   opacity: 0.8;
 }
+
+/* ==================== Empty Card Button Fix ==================== */
+/* Prevent hover flickering on buttons inside empty cards */
+.empty-card .ant-btn {
+  position: relative;
+  z-index: 1;
+}
+
+.empty-card .ant-btn:hover {
+  transform: none !important;
+  box-shadow: none !important;
+}

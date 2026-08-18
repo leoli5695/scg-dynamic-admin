@@ -1,0 +1,93 @@
+server:
+  port: 8090  # License Server 端口
+
+spring:
+  application:
+    name: license-server
+  # ============================================================================
+  # MySQL 数据源配置
+  # ============================================================================
+  # 默认连接本地 MySQL：127.0.0.1:3306
+  # 数据库名：license_server（存储 License、审计日志等）
+  # ============================================================================
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${LICENSE_DB_HOST:127.0.0.1}:${LICENSE_DB_PORT:3306}/license_server?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: ${LICENSE_DB_USERNAME:root}
+    password: ${LICENSE_DB_PASSWORD:123456}
+  jpa:
+    hibernate:
+      ddl-auto: update  # Auto-create tables if not exist
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.MySQLDialect
+
+# ============================================================================
+# License Server 配置
+# ============================================================================
+# RSA 密钥：用于 License 签名和验证
+# 生产环境必须通过环境变量设置
+# ============================================================================
+license:
+  server:
+    production-mode: ${LICENSE_PRODUCTION_MODE:false}
+    rsa:
+      # 生产环境必须设置环境变量
+      private-key: ${LICENSE_RSA_PRIVATE_KEY:}
+      public-key: ${LICENSE_RSA_PUBLIC_KEY:}
+      key-size: 2048
+    audit-log:
+      retention-days: 365
+      enabled: true
+    edition-defaults:
+      basic:
+        features: "BASIC_ROUTING,LOCAL_RATE_LIMIT,BASIC_AUTH,DOCKER_DEPLOY,HEALTH_CHECK,SERVICE_DISCOVERY,TIMEOUT_CONFIG,BASIC_LOGGING,BASIC_METRICS"
+        quotas: '{"maxInstances":1,"maxRoutes":10,"maxServices":5,"maxStrategies":10,"maxRateLimitQPS":100,"supportLevel":"COMMUNITY"}'
+      advanced:
+        features: "WEIGHTED_ROUTING,DISTRIBUTED_RATE_LIMIT,CIRCUIT_BREAKER,PROMETHEUS_MONITORING,K8S_DEPLOY,JWT_AUTH,HMAC_AUTH,GRAY_RELEASE_BASIC,INSTANCE_QUOTA_3"
+        quotas: '{"maxInstances":3,"maxRoutes":100,"maxServices":50,"maxStrategies":100,"maxRateLimitQPS":10000,"maxApiCopilotCalls":1000,"supportLevel":"PROFESSIONAL"}'
+      enterprise:
+        features: "WEIGHTED_ROUTING,DISTRIBUTED_RATE_LIMIT,CIRCUIT_BREAKER,PROMETHEUS_MONITORING,K8S_DEPLOY,JWT_AUTH,HMAC_AUTH,GRAY_RELEASE_BASIC,FULL_GRAY_RELEASE,AI_COPilot,FULL_CHAIN_TRACE,MULTI_TENANT,OAUTH2_AUTH,SSL_MANAGEMENT,AUDIT_LOG,STRESS_TEST,REQUEST_REPLAY,TOPOLOGY_VIEW,KUBERNETES_MANAGER,INSTANCE_UNLIMITED,ENTERPRISE_SUPPORT"
+        quotas: '{"maxInstances":-1,"maxRoutes":-1,"maxServices":-1,"maxStrategies":-1,"maxRateLimitQPS":-1,"maxApiCopilotCalls":-1,"supportLevel":"ENTERPRISE"}'
+
+# ============================================================================
+# Security 配置
+# ============================================================================
+# License Server 需要认证才能管理 License
+# ============================================================================
+license-server:
+  jwt:
+    secret: ${LICENSE_SERVER_JWT_SECRET:local-dev-license-server-secret-key-min-32-chars!}
+    expiration: 86400000  # 24 hours
+
+# ============================================================================
+# SpringDoc OpenAPI 配置
+# ============================================================================
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+  packages-to-scan: com.leoli.license.controller
+  default-produces-media-type: application/json
+
+# ============================================================================
+# Management 配置
+# ============================================================================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  level:
+    com.leoli.license: INFO
+    org.springframework.security: INFO

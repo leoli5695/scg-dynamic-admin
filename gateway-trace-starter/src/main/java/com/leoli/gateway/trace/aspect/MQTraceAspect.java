@@ -1,18 +1,23 @@
 package com.leoli.gateway.trace.aspect;
 
 import com.leoli.gateway.trace.TraceContextHolder;
+import com.leoli.gateway.trace.model.DistributedTrace;
+import com.leoli.gateway.trace.model.ServiceSpan;
+import com.leoli.gateway.trace.model.SpanTags;
+import com.leoli.gateway.trace.model.SpanType;
 import com.leoli.gateway.trace.properties.GatewayTraceProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 
+import java.util.Map;
+
 /**
  * RocketMQ operation tracing aspect
  * <p>
  * Automatically traces RocketMQ message sending operations.
- * Kafka tracing is handled by {@link KafkaMQTraceAspect} to avoid
- * AspectJ parsing KafkaTemplate pointcut when Kafka is not on classpath.
+ * Enhanced with hierarchical spanId/parentSpanId and standardized tags.
  *
  * @author leoli
  */
@@ -37,7 +42,7 @@ public class MQTraceAspect {
     /**
      * Internal tracing logic
      */
-    private Object traceMQInternal(ProceedingJoinPoint pjp, String mqType) throws Throwable {
+    private Object traceMQInternal(ProceedingJoinPoint pjp, String mqSystem) throws Throwable {
         // Check if tracing is enabled (master switch)
         if (!properties.isEnabled()) {
             return pjp.proceed();
@@ -58,29 +63,78 @@ public class MQTraceAspect {
             return pjp.proceed();
         }
 
-        String operation = mqType + "-" + pjp.getSignature().getName();
-        long start = System.nanoTime();
+        String methodName = pjp.getSignature().getName();
+        String operation = mqSystem + "-" + methodName;
+        
+        // Use enhanced enterSpan for hierarchy support
+        String spanId = TraceContextHolder.enterSpan(operation, SpanType.MQ);
 
         try {
             Object result = pjp.proceed();
-            long durationMs = (System.nanoTime() - start) / 1_000_000;
+            
+            // Add standardized MQ tags
+            addMQTags(spanId, mqSystem, methodName, pjp.getArgs());
+            
+            TraceContextHolder.exitSpan(spanId, true);
 
-            // Record successful Span
-            TraceContextHolder.addSpan(operation, durationMs, true);
-
-            log.debug("{} traced: {} - {}ms", mqType, operation, durationMs);
+            log.debug("{} traced: {} - SUCCESS", mqSystem, operation);
 
             return result;
 
         } catch (Throwable e) {
-            long durationMs = (System.nanoTime() - start) / 1_000_000;
+            TraceContextHolder.exitSpanWithException(spanId, e);
 
-            // Record failed Span
-            TraceContextHolder.addFailedSpan(operation, durationMs, e);
-
-            log.debug("{} traced: {} - {}ms - FAILED: {}", mqType, operation, durationMs, e.toString());
+            log.debug("{} traced: {} - FAILED: {}", mqSystem, operation, e.toString());
 
             throw e;
         }
+    }
+
+    /**
+     * Add standardized MQ tags to span
+     */
+    private void addMQTags(String spanId, String mqSystem, String methodName, Object[] args) {
+        DistributedTrace trace = TraceContextHolder.getTrace();
+        if (trace == null) return;
+        
+        for (ServiceSpan span : trace.getSpans()) {
+            if (span.getSpanId() != null && span.getSpanId().equals(spanId)) {
+                Map<String, Object> tags = span.getOrCreateTags();
+                tags.put(SpanTags.MQ_SYSTEM, mqSystem);
+                
+                // Extract topic from args (RocketMQTemplate methods usually have topic as first arg)
+                if (args != null && args.length > 0 && args[0] != null) {
+                    String topic = extractTopic(args[0]);
+                    if (topic != null) {
+                        tags.put(SpanTags.MQ_TOPIC, topic);
+                    }
+                }
+                
+                // Determine operation type from method name
+                if (methodName.toLowerCase().contains("sync")) {
+                    tags.put("mq.callType", "sync");
+                } else if (methodName.toLowerCase().contains("async")) {
+                    tags.put("mq.callType", "async");
+                } else if (methodName.toLowerCase().contains("oneway")) {
+                    tags.put("mq.callType", "oneway");
+                }
+                
+                break;
+            }
+        }
+    }
+
+    /**
+     * Extract topic from argument
+     */
+    private String extractTopic(Object arg) {
+        if (arg == null) return null;
+        
+        String str = arg.toString();
+        // Topic might be in format "topic:tag" or just "topic"
+        if (str.contains(":")) {
+            return str.substring(0, str.indexOf(':'));
+        }
+        return str;
     }
 }

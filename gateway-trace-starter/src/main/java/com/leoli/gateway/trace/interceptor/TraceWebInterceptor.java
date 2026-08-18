@@ -1,13 +1,19 @@
 package com.leoli.gateway.trace.interceptor;
 
 import com.leoli.gateway.trace.TraceContextHolder;
+import com.leoli.gateway.trace.model.DistributedTrace;
+import com.leoli.gateway.trace.model.SpanType;
 import com.leoli.gateway.trace.properties.GatewayTraceProperties;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -15,6 +21,11 @@ import java.util.UUID;
  * <p>
  * Responsible for extracting TraceId passed by gateway from request Header,
  * and initializing Trace context.
+ * <p>
+ * Enhanced with:
+ * - Span hierarchy support (parentSpanId from upstream)
+ * - Caller service tracking (for topology graph generation)
+ * - Baggage propagation (cross-service business context)
  * <p>
  * TraceId propagation chain:
  * Gateway generates → X-Trace-Id Header → downstream services → Starter extracts
@@ -30,6 +41,21 @@ import java.util.UUID;
 public class TraceWebInterceptor implements HandlerInterceptor {
 
     private static final String TRACE_ID_HEADER = "X-Trace-Id";
+    
+    /**
+     * Span ID Header name (from upstream, becomes this service's parentSpanId)
+     */
+    private static final String SPAN_ID_HEADER = "X-Span-Id";
+    
+    /**
+     * Caller service Header name (for topology graph generation)
+     */
+    private static final String CALLER_SERVICE_HEADER = "X-Caller-Service";
+    
+    /**
+     * Baggage Header name (JSON encoded cross-service context)
+     */
+    private static final String BAGGAGE_HEADER = "X-Trace-Baggage";
 
     private final String serviceName;
     private final GatewayTraceProperties properties;
@@ -57,7 +83,7 @@ public class TraceWebInterceptor implements HandlerInterceptor {
             log.debug("Received traceId from gateway: {}", traceId);
         }
 
-        // 设置TraceId到ThreadLocal
+        // Set TraceId to ThreadLocal
         TraceContextHolder.setTraceId(traceId);
 
         // Set sampling flag
@@ -69,7 +95,52 @@ public class TraceWebInterceptor implements HandlerInterceptor {
         String method = request.getMethod();
         TraceContextHolder.initTrace(serviceName, path, method);
 
-        // 设置客户端IP
+        // === Enhanced: Span hierarchy support ===
+        
+        // Get parentSpanId from upstream (X-Span-Id from caller)
+        String parentSpanId = request.getHeader(SPAN_ID_HEADER);
+        
+        // Get caller service name (for topology graph generation)
+        String callerService = request.getHeader(CALLER_SERVICE_HEADER);
+        
+        // Store caller info in trace for topology analysis
+        DistributedTrace trace = TraceContextHolder.getTrace();
+        if (trace != null) {
+            if (callerService != null && !callerService.isEmpty()) {
+                trace.setUpstreamService(callerService);
+                log.debug("Received caller service: {}", callerService);
+            }
+        }
+        
+        // Create entry span for this service
+        if (TraceContextHolder.isSampled()) {
+            String entrySpanId = TraceContextHolder.enterSpan(serviceName + ".entry", SpanType.SERVICE);
+            // Override parentSpanId from upstream
+            if (parentSpanId != null && !parentSpanId.isEmpty()) {
+                // Update the entry span's parentSpanId
+                for (com.leoli.gateway.trace.model.ServiceSpan span : trace.getSpans()) {
+                    if (span.getSpanId() != null && span.getSpanId().equals(entrySpanId)) {
+                        span.setParentSpanId(parentSpanId);
+                        break;
+                    }
+                }
+                log.debug("Set parentSpanId={} for entry span", parentSpanId);
+            }
+        }
+
+        // === Enhanced: Baggage propagation ===
+        
+        // Extract and restore baggage from upstream
+        String baggageHeader = request.getHeader(BAGGAGE_HEADER);
+        if (baggageHeader != null && !baggageHeader.isEmpty()) {
+            Map<String, String> baggage = decodeBaggage(baggageHeader);
+            if (baggage != null && !baggage.isEmpty()) {
+                TraceContextHolder.setAllBaggage(baggage);
+                log.debug("Restored baggage with {} keys from upstream", baggage.size());
+            }
+        }
+
+        // Set client IP
         String clientIp = getClientIp(request);
         if (TraceContextHolder.getTrace() != null) {
             TraceContextHolder.getTrace().setClientIp(clientIp);
@@ -97,6 +168,51 @@ public class TraceWebInterceptor implements HandlerInterceptor {
      */
     private String generateTraceId() {
         return UUID.randomUUID().toString().replace("-", "");
+    }
+
+    /**
+     * Decode baggage from URL-safe JSON string
+     */
+    private Map<String, String> decodeBaggage(String encodedBaggage) {
+        if (encodedBaggage == null || encodedBaggage.isEmpty()) {
+            return null;
+        }
+        
+        try {
+            // Remove JSON braces
+            String content = encodedBaggage.trim();
+            if (content.startsWith("{") && content.endsWith("}")) {
+                content = content.substring(1, content.length() - 1);
+            }
+            
+            if (content.isEmpty()) {
+                return null;
+            }
+            
+            Map<String, String> baggage = new HashMap<>();
+            
+            // Parse key-value pairs
+            String[] pairs = content.split(",");
+            for (String pair : pairs) {
+                // Format: "key":"value"
+                String[] kv = pair.split(":");
+                if (kv.length == 2) {
+                    // Remove quotes and URL decode
+                    String key = kv[0].trim().replace("\"", "");
+                    String value = kv[1].trim().replace("\"", "");
+                    
+                    key = URLDecoder.decode(key, StandardCharsets.UTF_8);
+                    value = URLDecoder.decode(value, StandardCharsets.UTF_8);
+                    
+                    baggage.put(key, value);
+                }
+            }
+            
+            return baggage;
+        } catch (Exception e) {
+            log.warn("Failed to decode baggage: {}", encodedBaggage, e);
+            return null;
+        }
     }
 
     /**

@@ -18,11 +18,8 @@ import java.util.stream.Collectors;
  * JWT Token Provider.
  * Generates and validates JWT tokens for authentication.
  *
- * SECURITY FIX (C4/C5):
- * - Removed hardcoded default secret
- * - Removed unsafe padding (was padding with "0"s)
- * - Added startup validation to reject empty/weak secrets
- * - Minimum 32 bytes for HS256, recommended 64 bytes
+ * Includes license edition in token claims for frontend feature gating.
+ * Default edition is BASIC if no license is configured.
  *
  * @author leoli
  */
@@ -37,21 +34,30 @@ public class JwtTokenProvider {
     // Recommended secret length for enhanced security (64 bytes)
     private static final int RECOMMENDED_SECRET_LENGTH = 64;
 
+    // Default license edition if not configured
+    private static final String DEFAULT_LICENSE_EDITION = "BASIC";
+
     private final SecretKey secretKey;
     private final long tokenValidityInMilliseconds;
+    private final String licenseEdition;
 
     public JwtTokenProvider(
             @Value("${gateway.admin.jwt.secret:}") 
             String secret,
             @Value("${gateway.admin.jwt.expiration:86400000}") 
-            long tokenValidityInSeconds) {
+            long tokenValidityInSeconds,
+            @Value("${license.edition:BASIC}") 
+            String licenseEdition) {
         // SECURITY: Validate secret at startup - application will fail to start if invalid
         validateSecret(secret);
 
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.tokenValidityInMilliseconds = tokenValidityInSeconds;
+        this.licenseEdition = licenseEdition != null && !licenseEdition.isEmpty() 
+                ? licenseEdition.toUpperCase() : DEFAULT_LICENSE_EDITION;
 
-        logger.info("JwtTokenProvider initialized with secret length: {} bytes", secret.length());
+        logger.info("JwtTokenProvider initialized with secret length: {} bytes, license edition: {}", 
+                secret.length(), this.licenseEdition);
     }
 
     /**
@@ -95,6 +101,7 @@ public class JwtTokenProvider {
 
     /**
      * Generate JWT token from username.
+     * Includes license edition claim for frontend feature gating.
      */
     public String generateToken(String username, java.util.List<String> roles) {
         Date now = new Date();
@@ -103,6 +110,7 @@ public class JwtTokenProvider {
         return Jwts.builder()
                 .setSubject(username)
                 .claim("roles", roles)
+                .claim("licenseEdition", licenseEdition)
                 .setIssuedAt(now)
                 .setExpiration(expiryDate)
                 .signWith(secretKey, SignatureAlgorithm.HS256)
@@ -124,6 +132,27 @@ public class JwtTokenProvider {
     public java.util.List<String> getRolesFromToken(String token) {
         Claims claims = getClaims(token);
         return claims.get("roles", java.util.List.class);
+    }
+
+    /**
+     * Get license edition from token.
+     * Returns BASIC if not present in token.
+     */
+    public String getLicenseEditionFromToken(String token) {
+        try {
+            Claims claims = getClaims(token);
+            String edition = claims.get("licenseEdition", String.class);
+            return edition != null ? edition : DEFAULT_LICENSE_EDITION;
+        } catch (Exception e) {
+            return DEFAULT_LICENSE_EDITION;
+        }
+    }
+
+    /**
+     * Get current configured license edition.
+     */
+    public String getCurrentLicenseEdition() {
+        return licenseEdition;
     }
 
     /**

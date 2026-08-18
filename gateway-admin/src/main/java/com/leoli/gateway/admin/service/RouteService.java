@@ -4,10 +4,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.center.ConfigCenterService;
 import com.leoli.gateway.admin.config.CacheConfig;
 import com.leoli.gateway.admin.converter.RouteConverter;
+import com.leoli.gateway.admin.event.GlobalBindingChangedEvent;
 import com.leoli.gateway.admin.metrics.BusinessMetrics;
 import com.leoli.gateway.admin.metrics.TracingHelper;
 import com.leoli.gateway.admin.model.GatewayInstanceEntity;
+import com.leoli.gateway.admin.model.PluginBindingEntity;
 import com.leoli.gateway.admin.model.RouteDefinition;
+import com.leoli.gateway.admin.model.RouteDefinition.FilterDefinition;
 import com.leoli.gateway.admin.model.RouteEntity;
 import com.leoli.gateway.admin.model.RouteResponse;
 import com.leoli.gateway.admin.model.RouteServiceBinding;
@@ -19,14 +22,21 @@ import io.micrometer.tracing.Span;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -67,6 +77,12 @@ public class RouteService {
     @Autowired
     private TracingHelper tracingHelper;
 
+    @Autowired
+    private RoutePluginBindingService routePluginBindingService;
+
+    @Autowired
+    private CacheManager cacheManager;
+
     @PostConstruct
     public void init() {
         loadRoutesFromDatabase();
@@ -88,14 +104,24 @@ public class RouteService {
             long enabledCount = entities.stream().filter(RouteEntity::getEnabled).count();
             log.info("Loaded {} routes from database ({} enabled)", entities.size(), enabledCount);
 
-            // Batch load all gateway instances to avoid N+1 queries
-            Map<String, String> instanceNamespaceMap = gatewayInstanceRepository.findAll().stream()
-                    .filter(i -> i.getNacosNamespace() != null)
-                    .collect(java.util.stream.Collectors.toMap(
-                            GatewayInstanceEntity::getInstanceId,
-                            GatewayInstanceEntity::getNacosNamespace,
-                            (a, b) -> a // handle duplicates
-                    ));
+            // 【性能优化】只加载启用路由关联的实例，避免N+1查询和内存浪费
+            Set<String> neededInstanceIds = entities.stream()
+                    .filter(RouteEntity::getEnabled)
+                    .map(RouteEntity::getInstanceId)
+                    .filter(id -> id != null && !id.isEmpty())
+                    .collect(java.util.stream.Collectors.toSet());
+            
+            Map<String, String> instanceNamespaceMap = new HashMap<>();
+            if (!neededInstanceIds.isEmpty()) {
+                instanceNamespaceMap = gatewayInstanceRepository.findByInstanceIdIn(new ArrayList<>(neededInstanceIds)).stream()
+                        .filter(i -> i.getNacosNamespace() != null)
+                        .collect(java.util.stream.Collectors.toMap(
+                                GatewayInstanceEntity::getInstanceId,
+                                GatewayInstanceEntity::getNacosNamespace,
+                                (a, b) -> a // handle duplicates
+                        ));
+                log.debug("Loaded {} instances for {} enabled routes", instanceNamespaceMap.size(), neededInstanceIds.size());
+            }
 
             // Recover only ENABLED routes that are missing in Nacos
             int recoveredCount = 0;
@@ -109,9 +135,13 @@ public class RouteService {
                 String routeDataId = ROUTE_PREFIX + entity.getRouteId();
                 if (!configCenterService.configExists(routeDataId, nacosNamespace)) {
                     RouteDefinition route = routeConverter.toDefinition(entity);
-                    configCenterService.publishConfig(routeDataId, nacosNamespace, route);
+                    // Merge plugin bindings before publishing
+                    RouteDefinition mergedRoute = mergePluginBindingsToRoute(route, entity.getRouteId());
+                    configCenterService.publishConfig(routeDataId, nacosNamespace, mergedRoute);
                     recoveredCount++;
-                    log.info("Recovered missing route in Nacos: {} (namespace: {})", routeDataId, nacosNamespace);
+                    log.info("Recovered missing route in Nacos: {} (namespace: {}, filters={})",
+                        routeDataId, nacosNamespace,
+                        mergedRoute.getFilters() != null ? mergedRoute.getFilters().size() : 0);
                 }
             }
 
@@ -140,8 +170,10 @@ public class RouteService {
      */
     public List<RouteResponse> getAllRoutes() {
         List<RouteEntity> entities = routeRepository.findAll();
+        // Pre-load global bindings once to avoid N+1 queries
+        List<PluginBindingEntity> globalBindings = routePluginBindingService.getEnabledGlobalBindings();
         return entities.stream()
-                .map(this::toResponse)
+                .map(entity -> toResponse(entity, globalBindings))
                 .collect(java.util.stream.Collectors.toList());
     }
 
@@ -150,8 +182,10 @@ public class RouteService {
      */
     public List<RouteResponse> getAllRoutesByInstanceId(String instanceId) {
         List<RouteEntity> entities = routeRepository.findByInstanceId(instanceId);
+        // Pre-load global bindings once to avoid N+1 queries
+        List<PluginBindingEntity> globalBindings = routePluginBindingService.getEnabledGlobalBindings();
         return entities.stream()
-                .map(this::toResponse)
+                .map(entity -> toResponse(entity, globalBindings))
                 .collect(java.util.stream.Collectors.toList());
     }
 
@@ -251,10 +285,13 @@ public class RouteService {
             String routeDataId = ROUTE_PREFIX + entity.getRouteId();
             long startTime = System.currentTimeMillis();
             try {
-                configCenterService.publishConfig(routeDataId, nacosNamespace, route);
+                // Merge plugin bindings before publishing
+                RouteDefinition mergedRoute = mergePluginBindingsToRoute(route, entity.getRouteId());
+                configCenterService.publishConfig(routeDataId, nacosNamespace, mergedRoute);
                 businessMetrics.recordConfigPublish();
                 businessMetrics.recordConfigPublishDuration(System.currentTimeMillis() - startTime);
-                log.info("Route pushed to Nacos: {} (namespace: {})", routeDataId, nacosNamespace);
+                log.info("Route pushed to Nacos: {} (namespace: {}, filters={})", routeDataId, nacosNamespace,
+                    mergedRoute.getFilters() != null ? mergedRoute.getFilters().size() : 0);
             } catch (Exception e) {
                 businessMetrics.recordConfigPublishError();
                 throw e;
@@ -332,9 +369,12 @@ public class RouteService {
 
         // Push to Nacos if enabled (with namespace)
         if (Boolean.TRUE.equals(entity.getEnabled())) {
+            // Merge plugin bindings before publishing
+            RouteDefinition mergedRoute = mergePluginBindingsToRoute(route, entity.getRouteId());
             String routeDataId = ROUTE_PREFIX + entity.getRouteId();
-            configCenterService.publishConfig(routeDataId, nacosNamespace, route);
-            log.info("Route updated in Nacos: {} (namespace: {})", routeDataId, nacosNamespace);
+            configCenterService.publishConfig(routeDataId, nacosNamespace, mergedRoute);
+            log.info("Route updated in Nacos: {} (namespace: {}, filters={})", routeDataId, nacosNamespace,
+                mergedRoute.getFilters() != null ? mergedRoute.getFilters().size() : 0);
         }
 
         log.info("Route updated successfully: {}", routeId);
@@ -401,10 +441,11 @@ public class RouteService {
             entity.setEnabled(true);
             routeRepository.save(entity);
 
-            // Push to Nacos (with namespace)
+            // Push to Nacos (with namespace) - merge plugin bindings
             RouteDefinition route = routeConverter.toDefinition(entity);
+            RouteDefinition mergedRoute = mergePluginBindingsToRoute(route, entity.getRouteId());
             String routeDataId = ROUTE_PREFIX + entity.getRouteId();
-            configCenterService.publishConfig(routeDataId, nacosNamespace, route);
+            configCenterService.publishConfig(routeDataId, nacosNamespace, mergedRoute);
 
             // Rebuild routes index
             rebuildRoutesIndex(nacosNamespace);
@@ -466,6 +507,14 @@ public class RouteService {
      * Convert RouteEntity to RouteResponse.
      */
     private RouteResponse toResponse(RouteEntity entity) {
+        return toResponse(entity, routePluginBindingService.getEnabledGlobalBindings());
+    }
+
+    /**
+     * Convert RouteEntity to RouteResponse with pre-loaded global bindings.
+     * Use this overload in batch operations to avoid N+1 queries.
+     */
+    private RouteResponse toResponse(RouteEntity entity, List<PluginBindingEntity> globalBindings) {
         RouteDefinition def = routeConverter.toDefinition(entity);
         RouteResponse response = new RouteResponse();
         response.setId(entity.getRouteId());
@@ -479,11 +528,101 @@ public class RouteService {
         response.setGrayRules(def.getGrayRules());
         response.setOrder(def.getOrder());
         response.setPredicates(def.getPredicates());
-        response.setFilters(def.getFilters());
+        response.setFilters(mergePluginBindingsToFilters(entity.getRouteId(), def.getFilters(), globalBindings));
         response.setMetadata(def.getMetadata());
         response.setEnabled(entity.getEnabled());
         response.setDescription(entity.getDescription());
         return response;
+    }
+
+    /**
+     * Merge plugin bindings into route filters.
+     * Plugin filters are appended after existing filters.
+     *
+     * @param routeId the route ID
+     * @param existingFilters existing filters from route definition
+     * @return merged filter list
+     */
+    private List<FilterDefinition> mergePluginBindingsToFilters(String routeId, List<FilterDefinition> existingFilters) {
+        return mergePluginBindingsToFilters(routeId, existingFilters, routePluginBindingService.getEnabledGlobalBindings());
+    }
+
+    /**
+     * Merge plugin bindings into route filters with pre-loaded global bindings.
+     * Use this overload in batch operations to avoid N+1 queries.
+     */
+    private List<FilterDefinition> mergePluginBindingsToFilters(String routeId, List<FilterDefinition> existingFilters, List<PluginBindingEntity> globalBindings) {
+        List<FilterDefinition> mergedFilters = new ArrayList<>();
+
+        // 1. Add global plugin bindings first (apply to all routes)
+        if (globalBindings != null && !globalBindings.isEmpty()) {
+            for (PluginBindingEntity binding : globalBindings) {
+                FilterDefinition globalFilter = new FilterDefinition();
+                globalFilter.setName(binding.getPluginName());
+                globalFilter.setArgs(routePluginBindingService.parseBindingConfig(binding));
+                mergedFilters.add(globalFilter);
+                log.debug("Added global plugin filter to route {}: plugin={}, order={}",
+                    routeId, binding.getPluginName(), binding.getOrder());
+            }
+        }
+
+        // 2. Add existing filters
+        if (existingFilters != null) {
+            mergedFilters.addAll(existingFilters);
+        }
+
+        // 3. Add route-specific plugin bindings
+        List<PluginBindingEntity> bindings = routePluginBindingService.getEnabledBindingsByRouteId(routeId);
+        if (bindings != null && !bindings.isEmpty()) {
+            for (PluginBindingEntity binding : bindings) {
+                FilterDefinition pluginFilter = new FilterDefinition();
+                pluginFilter.setName(binding.getPluginName()); // SCG uses plugin name as filter factory name
+                pluginFilter.setArgs(routePluginBindingService.parseBindingConfig(binding));
+                mergedFilters.add(pluginFilter);
+                log.debug("Added plugin filter to route {}: plugin={}, order={}",
+                    routeId, binding.getPluginName(), binding.getOrder());
+            }
+        }
+
+        return mergedFilters;
+    }
+
+    /**
+     * Merge plugin bindings into RouteDefinition before publishing to Nacos.
+     * This ensures the gateway receives the complete filter list including plugins.
+     *
+     * @param route the original route definition
+     * @param routeId the route ID
+     * @return route definition with merged plugin filters
+     */
+    private RouteDefinition mergePluginBindingsToRoute(RouteDefinition route, String routeId) {
+        return mergePluginBindingsToRoute(route, routeId, routePluginBindingService.getEnabledGlobalBindings());
+    }
+
+    /**
+     * Merge plugin bindings into RouteDefinition with pre-loaded global bindings.
+     * Use this overload in batch operations to avoid N+1 queries.
+     */
+    private RouteDefinition mergePluginBindingsToRoute(RouteDefinition route, String routeId, List<PluginBindingEntity> globalBindings) {
+        // Create a copy to avoid modifying original
+        RouteDefinition mergedRoute = new RouteDefinition();
+        mergedRoute.setId(route.getId());
+        mergedRoute.setRouteName(route.getRouteName());
+        mergedRoute.setUri(route.getUri());
+        mergedRoute.setMode(route.getMode());
+        mergedRoute.setServiceId(route.getServiceId());
+        mergedRoute.setServiceNamespace(route.getServiceNamespace());
+        mergedRoute.setServiceGroup(route.getServiceGroup());
+        mergedRoute.setServices(route.getServices());
+        mergedRoute.setGrayRules(route.getGrayRules());
+        mergedRoute.setOrder(route.getOrder());
+        mergedRoute.setPredicates(route.getPredicates());
+        mergedRoute.setMetadata(route.getMetadata());
+
+        // Merge filters with plugin bindings
+        mergedRoute.setFilters(mergePluginBindingsToFilters(routeId, route.getFilters(), globalBindings));
+
+        return mergedRoute;
     }
 
     /**
@@ -492,15 +631,34 @@ public class RouteService {
      */
     private void rebuildRoutesIndex(String nacosNamespace) {
         try {
+            // Query enabled routes once
+            List<RouteEntity> enabledRoutes = routeRepository.findByEnabledTrue();
+
             // Query enabled routes for the specific namespace
             List<String> routeIds;
             if (nacosNamespace != null && !nacosNamespace.isEmpty()) {
-                routeIds = routeRepository.findByEnabledTrue().stream()
-                    .filter(entity -> nacosNamespace.equals(getNacosNamespace(entity.getInstanceId())))
+                // Batch load instance namespaces to avoid N+1 queries in filter
+                Set<String> neededInstanceIds = enabledRoutes.stream()
+                    .map(RouteEntity::getInstanceId)
+                    .filter(id -> id != null && !id.isEmpty())
+                    .collect(java.util.stream.Collectors.toSet());
+                Map<String, String> instanceNamespaceMap = new HashMap<>();
+                if (!neededInstanceIds.isEmpty()) {
+                    instanceNamespaceMap = gatewayInstanceRepository.findByInstanceIdIn(new ArrayList<>(neededInstanceIds)).stream()
+                        .filter(i -> i.getNacosNamespace() != null)
+                        .collect(java.util.stream.Collectors.toMap(
+                            GatewayInstanceEntity::getInstanceId,
+                            GatewayInstanceEntity::getNacosNamespace,
+                            (a, b) -> a
+                        ));
+                }
+                final Map<String, String> nsMap = instanceNamespaceMap;
+                routeIds = enabledRoutes.stream()
+                    .filter(entity -> nacosNamespace.equals(nsMap.get(entity.getInstanceId())))
                     .map(RouteEntity::getRouteId)
                     .collect(java.util.stream.Collectors.toList());
             } else {
-                routeIds = routeRepository.findByEnabledTrue().stream()
+                routeIds = enabledRoutes.stream()
                     .map(RouteEntity::getRouteId)
                     .collect(java.util.stream.Collectors.toList());
             }
@@ -527,5 +685,88 @@ public class RouteService {
         } catch (Exception e) {
             log.error("Failed to rebuild routes index", e);
         }
+    }
+
+    /**
+     * Handle global binding change event.
+     * Refresh all enabled routes to apply new global plugin bindings.
+     *
+     * @param event the global binding change event
+     */
+    @EventListener
+    @Async
+    public void onGlobalBindingChanged(GlobalBindingChangedEvent event) {
+        log.info("Received global binding change event: type={}, bindingId={}, pluginId={}",
+            event.getChangeType(), event.getBindingId(), event.getPluginId());
+
+        try {
+            // Manually clear cache since self-invocation (this.refreshAllEnabledRoutes())
+            // bypasses Spring AOP proxy, making @CacheEvict ineffective
+            var cache = cacheManager.getCache(CacheConfig.CACHE_ROUTES);
+            if (cache != null) {
+                cache.clear();
+            }
+            refreshAllEnabledRoutes();
+            log.info("All routes refreshed after global binding change: {}", event.getChangeType());
+        } catch (Exception e) {
+            log.error("Failed to refresh routes after global binding change", e);
+        }
+    }
+
+    /**
+     * Refresh all enabled routes to Nacos.
+     * Used when global plugin bindings change to ensure all routes have updated filters.
+     */
+    @CacheEvict(value = CacheConfig.CACHE_ROUTES, allEntries = true)
+    public void refreshAllEnabledRoutes() {
+        List<RouteEntity> enabledRoutes = routeRepository.findByEnabledTrue();
+        if (enabledRoutes.isEmpty()) {
+            log.info("No enabled routes to refresh");
+            return;
+        }
+
+        log.info("Refreshing {} enabled routes after global binding change", enabledRoutes.size());
+
+        // Pre-load global bindings once to avoid N+1 queries in the loop
+        List<PluginBindingEntity> globalBindings = routePluginBindingService.getEnabledGlobalBindings();
+
+        // Batch load only needed gateway instances to avoid loading all instances
+        Set<String> neededInstanceIds = enabledRoutes.stream()
+                .map(RouteEntity::getInstanceId)
+                .filter(id -> id != null && !id.isEmpty())
+                .collect(java.util.stream.Collectors.toSet());
+        Map<String, String> instanceNamespaceMap = new HashMap<>();
+        if (!neededInstanceIds.isEmpty()) {
+            instanceNamespaceMap = gatewayInstanceRepository.findByInstanceIdIn(new ArrayList<>(neededInstanceIds)).stream()
+                    .filter(i -> i.getNacosNamespace() != null)
+                    .collect(java.util.stream.Collectors.toMap(
+                            GatewayInstanceEntity::getInstanceId,
+                            GatewayInstanceEntity::getNacosNamespace,
+                            (a, b) -> a
+                    ));
+        }
+
+        int successCount = 0;
+        int errorCount = 0;
+
+        for (RouteEntity entity : enabledRoutes) {
+            try {
+                String nacosNamespace = instanceNamespaceMap.get(entity.getInstanceId());
+                String routeDataId = ROUTE_PREFIX + entity.getRouteId();
+
+                RouteDefinition route = routeConverter.toDefinition(entity);
+                RouteDefinition mergedRoute = mergePluginBindingsToRoute(route, entity.getRouteId(), globalBindings);
+
+                configCenterService.publishConfig(routeDataId, nacosNamespace, mergedRoute);
+                successCount++;
+                log.debug("Refreshed route: {} (filters={})", routeDataId,
+                    mergedRoute.getFilters() != null ? mergedRoute.getFilters().size() : 0);
+            } catch (Exception e) {
+                errorCount++;
+                log.warn("Failed to refresh route {}: {}", entity.getRouteId(), e.getMessage());
+            }
+        }
+
+        log.info("Route refresh completed: {} success, {} errors", successCount, errorCount);
     }
 }

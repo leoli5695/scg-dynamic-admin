@@ -2,6 +2,7 @@ package com.leoli.gateway.admin.client;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
@@ -23,7 +24,14 @@ public class PrometheusClient {
     @Value("${gateway.prometheus.url:http://localhost:9091}")
     private String prometheusUrl;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate = createRestTemplate();
+
+    private static RestTemplate createRestTemplate() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(10000); // 10 seconds
+        factory.setReadTimeout(30000);    // 30 seconds
+        return new RestTemplate(factory);
+    }
 
     // 缓存 Prometheus 中所有 instance，用于自动匹配 exporterUrl
     private volatile Map<String, String> instanceCache = new HashMap<>();
@@ -337,7 +345,7 @@ public class PrometheusClient {
                 String instance = entry.getKey();
                 String job = entry.getValue();
                 if (job.equals(expectedJob) && port != null && port.equals(extractPort(instance))) {
-                    log.info("Type+Port match: exporterUrl={} → instance={} (type={})", exporterUrl, instance, middlewareType);
+                    log.debug("Type+Port match: exporterUrl={} → instance={} (type={})", exporterUrl, instance, middlewareType);
                     return instance;
                 }
             }
@@ -349,7 +357,7 @@ public class PrometheusClient {
             for (Map.Entry<String, String> entry : instanceCache.entrySet()) {
                 String instance = entry.getKey();
                 if (port.equals(extractPort(instance))) {
-                    log.info("Port match: exporterUrl={} → instance={}", exporterUrl, instance);
+                    log.debug("Port match: exporterUrl={} → instance={}", exporterUrl, instance);
                     return instance;
                 }
             }
@@ -403,7 +411,7 @@ public class PrometheusClient {
                 }
 
                 instanceCache = newCache;
-                log.info("Instance cache refreshed: {} instances found", instanceCache.size());
+                log.debug("Instance cache refreshed: {} instances found", instanceCache.size());
                 log.debug("Instance cache: {}", instanceCache);
             }
         } catch (Exception e) {
@@ -718,7 +726,7 @@ public class PrometheusClient {
 
         // 事务提交速率 (Counter → rate)
         List<Map<String, Object>> commitRate = queryRange(
-                "sum(rate(pg_stat_database_xact_commit{instance=\"" + exporterUrl + "\"}[" + rateWindow + "]))",
+                "sum(rate(pg_stat_database_xact_commit{instance=\"" + instance + "\"}[" + rateWindow + "]))",
                 start, end, step);
         timeSeries.put("transactionCommitRate", commitRate);
         summary.put("transactionCommitRate", summarizeTimeSeries(commitRate));

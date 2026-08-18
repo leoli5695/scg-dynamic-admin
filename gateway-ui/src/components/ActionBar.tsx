@@ -1,6 +1,6 @@
 import React from 'react';
-import { Space, Input, Select, Button, Dropdown, Typography } from 'antd';
-import type { InputProps, SelectProps, ButtonProps, MenuProps } from 'antd';
+import { Input, Select, Button, Dropdown } from 'antd';
+import type { ButtonProps, MenuProps } from 'antd';
 import { SearchOutlined, FilterOutlined, MoreOutlined } from '@ant-design/icons';
 
 interface ActionBarAction {

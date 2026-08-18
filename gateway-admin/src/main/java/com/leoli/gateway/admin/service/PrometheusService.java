@@ -77,7 +77,7 @@ public class PrometheusService {
             if (isMetricsEmpty(jvmMemory)) {
                 // Prometheus has no data, fetch directly from gateway (only for current time)
                 if (timestamp == null) {
-                    log.info("Prometheus has no data, fetching metrics directly from gateway");
+                    log.debug("Prometheus has no data, fetching metrics directly from gateway");
                     fetchMetricsDirectlyFromGateway(metrics);
                 } else {
                     log.warn("Prometheus has no historical data for timestamp: {}", timestamp);
@@ -250,7 +250,8 @@ public class PrometheusService {
                         simpleMetrics.put(name, value);
                     }
                 }
-            } catch (Exception ignored) {
+            } catch (Exception e) {
+                log.trace("Failed to parse Prometheus metric line: {}", e.getMessage());
             }
         }
 
@@ -259,7 +260,7 @@ public class PrometheusService {
         jvmMemory.put("heapUsed", heapUsedSum);
         jvmMemory.put("heapMax", heapMaxSum);
         jvmMemory.put("nonHeapUsed", nonHeapUsedSum);
-        log.info("Parsed metrics - heapUsed: {}, heapMax: {}, nonHeapUsed: {}", heapUsedSum, heapMaxSum, nonHeapUsedSum);
+        log.debug("Parsed metrics - heapUsed: {}, heapMax: {}, nonHeapUsed: {}", heapUsedSum, heapMaxSum, nonHeapUsedSum);
         if (heapUsedSum > 0 && heapMaxSum > 0) {
             jvmMemory.put("heapUsagePercent", Math.round(heapUsedSum / heapMaxSum * 10000) / 100.0);
         } else {
@@ -288,7 +289,7 @@ public class PrometheusService {
         gc.put("gcCount", gcCountSum);
         gc.put("gcTimeSeconds", Math.round(gcTimeSum * 1000) / 1000.0);
         gc.put("gcOverheadPercent", 0.0);
-        log.info("Parsed GC metrics - count: {}, time: {}s", gcCountSum, gcTimeSum);
+        log.debug("Parsed GC metrics - count: {}, time: {}s", gcCountSum, gcTimeSum);
         metrics.put("gc", gc);
 
         // HTTP - set defaults for now
@@ -756,7 +757,7 @@ public class PrometheusService {
             double avgGcTimeRate = extractValue(avgTimeRateResult, 0.0);
             double gcOverheadPercent = avgGcTimeRate * 100;
             gc.put("gcOverheadPercent", Math.round(gcOverheadPercent * 100) / 100.0);
-            log.info("Avg GC time rate query: {}, result: {}, avgGcTimeRate: {} per second, GC overhead: {}%", avgTimeRateQuery, avgTimeRateResult, avgGcTimeRate, gcOverheadPercent);
+            log.debug("Avg GC time rate query: {}, result: {}, avgGcTimeRate: {} per second, GC overhead: {}%", avgTimeRateQuery, avgTimeRateResult, avgGcTimeRate, gcOverheadPercent);
 
             // 获取实例数量，用于显示累计值的说明
             // 使用 count(count by (instance) ...) 正确计算实例数量，而不是时间序列数量
@@ -764,7 +765,7 @@ public class PrometheusService {
             String instanceCountQuery = "count(count by (instance) (jvm_memory_used_bytes{application=\"my-gateway\"" + instanceFilter + ",area=\"heap\"}))";
             String instanceCountResult = queryPrometheus(instanceCountQuery);
             double instanceCount = extractValue(instanceCountResult, 0.0);
-            log.info("Instance count query: {}, result: {}, count: {}", instanceCountQuery, instanceCountResult, instanceCount);
+            log.debug("Instance count query: {}, result: {}, count: {}", instanceCountQuery, instanceCountResult, instanceCount);
             if (instanceCount > 1) {
                 gc.put("instanceCount", (int) instanceCount);
                 gc.put("aggregateNote", "数据为" + (int)instanceCount + "个实例的累计值，GC开销为平均值");
@@ -854,13 +855,13 @@ public class PrometheusService {
             double oldCountRate = extractValue(queryPrometheus(oldCountRateQuery), 0.0);
             // 5分钟内的预估次数 = rate * 300秒
             double oldCount = oldCountRate * 300;
-            log.info("Old GC count rate: {} per second, estimated count in 5min: {}", oldCountRate, oldCount);
+            log.debug("Old GC count rate: {} per second, estimated count in 5min: {}", oldCountRate, oldCount);
 
             String oldTimeRateQuery = "sum(rate(jvm_gc_pause_seconds_sum{application=\"my-gateway\"" + instanceFilter + ",gc=~\"G1 Old Generation|.*MarkSweep|CMS|MarkSweepCompact|Old.*\"}[5m]))";
             double oldTimeRate = extractValue(queryPrometheus(oldTimeRateQuery), 0.0);
             // 5分钟内的预估时间 = rate * 300秒
             double oldTime = oldTimeRate * 300;
-            log.info("Old GC time rate: {} per second, estimated time in 5min: {}s", oldTimeRate, oldTime);
+            log.debug("Old GC time rate: {} per second, estimated time in 5min: {}s", oldTimeRate, oldTime);
 
             Map<String, Object> oldGC = new HashMap<>();
             oldGC.put("count", (long) oldCount);
@@ -891,7 +892,7 @@ public class PrometheusService {
                 double promotionRatio = promoRate / allocRate;
                 gc.put("promotionRatio", Math.round(promotionRatio * 10000) / 100.0);  // 百分比
             }
-            log.info("Memory allocation rate: {} MB/s, promotion rate: {} MB/s", gc.get("allocationRateMBPerSec"), gc.get("promotionRateMBPerSec"));
+            log.debug("Memory allocation rate: {} MB/s, promotion rate: {} MB/s", gc.get("allocationRateMBPerSec"), gc.get("promotionRateMBPerSec"));
 
             // ========== GC Pause Action Breakdown ==========
             // 同时使用 action 和 gc 标签来捕获所有GC类型
@@ -911,7 +912,7 @@ public class PrometheusService {
                 String actionTimeResult = queryPrometheus(actionTimeQuery);
                 double actionTime = extractValue(actionTimeResult, 0.0);
 
-                log.info("GC action '{}' - count: {}, time: {}", action, actionCount, actionTime);
+                log.debug("GC action '{}' - count: {}, time: {}", action, actionCount, actionTime);
 
                 if (actionCount > 0 || actionTime > 0) {
                     Map<String, Object> actionData = new HashMap<>();
@@ -1190,7 +1191,7 @@ public class PrometheusService {
                     .build()
                     .toUri();
 
-            log.info("Prometheus range query: {}", query);
+            log.debug("Prometheus range query: {}", query);
             String response = restTemplate.getForObject(uri, String.class);
 
             JsonNode root = objectMapper.readTree(response);
@@ -1205,7 +1206,7 @@ public class PrometheusService {
                         JsonNode lastValue = values.get(totalPoints - 1);
                         double firstData = firstValue.isArray() && firstValue.size() >= 2 ? firstValue.get(1).asDouble() : 0;
                         double lastData = lastValue.isArray() && lastValue.size() >= 2 ? lastValue.get(1).asDouble() : 0;
-                        log.info("Query '{}' returned {} points, first value: {}, last value: {}",
+                        log.debug("Query '{}' returned {} points, first value: {}, last value: {}",
                                 query, totalPoints, firstData, lastData);
                     }
 
@@ -1337,7 +1338,7 @@ public class PrometheusService {
             // 用户选择"最近N小时"，显示从那个时间点往前N小时的趋势
             end = centerTime;
             start = centerTime - (hours * 3600L);
-            log.info("Historical query: centerTime={}, range={} hours ({} to {})",
+            log.debug("Historical query: centerTime={}, range={} hours ({} to {})",
                     centerTime, hours, new java.util.Date(start * 1000), new java.util.Date(end * 1000));
         } else {
             // Realtime mode: query from now backwards
@@ -1544,7 +1545,7 @@ public class PrometheusService {
                 (Long) a.getOrDefault("requestCount", 0L)
             ));
             
-            log.info("Found {} routes with metrics", routeMetrics.size());
+            log.debug("Found {} routes with metrics", routeMetrics.size());
             
         } catch (Exception e) {
             log.warn("Failed to get route metrics: {}", e.getMessage());

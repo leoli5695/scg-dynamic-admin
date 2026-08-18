@@ -101,13 +101,13 @@ public class InstanceRetryExecutor {
                     instance.getHost(), instance.getPort());
         }
 
-        log.info("[RETRY-DEBUG] doExecute calling chain.filter, exchange response class={}",
+        log.debug("[RETRY-DEBUG] doExecute calling chain.filter, exchange response class={}",
                 exchange.getResponse().getClass().getSimpleName());
         return chain.filter(exchange)
                 .doOnSuccess(aVoid -> {
                     healthChecker.recordSuccess(serviceId, instance.getHost(), instance.getPort());
                     ServerHttpResponse response = exchange.getResponse();
-                    log.info("[RETRY-DEBUG] chain.filter success, response class={}, statusCode={}",
+                    log.debug("[RETRY-DEBUG] chain.filter success, response class={}, statusCode={}",
                             response.getClass().getSimpleName(), response.getStatusCode());
                 })
                 .onErrorResume(error -> {
@@ -136,7 +136,7 @@ public class InstanceRetryExecutor {
                         // Cannot safely retry - return 503 error immediately
                         return Mono.error(buildServiceUnavailableError(serviceId, instance, error));
                     }
-                    log.info("[RETRY-OK] Response state clean, can retry safely: statusCode=null, headersCount={}",
+                    log.debug("[RETRY-OK] Response state clean, can retry safely: statusCode=null, headersCount={}",
                             response.getHeaders().size());
 
                     ServiceInstance next = instanceFilter.findAlternative(serviceId, allInstances, triedInstances);

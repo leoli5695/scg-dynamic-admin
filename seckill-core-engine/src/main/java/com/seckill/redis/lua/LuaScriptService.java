@@ -89,6 +89,37 @@ public class LuaScriptService {
                 seckillDeductScript.getSha1(), stockRollbackScript.getSha1());
     }
 
+    /**
+     * P2-8: 预加载扣减脚本SHA到Redis缓存
+     * 应用启动时调用，避免首次执行性能抖动
+     */
+    public void loadDeductScript() {
+        try {
+            // 通过执行一次空操作来触发SHA缓存
+            // Spring Data Redis会自动将脚本SHA发送到Redis并缓存
+            List<String> keys = Arrays.asList("seckill:warmup:test");
+            redisTemplate.execute(seckillDeductScript, keys, "0", "0", "1", "0");
+            log.debug("Deduct script SHA loaded to Redis cache");
+        } catch (Exception e) {
+            log.warn("Failed to preload deduct script SHA (will retry on first execution): {}", e.getMessage());
+        }
+    }
+
+    /**
+     * P2-8: 预加载回补脚本SHA到Redis缓存
+     * 应用启动时调用，避免首次执行性能抖动
+     */
+    public void loadRollbackScript() {
+        try {
+            // 通过执行一次空操作来触发SHA缓存
+            List<String> keys = Arrays.asList("seckill:warmup:test", "seckill:warmup:test2", "seckill:warmup:test3");
+            redisTemplate.execute(stockRollbackScript, keys, "0", "0", "1");
+            log.debug("Rollback script SHA loaded to Redis cache");
+        } catch (Exception e) {
+            log.warn("Failed to preload rollback script SHA (will retry on first execution): {}", e.getMessage());
+        }
+    }
+
     public Long executeDeductScript(List<String> keys, String... args) {
         return execute(seckillDeductScript, keys, args);
     }

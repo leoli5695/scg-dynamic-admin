@@ -163,6 +163,13 @@
             <version>4.3.1</version>
         </dependency>
 
+        <!-- License Client for Commercial Features -->
+        <dependency>
+            <groupId>com.leoli</groupId>
+            <artifactId>license-client</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
         <!-- Testing -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

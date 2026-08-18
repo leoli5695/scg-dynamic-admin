@@ -77,7 +77,15 @@ public class LocalFallbackService {
     private final Map<Long, AtomicInteger> localStockMap = new ConcurrentHashMap<>();
 
     /**
-     * 本地购买记录（防重）
+     * 【并发安全修复】使用AtomicReference封装复合状态（库存+购买记录）
+     * 确保防重检查和库存扣减的原子性，避免降级模式下的超卖风险
+     * Key: seckillId
+     * Value: StockState (包含库存和该活动的所有用户购买记录)
+     */
+    private final Map<Long, java.util.concurrent.atomic.AtomicReference<StockState>> stockStateMap = new ConcurrentHashMap<>();
+
+    /**
+     * 本地购买记录（防重）- 保留用于向后兼容和审计
      * Key: seckillId:userId
      * Value: 已购买数量
      */
@@ -121,6 +129,11 @@ public class LocalFallbackService {
         // 降级模式下只分配部分库存（避免多实例超卖）
         int fallbackStock = (int) Math.ceil(totalStock * fallbackStockRatio);
         localStockMap.put(seckillId, new AtomicInteger(fallbackStock));
+        
+        // 【并发安全修复】初始化复合状态
+        StockState initialState = new StockState(fallbackStock, new ConcurrentHashMap<>());
+        stockStateMap.put(seckillId, new java.util.concurrent.atomic.AtomicReference<>(initialState));
+        
         log.warn("本地库存初始化: seckillId={}, totalStock={}, fallbackStock={}（降级模式，{}比例）",
                 seckillId, totalStock, fallbackStock, (int) (fallbackStockRatio * 100) + "%");
     }
@@ -129,6 +142,10 @@ public class LocalFallbackService {
      * ============================================================================
      * 本地库存扣减（Redis 故障时的兜底）
      * ============================================================================
+     * <p>
+     * 【并发安全修复】：
+     * - 使用AtomicReference.ensure复合状态（库存+购买记录）的原子性更新
+     * - 避免防重检查和库存扣减之间的竞态条件
      * <p>
      * 【多实例超卖防护】：
      * - 当本地库存低于 minStockThreshold 时，返回"系统繁忙"
@@ -142,52 +159,59 @@ public class LocalFallbackService {
      * - -3: 系统繁忙（库存过低，拒绝扣减）
      */
     public int deductStockLocal(Long seckillId, Long userId, int quantity) {
-        // Step 1: 防重检查（CAS 保证原子性）
-        String boughtKey = seckillId + ":" + userId;
-        AtomicInteger boughtCount = localBoughtMap.computeIfAbsent(boughtKey, k -> new AtomicInteger(0));
-
-        int maxBuyCount = seckillConfig.getMaxBuyCount();
-        while (true) {
-            int currentBought = boughtCount.get();
-            if (currentBought >= maxBuyCount) {
-                log.warn("本地防重检查：已购买过, seckillId={}, userId={}", seckillId, userId);
-                return -2;
-            }
-            if (boughtCount.compareAndSet(currentBought, currentBought + quantity)) {
-                break;
-            }
-        }
-
-        // Step 2: 库存扣减
-        AtomicInteger stock = localStockMap.get(seckillId);
-        if (stock == null) {
+        // 【并发安全修复】使用CAS循环确保原子性
+        java.util.concurrent.atomic.AtomicReference<StockState> stateRef = stockStateMap.get(seckillId);
+        if (stateRef == null) {
             log.error("本地库存未初始化: seckillId={}", seckillId);
-            boughtCount.addAndGet(-quantity);  // 回退防重计数
             return -1;
         }
-
-        // CAS 扣减
+        
+        int maxBuyCount = seckillConfig.getMaxBuyCount();
+        
+        // CAS循环：原子性地检查并更新复合状态
         while (true) {
-            int oldVal = stock.get();
-            if (oldVal <= minStockThreshold) {
-                boughtCount.addAndGet(-quantity);  // 回退防重计数
+            StockState currentState = stateRef.get();
+            
+            // Step 1: 防重检查
+            int currentBought = currentState.getUserBoughtCount(userId);
+            if (currentBought >= maxBuyCount) {
+                log.warn("本地防重检查：已购买过, seckillId={}, userId={}, bought={}", 
+                        seckillId, userId, currentBought);
+                return -2;
+            }
+            
+            // Step 2: 检查库存阈值
+            if (currentState.stock <= minStockThreshold) {
                 log.warn("本地库存过低，拒绝扣减: seckillId={}, remaining={}, threshold={}",
-                        seckillId, oldVal, minStockThreshold);
+                        seckillId, currentState.stock, minStockThreshold);
                 alertService.sendAlert("降级模式库存不足",
-                        "seckillId=" + seckillId + " 本地库存剩余 " + oldVal + "，拒绝新请求");
+                        "seckillId=" + seckillId + " 本地库存剩余 " + currentState.stock + "，拒绝新请求");
                 return -3;
             }
-            if (oldVal < quantity) {
-                boughtCount.addAndGet(-quantity);  // 回退防重计数
-                log.warn("本地库存不足: seckillId={}, remaining={}, request={}", seckillId, oldVal, quantity);
+            
+            // Step 3: 检查库存充足性
+            if (currentState.stock < quantity) {
+                log.warn("本地库存不足: seckillId={}, remaining={}, request={}", 
+                        seckillId, currentState.stock, quantity);
                 return -1;
             }
-            int newVal = oldVal - quantity;
-            if (stock.compareAndSet(oldVal, newVal)) {
+            
+            // Step 4: 创建新状态（不可变）
+            int newStock = currentState.stock - quantity;
+            StockState newState = currentState.withUpdatedStockAndUserBought(userId, quantity);
+            
+            // Step 5: CAS更新
+            if (stateRef.compareAndSet(currentState, newState)) {
+                // 同步更新旧map（向后兼容）
+                localStockMap.get(seckillId).set(newStock);
+                String boughtKey = seckillId + ":" + userId;
+                localBoughtMap.computeIfAbsent(boughtKey, k -> new AtomicInteger(0)).addAndGet(quantity);
+                
                 log.warn("本地库存扣减成功: seckillId={}, userId={}, remaining={}（降级模式，{}比例）",
-                        seckillId, userId, newVal, (int) (fallbackStockRatio * 100) + "%");
-                return newVal;
+                        seckillId, userId, newStock, (int) (fallbackStockRatio * 100) + "%");
+                return newStock;
             }
+            // CAS失败，重试
         }
     }
 
@@ -552,5 +576,35 @@ public class LocalFallbackService {
         public Object orderData;
         public long createTime;
         public int retryCount;
+    }
+    
+    /**
+     * 【并发安全修复】不可变的库存状态封装
+     * 确保库存和用户购买记录的原子性更新
+     */
+    private static class StockState {
+        final int stock;
+        final Map<Long, Integer> userBoughtMap; // userId -> bought count
+        
+        StockState(int stock, Map<Long, Integer> userBoughtMap) {
+            this.stock = stock;
+            this.userBoughtMap = new ConcurrentHashMap<>(userBoughtMap);
+        }
+        
+        /**
+         * 获取用户已购买数量
+         */
+        int getUserBoughtCount(Long userId) {
+            return userBoughtMap.getOrDefault(userId, 0);
+        }
+        
+        /**
+         * 创建新状态：更新库存和用户购买数量（不可变）
+         */
+        StockState withUpdatedStockAndUserBought(Long userId, int quantity) {
+            Map<Long, Integer> newBoughtMap = new ConcurrentHashMap<>(this.userBoughtMap);
+            newBoughtMap.merge(userId, quantity, Integer::sum);
+            return new StockState(this.stock - quantity, newBoughtMap);
+        }
     }
 }

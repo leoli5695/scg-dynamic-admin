@@ -252,13 +252,15 @@ logging:
 # Prometheus scrapes from http://gateway:80/actuator/prometheus (same port as main application)
 management:
   # NO separate management.server.port - use main port 80
+  # 策略：默认全启用（enabled-by-default 默认 true）+ 精确控制 exposure.include
+  # 只通过 exposure.include 控制 Web 暴露范围，避免端点被禁用后落入网关路由匹配导致 404
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus,metrics
+        include: health,info,prometheus,metrics,gateway,gatewayRoutes,gatewayServices,gatewayStrategies
   endpoint:
     health:
-      show-details: always
+      show-details: never  # 安全加固：不暴露健康详情，防止泄露内部组件状态
     prometheus:
       enabled: true
   metrics:
@@ -318,3 +320,26 @@ otel:
     exporter: ${OTEL_TRACES_EXPORTER:otlp}
   metrics:
     exporter: ${OTEL_METRICS_EXPORTER:otlp}
+
+# ============================================================================
+# License Configuration (Commercial Features)
+# ============================================================================
+# License Code: Base64 encoded license from license-server
+# Fallback Edition: BASIC (minimal features when license invalid)
+# Features requiring license:
+#   - WEIGHTED_ROUTING (ADVANCED+): Multi-service weighted routing
+#   - DISTRIBUTED_RATE_LIMIT (ADVANCED+): Redis distributed rate limiting
+#   - CIRCUIT_BREAKER (ADVANCED+): Resilience4j circuit breaker
+#   - FULL_GRAY_RELEASE (ENTERPRISE): Header/Cookie/Query gray rules
+#   - AI_COPilot (ENTERPRISE): AI Copilot features
+# ============================================================================
+license:
+  client:
+    enabled: ${LICENSE_ENABLED:true}
+    license-code: ${GATEWAY_LICENSE_CODE:}
+    license-file: ${GATEWAY_LICENSE_FILE:}
+    fallback-edition: ${LICENSE_FALLBACK_EDITION:BASIC}
+    allow-basic-fallback: ${LICENSE_ALLOW_BASIC_FALLBACK:true}
+    log-unlicensed-access: ${LICENSE_LOG_UNLICENSED_ACCESS:true}
+    warn-days-before-expiry: ${LICENSE_WARN_DAYS_BEFORE_EXPIRY:30}
+    validation-interval-seconds: ${LICENSE_VALIDATION_INTERVAL:3600}

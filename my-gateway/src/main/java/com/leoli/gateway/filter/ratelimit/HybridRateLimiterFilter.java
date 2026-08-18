@@ -1,17 +1,18 @@
 package com.leoli.gateway.filter.ratelimit;
 
-import com.leoli.gateway.constants.FilterOrderConstants;
-import com.leoli.gateway.constants.RateLimitConstants;
-import com.leoli.gateway.constants.CacheConstants;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.leoli.gateway.constants.CacheConstants;
+import com.leoli.gateway.constants.FilterOrderConstants;
+import com.leoli.gateway.constants.RateLimitConstants;
+import com.leoli.gateway.license.LicenseFeatureHelper;
+import com.leoli.gateway.limiter.DistributedRateLimiter;
 import com.leoli.gateway.limiter.RateLimitResult;
 import com.leoli.gateway.limiter.RedisHealthChecker;
-import com.leoli.gateway.limiter.DistributedRateLimiter;
 import com.leoli.gateway.limiter.ShadowQuotaManager;
 import com.leoli.gateway.manager.StrategyManager;
-import com.leoli.gateway.model.StrategyDefinition;
 import com.leoli.gateway.util.*;
+import com.leoli.license.client.model.LicenseInfo;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,14 +20,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
-import org.springframework.http.HttpStatus;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -57,6 +56,7 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
 
     private final StrategyManager strategyManager;
     private final ShadowQuotaManager shadowQuotaManager;
+    private final LicenseFeatureHelper licenseFeatureHelper;
 
     /**
      * Optional dependencies - may be null when Redis is disabled.
@@ -107,11 +107,21 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
         // Check if we should use Redis for rate limiting
         boolean shouldUseRedis = shouldUseRedisForRateLimiting();
 
+        // LICENSE CHECK: Redis distributed rate limiting requires DISTRIBUTED_RATE_LIMIT feature
+        // If not licensed, force local rate limiting
+        boolean hasDistributedRateLimitLicense = licenseFeatureHelper.hasFeature(LicenseInfo.Feature.DISTRIBUTED_RATE_LIMIT);
+
+        if (shouldUseRedis && !hasDistributedRateLimitLicense) {
+            log.debug("Redis distributed rate limiting blocked - DISTRIBUTED_RATE_LIMIT feature not licensed. " +
+                    "Using local rate limiting for route: {}", routeId);
+            shouldUseRedis = false;
+        }
+
         // 1. Check if Redis rate limiting should be used
         if (shouldUseRedis && redisLimitEnabled && redisHealthChecker != null
                 && redisHealthChecker.isRedisAvailableForRateLimiting() && distributedRateLimiter != null) {
             if (log.isDebugEnabled()) {
-                log.debug("Using Redis distributed rate limiting for key: {}", rateLimitKey);
+                log.debug("Using Redis distributed rate limiting for key: {} (License: DISTRIBUTED_RATE_LIMIT OK)", rateLimitKey);
             }
 
             // 2. Try Redis rate limiting with proper fallback handling

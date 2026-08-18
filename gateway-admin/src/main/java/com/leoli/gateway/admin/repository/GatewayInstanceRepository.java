@@ -92,4 +92,10 @@ public interface GatewayInstanceRepository extends JpaRepository<GatewayInstance
      */
     @Query("SELECT COUNT(g) FROM GatewayInstanceEntity g WHERE g.statusCode = 1")
     long countRunningInstances();
+    
+    /**
+     * 【性能优化】批量查询指定instanceId列表的实例，避免N+1查询
+     * 用于RouteService启动时按需加载相关实例
+     */
+    List<GatewayInstanceEntity> findByInstanceIdIn(List<String> instanceIds);
 }

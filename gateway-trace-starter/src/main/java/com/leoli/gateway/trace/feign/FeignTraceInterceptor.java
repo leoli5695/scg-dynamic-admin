@@ -1,10 +1,16 @@
 package com.leoli.gateway.trace.feign;
 
 import com.leoli.gateway.trace.TraceContextHolder;
+import com.leoli.gateway.trace.model.SpanTags;
+import com.leoli.gateway.trace.model.SpanType;
 import com.leoli.gateway.trace.properties.GatewayTraceProperties;
 import feign.RequestInterceptor;
 import feign.RequestTemplate;
 import lombok.extern.slf4j.Slf4j;
+
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
 
 /**
  * OpenFeign TraceId propagation interceptor
@@ -13,14 +19,14 @@ import lombok.extern.slf4j.Slf4j;
  * when calling downstream services via Feign, enabling full-link tracing
  * across services.
  * <p>
- * Usage:
- * 1. Auto-configured in GatewayTraceAutoConfiguration (conditional assembly)
- * 2. No manual configuration needed - works automatically when project depends on spring-cloud-starter-openfeign
+ * Enhanced with:
+ * - Span hierarchy propagation (spanId -> downstream parentSpanId)
+ * - Caller service name propagation (for topology graph generation)
+ * - Baggage propagation (cross-service business context)
  * <p>
  * Propagation chain:
  * Gateway generates TraceId → Header: X-Trace-Id → Service A
- * → Feign call → Header: X-Trace-Id → Service B
- * → Feign call → Header: X-Trace-Id → Service C ...
+ * → Feign call → Header: X-Trace-Id, X-Span-Id, X-Caller-Service → Service B
  *
  * @author leoli
  */
@@ -39,9 +45,24 @@ public class FeignTraceInterceptor implements RequestInterceptor {
     private static final String TRACE_ID_HEADER = "X-Trace-Id";
 
     /**
-     * 采样标记 Header 名称（可选）
+     * Sampling flag Header name
      */
     private static final String SAMPLED_HEADER = "X-Trace-Sampled";
+
+    /**
+     * Span ID Header name (current spanId becomes downstream's parentSpanId)
+     */
+    private static final String SPAN_ID_HEADER = "X-Span-Id";
+
+    /**
+     * Caller service Header name (for topology graph generation)
+     */
+    private static final String CALLER_SERVICE_HEADER = "X-Caller-Service";
+
+    /**
+     * Baggage Header name (JSON encoded cross-service context)
+     */
+    private static final String BAGGAGE_HEADER = "X-Trace-Baggage";
 
     @Override
     public void apply(RequestTemplate template) {
@@ -54,20 +75,127 @@ public class FeignTraceInterceptor implements RequestInterceptor {
         String traceId = TraceContextHolder.getTraceId();
 
         if (traceId != null && !traceId.isEmpty()) {
-            // 将 TraceId 传递到下游服务
+            // Propagate TraceId to downstream service
             template.header(TRACE_ID_HEADER, traceId);
             log.debug("Feign request: propagating traceId={} to {}", traceId, template.url());
         }
 
-        // 传递采样标记（下游服务可以根据此标记决定是否追踪）
-        // isSampled() 返回 boolean 基本类型，直接传递
+        // Propagate sampling flag
         boolean sampled = TraceContextHolder.isSampled();
         template.header(SAMPLED_HEADER, String.valueOf(sampled));
 
-        // Optional: propagate other context info (e.g., userId, tenantId)
-        // String userId = TraceContextHolder.getUserId();
-        // if (userId != null) {
-        //     template.header("X-User-Id", userId);
-        // }
+        // === Enhanced: Span hierarchy propagation ===
+        
+        // Propagate current spanId (becomes downstream's parentSpanId)
+        String currentSpanId = TraceContextHolder.getCurrentSpanId();
+        if (currentSpanId != null && !currentSpanId.isEmpty()) {
+            template.header(SPAN_ID_HEADER, currentSpanId);
+            log.debug("Feign request: propagating spanId={} (downstream parentSpanId)", currentSpanId);
+        }
+        
+        // Propagate caller service name (for topology graph generation)
+        String callerService = properties.getServiceName();
+        if (callerService != null && !callerService.isEmpty()) {
+            template.header(CALLER_SERVICE_HEADER, callerService);
+            log.debug("Feign request: caller service={}", callerService);
+            
+            // Add service target tag to current span (for topology analysis)
+            // Extract target service from Feign URL
+            String targetService = extractTargetService(template.url());
+            if (targetService != null) {
+                addServiceTargetTag(currentSpanId, targetService);
+            }
+        }
+
+        // === Enhanced: Baggage propagation ===
+        
+        // Propagate baggage (cross-service business context)
+        Map<String, String> baggage = TraceContextHolder.getAllBaggage();
+        if (baggage != null && !baggage.isEmpty()) {
+            String encodedBaggage = encodeBaggage(baggage);
+            template.header(BAGGAGE_HEADER, encodedBaggage);
+            log.debug("Feign request: propagating baggage with {} keys", baggage.size());
+        }
+    }
+
+    /**
+     * Extract target service name from Feign URL
+     * <p>
+     * URL patterns:
+     * - http://service-name/api/... → service-name
+     * - lb://service-name/api/... → service-name
+     */
+    private String extractTargetService(String url) {
+        if (url == null || url.isEmpty()) {
+            return null;
+        }
+        
+        try {
+            // Remove protocol prefix
+            String path = url;
+            if (path.startsWith("http://")) {
+                path = path.substring(7);
+            } else if (path.startsWith("lb://")) {
+                path = path.substring(5);
+            } else if (path.startsWith("https://")) {
+                path = path.substring(8);
+            }
+            
+            // Extract host (service name)
+            int slashIndex = path.indexOf('/');
+            if (slashIndex > 0) {
+                return path.substring(0, slashIndex);
+            }
+            return path;
+        } catch (Exception e) {
+            log.warn("Failed to extract target service from URL: {}", url);
+            return null;
+        }
+    }
+
+    /**
+     * Add service target tag to current span (for topology analysis)
+     */
+    private void addServiceTargetTag(String spanId, String targetService) {
+        if (spanId == null || targetService == null) {
+            return;
+        }
+        
+        com.leoli.gateway.trace.model.DistributedTrace trace = TraceContextHolder.getTrace();
+        if (trace == null) return;
+        
+        for (com.leoli.gateway.trace.model.ServiceSpan span : trace.getSpans()) {
+            if (span.getSpanId() != null && span.getSpanId().equals(spanId)) {
+                java.util.Map<String, Object> tags = span.getOrCreateTags();
+                tags.put(SpanTags.SERVICE_TARGET, targetService);
+                break;
+            }
+        }
+    }
+
+    /**
+     * Encode baggage map to URL-safe JSON string
+     */
+    private String encodeBaggage(Map<String, String> baggage) {
+        if (baggage == null || baggage.isEmpty()) {
+            return "";
+        }
+        
+        StringBuilder sb = new StringBuilder("{");
+        boolean first = true;
+        for (Map.Entry<String, String> entry : baggage.entrySet()) {
+            if (!first) {
+                sb.append(",");
+            }
+            first = false;
+            
+            // URL encode key and value for safety
+            String key = URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8);
+            String value = URLEncoder.encode(entry.getValue() != null ? entry.getValue() : "", StandardCharsets.UTF_8);
+            sb.append("\"").append(key).append("\":\"").append(value).append("\"");
+        }
+        sb.append("}");
+        
+        return sb.toString();
     }
 }

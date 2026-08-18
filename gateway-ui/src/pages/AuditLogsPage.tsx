@@ -15,6 +15,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import api from '../utils/api';
+import logger from '../utils/logger';
 import { useTranslation } from 'react-i18next';
 
 const { Title, Text } = Typography;
@@ -54,13 +55,13 @@ interface DiffResult {
   operationType: string;
   operator: string;
   createdAt: string;
-  oldValue: any;
-  newValue: any;
+  oldValue: unknown;
+  newValue: unknown;
   changes: Array<{
     type: string;
     field: string;
-    oldValue: any;
-    newValue: any;
+    oldValue: unknown;
+    newValue: unknown;
   }>;
 }
 
@@ -167,9 +168,9 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
   const handleCleanup = async () => {
     setCleanupLoading(true);
     try {
-      console.log('Calling cleanup API...');
+      logger.debug('Calling cleanup API...');
       const res = await api.post('/api/audit-logs/cleanup');
-      console.log('Cleanup response:', res.data);
+      logger.debug('Cleanup response:', res.data);
       if (res.data.code === 200) {
         message.success(`${t('audit.cleanup_done') || '清理完成'}，${t('audit.deleted_count') || '删除了'} ${res.data.data?.deletedCount || 0} ${t('audit.records') || '条日志'}`, 5);
         loadLogs();
@@ -179,9 +180,10 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
         console.error('Cleanup failed with code:', res.data.code, 'message:', res.data.message);
         message.error(`${t('audit.cleanup_failed') || '清理失败'}: ${res.data.message || '未知错误'}`, 5);
       }
-    } catch (e: any) {
-      console.error('Cleanup exception:', e);
-      const errorMsg = e.response?.data?.message || e.message || '网络错误';
+    } catch (e) {
+      const err = e as { response?: { data?: { message?: string } }; message?: string };
+      logger.error('Cleanup exception:', e);
+      const errorMsg = err.response?.data?.message || err.message || '网络错误';
       message.error(`${t('audit.cleanup_failed') || '清理失败'}: ${errorMsg}`, 5);
     } finally {
       setCleanupLoading(false);
@@ -191,9 +193,9 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
   const handleClearAll = async () => {
     setCleanupLoading(true);
     try {
-      console.log('Calling clear-all API...');
+      logger.debug('Calling clear-all API...');
       const res = await api.post('/api/audit-logs/clear-all');
-      console.log('Clear-all response:', res.data);
+      logger.debug('Clear-all response:', res.data);
       if (res.data.code === 200) {
         message.success(`${t('audit.clear_done') || '清空完成'}，${t('audit.deleted_count') || '删除了'} ${res.data.data?.deletedCount || 0} ${t('audit.records') || '条日志'}`, 5);
         loadLogs();
@@ -203,9 +205,10 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
         console.error('Clear-all failed with code:', res.data.code, 'message:', res.data.message);
         message.error(`${t('audit.clear_failed') || '清空失败'}: ${res.data.message || '未知错误'}`, 5);
       }
-    } catch (e: any) {
-      console.error('Clear-all exception:', e);
-      const errorMsg = e.response?.data?.message || e.message || '网络错误';
+    } catch (e) {
+      const err = e as { response?: { data?: { message?: string } }; message?: string };
+      logger.error('Clear-all exception:', e);
+      const errorMsg = err.response?.data?.message || err.message || '网络错误';
       message.error(`${t('audit.clear_failed') || '清空失败'}: ${errorMsg}`, 5);
     } finally {
       setCleanupLoading(false);
@@ -223,9 +226,10 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
       } else {
         message.error(`${t('audit.delete_failed') || '删除失败'}: ${res.data.message || '未知错误'}`);
       }
-    } catch (e: any) {
-      console.error('Delete exception:', e);
-      const errorMsg = e.response?.data?.message || e.message || '网络错误';
+    } catch (e) {
+      const err = e as { response?: { data?: { message?: string } }; message?: string };
+      logger.error('Delete exception:', e);
+      const errorMsg = err.response?.data?.message || err.message || '网络错误';
       message.error(`${t('audit.delete_failed') || '删除失败'}: ${errorMsg}`);
     }
   };
@@ -523,11 +527,12 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
     if (!instanceId) return;
     setTimelineLoading(true);
     try {
-      const params: Record<string, any> = { days: timelineDays, limit: 100 };
+      const params: Record<string, unknown> = { days: timelineDays, limit: 100 };
       if (timelineTargetType) params.targetType = timelineTargetType;
       const response = await api.get(`/api/audit-logs/timeline/${instanceId}`, { params });
       setTimeline(response.data?.data || response.data);
-    } catch (e: any) {
+    } catch (e) {
+      logger.error('Timeline load error:', e);
       message.error(t('audit.load_failed') || 'Failed to load timeline');
     } finally {
       setTimelineLoading(false);
@@ -772,7 +777,7 @@ const AuditLogsPage: React.FC<AuditLogsPageProps> = ({ instanceId }) => {
   // ===================== Diff Modal =====================
 
   // Helper: Render JSON value with collapse for large content
-  const renderJsonValue = (value: any, maxHeight: number = 200) => {
+  const renderJsonValue = (value: unknown, maxHeight: number = 200) => {
     const jsonStr = value ? JSON.stringify(value, null, 2) : null;
     if (!jsonStr) return <Text type="secondary">{t('common.none') || '无'}</Text>;
 

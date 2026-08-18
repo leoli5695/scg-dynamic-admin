@@ -12,7 +12,7 @@
         <relativePath/>
     </parent>
 
-    <groupId>com.example</groupId>
+    <groupId>com.leoli</groupId>
     <artifactId>gateway-admin</artifactId>
     <version>1.0.0</version>
     <packaging>jar</packaging>
@@ -212,6 +212,13 @@
             <groupId>net.javacrumbs.shedlock</groupId>
             <artifactId>shedlock-provider-redis-spring</artifactId>
             <version>5.10.0</version>
+        </dependency>
+
+        <!-- License Client for Feature Authorization -->
+        <dependency>
+            <groupId>com.leoli</groupId>
+            <artifactId>license-client</artifactId>
+            <version>1.0.0</version>
         </dependency>
     </dependencies>
 

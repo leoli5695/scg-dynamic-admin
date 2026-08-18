@@ -133,4 +133,14 @@ public interface DistributedTraceRepository extends JpaRepository<DistributedTra
         Long thresholdMs, 
         Pageable pageable
     );
+
+    /**
+     * 查询指定时间之后的Trace（拓扑图专用）
+     */
+    List<DistributedTraceEntity> findByTraceTimeAfter(LocalDateTime since);
+
+    /**
+     * 查询指定服务和时间之后的Trace（拓扑图专用）
+     */
+    List<DistributedTraceEntity> findByServiceNameAndTraceTimeAfter(String serviceName, LocalDateTime since);
 }

@@ -42,19 +42,6 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
   const [timeRange, setTimeRange] = useState<[Dayjs | null, Dayjs | null]>([null, null]);
   const { t } = useTranslation();
 
-  useEffect(() => {
-    if (visible) {
-      loadProviders();
-    }
-  }, [visible]);
-
-  useEffect(() => {
-    if (selectedProvider) {
-      loadModels(selectedProvider);
-      loadSavedConfig(selectedProvider);
-    }
-  }, [selectedProvider]);
-
   const loadProviders = async () => {
     try {
       const res = await api.get('/api/copilot/providers');
@@ -84,6 +71,19 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
       setValidated(config.isValid || false);
     }
   };
+
+  useEffect(() => {
+    if (visible) {
+      loadProviders();
+    }
+  }, [visible]);
+
+  useEffect(() => {
+    if (selectedProvider) {
+      loadModels(selectedProvider);
+      loadSavedConfig(selectedProvider);
+    }
+  }, [selectedProvider]);
 
   const handleValidate = async () => {
     if (!apiKey) {

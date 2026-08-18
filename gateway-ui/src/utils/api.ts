@@ -1,4 +1,5 @@
 import axios, { CancelTokenSource, AxiosError } from 'axios';
+import logger from './logger';
 
 // Create axios instance - use empty baseURL to leverage Vite proxy in development
 const api = axios.create({
@@ -31,7 +32,7 @@ api.interceptors.response.use(
   (error: AxiosError) => {
     // If request was cancelled, don't process error
     if (axios.isCancel(error)) {
-      console.log('Request cancelled:', error.message);
+      logger.debug('Request cancelled:', error.message);
       return Promise.resolve(null); // Return null instead of rejecting
     }
 

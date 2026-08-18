@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Load balancing instance selection strategies.
@@ -47,7 +48,7 @@ public class InstanceSelector {
 
     private ServiceInstance selectByRandom(List<ServiceInstance> instances) {
         double totalWeight = instances.stream().mapToDouble(this::getWeight).sum();
-        double random = Math.random() * totalWeight;
+        double random = ThreadLocalRandom.current().nextDouble() * totalWeight;
         double weightSum = 0;
         for (ServiceInstance instance : instances) {
             weightSum += getWeight(instance);
@@ -94,6 +95,8 @@ public class InstanceSelector {
     }
 
     private ServiceInstance selectByWeightedRoundRobin(List<ServiceInstance> instances) {
+        // Synchronize on currentWeights to ensure atomic read-modify-write for the three-step algorithm
+        synchronized (currentWeights) {
         for (ServiceInstance instance : instances) {
             String key = instance.getHost() + ":" + instance.getPort();
             currentWeights.putIfAbsent(key, 0.0);
@@ -123,6 +126,7 @@ public class InstanceSelector {
             currentWeights.put(key, currentWeights.get(key) - totalWeight);
         }
         return selected;
+        }
     }
 
     double getWeight(ServiceInstance instance) {
@@ -140,15 +144,6 @@ public class InstanceSelector {
     // --- Inner class: ConsistentHashRing ---
     private static class ConsistentHashRing {
         private final SortedMap<Long, ServiceInstance> ring = new TreeMap<>();
-        private static final MessageDigest md5;
-
-        static {
-            try {
-                md5 = MessageDigest.getInstance("MD5");
-            } catch (NoSuchAlgorithmException e) {
-                throw new RuntimeException("MD5 not available", e);
-            }
-        }
 
         void addNode(String key, ServiceInstance instance) {
             ring.put(hash(key), instance);
@@ -162,9 +157,14 @@ public class InstanceSelector {
         }
 
         private long hash(String key) {
-            byte[] d = md5.digest(key.getBytes());
-            return ((long) (d[3] & 0xFF) << 24) | ((long) (d[2] & 0xFF) << 16)
-                    | ((long) (d[1] & 0xFF) << 8) | (d[0] & 0xFF);
+            try {
+                MessageDigest md = MessageDigest.getInstance("MD5");
+                byte[] d = md.digest(key.getBytes());
+                return ((long) (d[3] & 0xFF) << 24) | ((long) (d[2] & 0xFF) << 16)
+                        | ((long) (d[1] & 0xFF) << 8) | (d[0] & 0xFF);
+            } catch (NoSuchAlgorithmException e) {
+                throw new RuntimeException("MD5 not available", e);
+            }
         }
     }
 }

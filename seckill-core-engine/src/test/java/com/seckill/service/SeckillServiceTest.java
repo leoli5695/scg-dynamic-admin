@@ -95,6 +95,9 @@ class SeckillServiceTest {
     @Mock
     private LocalTransactionService localTransactionService;
 
+    @Mock
+    private io.micrometer.core.instrument.MeterRegistry meterRegistry;
+
     private SeckillService seckillService;
 
     private SeckillRequest request;
@@ -118,6 +121,7 @@ class SeckillServiceTest {
                 seckillAlreadyBoughtCounter,
                 localCacheService,
                 seckillStockInsufficientCounter,
+                meterRegistry,
                 redisDegradeService,
                 snowflakeIdGenerator,
                 transactionLogMapper,
@@ -143,6 +147,9 @@ class SeckillServiceTest {
         product = new SeckillProduct();
         product.setId(1L);
         product.setSeckillPrice(BigDecimal.valueOf(99.9));
+
+        // Mock LocalTransactionService（本地事务处理成功）
+        when(localTransactionService.processOrderDirectly(any())).thenReturn(true);
 
         // Mock LocalCacheService（优先从本地缓存获取）
         when(localCacheService.getActivity(anyLong())).thenReturn(activity);

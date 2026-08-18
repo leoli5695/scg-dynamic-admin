@@ -1,4 +1,4 @@
-FROM 05feb4b8a268e111bb3c4356701bf0c4.d.1ms.run/eclipse-temurin:17-jre
+FROM eclipse-temurin:17-jre
 WORKDIR /app
 
 # Install curl for health check (Ubuntu-based)

@@ -3,6 +3,7 @@ import { Form, Input, Button, message, Typography, Divider } from 'antd';
 import { UserOutlined, LockOutlined, GlobalOutlined, ApiOutlined, CloudOutlined, SafetyOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
+import logger from '../utils/logger';
 import { useTranslation } from 'react-i18next';
 import TechRaysBackground from '../components/TechRaysBackground';
 import './LoginPage.css';
@@ -26,12 +27,13 @@ const LoginPage: React.FC = () => {
       const response = await api.post('/api/auth/login', values);
       
       if (response.data.code === 200) {
-        const { token, username, nickname, role } = response.data.data;
+        const { token, username, nickname, role, licenseEdition } = response.data.data;
         
         localStorage.setItem('token', token);
         localStorage.setItem('username', username);
         localStorage.setItem('nickname', nickname || username);
         localStorage.setItem('role', role);
+        localStorage.setItem('licenseEdition', licenseEdition || 'BASIC');
         
         message.success(t('login.success', { nickname: nickname || username }));
         
@@ -41,9 +43,10 @@ const LoginPage: React.FC = () => {
       } else {
         message.error(response.data.message || t('login.failed'));
       }
-    } catch (error: any) {
-      console.error('Login error:', error);
-      message.error(error.response?.data?.message || t('login.failed'));
+    } catch (error) {
+      const err = error as { response?: { data?: { message?: string } } };
+      logger.error('Login error:', error);
+      message.error(err.response?.data?.message || t('login.failed'));
     } finally {
       setLoading(false);
     }

@@ -250,3 +250,14 @@
 .event-card-normal:hover {
   background: var(--bg-card);
 }
+
+/* ==================== Plugin Card Hover Effects ==================== */
+.plugin-card-hover:hover {
+  border-color: var(--border-default);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(59, 130, 246, 0.1);
+}
+
+.plugin-card-hover:hover .ant-tag {
+  opacity: 1;
+}

@@ -264,8 +264,8 @@ public class CompensationService {
 
         long result = seckillDeductLua.rollbackStock(seckillId, userId, quantity);
 
-        if (result >= 1000) {
-            log.info("手动回补成功: shardIndex={}", result - 1000);
+        if (result >= SeckillDeductLua.LUA_SUCCESS_BASE) {
+            log.info("手动回补成功: shardIndex={}", SeckillDeductLua.extractShardIndex(result));
             return true;
         } else {
             log.error("手动回补失败: result={}", result);
@@ -285,6 +285,8 @@ public class CompensationService {
                 tx.getQuantity()
         );
 
-        log.info("事务回补库存: transactionId={}, shardIndex={}", tx.getTransactionId(), result >= 1000 ? result - 1000 : result);
+        log.info("事务回补库存: transactionId={}, shardIndex={}", 
+                tx.getTransactionId(), 
+                result >= SeckillDeductLua.LUA_SUCCESS_BASE ? SeckillDeductLua.extractShardIndex(result) : result);
     }
 }

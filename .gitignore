@@ -56,6 +56,7 @@ bin/
 
 # AI Coding Tools
 .trae/
+.qoder/
 
 # Logs
 *.log
@@ -81,7 +82,12 @@ gateway-admin/admin-err-new.log
 *.jar
 nul
 arthas-*
+arthas-boot.jar
+arthas-bin.zip
 demo-*.tar
+
+# Frontend build artifacts - generated at build time, not version controlled
+gateway-admin/src/main/resources/static/assets/
 
 # Submodules (use git submodule, not directory)
 nacos/

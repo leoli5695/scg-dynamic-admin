@@ -40,5 +40,14 @@ export default defineConfig({
     },
     // Increase chunk size warning limit since we're intentionally splitting
     chunkSizeWarningLimit: 600,
+    // Production optimization: Remove console.log statements
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: process.env.NODE_ENV === 'production', // Remove console in production
+        drop_debugger: true, // Remove debugger statements
+        pure_funcs: ['console.debug', 'console.trace'], // Also remove debug and trace
+      }
+    },
   },
 })

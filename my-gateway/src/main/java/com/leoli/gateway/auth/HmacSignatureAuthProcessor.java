@@ -185,7 +185,10 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
      */
     private boolean validateNonce(String nonce) {
         if (nonce == null || nonce.isEmpty()) {
-            return true;  // No nonce provided, skip validation (timestamp already validates)
+            // SECURITY FIX: Reject requests without nonce to prevent replay attacks.
+            // Previously returned true (skip validation), allowing replay within clock-skew window.
+            log.warn("HMAC request missing nonce header - rejecting to prevent replay attacks");
+            return false;
         }
 
         String redisKey = NONCE_KEY_PREFIX + nonce;

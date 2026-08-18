@@ -1,9 +1,11 @@
 package com.leoli.gateway.admin.controller;
 
 import com.leoli.gateway.admin.dto.ApiResponse;
+import com.leoli.gateway.admin.license.LicenseFeatureHelper;
 import com.leoli.gateway.admin.model.StressTest;
 import com.leoli.gateway.admin.model.StressTestMetrics;
 import com.leoli.gateway.admin.service.StressTestService;
+import com.leoli.license.client.model.LicenseInfo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
@@ -29,6 +31,7 @@ import java.util.Map;
 public class StressTestController {
 
     private final StressTestService stressTestService;
+    private final LicenseFeatureHelper licenseFeatureHelper;
 
     /**
      * Create and start a stress test.
@@ -39,6 +42,9 @@ public class StressTestController {
             @RequestBody StressTestService.StressTestConfig config) {
 
         log.info("Starting stress test for instance: {}", instanceId);
+
+        // License feature check - Stress Test requires ENTERPRISE edition
+        licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.STRESS_TEST);
 
         try {
             StressTest test = stressTestService.createAndStartTest(instanceId, config);
@@ -116,6 +122,9 @@ public class StressTestController {
 
         log.info("Analyzing stress test results: {}", testId);
 
+        // License feature check - AI analysis requires AI_COPilot feature
+        licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.AI_COPilot);
+
         try {
             String analysis = stressTestService.analyzeTestResults(testId, provider, language);
 
@@ -155,6 +164,9 @@ public class StressTestController {
             @RequestParam(required = false) String path) {
 
         log.info("Quick stress test: instance={}, requests={}, concurrent={}", instanceId, requests, concurrent);
+
+        // License feature check
+        licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.STRESS_TEST);
 
         StressTestService.StressTestConfig config = new StressTestService.StressTestConfig();
         config.setTestName("Quick Test");

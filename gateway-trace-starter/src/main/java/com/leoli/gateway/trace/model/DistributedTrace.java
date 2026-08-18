@@ -76,6 +76,24 @@ public class DistributedTrace {
     private String clientIp;
 
     /**
+     * Upstream service name (caller service, from X-Caller-Service header)
+     * Used for topology graph generation
+     */
+    private String upstreamService;
+
+    /**
+     * Downstream service names (services called by this service)
+     * Extracted from ServiceSpan metadata with SERVICE_TARGET tag
+     * Used for topology graph generation
+     */
+    private List<String> downstreamServices = new ArrayList<>();
+
+    /**
+     * Global baggage (cross-service context propagated from upstream)
+     */
+    private java.util.Map<String, String> baggage;
+
+    /**
      * 重试次数（上报失败时递增）
      */
     private int retryCount = 0;

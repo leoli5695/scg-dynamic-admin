@@ -1,0 +1,659 @@
+/**
+ * License Page Styles
+ * Dark theme design - consistent with gateway-ui theme
+ */
+
+/* ==================== Page Layout ==================== */
+.license-page {
+  padding: var(--space-6);
+  min-height: calc(100vh - 64px);
+  background: var(--bg-primary);
+}
+
+/* ==================== Page Header ==================== */
+.license-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-6);
+  padding: var(--space-4) var(--space-6);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.license-page-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.license-page-title .anticon {
+  font-size: 24px;
+  color: var(--primary-color);
+}
+
+.license-page-title .ant-typography {
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* ==================== Tab Content ==================== */
+.license-tab-content {
+  padding: var(--space-4) 0;
+}
+
+/* ==================== License Status Card ==================== */
+.license-status-card {
+  text-align: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.license-status-card .ant-card-body {
+  padding: var(--space-6);
+}
+
+.license-status-card:hover {
+  border-color: var(--border-default);
+}
+
+.license-edition-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding-bottom: var(--space-4);
+}
+
+.license-edition-header .edition-icon {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--gradient-primary);
+  color: var(--text-primary);
+  font-size: 40px;
+  box-shadow: var(--glow-primary);
+}
+
+.license-edition-header .ant-typography {
+  margin-bottom: 0 !important;
+  color: var(--text-primary);
+}
+
+/* Enterprise Gold Theme */
+.license-edition-header.enterprise .edition-icon {
+  background: var(--gradient-accent);
+  box-shadow: var(--glow-accent);
+}
+
+.license-expiry {
+  width: 100%;
+  padding: var(--space-3) 0;
+}
+
+/* ==================== Quota Card ==================== */
+.quota-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.quota-card .ant-card-head-title {
+  color: var(--text-primary);
+}
+
+.quota-card .ant-statistic-title {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.quota-card .ant-statistic-content {
+  font-size: var(--text-lg);
+  color: var(--text-primary);
+}
+
+.quota-card .ant-statistic-content-prefix {
+  margin-right: var(--space-2);
+  color: var(--primary-color);
+}
+
+.quota-card:hover {
+  border-color: var(--border-default);
+}
+
+/* ==================== Feature List Styles ==================== */
+.feature-item {
+  display: flex;
+  align-items: center;
+  padding: var(--space-4);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  transition: all var(--duration-fast) var(--ease-default);
+  height: 100%;
+  min-height: 80px;
+}
+
+.feature-item:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border-default);
+}
+
+.feature-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--primary-color);
+  margin-right: var(--space-4);
+}
+
+.feature-content {
+  flex: 1;
+}
+
+.feature-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.feature-header .ant-typography {
+  color: var(--text-primary);
+}
+
+.feature-desc {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  display: block;
+}
+
+.feature-edition {
+  margin-left: var(--space-4);
+}
+
+/* Feature BASIC State - Green background for free features */
+.feature-item.basic {
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.25);
+}
+
+.feature-item.basic:hover {
+  background: rgba(34, 197, 94, 0.18);
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.feature-item.basic .feature-icon {
+  background: rgba(34, 197, 94, 0.2);
+  color: var(--success-color);
+}
+
+/* Feature Enabled State */
+.feature-item.enabled .feature-icon {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--success-color);
+}
+
+.feature-item.enabled:not(.basic) {
+  background: rgba(34, 197, 94, 0.08);
+}
+
+/* Feature Disabled State */
+.feature-item.disabled .feature-icon {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--error-color);
+}
+
+/* Feature ADVANCED State - Blue theme */
+.feature-item.advanced {
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.feature-item.advanced:hover {
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.feature-item.advanced .feature-icon {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--primary-color);
+}
+
+/* Feature ENTERPRISE State - Purple theme */
+.feature-item.enterprise {
+  border-color: rgba(124, 58, 237, 0.2);
+}
+
+.feature-item.enterprise:hover {
+  border-color: rgba(124, 58, 237, 0.4);
+}
+
+.feature-item.enterprise .feature-icon {
+  background: rgba(124, 58, 237, 0.15);
+  color: #7c3aed;
+}
+
+/* ==================== Feature Matrix Tabs ==================== */
+.license-page .ant-tabs-tabpane .ant-list {
+  background: transparent;
+  border-radius: 0;
+  border: none;
+}
+
+/* Grid mode - feature cards */
+.license-page .ant-tabs-tabpane .ant-list-item {
+  padding: 0;
+  border-bottom: none;
+  margin-bottom: var(--space-4);
+}
+
+.license-page .ant-tabs-tabpane .ant-list-item:last-child {
+  border-bottom: none;
+}
+
+/* ==================== License Code Display ==================== */
+.license-code-display {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  word-break: break-all;
+  max-height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  color: var(--text-secondary);
+}
+
+/* ==================== Activate Hint ==================== */
+.activate-hint {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.activate-hint .ant-typography {
+  color: var(--text-muted);
+}
+
+/* ==================== Card Styles ==================== */
+.license-page .ant-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+}
+
+.license-page .ant-card-head-title {
+  color: var(--text-primary);
+}
+
+.license-page .ant-card-body {
+  color: var(--text-secondary);
+}
+
+/* ==================== Table Styles ==================== */
+.license-page .ant-table {
+  background: var(--bg-card);
+}
+
+.license-page .ant-table-thead > tr > th {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.license-page .ant-table-tbody > tr > td {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.license-page .ant-table-tbody > tr:hover > td {
+  background: var(--bg-elevated);
+}
+
+.license-page .ant-table-cell .ant-btn-text:hover {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.license-page .ant-table-cell .ant-btn-text.ant-btn-dangerous:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* ==================== Empty State ==================== */
+.license-page .ant-empty {
+  padding: var(--space-10) 0;
+}
+
+.license-page .ant-empty-description {
+  color: var(--text-muted);
+}
+
+/* ==================== Status Badge ==================== */
+.license-status-card .ant-badge-status-text {
+  margin-left: var(--space-2);
+  color: var(--text-secondary);
+}
+
+/* ==================== Descriptions Styles ==================== */
+.license-page .ant-descriptions-item-label {
+  color: var(--text-muted);
+}
+
+.license-page .ant-descriptions-item-content {
+  color: var(--text-primary);
+}
+
+/* ==================== Divider Styles ==================== */
+.license-page .ant-divider {
+  border-color: var(--border-subtle);
+}
+
+.license-page .ant-divider-inner-text {
+  color: var(--text-muted);
+}
+
+/* ==================== Alert Styles ==================== */
+.license-page .ant-alert {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+}
+
+.license-page .ant-alert-warning {
+  border-left: 3px solid var(--warning-color);
+}
+
+.license-page .ant-alert-error {
+  border-left: 3px solid var(--error-color);
+}
+
+.license-page .ant-alert-message {
+  color: var(--text-primary);
+}
+
+.license-page .ant-alert-description {
+  color: var(--text-secondary);
+}
+
+/* ==================== Tabs Styles ==================== */
+.license-page .ant-tabs-tab {
+  color: var(--text-secondary);
+}
+
+.license-page .ant-tabs-tab:hover {
+  color: var(--text-primary);
+}
+
+.license-page .ant-tabs-tab-active {
+  color: var(--primary-color);
+}
+
+.license-page .ant-tabs-ink-bar {
+  background: var(--primary-color);
+}
+
+.license-page .ant-tabs-nav::before {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* ==================== Modal Styles ==================== */
+.license-page .ant-modal-content {
+  background: var(--bg-card);
+}
+
+.license-page .ant-modal-header {
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.license-page .ant-modal-title {
+  color: var(--text-primary);
+}
+
+.license-page .ant-modal-body {
+  background: var(--bg-card);
+  color: var(--text-secondary);
+}
+
+.license-page .ant-modal-footer {
+  background: var(--bg-card);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ==================== Form Styles ==================== */
+.license-page .ant-form-item-label > label {
+  color: var(--text-secondary);
+}
+
+.license-page .ant-input,
+.license-page .ant-input-affix-wrapper,
+.license-page .ant-select-selector,
+.license-page .ant-picker {
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+}
+
+.license-page .ant-input:hover,
+.license-page .ant-input-affix-wrapper:hover,
+.license-page .ant-select-selector:hover,
+.license-page .ant-picker:hover {
+  border-color: var(--border-strong);
+}
+
+.license-page .ant-input:focus,
+.license-page .ant-input-affix-wrapper:focus,
+.license-page .ant-select-focused .ant-select-selector,
+.license-page .ant-picker-focused {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.license-page .ant-input::placeholder {
+  color: var(--text-muted);
+}
+
+.license-page .ant-select-dropdown {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+}
+
+.license-page .ant-select-item {
+  color: var(--text-primary);
+}
+
+.license-page .ant-select-item-option-active {
+  background: var(--bg-elevated);
+}
+
+.license-page .ant-select-item-option-selected {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--primary-color);
+}
+
+.license-page .ant-checkbox-wrapper {
+  color: var(--text-secondary);
+}
+
+.license-page .ant-checkbox-inner {
+  background: var(--bg-input);
+  border-color: var(--border-default);
+}
+
+.license-page .ant-checkbox-checked .ant-checkbox-inner {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+/* ==================== Progress Styles ==================== */
+.license-page .ant-progress-text {
+  color: var(--text-secondary);
+}
+
+.license-page .ant-progress-bg {
+  background-color: var(--primary-color);
+}
+
+.license-page .ant-progress-status-exception .ant-progress-bg {
+  background-color: var(--error-color);
+}
+
+/* ==================== Tag Styles ==================== */
+.license-page .ant-tag {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.license-page .ant-tag-success {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.3);
+  color: var(--success-color);
+}
+
+.license-page .ant-tag-error {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: var(--error-color);
+}
+
+.license-page .ant-tag-warning {
+  background: rgba(234, 179, 8, 0.15);
+  border-color: rgba(234, 179, 8, 0.3);
+  color: var(--warning-color);
+}
+
+.license-page .ant-tag-blue {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: var(--primary-color);
+}
+
+.license-page .ant-tag-cyan {
+  background: rgba(6, 182, 212, 0.15);
+  border-color: rgba(6, 182, 212, 0.3);
+  color: #06b6d4;
+}
+
+.license-page .ant-tag-gold {
+  background: rgba(251, 191, 36, 0.15);
+  border-color: rgba(251, 191, 36, 0.3);
+  color: var(--accent-color);
+}
+
+/* ==================== Statistic Styles ==================== */
+.license-page .ant-statistic-title {
+  color: var(--text-muted);
+}
+
+.license-page .ant-statistic-content-value {
+  color: var(--text-primary);
+}
+
+/* ==================== Responsive Adjustments ==================== */
+@media (max-width: 768px) {
+  .license-page {
+    padding: var(--space-4);
+  }
+
+  .license-page-header {
+    flex-direction: column;
+    gap: var(--space-4);
+    align-items: flex-start;
+    padding: var(--space-4);
+  }
+
+  .license-page-header .ant-space {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .quota-card .ant-col {
+    margin-bottom: var(--space-4);
+  }
+
+  .feature-item {
+    flex-wrap: wrap;
+  }
+
+  .feature-edition {
+    margin-left: 56px;
+    margin-top: var(--space-2);
+  }
+}
+
+@media (max-width: 480px) {
+  .license-page-title .anticon {
+    font-size: 20px;
+  }
+
+  .license-page-title .ant-typography {
+    font-size: var(--text-base);
+  }
+}
+
+/* ==================== Feature Detail Drawer ==================== */
+.feature-detail-drawer {
+  padding: 0;
+}
+
+.feature-detail-header {
+  padding: var(--space-2) 0;
+}
+
+.feature-detail-section {
+  margin-bottom: var(--space-6);
+}
+
+.feature-detail-section .ant-typography h5 {
+  color: var(--text-primary);
+  margin-bottom: var(--space-3);
+  font-weight: var(--weight-semibold);
+}
+
+.feature-detail-section .ant-typography {
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed);
+}
+
+.feature-detail-section .ant-list-item {
+  color: var(--text-secondary);
+}
+
+/* Drawer Header */
+.license-page .ant-drawer-header {
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.license-page .ant-drawer-title {
+  color: var(--text-primary);
+}
+
+.license-page .ant-drawer-title .anticon {
+  color: var(--primary-color);
+  font-size: 18px;
+}
+
+/* Drawer Body */
+.license-page .ant-drawer-body {
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+}
+
+/* Drawer Footer */
+.license-page .ant-drawer-footer {
+  background: var(--bg-card);
+  border-top: 1px solid var(--border-subtle);
+}

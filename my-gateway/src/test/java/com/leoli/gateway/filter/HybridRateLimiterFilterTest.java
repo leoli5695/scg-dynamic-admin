@@ -1,6 +1,7 @@
 package com.leoli.gateway.filter;
 
 import com.leoli.gateway.filter.ratelimit.HybridRateLimiterFilter;
+import com.leoli.gateway.license.LicenseFeatureHelper;
 import com.leoli.gateway.limiter.DistributedRateLimiter;
 import com.leoli.gateway.limiter.RateLimitResult;
 import com.leoli.gateway.limiter.RedisHealthChecker;
@@ -56,6 +57,9 @@ class HybridRateLimiterFilterTest {
     private ShadowQuotaManager shadowQuotaManager;
 
     @Mock
+    private LicenseFeatureHelper licenseFeatureHelper;
+
+    @Mock
     private GatewayFilterChain chain;
 
     @InjectMocks
@@ -66,6 +70,7 @@ class HybridRateLimiterFilterTest {
         // Set default field values
         ReflectionTestUtils.setField(filter, "redisLimitEnabled", true);
         ReflectionTestUtils.setField(filter, "shadowQuotaEnabled", true);
+        lenient().when(licenseFeatureHelper.hasFeature(any())).thenReturn(true);
     }
 
     // ============================================================

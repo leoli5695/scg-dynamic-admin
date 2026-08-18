@@ -46,4 +46,11 @@ public interface ActivityMapper extends BaseMapper<SeckillActivity> {
      */
     @Select("SELECT * FROM seckill_activity WHERE id = #{seckillId} FOR UPDATE")
     SeckillActivity selectByIdForUpdate(@Param("seckillId") Long seckillId);
+
+    /**
+     * 查询所有进行中的活动（status=1表示进行中）
+     * 用于库存一致性核对
+     */
+    @Select("SELECT * FROM seckill_activity WHERE status = 1 AND start_time <= NOW() AND end_time >= NOW()")
+    List<SeckillActivity> selectActiveActivities();
 }

@@ -1,6 +1,7 @@
 package com.leoli.gateway.admin.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leoli.gateway.admin.license.LicenseFeatureHelper;
 import com.leoli.gateway.admin.model.RouteDefinition;
 import com.leoli.gateway.admin.model.RouteEntity;
 import com.leoli.gateway.admin.service.AiAnalysisService;
@@ -8,17 +9,14 @@ import com.leoli.gateway.admin.service.AiCopilotService;
 import com.leoli.gateway.admin.service.AuditLogService;
 import com.leoli.gateway.admin.service.RouteService;
 import com.leoli.gateway.admin.validation.RouteValidator;
+import com.leoli.license.client.model.LicenseInfo;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * AI Copilot Controller.
@@ -37,6 +35,7 @@ public class AiCopilotController {
     private final RouteService routeService;
     private final AuditLogService auditLogService;
     private final ObjectMapper objectMapper;
+    private final LicenseFeatureHelper licenseFeatureHelper;
 
     /**
      * Chat with AI Copilot.
@@ -47,6 +46,9 @@ public class AiCopilotController {
     @PostMapping("/chat")
     public ResponseEntity<Map<String, Object>> chat(@RequestBody ChatRequest request) {
         log.info("AI Copilot chat request: context={}", request.getContext());
+
+        // License feature check - AI Copilot requires ENTERPRISE edition
+        licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.AI_COPilot);
 
         String sessionId = request.getSessionId();
         if (sessionId == null || sessionId.isEmpty()) {
@@ -96,6 +98,9 @@ public class AiCopilotController {
     public ResponseEntity<Map<String, Object>> generateRoute(@RequestBody RouteGenerationRequest request) {
         log.info("Generating route from description: {}", request.getDescription());
 
+        // License feature check
+        licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.AI_COPilot);
+
         AiCopilotService.RouteGenerationResult result = aiCopilotService.generateRoute(
                 request.getDescription(),
                 request.getInstanceId(),
@@ -114,8 +119,11 @@ public class AiCopilotController {
      */
     @PostMapping("/analyze-error")
     public ResponseEntity<Map<String, Object>> analyzeError(@RequestBody ErrorAnalysisRequest request) {
-        log.info("Analyzing error for instance: {}, provider={}, model={}", 
+        log.info("Analyzing error for instance: {}, provider={}, model={}",
                 request.getInstanceId(), request.getProvider(), request.getModel());
+
+        // License feature check
+        licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.AI_COPilot);
 
         AiCopilotService.DebugAnalysis analysis = aiCopilotService.analyzeError(
                 request.getErrorMessage(),
@@ -131,8 +139,8 @@ public class AiCopilotController {
      * Get optimization suggestions.
      *
      * @param instanceId Gateway instance ID
-     * @param provider Optional AI provider
-     * @param model Optional AI model
+     * @param provider   Optional AI provider
+     * @param model      Optional AI model
      * @return Optimization suggestions
      */
     @GetMapping("/optimizations/{instanceId}")
@@ -140,8 +148,11 @@ public class AiCopilotController {
             @PathVariable String instanceId,
             @RequestParam(required = false) String provider,
             @RequestParam(required = false) String model) {
-        log.info("Getting optimization suggestions for instance: {}, provider={}, model={}", 
+        log.info("Getting optimization suggestions for instance: {}, provider={}, model={}",
                 instanceId, provider, model);
+
+        // License feature check
+        licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.AI_COPilot);
 
         AiCopilotService.OptimizationResult result = aiCopilotService.suggestOptimizations(
                 instanceId, provider, model);
@@ -152,10 +163,10 @@ public class AiCopilotController {
     /**
      * Explain a configuration concept.
      *
-     * @param concept Concept name to explain
+     * @param concept    Concept name to explain
      * @param instanceId Optional gateway instance ID (for system context)
-     * @param provider Optional AI provider
-     * @param model Optional AI model
+     * @param provider   Optional AI provider
+     * @param model      Optional AI model
      * @return Concept explanation
      */
     @GetMapping("/explain")
@@ -165,6 +176,9 @@ public class AiCopilotController {
             @RequestParam(required = false) String provider,
             @RequestParam(required = false) String model) {
         log.info("Explaining concept: {}, instanceId={}, provider={}, model={}", concept, instanceId, provider, model);
+
+        // License feature check
+        licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.AI_COPilot);
 
         String explanation = aiCopilotService.explainConcept(concept, provider, model, instanceId);
 
@@ -383,18 +397,53 @@ public class AiCopilotController {
         private String model;
 
         // Getters and setters
-        public String getSessionId() { return sessionId; }
-        public void setSessionId(String sessionId) { this.sessionId = sessionId; }
-        public String getMessage() { return message; }
-        public void setMessage(String message) { this.message = message; }
-        public String getContext() { return context; }
-        public void setContext(String context) { this.context = context; }
-        public String getInstanceId() { return instanceId; }
-        public void setInstanceId(String instanceId) { this.instanceId = instanceId; }
-        public String getProvider() { return provider; }
-        public void setProvider(String provider) { this.provider = provider; }
-        public String getModel() { return model; }
-        public void setModel(String model) { this.model = model; }
+        public String getSessionId() {
+            return sessionId;
+        }
+
+        public void setSessionId(String sessionId) {
+            this.sessionId = sessionId;
+        }
+
+        public String getMessage() {
+            return message;
+        }
+
+        public void setMessage(String message) {
+            this.message = message;
+        }
+
+        public String getContext() {
+            return context;
+        }
+
+        public void setContext(String context) {
+            this.context = context;
+        }
+
+        public String getInstanceId() {
+            return instanceId;
+        }
+
+        public void setInstanceId(String instanceId) {
+            this.instanceId = instanceId;
+        }
+
+        public String getProvider() {
+            return provider;
+        }
+
+        public void setProvider(String provider) {
+            this.provider = provider;
+        }
+
+        public String getModel() {
+            return model;
+        }
+
+        public void setModel(String model) {
+            this.model = model;
+        }
     }
 
     public static class RouteGenerationRequest {
@@ -404,14 +453,37 @@ public class AiCopilotController {
         private String model;
 
         // Getters and setters
-        public String getDescription() { return description; }
-        public void setDescription(String description) { this.description = description; }
-        public String getInstanceId() { return instanceId; }
-        public void setInstanceId(String instanceId) { this.instanceId = instanceId; }
-        public String getProvider() { return provider; }
-        public void setProvider(String provider) { this.provider = provider; }
-        public String getModel() { return model; }
-        public void setModel(String model) { this.model = model; }
+        public String getDescription() {
+            return description;
+        }
+
+        public void setDescription(String description) {
+            this.description = description;
+        }
+
+        public String getInstanceId() {
+            return instanceId;
+        }
+
+        public void setInstanceId(String instanceId) {
+            this.instanceId = instanceId;
+        }
+
+        public String getProvider() {
+            return provider;
+        }
+
+        public void setProvider(String provider) {
+            this.provider = provider;
+        }
+
+        public String getModel() {
+            return model;
+        }
+
+        public void setModel(String model) {
+            this.model = model;
+        }
     }
 
     public static class ErrorAnalysisRequest {
@@ -421,14 +493,37 @@ public class AiCopilotController {
         private String model;
 
         // Getters and setters
-        public String getErrorMessage() { return errorMessage; }
-        public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
-        public String getInstanceId() { return instanceId; }
-        public void setInstanceId(String instanceId) { this.instanceId = instanceId; }
-        public String getProvider() { return provider; }
-        public void setProvider(String provider) { this.provider = provider; }
-        public String getModel() { return model; }
-        public void setModel(String model) { this.model = model; }
+        public String getErrorMessage() {
+            return errorMessage;
+        }
+
+        public void setErrorMessage(String errorMessage) {
+            this.errorMessage = errorMessage;
+        }
+
+        public String getInstanceId() {
+            return instanceId;
+        }
+
+        public void setInstanceId(String instanceId) {
+            this.instanceId = instanceId;
+        }
+
+        public String getProvider() {
+            return provider;
+        }
+
+        public void setProvider(String provider) {
+            this.provider = provider;
+        }
+
+        public String getModel() {
+            return model;
+        }
+
+        public void setModel(String model) {
+            this.model = model;
+        }
     }
 
     public static class ValidateRequest {
@@ -436,12 +531,29 @@ public class AiCopilotController {
         private String apiKey;
         private String baseUrl;
 
-        public String getProvider() { return provider; }
-        public void setProvider(String provider) { this.provider = provider; }
-        public String getApiKey() { return apiKey; }
-        public void setApiKey(String apiKey) { this.apiKey = apiKey; }
-        public String getBaseUrl() { return baseUrl; }
-        public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
+        public String getProvider() {
+            return provider;
+        }
+
+        public void setProvider(String provider) {
+            this.provider = provider;
+        }
+
+        public String getApiKey() {
+            return apiKey;
+        }
+
+        public void setApiKey(String apiKey) {
+            this.apiKey = apiKey;
+        }
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
+        }
     }
 
     public static class ConfigRequest {
@@ -450,30 +562,69 @@ public class AiCopilotController {
         private String apiKey;
         private String baseUrl;
 
-        public String getProvider() { return provider; }
-        public void setProvider(String provider) { this.provider = provider; }
-        public String getModel() { return model; }
-        public void setModel(String model) { this.model = model; }
-        public String getApiKey() { return apiKey; }
-        public void setApiKey(String apiKey) { this.apiKey = apiKey; }
-        public String getBaseUrl() { return baseUrl; }
-        public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
+        public String getProvider() {
+            return provider;
+        }
+
+        public void setProvider(String provider) {
+            this.provider = provider;
+        }
+
+        public String getModel() {
+            return model;
+        }
+
+        public void setModel(String model) {
+            this.model = model;
+        }
+
+        public String getApiKey() {
+            return apiKey;
+        }
+
+        public void setApiKey(String apiKey) {
+            this.apiKey = apiKey;
+        }
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
+        }
     }
 
     public static class ValidateRouteRequest {
         private String routeJson;
 
-        public String getRouteJson() { return routeJson; }
-        public void setRouteJson(String routeJson) { this.routeJson = routeJson; }
+        public String getRouteJson() {
+            return routeJson;
+        }
+
+        public void setRouteJson(String routeJson) {
+            this.routeJson = routeJson;
+        }
     }
 
     public static class ApplyRouteRequest {
         private String routeJson;
         private String instanceId;
 
-        public String getRouteJson() { return routeJson; }
-        public void setRouteJson(String routeJson) { this.routeJson = routeJson; }
-        public String getInstanceId() { return instanceId; }
-        public void setInstanceId(String instanceId) { this.instanceId = instanceId; }
+        public String getRouteJson() {
+            return routeJson;
+        }
+
+        public void setRouteJson(String routeJson) {
+            this.routeJson = routeJson;
+        }
+
+        public String getInstanceId() {
+            return instanceId;
+        }
+
+        public void setInstanceId(String instanceId) {
+            this.instanceId = instanceId;
+        }
     }
 }

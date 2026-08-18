@@ -49,6 +49,9 @@ class PaymentServiceTest {
     @Mock
     private ValueOperations<String, String> valueOperations;
 
+    @Mock
+    private DistributedLockService distributedLockService;
+
     private PaymentService paymentService;
 
     private PaymentCallbackRequest request;
@@ -59,11 +62,19 @@ class PaymentServiceTest {
         // Mock Redis operations
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
 
+        // Mock: executeWithLock 直接执行 action.execute()
+        when(distributedLockService.executeWithLock(anyString(), any(DistributedLockService.LockAction.class)))
+                .thenAnswer(invocation -> {
+                    DistributedLockService.LockAction<?> action = invocation.getArgument(1);
+                    return action.execute();
+                });
+
         paymentService = new PaymentService(
                 orderMapper,
                 redisTemplate,
                 transactionLogMapper,
-                elasticsearchService
+                elasticsearchService,
+                distributedLockService
         );
 
         request = new PaymentCallbackRequest();

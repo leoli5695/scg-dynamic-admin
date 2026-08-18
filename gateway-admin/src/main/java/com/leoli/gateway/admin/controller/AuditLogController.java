@@ -2,11 +2,13 @@ package com.leoli.gateway.admin.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.dto.ApiResponse;
+import com.leoli.gateway.admin.license.LicenseFeatureHelper;
 import com.leoli.gateway.admin.model.AuditLogEntity;
 import com.leoli.gateway.admin.model.AuditLogQuery;
 import com.leoli.gateway.admin.model.AuditLogStats;
 import com.leoli.gateway.admin.repository.AuditLogRepository;
 import com.leoli.gateway.admin.service.AuditLogService;
+import com.leoli.license.client.model.LicenseInfo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -39,6 +41,7 @@ public class AuditLogController {
 
     private final AuditLogRepository auditLogRepository;
     private final AuditLogService auditLogService;
+    private final LicenseFeatureHelper licenseFeatureHelper;
 
     @Value("${audit.log.retention-days:30}")
     private int retentionDays;
@@ -311,6 +314,9 @@ public class AuditLogController {
             @RequestParam(required = false) String targetType,
             @RequestParam(defaultValue = "100") int limit) {
 
+        // License feature check - Timeline view requires ADVANCED_AUDIT (ENTERPRISE)
+        licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.ADVANCED_AUDIT);
+
         try {
             AuditLogService.TimelineResult timeline = auditLogService.getTimeline(instanceId, days, targetType, limit);
             return ResponseEntity.ok(ApiResponse.success(timeline.toMap()));
@@ -335,6 +341,9 @@ public class AuditLogController {
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime,
             @RequestParam(defaultValue = "10000") int limit) {
+
+        // License feature check - Export requires ADVANCED_AUDIT (ENTERPRISE)
+        licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.ADVANCED_AUDIT);
 
         try {
             AuditLogQuery query = AuditLogQuery.builder()
@@ -403,6 +412,9 @@ public class AuditLogController {
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime,
             @RequestParam(defaultValue = "10000") int limit) {
+
+        // License feature check - Export requires ADVANCED_AUDIT (ENTERPRISE)
+        licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.ADVANCED_AUDIT);
 
         try {
             AuditLogQuery query = AuditLogQuery.builder()

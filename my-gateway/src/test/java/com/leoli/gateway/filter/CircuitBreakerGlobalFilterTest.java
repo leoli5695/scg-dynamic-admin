@@ -1,6 +1,7 @@
 package com.leoli.gateway.filter;
 
 import com.leoli.gateway.filter.resilience.CircuitBreakerGlobalFilter;
+import com.leoli.gateway.license.LicenseFeatureHelper;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.StrategyDefinition;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -39,6 +40,9 @@ class CircuitBreakerGlobalFilterTest {
     private StrategyManager strategyManager;
 
     @Mock
+    private LicenseFeatureHelper licenseFeatureHelper;
+
+    @Mock
     private GatewayFilterChain chain;
 
     @InjectMocks
@@ -47,6 +51,7 @@ class CircuitBreakerGlobalFilterTest {
     @BeforeEach
     void setUp() {
         lenient().when(chain.filter(any())).thenReturn(Mono.empty());
+        lenient().when(licenseFeatureHelper.hasFeature(any())).thenReturn(true);
     }
 
     // ============================================================

@@ -18,6 +18,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -441,7 +442,7 @@ public class ShadowQuotaManager implements ApplicationListener<HeartbeatEvent> {
         if (progress >= 100) {
             return true;
         }
-        return Math.random() * 100 < progress;
+        return ThreadLocalRandom.current().nextDouble() * 100 < progress;
     }
 
     /**

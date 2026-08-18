@@ -52,6 +52,7 @@ import {
   CopyOutlined,
 } from "@ant-design/icons";
 import api from "../utils/api";
+import logger from "../utils/logger";
 import AiReportRenderer from "../components/AiReportRenderer";
 import StressTestCharts from "../components/StressTestCharts";
 import "../styles/ai-report.css";
@@ -431,23 +432,23 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
     }
   };
 
-  const handleCreateTest = async (values: any) => {
+  const handleCreateTest = async (values: Record<string, unknown>) => {
     setCreating(true);
     
-    const submitData = {
+    const submitData: Record<string, unknown> = {
       ...values,
-      headers: values.headers ? JSON.parse(values.headers) : null,
+      headers: values.headers ? JSON.parse(values.headers as string) : null,
     };
     
     if (submitData.durationSeconds && submitData.totalRequests) {
-      if (submitData.durationSeconds > 0) {
+      if ((submitData.durationSeconds as number) > 0) {
         submitData.totalRequests = null;
       } else {
         submitData.durationSeconds = null;
       }
     }
     
-    console.log("Submit data:", JSON.stringify(submitData, null, 2));
+    logger.debug("Submit data:", JSON.stringify(submitData, null, 2));
     
     try {
       const response = await api.post("/api/stress-test/start", submitData, {
@@ -463,8 +464,9 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
       } else {
         message.error(response.data.error || t("stress_test.start_failed"));
       }
-    } catch (error: any) {
-      message.error(error.response?.data?.error || t("stress_test.start_failed"));
+    } catch (error) {
+      const err = error as { response?: { data?: { error?: string } } };
+      message.error(err.response?.data?.error || t("stress_test.start_failed"));
     } finally {
       setCreating(false);
     }
@@ -488,8 +490,9 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
       } else {
         message.error(response.data.error || t("stress_test.start_failed"));
       }
-    } catch (error: any) {
-      message.error(error.response?.data?.error || t("stress_test.start_failed"));
+    } catch (error) {
+      const err = error as { response?: { data?: { error?: string } } };
+      message.error(err.response?.data?.error || t("stress_test.start_failed"));
     }
   };
 
@@ -505,8 +508,9 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
       } else {
         message.error(response.data.error || t("stress_test.stop_failed"));
       }
-    } catch (error: any) {
-      message.error(error.response?.data?.error || t("stress_test.stop_failed"));
+    } catch (error) {
+      const err = error as { response?: { data?: { error?: string } } };
+      message.error(err.response?.data?.error || t("stress_test.stop_failed"));
     }
   };
 
@@ -540,8 +544,9 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
       } else {
         message.error(response.data.error || t("ai.analysis_failed"));
       }
-    } catch (error: any) {
-      message.error(error.response?.data?.error || t("ai.analysis_failed"));
+    } catch (error) {
+      const err = error as { response?: { data?: { error?: string } } };
+      message.error(err.response?.data?.error || t("ai.analysis_failed"));
     } finally {
       setAnalysisLoading(false);
     }
@@ -563,8 +568,9 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
       window.URL.revokeObjectURL(url);
 
       message.success(t("stress_test.export_success"));
-    } catch (error: any) {
-      message.error(error.response?.data?.error || t("stress_test.export_failed"));
+    } catch (error) {
+      const err = error as { response?: { data?: { error?: string } } };
+      message.error(err.response?.data?.error || t("stress_test.export_failed"));
     }
   };
 
@@ -602,8 +608,9 @@ const StressTestPage: React.FC<Props> = ({ instanceId }) => {
       } else {
         message.error(response.data.error || t("stress_test.share_failed"));
       }
-    } catch (error: any) {
-      message.error(error.response?.data?.error || t("stress_test.share_failed"));
+    } catch (error) {
+      const err = error as { response?: { data?: { error?: string } } };
+      message.error(err.response?.data?.error || t("stress_test.share_failed"));
     }
   };
 

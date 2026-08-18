@@ -18,6 +18,7 @@ import com.seckill.util.SnowflakeIdGenerator;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.client.producer.TransactionMQProducer;
@@ -70,18 +71,21 @@ public class SeckillService {
     private final Counter seckillAlreadyBoughtCounter;
     private final LocalCacheService localCacheService;
     private final Counter seckillStockInsufficientCounter;
+    private final MeterRegistry meterRegistry;
     private final RedisDegradeService redisDegradeService;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final TransactionLogMapper transactionLogMapper;
     private final LocalFallbackService localFallbackService;
     private final LocalTransactionService localTransactionService;
 
-    // OPTIMIZATION (P1): 事务状态本地缓存
+    // OPTIMIZATION (P1-5): 事务状态本地缓存
     // 用于RocketMQ事务回查时快速获取事务状态，避免每次都查询数据库
-    // 缓存5分钟，与RocketMQ重投窗口期对应
+    // 【修复】缓存时间延长至35分钟，覆盖RocketMQ最大重投窗口(30分钟) + 缓冲时间
+    // RocketMQ事务消息回查间隔: 60秒, 最大重试次数: 15次, 总窗口约30分钟
+    // 缓存35分钟确保在整个RocketMQ生命周期内都能命中缓存
     private final Cache<String, TransactionStatus> transactionStatusCache = Caffeine.newBuilder()
-            .maximumSize(10000)
-            .expireAfterWrite(5, TimeUnit.MINUTES)
+            .maximumSize(20000)  // 增加容量以支持更长的缓存时间
+            .expireAfterWrite(35, TimeUnit.MINUTES)  // 对齐RocketMQ超时时间 + 5分钟缓冲
             .recordStats()  // 记录缓存统计，用于监控
             .build();
 
@@ -114,6 +118,19 @@ public class SeckillService {
     public void init() {
         log.info("SeckillService initialized: producerStatus={}",
                 transactionMQProducer != null ? "available" : "disabled");
+        
+        // P2-7: 注册缓存命中率指标到Prometheus
+        io.micrometer.core.instrument.Gauge.builder("seckill.cache.transaction_status.hit_rate",
+                        transactionStatusCache, cache -> cache.stats().hitRate())
+                .description("Transaction status cache hit rate (0-1)")
+                .register(meterRegistry);
+        
+        io.micrometer.core.instrument.Gauge.builder("seckill.cache.transaction_status.size",
+                        transactionStatusCache, cache -> cache.estimatedSize())
+                .description("Transaction status cache current size")
+                .register(meterRegistry);
+        
+        log.info("Transaction status cache metrics registered to Prometheus");
     }
 
     /**
@@ -302,8 +319,14 @@ public class SeckillService {
         // 开发模式下RocketMQ可能禁用
         if (transactionMQProducer == null) {
             log.warn("RocketMQ未启用，跳过发送事务消息: transactionId={}", orderMessage.getTransactionId());
-            // 开发模式：直接执行本地事务并记录
-            executeLocalTransaction(orderMessage);
+            // 【P0-3修复】原问题：自调用 executeLocalTransaction()，@Transactional 代理不生效，异常被吞导致事务不回滚
+            // 修复：委托 LocalTransactionService 完整处理（独立 Bean，事务代理正常生效）
+            boolean success = localTransactionService.processOrderDirectly(orderMessage);
+            if (!success) {
+                log.error("本地事务处理失败: transactionId={}", orderMessage.getTransactionId());
+                seckillDeductLua.rollbackStock(orderMessage.getSeckillId(), orderMessage.getUserId(), orderMessage.getQuantity());
+                throw new RuntimeException("系统繁忙，请稍后再试");
+            }
             return;
         }
 

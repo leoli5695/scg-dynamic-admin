@@ -1,0 +1,46 @@
+{
+  "pluginName": "CustomRateLimit",
+  "description": "自定义限流插件，支持多种Key解析策略（IP/用户/API Key）",
+  "version": "1.0.0",
+  "category": "traffic",
+  "icon": "ThunderboltOutlined",
+  "color": "#8b5cf6",
+  "fields": [
+    {
+      "name": "maxRequests",
+      "type": "number",
+      "label": "最大请求数",
+      "description": "时间窗口内允许的最大请求数",
+      "default": 100,
+      "min": 1,
+      "max": 10000
+    },
+    {
+      "name": "keyResolver",
+      "type": "select",
+      "label": "Key解析策略",
+      "description": "选择限流的Key来源",
+      "default": "IP",
+      "options": [
+        {"label": "IP地址", "value": "IP"},
+        {"label": "用户ID", "value": "USER"},
+        {"label": "API Key", "value": "API_KEY"}
+      ]
+    },
+    {
+      "name": "enableLogging",
+      "type": "switch",
+      "label": "启用日志记录",
+      "description": "记录限流检查日志",
+      "default": true
+    },
+    {
+      "name": "customHeader",
+      "type": "text",
+      "label": "自定义Header名称",
+      "description": "可选，添加到请求的Header名称",
+      "placeholder": "例如：X-Rate-Limit-Status"
+    }
+  ],
+  "hasSubSchemas": false
+}

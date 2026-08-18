@@ -35,9 +35,9 @@ export interface RouteFormData {
   id: string;
   uri: string;
   order?: number;
-  predicates?: Array<{ name: string; args?: any }>;
-  filters?: Array<{ name: string; args?: any }>;
-  metadata?: any;
+  predicates?: Array<{ name: string; args?: Record<string, unknown> | string }>;
+  filters?: Array<{ name: string; args?: Record<string, unknown> | string }>;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -168,7 +168,7 @@ function validateOrder(order: number | undefined, errors: ValidationError[]): vo
 }
 
 function validatePredicates(
-  predicates: Array<{ name: string; args?: any }> | undefined,
+  predicates: Array<{ name: string; args?: Record<string, unknown> | string }> | undefined,
   errors: ValidationError[]
 ): void {
   if (!predicates || predicates.length === 0) {
@@ -196,7 +196,8 @@ function validatePredicates(
       
       // Validate path pattern
       const args = predicate.args;
-      let pattern = args?.pattern || args;
+      const argsObj = (typeof args === 'object' && args !== null) ? args : null;
+      const pattern = (argsObj?.pattern as string) || (typeof args === 'string' ? args : undefined);
       if (typeof pattern === 'string') {
         if (!pattern.startsWith('/')) {
           errors.push({ 
@@ -223,7 +224,7 @@ function validatePredicates(
 }
 
 function validateFilters(
-  filters: Array<{ name: string; args?: any }> | undefined,
+  filters: Array<{ name: string; args?: Record<string, unknown> | string }> | undefined,
   errors: ValidationError[]
 ): void {
   if (!filters) {
@@ -236,6 +237,7 @@ function validateFilters(
       return;
     }
 
+    const filterArgs = (typeof filter.args === 'object' && filter.args !== null) ? filter.args : {} as Record<string, unknown>;
     const name = filter.name;
     if (!name || name.trim() === '') {
       errors.push({ field: `filters[${index}].name`, message: `Filter at index ${index} has no name` });
@@ -244,9 +246,9 @@ function validateFilters(
 
     // Validate specific filters
     if (name === 'StripPrefix') {
-      const parts = filter.args?.parts;
+      const parts = filterArgs.parts;
       if (parts !== undefined) {
-        const partsNum = parseInt(parts, 10);
+        const partsNum = parseInt(String(parts), 10);
         if (isNaN(partsNum) || partsNum < 0) {
           errors.push({ 
             field: `filters[${index}].args.parts`, 
@@ -257,9 +259,9 @@ function validateFilters(
     }
 
     if (name === 'SetStatus') {
-      const status = filter.args?.status;
+      const status = filterArgs.status;
       if (status !== undefined) {
-        const statusNum = parseInt(status, 10);
+        const statusNum = parseInt(String(status), 10);
         if (!isNaN(statusNum) && (statusNum < 100 || statusNum > 599)) {
           errors.push({ 
             field: `filters[${index}].args.status`, 

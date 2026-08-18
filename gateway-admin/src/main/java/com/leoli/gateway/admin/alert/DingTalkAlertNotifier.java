@@ -3,6 +3,7 @@ package com.leoli.gateway.admin.alert;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
@@ -21,7 +22,14 @@ public class DingTalkAlertNotifier implements AlertNotifier {
     @Value("${gateway.health.alert.dingtalk.webhook:}")
     private String webhookUrl;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate = createRestTemplate();
+
+    private static RestTemplate createRestTemplate() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5000);  // 5 seconds
+        factory.setReadTimeout(10000);    // 10 seconds
+        return new RestTemplate(factory);
+    }
 
     @Override
     public void sendAlert(String title, String content, AlertLevel level) {

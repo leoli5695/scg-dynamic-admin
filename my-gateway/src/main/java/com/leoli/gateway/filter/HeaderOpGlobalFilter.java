@@ -62,6 +62,11 @@ public class HeaderOpGlobalFilter implements GlobalFilter, Ordered {
         Map<String, String> addRequestHeaders = getStringMapValue(config, "addRequestHeaders");
         if (addRequestHeaders != null) {
             for (Map.Entry<String, String> entry : addRequestHeaders.entrySet()) {
+                // SECURITY FIX: Validate header name to prevent injection
+                if (!isValidHeaderName(entry.getKey())) {
+                    log.warn("Skipping invalid request header name: {}", entry.getKey());
+                    continue;
+                }
                 String value = resolveHeaderValue(entry.getValue(), exchange, traceId);
                 requestBuilder.header(entry.getKey(), value);
                 log.debug("Added request header: {} = {}", entry.getKey(), value);
@@ -145,6 +150,8 @@ public class HeaderOpGlobalFilter implements GlobalFilter, Ordered {
     /**
      * Resolve header value with expression support.
      * Supports: ${traceId}, ${requestId}, ${timestamp}, ${routeId}
+     * 
+     * SECURITY FIX: Sanitizes header values to prevent CRLF injection.
      */
     private String resolveHeaderValue(String value, ServerWebExchange exchange, String traceId) {
         if (value == null) {
@@ -159,7 +166,23 @@ public class HeaderOpGlobalFilter implements GlobalFilter, Ordered {
         result = result.replace("${timestamp}", String.valueOf(System.currentTimeMillis()));
         result = result.replace("${routeId}", routeId != null ? routeId : "");
 
-        return result;
+        // SECURITY FIX: Strip CR/LF characters to prevent HTTP response splitting / header injection
+        return result.replaceAll("[\\r\\n]", "");
+    }
+
+    /**
+     * SECURITY FIX: Validate header name to prevent header injection.
+     * Only allows valid HTTP token characters (RFC 7230).
+     */
+    private boolean isValidHeaderName(String name) {
+        if (name == null || name.isEmpty()) return false;
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            if (c <= 0x20 || c >= 0x7f || "\"(),/:;<=>?@[\\]{}".indexOf(c) >= 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     // Helper methods

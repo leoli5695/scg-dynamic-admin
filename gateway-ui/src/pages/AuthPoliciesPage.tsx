@@ -54,6 +54,31 @@ interface Route {
   enabled: boolean;
 }
 
+interface UsageExample {
+  authType?: string;
+  error?: string;
+  headerValue?: string;
+  curlExample?: string;
+  tokenExpiresIn?: string;
+  algorithm?: string;
+  headerName?: string;
+  prefixNote?: string;
+  credentialsFormat?: string;
+  credentialsEncoded?: string;
+  curlWithAuthFlag?: string;
+  realm?: string;
+  getTokenCurl?: string;
+  clientId?: string;
+  tokenEndpoint?: string;
+  requiredScopes?: string;
+  note?: string;
+  requiredHeaders?: { name: string; value: string }[];
+  signatureCalculation?: string;
+  stringToSignFormat?: string;
+  signatureAlgorithm?: string;
+  accessKey?: string;
+}
+
 // Separate component for auth policy action dropdown to prevent re-renders
 interface AuthPolicyActionDropdownProps {
   policy: AuthPolicy;
@@ -115,7 +140,7 @@ const AuthPoliciesPage: React.FC<AuthPoliciesPageProps> = ({ instanceId }) => {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [bindingModalVisible, setBindingModalVisible] = useState(false);
   const [usageExampleModalVisible, setUsageExampleModalVisible] = useState(false);
-  const [usageExample, setUsageExample] = useState<any>(null);
+  const [usageExample, setUsageExample] = useState<UsageExample | null>(null);
   const [usageExampleLoading, setUsageExampleLoading] = useState(false);
   const [selectedPolicy, setSelectedPolicy] = useState<AuthPolicy | null>(null);
   const [filterType, setFilterType] = useState<string>('all');
@@ -140,7 +165,7 @@ const AuthPoliciesPage: React.FC<AuthPoliciesPageProps> = ({ instanceId }) => {
       if (policiesRes.data.code === 200) setPolicies(policiesRes.data.data || []);
       if (routesRes.data.code === 200) setRoutes(routesRes.data.data || []);
       if (bindingsRes.data.code === 200) setBindings(bindingsRes.data.data || []);
-    } catch (error: any) {
+    } catch {
       message.error(t('message.load_failed'));
     } finally {
       setLoading(false);
@@ -198,7 +223,7 @@ const AuthPoliciesPage: React.FC<AuthPoliciesPageProps> = ({ instanceId }) => {
     return route?.routeName || routeId?.substring(0, 12) || 'Unknown';
   };
 
-  const handleCreate = async (values: any) => {
+  const handleCreate = async (values: Record<string, unknown>) => {
     try {
       const params = instanceId ? { instanceId } : {};
       const response = await api.post('/api/auth/policies', values, { params });
@@ -210,12 +235,13 @@ const AuthPoliciesPage: React.FC<AuthPoliciesPageProps> = ({ instanceId }) => {
       } else {
         message.error(response.data.message);
       }
-    } catch (error: any) {
-      message.error(error.response?.data?.message || t('message.create_failed'));
+    } catch (error) {
+      const err = error as { response?: { data?: { message?: string } } };
+      message.error(err.response?.data?.message || t('message.create_failed'));
     }
   };
 
-  const handleUpdate = async (values: any) => {
+  const handleUpdate = async (values: Record<string, unknown>) => {
     if (!selectedPolicy) return;
     try {
       const params = instanceId ? { instanceId } : {};
@@ -229,8 +255,9 @@ const AuthPoliciesPage: React.FC<AuthPoliciesPageProps> = ({ instanceId }) => {
       } else {
         message.error(response.data.message);
       }
-    } catch (error: any) {
-      message.error(error.response?.data?.message || t('message.update_failed'));
+    } catch (error) {
+      const err = error as { response?: { data?: { message?: string } } };
+      message.error(err.response?.data?.message || t('message.update_failed'));
     }
   };
 
@@ -251,8 +278,9 @@ const AuthPoliciesPage: React.FC<AuthPoliciesPageProps> = ({ instanceId }) => {
           } else {
             message.error(response.data.message);
           }
-        } catch (error: any) {
-          message.error(error.response?.data?.message || t('message.delete_failed'));
+        } catch (error) {
+          const err = error as { response?: { data?: { message?: string } } };
+          message.error(err.response?.data?.message || t('message.delete_failed'));
         }
       },
     });
@@ -267,8 +295,9 @@ const AuthPoliciesPage: React.FC<AuthPoliciesPageProps> = ({ instanceId }) => {
         message.success(enabled ? t('auth_policy.enabled') : t('auth_policy.disabled'));
         loadData();
       }
-    } catch (error: any) {
-      message.error(error.response?.data?.message);
+    } catch (error) {
+      const err = error as { response?: { data?: { message?: string } } };
+      message.error(err.response?.data?.message);
     }
   }, [t, loadData, instanceId]);
 
@@ -281,7 +310,7 @@ const AuthPoliciesPage: React.FC<AuthPoliciesPageProps> = ({ instanceId }) => {
     handleDelete(policy.policyId);
   }, [handleDelete]);
 
-  const handleBind = async (values: any) => {
+  const handleBind = async (values: Record<string, unknown>) => {
     if (!selectedPolicy) return;
     
     const routeIds = Array.isArray(values.routeIds) ? values.routeIds : (values.routeIds ? [values.routeIds] : []);
@@ -325,8 +354,9 @@ const AuthPoliciesPage: React.FC<AuthPoliciesPageProps> = ({ instanceId }) => {
         setBindingModalVisible(false);
         setSelectedPolicy(null);
       }
-    } catch (error: any) {
-      message.error(error.response?.data?.message || t('auth_policy.binding_failed'));
+    } catch (error) {
+      const err = error as { response?: { data?: { message?: string } } };
+      message.error(err.response?.data?.message || t('auth_policy.binding_failed'));
     }
   };
 
@@ -338,8 +368,9 @@ const AuthPoliciesPage: React.FC<AuthPoliciesPageProps> = ({ instanceId }) => {
         message.success(t('auth_policy.binding_removed'));
         loadData();
       }
-    } catch (error: any) {
-      message.error(error.response?.data?.message);
+    } catch (error) {
+      const err = error as { response?: { data?: { message?: string } } };
+      message.error(err.response?.data?.message);
     }
   };
 
@@ -368,14 +399,15 @@ const AuthPoliciesPage: React.FC<AuthPoliciesPageProps> = ({ instanceId }) => {
       } else {
         message.error(response.data.message);
       }
-    } catch (error: any) {
+    } catch {
       message.error(t('auth_policy.usage_example_failed'));
     } finally {
       setUsageExampleLoading(false);
     }
   }, [t]);
 
-  const copyToClipboard = (text: string) => {
+  const copyToClipboard = (text?: string) => {
+    if (!text) return;
     navigator.clipboard.writeText(text);
     message.success(t('message.copy_success'));
   };
@@ -523,7 +555,7 @@ const AuthPoliciesPage: React.FC<AuthPoliciesPageProps> = ({ instanceId }) => {
             <div style={{ marginBottom: 16 }}>
               <Text type="secondary">{t('auth_policy.hmac_required_headers')}</Text>
               <div style={{ marginTop: 8 }}>
-                {usageExample.requiredHeaders?.map((h: any, i: number) => (
+                {usageExample.requiredHeaders?.map((h: { name: string; value: string }, i: number) => (
                   <Tag key={i} color="blue">{h.name}: {h.value}</Tag>
                 ))}
               </div>
