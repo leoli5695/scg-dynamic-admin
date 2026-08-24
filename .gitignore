@@ -67,6 +67,15 @@ logs/
 .DS_Store
 Thumbs.db
 
+# Debug screenshots (smoke test artifacts)
+*.png
+
+# Environment files with real credentials - never commit
+# (.env.example templates are tracked; actual .env files are not)
+.env
+**/.env
+!**/.env.example
+
 # Application specific
 gateway-admin/admin-err.log
 gateway-admin/admin.log

@@ -6,6 +6,7 @@ import com.leoli.gateway.filter.TraceCaptureGlobalFilter;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.StrategyDefinition;
 import com.leoli.gateway.util.RouteUtils;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -13,12 +14,18 @@ import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.core.io.buffer.DataBufferLimitException;
+import org.springframework.core.io.buffer.DataBufferUtils;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.server.reactive.ServerHttpRequestDecorator;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.http.server.reactive.ServerHttpResponseDecorator;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import org.reactivestreams.Publisher;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.net.URI;
@@ -47,6 +54,44 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
     // Cache for retry configurations
     private final Map<String, RetryConfig> configCache = new ConcurrentHashMap<>();
 
+    /**
+     * FIX: invalidate the local retry-config cache when strategies change,
+     * otherwise updates made in the admin console only take effect after restart.
+     */
+    @PostConstruct
+    public void initConfigInvalidation() {
+        strategyManager.addChangeListener(new StrategyManager.StrategyChangeListener() {
+            @Override
+            public void onChanged(StrategyDefinition strategy) {
+                invalidateIfRetry(strategy);
+            }
+
+            @Override
+            public void onRemoved(StrategyDefinition strategy) {
+                invalidateIfRetry(strategy);
+            }
+
+            @Override
+            public void onCleared() {
+                configCache.clear();
+            }
+        });
+    }
+
+    private void invalidateIfRetry(StrategyDefinition strategy) {
+        if (!StrategyDefinition.TYPE_RETRY.equals(strategy.getStrategyType())) {
+            return;
+        }
+        if (strategy.getRouteId() != null) {
+            configCache.remove(strategy.getRouteId());
+            log.debug("Invalidated cached retry config for route: {}", strategy.getRouteId());
+        } else {
+            // Global strategy affects all routes
+            configCache.clear();
+            log.debug("Invalidated all cached retry configs (global strategy changed)");
+        }
+    }
+
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String routeId = RouteUtils.getRouteId(exchange);
@@ -64,7 +109,63 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
         log.debug("Retry filter enabled for route {}, max attempts: {}, retryOnStatusCodes: {}", 
                 routeId, config.maxAttempts, config.retryOnStatusCodes);
 
+        // FIX (retry body loss): only InstanceRetryExecutor (STATIC routes) used to cache the request
+        // body before retry. For lb://, cross-namespace Nacos and direct http(s):// routes the body
+        // stream was already consumed by the first attempt, so retries were sent with an EMPTY body,
+        // causing dirty data on non-idempotent endpoints. Cache the body (bounded) before first attempt.
+        HttpMethod method = exchange.getRequest().getMethod();
+        boolean mayHaveBody = HttpMethod.POST.equals(method) || HttpMethod.PUT.equals(method)
+                || HttpMethod.PATCH.equals(method);
+        long contentLength = exchange.getRequest().getHeaders().getContentLength();
+        if (mayHaveBody && contentLength != 0) {
+            int maxCachedBodyBytes = retryProperties.getMaxCachedBodyBytes();
+            if (contentLength > maxCachedBodyBytes) {
+                // Body too large to cache safely - run a single attempt without retry (body untouched)
+                log.warn("Request body ({} bytes) exceeds retry cache limit ({} bytes) for route {}, "
+                        + "executing single attempt without retry", contentLength, maxCachedBodyBytes, routeId);
+                return chain.filter(exchange);
+            }
+            return cacheBodyAndExecute(exchange, chain, config, routeId, maxCachedBodyBytes);
+        }
+
         return executeWithRetry(exchange, chain, config, 0);
+    }
+
+    /**
+     * FIX: cache the request body (bounded by maxCachedBodyBytes) into a heap byte[] and decorate the
+     * request so every retry attempt can re-read the body. Uses a dedicated attribute key to avoid
+     * conflicting with SCG's CACHED_REQUEST_BODY_ATTR (which expects a DataBuffer value).
+     */
+    private static final String RETRY_CACHED_BODY_ATTR = "retryCachedBodyBytes";
+
+    private Mono<Void> cacheBodyAndExecute(ServerWebExchange exchange, GatewayFilterChain chain,
+                                           RetryConfig config, String routeId, int maxCachedBodyBytes) {
+        return DataBufferUtils.join(exchange.getRequest().getBody(), maxCachedBodyBytes)
+                .defaultIfEmpty(exchange.getResponse().bufferFactory().wrap(new byte[0]))
+                .flatMap(dataBuffer -> {
+                    final byte[] bodyBytes = new byte[dataBuffer.readableByteCount()];
+                    dataBuffer.read(bodyBytes);
+                    DataBufferUtils.release(dataBuffer);
+                    exchange.getAttributes().put(RETRY_CACHED_BODY_ATTR, bodyBytes);
+                    ServerHttpRequestDecorator cachedRequest = new ServerHttpRequestDecorator(exchange.getRequest()) {
+                        @Override
+                        public Flux<DataBuffer> getBody() {
+                            // Replay the cached body for every subscription (each retry attempt)
+                            return Flux.just(exchange.getResponse().bufferFactory().wrap(bodyBytes));
+                        }
+                    };
+                    ServerWebExchange cachedExchange = exchange.mutate().request(cachedRequest).build();
+                    return executeWithRetry(cachedExchange, chain, config, 0);
+                })
+                .onErrorResume(DataBufferLimitException.class, e -> {
+                    // Chunked body exceeded the limit mid-stream - the body stream is already partially
+                    // consumed and cannot be forwarded safely; reject instead of retrying with garbage.
+                    log.warn("Request body exceeds retry cache limit ({} bytes) for route {}, "
+                            + "rejecting with 413 to avoid retry with truncated body", maxCachedBodyBytes, routeId);
+                    ServerHttpResponse response = exchange.getResponse();
+                    response.setStatusCode(HttpStatus.PAYLOAD_TOO_LARGE);
+                    return response.setComplete();
+                });
     }
 
     /**
@@ -86,6 +187,8 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
 
         // Use AtomicBoolean to signal if retry is needed based on status code
         AtomicBoolean needRetry = new AtomicBoolean(false);
+        // FIX: track whether any body was written downstream, used to detect the empty-body retryable case
+        AtomicBoolean bodyWritten = new AtomicBoolean(false);
         AtomicInteger currentAttempt = new AtomicInteger(attempt);
         ServerHttpResponse originalResponse = exchange.getResponse();
         
@@ -101,13 +204,21 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
                         RouteUtils.getRouteId(exchange), status, statusValue, config.retryOnStatusCodes, attempt);
                 
                 if (status != null && config.retryOnStatusCodes.contains(statusValue)) {
-                    if (attempt < config.maxAttempts) {
+                    // FIX (unified semantics): maxAttempts is documented as "including first request",
+                    // so a retry to attempt+1 is allowed only while attempt+1 < maxAttempts. Previously
+                    // the status path used 'attempt < maxAttempts' executing maxAttempts+1 times in total,
+                    // inconsistent with the exception path.
+                    if (attempt + 1 < config.maxAttempts) {
                         log.debug("Status code {} detected for route {}, will retry (attempt {}/{})",
                                 statusValue, RouteUtils.getRouteId(exchange), attempt + 1, config.maxAttempts);
                         needRetry.set(true);
                         currentAttempt.set(attempt);
-                        // Return empty to block body write, retry will be triggered in .then()
-                        return Mono.empty();
+                        // FIX (memory leak): consume and release upstream response buffers before
+                        // discarding the body, otherwise NettyDataBuffers leak and the upstream
+                        // connection is never returned to the pool on retry.
+                        return Flux.from(body)
+                                .doOnNext(DataBufferUtils::release)
+                                .then();
                     } else {
                         log.warn("Max retry attempts ({}) reached for route {}, status code: {}",
                                 config.maxAttempts, RouteUtils.getRouteId(exchange), statusValue);
@@ -121,6 +232,7 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
                         addRetryInfoHeaders(getDelegate(), retryCount, config.maxAttempts, true);
                     }
                 }
+                bodyWritten.set(true);
                 return super.writeWith(body);
             }
             
@@ -132,12 +244,17 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
                         RouteUtils.getRouteId(exchange), status, statusValue, config.retryOnStatusCodes, attempt);
                 
                 if (status != null && config.retryOnStatusCodes.contains(statusValue)) {
-                    if (attempt < config.maxAttempts) {
+                    if (attempt + 1 < config.maxAttempts) {
                         log.debug("Status code {} detected in writeAndFlushWith for route {}, will retry (attempt {}/{})",
                                 statusValue, RouteUtils.getRouteId(exchange), attempt + 1, config.maxAttempts);
                         needRetry.set(true);
                         currentAttempt.set(attempt);
-                        return Mono.empty();
+                        // FIX (memory leak): same as writeWith - consume and release all buffers
+                        // from the nested publishers before triggering retry.
+                        return Flux.from(body)
+                                .flatMapSequential(Flux::from)
+                                .doOnNext(DataBufferUtils::release)
+                                .then();
                     } else {
                         // Add retry info headers when max attempts reached
                         addRetryInfoHeaders(getDelegate(), attempt, config.maxAttempts, false);
@@ -149,6 +266,7 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
                         addRetryInfoHeaders(getDelegate(), retryCount, config.maxAttempts, true);
                     }
                 }
+                bodyWritten.set(true);
                 return super.writeAndFlushWith(body);
             }
         };
@@ -186,13 +304,25 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
                                 RouteUtils.getRouteId(exchange), attempt + 1, config.maxAttempts);
                         return doRetry(exchange, chain, config, attempt);
                     }
+                    // FIX (empty-body retryable status): when the upstream returns a retryable status with
+                    // an EMPTY body (e.g. 503 from an overloaded LB), NettyWriteResponseFilter completes
+                    // without invoking writeWith, so needRetry was never set and no retry happened.
+                    if (!bodyWritten.get() && !originalResponse.isCommitted() && attempt + 1 < config.maxAttempts) {
+                        HttpStatusCode finalStatus = originalResponse.getStatusCode();
+                        if (finalStatus != null && config.retryOnStatusCodes.contains(finalStatus.value())) {
+                            log.debug("Retrying request for route {} due to retryable status {} with empty body, attempt {}/{}",
+                                    RouteUtils.getRouteId(exchange), finalStatus.value(), attempt + 1, config.maxAttempts);
+                            return doRetry(exchange, chain, config, attempt);
+                        }
+                    }
                     return Mono.empty();
                 }));
     }
 
     /**
      * Perform retry with delay and URL restoration.
-     * Note: InstanceRetryExecutor handles request body caching, so we don't need to cache here.
+     * Note: request body caching for retry is handled by cacheBodyAndExecute (this filter) for
+     * non-STATIC routes and by InstanceRetryExecutor for STATIC routes.
      */
     private Mono<Void> doRetry(ServerWebExchange exchange, GatewayFilterChain chain,
                                RetryConfig config, int attempt) {
@@ -201,9 +331,9 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
         exchange.getAttributes().put("retry_count", retryCount != null ? retryCount + 1 : 1);
 
         // Mark this as an intermediate retry request so TraceCaptureGlobalFilter can skip trace capture
-        // The last retry attempt (when attempt + 1 == config.maxAttempts) will NOT be marked,
+        // The last retry attempt (when attempt + 1 == config.maxAttempts - 1) will NOT be marked,
         // allowing TraceCaptureGlobalFilter to capture the final result
-        if (attempt + 1 < config.maxAttempts) {
+        if (attempt + 2 < config.maxAttempts) {
             exchange.getAttributes().put(TraceCaptureGlobalFilter.IS_RETRY_REQUEST_ATTR, true);
             log.debug("Marked as intermediate retry request, trace capture will be skipped: attempt={}", attempt + 1);
         } else {
@@ -217,6 +347,23 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
         if (originalUrl != null) {
             exchange.getAttributes().put(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR, originalUrl);
         }
+
+        // FIX (retry never re-routed): NettyRoutingFilter skips routing when
+        // GATEWAY_ALREADY_ROUTED_ATTR is set, so every retry attempt replayed the STALE
+        // first response instead of re-sending the request, and the client hung because
+        // the first response body had already been consumed. Clear the routing marker
+        // (and the stale client response) so the next attempt performs a real downstream
+        // call, mirroring SCG's built-in RetryGatewayFilter behavior.
+        exchange.getAttributes().remove(ServerWebExchangeUtils.GATEWAY_ALREADY_ROUTED_ATTR);
+        exchange.getAttributes().remove(ServerWebExchangeUtils.CLIENT_RESPONSE_ATTR);
+        exchange.getAttributes().remove(ServerWebExchangeUtils.CLIENT_RESPONSE_CONN_ATTR);
+
+        // FIX (accumulated response headers on retry): NettyWriteResponseFilter copies the
+        // downstream response headers into exchange.getResponse() on EVERY attempt without
+        // clearing them first, so retried attempts stacked duplicate Content-Length values
+        // ([31, 31, 29]) and the client rejected the response. Reset the headers before
+        // the next attempt; the final attempt repopulates them from its own response.
+        exchange.getResponse().getHeaders().clear();
 
         // Clear instance selection markers so load balancer can pick new instance
         exchange.getAttributes().remove("selected_instance");

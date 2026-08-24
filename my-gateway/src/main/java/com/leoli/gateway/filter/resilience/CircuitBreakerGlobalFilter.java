@@ -123,10 +123,15 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
                                 routeId, error.getClass().getSimpleName(), duration, circuitBreaker.getState());
                     })
                     .doOnCancel(() -> {
-                        // Request cancelled (client disconnected) = record as error for monitoring
+                        // FIX: record cancellation as an error result so the circuit breaker is not stuck.
+                        // In HALF_OPEN state, Resilience4j needs permittedNumberOfCallsInHalfOpenState results
+                        // to evaluate and transition out; if a probe request is cancelled (client disconnect /
+                        // downstream timeout) without recording any result, the breaker stays HALF_OPEN forever
+                        // and every subsequent request is rejected with CallNotPermittedException.
                         long duration = System.currentTimeMillis() - startTime;
-                        log.debug("Request cancelled for route {}: duration={}ms", routeId, duration);
-                        // Note: We don't record cancellation as failure - client-side issue
+                        circuitBreaker.onError(duration, TimeUnit.MILLISECONDS,
+                                new java.util.concurrent.CancellationException("Request cancelled for route " + routeId));
+                        log.debug("Request cancelled for route {}: duration={}ms, recorded as error to unblock HALF_OPEN evaluation", routeId, duration);
                     });
         });
     }

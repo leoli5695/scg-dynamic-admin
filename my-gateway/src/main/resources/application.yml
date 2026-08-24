@@ -128,7 +128,7 @@ spring:
 gateway:
   # Request Trace Configuration - for topology Client nodes
   trace:
-    capture-all: ${GATEWAY_TRACE_CAPTURE_ALL:true}
+    capture-all: ${GATEWAY_TRACE_CAPTURE_ALL:true}  # set to false in production
     capture-errors: ${GATEWAY_TRACE_CAPTURE_ERRORS:true}
     capture-slow: ${GATEWAY_TRACE_CAPTURE_SLOW:true}
     slow-threshold-ms: ${GATEWAY_TRACE_SLOW_THRESHOLD:3000}
@@ -257,7 +257,9 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus,metrics,gateway,gatewayRoutes,gatewayServices,gatewayStrategies
+        # Security: only expose essential endpoints by default.
+        # Add gateway*, routes, services, strategies via ACTUATOR_EXPOSURE_INCLUDE for debugging.
+        include: ${ACTUATOR_EXPOSURE_INCLUDE:health,info,prometheus,metrics}
   endpoint:
     health:
       show-details: never  # 安全加固：不暴露健康详情，防止泄露内部组件状态
@@ -276,7 +278,7 @@ management:
   tracing:
     enabled: ${OTEL_TRACING_ENABLED:true}
     sampling:
-      probability: ${OTEL_SAMPLING_PROBABILITY:1.0}  # 1.0 = 100% sampling
+      probability: ${OTEL_SAMPLING_PROBABILITY:1.0}  # 1.0 = 100% sampling; set to 0.1 in production
   otlp:
     tracing:
       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:30263/v1/traces}

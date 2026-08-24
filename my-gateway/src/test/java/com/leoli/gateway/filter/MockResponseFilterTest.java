@@ -1,9 +1,12 @@
 package com.leoli.gateway.filter;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.jknack.handlebars.Handlebars;
 import com.leoli.gateway.filter.transform.MockResponseFilter;
 import com.leoli.gateway.manager.StrategyManager;
+import com.leoli.gateway.model.MockResponseConfig;
+import com.leoli.gateway.model.StrategyDefinition;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -47,6 +50,8 @@ class MockResponseFilterTest {
 
     @BeforeEach
     void setUp() {
+        // Mirror the production ObjectMapper leniency for config conversion
+        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
         filter = new MockResponseFilter(objectMapper, handlebars);
         org.springframework.test.util.ReflectionTestUtils.setField(filter, "strategyManager", strategyManager);
     }
@@ -59,7 +64,7 @@ class MockResponseFilterTest {
         @DisplayName("Filter should pass through when config is null")
         void testFilter_nullConfig() {
             MockServerWebExchange exchange = createMockExchange("/api/test", "test-route");
-            when(strategyManager.getMockResponseConfig(anyString())).thenReturn(null);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_MOCK_RESPONSE), eq(MockResponseConfig.class))).thenReturn(null);
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -75,7 +80,7 @@ class MockResponseFilterTest {
             MockServerWebExchange exchange = createMockExchange("/api/test", "test-route");
             Map<String, Object> config = new HashMap<>();
             config.put("enabled", false);
-            when(strategyManager.getMockResponseConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_MOCK_RESPONSE), eq(MockResponseConfig.class))).thenReturn(typedConfig(config));
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -96,7 +101,7 @@ class MockResponseFilterTest {
             MockServerWebExchange exchange = createMockExchange("/api/test", "test-route");
 
             Map<String, Object> config = createStaticMockConfig(200, "{\"message\":\"Hello Mock\"}");
-            when(strategyManager.getMockResponseConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_MOCK_RESPONSE), eq(MockResponseConfig.class))).thenReturn(typedConfig(config));
 
             StepVerifier.create(filter.filter(exchange, chain))
                     .expectComplete()
@@ -114,7 +119,7 @@ class MockResponseFilterTest {
             MockServerWebExchange exchange = createMockExchange("/api/test", "test-route");
 
             Map<String, Object> config = createStaticMockConfig(201, "{\"created\":true}");
-            when(strategyManager.getMockResponseConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_MOCK_RESPONSE), eq(MockResponseConfig.class))).thenReturn(typedConfig(config));
 
             StepVerifier.create(filter.filter(exchange, chain))
                     .expectComplete()
@@ -135,7 +140,7 @@ class MockResponseFilterTest {
             MockServerWebExchange exchange = createMockExchange("/api/users/123", "test-route");
 
             Map<String, Object> config = createDynamicMockConfig();
-            when(strategyManager.getMockResponseConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_MOCK_RESPONSE), eq(MockResponseConfig.class))).thenReturn(typedConfig(config));
 
             StepVerifier.create(filter.filter(exchange, chain))
                     .expectComplete()
@@ -150,7 +155,7 @@ class MockResponseFilterTest {
             MockServerWebExchange exchange = createMockExchange("/api/unknown", "test-route");
 
             Map<String, Object> config = createDynamicMockConfig();
-            when(strategyManager.getMockResponseConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_MOCK_RESPONSE), eq(MockResponseConfig.class))).thenReturn(typedConfig(config));
 
             StepVerifier.create(filter.filter(exchange, chain))
                     .expectComplete()
@@ -170,7 +175,7 @@ class MockResponseFilterTest {
             MockServerWebExchange exchange = createMockExchange("/api/users/123", "test-route");
 
             Map<String, Object> config = createTemplateMockConfig();
-            when(strategyManager.getMockResponseConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_MOCK_RESPONSE), eq(MockResponseConfig.class))).thenReturn(typedConfig(config));
 
             StepVerifier.create(filter.filter(exchange, chain))
                     .expectComplete()
@@ -194,7 +199,7 @@ class MockResponseFilterTest {
             exchange.getAttributes().put("org.springframework.cloud.gateway.support.ServerWebExchangeUtils.gatewayRouteId", "test-route");
 
             Map<String, Object> config = createStaticMockConfigWithPassThrough();
-            when(strategyManager.getMockResponseConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_MOCK_RESPONSE), eq(MockResponseConfig.class))).thenReturn(typedConfig(config));
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -213,7 +218,7 @@ class MockResponseFilterTest {
             exchange.getAttributes().put("org.springframework.cloud.gateway.support.ServerWebExchangeUtils.gatewayRouteId", "test-route");
 
             Map<String, Object> config = createStaticMockConfigWithPassThroughQuery();
-            when(strategyManager.getMockResponseConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_MOCK_RESPONSE), eq(MockResponseConfig.class))).thenReturn(typedConfig(config));
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -234,7 +239,7 @@ class MockResponseFilterTest {
             MockServerWebExchange exchange = createMockExchange("/api/test", "test-route");
 
             Map<String, Object> config = createStaticMockConfigWithDelay(100);
-            when(strategyManager.getMockResponseConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_MOCK_RESPONSE), eq(MockResponseConfig.class))).thenReturn(typedConfig(config));
 
             long startTime = System.currentTimeMillis();
             StepVerifier.create(filter.filter(exchange, chain))
@@ -258,7 +263,7 @@ class MockResponseFilterTest {
             MockServerWebExchange exchange = createMockExchange("/api/test", "test-route");
 
             Map<String, Object> config = createStaticMockConfigWithErrorSimulation(100);
-            when(strategyManager.getMockResponseConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_MOCK_RESPONSE), eq(MockResponseConfig.class))).thenReturn(typedConfig(config));
 
             StepVerifier.create(filter.filter(exchange, chain))
                     .expectComplete()
@@ -283,6 +288,14 @@ class MockResponseFilterTest {
     }
 
     // ============== Helper Methods ==============
+
+    /**
+     * Convert the legacy Map-style config to the typed config the filter now reads
+     * via StrategyManager.getConfig(routeId, type, class).
+     */
+    private MockResponseConfig typedConfig(Map<String, Object> config) {
+        return config == null ? null : objectMapper.convertValue(config, MockResponseConfig.class);
+    }
 
     private MockServerWebExchange createMockExchange(String path, String routeId) {
         MockServerHttpRequest request = MockServerHttpRequest.get(path).build();

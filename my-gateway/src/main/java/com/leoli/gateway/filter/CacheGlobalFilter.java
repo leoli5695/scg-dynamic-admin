@@ -4,7 +4,9 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.manager.StrategyManager;
+import com.leoli.gateway.model.StrategyDefinition;
 import com.leoli.gateway.util.RouteUtils;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -44,6 +46,50 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
 
     // Cache instances per route: routeId -> cache
     private final Map<String, Cache<String, CachedResponse>> routeCaches = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * FIX: drop per-route Caffeine instances when cache strategies change.
+     * TTL/maxSize were frozen at first creation, so config updates never took
+     * effect without a restart; deleted routes also left entries behind forever.
+     */
+    @PostConstruct
+    public void initCacheInvalidation() {
+        strategyManager.addChangeListener(new StrategyManager.StrategyChangeListener() {
+            @Override
+            public void onChanged(StrategyDefinition strategy) {
+                invalidateIfCache(strategy);
+            }
+
+            @Override
+            public void onRemoved(StrategyDefinition strategy) {
+                invalidateIfCache(strategy);
+            }
+
+            @Override
+            public void onCleared() {
+                routeCaches.values().forEach(Cache::invalidateAll);
+                routeCaches.clear();
+            }
+        });
+    }
+
+    private void invalidateIfCache(StrategyDefinition strategy) {
+        if (!StrategyDefinition.TYPE_CACHE.equals(strategy.getStrategyType())) {
+            return;
+        }
+        if (strategy.getRouteId() != null) {
+            Cache<String, CachedResponse> cache = routeCaches.remove(strategy.getRouteId());
+            if (cache != null) {
+                cache.invalidateAll();
+            }
+            log.debug("Invalidated route cache instance for route: {}", strategy.getRouteId());
+        } else {
+            // Global strategy: rebuild all route cache instances with new settings
+            routeCaches.values().forEach(Cache::invalidateAll);
+            routeCaches.clear();
+            log.debug("Invalidated all route cache instances (global cache strategy changed)");
+        }
+    }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
@@ -114,59 +160,59 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
                     return super.writeWith(body);
                 }
 
-                // Intercept and cache response body with proper DataBuffer release tracking
-                return Flux.from(body)
-                        .collectList()
-                        .flatMap(buffers -> {
-                            if (buffers.isEmpty()) {
-                                return super.writeWith(Flux.empty());
-                            }
+                // FIX (aggregate-then-check): previously the WHOLE body was collectList-ed
+                // before maxCacheBodySize was evaluated, so oversized responses still
+                // exhausted the heap. Stream instead: every chunk passes through untouched
+                // while a heap copy is kept only until the size limit is reached.
+                long maxCacheBodySize = getLongValue(config, "maxCacheBodySize", 1024L * 1024); // 默认1MB
+                java.io.ByteArrayOutputStream sink = new java.io.ByteArrayOutputStream();
+                java.util.concurrent.atomic.AtomicBoolean exceeded =
+                        new java.util.concurrent.atomic.AtomicBoolean(false);
 
-                            int totalSize = buffers.stream().mapToInt(DataBuffer::readableByteCount).sum();
+                Flux<? extends DataBuffer> tee = Flux.from(body).doOnNext(buffer -> {
+                    if (exceeded.get()) {
+                        return;
+                    }
+                    int size = buffer.readableByteCount();
+                    if (sink.size() + size > maxCacheBodySize) {
+                        exceeded.set(true);
+                        log.debug("Response body exceeds maxCacheBodySize {} bytes, skipping cache",
+                                maxCacheBodySize);
+                        return;
+                    }
+                    try {
+                        // asByteBuffer() exposes a view without consuming the read position,
+                        // so the original chunk still flows downstream intact.
+                        java.nio.ByteBuffer view = buffer.asByteBuffer();
+                        byte[] chunk = new byte[view.remaining()];
+                        view.get(chunk);
+                        sink.write(chunk);
+                    } catch (Exception e) {
+                        exceeded.set(true);
+                        log.debug("Failed to copy response chunk for caching: {}", e.getMessage());
+                    }
+                });
 
-                            // 【P1-2修复】限制缓存体大小，防止大响应体撑爆堆内存（OOM）
-                            long maxCacheBodySize = getLongValue(config, "maxCacheBodySize", 1024L * 1024); // 默认1MB
-                            if (totalSize > maxCacheBodySize) {
-                                log.debug("Response body {} bytes exceeds maxCacheBodySize {} bytes, skipping cache",
-                                        totalSize, maxCacheBodySize);
-                                return super.writeWith(Flux.fromIterable(buffers));
+                return super.writeWith(tee)
+                        .doFinally(signal -> {
+                            if (exceeded.get() || sink.size() == 0) {
+                                return;
                             }
-                            byte[] allBytes = new byte[totalSize];
-                            int offset = 0;
-                            int releasedCount = 0;
                             try {
-                                for (DataBuffer buffer : buffers) {
-                                    int size = buffer.readableByteCount();
-                                    buffer.read(allBytes, offset, size);
-                                    offset += size;
-                                    DataBufferUtils.release(buffer);
-                                    releasedCount++;
-                                }
-
-                                // Cache the response with body bytes
                                 long ttlSeconds = getLongValue(config, "ttlSeconds", 60L);
                                 HttpHeaders copiedHeaders = new HttpHeaders();
                                 copiedHeaders.putAll(originalResponse.getHeaders());
                                 CachedResponse cachedResponse = new CachedResponse(
                                         statusCode.value(),
                                         copiedHeaders,
-                                        allBytes,
+                                        sink.toByteArray(),
                                         System.currentTimeMillis() + (ttlSeconds * 1000)
                                 );
                                 cache.put(cacheKey, cachedResponse);
                                 log.debug("Cached response for route {}, key: {}, size: {} bytes",
-                                        routeId, cacheKey, allBytes.length);
-
-                                return super.writeWith(Mono.just(originalResponse.bufferFactory().wrap(allBytes)));
+                                        routeId, cacheKey, sink.size());
                             } catch (Exception e) {
                                 log.error("Error caching response body: {}", e.getMessage(), e);
-                                for (int i = releasedCount; i < buffers.size(); i++) {
-                                    DataBufferUtils.release(buffers.get(i));
-                                }
-                                if (allBytes != null) {
-                                    return super.writeWith(Mono.just(originalResponse.bufferFactory().wrap(allBytes)));
-                                }
-                                return super.writeWith(Flux.empty());
                             }
                         });
             }
@@ -249,6 +295,20 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
     private Mono<Void> writeCachedResponse(ServerWebExchange exchange, CachedResponse cached) {
         ServerHttpResponse response = exchange.getResponse();
         response.setStatusCode(HttpStatus.valueOf(cached.statusCode));
+
+        // FIX (cached headers lost): the original upstream headers (Content-Type, Set-Cookie
+        // exclusions aside, Cache-Control, ...) were captured at cache time but never
+        // restored on hit - clients received a cached body with no content type. Restore
+        // them now; Content-Length is dropped because the body may be written as a single
+        // buffer and the framework will set it.
+        HttpHeaders headers = response.getHeaders();
+        if (cached.headers != null) {
+            cached.headers.forEach((name, values) -> {
+                if (!HttpHeaders.CONTENT_LENGTH.equalsIgnoreCase(name)) {
+                    headers.put(name, values);
+                }
+            });
+        }
 
         // Add cache headers
         response.getHeaders().add("X-Cache", "HIT");

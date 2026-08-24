@@ -237,6 +237,7 @@ public class AsyncTraceReporter {
 
         webClient.post()
                 .uri(url)
+                .headers(h -> { if (properties.getInternalToken() != null && !properties.getInternalToken().isEmpty()) h.set("X-Internal-Token", properties.getInternalToken()); })
                 .bodyValue(traces)
                 .retrieve()
                 .bodyToMono(Void.class)
@@ -395,6 +396,7 @@ public class AsyncTraceReporter {
                     String url = adminUrl + "/api/services/traces/batch";
                     webClient.post()
                             .uri(url)
+                            .headers(h -> { if (properties.getInternalToken() != null && !properties.getInternalToken().isEmpty()) h.set("X-Internal-Token", properties.getInternalToken()); })
                             .bodyValue(remaining)
                             .retrieve()
                             .bodyToMono(Void.class)

@@ -100,7 +100,7 @@ class HybridRateLimiterFilterTest {
 
             // Verify: chain was called, no rate limiting
             verify(chain).filter(exchange);
-            verify(distributedRateLimiter, never()).tryAcquireWithFallback(anyString(), anyInt(), anyInt(), anyLong());
+            verify(distributedRateLimiter, never()).tryAcquireReactive(anyString(), anyInt(), anyInt(), anyLong());
         }
 
         @Test
@@ -120,7 +120,7 @@ class HybridRateLimiterFilterTest {
                     .verify();
 
             verify(chain).filter(exchange);
-            verify(distributedRateLimiter, never()).tryAcquireWithFallback(anyString(), anyInt(), anyInt(), anyLong());
+            verify(distributedRateLimiter, never()).tryAcquireReactive(anyString(), anyInt(), anyInt(), anyLong());
         }
 
         @Test
@@ -134,8 +134,10 @@ class HybridRateLimiterFilterTest {
 
             // Mock: Redis available, rate limit denied
             lenient().when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(true);
-            lenient().when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyInt(), anyLong()))
-                    .thenReturn(RateLimitResult.denied(0));
+            lenient().when(shadowQuotaManager.isRedisHealthy()).thenReturn(true);
+            lenient().when(shadowQuotaManager.getRecoveryProgress()).thenReturn(100);
+            lenient().when(distributedRateLimiter.tryAcquireReactive(anyString(), anyInt(), anyInt(), anyLong()))
+                    .thenReturn(Mono.just(RateLimitResult.denied(0)));
 
             // Execute
             StepVerifier.create(filter.filter(exchange, chain))
@@ -171,8 +173,8 @@ class HybridRateLimiterFilterTest {
             when(shadowQuotaManager.getRecoveryProgress()).thenReturn(100);
 
             // Mock rate limit allowed
-            when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyInt(), anyLong()))
-                    .thenReturn(RateLimitResult.allowed(99));
+            when(distributedRateLimiter.tryAcquireReactive(anyString(), anyInt(), anyInt(), anyLong()))
+                    .thenReturn(Mono.just(RateLimitResult.allowed(99)));
 
             // registerRoute is void, no need to mock;
             when(chain.filter(any(org.springframework.web.server.ServerWebExchange.class))).thenReturn(Mono.empty());
@@ -181,7 +183,7 @@ class HybridRateLimiterFilterTest {
                     .expectComplete()
                     .verify();
 
-            verify(distributedRateLimiter).tryAcquireWithFallback(anyString(), anyInt(), anyInt(), anyLong());
+            verify(distributedRateLimiter).tryAcquireReactive(anyString(), anyInt(), anyInt(), anyLong());
             verify(chain).filter(exchange);
         }
 
@@ -196,8 +198,8 @@ class HybridRateLimiterFilterTest {
 
             // Mock Redis available check but returns fallback
             lenient().when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(true);
-            lenient().when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyInt(), anyLong()))
-                    .thenReturn(RateLimitResult.fallback("Redis error"));
+            lenient().when(distributedRateLimiter.tryAcquireReactive(anyString(), anyInt(), anyInt(), anyLong()))
+                    .thenReturn(Mono.just(RateLimitResult.fallback("Redis error")));
 
             // Mock shadow quota
             when(shadowQuotaManager.isRedisHealthy()).thenReturn(false);
@@ -246,7 +248,7 @@ class HybridRateLimiterFilterTest {
                     .verify();
 
             verify(shadowQuotaManager).getShadowQuota(anyString(), anyInt());
-            verify(distributedRateLimiter, never()).tryAcquireWithFallback(anyString(), anyInt(), anyInt(), anyLong());
+            verify(distributedRateLimiter, never()).tryAcquireReactive(anyString(), anyInt(), anyInt(), anyLong());
         }
 
         @Test
@@ -262,8 +264,8 @@ class HybridRateLimiterFilterTest {
             when(shadowQuotaManager.isRedisHealthy()).thenReturn(true);
             when(shadowQuotaManager.getRecoveryProgress()).thenReturn(100);
 
-            when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyInt(), anyLong()))
-                    .thenReturn(RateLimitResult.allowed(99));
+            when(distributedRateLimiter.tryAcquireReactive(anyString(), anyInt(), anyInt(), anyLong()))
+                    .thenReturn(Mono.just(RateLimitResult.allowed(99)));
 
             // registerRoute is void, no need to mock;
             when(chain.filter(any(org.springframework.web.server.ServerWebExchange.class))).thenReturn(Mono.empty());
@@ -272,7 +274,7 @@ class HybridRateLimiterFilterTest {
                     .expectComplete()
                     .verify();
 
-            verify(distributedRateLimiter).tryAcquireWithFallback(anyString(), anyInt(), anyInt(), anyLong());
+            verify(distributedRateLimiter).tryAcquireReactive(anyString(), anyInt(), anyInt(), anyLong());
         }
     }
 

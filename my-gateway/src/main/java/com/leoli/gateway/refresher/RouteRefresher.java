@@ -16,6 +16,8 @@ import org.springframework.stereotype.Component;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static com.leoli.gateway.constants.GatewayConfigConstants.*;
 
@@ -39,6 +41,20 @@ public class RouteRefresher {
     // Route listeners cache: <routeId, listener>
     private final ConcurrentHashMap<String, ConfigCenterService.ConfigListener> routeListeners = new ConcurrentHashMap<>();
 
+    // FIX: keep the index listener as a field instance so destroy() can actually remove it.
+    // Previously destroy() passed a fresh this::onRoutesIndexChanged method reference which
+    // never matched the instance registered in init().
+    private final ConfigCenterService.ConfigListener indexListener = this::onRoutesIndexChanged;
+
+    // FIX: dedicated single-thread executor for route loading so that the config-center
+    // callback thread is never blocked by Thread.sleep retries (which used to stall
+    // every other listener callback when many routes were added at once).
+    private final ExecutorService routeLoadExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "route-load-executor");
+        t.setDaemon(true);
+        return t;
+    });
+
     @Autowired
     public RouteRefresher(RouteManager routeManager,
                           ConfigCenterService configService,
@@ -57,7 +73,6 @@ public class RouteRefresher {
     @PostConstruct
     public void init() {
         // 1. Listen to routes index changes
-        ConfigCenterService.ConfigListener indexListener = this::onRoutesIndexChanged;
         configService.addListener(ROUTES_INDEX, GROUP, indexListener);
         log.info("✅ Registered listener for routes index: {}", ROUTES_INDEX);
 
@@ -81,8 +96,10 @@ public class RouteRefresher {
             }
         }
 
-        // Remove index listener
-        configService.removeListener(ROUTES_INDEX, GROUP, this::onRoutesIndexChanged);
+        // Remove index listener using the same field instance registered in init()
+        configService.removeListener(ROUTES_INDEX, GROUP, indexListener);
+
+        routeLoadExecutor.shutdownNow();
 
         log.info("RouteRefresher destroyed, all listeners removed");
     }
@@ -202,7 +219,16 @@ public class RouteRefresher {
         // STEP 1: Register listener FIRST (to catch any config changes)
         registerRouteListener(routeId, routeDataId);
 
-        // STEP 2: Load route config synchronously with retry
+        // STEP 2: Load route config asynchronously with retry.
+        // FIX: never sleep on the config-center callback thread - a burst of new routes
+        // would otherwise block all other config listener callbacks for seconds.
+        routeLoadExecutor.submit(() -> loadRouteWithRetry(routeId, routeDataId));
+    }
+
+    /**
+     * Load a route config synchronously with retry (runs on routeLoadExecutor).
+     */
+    private void loadRouteWithRetry(String routeId, String routeDataId) {
         String routeConfig = null;
         int maxRetries = 3;
         for (int i = 0; i < maxRetries; i++) {
@@ -226,6 +252,8 @@ public class RouteRefresher {
                 routeManager.putRoute(routeId, route);
                 log.info("✅ Loaded route: {} -> {} (route.id={}, predicates={})",
                         routeId, route.getUri(), route.getId(), route.getPredicates());
+                // Refresh SCG routes now that the async load completed
+                refreshSCGRoutes();
             } catch (Exception e) {
                 log.error("Failed to parse route: {}", routeId, e);
             }
@@ -473,25 +501,17 @@ public class RouteRefresher {
                 if (!localRouteIds.contains(routeId)) {
                     log.warn("🔍 Found missing route during periodic sync: {}", routeId);
 
-                    // Try to load the missing route
-                    String routeDataId = ROUTE_PREFIX + routeId;
-                    String routeConfig = configService.getConfig(routeDataId, GROUP);
-
-                    if (routeConfig != null && !routeConfig.isBlank()) {
-                        RouteDefinition route = parseRoute(routeConfig);
-                        // Load route into RouteManager
-                        routeManager.putRoute(routeId, route);
-                        syncedCount++;
-                        log.info("✅ Periodic sync recovered missing route: {}", routeId);
-                    } else {
-                        log.warn("⚠️  Route config not found in Nacos: {}", routeId);
-                    }
+                    // FIX: recover via addRouteListener so the recovered route also gets
+                    // a per-route listener (previously it was loaded without any listener,
+                    // so subsequent updates could only be noticed via index changes).
+                    addRouteListener(routeId);
+                    syncedCount++;
+                    log.info("✅ Periodic sync recovered missing route: {}", routeId);
                 }
             }
 
             if (syncedCount > 0) {
                 log.info("📊 Periodic sync completed: recovered {} missing routes", syncedCount);
-                refreshSCGRoutes();
             }
 
         } catch (Exception e) {

@@ -368,6 +368,13 @@ public class StrategyConfig {
         private List<String> excludePaths = new ArrayList<>();
 
         /**
+         * Query parameter names skipped by the security scan (whitelist).
+         * Use for fields that legitimately carry markdown/code/base64 content
+         * which would otherwise trip the low-confidence WAF patterns.
+         */
+        private List<String> whitelistParams = new ArrayList<>();
+
+        /**
          * Check request parameters.
          */
         private boolean checkParameters = true;

@@ -1,5 +1,6 @@
 package com.leoli.gateway.admin.util;
 
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -8,6 +9,7 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
 
@@ -17,7 +19,12 @@ import java.util.Base64;
  * Security features:
  * - AES-256-GCM authenticated encryption (prevents tampering)
  * - Random IV per encryption (prevents pattern detection)
- * - Key loaded from environment variable (no hardcoded keys)
+ * - Key loaded from configuration (no hardcoded keys), fail-fast at startup
+ *
+ * FIX: unified with SslCertificateService on the same configuration property
+ * (gateway.admin.ssl.encryption-key, overridable via GATEWAY_ENCRYPTION_KEY).
+ * Previously this class read a different property (${GATEWAY_ENCRYPTION_KEY}) that
+ * no deployment ever set, and silently fell back to plaintext storage.
  *
  * @author leoli
  */
@@ -28,26 +35,43 @@ public class ApiKeyEncryptor {
     private static final String ALGORITHM = "AES/GCM/NoPadding";
     private static final int GCM_IV_LENGTH = 12;  // 96 bits for GCM
     private static final int GCM_TAG_LENGTH = 128; // 128 bits authentication tag
+    private static final int MIN_KEY_LENGTH = 16;  // same minimum as SslCertificateService
 
-    @Value("${GATEWAY_ENCRYPTION_KEY:}")
+    // Unified with SslCertificateService: gateway.admin.ssl.encryption-key
+    @Value("${gateway.admin.ssl.encryption-key:}")
     private String encryptionKey;
 
     private final SecureRandom secureRandom = new SecureRandom();
+
+    /**
+     * FIX: fail fast at startup when the encryption key is missing or too short,
+     * instead of silently storing secrets in plaintext (previous behavior gave
+     * operators the false impression that data was encrypted).
+     */
+    @PostConstruct
+    public void validateKey() {
+        if (encryptionKey == null || encryptionKey.isEmpty()) {
+            throw new IllegalStateException(
+                    "Encryption key not configured. Set gateway.admin.ssl.encryption-key " +
+                    "or the GATEWAY_ENCRYPTION_KEY environment variable (minimum " + MIN_KEY_LENGTH + " characters).");
+        }
+        if (encryptionKey.getBytes(StandardCharsets.UTF_8).length < MIN_KEY_LENGTH) {
+            throw new IllegalStateException(
+                    "Encryption key too short (" + encryptionKey.getBytes(StandardCharsets.UTF_8).length +
+                    " bytes). Minimum " + MIN_KEY_LENGTH + " characters required.");
+        }
+        log.info("ApiKeyEncryptor initialized (AES-256-GCM, key source: gateway.admin.ssl.encryption-key)");
+    }
 
     /**
      * Encrypt a plaintext string.
      * Returns Base64-encoded ciphertext (IV + encrypted data + auth tag).
      *
      * @param plaintext the string to encrypt
-     * @return Base64-encoded encrypted string, or original if encryption not configured
+     * @return Base64-encoded encrypted string
      */
     public String encrypt(String plaintext) {
         if (plaintext == null || plaintext.isEmpty()) {
-            return plaintext;
-        }
-
-        if (encryptionKey == null || encryptionKey.isEmpty()) {
-            log.warn("Encryption key not configured, storing value in plaintext (NOT RECOMMENDED)");
             return plaintext;
         }
 
@@ -88,11 +112,6 @@ public class ApiKeyEncryptor {
             return ciphertext;
         }
 
-        if (encryptionKey == null || encryptionKey.isEmpty()) {
-            log.warn("Encryption key not configured, returning value as-is");
-            return ciphertext;
-        }
-
         try {
             byte[] keyBytes = deriveKey(encryptionKey);
             SecretKeySpec keySpec = new SecretKeySpec(keyBytes, "AES");
@@ -122,20 +141,16 @@ public class ApiKeyEncryptor {
 
     /**
      * Derive a valid 32-byte AES-256 key from the encryption key string.
+     * FIX: SHA-256 derivation accepts any key >= 16 chars (consistent with the
+     * SslCertificateService minimum) while always producing a full AES-256 key.
      */
     private byte[] deriveKey(String key) {
-        byte[] keyBytes = key.getBytes(StandardCharsets.UTF_8);
-        
-        if (keyBytes.length < 32) {
-            throw new IllegalStateException(
-                "Encryption key too short. Minimum 32 characters required for AES-256. " +
-                "Current length: " + keyBytes.length);
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return digest.digest(key.getBytes(StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to derive encryption key", e);
         }
-
-        // Use first 32 bytes for AES-256
-        byte[] validKey = new byte[32];
-        System.arraycopy(keyBytes, 0, validKey, 0, 32);
-        return validKey;
     }
 
     /**

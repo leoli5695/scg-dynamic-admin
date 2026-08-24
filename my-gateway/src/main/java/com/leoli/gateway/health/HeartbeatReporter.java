@@ -37,6 +37,13 @@ public class HeartbeatReporter {
     @Value("${gateway.admin.url:http://127.0.0.1:9090}")
     private String adminUrl;
 
+    /**
+     * Shared secret for admin internal report endpoints (X-Internal-Token header).
+     * Must match gateway.admin.security.internal-token on the admin console.
+     */
+    @Value("${gateway.admin.internal-token:${GATEWAY_INTERNAL_TOKEN:}}")
+    private String internalToken;
+
     @Value("${GATEWAY_INSTANCE_ID:}")
     private String instanceId;
 
@@ -130,6 +137,9 @@ public class HeartbeatReporter {
             try {
                 HttpHeaders headers = new HttpHeaders();
                 headers.setContentType(MediaType.APPLICATION_JSON);
+                if (internalToken != null && !internalToken.isEmpty()) {
+                    headers.set("X-Internal-Token", internalToken);
+                }
                 HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
                 ResponseEntity<Map> response = restTemplate.postForEntity(url, entity, Map.class);

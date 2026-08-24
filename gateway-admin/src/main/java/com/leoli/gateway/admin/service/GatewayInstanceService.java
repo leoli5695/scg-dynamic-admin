@@ -35,6 +35,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Gateway Instance Service.
@@ -90,8 +91,18 @@ public class GatewayInstanceService {
     @Value("${gateway.instance.management-port:9091}")
     private Integer defaultManagementPort;
 
-    // Cache for ApiClients by cluster ID
-    private final Map<Long, ApiClient> clientCache = new HashMap<>();
+    // FIX: HashMap is not thread-safe; concurrent per-instance deployments could
+    // corrupt the cache. ConcurrentHashMap plus a content-hash check also rebuilds
+    // the client when the stored kubeconfig changes.
+    private final Map<Long, ApiClient> clientCache = new ConcurrentHashMap<>();
+    private final Map<Long, Integer> clientCacheConfigHash = new ConcurrentHashMap<>();
+
+    /**
+     * TLS certificate verification for Kubernetes API connections.
+     * Enable in production; only self-signed dev clusters should disable it.
+     */
+    @Value("${gateway.kubernetes.verify-ssl:false}")
+    private boolean verifyK8sSsl;
 
     /**
      * Create Nacos namespace for gateway instance.
@@ -424,19 +435,27 @@ public class GatewayInstanceService {
      * Get ApiClient for a cluster.
      */
     private ApiClient getApiClient(Long clusterId, String kubeconfig) {
+        int configHash = kubeconfig != null ? kubeconfig.hashCode() : 0;
         ApiClient client = clientCache.get(clusterId);
-        if (client == null) {
-            try {
-                StringReader reader = new StringReader(kubeconfig);
-                KubeConfig kubeConfig = KubeConfig.loadKubeConfig(reader);
-                client = ClientBuilder.kubeconfig(kubeConfig).build();
-                client.setVerifyingSsl(false);
-                clientCache.put(clusterId, client);
-            } catch (IOException e) {
-                throw new RuntimeException("Failed to create Kubernetes client: " + e.getMessage());
-            }
+        if (client != null && clientCacheConfigHash.getOrDefault(clusterId, 0) == configHash) {
+            return client;
         }
-        return client;
+        try {
+            StringReader reader = new StringReader(kubeconfig);
+            KubeConfig kubeConfig = KubeConfig.loadKubeConfig(reader);
+            client = ClientBuilder.kubeconfig(kubeConfig).build();
+            // FIX: TLS verification is configurable instead of hardcoded false
+            client.setVerifyingSsl(verifyK8sSsl);
+            if (!verifyK8sSsl) {
+                log.warn("Kubernetes TLS verification is disabled for cluster {} " +
+                        "(gateway.kubernetes.verify-ssl=false) - do not use in production", clusterId);
+            }
+            clientCache.put(clusterId, client);
+            clientCacheConfigHash.put(clusterId, configHash);
+            return client;
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to create Kubernetes client: " + e.getMessage());
+        }
     }
 
     /**

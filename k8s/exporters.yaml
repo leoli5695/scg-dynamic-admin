@@ -134,9 +134,13 @@ spec:
         - containerPort: 9104
           name: metrics
         env:
-        # 使用 DATA_SOURCE_NAME 格式 (旧版本兼容)
+        # Credentials come from the mysql-exporter-credentials Secret
+        # (see mysql-credentials.yaml) - never inline DSNs here.
         - name: DATA_SOURCE_NAME
-          value: "root:123456@(host.rancher-desktop.internal:3306)/"
+          valueFrom:
+            secretKeyRef:
+              name: mysql-exporter-credentials
+              key: data-source-name
         resources:
           requests:
             cpu: "50m"

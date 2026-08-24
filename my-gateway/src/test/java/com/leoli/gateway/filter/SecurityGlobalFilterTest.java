@@ -1,5 +1,6 @@
 package com.leoli.gateway.filter;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.filter.security.SecurityGlobalFilter;
 import com.leoli.gateway.manager.StrategyManager;
 import org.junit.jupiter.api.BeforeEach;
@@ -7,7 +8,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -37,11 +37,12 @@ class SecurityGlobalFilterTest {
     @Mock
     private GatewayFilterChain chain;
 
-    @InjectMocks
     private SecurityGlobalFilter filter;
 
     @BeforeEach
     void setUp() {
+        // Real ObjectMapper: threat responses are serialized with Jackson
+        filter = new SecurityGlobalFilter(strategyManager, new ObjectMapper());
         // Use lenient() to avoid UnnecessaryStubbingException for tests that block requests
         lenient().when(chain.filter(any())).thenReturn(Mono.empty());
     }
@@ -130,9 +131,9 @@ class SecurityGlobalFilterTest {
         }
 
         @Test
-        @DisplayName("Should detect SQL comment injection")
+        @DisplayName("Should detect SQL comment injection correlated with a high-confidence hit")
         void testSqlInjection_commentPattern() {
-            MockServerWebExchange exchange = createGetExchange("/api/test?id=1--");
+            MockServerWebExchange exchange = createGetExchange("/api/test?id=1' --");
             Map<String, Object> config = createConfigWithSql(true);
             when(strategyManager.getSecurityConfig(anyString())).thenReturn(config);
 
@@ -140,6 +141,23 @@ class SecurityGlobalFilterTest {
                     .verifyComplete();
 
             assertEquals(HttpStatus.BAD_REQUEST, exchange.getResponse().getStatusCode());
+        }
+
+        @Test
+        @DisplayName("Should NOT block bare comment markers (false-positive reduction)")
+        void testSqlComment_bareMarkerPasses() {
+            // Values merely ending in "--" (e.g. markdown, passwords, dates) must
+            // not be blocked: the low-confidence comment pattern only counts when
+            // a high-confidence SQL pattern also matched.
+            MockServerWebExchange exchange = createGetExchange("/api/test?password=abc--");
+            Map<String, Object> config = createConfigWithSql(true);
+            when(strategyManager.getSecurityConfig(anyString())).thenReturn(config);
+
+            StepVerifier.create(filter.filter(exchange, chain))
+                    .verifyComplete();
+
+            assertNull(exchange.getResponse().getStatusCode());
+            verify(chain).filter(exchange);
         }
 
         @Test

@@ -4,6 +4,7 @@ import com.leoli.gateway.admin.dto.ApiResponse;
 import com.leoli.gateway.admin.model.EmailConfig;
 import com.leoli.gateway.admin.service.EmailConfigService;
 import com.leoli.gateway.admin.service.EmailSenderService;
+import com.leoli.gateway.admin.util.ApiKeyEncryptor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -28,6 +29,7 @@ public class EmailConfigController {
 
     private final EmailSenderService emailSenderService;
     private final EmailConfigService emailConfigService;
+    private final ApiKeyEncryptor apiKeyEncryptor;  // FIX: encrypt SMTP password before persisting
 
     /**
      * Get all email configurations
@@ -97,6 +99,9 @@ public class EmailConfigController {
                 return ResponseEntity.ok(ApiResponse.badRequest("SMTP password is required"));
             }
 
+            // FIX: store SMTP password encrypted instead of plaintext
+            config.setSmtpPassword(apiKeyEncryptor.encrypt(config.getSmtpPassword()));
+
             EmailConfig saved = emailConfigService.saveConfig(config);
             
             // Reload email sender with new config
@@ -132,7 +137,8 @@ public class EmailConfigController {
             if (config.getSmtpUsername() != null) existing.setSmtpUsername(config.getSmtpUsername());
             // Only update password if not masked
             if (config.getSmtpPassword() != null && !config.getSmtpPassword().equals("******")) {
-                existing.setSmtpPassword(config.getSmtpPassword());
+                // FIX: store SMTP password encrypted instead of plaintext
+                existing.setSmtpPassword(apiKeyEncryptor.encrypt(config.getSmtpPassword()));
             }
             if (config.getFromEmail() != null) existing.setFromEmail(config.getFromEmail());
             if (config.getFromName() != null) existing.setFromName(config.getFromName());

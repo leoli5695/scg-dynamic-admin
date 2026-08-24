@@ -4,6 +4,7 @@ import io.kubernetes.client.openapi.ApiClient;
 import io.kubernetes.client.util.ClientBuilder;
 import io.kubernetes.client.util.KubeConfig;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -18,12 +19,22 @@ import java.util.Map;
 @Service
 public class KubeConfigService {
 
+    /**
+     * TLS certificate verification for Kubernetes API connections.
+     * FIX: was hardcoded false; enable in production via gateway.kubernetes.verify-ssl.
+     */
+    @Value("${gateway.kubernetes.verify-ssl:false}")
+    private boolean verifySsl;
+
     public ApiClient createApiClient(String kubeconfigContent) {
         try {
             StringReader reader = new StringReader(kubeconfigContent);
             KubeConfig kubeConfig = KubeConfig.loadKubeConfig(reader);
             ApiClient client = ClientBuilder.kubeconfig(kubeConfig).build();
-            client.setVerifyingSsl(false);
+            client.setVerifyingSsl(verifySsl);
+            if (!verifySsl) {
+                log.warn("Kubernetes TLS verification is disabled (gateway.kubernetes.verify-ssl=false) - do not use in production");
+            }
             return client;
         } catch (IOException e) {
             log.error("Failed to create ApiClient: {}", e.getMessage());

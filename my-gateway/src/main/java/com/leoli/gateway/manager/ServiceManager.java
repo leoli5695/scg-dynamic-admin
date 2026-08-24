@@ -61,19 +61,6 @@ public class ServiceManager {
             return;
         }
 
-        // CRITICAL: Clear health checker cache FIRST (before instanceCache)
-        // This ensures stale instance records (e.g., old port 30903) are removed
-        // when configuration changes (e.g., to new port 9003)
-        // Must call BEFORE instanceCache.remove() because clearServiceInstances()
-        // needs to check instanceCache for shared instances
-        hybridHealthChecker.clearServiceInstances(serviceId);
-
-        // Then clear old cache for this service
-        endpointCache.remove(serviceId);
-        instanceCache.remove(serviceId);
-        roundRobinCounters.remove(serviceId);
-        loadBalancerStrategyCache.remove(serviceId);
-
         log.debug("Parsing service config for: {}", serviceId);
 
         // Parse loadBalancer strategy (default: weighted)
@@ -81,72 +68,86 @@ public class ServiceManager {
         if (serviceNode.has("loadBalancer")) {
             loadBalancer = serviceNode.get("loadBalancer").asText("weighted");
         }
-        loadBalancerStrategyCache.put(serviceId, loadBalancer);
-        log.debug("Service {} loadBalancer strategy: {}", serviceId, loadBalancer);
+
+        // FIX (clear-then-rebuild fail-open): previously ALL caches were wiped
+        // BEFORE parsing, so (a) a malformed config (neither endpoint nor
+        // instances) left the service with NO instances until the next push,
+        // and (b) routing failed during the parse window. Parse into local
+        // state first and only swap the caches once parsing succeeds.
+        ServiceEndpoint newEndpoint = null;
+        List<ServiceInstance> newInstances = null;
 
         // Single endpoint mode
         if (serviceNode.has("endpoint")) {
             String endpoint = serviceNode.get("endpoint").asText();
-
-            ServiceEndpoint serviceEndpoint = new ServiceEndpoint(serviceId, endpoint);
-            endpointCache.put(serviceId, serviceEndpoint);
-
-            // Also store in instanceCache for compatibility
-            List<ServiceInstance> instances = new ArrayList<>();
-            instances.add(new ServiceInstance(serviceId, endpoint, 1));
-            instanceCache.put(serviceId, instances);
-
-            log.debug("Loaded service: {} -> {}", serviceId, endpoint);
+            newEndpoint = new ServiceEndpoint(serviceId, endpoint);
+            newInstances = new ArrayList<>();
+            newInstances.add(new ServiceInstance(serviceId, endpoint, 1));
+        } else if (!serviceNode.has("instances") || !serviceNode.get("instances").isArray()) {
+            // Invalid config: keep the previous cached state untouched
+            log.warn("Service config for {} has neither 'endpoint' nor 'instances' field, keeping previous cache", serviceId);
             return;
-        }
-
-        // Multiple instances mode
-        if (!serviceNode.has("instances") || !serviceNode.get("instances").isArray()) {
-            log.warn("Service config for {} has neither 'endpoint' nor 'instances' field", serviceId);
-            return;
-        }
-
-        List<ServiceInstance> instances = new ArrayList<>();
-        JsonNode instancesNode = serviceNode.get("instances");
-
-        for (JsonNode instanceNode : instancesNode) {
-            // Support both "ip" and "address" field names
-            String address = null;
-            if (instanceNode.has("ip")) {
-                address = instanceNode.get("ip").asText();
-            } else if (instanceNode.has("address")) {
-                address = instanceNode.get("address").asText();
-            }
-
-            if (address == null || !instanceNode.has("port")) {
-                continue;
-            }
-
-            int port = instanceNode.get("port").asInt();
-            int weight = instanceNode.has("weight") ? instanceNode.get("weight").asInt() : 1;
-            boolean enabled = !instanceNode.has("enabled") || instanceNode.get("enabled").asBoolean(true);
-            // Note: 'healthy' from config is just initial status hint
-            // Actual health status is managed by HybridHealthChecker via active/passive checks
-            // We store ALL instances (including disabled ones) for health checking
-
-            String instanceEndpoint = "http://" + address + ":" + port;
-            instances.add(new ServiceInstance(serviceId, instanceEndpoint, weight, enabled));
-
-            log.debug("Loaded service instance: {} -> {}:{} (weight: {}, enabled: {})",
-                    serviceId, address, port, weight, enabled);
-        }
-
-        if (!instances.isEmpty()) {
-            // Use first instance as primary endpoint
-            endpointCache.put(serviceId, new ServiceEndpoint(serviceId, instances.get(0).getAddress()));
-            instanceCache.put(serviceId, instances);
-            roundRobinCounters.put(serviceId, new AtomicInteger(0));
-
-            log.info("Loaded service '{}' with {} instances, loadBalancer: {}",
-                    serviceId, instances.size(), loadBalancer);
         } else {
-            log.warn("Service '{}' has no instances configured", serviceId);
+            // Multiple instances mode
+            newInstances = new ArrayList<>();
+            JsonNode instancesNode = serviceNode.get("instances");
+
+            for (JsonNode instanceNode : instancesNode) {
+                // Support both "ip" and "address" field names
+                String address = null;
+                if (instanceNode.has("ip")) {
+                    address = instanceNode.get("ip").asText();
+                } else if (instanceNode.has("address")) {
+                    address = instanceNode.get("address").asText();
+                }
+
+                if (address == null || !instanceNode.has("port")) {
+                    continue;
+                }
+
+                int port = instanceNode.get("port").asInt();
+                int weight = instanceNode.has("weight") ? instanceNode.get("weight").asInt() : 1;
+                boolean enabled = !instanceNode.has("enabled") || instanceNode.get("enabled").asBoolean(true);
+                // Note: 'healthy' from config is just initial status hint
+                // Actual health status is managed by HybridHealthChecker via active/passive checks
+                // We store ALL instances (including disabled ones) for health checking
+
+                String instanceEndpoint = "http://" + address + ":" + port;
+                newInstances.add(new ServiceInstance(serviceId, instanceEndpoint, weight, enabled));
+
+                log.debug("Loaded service instance: {} -> {}:{} (weight: {}, enabled: {})",
+                        serviceId, address, port, weight, enabled);
+            }
+
+            if (!newInstances.isEmpty()) {
+                // Use first instance as primary endpoint
+                newEndpoint = new ServiceEndpoint(serviceId, newInstances.get(0).getAddress());
+            }
         }
+
+        if (newInstances == null || newInstances.isEmpty()) {
+            // No valid instances parsed: keep the previous cache rather than
+            // wiping it, so a transient bad push cannot take the service down.
+            log.warn("Service '{}' has no valid instances parsed, keeping previous cache", serviceId);
+            return;
+        }
+
+        // Parsing succeeded - clear stale health records and swap caches.
+        // CRITICAL: clearServiceInstances() checks instanceCache for shared
+        // instances, so it must run BEFORE the instanceCache entry is replaced.
+        hybridHealthChecker.clearServiceInstances(serviceId);
+
+        endpointCache.remove(serviceId);
+        instanceCache.remove(serviceId);
+        roundRobinCounters.remove(serviceId);
+
+        loadBalancerStrategyCache.put(serviceId, loadBalancer);
+        endpointCache.put(serviceId, newEndpoint);
+        instanceCache.put(serviceId, newInstances);
+        roundRobinCounters.put(serviceId, new AtomicInteger(0));
+
+        log.info("Loaded service '{}' with {} instances, loadBalancer: {}",
+                serviceId, newInstances.size(), loadBalancer);
     }
 
     /**

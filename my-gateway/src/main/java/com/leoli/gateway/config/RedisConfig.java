@@ -1,20 +1,26 @@
 package com.leoli.gateway.config;
 
 import com.leoli.gateway.constants.RedisConstants;
+import io.lettuce.core.ClientOptions;
 import io.lettuce.core.cluster.ClusterClientOptions;
 import io.lettuce.core.cluster.ClusterTopologyRefreshOptions;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.connection.ReactiveRedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisClusterConfiguration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.RedisNode;
 import org.springframework.data.redis.connection.RedisSentinelConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import org.springframework.data.redis.connection.lettuce.LettucePoolingClientConfiguration;
+import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 
@@ -120,14 +126,43 @@ public class RedisConfig {
     private RedisConnectionFactory createSingleConnectionFactory() {
         log.info("Configuring single node Redis: {}:{}", host, port);
 
-        LettuceConnectionFactory factory = new LettuceConnectionFactory();
-        factory.setHostName(host);
-        factory.setPort(port);
-        factory.setPassword(password.isEmpty() ? null : password);
-        factory.setDatabase(database);
-        factory.setTimeout(timeout);
+        RedisStandaloneConfiguration redisConfig = new RedisStandaloneConfiguration(host, port);
+        redisConfig.setPassword(password.isEmpty() ? null : password);
+        redisConfig.setDatabase(database);
+        // FIX (dead config): apply the pooled client configuration - previously
+        // single mode used the default client configuration with no pooling.
+        // The client configuration must be passed via the constructor; the factory
+        // has no setter for it.
+        LettuceConnectionFactory factory = new LettuceConnectionFactory(
+                redisConfig, buildPooledClientConfiguration(null));
 
         return initializeFactory(factory, "single node");
+    }
+
+    /**
+     * Build a Lettuce client configuration with the connection pool applied.
+     * <p>
+     * FIX (dead config): maxActive/maxIdle/minIdle were read from
+     * spring.redis.lettuce.pool.* but never wired into any
+     * LettuceClientConfiguration, so pool tuning had no effect and all
+     * blocking commands shared a single multiplexed connection.
+     *
+     * @param clientOptions optional client options (cluster topology refresh)
+     */
+    private LettuceClientConfiguration buildPooledClientConfiguration(ClientOptions clientOptions) {
+        GenericObjectPoolConfig<?> poolConfig = new GenericObjectPoolConfig<>();
+        poolConfig.setMaxTotal(maxActive);
+        poolConfig.setMaxIdle(maxIdle);
+        poolConfig.setMinIdle(minIdle);
+
+        LettucePoolingClientConfiguration.LettucePoolingClientConfigurationBuilder builder =
+                LettucePoolingClientConfiguration.builder()
+                        .poolConfig(poolConfig)
+                        .commandTimeout(Duration.ofMillis(timeout));
+        if (clientOptions != null) {
+            builder.clientOptions(clientOptions);
+        }
+        return builder.build();
     }
 
     /**
@@ -164,9 +199,7 @@ public class RedisConfig {
         // Configure database (sentinel mode also supports database selection)
         sentinelConfig.setDatabase(database);
 
-        LettuceClientConfiguration clientConfig = LettuceClientConfiguration.builder()
-            .commandTimeout(Duration.ofMillis(timeout))
-            .build();
+        LettuceClientConfiguration clientConfig = buildPooledClientConfiguration(null);
 
         LettuceConnectionFactory factory = new LettuceConnectionFactory(sentinelConfig, clientConfig);
         return initializeFactory(factory, "sentinel");
@@ -210,10 +243,7 @@ public class RedisConfig {
             .topologyRefreshOptions(topologyRefreshOptions)
             .build();
 
-        LettuceClientConfiguration clientConfig = LettuceClientConfiguration.builder()
-            .commandTimeout(Duration.ofMillis(timeout))
-            .clientOptions(clusterClientOptions)
-            .build();
+        LettuceClientConfiguration clientConfig = buildPooledClientConfiguration(clusterClientOptions);
 
         LettuceConnectionFactory factory = new LettuceConnectionFactory(clusterConfig, clientConfig);
         return initializeFactory(factory, "cluster");
@@ -241,6 +271,25 @@ public class RedisConfig {
         StringRedisTemplate template = new StringRedisTemplate();
         template.setConnectionFactory(factory);
         return template;
+    }
+
+    /**
+     * ReactiveStringRedisTemplate Bean.
+     * <p>
+     * FIX (blocking Redis on Netty EventLoop): hot-path components (HMAC nonce
+     * validation, distributed rate limiting, token quota) must use this reactive
+     * template instead of the blocking StringRedisTemplate, otherwise a Redis
+     * round-trip blocks an EventLoop thread and stalls every connection sharing it.
+     */
+    @Bean
+    public ReactiveStringRedisTemplate reactiveStringRedisTemplate(RedisConnectionFactory factory) {
+        // LettuceConnectionFactory implements ReactiveRedisConnectionFactory; the bean
+        // method return type is the broader RedisConnectionFactory, so cast here.
+        if (!(factory instanceof ReactiveRedisConnectionFactory reactiveFactory)) {
+            throw new IllegalStateException("Redis connection factory does not support reactive access: "
+                    + factory.getClass().getName());
+        }
+        return new ReactiveStringRedisTemplate(reactiveFactory);
     }
 
     /**

@@ -160,10 +160,14 @@ public class HistoricalDataTracker {
         int limit = Math.min(minutes, MAX_SNAPSHOTS);
         List<HistoricalSnapshot> result = new ArrayList<>();
 
+        // FIX (wrong direction): snapshots are appended oldest->newest, so
+        // iterating from the head collected the OLDEST N minutes instead of
+        // the RECENT N minutes. Walk from the tail (newest first) and then
+        // reverse back to chronological order for chart display.
         int count = 0;
-        for (HistoricalSnapshot snapshot : historicalSnapshots) {
-            if (count >= limit) break;
-            result.add(snapshot);
+        Iterator<HistoricalSnapshot> it = historicalSnapshots.descendingIterator();
+        while (it.hasNext() && count < limit) {
+            result.add(it.next());
             count++;
         }
 

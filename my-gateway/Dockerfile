@@ -2,7 +2,7 @@
 # Build jar first: mvn clean package -DskipTests
 # Using eclipse-temurin (Ubuntu-based) with required tools
 
-FROM eclipse-temurin:17-jre
+FROM eclipse-temurin:21-jre
 WORKDIR /app
 
 # Install useful tools for debugging (Ubuntu-based)

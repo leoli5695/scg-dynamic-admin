@@ -1,5 +1,6 @@
 package com.leoli.gateway.filter.security;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.util.RouteUtils;
@@ -16,6 +17,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
+import org.springframework.util.AntPathMatcher;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
@@ -23,6 +25,8 @@ import reactor.core.publisher.Mono;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -40,6 +44,7 @@ import java.util.stream.Collectors;
 public class SecurityGlobalFilter implements GlobalFilter, Ordered {
 
     private final StrategyManager strategyManager;
+    private final ObjectMapper objectMapper;
 
     /**
      * Maximum body size for security scanning (default: 10MB).
@@ -48,16 +53,19 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
      */
     private static final int MAX_BODY_SIZE_BYTES = 10 * 1024 * 1024;  // 10MB
 
-    // SQL Injection patterns
+    /** Ant-style matcher for excludePaths (* = single segment, ** = multiple). */
+    private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
+
+    // High-confidence SQL injection patterns - a single hit blocks in BLOCK mode
     private static final List<Pattern> SQL_INJECTION_PATTERNS = Arrays.asList(
             // SQL keywords with context
             Pattern.compile("(?i)(\\b(select|insert|update|delete|drop|create|alter|truncate|exec|execute)\\b.*\\b(from|into|table|database|set|where)\\b)"),
             // Union-based
             Pattern.compile("(?i)(union\\s+(all\\s+)?select)"),
-            // Comment injection
-            Pattern.compile("(--|/\\*|\\*/|#)"),
-            // Boolean-based (with or without quotes): OR '1'='1', OR 1=1, OR 'a'='a'
-            Pattern.compile("(?i)(\\b(and|or)\\b\\s+(['\"]?\\w+['\"]?\\s*=\\s*['\"]?\\w+['\"]?))"),
+            // Boolean-based: only quote/number tautology forms. FIX (false positives):
+            // the old \\b(and|or)\\b\\s+\\w+=\\w+ form fired on natural language such as
+            // "color or size=large".
+            Pattern.compile("(?i)\\b(and|or)\\b\\s+(\\d+\\s*=\\s*\\d+|'[^']*'\\s*=|\"[^\"]*\"\\s*=)"),
             // Tautology: '1'='1', 1=1, 'a'='a'
             Pattern.compile("(?i)(['\"]\\s*=\\s*['\"])"),
             // Single quote followed by SQL keyword
@@ -74,6 +82,16 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
             Pattern.compile("(?i)(information_schema\\.)"),
             // Quote escape patterns
             Pattern.compile("('\\s*(;|%3B|--|%2D%2D))")
+    );
+
+    // Low-confidence SQL injection patterns - only block when combined with a
+    // high-confidence hit. FIX (false positives): the old bare (--|/\*|\*/|#)
+    // pattern fired on any text containing "#" or "--" (URL fragments, markdown,
+    // dates like 2024--2025, passwords). Comment markers now require trailing
+    // whitespace or end-of-value, so embedded "--"/"#section" no longer matches.
+    private static final List<Pattern> SQL_LOW_CONFIDENCE_PATTERNS = Arrays.asList(
+            Pattern.compile("(?:--|#)(?:\\s|$)"),
+            Pattern.compile("/\\*|\\*/")
     );
 
     // XSS patterns
@@ -125,11 +143,14 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getURI().getPath();
 
-        // Check exclude paths
+        // Check exclude paths - FIX: AntPathMatcher instead of per-request regex
+        // compilation. The old excludePath.replace("*", ".*") recompiled a regex on
+        // every request, did not escape regex metacharacters (. + etc.) and let *
+        // cross segment boundaries.
         List<String> excludePaths = getStringListValue(config, "excludePaths");
         if (excludePaths != null && !excludePaths.isEmpty()) {
             for (String excludePath : excludePaths) {
-                if (path.matches(excludePath.replace("*", ".*"))) {
+                if (PATH_MATCHER.match(excludePath, path)) {
                     log.debug("Path {} excluded from security check", path);
                     return chain.filter(exchange);
                 }
@@ -142,6 +163,9 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
         boolean enableSqlInjection = getBoolValue(config, "enableSqlInjectionProtection", true);
         boolean enableXss = getBoolValue(config, "enableXssProtection", true);
         String mode = getStringValue(config, "mode", "BLOCK");
+        // FIX (false positives): parameter names listed here are skipped entirely
+        // (e.g. fields that legitimately carry markdown/code/base64 content).
+        List<String> whitelistParams = getStringListValue(config, "whitelistParams");
 
         // Log security settings (DEBUG level to avoid high-frequency logging)
         if (log.isDebugEnabled()) {
@@ -156,6 +180,9 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
             MultiValueMap<String, String> queryParams = request.getQueryParams();
             for (Map.Entry<String, List<String>> entry : queryParams.entrySet()) {
                 String paramName = entry.getKey();
+                if (whitelistParams != null && whitelistParams.contains(paramName)) {
+                    continue;
+                }
                 for (String paramValue : entry.getValue()) {
                     checkValue(paramName + "=" + paramValue, enableSqlInjection, enableXss, threats);
                 }
@@ -187,9 +214,15 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * Check if request has a body.
-     * Note: GET requests can have body (not recommended by HTTP spec but allowed),
-     * and attackers may exploit this to bypass security checks.
+     * Check if the request may carry a body that must be scanned.
+     * <p>
+     * FIX (Content-Type bypass): previously only JSON and form-urlencoded bodies
+     * were scanned, so an attacker could smuggle payloads with
+     * Content-Type: text/xml, text/plain or multipart/form-data (the console even
+     * supports XML protocol conversion). Now ANY request that shows evidence of a
+     * body (Content-Type present, Content-Length > 0, or chunked transfer) is
+     * scanned regardless of media type. The 10MB cap in checkRequestBody still
+     * applies, and WebSocket upgrade streams are never consumed.
      */
     private boolean hasBody(ServerHttpRequest request) {
         // Only skip HEAD method (GET and DELETE can have body for security check)
@@ -197,10 +230,22 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
         if ("HEAD".equals(method)) {
             return false;
         }
-        MediaType contentType = request.getHeaders().getContentType();
-        return contentType != null &&
-                (contentType.includes(MediaType.APPLICATION_JSON) ||
-                        contentType.includes(MediaType.APPLICATION_FORM_URLENCODED));
+        HttpHeaders headers = request.getHeaders();
+        // Never consume WebSocket upgrade streams
+        if (headers.containsKey(HttpHeaders.UPGRADE)) {
+            return false;
+        }
+        // Any declared content type means a body must be scanned (XML, multipart,
+        // text/plain, custom vendor types included)
+        if (headers.getContentType() != null) {
+            return true;
+        }
+        // Body without a declared type: explicit length or chunked transfer
+        if (headers.getContentLength() > 0) {
+            return true;
+        }
+        String transferEncoding = headers.getFirst(HttpHeaders.TRANSFER_ENCODING);
+        return transferEncoding != null && transferEncoding.toLowerCase().contains("chunked");
     }
 
     /**
@@ -259,23 +304,32 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
                     dataBuffer.read(bytes);
                     DataBufferUtils.release(dataBuffer);
 
+                    // SECURITY: the full body is always scanned. A previous
+                    // optimization truncated the scan to the leading 512KB for large
+                    // bodies, which let attackers bypass WAF detection deterministically
+                    // by padding a body past the scan limit (payload placed after the
+                    // boundary was never inspected). The 10MB cap in MAX_BODY_SIZE_BYTES
+                    // already bounds the worst-case decode/regex cost, so correctness
+                    // wins over the marginal hot-path saving.
                     String body = new String(bytes, StandardCharsets.UTF_8);
                     List<String> threats = new ArrayList<>(existingThreats);
                     checkValue(body, enableSqlInjection, enableXss, threats);
 
-                    if (!threats.isEmpty()) {
-                        return handleThreat(exchange, threats, mode, chain);
-                    }
-
-                    // Rebuild request with body
+                    // Rebuild request with cached body BEFORE threat handling, so that
+                    // DETECT mode (which forwards the request) does not lose the consumed body.
                     ServerHttpRequest newRequest = new org.springframework.http.server.reactive.ServerHttpRequestDecorator(request) {
                         @Override
                         public reactor.core.publisher.Flux<DataBuffer> getBody() {
                             return reactor.core.publisher.Flux.just(exchange.getResponse().bufferFactory().wrap(bytes));
                         }
                     };
+                    ServerWebExchange rebuiltExchange = exchange.mutate().request(newRequest).build();
 
-                    return chain.filter(exchange.mutate().request(newRequest).build());
+                    if (!threats.isEmpty()) {
+                        return handleThreat(rebuiltExchange, threats, mode, chain);
+                    }
+
+                    return chain.filter(rebuiltExchange);
                 });
     }
 
@@ -294,12 +348,17 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
 
     /**
      * Check a value for threats.
+     * <p>
+     * Low-confidence SQL patterns (bare comment markers) only count as a threat
+     * when a high-confidence pattern also matched, to keep BLOCK mode from
+     * rejecting legitimate content.
      */
     private void checkValue(String value, boolean checkSql, boolean checkXss, List<String> threats) {
         if (value == null || value.isEmpty()) {
             return;
         }
 
+        int hitsBefore = threats.size();
         if (checkSql) {
             for (Pattern pattern : SQL_INJECTION_PATTERNS) {
                 if (pattern.matcher(value).find()) {
@@ -314,6 +373,15 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
                 if (pattern.matcher(value).find()) {
                     threats.add("XSS: " + pattern.pattern());
                     log.warn("XSS detected: pattern={}", pattern.pattern());
+                }
+            }
+        }
+
+        if (checkSql && threats.size() > hitsBefore) {
+            for (Pattern pattern : SQL_LOW_CONFIDENCE_PATTERNS) {
+                if (pattern.matcher(value).find()) {
+                    threats.add("SQL_INJECTION: " + pattern.pattern());
+                    log.warn("SQL injection detected (low-confidence, correlated): pattern={}", pattern.pattern());
                 }
             }
         }
@@ -336,10 +404,20 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
         response.setStatusCode(HttpStatus.BAD_REQUEST);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
 
-        String body = String.format(
-                "{\"error\":\"Security threat detected\",\"threats\":[\"%s\"]}",
-                String.join("\", \"", threats)
-        );
+        String body;
+        try {
+            // FIX (response injection): threats contain regex pattern text with
+            // quotes/backslashes - serialize with Jackson instead of hand-built
+            // String.format JSON, which produced invalid JSON and allowed response
+            // body injection.
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("error", "Security threat detected");
+            payload.put("threats", threats);
+            body = objectMapper.writeValueAsString(payload);
+        } catch (Exception e) {
+            log.warn("Failed to serialize security threat response", e);
+            body = "{\"error\":\"Security threat detected\"}";
+        }
 
         DataBuffer buffer = response.bufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8));
         return response.writeWith(Mono.just(buffer));

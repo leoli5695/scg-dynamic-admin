@@ -22,7 +22,7 @@ echo ============================================================
 REM 检查 Java
 java -version >nul 2>&1
 if errorlevel 1 (
-    echo [ERROR] 未找到 Java，请先安装 JDK 17+
+    echo [ERROR] 未找到 Java，请先安装 JDK 21+
     pause
     exit /b 1
 )

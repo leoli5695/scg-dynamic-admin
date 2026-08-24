@@ -14,6 +14,9 @@ server:
     min-response-size: 1024
 
 spring:
+  threads:
+    virtual:
+      enabled: true  # JDK 21 虚拟线程：Tomcat 请求线程 + @Async + @Scheduled 全部使用虚拟线程，缓解异构负载线程池竞争
   application:
     name: gateway-admin
   cache:
@@ -41,7 +44,7 @@ spring:
       leak-detection-threshold: ${DB_LEAK_DETECTION_THRESHOLD:60000}
   jpa:
     hibernate:
-      ddl-auto: update  # Auto-create tables if not exist
+      ddl-auto: ${JPA_DDL_AUTO:update}  # Auto-create tables if not exist; set to 'validate' in production
     show-sql: false
     properties:
       hibernate:
@@ -56,6 +59,9 @@ spring:
   data:
     redis:
       host: ${REDIS_HOST:localhost}
+      # NOTE: 30379 is the K8s NodePort for the test namespace.
+      # Override via REDIS_PORT in production (in-cluster DNS: redis:6379).
+      # See application-prod.yml for production-safe defaults.
       port: ${REDIS_PORT:30379}
       password: ${REDIS_PASSWORD:}
       database: 0
@@ -72,6 +78,9 @@ spring:
   # 本地开发模式禁用服务注册（NACOS_DISCOVERY_ENABLED=false）
   # ============================================================================
   cloud:
+    # NOTE: localhost:30848 is the K8s NodePort for the test namespace.
+    # Override via NACOS_SERVER_ADDR in production (in-cluster DNS: nacos:8848).
+    # See application-prod.yml for production-safe defaults.
     nacos:
       discovery:
         server-addr: ${NACOS_SERVER_ADDR:localhost:30848}
@@ -138,9 +147,19 @@ gateway:
       enabled: true  # Enable JWT for production
     ssl:
       # SECURITY FIX (C6/C7): SSL encryption key for password protection (AES-GCM)
-      # Local dev default provided below, production should override via environment variable
-      # Minimum: 16 bytes (128 bits), Recommended: 32 bytes for AES-256
-      encryption-key: ${GATEWAY_ADMIN_SSL_ENCRYPTION_KEY:LocalDevSSLKey16!}
+      # FIX: no hardcoded default anymore - startup fails if unset (same posture as JWT secret).
+      # GATEWAY_ENCRYPTION_KEY is the primary env var; legacy GATEWAY_ADMIN_SSL_ENCRYPTION_KEY still honored.
+      # This key is shared with ApiKeyEncryptor (AI API key encryption).
+      # Minimum: 16 bytes (128 bits), Recommended: 32 bytes
+      encryption-key: ${GATEWAY_ENCRYPTION_KEY:${GATEWAY_ADMIN_SSL_ENCRYPTION_KEY:}}
+    security:
+      # Shared secret for gateway instance internal report endpoints
+      # (heartbeat / trace upload / health sync), sent as X-Internal-Token header.
+      # SECURITY FIX: REQUIRED - startup fails when empty (same posture as the JWT
+      # secret), so the report endpoints can never run unprotected.
+      # Must match gateway.admin.internal-token on gateway instances.
+      # Generate with: openssl rand -base64 32
+      internal-token: ${GATEWAY_INTERNAL_TOKEN:}
   # ============================================================================
   # Jaeger 分布式追踪配置（K8s test 命名空间，NodePort 映射）
   # ============================================================================
@@ -207,11 +226,22 @@ gateway:
     # Health status retention in memory (milliseconds)
     memory-retention-ms: 600000  # 10 minutes
 
+    # ==========================================================================
+    # Reconciliation Configuration
+    # ==========================================================================
+    # Interval between DB-Nacos reconciliation runs (milliseconds).
+    # Window was 5 minutes - route changes could take up to 5 minutes to reach
+    # the gateway after a failed Nacos push. Default shortened to 60s.
+    reconcile:
+      interval-ms: ${RECONCILE_INTERVAL_MS:60000}
+
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus,metrics
+        # Security: only expose essential endpoints by default.
+        # Add gateway*, routes, services, strategies via ACTUATOR_EXPOSURE_INCLUDE for debugging.
+        include: ${ACTUATOR_EXPOSURE_INCLUDE:health,info,prometheus,metrics}
   endpoint:
     health:
       # SECURITY FIX (M5): Changed from 'always' to 'when-authorized'
@@ -274,12 +304,12 @@ otel:
 # SpringDoc OpenAPI Configuration
 springdoc:
   api-docs:
-    enabled: ${SPRINGDOC_ENABLED:true}
+    enabled: ${SPRINGDOC_ENABLED:false}
     path: /v3/api-docs
   swagger-ui:
-    enabled: ${SPRINGDOC_SWAGGER_UI_ENABLED:true}
+    enabled: ${SPRINGDOC_SWAGGER_UI_ENABLED:false}
     path: /swagger-ui.html
-  show-actuator: true
+  show-actuator: ${SPRINGDOC_SHOW_ACTUATOR:false}
   packages-to-scan: com.leoli.gateway.admin.controller
   default-produces-media-type: application/json
 

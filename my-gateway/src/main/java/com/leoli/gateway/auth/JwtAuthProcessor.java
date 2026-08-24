@@ -1,5 +1,7 @@
 package com.leoli.gateway.auth;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.leoli.gateway.enums.AuthType;
 import com.leoli.gateway.model.AuthConfig;
 import io.jsonwebtoken.*;
@@ -8,6 +10,7 @@ import io.jsonwebtoken.security.SignatureException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.util.DigestUtils;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
@@ -16,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
 import java.security.PublicKey;
 import java.security.spec.X509EncodedKeySpec;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.Date;
 
@@ -39,6 +43,25 @@ public class JwtAuthProcessor extends AbstractAuthProcessor {
 
     @Autowired
     private JwtValidationCache jwtCache;
+
+    /**
+     * FIX (CPU exhaustion DoS): JwtParser instances are immutable and expensive to build
+     * (PBKDF2 key derivation alone costs 10000 iterations for short secrets). Previously
+     * EVERY cache miss rebuilt the parser - an attacker flooding forged tokens could pin
+     * all EventLoop cores. Cache the built parser per policy-config fingerprint.
+     */
+    private final Cache<String, JwtParser> parserCache = Caffeine.newBuilder()
+            .maximumSize(256)
+            .build();
+
+    /**
+     * FIX (no negative cache): invalid tokens forced a full parse + signature verification
+     * on every request. Short-lived negative cache rejects repeat offenders in O(1).
+     */
+    private final Cache<String, Boolean> invalidTokenCache = Caffeine.newBuilder()
+            .maximumSize(10_000)
+            .expireAfterWrite(Duration.ofSeconds(5))
+            .build();
 
     @Override
     public AuthType getAuthType() {
@@ -67,6 +90,15 @@ public class JwtAuthProcessor extends AbstractAuthProcessor {
         final String finalToken = token;
         final String policyId = config.getPolicyId();
 
+        // FIX (DoS): negative cache - tokens that recently failed validation are rejected
+        // immediately instead of re-running full parse/signature verification every request.
+        final String negativeKey = policyId + ":" +
+                DigestUtils.md5DigestAsHex(finalToken.getBytes(StandardCharsets.UTF_8));
+        if (invalidTokenCache.getIfPresent(negativeKey) != null) {
+            logFailure("JWT", "Token rejected via negative cache (recent validation failure)");
+            return Mono.error(new RuntimeException("Invalid JWT token"));
+        }
+
         // Try cache first
         Claims cachedClaims = jwtCache.get(finalToken, policyId);
         if (cachedClaims != null) {
@@ -90,21 +122,27 @@ public class JwtAuthProcessor extends AbstractAuthProcessor {
             return Mono.empty(); // Continue the filter chain
 
         } catch (ExpiredJwtException ex) {
+            invalidTokenCache.put(negativeKey, Boolean.TRUE);
             logFailure("JWT", "JWT token expired: " + ex.getMessage());
             return Mono.error(new RuntimeException("JWT token has expired"));
         } catch (UnsupportedJwtException ex) {
+            invalidTokenCache.put(negativeKey, Boolean.TRUE);
             logFailure("JWT", "Unsupported JWT: " + ex.getMessage());
             return Mono.error(new RuntimeException("Unsupported JWT token format"));
         } catch (MalformedJwtException ex) {
+            invalidTokenCache.put(negativeKey, Boolean.TRUE);
             logFailure("JWT", "Malformed JWT: " + ex.getMessage());
             return Mono.error(new RuntimeException("Malformed JWT token"));
         } catch (SignatureException ex) {
+            invalidTokenCache.put(negativeKey, Boolean.TRUE);
             logFailure("JWT", "Invalid JWT signature: " + ex.getMessage());
             return Mono.error(new RuntimeException("Invalid JWT signature"));
         } catch (IllegalArgumentException ex) {
+            invalidTokenCache.put(negativeKey, Boolean.TRUE);
             logFailure("JWT", "Invalid JWT: " + ex.getMessage());
             return Mono.error(new RuntimeException("Invalid JWT token"));
         } catch (Exception ex) {
+            invalidTokenCache.put(negativeKey, Boolean.TRUE);
             logFailure("JWT", "JWT validation error: " + ex.getMessage());
             return Mono.error(new RuntimeException("JWT validation failed: " + ex.getMessage()));
         }
@@ -126,10 +164,38 @@ public class JwtAuthProcessor extends AbstractAuthProcessor {
 
     /**
      * Validate JWT token and return claims.
+     * <p>
+     * FIX (parser rebuilt on every miss): the parser is cached by a fingerprint of the
+     * policy configuration, so key derivation (PBKDF2/RSA parsing) happens once per
+     * configuration instead of once per request.
      */
     private Claims validateToken(String token, AuthConfig config) throws Exception {
         String algorithm = config.getJwtAlgorithm() != null ? config.getJwtAlgorithm().toUpperCase() : "HS256";
 
+        // Fingerprint covers every config value that influences the parser, so a policy
+        // update automatically produces a new cache key (stale parsers are never reused).
+        String fingerprint = algorithm + "|" + config.getSecretKey() + "|" + config.getJwtPublicKey()
+                + "|" + config.getJwtIssuer() + "|" + config.getJwtAudience()
+                + "|" + config.getJwtClockSkewSeconds();
+        String parserKey = config.getPolicyId() + ":" +
+                DigestUtils.md5DigestAsHex(fingerprint.getBytes(StandardCharsets.UTF_8));
+
+        JwtParser parser = parserCache.get(parserKey, k -> buildParser(config, algorithm));
+
+        // Parse and validate
+        Jwt<?, Claims> jwt = parser.parseSignedClaims(token);
+        Claims claims = jwt.getPayload();
+
+        // Additional custom validations
+        validateCustomClaims(claims, config);
+
+        return claims;
+    }
+
+    /**
+     * Build an immutable, thread-safe JwtParser for the given configuration.
+     */
+    private JwtParser buildParser(AuthConfig config, String algorithm) {
         JwtParserBuilder parserBuilder = Jwts.parser();
 
         switch (algorithm) {
@@ -139,8 +205,12 @@ public class JwtAuthProcessor extends AbstractAuthProcessor {
                 parserBuilder.verifyWith(key);
                 break;
             case "RS256":
-                PublicKey publicKey = getPublicKey(config.getJwtPublicKey());
-                parserBuilder.verifyWith(publicKey);
+                try {
+                    PublicKey publicKey = getPublicKey(config.getJwtPublicKey());
+                    parserBuilder.verifyWith(publicKey);
+                } catch (Exception e) {
+                    throw new IllegalArgumentException("Invalid RS256 public key: " + e.getMessage(), e);
+                }
                 break;
             default:
                 // Default to HS256
@@ -162,14 +232,7 @@ public class JwtAuthProcessor extends AbstractAuthProcessor {
             parserBuilder.requireAudience(config.getJwtAudience());
         }
 
-        // Parse and validate
-        Jwt<?, Claims> jwt = parserBuilder.build().parseSignedClaims(token);
-        Claims claims = jwt.getPayload();
-
-        // Additional custom validations
-        validateCustomClaims(claims, config);
-
-        return claims;
+        return parserBuilder.build();
     }
 
     /**

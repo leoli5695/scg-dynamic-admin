@@ -1854,3 +1854,41 @@ This API Gateway architecture demonstrates:
 
 For feature documentation, see [FEATURES.md](FEATURES.md).
 For quick start guide, see [QUICK_START.md](QUICK_START.md).
+
+## 23. Known Limitations & Trade-offs
+
+### 23.1 Admin Monolith Carries Heterogeneous Workloads
+
+gateway-admin is a single Spring Boot process that hosts:
+
+- Route/service/plugin CRUD (management plane)
+- Kubernetes cluster management (Pod stats, node info, namespace ops)
+- Stress test orchestration (JMeter execution, result aggregation)
+- AI Copilot (LLM calls, tool-call loops, streaming responses)
+- Distributed trace ingestion and query
+- Health heartbeat aggregation
+
+**Impact**: a stress-test run or AI Copilot session can saturate the admin's
+thread pool and starve management-plane requests (route publishing, health
+sync). There is no workload isolation or priority queue today.
+
+**Mitigation**: the admin itself is not on the data-plane hot path, so
+routing never breaks, but the console UI may become unresponsive under
+combined load. Long-term, move stress-test execution and AI inference to
+separate worker services.
+
+### 23.2 Configuration Defaults Coupled to K8s Test Namespace
+
+NodePort addresses (localhost:30848 for Nacos, :30379 for Redis, :30500 for
+Consul, :30686 for Jaeger, :30263 for OTLP, :30090 for Prometheus, :30808
+for RocketMQ Console) are hardcoded as default values in application.yml.
+Switching to a different K8s namespace or a non-K8s environment requires
+overriding every host/port via environment variables. The production profile
+(application-prod.yml) documents the expected in-cluster DNS names.
+
+### 23.3 Write Consistency Window (MySQL → Nacos)
+
+When a route/service update succeeds in MySQL but the subsequent Nacos
+publish fails, the gateway operates on stale configuration until the
+reconciliation task runs (default 60s). During this window, the console
+shows the new config as "saved" while the gateway still uses the old one.

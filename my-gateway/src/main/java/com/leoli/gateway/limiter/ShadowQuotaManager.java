@@ -103,6 +103,13 @@ public class ShadowQuotaManager implements ApplicationListener<HeartbeatEvent> {
     private final ConcurrentHashMap<String, AtomicLong> shadowQuotas = new ConcurrentHashMap<>();
 
     /**
+     * FIX (SCAN pattern mismatch): strategyId per route. When known, the snapshot job
+     * scans "rate_limit:{strategyId}:*" which matches every key the rate limiter
+     * actually writes (all key types: combined/route/ip/user/header).
+     */
+    private final ConcurrentHashMap<String, String> routeStrategyIds = new ConcurrentHashMap<>();
+
+    /**
      * Redis health status
      */
     private volatile boolean redisHealthy = true;
@@ -265,6 +272,12 @@ public class ShadowQuotaManager implements ApplicationListener<HeartbeatEvent> {
     /**
      * Update global QPS snapshots from Redis.
      * Uses SCAN command (non-blocking) instead of KEYS (blocking).
+     * <p>
+     * FIX (SCAN pattern mismatch): the previous pattern "rate_limit:*:{routeId}*" never
+     * matched the real key layout "rate_limit:{strategyId}:{keyType}:..." (ip/user/header
+     * keys do not contain the routeId at all), so snapshots stayed 0 and shadow quotas
+     * were never refreshed from actual traffic. When the strategyId is registered we now
+     * scan "rate_limit:{strategyId}:*" which covers every key type.
      */
     private void updateGlobalQpsSnapshots() {
         int nodeCount = cachedNodeCount.get();
@@ -274,7 +287,10 @@ public class ShadowQuotaManager implements ApplicationListener<HeartbeatEvent> {
                 long totalQps = 0;
 
                 // Use SCAN (non-blocking) instead of KEYS (blocking)
-                String pattern = RateLimitConstants.RATE_LIMIT_KEY_SCAN_PATTERN + routeId + "*";
+                String strategyId = routeStrategyIds.get(routeId);
+                String pattern = (strategyId != null && !strategyId.isEmpty())
+                        ? RateLimitConstants.RATE_LIMIT_KEY_PREFIX + strategyId + ":*"
+                        : RateLimitConstants.RATE_LIMIT_KEY_SCAN_PATTERN + routeId + "*";
                 ScanOptions scanOptions = ScanOptions.scanOptions()
                     .match(pattern)
                     .count(100)
@@ -366,9 +382,24 @@ public class ShadowQuotaManager implements ApplicationListener<HeartbeatEvent> {
      * @param configQps Configured QPS for the route
      */
     public void registerRoute(String routeId, int configQps) {
+        registerRoute(routeId, null, configQps);
+    }
+
+    /**
+     * Register a route for shadow quota tracking with its rate-limit strategyId,
+     * enabling strategy-scoped SCAN snapshots (see updateGlobalQpsSnapshots).
+     *
+     * @param routeId    Route identifier
+     * @param strategyId Rate limit strategy id (nullable for legacy strategies)
+     * @param configQps  Configured QPS for the route
+     */
+    public void registerRoute(String routeId, String strategyId, int configQps) {
         int nodeCount = Math.max(1, cachedNodeCount.get());
         shadowQuotas.computeIfAbsent(routeId, k -> new AtomicLong(configQps / nodeCount));
         globalQpsSnapshots.computeIfAbsent(routeId, k -> new AtomicLong(configQps));
+        if (strategyId != null && !strategyId.isEmpty()) {
+            routeStrategyIds.putIfAbsent(routeId, strategyId);
+        }
         log.debug("Registered route {} for shadow quota tracking, initial quota: {}",
                 routeId, configQps / nodeCount);
     }

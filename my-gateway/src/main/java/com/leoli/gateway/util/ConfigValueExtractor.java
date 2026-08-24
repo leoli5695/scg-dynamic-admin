@@ -200,6 +200,10 @@ public final class ConfigValueExtractor {
 
     /**
      * Get window size in milliseconds based on time unit.
+     * <p>
+     * FIX (windowSizeMs key silently ignored): an explicit positive {@code windowSizeMs}
+     * (milliseconds) in the strategy config now takes precedence over the semantic
+     * {@code timeUnit} key. Existing configs using timeUnit keep working unchanged.
      *
      * @param configMap Configuration map
      * @param timeUnitKey Key for time unit configuration
@@ -207,6 +211,12 @@ public final class ConfigValueExtractor {
      * @return Window size in milliseconds
      */
     public static long getWindowSizeMs(Map<String, Object> configMap, String timeUnitKey, long defaultMs) {
+        if (configMap != null && configMap.get("windowSizeMs") != null) {
+            long explicitMs = getLong(configMap, "windowSizeMs", -1);
+            if (explicitMs > 0) {
+                return explicitMs;
+            }
+        }
         String timeUnit = getString(configMap, timeUnitKey, "second");
         return convertTimeUnitToMs(timeUnit, defaultMs);
     }

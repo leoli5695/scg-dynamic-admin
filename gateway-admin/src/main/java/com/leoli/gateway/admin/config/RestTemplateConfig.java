@@ -1,8 +1,10 @@
 package com.leoli.gateway.admin.config;
 
+import com.leoli.gateway.admin.properties.GatewayAdminProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 
@@ -31,11 +33,26 @@ public class RestTemplateConfig {
     private int readTimeoutMs = 30000;
 
     @Bean
-    public RestTemplate restTemplate() {
+    public RestTemplate restTemplate(GatewayAdminProperties properties) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(connectTimeoutMs);
         factory.setReadTimeout(readTimeoutMs);
-        return new RestTemplate(factory);
+        RestTemplate template = new RestTemplate(factory);
+
+        // FIX: gateway instances now protect /internal/** endpoints with the shared
+        // X-Internal-Token. Attach the token to all outbound calls targeting those
+        // endpoints (filter-chain stats, circuit breaker control, etc.).
+        String internalToken = properties.getSecurity().getInternalToken();
+        if (internalToken != null && !internalToken.isEmpty()) {
+            ClientHttpRequestInterceptor tokenInterceptor = (request, body, execution) -> {
+                if (request.getURI().getPath().startsWith("/internal/")) {
+                    request.getHeaders().set("X-Internal-Token", internalToken);
+                }
+                return execution.execute(request, body);
+            };
+            template.getInterceptors().add(tokenInterceptor);
+        }
+        return template;
     }
 
     // Getter and setter for configuration properties

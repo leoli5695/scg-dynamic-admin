@@ -1,12 +1,15 @@
 package com.leoli.gateway.filter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.filter.ratelimit.MultiDimRateLimiterFilter;
 import com.leoli.gateway.limiter.DistributedRateLimiter;
 import com.leoli.gateway.limiter.RateLimitResult;
 import com.leoli.gateway.limiter.RedisHealthChecker;
 import com.leoli.gateway.limiter.ShadowQuotaManager;
 import com.leoli.gateway.manager.StrategyManager;
+import com.leoli.gateway.model.MultiDimRateLimiterConfig;
+import com.leoli.gateway.model.StrategyDefinition;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -22,16 +25,16 @@ import org.springframework.test.util.ReflectionTestUtils;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import java.util.HashMap;
-import java.util.Map;
-
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
  * Unit tests for MultiDimRateLimiterFilter.
- * Tests multi-dimensional rate limiting with Global, Tenant, User, and IP levels.
+ * <p>
+ * Regression coverage for the reactive refactor (FIX: blocking Redis on EventLoop):
+ * dimensions are checked through tryAcquireReactive and the reactive pipeline must
+ * keep the original FIRST_HIT short-circuit / ALL_HIT evaluate-all semantics.
  */
 @ExtendWith(MockitoExtension.class)
 class MultiDimRateLimiterFilterTest {
@@ -74,7 +77,8 @@ class MultiDimRateLimiterFilterTest {
         @DisplayName("Filter should pass through when config is null")
         void testFilter_nullConfig() {
             MockServerWebExchange exchange = createMockExchange("/api/test", "test-route");
-            when(strategyManager.getMultiDimRateLimiterConfig(anyString())).thenReturn(null);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_MULTI_DIM_RATE_LIMITER),
+                    eq(MultiDimRateLimiterConfig.class))).thenReturn(null);
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -88,9 +92,10 @@ class MultiDimRateLimiterFilterTest {
         @DisplayName("Filter should pass through when disabled")
         void testFilter_disabledConfig() {
             MockServerWebExchange exchange = createMockExchange("/api/test", "test-route");
-            Map<String, Object> config = new HashMap<>();
-            config.put("enabled", false);
-            when(strategyManager.getMultiDimRateLimiterConfig(anyString())).thenReturn(config);
+            MultiDimRateLimiterConfig config = createMultiDimConfig(true, 100, false, 0, false, 0, false, 0);
+            config.setEnabled(false);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_MULTI_DIM_RATE_LIMITER),
+                    eq(MultiDimRateLimiterConfig.class))).thenReturn(config);
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -102,7 +107,7 @@ class MultiDimRateLimiterFilterTest {
     }
 
     @Nested
-    @DisplayName("Multi-Dimension Rate Limiting Tests")
+    @DisplayName("Multi-Dimension Rate Limiting Tests (reactive Redis path)")
     class MultiDimensionTests {
 
         @Test
@@ -110,11 +115,11 @@ class MultiDimRateLimiterFilterTest {
         void testFilter_allDimensionsPass() {
             MockServerWebExchange exchange = createMockExchange("/api/test", "test-route");
 
-            Map<String, Object> config = createMultiDimConfig(true, 100, true, 50, true, 10, true, 5);
-            lenient().when(strategyManager.getMultiDimRateLimiterConfig(anyString())).thenReturn(config);
+            MultiDimRateLimiterConfig config = createMultiDimConfig(true, 100, false, 0, false, 0, true, 5);
+            stubConfig(config);
             lenient().when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(true);
-            lenient().when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyInt(), anyLong()))
-                    .thenReturn(RateLimitResult.allowed(99));
+            lenient().when(distributedRateLimiter.tryAcquireReactive(anyString(), anyInt(), anyInt(), anyLong()))
+                    .thenReturn(Mono.just(RateLimitResult.allowed(99)));
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -129,11 +134,11 @@ class MultiDimRateLimiterFilterTest {
         void testFilter_globalLimitExceeded() {
             MockServerWebExchange exchange = createMockExchange("/api/test", "test-route");
 
-            Map<String, Object> config = createMultiDimConfig(true, 100, false, 0, false, 0, false, 0);
-            lenient().when(strategyManager.getMultiDimRateLimiterConfig(anyString())).thenReturn(config);
+            MultiDimRateLimiterConfig config = createMultiDimConfig(true, 100, false, 0, false, 0, false, 0);
+            stubConfig(config);
             lenient().when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(true);
-            lenient().when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyInt(), anyLong()))
-                    .thenReturn(RateLimitResult.denied(0));
+            lenient().when(distributedRateLimiter.tryAcquireReactive(anyString(), anyInt(), anyInt(), anyLong()))
+                    .thenReturn(Mono.just(RateLimitResult.denied(0)));
 
             StepVerifier.create(filter.filter(exchange, chain))
                     .expectComplete()
@@ -144,12 +149,31 @@ class MultiDimRateLimiterFilterTest {
         }
 
         @Test
-        @DisplayName("Should fallback to local limiter when Redis unavailable")
-        void testFilter_fallbackToLocal() {
+        @DisplayName("Should fallback to local limiter when Redis result signals fallback")
+        void testFilter_fallbackToLocalOnRedisFailure() {
             MockServerWebExchange exchange = createMockExchange("/api/test", "test-route");
 
-            Map<String, Object> config = createMultiDimConfig(true, 100, false, 0, false, 0, false, 0);
-            lenient().when(strategyManager.getMultiDimRateLimiterConfig(anyString())).thenReturn(config);
+            MultiDimRateLimiterConfig config = createMultiDimConfig(true, 100, false, 0, false, 0, false, 0);
+            stubConfig(config);
+            lenient().when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(true);
+            lenient().when(distributedRateLimiter.tryAcquireReactive(anyString(), anyInt(), anyInt(), anyLong()))
+                    .thenReturn(Mono.just(RateLimitResult.fallback("Redis down")));
+            when(chain.filter(any())).thenReturn(Mono.empty());
+
+            StepVerifier.create(filter.filter(exchange, chain))
+                    .expectComplete()
+                    .verify();
+
+            verify(chain).filter(exchange);
+        }
+
+        @Test
+        @DisplayName("Should use local limiter when Redis health check reports unavailable")
+        void testFilter_localLimiterWhenRedisUnavailable() {
+            MockServerWebExchange exchange = createMockExchange("/api/test", "test-route");
+
+            MultiDimRateLimiterConfig config = createMultiDimConfig(true, 100, false, 0, false, 0, false, 0);
+            stubConfig(config);
             lenient().when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(false);
             when(chain.filter(any())).thenReturn(Mono.empty());
 
@@ -158,6 +182,93 @@ class MultiDimRateLimiterFilterTest {
                     .verify();
 
             verify(chain).filter(exchange);
+            verifyNoInteractions(distributedRateLimiter);
+        }
+    }
+
+    @Nested
+    @DisplayName("Reject Strategy Semantics (reactive pipeline regression)")
+    class RejectStrategyTests {
+
+        @Test
+        @DisplayName("FIRST_HIT should short-circuit after the first denied dimension")
+        void testFirstHit_shortCircuits() {
+            MockServerWebExchange exchange = createMockExchange("/api/test", "test-route");
+
+            // Global (denied) + IP (would allow): FIRST_HIT must not evaluate IP
+            MultiDimRateLimiterConfig config = createMultiDimConfig(true, 100, false, 0, false, 0, true, 5);
+            config.setRejectStrategy("FIRST_HIT");
+            stubConfig(config);
+            lenient().when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(true);
+            lenient().when(distributedRateLimiter.tryAcquireReactive(anyString(), anyInt(), anyInt(), anyLong()))
+                    .thenReturn(Mono.just(RateLimitResult.denied(0)));
+
+            StepVerifier.create(filter.filter(exchange, chain))
+                    .expectComplete()
+                    .verify();
+
+            verify(chain, never()).filter(any());
+            assertEquals(HttpStatus.TOO_MANY_REQUESTS, exchange.getResponse().getStatusCode());
+            // Only the GLOBAL dimension was evaluated before short-circuiting
+            verify(distributedRateLimiter, times(1))
+                    .tryAcquireReactive(anyString(), anyInt(), anyInt(), anyLong());
+            assertEquals("GLOBAL", exchange.getResponse().getHeaders().getFirst("X-RateLimit-Limit-Level"));
+        }
+
+        @Test
+        @DisplayName("ALL_HIT should evaluate every dimension even after a denial")
+        void testAllHit_evaluatesAllDimensions() {
+            MockServerWebExchange exchange = createMockExchange("/api/test", "test-route");
+
+            // Global (denied) + IP: ALL_HIT must evaluate both dimensions
+            MultiDimRateLimiterConfig config = createMultiDimConfig(true, 100, false, 0, false, 0, true, 5);
+            config.setRejectStrategy("ALL_HIT");
+            stubConfig(config);
+            lenient().when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(true);
+            lenient().when(distributedRateLimiter.tryAcquireReactive(anyString(), anyInt(), anyInt(), anyLong()))
+                    .thenReturn(Mono.just(RateLimitResult.denied(0)));
+
+            StepVerifier.create(filter.filter(exchange, chain))
+                    .expectComplete()
+                    .verify();
+
+            verify(chain, never()).filter(any());
+            assertEquals(HttpStatus.TOO_MANY_REQUESTS, exchange.getResponse().getStatusCode());
+            // Both GLOBAL and IP dimensions were evaluated
+            verify(distributedRateLimiter, times(2))
+                    .tryAcquireReactive(anyString(), anyInt(), anyInt(), anyLong());
+        }
+    }
+
+    @Nested
+    @DisplayName("Local Limiter Behavior")
+    class LocalLimiterTests {
+
+        @Test
+        @DisplayName("Local window should reject after quota exhausted")
+        void testLocalWindow_quotaExhausted() {
+            MultiDimRateLimiterConfig config = createMultiDimConfig(true, 1, false, 0, false, 0, false, 0);
+            config.setGlobalQuota(quota(true, 1, 1, 1000));
+            stubConfig(config);
+            lenient().when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(false);
+
+            // Window(qps=1, burst=1) allows steady + burst = 2 requests
+            when(chain.filter(any())).thenReturn(Mono.empty());
+            for (int i = 0; i < 2; i++) {
+                MockServerWebExchange allowed = createMockExchange("/api/test", "test-route");
+                StepVerifier.create(filter.filter(allowed, chain))
+                        .expectComplete()
+                        .verify();
+            }
+            verify(chain, times(2)).filter(any());
+
+            // Third request within the same window must be rejected
+            MockServerWebExchange third = createMockExchange("/api/test", "test-route");
+            StepVerifier.create(filter.filter(third, chain))
+                    .expectComplete()
+                    .verify();
+            assertEquals(HttpStatus.TOO_MANY_REQUESTS, third.getResponse().getStatusCode());
+            verify(chain, times(2)).filter(any());
         }
     }
 
@@ -169,20 +280,20 @@ class MultiDimRateLimiterFilterTest {
         @DisplayName("Should extract tenant from API key metadata")
         void testExtractTenantFromApiKey() {
             MockServerWebExchange exchange = createMockExchange("/api/test", "test-route");
-            exchange.getAttributes().put("api_key_metadata", Map.of("tenantId", "tenant-001"));
+            exchange.getAttributes().put("api_key_metadata", java.util.Map.of("tenantId", "tenant-001"));
 
-            Map<String, Object> config = createMultiDimConfig(false, 0, true, 50, false, 0, false, 0);
-            lenient().when(strategyManager.getMultiDimRateLimiterConfig(anyString())).thenReturn(config);
+            MultiDimRateLimiterConfig config = createMultiDimConfig(false, 0, true, 50, false, 0, false, 0);
+            stubConfig(config);
             lenient().when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(true);
-            lenient().when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyInt(), anyLong()))
-                    .thenReturn(RateLimitResult.allowed(49));
+            lenient().when(distributedRateLimiter.tryAcquireReactive(anyString(), anyInt(), anyInt(), anyLong()))
+                    .thenReturn(Mono.just(RateLimitResult.allowed(49)));
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
                     .expectComplete()
                     .verify();
 
-            verify(distributedRateLimiter).tryAcquireWithFallback(contains("tenant-001"), eq(50), anyInt(), anyLong());
+            verify(distributedRateLimiter).tryAcquireReactive(contains("tenant-001"), eq(50), anyInt(), anyLong());
         }
 
         @Test
@@ -191,18 +302,18 @@ class MultiDimRateLimiterFilterTest {
             MockServerWebExchange exchange = createMockExchange("/api/test", "test-route");
             exchange.getAttributes().put("jwt_subject", "user-123");
 
-            Map<String, Object> config = createMultiDimConfig(false, 0, false, 0, true, 10, false, 0);
-            lenient().when(strategyManager.getMultiDimRateLimiterConfig(anyString())).thenReturn(config);
+            MultiDimRateLimiterConfig config = createMultiDimConfig(false, 0, false, 0, true, 10, false, 0);
+            stubConfig(config);
             lenient().when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(true);
-            lenient().when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyInt(), anyLong()))
-                    .thenReturn(RateLimitResult.allowed(9));
+            lenient().when(distributedRateLimiter.tryAcquireReactive(anyString(), anyInt(), anyInt(), anyLong()))
+                    .thenReturn(Mono.just(RateLimitResult.allowed(9)));
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
                     .expectComplete()
                     .verify();
 
-            verify(distributedRateLimiter).tryAcquireWithFallback(contains("user-123"), eq(10), anyInt(), anyLong());
+            verify(distributedRateLimiter).tryAcquireReactive(contains("user-123"), eq(10), anyInt(), anyLong());
         }
     }
 
@@ -211,14 +322,18 @@ class MultiDimRateLimiterFilterTest {
     class OrderTest {
 
         @Test
-        @DisplayName("Filter order should be HIGHEST_PRECEDENCE + 21")
+        @DisplayName("Filter order should match FilterOrderConstants.MULTI_DIM_RATE_LIMITER")
         void testFilterOrder() {
-            assertTrue(filter.getOrder() < 0, "Filter should have high priority (negative order)");
-            assertEquals(-2147483627, filter.getOrder());
+            assertEquals(FilterOrderConstants.MULTI_DIM_RATE_LIMITER, filter.getOrder());
         }
     }
 
     // ============== Helper Methods ==============
+
+    private void stubConfig(MultiDimRateLimiterConfig config) {
+        lenient().when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_MULTI_DIM_RATE_LIMITER),
+                eq(MultiDimRateLimiterConfig.class))).thenReturn(config);
+    }
 
     private MockServerWebExchange createMockExchange(String path, String routeId) {
         MockServerHttpRequest request = MockServerHttpRequest.get(path)
@@ -229,47 +344,27 @@ class MultiDimRateLimiterFilterTest {
         return exchange;
     }
 
-    private Map<String, Object> createMultiDimConfig(boolean globalEnabled, int globalQps,
-                                                      boolean tenantEnabled, int tenantQps,
-                                                      boolean userEnabled, int userQps,
-                                                      boolean ipEnabled, int ipQps) {
-        Map<String, Object> config = new HashMap<>();
-        config.put("enabled", true);
-        config.put("rejectStrategy", "FIRST_HIT");
-        config.put("keySource", "COMBINED");
+    private MultiDimRateLimiterConfig.QuotaConfig quota(boolean enabled, int qps, int burstCapacity, long windowSizeMs) {
+        MultiDimRateLimiterConfig.QuotaConfig quota = new MultiDimRateLimiterConfig.QuotaConfig();
+        quota.setEnabled(enabled);
+        quota.setQps(qps);
+        quota.setBurstCapacity(burstCapacity);
+        quota.setWindowSizeMs(windowSizeMs);
+        return quota;
+    }
 
-        // Global quota
-        Map<String, Object> globalQuota = new HashMap<>();
-        globalQuota.put("enabled", globalEnabled);
-        globalQuota.put("qps", globalQps);
-        globalQuota.put("burstCapacity", globalQps * 2);
-        globalQuota.put("windowSizeMs", 1000);
-        config.put("globalQuota", globalQuota);
-
-        // Tenant quota
-        Map<String, Object> tenantQuota = new HashMap<>();
-        tenantQuota.put("enabled", tenantEnabled);
-        tenantQuota.put("qps", tenantQps);
-        tenantQuota.put("burstCapacity", tenantQps * 2);
-        tenantQuota.put("windowSizeMs", 1000);
-        config.put("tenantQuota", tenantQuota);
-
-        // User quota
-        Map<String, Object> userQuota = new HashMap<>();
-        userQuota.put("enabled", userEnabled);
-        userQuota.put("qps", userQps);
-        userQuota.put("burstCapacity", userQps * 2);
-        userQuota.put("windowSizeMs", 1000);
-        config.put("userQuota", userQuota);
-
-        // IP quota
-        Map<String, Object> ipQuota = new HashMap<>();
-        ipQuota.put("enabled", ipEnabled);
-        ipQuota.put("qps", ipQps);
-        ipQuota.put("burstCapacity", ipQps * 2);
-        ipQuota.put("windowSizeMs", 1000);
-        config.put("ipQuota", ipQuota);
-
+    private MultiDimRateLimiterConfig createMultiDimConfig(boolean globalEnabled, int globalQps,
+                                                            boolean tenantEnabled, int tenantQps,
+                                                            boolean userEnabled, int userQps,
+                                                            boolean ipEnabled, int ipQps) {
+        MultiDimRateLimiterConfig config = new MultiDimRateLimiterConfig();
+        config.setEnabled(true);
+        config.setRejectStrategy("FIRST_HIT");
+        config.setKeySource("COMBINED");
+        config.setGlobalQuota(quota(globalEnabled, globalQps, Math.max(globalQps * 2, 1), 1000));
+        config.setTenantQuota(quota(tenantEnabled, tenantQps, Math.max(tenantQps * 2, 1), 1000));
+        config.setUserQuota(quota(userEnabled, userQps, Math.max(userQps * 2, 1), 1000));
+        config.setIpQuota(quota(ipEnabled, ipQps, Math.max(ipQps * 2, 1), 1000));
         return config;
     }
 }

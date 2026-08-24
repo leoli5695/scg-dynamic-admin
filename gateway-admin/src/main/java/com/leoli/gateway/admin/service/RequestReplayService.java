@@ -1,11 +1,16 @@
 package com.leoli.gateway.admin.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.leoli.gateway.admin.model.RequestTrace;
 import com.leoli.gateway.admin.repository.RequestTraceRepository;
 import com.leoli.gateway.admin.service.GatewayInstanceService;
+import com.leoli.gateway.admin.util.UrlSecurityValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,7 +18,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
+import java.time.Duration;
 import java.util.stream.Collectors;
 
 /**
@@ -41,8 +46,21 @@ public class RequestReplayService {
     private final GatewayInstanceService instanceService;
     private final JsonDiffService jsonDiffService;
 
-    // In-progress replay sessions
-    private final ConcurrentHashMap<String, ReplaySession> activeSessions = new ConcurrentHashMap<>();
+    // In-progress replay sessions.
+    // FIX: sessions previously accumulated forever (memory leak). Bound the
+    // store with a TTL + size cap; finished sessions stay queryable for the
+    // TTL window before eviction.
+    private final Cache<String, ReplaySession> activeSessions = Caffeine.newBuilder()
+            .expireAfterWrite(Duration.ofHours(1))
+            .maximumSize(1000)
+            .build();
+
+    // FIX: self-reference through the Spring proxy so that @Transactional on executeReplay
+    // still applies when invoked from the async batch replay thread (plain this.executeReplay
+    // bypasses the proxy and @Modifying queries would throw TransactionRequiredException).
+    @Autowired
+    @Lazy
+    private RequestReplayService self;
 
     // Maximum body size for storage
     private static final int MAX_BODY_SIZE = 65536;
@@ -178,6 +196,16 @@ public class RequestReplayService {
 
         if (gatewayUrl == null) {
             return ReplayResult.error("Gateway instance not accessible");
+        }
+
+        // FIX: SSRF guard - custom target URLs are user-supplied, validate them.
+        // Internal gateway addresses are allowed, loopback/metadata/link-local are not.
+        if (options != null && options.getCustomTargetUrl() != null) {
+            try {
+                UrlSecurityValidator.validateInternalTargetUrl(gatewayUrl);
+            } catch (IllegalArgumentException e) {
+                return ReplayResult.error("Invalid target URL: " + e.getMessage());
+            }
         }
 
         return doReplay(prepared, gatewayUrl, options != null && options.isCompareWithOriginal());
@@ -341,8 +369,8 @@ public class RequestReplayService {
                                 requestIntervalMs * 1_000_000L);
                     }
 
-                    // Execute replay
-                    ReplayResult result = executeReplay(traceId, instanceId, options);
+                    // Execute replay (via proxy so @Transactional applies)
+                    ReplayResult result = self.executeReplay(traceId, instanceId, options);
                     session.getResults().add(result);
 
                     if (result.isSuccess()) {
@@ -383,14 +411,14 @@ public class RequestReplayService {
      * Get batch replay status.
      */
     public ReplaySession getBatchStatus(String sessionId) {
-        return activeSessions.get(sessionId);
+        return activeSessions.getIfPresent(sessionId);
     }
 
     /**
      * Cancel batch replay.
      */
     public boolean cancelBatch(String sessionId) {
-        ReplaySession session = activeSessions.get(sessionId);
+        ReplaySession session = activeSessions.getIfPresent(sessionId);
         if (session != null && "RUNNING".equals(session.getStatus())) {
             session.setStatus("CANCELLED");
             session.setEndTime(System.currentTimeMillis());

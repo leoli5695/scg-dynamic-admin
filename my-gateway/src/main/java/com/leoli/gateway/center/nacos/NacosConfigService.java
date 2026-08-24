@@ -23,6 +23,12 @@ public class NacosConfigService extends AbstractConfigService {
     // Local content cache: dataId::group -> content (for fallback)
     private final Map<String, String> contentCache = new ConcurrentHashMap<>();
 
+    // FIX (listener leak): every addListener() call registered a NEW anonymous
+    // Nacos Listener that removeListener() never unregistered, so repeated
+    // add/remove cycles (reloads, bean restarts) leaked listeners without
+    // bound. Track one Nacos Listener per dataId::group and remove it properly.
+    private final Map<String, Listener> nacosListeners = new ConcurrentHashMap<>();
+
     // Config center health status tracker
     private volatile boolean healthy = true;
     private volatile long lastSuccessTime = System.currentTimeMillis();
@@ -38,17 +44,19 @@ public class NacosConfigService extends AbstractConfigService {
         String key = buildKey(dataId, group);
         try {
             String content = nacosConfigService.getConfig(dataId, group, 5000);
+            markHealthy();
             if (content != null && !content.trim().isEmpty()) {
                 // Update cache on success
                 contentCache.put(key, content);
-                markHealthy();
                 return content;
             }
-            // If Nacos returns empty, use cached version
-            String cachedContent = contentCache.get(key);
-            if (cachedContent != null) {
-                log.warn("Nacos returned empty for {}#{} - using cached content", dataId, group);
-                return cachedContent;
+            // FIX (deleted config resurrection): Nacos responded SUCCESSFULLY
+            // but the config no longer exists (deleted). Previously this fell
+            // back to the cached copy, reviving deleted configs forever. Only
+            // use the cache when Nacos is UNREACHABLE (exception path below).
+            String removed = contentCache.remove(key);
+            if (removed != null) {
+                log.info("Config {}#{} no longer exists in Nacos - dropped cached copy", dataId, group);
             }
             return null;
         } catch (NacosException e) {
@@ -95,8 +103,15 @@ public class NacosConfigService extends AbstractConfigService {
     public void addListener(String dataId, String group, ConfigListener listener) {
         super.addListener(dataId, group, listener);
 
+        String key = buildKey(dataId, group);
+        // Only register one Nacos listener per dataId::group - re-adds would
+        // otherwise stack duplicate anonymous listeners.
+        if (nacosListeners.containsKey(key)) {
+            return;
+        }
+
         try {
-            nacosConfigService.addListener(dataId, group, new Listener() {
+            Listener nacosListener = new Listener() {
                 @Override
                 public Executor getExecutor() {
                     return null; // Use default executor
@@ -111,7 +126,9 @@ public class NacosConfigService extends AbstractConfigService {
                     }
                     notifyListeners(dataId, group, configInfo);
                 }
-            });
+            };
+            nacosConfigService.addListener(dataId, group, nacosListener);
+            nacosListeners.put(key, nacosListener);
             log.debug("Nacos listener added for: {}#{}", dataId, group);
         } catch (NacosException e) {
             log.error("Failed to add Nacos listener: {}#{} - Error: {}", dataId, group, e.getMessage());
@@ -124,9 +141,17 @@ public class NacosConfigService extends AbstractConfigService {
     @Override
     public void removeListener(String dataId, String group, ConfigListener listener) {
         super.removeListener(dataId, group, listener);
-        // Note: Nacos doesn't provide a direct way to remove listeners by content
-        // In production, you might want to track Listener objects and call removeListener
-        log.debug("Listener removed for: {}#{}", dataId, group);
+        // FIX (listener leak): actually unregister the tracked Nacos listener
+        String key = buildKey(dataId, group);
+        Listener nacosListener = nacosListeners.remove(key);
+        if (nacosListener != null) {
+            try {
+                nacosConfigService.removeListener(dataId, group, nacosListener);
+                log.debug("Nacos listener removed for: {}#{}", dataId, group);
+            } catch (Exception e) {
+                log.warn("Failed to remove Nacos listener: {}#{} - {}", dataId, group, e.getMessage());
+            }
+        }
     }
 
     @Override

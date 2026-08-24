@@ -40,6 +40,19 @@ spec:
               fieldPath: status.podIP
         - name: GATEWAY_ADMIN_URL
           value: "http://gateway-admin:9090"
+        # Shared secret for admin internal report endpoints (X-Internal-Token).
+        # REQUIRED - the gateway refuses to start when empty (same posture as the
+        # JWT secret). Must match gateway.admin.security.internal-token on
+        # gateway-admin. Provided via the gateway-internal-secrets Secret
+        # (see gateway-secrets.yaml) instead of an inline value, so a real token
+        # never lands in this manifest. One-time setup:
+        #   kubectl -n test create secret generic gateway-internal-secrets \
+        #     --from-literal=internal-token="$(openssl rand -base64 32)"
+        - name: GATEWAY_INTERNAL_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: gateway-internal-secrets
+              key: internal-token
         - name: GATEWAY_ID
           valueFrom:
             fieldRef:

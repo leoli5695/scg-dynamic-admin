@@ -122,7 +122,8 @@ public class LicenseStore {
         LicenseInfo license = licenseRef.get();
 
         // Check expiration on access
-        if (license != null && license.isExpired() && !license.getLicenseId().equals("FALLBACK-BASIC")) {
+        // (fallback licenses are permanent and must never be swapped out of themselves)
+        if (license != null && license.isExpired() && !isFallbackLicense(license)) {
             log.warn("License expired, switching to fallback");
             if (properties.isAllowBasicFallback()) {
                 loadFallbackLicense();
@@ -186,6 +187,13 @@ public class LicenseStore {
             license.getDaysRemaining() + " days remaining";
 
         return license.getEdition() + " (" + license.getCustomerName() + ", " + expiry + ")";
+    }
+
+    /**
+     * Check whether the given license is a locally built fallback license.
+     */
+    private boolean isFallbackLicense(LicenseInfo license) {
+        return license.getLicenseId() != null && license.getLicenseId().startsWith("FALLBACK-");
     }
 
     /**

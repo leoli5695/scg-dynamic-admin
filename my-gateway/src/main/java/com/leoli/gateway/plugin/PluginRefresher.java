@@ -7,6 +7,8 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cloud.gateway.event.RefreshRoutesEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
@@ -43,6 +45,9 @@ public class PluginRefresher {
     @Autowired
     private PluginRegistryService pluginRegistryService;
 
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
@@ -74,13 +79,13 @@ public class PluginRefresher {
     public void destroy() {
         log.info("PluginRefresher destroying...");
 
-        // Remove all plugin listeners
-        for (String pluginId : loadedPluginIds) {
+        // FIX (empty second loop): removePluginListener() removes the id from
+        // loadedPluginIds, so the previous second loop (unload) iterated an
+        // already-empty set and plugins were never unloaded on shutdown.
+        // Snapshot the ids and handle listener removal + unload in one pass.
+        List<String> pluginIds = new ArrayList<>(loadedPluginIds);
+        for (String pluginId : pluginIds) {
             removePluginListener(pluginId);
-        }
-
-        // Unload all plugins
-        for (String pluginId : loadedPluginIds) {
             unloadPlugin(pluginId);
         }
 
@@ -217,11 +222,12 @@ public class PluginRefresher {
         }
 
         try {
-            // Check if already loaded with same JAR
-            Class<?> existingClass = pluginLoaderService.getLoadedFactoryClass(pluginId);
-            if (existingClass != null) {
-                log.debug("Plugin already loaded: {}", pluginId);
-                return;
+            // FIX (hot update): previously this returned early whenever a class
+            // was already loaded, so an updated JAR/config was silently ignored.
+            // Unload the previous version first so the new one can take effect.
+            if (pluginLoaderService.getLoadedFactoryClass(pluginId) != null) {
+                log.info("Plugin {} already loaded, unloading previous version for update", pluginId);
+                unloadPlugin(pluginId);
             }
 
             // Load JAR and discover class
@@ -241,6 +247,11 @@ public class PluginRefresher {
             // Register as Spring Bean
             pluginRegistryService.registerPlugin(pluginId, config.getPluginName(), factoryClass);
 
+            // FIX (hot update): routes were compiled once against the filter factory
+            // set known at that time; refresh so SCG rebuilds routes against the
+            // newly registered factory.
+            publishRoutesRefresh();
+
             log.info("Plugin loaded and registered: {} -> {}", pluginId, config.getPluginName());
 
         } catch (Exception e) {
@@ -259,9 +270,25 @@ public class PluginRefresher {
             // Unload from ClassLoader
             pluginLoaderService.unloadPlugin(pluginId);
 
+            // Refresh routes so definitions referencing the removed filter fail
+            // fast / get recompiled without the stale factory.
+            publishRoutesRefresh();
+
             log.info("Plugin unloaded: {}", pluginId);
         } catch (Exception e) {
             log.error("Failed to unload plugin: {}", pluginId, e);
+        }
+    }
+
+    /**
+     * Publish RefreshRoutesEvent so SCG and the compiled route cache rebuild
+     * routes against the current filter factory set.
+     */
+    private void publishRoutesRefresh() {
+        try {
+            eventPublisher.publishEvent(new RefreshRoutesEvent(this));
+        } catch (Exception e) {
+            log.warn("Failed to publish RefreshRoutesEvent after plugin change: {}", e.getMessage());
         }
     }
 

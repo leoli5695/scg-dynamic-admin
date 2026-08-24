@@ -1,0 +1,34 @@
+# ============================================================================
+# Production Profile Overrides for my-gateway (data plane)
+# ============================================================================
+# Activated by: SPRING_PROFILES_ACTIVE=prod
+# Hardens development defaults for production deployment.
+# ============================================================================
+
+gateway:
+  trace:
+    capture-all: false  # Only capture sampled traces in production
+    sampling-rate: ${GATEWAY_TRACE_SAMPLING_RATE:10}
+  ssl:
+    enabled: ${GATEWAY_SSL_ENABLED:true}  # Enable HTTPS in production
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  tracing:
+    sampling:
+      probability: 0.1  # 10% sampling in production
+
+# Production sampling: 10% tracing
+otel:
+  traces:
+    sampler: parentbased_traceidratio
+  sdk:
+    disabled: false
+
+logging:
+  level:
+    com.leoli.gateway: INFO
+    org.springframework.cloud.gateway: WARN

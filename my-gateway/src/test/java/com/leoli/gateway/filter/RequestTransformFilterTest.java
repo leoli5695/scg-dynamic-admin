@@ -1,9 +1,12 @@
 package com.leoli.gateway.filter;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import com.leoli.gateway.filter.transform.RequestTransformFilter;
 import com.leoli.gateway.manager.StrategyManager;
+import com.leoli.gateway.model.RequestTransformConfig;
+import com.leoli.gateway.model.StrategyDefinition;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -55,6 +58,8 @@ class RequestTransformFilterTest {
     @BeforeEach
     void setUp() {
         bufferFactory = new DefaultDataBufferFactory();
+        // Mirror the production ObjectMapper leniency for config conversion
+        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
         filter = new RequestTransformFilter();
         ReflectionTestUtils.setField(filter, "strategyManager", strategyManager);
         ReflectionTestUtils.setField(filter, "objectMapper", objectMapper);
@@ -69,7 +74,7 @@ class RequestTransformFilterTest {
         @DisplayName("Filter should pass through when config is null")
         void testFilter_nullConfig() {
             MockServerWebExchange exchange = createPostExchange("/api/test", "{}", "test-route");
-            when(strategyManager.getRequestTransformConfig(anyString())).thenReturn(null);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_REQUEST_TRANSFORM), eq(RequestTransformConfig.class))).thenReturn(null);
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -85,7 +90,7 @@ class RequestTransformFilterTest {
             MockServerWebExchange exchange = createPostExchange("/api/test", "{}", "test-route");
             Map<String, Object> config = new HashMap<>();
             config.put("enabled", false);
-            when(strategyManager.getRequestTransformConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_REQUEST_TRANSFORM), eq(RequestTransformConfig.class))).thenReturn(typedConfig(config));
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -103,7 +108,7 @@ class RequestTransformFilterTest {
             exchange.getAttributes().put("org.springframework.cloud.gateway.support.ServerWebExchangeUtils.gatewayRouteId", "test-route");
 
             Map<String, Object> config = createBasicTransformConfig();
-            when(strategyManager.getRequestTransformConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_REQUEST_TRANSFORM), eq(RequestTransformConfig.class))).thenReturn(typedConfig(config));
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -125,7 +130,7 @@ class RequestTransformFilterTest {
             MockServerWebExchange exchange = createPostExchange("/api/test", requestBody, "test-route");
 
             Map<String, Object> config = createTransformConfigWithRemoveFields(List.of("password"));
-            when(strategyManager.getRequestTransformConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_REQUEST_TRANSFORM), eq(RequestTransformConfig.class))).thenReturn(typedConfig(config));
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -142,7 +147,7 @@ class RequestTransformFilterTest {
             MockServerWebExchange exchange = createPostExchange("/api/test", requestBody, "test-route");
 
             Map<String, Object> config = createTransformConfigWithAddFields(Map.of("version", "1.0"));
-            when(strategyManager.getRequestTransformConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_REQUEST_TRANSFORM), eq(RequestTransformConfig.class))).thenReturn(typedConfig(config));
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -164,7 +169,7 @@ class RequestTransformFilterTest {
             MockServerWebExchange exchange = createPostExchange("/api/test", requestBody, "test-route");
 
             Map<String, Object> config = createTransformConfigWithMasking();
-            when(strategyManager.getRequestTransformConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_REQUEST_TRANSFORM), eq(RequestTransformConfig.class))).thenReturn(typedConfig(config));
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -186,7 +191,7 @@ class RequestTransformFilterTest {
             MockServerWebExchange exchange = createPostExchange("/api/test", requestBody, "test-route");
 
             Map<String, Object> config = createBasicTransformConfig();
-            when(strategyManager.getRequestTransformConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_REQUEST_TRANSFORM), eq(RequestTransformConfig.class))).thenReturn(typedConfig(config));
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -208,7 +213,7 @@ class RequestTransformFilterTest {
             MockServerWebExchange exchange = createPostExchange("/api/test", requestBody, "test-route");
 
             Map<String, Object> config = createBasicTransformConfig();
-            when(strategyManager.getRequestTransformConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_REQUEST_TRANSFORM), eq(RequestTransformConfig.class))).thenReturn(typedConfig(config));
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -224,7 +229,7 @@ class RequestTransformFilterTest {
             MockServerWebExchange exchange = createPostExchange("/api/test", "", "test-route");
 
             Map<String, Object> config = createBasicTransformConfig();
-            when(strategyManager.getRequestTransformConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_REQUEST_TRANSFORM), eq(RequestTransformConfig.class))).thenReturn(typedConfig(config));
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -247,6 +252,14 @@ class RequestTransformFilterTest {
     }
 
     // ============== Helper Methods ==============
+
+    /**
+     * Convert the legacy Map-style config to the typed config the filter now reads
+     * via StrategyManager.getConfig(routeId, type, class).
+     */
+    private RequestTransformConfig typedConfig(Map<String, Object> config) {
+        return config == null ? null : objectMapper.convertValue(config, RequestTransformConfig.class);
+    }
 
     private MockServerWebExchange createPostExchange(String path, String body, String routeId) {
         DataBuffer buffer = bufferFactory.wrap(body.getBytes(StandardCharsets.UTF_8));

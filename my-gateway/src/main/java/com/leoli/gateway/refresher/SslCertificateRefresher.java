@@ -38,6 +38,10 @@ public class SslCertificateRefresher {
     // Certificate listeners cache: <domain, listener>
     private final ConcurrentHashMap<String, ConfigCenterService.ConfigListener> certListeners = new ConcurrentHashMap<>();
 
+    // FIX: keep index listener as a field so it can be removed on destroy
+    // (method references create a new instance per call and never match)
+    private final ConfigCenterService.ConfigListener indexListener = this::onCertificatesIndexChanged;
+
     @Autowired
     public SslCertificateRefresher(DynamicSslContextManager sslContextManager,
                                    ConfigCenterService configService,
@@ -56,7 +60,6 @@ public class SslCertificateRefresher {
     @PostConstruct
     public void init() {
         // 1. Listen to certificates index changes
-        ConfigCenterService.ConfigListener indexListener = this::onCertificatesIndexChanged;
         configService.addListener(SSL_CERTIFICATES_INDEX, GROUP, indexListener);
         log.info("✅ Registered listener for certificates index: {}", SSL_CERTIFICATES_INDEX);
 
@@ -85,8 +88,8 @@ public class SslCertificateRefresher {
             }
         }
 
-        // Remove index listener
-        configService.removeListener(SSL_CERTIFICATES_INDEX, GROUP, this::onCertificatesIndexChanged);
+        // Remove index listener (using the stored field instance)
+        configService.removeListener(SSL_CERTIFICATES_INDEX, GROUP, indexListener);
 
         log.info("SslCertificateRefresher destroyed, all listeners removed");
     }
@@ -153,6 +156,10 @@ public class SslCertificateRefresher {
             // Restart HTTPS server to apply changes
             if (!sslContextManager.getConfiguredDomains().isEmpty()) {
                 sslServerConfig.startHttpsServer();
+            } else {
+                // FIX: when the last certificate was removed the HTTPS server kept
+                // running with the stale context; stop it explicitly.
+                sslServerConfig.stopHttpsServer();
             }
 
         } catch (Exception e) {

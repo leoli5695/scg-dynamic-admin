@@ -117,19 +117,47 @@ public class DynamicSslContextManager {
             byte[] certBytes = Base64.getDecoder().decode(pemCert);
             X509Certificate cert = (X509Certificate) certFactory.generateCertificate(new ByteArrayInputStream(certBytes));
 
+            // FIX (hardcoded RSA): PKCS#1/SEC1 keys cannot be parsed as PKCS#8 and
+            // were failing with a confusing InvalidKeySpecException. Detect them
+            // and report an actionable error instead.
+            if (keyContent.contains("BEGIN RSA PRIVATE KEY") || keyContent.contains("BEGIN EC PRIVATE KEY")) {
+                log.error("PEM private key is in PKCS#1/SEC1 format; convert it to PKCS#8 " +
+                        "(openssl pkcs8 -topk8 -nocrypt -in key.pem -out key-pkcs8.pem)");
+                return null;
+            }
+
             // Parse private key (PKCS#8 format expected)
             String pemKey = keyContent
                     .replace("-----BEGIN PRIVATE KEY-----", "")
                     .replace("-----END PRIVATE KEY-----", "")
-                    .replace("-----BEGIN RSA PRIVATE KEY-----", "")
-                    .replace("-----END RSA PRIVATE KEY-----", "")
                     .replaceAll("\\s", "");
             byte[] keyBytes = Base64.getDecoder().decode(pemKey);
 
-            // Create key spec and generate private key
+            // FIX (hardcoded RSA): the key algorithm was fixed to "RSA", so EC
+            // certificates failed to load. Derive it from the certificate's public
+            // key, falling back to common algorithms when the provider name does
+            // not match a KeyFactory directly.
             java.security.spec.PKCS8EncodedKeySpec keySpec = new java.security.spec.PKCS8EncodedKeySpec(keyBytes);
-            java.security.KeyFactory keyFactory = java.security.KeyFactory.getInstance("RSA");
-            PrivateKey privateKey = keyFactory.generatePrivate(keySpec);
+            PrivateKey privateKey = null;
+            String certAlgorithm = cert.getPublicKey().getAlgorithm();
+            String[] candidates = (certAlgorithm != null && !certAlgorithm.isEmpty())
+                    ? new String[]{certAlgorithm, "RSA", "EC", "DSA", "Ed25519"}
+                    : new String[]{"RSA", "EC", "DSA", "Ed25519"};
+            Exception lastFailure = null;
+            for (String algorithm : candidates) {
+                try {
+                    java.security.KeyFactory keyFactory = java.security.KeyFactory.getInstance(algorithm);
+                    privateKey = keyFactory.generatePrivate(keySpec);
+                    break;
+                } catch (Exception e) {
+                    lastFailure = e;
+                }
+            }
+            if (privateKey == null) {
+                log.error("Failed to parse PEM private key (cert algorithm={}): {}",
+                        certAlgorithm, lastFailure != null ? lastFailure.getMessage() : "unknown");
+                return null;
+            }
 
             // Create temporary keystore
             KeyStore keyStore = KeyStore.getInstance("JKS");

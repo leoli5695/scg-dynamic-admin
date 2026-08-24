@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.model.AiConfig;
 
 import com.leoli.gateway.admin.repository.AiConfigRepository;
+import com.leoli.gateway.admin.util.ApiKeyEncryptor;
+import com.leoli.gateway.admin.util.UrlSecurityValidator;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,12 +38,27 @@ public class AiAnalysisService {
                               GatewayInstanceService gatewayInstanceService,
                               @Lazy StressTestService stressTestService,
                               AiMetricsCollector aiMetricsCollector,
-                              AiPromptBuilder aiPromptBuilder) {
+                              AiPromptBuilder aiPromptBuilder,
+                              ApiKeyEncryptor apiKeyEncryptor) {
         this.aiConfigRepository = aiConfigRepository;
         this.gatewayInstanceService = gatewayInstanceService;
         this.stressTestService = stressTestService;
         this.aiMetricsCollector = aiMetricsCollector;
         this.aiPromptBuilder = aiPromptBuilder;
+        this.apiKeyEncryptor = apiKeyEncryptor;
+    }
+
+    // FIX: encryption moved from the JPA entity (where @Autowired never worked and keys
+    // were stored in plaintext) to the service layer.
+    private final ApiKeyEncryptor apiKeyEncryptor;
+
+    /**
+     * Resolve the usable (decrypted) API key for a stored config.
+     * Legacy plaintext values pass through unchanged because decrypt() falls back
+     * to the original value when GCM decryption fails.
+     */
+    public String resolveApiKey(AiConfig config) {
+        return config.getApiKey() != null ? apiKeyEncryptor.decrypt(config.getApiKey()) : null;
     }
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -157,6 +174,7 @@ public class AiAnalysisService {
                 // 如果 BAILIAN 已存在且未配置，更新其配置
                 AiConfig bailianConfig = existingBailian.get();
                 if (bailianConfig.getApiKey() == null && qwenConfig.getApiKey() != null) {
+                    // Copy the stored (possibly encrypted) value as-is between entities
                     bailianConfig.setApiKey(qwenConfig.getApiKey());
                     bailianConfig.setModel(qwenConfig.getModel());
                     bailianConfig.setBaseUrl(qwenConfig.getBaseUrl() != null ?
@@ -206,6 +224,9 @@ public class AiAnalysisService {
     public boolean validateApiKey(String provider, String apiKey, String baseUrl) {
         try {
             String url = baseUrl != null ? baseUrl : DEFAULT_BASE_URLS.get(provider);
+
+            // FIX: SSRF guard - never send credentials to user-supplied internal addresses
+            UrlSecurityValidator.validateExternalUrl(url);
 
             switch (provider) {
                 case "BAILIAN":
@@ -260,7 +281,12 @@ public class AiAnalysisService {
                 .orElseThrow(() -> new RuntimeException("Provider not found: " + provider));
 
         config.setModel(model);
-        config.setApiKey(apiKey);
+        // FIX: encrypt at the service layer - the entity-level encryption was dead code
+        config.setApiKey(apiKey != null && !apiKey.isEmpty() ? apiKeyEncryptor.encrypt(apiKey) : null);
+        // FIX: SSRF guard - reject user-supplied baseUrl pointing to internal/metadata addresses
+        if (baseUrl != null && !baseUrl.isEmpty()) {
+            UrlSecurityValidator.validateExternalUrl(baseUrl);
+        }
         config.setBaseUrl(baseUrl);
         config.setIsValid(true);
         config.setLastValidatedAt(LocalDateTime.now());
@@ -304,11 +330,12 @@ public class AiAnalysisService {
         String baseUrl = config.getBaseUrl() != null ? config.getBaseUrl() : DEFAULT_BASE_URLS.get(provider);
 
         try {
+            String apiKey = resolveApiKey(config);
             return switch (provider) {
-                case "BAILIAN" -> callOpenAIApi(baseUrl, config.getApiKey(), config.getModel(), prompt);
-                case "OPENAI" -> callOpenAIApi(baseUrl, config.getApiKey(), config.getModel(), prompt);
-                case "GEMINI" -> callGeminiApi(baseUrl, config.getApiKey(), config.getModel(), prompt);
-                case "CLAUDE" -> callClaudeApi(baseUrl, config.getApiKey(), config.getModel(), prompt);
+                case "BAILIAN" -> callOpenAIApi(baseUrl, apiKey, config.getModel(), prompt);
+                case "OPENAI" -> callOpenAIApi(baseUrl, apiKey, config.getModel(), prompt);
+                case "GEMINI" -> callGeminiApi(baseUrl, apiKey, config.getModel(), prompt);
+                case "CLAUDE" -> callClaudeApi(baseUrl, apiKey, config.getModel(), prompt);
                 default -> throw new RuntimeException("Unsupported provider: " + provider);
             };
         } catch (Exception e) {
@@ -628,11 +655,12 @@ public class AiAnalysisService {
         String baseUrl = config.getBaseUrl() != null ? config.getBaseUrl() : DEFAULT_BASE_URLS.get(provider);
 
         try {
+            String apiKey = resolveApiKey(config);
             return switch (provider) {
-                case "BAILIAN" -> callOpenAIWithTools(baseUrl, config.getApiKey(), effectiveModel, messages, tools);
-                case "OPENAI" -> callOpenAIWithTools(baseUrl, config.getApiKey(), effectiveModel, messages, tools);
-                case "CLAUDE" -> callClaudeWithTools(baseUrl, config.getApiKey(), effectiveModel, messages, tools);
-                case "GEMINI" -> callGeminiWithTools(baseUrl, config.getApiKey(), effectiveModel, messages, tools);
+                case "BAILIAN" -> callOpenAIWithTools(baseUrl, apiKey, effectiveModel, messages, tools);
+                case "OPENAI" -> callOpenAIWithTools(baseUrl, apiKey, effectiveModel, messages, tools);
+                case "CLAUDE" -> callClaudeWithTools(baseUrl, apiKey, effectiveModel, messages, tools);
+                case "GEMINI" -> callGeminiWithTools(baseUrl, apiKey, effectiveModel, messages, tools);
                 default -> throw new RuntimeException("Unsupported provider: " + provider);
             };
         } catch (Exception e) {

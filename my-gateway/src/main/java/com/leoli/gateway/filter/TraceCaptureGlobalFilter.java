@@ -31,6 +31,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Global filter for capturing error and slow requests for tracing and replay.
@@ -56,6 +57,12 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
 
     @Value("${gateway.admin.url:http://127.0.0.1:9090}")
     private String adminUrl;
+
+    /**
+     * Shared secret for admin internal report endpoints (X-Internal-Token header).
+     */
+    @Value("${gateway.admin.internal-token:${GATEWAY_INTERNAL_TOKEN:}}")
+    private String internalToken;
 
     @Value("${gateway.instance-id:${GATEWAY_INSTANCE_ID:gateway-1}}")
     private String instanceId;
@@ -118,6 +125,16 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
 
         ServerHttpRequest request = exchange.getRequest();
 
+        // FIX (lazy capture): body capture is pure overhead for streaming
+        // protocols and when all capture modes are disabled. Skip the response
+        // decorator entirely in those cases and run the chain undecorated.
+        boolean isStreaming = isWebSocketUpgrade(request) || isSseRequest(request);
+        boolean anyCaptureEnabled = captureErrors || captureSlow || captureAll;
+        if (isStreaming || !anyCaptureEnabled) {
+            return chain.filter(exchange)
+                    .doFinally(signalType -> afterRequest(exchange, startTime, finalTraceId, null, null));
+        }
+
         // Check if we need to capture request body (for POST/PUT)
         boolean shouldCaptureBody = shouldCaptureBody(request);
 
@@ -131,13 +148,19 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
                 // Convert any Publisher to Flux for consistent handling
                 Flux<? extends DataBuffer> flux = Flux.from(body);
                 return super.writeWith(flux.doOnNext(dataBuffer -> {
+                    // Skip copying once the capture buffer is full - avoids
+                    // allocating/discarding byte[] for every remaining chunk
+                    // of large responses.
+                    if (responseBodyBuilder.length() >= maxBodySize) {
+                        return;
+                    }
                     // Cache response body
                     byte[] bytes = new byte[dataBuffer.readableByteCount()];
                     dataBuffer.read(bytes);
                     String chunk = new String(bytes, StandardCharsets.UTF_8);
                     if (responseBodyBuilder.length() + chunk.length() <= maxBodySize) {
                         responseBodyBuilder.append(chunk);
-                    } else if (responseBodyBuilder.length() < maxBodySize) {
+                    } else {
                         int remaining = maxBodySize - responseBodyBuilder.length();
                         responseBodyBuilder.append(chunk.substring(0, remaining)).append("...[TRUNCATED]");
                     }
@@ -170,8 +193,10 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
      *
      * 【OOM 防护修复】：
      * - 先检查 Content-Length，超过 maxBodySize 直接跳过缓存
-     * - 使用流式读取 + 早期截断，避免全量聚合到内存
-     * - 防止大文件上传或慢速攻击导致网关内存耗尽
+     * - 改用旁路拷贝（side-copy）：请求体流原样透传给下游，仅在流经时同步拷贝
+     *   最多 maxBodySize 字节用于 Trace 记录。
+     * - 彻底移除无上限的 DataBufferUtils.join，chunked 超大请求不会再全量聚合进内存；
+     *   同时请求体不会被二次消费，转发始终携带完整原始 body。
      */
     private Mono<Void> cacheRequestBodyAndContinue(ServerWebExchange exchange, GatewayFilterChain chain,
                                                    long startTime, String traceId, StringBuilder responseBodyBuilder) {
@@ -191,57 +216,41 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
                     });
         }
 
-        // 【OOM 防护】流式读取 + 早期截断（使用 takeUntil 避免读取超量数据）
-        return DataBufferUtils.join(request.getBody())
-                .defaultIfEmpty(new DefaultDataBufferFactory().wrap(new byte[0]))
-                .flatMap(dataBuffer -> {
-                    int readableBytes = dataBuffer.readableByteCount();
+        // 【旁路拷贝】流经过时同步捕获最多 maxBodySize 字节，原始 buffer 位置恢复后继续转发
+        StringBuilder requestBodyBuilder = new StringBuilder();
+        AtomicLong capturedBytes = new AtomicLong(0);
+        Flux<DataBuffer> sideCopyBody = request.getBody().doOnNext(buffer -> {
+            long remaining = maxBodySize - capturedBytes.get();
+            if (remaining > 0) {
+                int toRead = (int) Math.min(buffer.readableByteCount(), remaining);
+                byte[] chunk = new byte[toRead];
+                buffer.read(chunk);
+                // Reset buffer position so downstream still receives the full original body
+                buffer.readPosition(0);
+                requestBodyBuilder.append(new String(chunk, StandardCharsets.UTF_8));
+                capturedBytes.addAndGet(toRead);
+            }
+        });
 
-                    // 【OOM 防护】如果单个 buffer 超过限制，截断并标记
-                    final boolean truncated = readableBytes > maxBodySize;
-                    final int readSize = truncated ? maxBodySize : readableBytes;
-                    final byte[] bodyBytes = new byte[readSize];
-                    try {
-                        dataBuffer.read(bodyBytes, 0, readSize);
-                    } finally {
-                        // Ensure DataBuffer is always released to prevent direct buffer memory leak
-                        DataBufferUtils.release(dataBuffer);
+        ServerHttpRequest newRequest = new ServerHttpRequestDecorator(request) {
+            @Override
+            public Flux<DataBuffer> getBody() {
+                return sideCopyBody;
+            }
+        };
+
+        // Important: Keep the decorated response (for capturing response body)
+        return chain.filter(exchange.mutate().request(newRequest).response(exchange.getResponse()).build())
+                .doFinally(signalType -> {
+                    String requestBody = null;
+                    if (requestBodyBuilder.length() > 0) {
+                        requestBody = capturedBytes.get() >= maxBodySize
+                                ? requestBodyBuilder + "...[TRUNCATED]"
+                                : requestBodyBuilder.toString();
+                        exchange.getAttributes().put(REQUEST_BODY_ATTR, requestBody);
                     }
-
-                    if (truncated) {
-                        String bodyStr = new String(bodyBytes, StandardCharsets.UTF_8) + "...[TRUNCATED]";
-                        log.debug("Request body truncated: traceId={}, originalSize={}, truncatedSize={}",
-                                traceId, readableBytes, maxBodySize);
-
-                        // 继续处理但使用截断后的请求体
-                        // 注意：截断后的请求体不能用于实际转发，这里仅用于 Trace 记录
-                        return chain.filter(exchange)
-                                .doFinally(signalType -> {
-                                    String responseBody = responseBodyBuilder.length() > 0 ? responseBodyBuilder.toString() : null;
-                                    afterRequest(exchange, startTime, traceId, bodyStr, responseBody);
-                                });
-                    }
-
-                    String bodyStr = new String(bodyBytes, StandardCharsets.UTF_8);
-                    final String requestBody = bodyStr;
-
-                    // Store in exchange attributes for later use
-                    exchange.getAttributes().put(REQUEST_BODY_ATTR, requestBody);
-
-                    // Rebuild request with cached body
-                    ServerHttpRequest newRequest = new ServerHttpRequestDecorator(request) {
-                        @Override
-                        public Flux<DataBuffer> getBody() {
-                            return Flux.just(exchange.getResponse().bufferFactory().wrap(bodyBytes));
-                        }
-                    };
-
-                    // Important: Keep the decorated response (for capturing response body)
-                    return chain.filter(exchange.mutate().request(newRequest).response(exchange.getResponse()).build())
-                            .doFinally(signalType -> {
-                                String responseBody = responseBodyBuilder.length() > 0 ? responseBodyBuilder.toString() : null;
-                                afterRequest(exchange, startTime, traceId, requestBody, responseBody);
-                            });
+                    String responseBody = responseBodyBuilder.length() > 0 ? responseBodyBuilder.toString() : null;
+                    afterRequest(exchange, startTime, traceId, requestBody, responseBody);
                 });
     }
 
@@ -665,6 +674,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
                     .post()
                     .uri(adminUrl + "/api/traces/internal")
                     .contentType(MediaType.APPLICATION_JSON)
+                    .headers(h -> { if (!internalToken.isEmpty()) h.set("X-Internal-Token", internalToken); })
                     .bodyValue(trace)
                     .retrieve()
                     .bodyToMono(String.class)
@@ -726,6 +736,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
                     .post()
                     .uri(adminUrl + "/api/filter-executions/internal")
                     .contentType(MediaType.APPLICATION_JSON)
+                    .headers(h -> { if (!internalToken.isEmpty()) h.set("X-Internal-Token", internalToken); })
                     .bodyValue(executionData)
                     .retrieve()
                     .bodyToMono(String.class)

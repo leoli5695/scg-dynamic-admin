@@ -1,7 +1,7 @@
 package com.leoli.gateway.admin.service;
 
+import com.leoli.gateway.admin.config.JwtTokenProvider;
 import com.leoli.gateway.admin.model.User;
-import com.leoli.gateway.admin.util.JwtUtil;
 import com.leoli.gateway.admin.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -23,15 +24,18 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final JwtUtil jwtUtil;
+    // FIX: unified on JwtTokenProvider - tokens issued by JwtUtil lacked the
+    // "roles"/"licenseEdition" claims that the filter and AuthController read,
+    // so roles were dropped and the license edition was always BASIC.
+    private final JwtTokenProvider jwtTokenProvider;
 
     @Autowired
-    public AuthService(UserRepository userRepository, 
-                      PasswordEncoder passwordEncoder, 
-                      JwtUtil jwtUtil) {
+    public AuthService(UserRepository userRepository,
+                      PasswordEncoder passwordEncoder,
+                      JwtTokenProvider jwtTokenProvider) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
-        this.jwtUtil = jwtUtil;
+        this.jwtTokenProvider = jwtTokenProvider;
     }
 
     /**
@@ -60,8 +64,9 @@ public class AuthService {
             throw new IllegalArgumentException("Invalid username or password");
         }
 
-        // Generate JWT token
-        String token = jwtUtil.generateToken(user.getUsername(), user.getRole());
+        // Generate JWT token (roles + licenseEdition claims)
+        List<String> roles = user.getRole() != null ? List.of(user.getRole()) : List.of();
+        String token = jwtTokenProvider.generateToken(user.getUsername(), roles);
         log.info("User authenticated successfully: {}", username);
         
         return token;

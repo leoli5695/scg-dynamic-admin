@@ -4,10 +4,13 @@ import com.leoli.gateway.config.RedisEnabledCondition;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Conditional;
+import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Mono;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -26,6 +29,9 @@ public class DistributedRateLimiter {
 
     @Autowired(required = false)
     private StringRedisTemplate redisTemplate;
+
+    @Autowired(required = false)
+    private ReactiveStringRedisTemplate reactiveRedisTemplate;
 
     @Autowired(required = false)
     private DefaultRedisScript<Long> rateLimitScript;
@@ -89,6 +95,44 @@ public class DistributedRateLimiter {
             log.error("Redis rate limiter failed, should fallback to local: {}", e.getMessage());
             return RateLimitResult.fallback(e);
         }
+    }
+
+    /**
+     * Reactive variant of {@link #tryAcquireWithFallback(String, int, int, long)}.
+     * <p>
+     * FIX (blocking Redis on Netty EventLoop): the rate limiter runs on the request hot
+     * path, so the Lua script MUST be executed through the reactive template. The blocking
+     * execute() stalled an EventLoop thread for every Redis round-trip.
+     */
+    public Mono<RateLimitResult> tryAcquireReactive(String key, int maxRequests, int burstCapacity, long windowSizeMs) {
+        if (reactiveRedisTemplate == null || rateLimitScript == null) {
+            log.debug("Redis not fully configured, should fallback to local limiter");
+            return Mono.just(RateLimitResult.fallback("Redis not configured"));
+        }
+
+        return reactiveRedisTemplate.execute(
+                        rateLimitScript,
+                        Collections.singletonList(key),
+                        Arrays.asList(String.valueOf(windowSizeMs),
+                                String.valueOf(maxRequests),
+                                String.valueOf(burstCapacity)))
+                .next()
+                .map(result -> {
+                    boolean allowed = result != null && result == 1L;
+                    if (allowed) {
+                        log.debug("Rate limit allowed for key: {}, maxRequests: {}, burstCapacity: {}", key, maxRequests, burstCapacity);
+                        return RateLimitResult.allowed(burstCapacity);
+                    } else {
+                        log.warn("Rate limit exceeded for key: {}", key);
+                        return RateLimitResult.denied(0);
+                    }
+                })
+                .defaultIfEmpty(RateLimitResult.fallback("Redis script returned null"))
+                .onErrorResume(e -> {
+                    log.error("Redis rate limiter failed, should fallback to local: {}", e.getMessage());
+                    Exception cause = e instanceof Exception ex ? ex : new RuntimeException(e);
+                    return Mono.just(RateLimitResult.fallback(cause));
+                });
     }
 
     /**

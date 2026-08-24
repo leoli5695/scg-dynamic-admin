@@ -202,32 +202,33 @@ public class RateLimitResetService {
     private int scanAndDeleteKeys(String pattern) {
         int deletedCount = 0;
         try {
-            // Use SCAN with COUNT option to limit scan batch size
-            org.springframework.data.redis.core.Cursor<String> cursor = redisTemplate.scan(
+            // Use SCAN with COUNT option to limit scan batch size.
+            // FIX: try-with-resources - cursor.close() was skipped when the scan
+            // loop threw, leaking the underlying Redis connection/cursor.
+            try (org.springframework.data.redis.core.Cursor<String> cursor = redisTemplate.scan(
                     org.springframework.data.redis.core.ScanOptions.scanOptions()
                             .match(pattern)
                             .count(1000) // Scan 1000 keys per batch
                             .build()
-            );
+            )) {
 
-            List<String> keysToDelete = new ArrayList<>();
-            while (cursor.hasNext()) {
-                keysToDelete.add(cursor.next());
-                // Delete in batches of 100 to avoid large DEL commands
-                if (keysToDelete.size() >= 100) {
+                List<String> keysToDelete = new ArrayList<>();
+                while (cursor.hasNext()) {
+                    keysToDelete.add(cursor.next());
+                    // Delete in batches of 100 to avoid large DEL commands
+                    if (keysToDelete.size() >= 100) {
+                        redisTemplate.delete(keysToDelete);
+                        deletedCount += keysToDelete.size();
+                        keysToDelete.clear();
+                    }
+                }
+
+                // Delete remaining keys
+                if (!keysToDelete.isEmpty()) {
                     redisTemplate.delete(keysToDelete);
                     deletedCount += keysToDelete.size();
-                    keysToDelete.clear();
                 }
             }
-
-            // Delete remaining keys
-            if (!keysToDelete.isEmpty()) {
-                redisTemplate.delete(keysToDelete);
-                deletedCount += keysToDelete.size();
-            }
-
-            cursor.close();
 
         } catch (Exception e) {
             log.error("Error scanning/deleting keys for pattern {}: {}", pattern, e.getMessage());

@@ -1,4 +1,4 @@
-FROM ghcr.io/graalvm/graalvm-community:17
+FROM ghcr.io/graalvm/graalvm-community:21
 WORKDIR /app
 
 RUN microdnf install -y curl tzdata && microdnf clean all

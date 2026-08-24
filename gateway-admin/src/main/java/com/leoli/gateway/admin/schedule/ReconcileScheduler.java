@@ -25,17 +25,18 @@ public class ReconcileScheduler {
     private final List<ReconcileTask<?>> reconcileTasks;
 
     /**
-     * Execute reconciliation for all entity types every 5 minutes.
-     * 
+     * Execute reconciliation for all entity types.
+     * Interval is configurable via gateway.admin.reconcile.interval-ms (default 60s).
+     *
      * ShedLock configuration:
-     * - lockAtMostFor: Maximum lock duration (10 minutes) - prevents zombie locks
-     * - lockAtLeastFor: Minimum lock duration (1 minute) - prevents rapid re-execution
-     * 
+     * - lockAtMostFor: Maximum lock duration (5 minutes) - prevents zombie locks
+     * - lockAtLeastFor: Minimum lock duration (30 seconds) - prevents rapid re-execution
+     *
      * If Redis is unavailable, ShedLock is disabled and all instances will run
      * reconciliation (may cause duplicate work but won't break functionality).
      */
-    @Scheduled(fixedDelay = 300000) // 5 minutes
-    @SchedulerLock(name = "reconcileAll", lockAtMostFor = "10m", lockAtLeastFor = "1m")
+    @Scheduled(fixedDelayString = "${gateway.admin.reconcile.interval-ms:60000}")
+    @SchedulerLock(name = "reconcileAll", lockAtMostFor = "5m", lockAtLeastFor = "30s")
     public void reconcileAll() {
         log.info("Starting scheduled reconciliation for {} entity types...", reconcileTasks.size());
 

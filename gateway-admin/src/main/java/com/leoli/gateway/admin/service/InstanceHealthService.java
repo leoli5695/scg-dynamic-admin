@@ -1,5 +1,7 @@
 package com.leoli.gateway.admin.service;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.leoli.gateway.admin.dto.InstanceHealthDTO;
 import com.leoli.gateway.admin.model.ServiceInstanceHealth;
 import com.leoli.gateway.admin.repository.ServiceInstanceHealthRepository;
@@ -10,8 +12,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Instance health status service.
@@ -34,12 +36,20 @@ public class InstanceHealthService {
     @Autowired(required = false)
     private RestTemplate restTemplate;  // For active HTTP probing
 
-    // In-memory health status store (can also use Redis)
-    private final ConcurrentHashMap<String, InstanceHealthDTO> healthStore =
-            new ConcurrentHashMap<>();
+    // In-memory health status store (can also use Redis).
+    // FIX: plain ConcurrentHashMaps grew without bound when instances were
+    // scaled down - entries for vanished pods stayed forever. Bound both stores
+    // with TTL + size caps; a long TTL keeps alert deduplication effective.
+    private final Cache<String, InstanceHealthDTO> healthStore = Caffeine.newBuilder()
+            .expireAfterAccess(Duration.ofHours(6))
+            .maximumSize(10_000)
+            .build();
 
     // Track last alert time for each instance (avoid repeated alerts)
-    private final ConcurrentHashMap<String, Long> lastAlertTimeMap = new ConcurrentHashMap<>();
+    private final Cache<String, Long> lastAlertTimeMap = Caffeine.newBuilder()
+            .expireAfterWrite(Duration.ofHours(1))
+            .maximumSize(10_000)
+            .build();
     private static final long ALERT_COOLDOWN_MS = 300000; // 5 minutes
 
     @Value("${gateway.health.db-sync-enabled:false}")
@@ -68,7 +78,7 @@ public class InstanceHealthService {
 
             // 1. Check if state changed (for alert deduplication)
             String key = buildKey(serviceId, ip, port);
-            InstanceHealthDTO previousHealth = healthStore.get(key);
+            InstanceHealthDTO previousHealth = healthStore.getIfPresent(key);
             boolean stateChanged = previousHealth == null ||
                     previousHealth.isHealthy() != health.isHealthy();
 
@@ -109,7 +119,7 @@ public class InstanceHealthService {
      * Check if we should send an alert (cooldown expired).
      */
     private boolean shouldSendAlert(String key) {
-        Long lastAlertTime = lastAlertTimeMap.get(key);
+        Long lastAlertTime = lastAlertTimeMap.getIfPresent(key);
         if (lastAlertTime == null) {
             return true;
         }
@@ -121,7 +131,7 @@ public class InstanceHealthService {
      */
     public List<InstanceHealthDTO> getServiceInstanceHealth(String serviceId) {
         // Priority: return from memory cache (high real-time)
-        List<InstanceHealthDTO> fromCache = healthStore.values().stream()
+        List<InstanceHealthDTO> fromCache = healthStore.asMap().values().stream()
                 .filter(h -> h.getServiceId().equals(serviceId))
                 .collect(java.util.stream.Collectors.toList());
 
@@ -188,7 +198,7 @@ public class InstanceHealthService {
      * Get all instance health statuses.
      */
     public List<InstanceHealthDTO> getAllInstanceHealth() {
-        return new ArrayList<>(healthStore.values());
+        return new ArrayList<>(healthStore.asMap().values());
     }
 
     /**
@@ -197,8 +207,8 @@ public class InstanceHealthService {
     public Map<String, Object> getHealthOverview() {
         Map<String, Object> overview = new HashMap<>();
 
-        int totalInstances = healthStore.size();
-        int healthyCount = (int) healthStore.values().stream()
+        int totalInstances = (int) healthStore.estimatedSize();
+        int healthyCount = (int) healthStore.asMap().values().stream()
                 .filter(InstanceHealthDTO::isHealthy)
                 .count();
         int unhealthyCount = totalInstances - healthyCount;
@@ -211,7 +221,7 @@ public class InstanceHealthService {
 
         // Group by service
         Map<String, Map<String, Integer>> serviceStats = new HashMap<>();
-        healthStore.values().forEach(health -> {
+        healthStore.asMap().values().forEach(health -> {
             String serviceId = health.getServiceId();
             serviceStats.computeIfAbsent(serviceId, k -> {
                 Map<String, Integer> stats = new HashMap<>();

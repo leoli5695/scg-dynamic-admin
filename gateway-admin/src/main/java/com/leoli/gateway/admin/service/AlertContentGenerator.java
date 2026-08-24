@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.model.AiConfig;
 import com.leoli.gateway.admin.prompt.PromptService;
 import com.leoli.gateway.admin.repository.AiConfigRepository;
+import com.leoli.gateway.admin.util.ApiKeyEncryptor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
@@ -28,6 +29,7 @@ public class AlertContentGenerator {
     private final AiConfigRepository aiConfigRepository;
     private final PrometheusService prometheusService;
     private final PromptService promptService;  // 新增：用于动态提示词
+    private final ApiKeyEncryptor apiKeyEncryptor;  // Service 层解密存储的 API Key
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private final RestTemplate restTemplate = createRestTemplate();
@@ -226,10 +228,11 @@ public class AlertContentGenerator {
         String baseUrl = config.getBaseUrl() != null ? config.getBaseUrl() : DEFAULT_BASE_URLS.getOrDefault(provider, "");
 
         try {
+            String apiKey = config.getApiKey() != null ? apiKeyEncryptor.decrypt(config.getApiKey()) : null;
             return switch (provider) {
-                case "BAILIAN" -> callBailianApi(baseUrl, config.getApiKey(), config.getModel(), prompt);
-                case "OPENAI", "DEEPSEEK", "KIMI" -> callOpenAICompatibleApi(baseUrl, config.getApiKey(), config.getModel(), prompt);
-                case "GLM" -> callGlmApi(baseUrl, config.getApiKey(), config.getModel(), prompt);
+                case "BAILIAN" -> callBailianApi(baseUrl, apiKey, config.getModel(), prompt);
+                case "OPENAI", "DEEPSEEK", "KIMI" -> callOpenAICompatibleApi(baseUrl, apiKey, config.getModel(), prompt);
+                case "GLM" -> callGlmApi(baseUrl, apiKey, config.getModel(), prompt);
                 default -> throw new RuntimeException("Unsupported provider: " + provider);
             };
         } catch (Exception e) {

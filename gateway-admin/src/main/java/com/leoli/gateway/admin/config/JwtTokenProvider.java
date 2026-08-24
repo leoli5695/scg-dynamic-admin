@@ -198,6 +198,20 @@ public class JwtTokenProvider {
     }
 
     /**
+     * Get the expiration epoch-millis from a token (for revocation record retention).
+     * Returns 0 if the token cannot be parsed.
+     */
+    public long getExpirationFromToken(String token) {
+        try {
+            Claims claims = getClaims(token);
+            Date exp = claims.getExpiration();
+            return exp != null ? exp.getTime() : 0L;
+        } catch (Exception e) {
+            return 0L;
+        }
+    }
+
+    /**
      * Get claims from token.
      */
     private Claims getClaims(String token) {

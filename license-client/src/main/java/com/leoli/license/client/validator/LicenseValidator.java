@@ -240,42 +240,110 @@ public class LicenseValidator {
     }
 
     /**
-     * Build fallback LicenseInfo for BASIC edition (free, permanent)
+     * Build fallback LicenseInfo (free, permanent) for the edition configured via
+     * {@code license.client.fallback-edition} (default BASIC).
+     * <p>
+     * FIX (fallback-edition ignored): this method previously hardcoded BASIC, so
+     * configuring fallback-edition=ADVANCED/ENTERPRISE had no effect.
      */
     public LicenseInfo buildFallbackLicense(LicenseProperties properties) {
-        Set<String> basicFeatures = new HashSet<>();
-        // All BASIC features (free)
-        basicFeatures.add("BASIC_ROUTING");
-        basicFeatures.add("LOCAL_RATE_LIMIT");
-        basicFeatures.add("BASIC_AUTH");
-        basicFeatures.add("DOCKER_DEPLOY");
-        basicFeatures.add("HEALTH_CHECK");
-        basicFeatures.add("SERVICE_DISCOVERY");
-        basicFeatures.add("TIMEOUT_CONFIG");
-        basicFeatures.add("BASIC_LOGGING");
-        basicFeatures.add("BASIC_METRICS");
+        String edition = normalizeEdition(properties.getFallbackEdition());
+        int editionLevel = editionLevel(edition);
 
-        LicenseInfo.QuotaInfo basicQuotas = LicenseInfo.QuotaInfo.builder()
-            .maxInstances(1)
-            .maxRoutes(10)
-            .maxServices(5)
-            .maxStrategies(10)
-            .maxRateLimitQPS(100)
-            .supportLevel("COMMUNITY")
-            .build();
+        // Grant every feature whose required edition is at or below the fallback edition
+        Set<String> features = new HashSet<>();
+        for (LicenseInfo.Feature feature : LicenseInfo.Feature.values()) {
+            if (editionLevel(feature.getRequiredEdition()) <= editionLevel) {
+                features.add(feature.name());
+            }
+        }
 
-        // BASIC edition is free and permanent (expires in 2099)
+        LicenseInfo.QuotaInfo quotas;
+        String supportLevel;
+        switch (edition) {
+            case "ENTERPRISE":
+                quotas = LicenseInfo.QuotaInfo.builder()
+                    .maxInstances(-1)
+                    .maxRoutes(-1)
+                    .maxServices(-1)
+                    .maxStrategies(-1)
+                    .maxRateLimitQPS(-1)
+                    .supportLevel("PRIORITY")
+                    .build();
+                supportLevel = "PRIORITY";
+                break;
+            case "ADVANCED":
+                quotas = LicenseInfo.QuotaInfo.builder()
+                    .maxInstances(3)
+                    .maxRoutes(50)
+                    .maxServices(20)
+                    .maxStrategies(50)
+                    .maxRateLimitQPS(1000)
+                    .supportLevel("STANDARD")
+                    .build();
+                supportLevel = "STANDARD";
+                break;
+            default:
+                quotas = LicenseInfo.QuotaInfo.builder()
+                    .maxInstances(1)
+                    .maxRoutes(10)
+                    .maxServices(5)
+                    .maxStrategies(10)
+                    .maxRateLimitQPS(100)
+                    .supportLevel("COMMUNITY")
+                    .build();
+                supportLevel = "COMMUNITY";
+                break;
+        }
+
+        // Fallback licenses are free and permanent (expire in 2099)
         LocalDateTime permanentExpiry = LocalDateTime.of(2099, 12, 31, 23, 59, 59);
 
+        log.info("Building fallback license for edition: {} ({} features, support: {})",
+            edition, features.size(), supportLevel);
+
         return LicenseInfo.builder()
-            .licenseId("FALLBACK-BASIC")
-            .edition("BASIC")
+            .licenseId("FALLBACK-" + edition)
+            .edition(edition)
             .customerName("Fallback")
             .customerEmail("fallback@local")
-            .features(basicFeatures)
-            .quotas(basicQuotas)
+            .features(features)
+            .quotas(quotas)
             .expiresAt(permanentExpiry)
             .loadedAt(LocalDateTime.now())
             .build();
+    }
+
+    /**
+     * Normalize the configured fallback edition; unknown/blank values degrade to BASIC.
+     */
+    private String normalizeEdition(String configured) {
+        if (configured == null || configured.isBlank()) {
+            return "BASIC";
+        }
+        String upper = configured.trim().toUpperCase();
+        switch (upper) {
+            case "BASIC":
+            case "ADVANCED":
+            case "ENTERPRISE":
+                return upper;
+            default:
+                log.warn("Unknown fallback-edition '{}' - degrading to BASIC", configured);
+                return "BASIC";
+        }
+    }
+
+    /**
+     * Edition ordering level used for feature entitlement comparison.
+     */
+    private int editionLevel(String edition) {
+        switch (edition) {
+            case "ENTERPRISE":
+                return 2;
+            case "ADVANCED":
+                return 1;
+            default:
+                return 0;
+        }
     }
 }

@@ -3,10 +3,13 @@ package com.leoli.gateway.filter.transform;
 import com.leoli.gateway.constants.FilterOrderConstants;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.jknack.handlebars.Handlebars;
 import com.github.jknack.handlebars.Template;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.MockResponseConfig;
+import com.leoli.gateway.model.StrategyDefinition;
 import com.leoli.gateway.util.RouteUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +30,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Mock Response Filter.
@@ -50,6 +54,14 @@ public class MockResponseFilter implements GlobalFilter, Ordered {
     private final ObjectMapper objectMapper;
     private final Handlebars handlebars;
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
+
+    // FIX (performance): handlebars.compileInline was invoked on every request
+    // even though the template comes from the (rarely changing) strategy config.
+    // Compiled templates are cached by their source text; invalid templates are
+    // negative-cached so repeated requests do not retry compilation.
+    private final Cache<String, Optional<Template>> templateCache = Caffeine.newBuilder()
+            .maximumSize(256)
+            .build();
 
     @Autowired
     public MockResponseFilter(ObjectMapper objectMapper, Handlebars handlebars) {
@@ -101,19 +113,14 @@ public class MockResponseFilter implements GlobalFilter, Ordered {
 
     /**
      * Get configuration from StrategyManager.
+     * <p>
+     * FIX (performance): uses the typed getter whose conversion result is
+     * cached per strategy version instead of running ObjectMapper.convertValue
+     * on every request.
      */
     private MockResponseConfig getConfig(String routeId) {
-        Map<String, Object> configMap = strategyManager.getMockResponseConfig(routeId);
-        if (configMap == null || configMap.isEmpty()) {
-            return null;
-        }
-
-        try {
-            return objectMapper.convertValue(configMap, MockResponseConfig.class);
-        } catch (Exception e) {
-            log.warn("Failed to parse MockResponseConfig for route {}: {}", routeId, e.getMessage());
-            return null;
-        }
+        return strategyManager.getConfig(routeId,
+                StrategyDefinition.TYPE_MOCK_RESPONSE, MockResponseConfig.class);
     }
 
     /**
@@ -359,7 +366,17 @@ public class MockResponseFilter implements GlobalFilter, Ordered {
         try {
             switch (engine) {
                 case "HANDLEBARS":
-                    Template handlebarsTemplate = handlebars.compileInline(template);
+                    Template handlebarsTemplate = templateCache.get(template, key -> {
+                        try {
+                            return Optional.of(handlebars.compileInline(key));
+                        } catch (Exception e) {
+                            log.warn("Invalid handlebars template: {}", e.getMessage());
+                            return Optional.empty();
+                        }
+                    }).orElse(null);
+                    if (handlebarsTemplate == null) {
+                        return template;
+                    }
                     return handlebarsTemplate.apply(variables);
 
                 case "MUSTACHE":

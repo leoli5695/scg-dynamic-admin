@@ -1,5 +1,6 @@
 package com.leoli.gateway.admin.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.time.LocalDateTime;
@@ -51,20 +52,26 @@ public class SslCertificate {
     private String certContent;
 
     /**
-     * Private key content (for PEM: the .key file content)
+     * Private key content (for PEM: the .key file content).
+     * Never serialized in API responses; internal sync paths read it via getter.
      */
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     @Column(name = "key_content", columnDefinition = "MEDIUMTEXT")
     private String keyContent;
 
     /**
-     * Keystore content (for JKS/P12: base64 encoded)
+     * Keystore content (for JKS/P12: base64 encoded).
+     * Never serialized in API responses.
      */
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     @Column(name = "keystore_content", columnDefinition = "MEDIUMTEXT")
     private String keystoreContent;
 
     /**
-     * Keystore password (encrypted)
+     * Keystore password (encrypted).
+     * Never serialized in API responses.
      */
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     @Column(name = "keystore_password", length = 255)
     private String keystorePassword;
 

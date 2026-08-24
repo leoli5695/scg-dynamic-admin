@@ -115,6 +115,14 @@ public class GatewayTraceProperties {
      */
     private boolean trustPrivateNetworks = true;
 
+    /**
+     * Shared secret for admin internal report endpoints.
+     * Sent as X-Internal-Token header on trace/middleware-metadata uploads.
+     * Must match gateway.admin.security.internal-token on the admin console.
+     * Default: empty (admin side enforcement is optional).
+     */
+    private String internalToken = "";
+
     // ==================== Middleware Exporter Configuration ====================
     // 配置驱动：用户必须显式配置 exporter URL 才会上报该中间件
     // 不再自动检测中间件信息，因为：

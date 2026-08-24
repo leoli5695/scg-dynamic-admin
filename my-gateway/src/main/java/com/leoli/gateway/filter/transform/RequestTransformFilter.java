@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.RequestTransformConfig;
+import com.leoli.gateway.model.StrategyDefinition;
+import com.leoli.gateway.util.PatternCache;
 import com.leoli.gateway.util.RouteUtils;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +23,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpRequestDecorator;
+import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
@@ -75,6 +78,16 @@ public class RequestTransformFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
+        // FIX (OOM): pre-check Content-Length against maxBodySize BEFORE consuming the body.
+        // Previously the limit was only checked AFTER an unbounded join had already allocated
+        // the entire body in heap, making the maxBodySize protection ineffective.
+        long contentLength = exchange.getRequest().getHeaders().getContentLength();
+        if (contentLength > config.getMaxBodySize()) {
+            log.debug("Request body ({} bytes) exceeds transform maxBodySize ({}), passing through unchanged",
+                    contentLength, config.getMaxBodySize());
+            return chain.filter(exchange);
+        }
+
         log.debug("RequestTransform filter - routeId: {}, transforming request body", routeId);
 
         // Cache and transform request body
@@ -83,19 +96,14 @@ public class RequestTransformFilter implements GlobalFilter, Ordered {
 
     /**
      * Get configuration from StrategyManager.
+     * <p>
+     * FIX (performance): uses the typed getter whose conversion result is
+     * cached per strategy version instead of running ObjectMapper.convertValue
+     * on every request.
      */
     private RequestTransformConfig getConfig(String routeId) {
-        Map<String, Object> configMap = strategyManager.getRequestTransformConfig(routeId);
-        if (configMap == null || configMap.isEmpty()) {
-            return null;
-        }
-
-        try {
-            return objectMapper.convertValue(configMap, RequestTransformConfig.class);
-        } catch (Exception e) {
-            log.warn("Failed to parse RequestTransformConfig for route {}: {}", routeId, e.getMessage());
-            return null;
-        }
+        return strategyManager.getConfig(routeId,
+                StrategyDefinition.TYPE_REQUEST_TRANSFORM, RequestTransformConfig.class);
     }
 
     /**
@@ -142,7 +150,9 @@ public class RequestTransformFilter implements GlobalFilter, Ordered {
                                               RequestTransformConfig config) {
         ServerHttpRequest request = exchange.getRequest();
 
-        return DataBufferUtils.join(request.getBody())
+        // FIX (OOM): bounded join by maxBodySize; the Content-Length pre-check in filter() covers
+        // known sizes, this limit also guards chunked requests.
+        return DataBufferUtils.join(request.getBody(), config.getMaxBodySize())
                 .defaultIfEmpty(new DefaultDataBufferFactory().wrap(new byte[0]))
                 .flatMap(dataBuffer -> {
                     // Read body bytes with guaranteed release to prevent direct buffer memory leak
@@ -158,7 +168,8 @@ public class RequestTransformFilter implements GlobalFilter, Ordered {
                         if (bytes.length > config.getMaxBodySize()) {
                             log.debug("Request body size {} exceeds limit {}, passing through unchanged",
                                     bytes.length, config.getMaxBodySize());
-                            return chain.filter(exchange);
+                            // FIX: body was already consumed by join - must rebuild it before forwarding
+                            return chain.filter(rebuildWithCachedBody(exchange, request, bytes));
                         }
 
                         String bodyStr = new String(bytes, StandardCharsets.UTF_8);
@@ -201,10 +212,34 @@ public class RequestTransformFilter implements GlobalFilter, Ordered {
 
                     } catch (Exception e) {
                         log.error("Error transforming request body: {}", e.getMessage(), e);
-                        // On error, pass through original request
-                        return chain.filter(exchange);
+                        // FIX: body was already consumed by join - rebuild it before pass-through
+                        return chain.filter(rebuildWithCachedBody(exchange, request, bytes));
                     }
+                })
+                .onErrorResume(org.springframework.core.io.buffer.DataBufferLimitException.class, e -> {
+                    // Chunked body exceeded maxBodySize mid-stream - the body is already partially
+                    // consumed and cannot be forwarded safely; reject with 413.
+                    log.warn("Request body exceeds transform maxBodySize ({} bytes), rejecting with 413",
+                            config.getMaxBodySize());
+                    ServerHttpResponse response = exchange.getResponse();
+                    response.setStatusCode(org.springframework.http.HttpStatus.PAYLOAD_TOO_LARGE);
+                    return response.setComplete();
                 });
+    }
+
+    /**
+     * Rebuild the exchange request with already-consumed body bytes.
+     * After DataBufferUtils.join the original body flux is empty, so any path that
+     * continues the chain must use the rebuilt request to avoid losing the body.
+     */
+    private ServerWebExchange rebuildWithCachedBody(ServerWebExchange exchange, ServerHttpRequest request, byte[] bytes) {
+        ServerHttpRequest newRequest = new ServerHttpRequestDecorator(request) {
+            @Override
+            public Flux<DataBuffer> getBody() {
+                return Flux.just(exchange.getResponse().bufferFactory().wrap(bytes));
+            }
+        };
+        return exchange.mutate().request(newRequest).build();
     }
 
     /**
@@ -482,14 +517,14 @@ public class RequestTransformFilter implements GlobalFilter, Ordered {
 
             case "CUSTOM":
                 if (rule.getPattern() != null) {
-                    try {
-                        Pattern pattern = Pattern.compile(rule.getPattern());
-                        Matcher matcher = pattern.matcher(value);
-                        return matcher.replaceAll(replacement);
-                    } catch (Exception e) {
-                        log.warn("Invalid masking pattern: {}", rule.getPattern());
-                        return replacement;
-                    }
+                    // FIX (performance): patterns were compiled on every request;
+                    // use the shared compiled-pattern cache instead.
+                    return PatternCache.compile(rule.getPattern())
+                            .map(pattern -> pattern.matcher(value).replaceAll(replacement))
+                            .orElseGet(() -> {
+                                log.warn("Invalid masking pattern: {}", rule.getPattern());
+                                return replacement;
+                            });
                 }
                 return replacement;
 

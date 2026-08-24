@@ -30,30 +30,35 @@ public class GatewayAdminProperties {
      */
     private CorsProperties cors = new CorsProperties();
 
+    /**
+     * Security configuration properties.
+     */
+    private SecurityProperties security = new SecurityProperties();
+
+    @Data
+    public static class SecurityProperties {
+        /**
+         * Shared secret for gateway instance internal report endpoints
+         * (heartbeat, trace upload, health sync). Sent as X-Internal-Token header.
+         * SECURITY FIX: must be configured - startup fails when empty (same
+         * posture as the JWT secret), so the endpoints can never run unprotected.
+         */
+        private String internalToken = "";
+    }
+
     @Data
     public static class CorsProperties {
         /**
          * Allowed origins for CORS.
-         * Default includes common local development origins.
-         * Production should configure specific domains.
+         * FIX: default trimmed to the actual dev servers (Vite on 5173 and the
+         * common 3000) instead of 16 speculative origins - production must set
+         * gateway.admin.cors.allowed-origins explicitly.
          */
         private List<String> allowedOrigins = Arrays.asList(
-                "http://localhost",
-                "http://localhost:3000",
-                "http://localhost:3001",
-                "http://localhost:3002",
-                "http://localhost:3003",
-                "http://localhost:3004",
                 "http://localhost:5173",
-                "http://localhost:8081",
-                "http://127.0.0.1",
-                "http://127.0.0.1:3000",
-                "http://127.0.0.1:3001",
-                "http://127.0.0.1:3002",
-                "http://127.0.0.1:3003",
-                "http://127.0.0.1:3004",
                 "http://127.0.0.1:5173",
-                "http://127.0.0.1:8081"
+                "http://localhost:3000",
+                "http://127.0.0.1:3000"
         );
 
         /**

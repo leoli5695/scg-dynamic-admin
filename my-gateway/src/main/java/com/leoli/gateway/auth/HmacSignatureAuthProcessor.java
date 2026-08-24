@@ -5,7 +5,7 @@ import com.leoli.gateway.enums.AuthType;
 import com.leoli.gateway.model.AuthConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
@@ -15,12 +15,12 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 
 /**
  * HMAC Signature Authentication Processor.
@@ -29,10 +29,11 @@ import java.util.concurrent.TimeUnit;
  * Features:
  * - Request signing with HMAC-SHA256
  * - Timestamp validation to prevent replay attacks
- * - Content-MD5 validation for request body integrity
+ * - Content-MD5 header support (validated only for empty bodies; streaming bodies
+ *   cannot be hashed without consuming them, see validateContentMd5)
  * - Custom header support
  * - Multiple access key support
- * - Distributed nonce validation via Redis (for multi-instance deployments)
+ * - Distributed nonce validation via reactive Redis (for multi-instance deployments)
  *
  * @author leoli
  */
@@ -56,9 +57,11 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
     // Nonce expiry time
     private static final long NONCE_EXPIRY_MS = AuthConstants.DEFAULT_NONCE_EXPIRY_MS;
 
-    // Redis template for distributed nonce validation (optional - may be null if Redis not configured)
+    // Reactive Redis template for distributed nonce validation (optional - null if Redis not configured).
+    // FIX (blocking Redis on EventLoop): nonce validation runs on the Netty EventLoop, so the
+    // blocking StringRedisTemplate would stall every connection on the thread. Use reactive API.
     @Autowired(required = false)
-    private StringRedisTemplate redisTemplate;
+    private ReactiveStringRedisTemplate reactiveRedisTemplate;
 
     // Local fallback nonce cache for single-instance or when Redis is unavailable
     private final Map<String, Long> localNonceCache = new ConcurrentHashMap<>();
@@ -106,44 +109,51 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
             return Mono.error(new RuntimeException("Request timestamp expired or invalid"));
         }
 
-        // Validate nonce for replay attack prevention
-        if (nonce != null && !validateNonce(nonce)) {
-            logFailure("HMAC", "Invalid or reused nonce");
-            return Mono.error(new RuntimeException("Invalid or reused nonce"));
-        }
+        // FIX: validate nonce unconditionally - previously a missing nonce skipped validation
+        // entirely (the caller guarded with `nonce != null`), defeating replay protection.
+        // Nonce validation is now reactive so the Redis SETNX never blocks the EventLoop.
+        return validateNonce(nonce)
+                .flatMap(nonceValid -> {
+                    if (!Boolean.TRUE.equals(nonceValid)) {
+                        logFailure("HMAC", "Invalid or reused nonce");
+                        return Mono.<Void>error(new RuntimeException("Invalid or reused nonce"));
+                    }
 
-        // Get secret key for the access key
-        String secretKey = getSecretKeyForAccessKey(accessKey, config);
-        if (secretKey == null || secretKey.isEmpty()) {
-            logFailure("HMAC", "Unknown access key: " + accessKey);
-            return Mono.error(new RuntimeException("Invalid access key"));
-        }
+                    // Get secret key for the access key
+                    String secretKey = getSecretKeyForAccessKey(accessKey, config);
+                    if (secretKey == null || secretKey.isEmpty()) {
+                        logFailure("HMAC", "Unknown access key: " + accessKey);
+                        return Mono.<Void>error(new RuntimeException("Invalid access key"));
+                    }
 
-        // Build string to sign
-        String stringToSign = buildStringToSign(exchange, timestamp, nonce);
+                    // Build string to sign
+                    String stringToSign = buildStringToSign(exchange, timestamp, nonce);
 
-        // Calculate expected signature
-        String expectedSignature = calculateSignature(stringToSign, secretKey, config.getSignatureAlgorithm());
+                    // Calculate expected signature
+                    String expectedSignature = calculateSignature(stringToSign, secretKey, config.getSignatureAlgorithm());
 
-        // Compare signatures (constant-time comparison)
-        if (!constantTimeEquals(signature, expectedSignature)) {
-            logFailure("HMAC", "Signature mismatch. Expected: " + expectedSignature + ", Got: " + signature);
-            return Mono.error(new RuntimeException("Invalid signature"));
-        }
+                    // Compare signatures (constant-time comparison)
+                    if (!constantTimeEquals(signature, expectedSignature)) {
+                        // SECURITY FIX: never log the expected signature - anyone with log access
+                        // could replay/forge signed requests for the remainder of the clock-skew window.
+                        logFailure("HMAC", "Signature mismatch for access key: " + accessKey);
+                        return Mono.<Void>error(new RuntimeException("Invalid signature"));
+                    }
 
-        // Optionally validate Content-MD5 for request body integrity
-        String contentMd5 = headers.getFirst(X_CONTENT_MD5);
-        if (contentMd5 != null && !contentMd5.isEmpty()) {
-            log.debug("Content-MD5 header present: {}", contentMd5);
-        }
+                    // Optionally validate Content-MD5 for request body integrity
+                    if (!validateContentMd5(exchange, headers.getFirst(X_CONTENT_MD5))) {
+                        logFailure("HMAC", "Content-MD5 mismatch");
+                        return Mono.<Void>error(new RuntimeException("Content-MD5 mismatch"));
+                    }
 
-        // Add authentication info to exchange attributes
-        exchange.getAttributes().put("auth_access_key", accessKey);
-        exchange.getAttributes().put("auth_type", "HMAC");
-        exchange.getAttributes().put("auth_signature_valid", true);
+                    // Add authentication info to exchange attributes
+                    exchange.getAttributes().put("auth_access_key", accessKey);
+                    exchange.getAttributes().put("auth_type", "HMAC");
+                    exchange.getAttributes().put("auth_signature_valid", true);
 
-        logSuccess("HMAC signature validated for access key: " + accessKey);
-        return Mono.empty();
+                    logSuccess("HMAC signature validated for access key: " + accessKey);
+                    return Mono.<Void>empty();
+                });
     }
 
     /**
@@ -174,56 +184,53 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
 
     /**
      * Validate nonce to prevent replay attacks.
-     * 
-     * SECURITY FIX: Uses Redis for distributed nonce validation in multi-instance deployments.
-     * Falls back to local cache when Redis is unavailable (with warning logged).
-     * 
+     * <p>
+     * SECURITY FIX: Uses reactive Redis for distributed nonce validation in multi-instance
+     * deployments. The previous implementation used the BLOCKING StringRedisTemplate directly
+     * on the Netty EventLoop - every Redis round-trip stalled all connections sharing the
+     * thread. Falls back to local cache when Redis is unavailable (with warning logged).
+     * <p>
      * Redis-based validation:
      * - Uses SETNX (SET if Not eXists) for atomic check-and-set
      * - Sets TTL for automatic cleanup
      * - Prevents replay attacks across all gateway instances
      */
-    private boolean validateNonce(String nonce) {
+    private Mono<Boolean> validateNonce(String nonce) {
         if (nonce == null || nonce.isEmpty()) {
             // SECURITY FIX: Reject requests without nonce to prevent replay attacks.
-            // Previously returned true (skip validation), allowing replay within clock-skew window.
             log.warn("HMAC request missing nonce header - rejecting to prevent replay attacks");
-            return false;
+            return Mono.just(false);
         }
 
-        String redisKey = NONCE_KEY_PREFIX + nonce;
-        long expirySeconds = NONCE_EXPIRY_MS / 1000;
+        // Reactive Redis path (for distributed validation)
+        if (reactiveRedisTemplate != null) {
+            String redisKey = NONCE_KEY_PREFIX + nonce;
+            return reactiveRedisTemplate.opsForValue()
+                    .setIfAbsent(redisKey, "1", Duration.ofMillis(NONCE_EXPIRY_MS))
+                    .defaultIfEmpty(Boolean.FALSE)
+                    .doOnNext(success -> {
+                        if (Boolean.TRUE.equals(success)) {
+                            log.debug("Nonce validated via Redis: {}", nonce);
+                        } else {
+                            log.warn("Nonce already used (replay attack detected): {}", nonce);
+                        }
+                    })
+                    .onErrorResume(e -> {
+                        log.error("Redis nonce validation failed, falling back to local cache: {}", e.getMessage());
+                        return Mono.fromSupplier(() -> validateNonceLocal(nonce));
+                    });
+        }
 
-        // Try Redis first (for distributed validation)
-        if (redisTemplate != null) {
-            try {
-                // Use SETNX for atomic "set if not exists" operation
-                Boolean success = redisTemplate.opsForValue()
-                        .setIfAbsent(redisKey, "1", expirySeconds, TimeUnit.SECONDS);
-
-                if (Boolean.TRUE.equals(success)) {
-                    log.debug("Nonce validated via Redis: {}", nonce);
-                    return true;
-                } else {
-                    log.warn("Nonce already used (replay attack detected): {}", nonce);
-                    return false;
-                }
-            } catch (Exception e) {
-                log.error("Redis nonce validation failed, falling back to local cache: {}", e.getMessage());
-                // Fall through to local cache
-            }
-        } else {
-            // Warn once if Redis is unavailable
-            if (!redisUnavailableWarned) {
-                redisUnavailableWarned = true;
-                log.warn("Redis not configured for HMAC nonce validation - using local cache. " +
-                         "Replay attacks may succeed across gateway instances. " +
-                         "Configure Redis for production multi-instance deployments.");
-            }
+        // Warn once if Redis is unavailable
+        if (!redisUnavailableWarned) {
+            redisUnavailableWarned = true;
+            log.warn("Redis not configured for HMAC nonce validation - using local cache. " +
+                     "Replay attacks may succeed across gateway instances. " +
+                     "Configure Redis for production multi-instance deployments.");
         }
 
         // Fallback: Local cache (single-instance mode)
-        return validateNonceLocal(nonce);
+        return Mono.fromSupplier(() -> validateNonceLocal(nonce));
     }
 
     /**
@@ -236,14 +243,40 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
         // Clean up expired nonces periodically
         localNonceCache.entrySet().removeIf(entry -> currentTime - entry.getValue() > NONCE_EXPIRY_MS);
 
-        // Check if nonce has been used
-        if (localNonceCache.containsKey(nonce)) {
+        // FIX (TOCTOU): containsKey + put was not atomic - two concurrent requests with the same
+        // nonce could both pass. putIfAbsent performs the check-and-insert in one atomic step.
+        if (localNonceCache.putIfAbsent(nonce, currentTime) != null) {
             log.warn("Nonce already used locally: {}", nonce);
             return false;
         }
+        return true;
+    }
 
-        // Add nonce to cache
-        localNonceCache.put(nonce, currentTime);
+    /**
+     * Validate the optional Content-MD5 header for request body integrity.
+     * <p>
+     * FIX (declared but never validated): the header used to be logged and ignored.
+     * Streaming request bodies cannot be hashed here without consuming them (the auth
+     * processor cannot re-wrap the exchange), so validation is performed for empty bodies
+     * and skipped with a debug log otherwise - the misleading "always validated" claim was
+     * removed from the class documentation.
+     */
+    private boolean validateContentMd5(ServerWebExchange exchange, String contentMd5) {
+        if (contentMd5 == null || contentMd5.isEmpty()) {
+            return true;
+        }
+
+        long contentLength = exchange.getRequest().getHeaders().getContentLength();
+        if (contentLength == 0) {
+            String expected = calculateMD5("");
+            if (!constantTimeEquals(contentMd5, expected)) {
+                log.warn("Content-MD5 header does not match empty request body");
+                return false;
+            }
+            return true;
+        }
+
+        log.debug("Content-MD5 validation skipped for streaming request body (Content-Length: {})", contentLength);
         return true;
     }
 

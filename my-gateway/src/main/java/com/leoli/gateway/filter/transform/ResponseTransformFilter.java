@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.ResponseTransformConfig;
+import com.leoli.gateway.model.StrategyDefinition;
+import com.leoli.gateway.util.PatternCache;
 import com.leoli.gateway.util.RouteUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
@@ -15,9 +17,11 @@ import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.core.io.buffer.DataBufferLimitException;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.http.server.reactive.ServerHttpResponseDecorator;
@@ -80,9 +84,16 @@ public class ResponseTransformFilter implements GlobalFilter, Ordered {
         ServerHttpResponseDecorator decoratedResponse = new ServerHttpResponseDecorator(originalResponse) {
             @Override
             public Mono<Void> writeWith(Publisher<? extends DataBuffer> body) {
+                // FIX (NPE): getStatusCode() can be null when the upstream never set a
+                // status - the previous getStatusCode().value() crashed the response path.
+                HttpStatusCode statusCode = getStatusCode();
+                if (statusCode == null) {
+                    return super.writeWith(body);
+                }
+
                 // Check status code filter
-                HttpStatus status = HttpStatus.valueOf(getStatusCode().value());
-                if (!shouldTransformStatus(config, status)) {
+                HttpStatus status = HttpStatus.resolve(statusCode.value());
+                if (status == null || !shouldTransformStatus(config, status)) {
                     return super.writeWith(body);
                 }
 
@@ -97,35 +108,25 @@ public class ResponseTransformFilter implements GlobalFilter, Ordered {
                     return super.writeWith(body);
                 }
 
-                return Flux.from(body)
-                        .collectList()
-                        .flatMap(buffers -> {
-                            if (buffers.isEmpty()) {
-                                return super.writeWith(Flux.empty());
-                            }
+                // FIX (aggregate-then-check): previously the whole body was collectList-ed
+                // BEFORE maxBodySize was evaluated, so oversized responses still exhausted
+                // the heap. Pre-check Content-Length and use a bounded join instead.
+                long maxBodySize = config.getMaxBodySize();
+                long contentLength = getHeaders().getContentLength();
+                if (contentLength > maxBodySize) {
+                    log.debug("Response body size {} exceeds limit {}, passing through",
+                            contentLength, maxBodySize);
+                    return super.writeWith(body);
+                }
 
-                            // Merge all buffers with proper release tracking to prevent direct buffer memory leak
-                            int totalSize = buffers.stream().mapToInt(DataBuffer::readableByteCount).sum();
-                            byte[] allBytes = null;
-                            int releasedCount = 0;
+                // join() takes an int limit; maxBodySize is long - clamp to Integer.MAX_VALUE
+                return DataBufferUtils.join(body, (int) Math.min(maxBodySize, Integer.MAX_VALUE))
+                        .flatMap(buffer -> {
+                            byte[] allBytes = new byte[buffer.readableByteCount()];
+                            buffer.read(allBytes);
+                            DataBufferUtils.release(buffer);
+
                             try {
-                                allBytes = new byte[totalSize];
-                                int offset = 0;
-                                for (DataBuffer buffer : buffers) {
-                                    int size = buffer.readableByteCount();
-                                    buffer.read(allBytes, offset, size);
-                                    offset += size;
-                                    DataBufferUtils.release(buffer);
-                                    releasedCount++;
-                                }
-
-                                // Check size limit
-                                if (allBytes.length > config.getMaxBodySize()) {
-                                    log.debug("Response body size {} exceeds limit {}, passing through",
-                                            allBytes.length, config.getMaxBodySize());
-                                    return super.writeWith(Flux.just(originalResponse.bufferFactory().wrap(allBytes)));
-                                }
-
                                 // Transform the body
                                 String originalBody = new String(allBytes, StandardCharsets.UTF_8);
                                 String transformedBody = transformBody(originalBody, config);
@@ -138,16 +139,21 @@ public class ResponseTransformFilter implements GlobalFilter, Ordered {
 
                             } catch (Exception e) {
                                 log.error("Error transforming response body: {}", e.getMessage(), e);
-                                // Release any remaining unreleased buffers to prevent direct buffer memory leak
-                                for (int i = releasedCount; i < buffers.size(); i++) {
-                                    DataBufferUtils.release(buffers.get(i));
-                                }
-                                // Return original data if available, otherwise empty response
-                                if (allBytes != null) {
-                                    return super.writeWith(Flux.just(originalResponse.bufferFactory().wrap(allBytes)));
-                                }
-                                return super.writeWith(Flux.empty());
+                                // Return original data on transform failure
+                                return super.writeWith(Flux.just(originalResponse.bufferFactory().wrap(allBytes)));
                             }
+                        })
+                        .onErrorResume(DataBufferLimitException.class, e -> {
+                            // Chunked body exceeded the limit mid-stream; the body is already
+                            // partially consumed and cannot be forwarded, so fail the response.
+                            log.warn("Response body exceeded maxBodySize {} during transform, routeId: {}",
+                                    maxBodySize, routeId);
+                            originalResponse.setStatusCode(HttpStatus.BAD_GATEWAY);
+                            originalResponse.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+                            byte[] err = "{\"code\":502,\"message\":\"Response too large to transform\"}"
+                                    .getBytes(StandardCharsets.UTF_8);
+                            return originalResponse.writeWith(
+                                    Mono.just(originalResponse.bufferFactory().wrap(err)));
                         });
             }
         };
@@ -157,19 +163,14 @@ public class ResponseTransformFilter implements GlobalFilter, Ordered {
 
     /**
      * Get configuration from StrategyManager.
+     * <p>
+     * FIX (performance): uses the typed getter whose conversion result is
+     * cached per strategy version instead of running ObjectMapper.convertValue
+     * on every request.
      */
     private ResponseTransformConfig getConfig(String routeId) {
-        Map<String, Object> configMap = strategyManager.getResponseTransformConfig(routeId);
-        if (configMap == null || configMap.isEmpty()) {
-            return null;
-        }
-
-        try {
-            return objectMapper.convertValue(configMap, ResponseTransformConfig.class);
-        } catch (Exception e) {
-            log.warn("Failed to parse ResponseTransformConfig for route {}: {}", routeId, e.getMessage());
-            return null;
-        }
+        return strategyManager.getConfig(routeId,
+                StrategyDefinition.TYPE_RESPONSE_TRANSFORM, ResponseTransformConfig.class);
     }
 
     /**
@@ -503,14 +504,14 @@ public class ResponseTransformFilter implements GlobalFilter, Ordered {
 
             case "CUSTOM":
                 if (rule.getPattern() != null) {
-                    try {
-                        Pattern pattern = Pattern.compile(rule.getPattern());
-                        Matcher matcher = pattern.matcher(value);
-                        return matcher.replaceAll(replacement);
-                    } catch (Exception e) {
-                        log.warn("Invalid masking pattern: {}", rule.getPattern());
-                        return replacement;
-                    }
+                    // FIX (performance): patterns were compiled on every request;
+                    // use the shared compiled-pattern cache instead.
+                    return PatternCache.compile(rule.getPattern())
+                            .map(pattern -> pattern.matcher(value).replaceAll(replacement))
+                            .orElseGet(() -> {
+                                log.warn("Invalid masking pattern: {}", rule.getPattern());
+                                return replacement;
+                            });
                 }
                 return replacement;
 

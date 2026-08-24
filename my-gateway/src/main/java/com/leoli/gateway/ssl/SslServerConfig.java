@@ -78,11 +78,13 @@ public class SslServerConfig {
             return;
         }
 
-        // If server already started, just update the cache
+        // FIX (renewal not taking effect): the running server was bound with the
+        // SslContext captured at startup, so renewed certificates only updated the
+        // cache and never affected live connections. Restart the server so it
+        // binds the fresh contexts.
         if (serverStarted.get()) {
-            log.debug("HTTPS server already started, updating SSL context cache");
-            updateSslCache();
-            return;
+            log.info("HTTPS server running, restarting to apply updated SSL contexts");
+            stopHttpsServerInternal();
         }
 
         try {

@@ -37,6 +37,10 @@ public class FilterChainTracker {
 
     // Recent trace records (rolling window using ConcurrentLinkedDeque for better concurrency)
     private final ConcurrentLinkedDeque<FilterChainRecord> recentRecords = new ConcurrentLinkedDeque<>();
+    // FIX (O(N) scan): index for O(1) lookup by traceId - addToRecord and
+    // getRecordForTrace previously scanned the whole deque PER FILTER end,
+    // turning every request into O(filters * records) work on the hot path.
+    private final ConcurrentHashMap<String, FilterChainRecord> recordIndex = new ConcurrentHashMap<>();
     private static final int MAX_RECORDS = 1000;
     private final AtomicInteger recordCount = new AtomicInteger(0);
 
@@ -178,12 +182,7 @@ public class FilterChainTracker {
      * Get filter chain record for a specific trace.
      */
     public FilterChainRecord getRecordForTrace(String traceId) {
-        for (FilterChainRecord record : recentRecords) {
-            if (record.getTraceId().equals(traceId)) {
-                return record;
-            }
-        }
-        return null;
+        return recordIndex.get(traceId);
     }
 
     /**
@@ -210,31 +209,30 @@ public class FilterChainTracker {
      * Add execution to record.
      */
     private void addToRecord(FilterExecution execution) {
-        // Find existing record for this trace or create new one
-        FilterChainRecord record = null;
-        for (FilterChainRecord r : recentRecords) {
-            if (r.getTraceId().equals(execution.getTraceId())) {
-                record = r;
+        // FIX (O(N) scan): index lookup instead of iterating the deque
+        FilterChainRecord record = recordIndex.computeIfAbsent(execution.getTraceId(), traceId -> {
+            FilterChainRecord newRecord = new FilterChainRecord(traceId);
+            recentRecords.addFirst(newRecord);
+            recordCount.incrementAndGet();
+            return newRecord;
+        });
+
+        // Maintain rolling window
+        while (recordCount.get() > MAX_RECORDS) {
+            FilterChainRecord oldest = recentRecords.pollLast();
+            if (oldest == null) {
                 break;
             }
-        }
-
-        if (record == null) {
-            record = new FilterChainRecord(execution.getTraceId());
-            recentRecords.addFirst(record);
-            int count = recordCount.incrementAndGet();
-
-            // Maintain rolling window
-            while (count > MAX_RECORDS) {
-                recentRecords.removeLast();
-                count = recordCount.decrementAndGet();
-            }
+            recordCount.decrementAndGet();
+            recordIndex.remove(oldest.getTraceId(), oldest);
         }
 
         record.addExecution(execution);
 
         // Check if whole chain is slow
-        if (record.getTotalDurationMs() > slowThresholdMs) {
+        // FIX (duplicate counting): this method runs once per FILTER, so a slow
+        // request with N filters was counted N times. Count each trace once.
+        if (record.getTotalDurationMs() > slowThresholdMs && record.markSlowCounted()) {
             slowRequestCount.incrementAndGet();
         }
     }
@@ -245,6 +243,7 @@ public class FilterChainTracker {
     public void clearStats() {
         filterStats.clear();
         recentRecords.clear();
+        recordIndex.clear();
         recordCount.set(0);
         slowRequestCount.set(0);
         log.info("Filter chain statistics cleared");
@@ -419,6 +418,10 @@ public class FilterChainTracker {
         private final String traceId;
         private final List<FilterExecution> executions = new ArrayList<>();
         private long createdAt = System.currentTimeMillis();
+        // FIX (duplicate slow counting): one-time latch so a slow trace only
+        // increments slowRequestCount once, no matter how many filters end.
+        private final java.util.concurrent.atomic.AtomicBoolean slowCounted =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
 
         public FilterChainRecord(String traceId) {
             this.traceId = traceId;
@@ -426,6 +429,14 @@ public class FilterChainTracker {
 
         public synchronized void addExecution(FilterExecution execution) {
             executions.add(execution);
+        }
+
+        /**
+         * Atomically claim the "slow request counted" flag for this trace.
+         * @return true only for the first caller
+         */
+        public boolean markSlowCounted() {
+            return slowCounted.compareAndSet(false, true);
         }
 
         /**
@@ -442,39 +453,61 @@ public class FilterChainTracker {
          * with the gateway's total latency calculation.
          */
         public long getTotalDurationMs() {
-            if (executions.isEmpty()) return 0;
-            long maxEnd = executions.stream().mapToLong(e -> e.endTime).max().orElse(0);
+            // FIX (concurrent read): executions is mutated under the instance
+            // lock by addExecution - stream it under the same lock so readers
+            // never hit a ConcurrentModificationException.
+            List<FilterExecution> snapshot;
+            synchronized (this) {
+                if (executions.isEmpty()) return 0;
+                snapshot = new ArrayList<>(executions);
+            }
+            long maxEnd = snapshot.stream().mapToLong(e -> e.endTime).max().orElse(0);
 
             // FIX: Use chainStartTimeNanos for TRUE chain start time
             // Fall back to min(startTime) only if chainStartTimeNanos not set (legacy data)
-            long chainStart = executions.stream()
+            long chainStart = snapshot.stream()
                     .filter(e -> e.chainStartTimeNanos > 0)
                     .mapToLong(e -> e.chainStartTimeNanos)
                     .findFirst()
-                    .orElse(executions.stream().mapToLong(e -> e.startTime).min().orElse(0));
+                    .orElse(snapshot.stream().mapToLong(e -> e.startTime).min().orElse(0));
 
             return (maxEnd - chainStart) / 1_000_000;
         }
 
         public int getSuccessCount() {
-            return (int) executions.stream().filter(FilterExecution::isSuccess).count();
+            List<FilterExecution> snapshot;
+            synchronized (this) {
+                snapshot = new ArrayList<>(executions);
+            }
+            return (int) snapshot.stream().filter(FilterExecution::isSuccess).count();
         }
 
         public int getFailureCount() {
-            return (int) executions.stream().filter(e -> !e.isSuccess()).count();
+            List<FilterExecution> snapshot;
+            synchronized (this) {
+                snapshot = new ArrayList<>(executions);
+            }
+            return (int) snapshot.stream().filter(e -> !e.isSuccess()).count();
         }
 
         public Map<String, Object> toMap() {
+            // Snapshot under lock - executions can still be appended while
+            // the trace detail is being serialized.
+            List<FilterExecution> snapshot;
+            synchronized (this) {
+                snapshot = new ArrayList<>(executions);
+            }
+
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("traceId", traceId);
             map.put("createdAt", createdAt);
             map.put("totalDurationMs", getTotalDurationMs());
             map.put("successCount", getSuccessCount());
             map.put("failureCount", getFailureCount());
-            map.put("filterCount", executions.size());
+            map.put("filterCount", snapshot.size());
 
             List<Map<String, Object>> execList = new ArrayList<>();
-            executions.stream()
+            snapshot.stream()
                     .sorted(Comparator.comparingLong(e -> e.startTime))
                     .forEach(exec -> {
                         Map<String, Object> execMap = new LinkedHashMap<>();
@@ -496,7 +529,7 @@ public class FilterChainTracker {
             long totalDur = getTotalDurationMs();
             if (totalDur > 0) {
                 List<Map<String, Object>> breakdown = new ArrayList<>();
-                executions.forEach(exec -> {
+                snapshot.forEach(exec -> {
                     Map<String, Object> b = new LinkedHashMap<>();
                     b.put("filter", exec.getFilterName());
                     b.put("totalDurationMs", exec.getDurationMs());
@@ -512,7 +545,13 @@ public class FilterChainTracker {
 
         // Getters
         public String getTraceId() { return traceId; }
-        public List<FilterExecution> getExecutions() { return executions; }
+        // FIX (concurrent read): return a snapshot - the live list is mutated
+        // by addExecution while callers iterate it.
+        public List<FilterExecution> getExecutions() {
+            synchronized (this) {
+                return new ArrayList<>(executions);
+            }
+        }
         public long getCreatedAt() { return createdAt; }
     }
 

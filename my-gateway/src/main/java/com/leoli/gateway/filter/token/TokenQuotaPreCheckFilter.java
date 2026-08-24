@@ -26,6 +26,7 @@ import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.nio.charset.StandardCharsets;
 
@@ -96,36 +97,42 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
         long estimatedInputTokens = estimateInputTokens(exchange, config.tokenQuotaConfig);
         exchange.getAttributes().put("token_quota_estimated_input", estimatedInputTokens);
 
-        // Apply pre-deduct strategy
-        String preDeductStrategy = config.tokenQuotaConfig.getPreDeductStrategy();
-        long preDeductedTokens = 0;
+        // Apply pre-deduct strategy.
+        // FIX (blocking Redis on EventLoop): all quota Redis operations are blocking;
+        // execute them on boundedElastic so the Netty EventLoop is never stalled by a
+        // Redis round-trip on the AI request hot path.
+        final String strategy = config.tokenQuotaConfig.getPreDeductStrategy();
+        return Mono.fromCallable(() -> {
+                    if ("ESTIMATE".equalsIgnoreCase(strategy) || "HYBRID".equalsIgnoreCase(strategy)) {
+                        long preDeducted = applyPreDeductStrategy(tenantId, estimatedInputTokens, config.tokenQuotaConfig);
+                        if (preDeducted < 0) {
+                            // Pre-deduct failed (quota exceeded)
+                            return tokenQuotaManager.checkQuota(tenantId, config.tokenQuotaConfig);
+                        }
+                        // Store pre-deducted amount for settlement in collector filter
+                        exchange.getAttributes().put("token_quota_pre_deducted", preDeducted);
+                        return QuotaCheckResult.allowed(0, 0);
+                    } else {
+                        // NONE strategy: just check quota
+                        return tokenQuotaManager.checkQuota(tenantId, config.tokenQuotaConfig);
+                    }
+                })
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(result -> {
+                    if (!result.isAllowed()) {
+                        return rejectRequest(exchange, tenantId, result, config.tokenQuotaConfig);
+                    }
 
-        if ("ESTIMATE".equalsIgnoreCase(preDeductStrategy) || "HYBRID".equalsIgnoreCase(preDeductStrategy)) {
-            preDeductedTokens = applyPreDeductStrategy(tenantId, estimatedInputTokens, config.tokenQuotaConfig);
-            if (preDeductedTokens < 0) {
-                // Pre-deduct failed (quota exceeded)
-                QuotaCheckResult result = tokenQuotaManager.checkQuota(tenantId, config.tokenQuotaConfig);
-                return rejectRequest(exchange, tenantId, result, config.tokenQuotaConfig);
-            }
-            // Store pre-deducted amount for settlement in collector filter
-            exchange.getAttributes().put("token_quota_pre_deducted", preDeductedTokens);
-        } else {
-            // NONE strategy: just check quota
-            QuotaCheckResult result = tokenQuotaManager.checkQuota(tenantId, config.tokenQuotaConfig);
-            if (!result.isAllowed()) {
-                return rejectRequest(exchange, tenantId, result, config.tokenQuotaConfig);
-            }
-        }
+                    // Add quota headers to response (before the response is committed)
+                    addQuotaHeaders(exchange, tenantId, config.tokenQuotaConfig);
 
-        // Add quota headers to response
-        addQuotaHeaders(exchange, tenantId, config.tokenQuotaConfig);
+                    if (log.isDebugEnabled()) {
+                        log.debug("Token quota check passed for tenant {}, estimated: {}, strategy: {}",
+                                tenantId, estimatedInputTokens, strategy);
+                    }
 
-        if (log.isDebugEnabled()) {
-            log.debug("Token quota check passed for tenant {}, preDeducted: {}, estimated: {}, strategy: {}",
-                    tenantId, preDeductedTokens, estimatedInputTokens, preDeductStrategy);
-        }
-
-        return chain.filter(exchange);
+                    return chain.filter(exchange);
+                });
     }
 
     /**
@@ -255,7 +262,10 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
             if (strategy != null && strategy.isEnabled()) {
                 Map<String, Object> configMap = strategy.getConfig();
                 if (configMap != null && !configMap.isEmpty()) {
-                    TokenQuotaConfig tokenQuotaConfig = objectMapper.convertValue(configMap, TokenQuotaConfig.class);
+                    // FIX (performance): conversion result is cached per strategy
+                    // version inside StrategyManager instead of converting per request.
+                    TokenQuotaConfig tokenQuotaConfig = strategyManager.convertStrategyConfig(
+                            routeId, "TOKEN_RATE_LIMITER", strategy, TokenQuotaConfig.class);
                     if (tokenQuotaConfig != null && tokenQuotaConfig.isEnabled()) {
                         wrapper.enabled = true;
                         wrapper.tokenQuotaConfig = tokenQuotaConfig;
@@ -275,7 +285,11 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
                 if (globalStrategy.isEnabled()) {
                     Map<String, Object> configMap = globalStrategy.getConfig();
                     if (configMap != null && !configMap.isEmpty()) {
-                        TokenQuotaConfig tokenQuotaConfig = objectMapper.convertValue(configMap, TokenQuotaConfig.class);
+                        // Separate cache namespace (global: prefix) so the global
+                        // entry does not flap with the route-bound one.
+                        TokenQuotaConfig tokenQuotaConfig = strategyManager.convertStrategyConfig(
+                                "global:" + globalStrategy.getStrategyId(), "TOKEN_RATE_LIMITER",
+                                globalStrategy, TokenQuotaConfig.class);
                         if (tokenQuotaConfig != null && tokenQuotaConfig.isEnabled()) {
                             wrapper.enabled = true;
                             wrapper.tokenQuotaConfig = tokenQuotaConfig;

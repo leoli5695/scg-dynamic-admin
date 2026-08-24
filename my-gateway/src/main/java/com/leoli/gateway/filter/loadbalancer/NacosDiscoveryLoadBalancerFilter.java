@@ -222,7 +222,10 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
         if (totalWeight <= 0) {
             // All weights are 0, use simple round-robin
             AtomicInteger counter = roundRobinCounters.computeIfAbsent(serviceName, k -> new AtomicInteger(0));
-            int index = Math.abs(counter.getAndIncrement() % instances.size());
+            // FIX (overflow): getAndIncrement eventually wraps negative, and Math.abs(Integer.MIN_VALUE)
+            // stays negative causing ArrayIndexOutOfBoundsException on long-running gateways.
+            // Math.floorMod always yields a valid non-negative index.
+            int index = Math.floorMod(counter.getAndIncrement(), instances.size());
             return instances.get(index);
         }
 
@@ -230,36 +233,41 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
         // Each instance's currentWeight is stored in a map
         Map<String, AtomicInteger> weightMap = instanceCurrentWeights.computeIfAbsent(
                 serviceName, k -> new java.util.concurrent.ConcurrentHashMap<>());
-        
-        // Add static weight to currentWeight for all instances
-        ServiceInstance selected = null;
-        double maxCurrentWeight = -1;
-        
-        for (ServiceInstance instance : instances) {
-            String instanceKey = instance.getHost() + ":" + instance.getPort();
-            AtomicInteger currentWeight = weightMap.computeIfAbsent(
-                    instanceKey, k -> new AtomicInteger(0));
-            
-            // Add static weight to current weight
-            int newWeight = currentWeight.addAndGet((int) instance.getWeight());
-            
-            // Track instance with highest current weight
-            if (newWeight > maxCurrentWeight) {
-                maxCurrentWeight = newWeight;
-                selected = instance;
+
+        // FIX (atomicity): the add-weight / pick-max / subtract-total sequence must be atomic per
+        // service; otherwise concurrent requests all pick the same max instance and the weight
+        // distribution drifts away from the configured weights.
+        synchronized (weightMap) {
+            // Add static weight to currentWeight for all instances
+            ServiceInstance selected = null;
+            double maxCurrentWeight = -1;
+
+            for (ServiceInstance instance : instances) {
+                String instanceKey = instance.getHost() + ":" + instance.getPort();
+                AtomicInteger currentWeight = weightMap.computeIfAbsent(
+                        instanceKey, k -> new AtomicInteger(0));
+
+                // Add static weight to current weight
+                int newWeight = currentWeight.addAndGet((int) instance.getWeight());
+
+                // Track instance with highest current weight
+                if (newWeight > maxCurrentWeight) {
+                    maxCurrentWeight = newWeight;
+                    selected = instance;
+                }
             }
-        }
-        
-        // Subtract total weight from selected instance
-        if (selected != null) {
-            String selectedKey = selected.getHost() + ":" + selected.getPort();
-            AtomicInteger selectedWeight = weightMap.get(selectedKey);
-            if (selectedWeight != null) {
-                selectedWeight.addAndGet(-(int) totalWeight);
+
+            // Subtract total weight from selected instance
+            if (selected != null) {
+                String selectedKey = selected.getHost() + ":" + selected.getPort();
+                AtomicInteger selectedWeight = weightMap.get(selectedKey);
+                if (selectedWeight != null) {
+                    selectedWeight.addAndGet(-(int) totalWeight);
+                }
             }
+
+            return selected != null ? selected : instances.get(0);
         }
-        
-        return selected != null ? selected : instances.get(0);
     }
 
     /**

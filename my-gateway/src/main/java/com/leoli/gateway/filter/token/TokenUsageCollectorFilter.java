@@ -18,6 +18,8 @@ import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.core.io.buffer.DataBufferLimitException;
+import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpResponse;
@@ -26,6 +28,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -122,19 +125,59 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
             public Mono<Void> writeWith(org.reactivestreams.Publisher<? extends DataBuffer> body) {
                 Flux<? extends DataBuffer> flux = Flux.from(body);
 
+                if (!isSse) {
+                    // FIX (dead headers): X-Token-Usage-* were added in doFinally,
+                    // AFTER the response was committed, so they were never sent.
+                    // For JSON responses aggregate the body first, parse usage and
+                    // set the headers BEFORE writing. Known-oversized bodies fall
+                    // back to plain streaming (no headers) to keep memory bounded.
+                    long contentLength = getHeaders().getContentLength();
+                    if (contentLength < 0 || contentLength <= maxBodySize) {
+                        return DataBufferUtils.join(flux, maxBodySize)
+                                .flatMap(dataBuffer -> {
+                                    byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                                    dataBuffer.read(bytes);
+                                    DataBufferUtils.release(dataBuffer);
+
+                                    String responseBody = new String(bytes, StandardCharsets.UTF_8);
+                                    buffer.setJsonBody(responseBody);
+                                    bufferedChars.addAndGet(responseBody.length());
+
+                                    try {
+                                        TokenUsage usage = processJsonUsage(config.tokenQuotaConfig, responseBody);
+                                        addTokenUsageHeaders(exchange.getResponse(), usage, 0L, preDeductedTokens, false);
+                                    } catch (Exception e) {
+                                        log.debug("Failed to pre-parse token usage for headers: {}", e.getMessage());
+                                    }
+
+                                    return super.writeWith(Flux.just(
+                                            exchange.getResponse().bufferFactory().wrap(bytes)));
+                                })
+                                .onErrorResume(DataBufferLimitException.class, e -> {
+                                    // Chunked body exceeded maxBodySize mid-stream; the body is
+                                    // already consumed, so report the misconfiguration.
+                                    log.warn("Response body exceeded max-body-size {} during token usage collection, routeId: {}",
+                                            maxBodySize, routeId);
+                                    exchange.getResponse().setStatusCode(org.springframework.http.HttpStatus.BAD_GATEWAY);
+                                    exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
+                                    byte[] err = "{\"code\":502,\"message\":\"Response too large for token usage collection\"}"
+                                            .getBytes(StandardCharsets.UTF_8);
+                                    return super.writeWith(Flux.just(
+                                            exchange.getResponse().bufferFactory().wrap(err)));
+                                });
+                    }
+                    // Known oversized body: stream through without usage headers
+                    return super.writeWith(flux);
+                }
+
                 return super.writeWith(flux.doOnNext(dataBuffer -> {
                     // Read and buffer response chunk
                     byte[] bytes = new byte[dataBuffer.readableByteCount()];
                     dataBuffer.read(bytes);
                     String chunk = new String(bytes, StandardCharsets.UTF_8);
 
-                    if (isSse) {
-                        // SSE mode: smart buffering based on usage info
-                        handleSseChunk(chunk, buffer, totalTokens, bufferedChars, config.tokenQuotaConfig);
-                    } else {
-                        // JSON mode: collect complete body with size limit
-                        handleJsonChunk(chunk, buffer, bufferedChars);
-                    }
+                    // SSE mode: smart buffering based on usage info
+                    handleSseChunk(chunk, buffer, totalTokens, bufferedChars, config.tokenQuotaConfig);
 
                     // Reset buffer position for actual write
                     dataBuffer.readPosition(0);
@@ -152,9 +195,15 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                     // Check for stream interruption
                     boolean interrupted = isStreamInterrupted(signalType, isSse, buffer);
 
-                    // Process collected response body with pre-deduct settlement
-                    processTokenUsageWithSettlement(exchange, tenantId, config.tokenQuotaConfig,
-                            buffer, totalTokens.get(), preDeductedTokens, interrupted, isSse);
+                    // Process collected response body with pre-deduct settlement.
+                    // FIX (blocking Redis on EventLoop): doFinally runs on the Netty
+                    // EventLoop; settlement performs blocking Redis calls (consume/refund),
+                    // so offload it to boundedElastic.
+                    Mono.fromRunnable(() -> processTokenUsageWithSettlement(exchange, tenantId,
+                                    config.tokenQuotaConfig, buffer, totalTokens.get(),
+                                    preDeductedTokens, interrupted, isSse))
+                            .subscribeOn(Schedulers.boundedElastic())
+                            .subscribe();
                 });
     }
 
@@ -309,15 +358,15 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                 tokenQuotaManager.consumeTokens(tenantId, actualTokens, config);
             }
 
-            // Add usage to response headers for debugging
+            // FIX (dead headers): X-Token-Usage-* were previously added here, after
+            // the response was already committed, so they never reached the client.
+            // For JSON responses they are now set before the body is written
+            // (see writeWith); for SSE streams headers cannot be added after
+            // commit, so the values are only logged.
             if (usage != null && usage.hasUsage()) {
-                exchange.getResponse().getHeaders().add("X-Token-Usage-Prompt", String.valueOf(usage.getPromptTokens()));
-                exchange.getResponse().getHeaders().add("X-Token-Usage-Completion", String.valueOf(usage.getCompletionTokens()));
-                exchange.getResponse().getHeaders().add("X-Token-Usage-Total", String.valueOf(actualTokens));
-                exchange.getResponse().getHeaders().add("X-Token-Pre-Deducted", String.valueOf(preDeductedTokens));
-                if (interrupted) {
-                    exchange.getResponse().getHeaders().add("X-Token-Stream-Interrupted", "true");
-                }
+                log.debug("Token usage detail: prompt={}, completion={}, total={}, preDeducted={}, interrupted={}",
+                        usage.getPromptTokens(), usage.getCompletionTokens(), actualTokens,
+                        preDeductedTokens, interrupted);
             }
 
             log.info("Token usage settled: tenant={}, preDeducted={}, actual={}, interrupted={}",
@@ -330,6 +379,26 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
             if (preDeductedTokens > 0 && config.isAutoRefundEnabled()) {
                 tokenQuotaManager.refundTokens(tenantId, preDeductedTokens, config, "PROCESSING_ERROR");
             }
+        }
+    }
+
+    /**
+     * Add token usage headers before the response is committed.
+     * Must be called BEFORE the body is written, otherwise the headers are
+     * silently dropped by the already-committed response.
+     */
+    private void addTokenUsageHeaders(ServerHttpResponse response, TokenUsage usage,
+                                       long actualTokensFallback, long preDeductedTokens, boolean interrupted) {
+        if (usage == null || !usage.hasUsage()) {
+            return;
+        }
+        long actualTokens = actualTokensFallback > 0 ? actualTokensFallback : usage.getTotalTokens();
+        response.getHeaders().add("X-Token-Usage-Prompt", String.valueOf(usage.getPromptTokens()));
+        response.getHeaders().add("X-Token-Usage-Completion", String.valueOf(usage.getCompletionTokens()));
+        response.getHeaders().add("X-Token-Usage-Total", String.valueOf(actualTokens));
+        response.getHeaders().add("X-Token-Pre-Deducted", String.valueOf(preDeductedTokens));
+        if (interrupted) {
+            response.getHeaders().add("X-Token-Stream-Interrupted", "true");
         }
     }
 
@@ -455,7 +524,10 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
             if (strategy != null && strategy.isEnabled()) {
                 Map<String, Object> configMap = strategy.getConfig();
                 if (configMap != null && !configMap.isEmpty()) {
-                    TokenQuotaConfig tokenQuotaConfig = objectMapper.convertValue(configMap, TokenQuotaConfig.class);
+                    // FIX (performance): conversion result is cached per strategy
+                    // version inside StrategyManager instead of converting per request.
+                    TokenQuotaConfig tokenQuotaConfig = strategyManager.convertStrategyConfig(
+                            routeId, "TOKEN_RATE_LIMITER", strategy, TokenQuotaConfig.class);
                     if (tokenQuotaConfig != null && tokenQuotaConfig.isEnabled()) {
                         wrapper.enabled = true;
                         wrapper.tokenQuotaConfig = tokenQuotaConfig;
@@ -475,7 +547,11 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                 if (globalStrategy.isEnabled()) {
                     Map<String, Object> configMap = globalStrategy.getConfig();
                     if (configMap != null && !configMap.isEmpty()) {
-                        TokenQuotaConfig tokenQuotaConfig = objectMapper.convertValue(configMap, TokenQuotaConfig.class);
+                        // Separate cache namespace (global: prefix) so the global
+                        // entry does not flap with the route-bound one.
+                        TokenQuotaConfig tokenQuotaConfig = strategyManager.convertStrategyConfig(
+                                "global:" + globalStrategy.getStrategyId(), "TOKEN_RATE_LIMITER",
+                                globalStrategy, TokenQuotaConfig.class);
                         if (tokenQuotaConfig != null && tokenQuotaConfig.isEnabled()) {
                             wrapper.enabled = true;
                             wrapper.tokenQuotaConfig = tokenQuotaConfig;
@@ -535,7 +611,7 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
         private final int maxChunks;          // Max chunks to store
         private final int maxJsonSize;        // Max size for JSON response
 
-        private String jsonBody = "";
+        private StringBuilder jsonBody = new StringBuilder();
         private List<String> sseChunks = new ArrayList<>();
         private int totalBufferedBytes = 0;
 
@@ -545,9 +621,20 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
             this.maxJsonSize = maxJsonSize;
         }
 
+        public String getJsonBody() {
+            return jsonBody.toString();
+        }
+
+        public void setJsonBody(String body) {
+            // FIX (O(n^2) concatenation): jsonBody was a String appended with +=
+            // per chunk, copying the whole buffer on every append.
+            jsonBody = new StringBuilder(body != null ? body : "");
+            totalBufferedBytes += jsonBody.length();
+        }
+
         public void appendJsonBody(String chunk) {
             if (totalBufferedBytes + chunk.length() <= maxJsonSize) {
-                jsonBody += chunk;
+                jsonBody.append(chunk);
                 totalBufferedBytes += chunk.length();
             }
         }

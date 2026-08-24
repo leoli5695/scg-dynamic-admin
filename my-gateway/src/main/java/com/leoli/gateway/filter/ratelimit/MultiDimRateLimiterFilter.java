@@ -22,6 +22,7 @@ import org.springframework.core.Ordered;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
@@ -100,18 +101,18 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
         // Build dimension keys
         List<DimensionKey> keys = buildDimensionKeys(routeId, tenantId, userId, clientIp, config.multiDimConfig);
 
-        // Check all dimensions
-        RateCheckResult result = checkAllDimensions(keys, config.multiDimConfig);
-
-        if (result.isAllowed()) {
-            // Add rate limit headers
-            GatewayResponseHelper.addRateLimitHeaders(exchange.getResponse(), result.getMinRemaining(), result.getMinRemaining());
-            return chain.filter(exchange);
-        } else {
-            log.warn("Multi-dim rate limit exceeded - routeId: {}, level: {}, key: {}",
-                    routeId, result.getExceededLevel(), result.getExceededKey());
-            return rejectRequest(exchange, result);
-        }
+        // Check all dimensions (fully reactive - no blocking Redis on the EventLoop)
+        return checkAllDimensions(keys, config.multiDimConfig)
+                .flatMap(result -> {
+                    if (result.isAllowed()) {
+                        // Add rate limit headers
+                        GatewayResponseHelper.addRateLimitHeaders(exchange.getResponse(), result.getMinRemaining(), result.getMinRemaining());
+                        return chain.filter(exchange);
+                    }
+                    log.warn("Multi-dim rate limit exceeded - routeId: {}, level: {}, key: {}",
+                            routeId, result.getExceededLevel(), result.getExceededKey());
+                    return rejectRequest(exchange, result);
+                });
     }
 
     /**
@@ -121,19 +122,15 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
         ConfigWrapper wrapper = new ConfigWrapper();
 
         // First try multi-dim config
-        Map<String, Object> configMap = strategyManager.getMultiDimRateLimiterConfig(routeId);
+        // FIX (performance): typed getter caches the converted config per
+        // strategy version instead of converting on every request.
+        MultiDimRateLimiterConfig multiDimConfig = strategyManager.getConfig(routeId,
+                StrategyDefinition.TYPE_MULTI_DIM_RATE_LIMITER, MultiDimRateLimiterConfig.class);
 
-        if (configMap != null && !configMap.isEmpty()) {
-            try {
-                MultiDimRateLimiterConfig multiDimConfig = objectMapper.convertValue(configMap, MultiDimRateLimiterConfig.class);
-                if (multiDimConfig != null && multiDimConfig.isEnabled()) {
-                    wrapper.enabled = true;
-                    wrapper.multiDimConfig = multiDimConfig;
-                    return wrapper;
-                }
-            } catch (Exception e) {
-                log.warn("Failed to parse multi-dim rate limiter config for route {}: {}", routeId, e.getMessage());
-            }
+        if (multiDimConfig != null && multiDimConfig.isEnabled()) {
+            wrapper.enabled = true;
+            wrapper.multiDimConfig = multiDimConfig;
+            return wrapper;
         }
 
         wrapper.enabled = false;
@@ -190,42 +187,58 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
 
     /**
      * Check all dimensions for rate limiting.
+     * <p>
+     * FIX (blocking Redis on EventLoop): dimensions are checked through a reactive
+     * pipeline so the Redis Lua round-trips never block a Netty EventLoop thread.
+     * Sequential evaluation with early termination keeps the original semantics:
+     * a deny in an earlier dimension short-circuits later checks under FIRST_HIT,
+     * and under ALL_HIT all dimensions are evaluated before rejecting.
      */
-    private RateCheckResult checkAllDimensions(List<DimensionKey> keys, MultiDimRateLimiterConfig config) {
+    private Mono<RateCheckResult> checkAllDimensions(List<DimensionKey> keys, MultiDimRateLimiterConfig config) {
         RateCheckResult result = new RateCheckResult();
         result.setAllowed(true);
         result.setMinRemaining(Integer.MAX_VALUE);
 
         String rejectStrategy = config.getRejectStrategy();
 
-        for (DimensionKey dimKey : keys) {
-            CheckResult checkResult = checkSingleDimension(dimKey);
+        return Flux.fromIterable(keys)
+                .concatMap(dimKey -> checkSingleDimension(dimKey)
+                        .map(checkResult -> new DimOutcome(dimKey, checkResult)))
+                .doOnNext(outcome -> {
+                    DimensionKey dimKey = outcome.dimKey();
+                    CheckResult checkResult = outcome.checkResult();
+                    result.getTotalResults().add(checkResult);
 
-            result.getTotalResults().add(checkResult);
+                    if (!checkResult.isAllowed()) {
+                        result.setAllowed(false);
+                        // Mirror the original loop: under ALL_HIT a later denied dimension
+                        // overwrites the earlier one; FIRST_HIT stops at the first denial.
+                        result.setExceededLevel(dimKey.getLevel());
+                        result.setExceededKey(dimKey.getKey());
+                        result.setExceededQuota(dimKey.getQuotaConfig());
+                    }
 
-            if (!checkResult.isAllowed()) {
-                result.setAllowed(false);
-                result.setExceededLevel(dimKey.getLevel());
-                result.setExceededKey(dimKey.getKey());
-                result.setExceededQuota(dimKey.getQuotaConfig());
+                    result.setMinRemaining(Math.min(result.getMinRemaining(), checkResult.getRemaining()));
+                })
+                // FIRST_HIT: stop at the first denied dimension (previous loop returned immediately)
+                .takeWhile(outcome -> !("FIRST_HIT".equals(rejectStrategy) && !outcome.checkResult().isAllowed()))
+                .then(Mono.fromSupplier(() -> result));
+    }
 
-                if ("FIRST_HIT".equals(rejectStrategy)) {
-                    // Return immediately on first failure
-                    return result;
-                }
-            }
-
-            result.setMinRemaining(Math.min(result.getMinRemaining(), checkResult.getRemaining()));
-        }
-
-        return result;
+    /**
+     * Pairs a dimension key with its check result for the reactive pipeline.
+     */
+    private record DimOutcome(DimensionKey dimKey, CheckResult checkResult) {
     }
 
     /**
      * Check a single dimension.
+     * <p>
+     * FIX (blocking Redis on EventLoop): the Redis path now uses the reactive Lua
+     * execution ({@link DistributedRateLimiter#tryAcquireReactive}) instead of the
+     * blocking execute(), which stalled an EventLoop thread per dimension per request.
      */
-    private CheckResult checkSingleDimension(DimensionKey dimKey) {
-        CheckResult result = new CheckResult();
+    private Mono<CheckResult> checkSingleDimension(DimensionKey dimKey) {
         MultiDimRateLimiterConfig.QuotaConfig quota = dimKey.getQuotaConfig();
 
         // Try Redis first
@@ -233,32 +246,44 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
                 && redisHealthChecker.isRedisAvailableForRateLimiting()
                 && distributedRateLimiter != null) {
 
-            RateLimitResult redisResult = distributedRateLimiter.tryAcquireWithFallback(
-                    dimKey.getKey(), quota.getQps(), quota.getBurstCapacity(), quota.getWindowSizeMs());
-
-            // 防御性判空：不应该发生但 mock/异常场景下保护主流程
-            if (redisResult == null) {
-                log.warn("DistributedRateLimiter returned null for key={}, falling back to local", dimKey.getKey());
-            } else if (redisResult.isAllowed()) {
-                result.setAllowed(true);
-                result.setRemaining(redisResult.getRemainingRequests());
-                return result;
-            } else if (!redisResult.isShouldFallback()) {
-                // Redis denied the request
-                result.setAllowed(false);
-                result.setRemaining(0);
-                return result;
-            }
-            // Redis unavailable 或 null，fall through to local
+            return distributedRateLimiter.tryAcquireReactive(
+                            dimKey.getKey(), quota.getQps(), quota.getBurstCapacity(), quota.getWindowSizeMs())
+                    .defaultIfEmpty(RateLimitResult.fallback("Redis returned empty result"))
+                    .map(redisResult -> {
+                        CheckResult result = new CheckResult();
+                        if (redisResult.isAllowed()) {
+                            result.setAllowed(true);
+                            result.setRemaining(redisResult.getRemainingRequests());
+                            return result;
+                        }
+                        if (!redisResult.isShouldFallback()) {
+                            // Redis denied the request
+                            result.setAllowed(false);
+                            result.setRemaining(0);
+                            return result;
+                        }
+                        // Redis unavailable - fall through to local limiter
+                        log.info("Redis unavailable for multi-dim key: {}, falling back to local limiter", dimKey.getKey());
+                        applyLocalWindow(result, dimKey.getKey(), quota);
+                        return result;
+                    });
         }
 
-        // Use local rate limiter (shared utility class)
-        com.leoli.gateway.util.RateLimiterWindow window = rateLimiterCache.get(dimKey.getKey(),
+        // Redis disabled - local limiter only
+        CheckResult result = new CheckResult();
+        applyLocalWindow(result, dimKey.getKey(), quota);
+        return Mono.just(result);
+    }
+
+    /**
+     * Apply the local rate limiter window (shared utility class) and fill the result.
+     */
+    private void applyLocalWindow(CheckResult result, String key, MultiDimRateLimiterConfig.QuotaConfig quota) {
+        com.leoli.gateway.util.RateLimiterWindow window = rateLimiterCache.get(key,
                 k -> new com.leoli.gateway.util.RateLimiterWindow(quota.getQps(), quota.getBurstCapacity(), quota.getWindowSizeMs()));
 
         result.setAllowed(window.tryAcquire());
         result.setRemaining(window.getRemaining());
-        return result;
     }
 
     /**

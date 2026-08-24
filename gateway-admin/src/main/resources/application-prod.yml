@@ -1,0 +1,58 @@
+# ============================================================================
+# Production Profile Overrides for gateway-admin
+# ============================================================================
+# Activated by: SPRING_PROFILES_ACTIVE=prod
+# Hardens development defaults for production deployment.
+# ============================================================================
+
+spring:
+  threads:
+    virtual:
+      enabled: true  # JDK 21 虚拟线程（生产环境）
+  jpa:
+    hibernate:
+      ddl-auto: validate  # Never auto-modify schema in production
+    show-sql: false
+
+# Disable API documentation in production
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+  show-actuator: false
+
+# Narrow actuator exposure to the bare minimum
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: never
+  tracing:
+    sampling:
+      probability: 0.1  # 10% sampling in production
+
+# Production sampling: 10% tracing
+otel:
+  traces:
+    sampler: parentbased_traceidratio
+  sdk:
+    disabled: false
+
+# Disable K8s management in production (unless explicitly needed)
+gateway:
+  kubernetes:
+    enabled: ${K8S_ENABLED:false}
+  admin:
+    reconcile:
+      interval-ms: ${RECONCILE_INTERVAL_MS:60000}
+
+# Logging: reduce noise
+logging:
+  level:
+    com.leoli.gateway.admin: INFO
+    org.springframework.security: WARN
+    org.springframework.web: WARN

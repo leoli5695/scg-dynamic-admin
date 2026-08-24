@@ -98,7 +98,10 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
 
         // Register route with ShadowQuotaManager for failover tracking
         if (shadowQuotaEnabled) {
-            shadowQuotaManager.registerRoute(routeId, config.qps);
+            // FIX (SCAN pattern mismatch): pass the strategyId so the snapshot job can scan
+            // "rate_limit:{strategyId}:*" - the old routeId-only pattern never matched
+            // strategy-prefixed keys, so shadow quotas were never refreshed from Redis.
+            shadowQuotaManager.registerRoute(routeId, config.strategyId, config.qps);
         }
 
         String clientId = extractClientId(exchange, config);
@@ -124,44 +127,65 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
                 log.debug("Using Redis distributed rate limiting for key: {} (License: DISTRIBUTED_RATE_LIMIT OK)", rateLimitKey);
             }
 
-            // 2. Try Redis rate limiting with proper fallback handling
-            RateLimitResult result = distributedRateLimiter.tryAcquireWithFallback(
-                    rateLimitKey, config.qps, config.burstCapacity, config.windowSizeMs);
-
-            if (result.isAllowed()) {
-                return chain.filter(exchange);
-            } else if (!result.isShouldFallback()) {
-                // Rate limit exceeded (Redis working correctly)
-                log.warn("Redis rate limit exceeded for key: {}, QPS: {}, burstCapacity: {}", rateLimitKey, config.qps, config.burstCapacity);
-                return GatewayResponseHelper.writeRateLimited(exchange.getResponse(), config.burstCapacity, config.windowSizeMs);
-            }
-            // Redis unavailable, fall through to local limiter
-            log.info("Redis unavailable for key: {}, falling back to local limiter", rateLimitKey);
+            // 2. Try Redis rate limiting with proper fallback handling.
+            // FIX (blocking Redis on EventLoop): use the reactive variant so the Lua
+            // script round-trip never blocks a Netty EventLoop thread.
+            return distributedRateLimiter.tryAcquireReactive(
+                            rateLimitKey, config.qps, config.burstCapacity, config.windowSizeMs)
+                    .flatMap(result -> {
+                        if (result.isAllowed()) {
+                            return chain.filter(exchange);
+                        }
+                        if (!result.isShouldFallback()) {
+                            // Rate limit exceeded (Redis working correctly)
+                            log.warn("Redis rate limit exceeded for key: {}, QPS: {}, burstCapacity: {}", rateLimitKey, config.qps, config.burstCapacity);
+                            return GatewayResponseHelper.writeRateLimited(exchange.getResponse(), config.burstCapacity, config.windowSizeMs);
+                        }
+                        // Redis unavailable, fall through to local limiter
+                        log.info("Redis unavailable for key: {}, falling back to local limiter", rateLimitKey);
+                        return applyLocalRateLimiting(exchange, chain, routeId, rateLimitKey, config);
+                    });
         }
 
         // 3. Fallback to local rate limiting with shadow quota
+        return applyLocalRateLimiting(exchange, chain, routeId, rateLimitKey, config);
+    }
+
+    /**
+     * Local rate limiting with shadow-quota degradation.
+     */
+    private Mono<Void> applyLocalRateLimiting(ServerWebExchange exchange, GatewayFilterChain chain,
+                                              String routeId, String rateLimitKey, RateLimitConfig config) {
         if (log.isDebugEnabled()) {
             log.debug("Using local rate limiting for key: {}", rateLimitKey);
         }
 
         // Get shadow quota for graceful degradation
         long localQuota = config.qps;
+        String localKey = rateLimitKey;
         if (shadowQuotaEnabled && !shadowQuotaManager.isRedisHealthy()) {
             localQuota = shadowQuotaManager.getShadowQuota(routeId, config.qps);
+            // FIX (node quota treated as per-client quota): the shadow quota is the budget
+            // for THIS NODE across ALL clients of the route. It was previously applied to
+            // every per-client window, multiplying the budget by the number of clients.
+            // Share one window per route+strategy instead.
+            localKey = config.keyPrefix
+                    + (config.strategyId != null && !config.strategyId.isEmpty() ? config.strategyId + ":" : "")
+                    + "shadow:" + routeId;
             if (log.isDebugEnabled()) {
                 log.debug("Using shadow quota for route {}: {} (configured: {})", routeId, localQuota, config.qps);
             }
         }
 
-        com.leoli.gateway.util.RateLimiterWindow window = getOrCreateWindowWithQuota(rateLimitKey, (int) localQuota, config);
+        com.leoli.gateway.util.RateLimiterWindow window = getOrCreateWindowWithQuota(localKey, (int) localQuota, config);
 
         if (window.tryAcquire()) {
             if (log.isDebugEnabled()) {
-                log.debug("Local rate limit allowed for key: {}, remaining: {}", rateLimitKey, window.getRemaining());
+                log.debug("Local rate limit allowed for key: {}, remaining: {}", localKey, window.getRemaining());
             }
             return chain.filter(exchange);
         } else {
-            log.warn("Local rate limit exceeded for key: {}, quota: {}", rateLimitKey, localQuota);
+            log.warn("Local rate limit exceeded for key: {}, quota: {}", localKey, localQuota);
             return GatewayResponseHelper.writeRateLimited(exchange.getResponse(), config.qps, config.windowSizeMs, 1);
         }
     }
@@ -246,8 +270,15 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
     private com.leoli.gateway.util.RateLimiterWindow getOrCreateWindowWithQuota(String key, int quota, RateLimitConfig config) {
         // Use shadow quota for the window, but keep original burst capacity ratio
         int burstCapacity = (int) (quota * ((double) config.burstCapacity / config.qps));
-        return rateLimiterCache.get(key, k ->
-                new com.leoli.gateway.util.RateLimiterWindow(quota, Math.max(quota, burstCapacity), config.windowSizeMs));
+        // FIX (shadow quota ignored for existing windows): Caffeine get() only builds on
+        // miss, so a window created with the full QPS kept the stale quota forever after
+        // Redis failed. Recreate the window whenever the effective quota changes.
+        com.leoli.gateway.util.RateLimiterWindow window = rateLimiterCache.getIfPresent(key);
+        if (window == null || window.getMaxRequests() != quota) {
+            window = new com.leoli.gateway.util.RateLimiterWindow(quota, Math.max(quota, burstCapacity), config.windowSizeMs);
+            rateLimiterCache.put(key, window);
+        }
+        return window;
     }
 
     /**

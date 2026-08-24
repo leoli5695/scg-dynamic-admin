@@ -28,8 +28,13 @@ public class RouteManager {
 
     /**
      * Add or update a single route.
+     *
+     * FIX: synchronized to close the check-then-act race on routeIndex
+     * (contains + add was not atomic; concurrent index-change callbacks and
+     * periodic sync could both pass the check and insert duplicate IDs,
+     * causing SCG to load duplicate routes).
      */
-    public void putRoute(String routeId, RouteDefinition route) {
+    public synchronized void putRoute(String routeId, RouteDefinition route) {
         routeCache.put(routeId, route);
         if (!routeIndex.contains(routeId)) {
             routeIndex.add(routeId);
@@ -40,7 +45,7 @@ public class RouteManager {
     /**
      * Remove a route by ID.
      */
-    public void removeRoute(String routeId) {
+    public synchronized void removeRoute(String routeId) {
         RouteDefinition removed = routeCache.remove(routeId);
         routeIndex.remove(routeId);
         if (removed != null) {
@@ -68,7 +73,7 @@ public class RouteManager {
     /**
      * Clear all routes.
      */
-    public void clearAll() {
+    public synchronized void clearAll() {
         routeCache.clear();
         routeIndex.clear();
         log.warn("All routes cleared");

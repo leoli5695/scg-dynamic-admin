@@ -8,6 +8,7 @@ import com.leoli.gateway.admin.model.StressTestShare;
 import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
 import com.leoli.gateway.admin.repository.StressTestRepository;
 import com.leoli.gateway.admin.repository.StressTestShareRepository;
+import com.leoli.gateway.admin.util.UrlSecurityValidator;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
@@ -231,9 +232,11 @@ public class StressTestService {
         status.setRequestsPerSecond(test.getRequestsPerSecond());
         status.setErrorRate(test.getErrorRate());
 
-        // Add live progress if running
-        if ("RUNNING".equals(test.getStatus()) && runningTests.containsKey(testId)) {
-            StressTestSession session = runningTests.get(testId);
+        // Add live progress if running.
+        // FIX: single get + null check - containsKey/get race could NPE when the
+        // session is removed between the two calls.
+        StressTestSession session = runningTests.get(testId);
+        if ("RUNNING".equals(test.getStatus()) && session != null) {
             status.setProgress(session.getProgress());
             status.setLiveRps(session.getLiveRps());
             status.setActualRequests(session.totalCompleted.get());
@@ -256,12 +259,13 @@ public class StressTestService {
         metrics.setTestId(testId);
         metrics.setStatus(test.getStatus());
 
-        // If test is running, get live metrics from session
-        if ("RUNNING".equals(test.getStatus()) && runningTests.containsKey(testId)) {
-            StressTestSession session = runningTests.get(testId);
-            metrics.setProgress(session.getProgress());
-            metrics.setTimeline(session.stats.getTimeline());
-            metrics.setSummary(session.stats.getSummary());
+        // If test is running, get live metrics from session.
+        // FIX: single get + null check to avoid the containsKey/get race.
+        StressTestSession liveSession = runningTests.get(testId);
+        if ("RUNNING".equals(test.getStatus()) && liveSession != null) {
+            metrics.setProgress(liveSession.getProgress());
+            metrics.setTimeline(liveSession.stats.getTimeline());
+            metrics.setSummary(liveSession.stats.getSummary());
         } else {
             // For completed tests, build metrics from stored data
             metrics.setProgress(1.0);
@@ -400,46 +404,12 @@ public class StressTestService {
     
     /**
      * Validate target URL to prevent SSRF attacks.
+     * FIX: delegates to the shared SSRF guard - fail-closed on DNS failure,
+     * checks all resolved addresses, blocks loopback/link-local/metadata while
+     * still allowing private-network gateway instances (the legitimate target).
      */
     private void validateTargetUrl(String urlString) {
-        try {
-            java.net.URI uri = new java.net.URI(urlString);
-            String scheme = uri.getScheme();
-            
-            // Only allow HTTP/HTTPS
-            if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
-                throw new IllegalArgumentException("Only HTTP/HTTPS URLs are allowed");
-            }
-            
-            String host = uri.getHost();
-            if (host == null || host.isEmpty()) {
-                throw new IllegalArgumentException("Invalid URL: missing host");
-            }
-            
-            // Prevent access to internal addresses
-            if (isInternalAddress(host)) {
-                throw new IllegalArgumentException("Internal addresses are not allowed for security reasons");
-            }
-            
-        } catch (java.net.URISyntaxException e) {
-            throw new IllegalArgumentException("Invalid URL format: " + e.getMessage());
-        }
-    }
-    
-    /**
-     * Check if address is internal/private.
-     */
-    private boolean isInternalAddress(String host) {
-        try {
-            java.net.InetAddress address = java.net.InetAddress.getByName(host);
-            return address.isLoopbackAddress() ||
-                   address.isSiteLocalAddress() ||
-                   address.isLinkLocalAddress() ||
-                   address.isAnyLocalAddress();
-        } catch (Exception e) {
-            // If we can't resolve, allow it (DNS will fail later if invalid)
-            return false;
-        }
+        UrlSecurityValidator.validateInternalTargetUrl(urlString);
     }
 
     private String buildTargetUrl(GatewayInstanceEntity instance, StressTestConfig config) {
@@ -456,6 +426,10 @@ public class StressTestService {
                 throw new RuntimeException("No access URL available for instance");
             }
         }
+
+        // FIX: instance access URLs were previously not validated at all; an
+        // attacker-controlled reportedAccessUrl could target arbitrary hosts.
+        UrlSecurityValidator.validateInternalTargetUrl(baseUrl);
 
         if (config.getPath() != null) {
             String path = config.getPath();

@@ -47,7 +47,13 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
     
     @org.springframework.beans.factory.annotation.Value("${gateway.admin.url:http://127.0.0.1:9090}")
     private String adminUrl;
-    
+
+    /**
+     * Shared secret for admin internal report endpoints (X-Internal-Token header).
+     */
+    @org.springframework.beans.factory.annotation.Value("${gateway.admin.internal-token:${GATEWAY_INTERNAL_TOKEN:}}")
+    private String internalToken;
+
     @org.springframework.beans.factory.annotation.Value("${gateway.instance-id:gateway-unknown}")
     private String instanceId;
 
@@ -241,9 +247,11 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
                 lowerMessage.contains("failed to connect");
     }
 
+    // FIX (performance): pattern was compiled on every exception; hoist to a constant.
+    private static final Pattern STATUS_CODE_PATTERN = Pattern.compile("(\\d{3})\\s+[A-Z_]+");
+
     private HttpStatus extractStatusFromMessage(String message) {
-        Pattern pattern = Pattern.compile("(\\d{3})\\s+[A-Z_]+");
-        Matcher matcher = pattern.matcher(message);
+        Matcher matcher = STATUS_CODE_PATTERN.matcher(message);
 
         if (matcher.find()) {
             try {
@@ -279,7 +287,10 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
         body.put("error", status.getReasonPhrase());
         body.put("data", null);
 
-        String message = extractMessage(ex);
+        // SECURITY FIX (information leakage): raw 5xx exception messages frequently
+        // contain internal details (class names, upstream hosts, connection strings).
+        // Return only the generic reason phrase to clients; full detail stays in logs.
+        String message = status.is5xxServerError() ? status.getReasonPhrase() : extractMessage(ex);
         if (message != null && !message.isEmpty()) {
             body.put("message", message);
         }
@@ -446,6 +457,7 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
                             .post()
                             .uri(adminUrl + "/api/traces/internal")
                             .contentType(MediaType.APPLICATION_JSON)
+                            .headers(h -> { if (internalToken != null && !internalToken.isEmpty()) h.set("X-Internal-Token", internalToken); })
                             .bodyValue(trace)
                             .retrieve()
                             .bodyToMono(String.class)

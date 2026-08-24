@@ -106,12 +106,27 @@ public class TokenQuotaManager {
         quotaCheckScript = new DefaultRedisScript<>();
         quotaCheckScript.setScriptText(script);
         quotaCheckScript.setResultType((Class) List.class);
+
+        // FIX (refund GET->SET race): refund used to read the counter, compute the new
+        // value locally and SET it back - any concurrent consume between GET and SET was
+        // silently lost. This Lua script decrements atomically with a floor at zero.
+        // KEYS[1]=usedKey, ARGV[1]=refund amount, ARGV[2]=TTL seconds
+        String refundScriptText =
+            "local refund = tonumber(ARGV[1])\n" +
+            "local used = tonumber(redis.call('GET', KEYS[1]) or '0')\n" +
+            "local newUsed = math.max(0, used - refund)\n" +
+            "redis.call('SET', KEYS[1], tostring(newUsed))\n" +
+            "redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))\n" +
+            "return newUsed";
+        refundScript = new DefaultRedisScript<>();
+        refundScript.setScriptText(refundScriptText);
+        refundScript.setResultType(Long.class);
     }
 
     /**
-     * Lua script for token consumption (no check).
+     * Lua script for atomic token refund (decrement with floor at zero).
      */
-    private DefaultRedisScript<Long> consumeScript;
+    private DefaultRedisScript<Long> refundScript;
 
     // ============== Quota Check Methods ==============
 
@@ -517,19 +532,21 @@ public class TokenQuotaManager {
             // Refund monthly tokens (decrease used count)
             if (shouldCheckMonthly(quota, config)) {
                 String monthlyUsedKey = buildKey("monthly", tenantId, "used");
-                long currentUsed = getUsedTokens(monthlyUsedKey);
-                long newUsed = Math.max(0, currentUsed - cappedRefund);
-                redisTemplate.opsForValue().set(monthlyUsedKey, String.valueOf(newUsed));
-                ensureMonthlyKeyTTL(monthlyUsedKey);
+                // FIX (GET->SET race): atomic decrement-with-floor via Lua script
+                redisTemplate.execute(refundScript,
+                        Collections.singletonList(monthlyUsedKey),
+                        String.valueOf(cappedRefund),
+                        String.valueOf(calculateMonthlyTTLSeconds()));
             }
 
             // Refund daily tokens
             if (shouldCheckDaily(quota, config)) {
                 String dailyUsedKey = buildKey("daily", tenantId, "used");
-                long currentUsed = getUsedTokens(dailyUsedKey);
-                long newUsed = Math.max(0, currentUsed - cappedRefund);
-                redisTemplate.opsForValue().set(dailyUsedKey, String.valueOf(newUsed));
-                ensureDailyKeyTTL(dailyUsedKey);
+                // FIX (GET->SET race): atomic decrement-with-floor via Lua script
+                redisTemplate.execute(refundScript,
+                        Collections.singletonList(dailyUsedKey),
+                        String.valueOf(cappedRefund),
+                        String.valueOf(calculateDailyTTLSeconds()));
             }
 
             // Update local cache snapshot
@@ -547,6 +564,10 @@ public class TokenQuotaManager {
     /**
      * Pre-deduct estimated tokens for a request.
      * Returns the estimated tokens pre-deducted for later comparison.
+     * <p>
+     * FIX (TOCTOU): previously this ran checkQuota() and consumeTokens() as two separate
+     * Redis round-trips - concurrent requests could both pass the check and overdraw the
+     * quota. Now a single atomic Lua check-and-consume is used.
      *
      * @param tenantId Tenant identifier
      * @param estimatedTokens Estimated tokens to pre-deduct
@@ -564,17 +585,11 @@ public class TokenQuotaManager {
             preDeductAmount = estimatedTokens * config.getEstimateMultiplier();
         }
 
-        // Check quota before pre-deduct
-        QuotaCheckResult checkResult = checkQuota(tenantId, config);
-        if (!checkResult.isAllowed()) {
-            return -1;  // Quota exceeded
-        }
-
-        // Pre-deduct tokens
-        boolean success = consumeTokens(tenantId, preDeductAmount, config);
-        if (success) {
-            log.debug("Pre-deducted {} tokens for tenant {} (estimated: {})",
-                    preDeductAmount, tenantId, estimatedTokens);
+        // Atomic check + deduct in one Redis round-trip (no TOCTOU window)
+        long remaining = checkAndConsume(tenantId, preDeductAmount, config);
+        if (remaining >= 0) {
+            log.debug("Pre-deducted {} tokens for tenant {} (estimated: {}, remaining: {})",
+                    preDeductAmount, tenantId, estimatedTokens, remaining);
             return preDeductAmount;
         }
 

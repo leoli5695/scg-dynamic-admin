@@ -9,6 +9,7 @@ import org.springframework.util.CollectionUtils;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Strategy configuration manager.
@@ -46,6 +47,69 @@ public class StrategyManager {
     // Injected ObjectMapper for consistent serialization
     private final ObjectMapper objectMapper;
 
+    // FIX: change listeners so filters holding local config caches (retry config,
+    // per-route Caffeine instances, ...) can invalidate them when a strategy is
+    // added/updated/removed from the config center.
+    private final List<StrategyChangeListener> changeListeners = new CopyOnWriteArrayList<>();
+
+    // FIX (performance): typed strategy configs were re-converted with
+    // ObjectMapper.convertValue on every request. Converted objects are cached
+    // here and validated by StrategyDefinition reference identity - putStrategy
+    // atomically installs a NEW definition on updates, so a stale entry simply
+    // misses and triggers one re-conversion.
+    private final Map<String, TypedConfigEntry> typedConfigCache = new ConcurrentHashMap<>();
+
+    private record TypedConfigEntry(StrategyDefinition source, Object config) {
+    }
+
+    /**
+     * Listener for strategy cache changes.
+     */
+    public interface StrategyChangeListener {
+        /** Strategy added or updated. */
+        void onChanged(StrategyDefinition strategy);
+
+        /** Strategy removed. */
+        void onRemoved(StrategyDefinition strategy);
+
+        /** All strategies cleared. */
+        void onCleared();
+    }
+
+    public void addChangeListener(StrategyChangeListener listener) {
+        changeListeners.add(listener);
+    }
+
+    private void notifyChanged(StrategyDefinition strategy) {
+        for (StrategyChangeListener listener : changeListeners) {
+            try {
+                listener.onChanged(strategy);
+            } catch (Exception e) {
+                log.warn("Strategy change listener failed: {}", e.getMessage());
+            }
+        }
+    }
+
+    private void notifyRemoved(StrategyDefinition strategy) {
+        for (StrategyChangeListener listener : changeListeners) {
+            try {
+                listener.onRemoved(strategy);
+            } catch (Exception e) {
+                log.warn("Strategy change listener failed: {}", e.getMessage());
+            }
+        }
+    }
+
+    private void notifyCleared() {
+        for (StrategyChangeListener listener : changeListeners) {
+            try {
+                listener.onCleared();
+            } catch (Exception e) {
+                log.warn("Strategy change listener failed: {}", e.getMessage());
+            }
+        }
+    }
+
     @Autowired
     public StrategyManager(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
@@ -57,19 +121,38 @@ public class StrategyManager {
 
     /**
      * Add or update a strategy.
+     * <p>
+     * FIX (fail-open window): previously this delegated to removeStrategy()
+     * first, which (a) fired a spurious onRemoved event on plain updates and
+     * (b) left a window where the strategy was absent from the cache, so
+     * concurrent requests saw no config at all. Now the cache entry is
+     * replaced in place and only the index entries are re-pointed.
      */
     public void putStrategy(String strategyId, StrategyDefinition strategy) {
         if (strategyId == null || strategy == null) {
             return;
         }
 
-        // Remove old indexing if exists
-        removeStrategy(strategyId);
+        // Drop stale index entries of the previous version (without notifying)
+        StrategyDefinition old = strategyCache.get(strategyId);
+        if (old != null) {
+            removeFromIndexes(old, strategyId);
+        }
 
-        // Add to cache
+        // Update cache first so readers never see a missing entry
         strategyCache.put(strategyId, strategy);
 
         // Update indexes
+        addToIndexes(strategy, strategyId);
+
+        log.debug("Strategy cached: {} (type={}, scope={})", strategyId, strategy.getStrategyType(), strategy.getScope());
+        notifyChanged(strategy);
+    }
+
+    /**
+     * Add a strategy to the route/global indexes.
+     */
+    private void addToIndexes(StrategyDefinition strategy, String strategyId) {
         if (strategy.isRouteBound()) {
             routeStrategyIndex.computeIfAbsent(strategy.getRouteId(), k -> ConcurrentHashMap.newKeySet())
                     .add(strategyId);
@@ -77,20 +160,12 @@ public class StrategyManager {
             globalStrategiesByType.computeIfAbsent(strategy.getStrategyType(), k -> ConcurrentHashMap.newKeySet())
                     .add(strategyId);
         }
-
-        log.debug("Strategy cached: {} (type={}, scope={})", strategyId, strategy.getStrategyType(), strategy.getScope());
     }
 
     /**
-     * Remove a strategy.
+     * Remove a strategy from the route/global indexes.
      */
-    public void removeStrategy(String strategyId) {
-        StrategyDefinition strategy = strategyCache.remove(strategyId);
-        if (strategy == null) {
-            return;
-        }
-
-        // Update indexes
+    private void removeFromIndexes(StrategyDefinition strategy, String strategyId) {
         if (strategy.isRouteBound() && strategy.getRouteId() != null) {
             Set<String> routeStrategies = routeStrategyIndex.get(strategy.getRouteId());
             if (routeStrategies != null) {
@@ -102,8 +177,21 @@ public class StrategyManager {
                 globalStrategies.remove(strategyId);
             }
         }
+    }
+
+    /**
+     * Remove a strategy.
+     */
+    public void removeStrategy(String strategyId) {
+        StrategyDefinition strategy = strategyCache.remove(strategyId);
+        if (strategy == null) {
+            return;
+        }
+
+        removeFromIndexes(strategy, strategyId);
 
         log.debug("Strategy removed: {}", strategyId);
+        notifyRemoved(strategy);
     }
 
     /**
@@ -207,7 +295,10 @@ public class StrategyManager {
         Set<String> routeStrategies = routeStrategyIndex.remove(routeId);
         if (routeStrategies != null) {
             for (String strategyId : routeStrategies) {
-                strategyCache.remove(strategyId);
+                StrategyDefinition removed = strategyCache.remove(strategyId);
+                if (removed != null) {
+                    notifyRemoved(removed);
+                }
             }
         }
         log.debug("Removed all strategies for route: {}", routeId);
@@ -220,7 +311,9 @@ public class StrategyManager {
         strategyCache.clear();
         routeStrategyIndex.clear();
         globalStrategiesByType.clear();
+        typedConfigCache.clear();
         log.info("Strategy cache cleared");
+        notifyCleared();
     }
 
     /**
@@ -251,22 +344,28 @@ public class StrategyManager {
      * @return Config as Map (with strategyId included), or null if not found
      */
     public Map<String, Object> getConfig(String routeId, String strategyType) {
-        StrategyDefinition strategy = getStrategyForRoute(routeId, strategyType);
-        if (Objects.isNull(strategy)) {
-            // Try fallback to snapshot if config center is unhealthy
-            if (!configCenterHealthy) {
-                strategy = getStrategyFromSnapshot(routeId, strategyType);
-                if (strategy != null) {
-                    log.warn("Using snapshot fallback for strategy type: {}, routeId: {}", strategyType, routeId);
-                }
-            }
-            if (Objects.isNull(strategy)) return null;
-        }
+        StrategyDefinition strategy = resolveStrategyWithFallback(routeId, strategyType);
+        if (Objects.isNull(strategy)) return null;
         // Include strategyId and scope in config for rate limiter key management
         Map<String, Object> configWithId = new HashMap<>(strategy.getConfig());
         configWithId.put("strategyId", strategy.getStrategyId());
         configWithId.put("scope", strategy.getScope());
         return configWithId;
+    }
+
+    /**
+     * Resolve the strategy for a route/type, falling back to the snapshot
+     * when the config center is unhealthy.
+     */
+    private StrategyDefinition resolveStrategyWithFallback(String routeId, String strategyType) {
+        StrategyDefinition strategy = getStrategyForRoute(routeId, strategyType);
+        if (Objects.isNull(strategy) && !configCenterHealthy) {
+            strategy = getStrategyFromSnapshot(routeId, strategyType);
+            if (strategy != null) {
+                log.warn("Using snapshot fallback for strategy type: {}, routeId: {}", strategyType, routeId);
+            }
+        }
+        return strategy;
     }
 
     /**
@@ -278,12 +377,54 @@ public class StrategyManager {
      * @return Config converted to target type, or null if not found or conversion fails
      */
     public <T> T getConfig(String routeId, String strategyType, Class<T> clazz) {
-        Map<String, Object> config = getConfig(routeId, strategyType);
-        if (Objects.isNull(config)) {
+        StrategyDefinition strategy = resolveStrategyWithFallback(routeId, strategyType);
+        if (Objects.isNull(strategy)) {
             return null;
         }
+        return convertStrategyConfig(routeId, strategyType, strategy, clazz);
+    }
+
+    /**
+     * Convert a strategy's config to a strongly-typed object, with caching.
+     * <p>
+     * FIX (performance): callers previously ran ObjectMapper.convertValue on
+     * every request. The converted object is cached per route/type/class and
+     * validated against the StrategyDefinition reference; putStrategy installs
+     * a new definition instance on every update, so stale entries miss.
+     *
+     * @param routeId      Route identifier (cache key component)
+     * @param strategyType Strategy type constant (cache key component)
+     * @param strategy     Resolved strategy definition
+     * @param clazz        Target class for type conversion
+     * @return Converted config, or null if missing/invalid
+     */
+    public <T> T convertStrategyConfig(String routeId, String strategyType,
+                                       StrategyDefinition strategy, Class<T> clazz) {
+        if (strategy == null) {
+            return null;
+        }
+        Map<String, Object> configMap = strategy.getConfig();
+        if (configMap == null || configMap.isEmpty()) {
+            return null;
+        }
+
+        String cacheKey = routeId + '|' + strategyType + '|' + clazz.getName();
+        TypedConfigEntry entry = typedConfigCache.get(cacheKey);
+        if (entry != null && entry.source() == strategy) {
+            return clazz.cast(entry.config());
+        }
+
         try {
-            return objectMapper.convertValue(config, clazz);
+            // Include strategyId and scope (same as the raw-map getter) so typed
+            // configs used for rate limiter key management keep working.
+            Map<String, Object> configWithId = new HashMap<>(configMap);
+            configWithId.put("strategyId", strategy.getStrategyId());
+            configWithId.put("scope", strategy.getScope());
+            T converted = objectMapper.convertValue(configWithId, clazz);
+            if (converted != null) {
+                typedConfigCache.put(cacheKey, new TypedConfigEntry(strategy, converted));
+            }
+            return converted;
         } catch (Exception e) {
             log.error("Failed to convert config to type {} for strategy {}: {}",
                     clazz.getSimpleName(), strategyType, e.getMessage());

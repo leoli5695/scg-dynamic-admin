@@ -36,6 +36,13 @@ public class StrategyRefresher {
     // Track active listeners: strategyId -> listener
     private final Map<String, ConfigCenterService.ConfigListener> activeListeners = new ConcurrentHashMap<>();
 
+    // FIX: keep index listener as a field so it can be removed on destroy
+    // (method references create a new instance per call and never match)
+    private final ConfigCenterService.ConfigListener indexListener = (dataId, group, content) -> {
+        log.info("Strategies index changed, reloading strategies...");
+        onIndexChange(content);
+    };
+
     @Autowired
     public StrategyRefresher(StrategyManager strategyManager, ConfigCenterService configService, ObjectMapper objectMapper) {
         this.strategyManager = strategyManager;
@@ -47,18 +54,22 @@ public class StrategyRefresher {
     @PostConstruct
     public void init() {
         log.info("StrategyRefresher: Loading initial strategies...");
-        loadInitialStrategies();
+        // FIX (same root cause as route enable/disable 404): register the index listener
+        // BEFORE the initial load, so strategy publishes arriving in between are not lost.
         registerIndexListener();
+        loadInitialStrategies();
     }
 
     @PreDestroy
     public void destroy() {
-        // Remove all listeners
+        // Remove all per-strategy listeners
         for (Map.Entry<String, ConfigCenterService.ConfigListener> entry : activeListeners.entrySet()) {
             String dataId = STRATEGY_PREFIX + entry.getKey();
             configService.removeListener(dataId, GROUP, entry.getValue());
         }
         activeListeners.clear();
+        // FIX: remove the index listener using the stored field instance
+        configService.removeListener(STRATEGIES_INDEX, GROUP, indexListener);
         log.info("StrategyRefresher: All listeners removed");
     }
 
@@ -91,11 +102,20 @@ public class StrategyRefresher {
 
     /**
      * Load a single strategy and register listener.
+     *
+     * FIX (same root cause as route enable/disable 404): register the listener
+     * FIRST, then load config. gateway-admin publishes the strategy config and
+     * then updates the index in two steps; with the old order (load then listen)
+     * an update arriving in the window between getConfig and addListener was
+     * silently lost until the next index change or restart.
      */
     private void loadStrategy(String strategyId) {
         String dataId = STRATEGY_PREFIX + strategyId;
         try {
-            // Get strategy content
+            // STEP 1: Register listener FIRST (to catch any config changes)
+            registerListener(strategyId);
+
+            // STEP 2: Get strategy content
             String content = configService.getConfig(dataId, GROUP);
             if (content != null && !content.isBlank()) {
                 StrategyDefinition strategy = objectMapper.readValue(content, StrategyDefinition.class);
@@ -104,9 +124,6 @@ public class StrategyRefresher {
                     log.debug("Loaded strategy: {} (type={})", strategyId, strategy.getStrategyType());
                 }
             }
-
-            // Register listener for this strategy
-            registerListener(strategyId);
         } catch (Exception e) {
             log.error("Failed to load strategy {}: {}", strategyId, e.getMessage());
         }
@@ -163,6 +180,11 @@ public class StrategyRefresher {
     public void reloadFromConfigCenter() {
         log.info("Reloading all strategies from config center...");
         strategyManager.clear();
+        // FIX: actually remove listeners from the config center before clearing the map,
+        // otherwise duplicate listeners accumulate on every reload.
+        for (Map.Entry<String, ConfigCenterService.ConfigListener> entry : activeListeners.entrySet()) {
+            configService.removeListener(STRATEGY_PREFIX + entry.getKey(), GROUP, entry.getValue());
+        }
         activeListeners.clear();
         loadInitialStrategies();
     }
@@ -172,10 +194,6 @@ public class StrategyRefresher {
      * When index changes, reload all strategies.
      */
     private void registerIndexListener() {
-        ConfigCenterService.ConfigListener indexListener = (dataId, group, content) -> {
-            log.info("Strategies index changed, reloading strategies...");
-            onIndexChange(content);
-        };
         configService.addListener(STRATEGIES_INDEX, GROUP, indexListener);
         log.info("Registered listener for strategies index");
     }
@@ -188,6 +206,12 @@ public class StrategyRefresher {
             if (content == null || content.isBlank()) {
                 // All strategies removed
                 strategyManager.clear();
+                // FIX: also unregister every per-strategy listener from the
+                // config center - previously the map was cleared without
+                // removal, leaking listeners until restart.
+                for (Map.Entry<String, ConfigCenterService.ConfigListener> entry : activeListeners.entrySet()) {
+                    configService.removeListener(STRATEGY_PREFIX + entry.getKey(), GROUP, entry.getValue());
+                }
                 activeListeners.clear();
                 log.info("All strategies cleared");
                 return;
@@ -204,7 +228,11 @@ public class StrategyRefresher {
             // Remove strategies no longer in index
             for (String strategyId : toRemove) {
                 strategyManager.removeStrategy(strategyId);
-                activeListeners.remove(strategyId);
+                // FIX: also unregister the per-strategy listener from the config center
+                ConfigCenterService.ConfigListener listener = activeListeners.remove(strategyId);
+                if (listener != null) {
+                    configService.removeListener(STRATEGY_PREFIX + strategyId, GROUP, listener);
+                }
                 log.info("Removed strategy: {}", strategyId);
             }
 

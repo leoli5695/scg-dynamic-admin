@@ -55,6 +55,23 @@ public class IPFilterGlobalFilter implements GlobalFilter, Ordered {
             .build();
 
     /**
+     * FIX (performance): the network side of each configured CIDR was split,
+     * parsed and (for IPv6) byte-expanded on every request even though it only
+     * changes when the strategy config changes. Pre-parsed CIDRs are cached by
+     * their textual form; invalid entries are cached as invalid (negative cache).
+     */
+    private final Cache<String, ParsedCidr> cidrCache = Caffeine.newBuilder()
+            .maximumSize(1024)
+            .build();
+
+    private record ParsedCidr(boolean valid, boolean ipv6,
+                              long maskedNetworkLong, long mask, byte[] networkBytes, int prefixLength) {
+        static ParsedCidr invalid() {
+            return new ParsedCidr(false, false, 0L, 0L, null, 0);
+        }
+    }
+
+    /**
      * Check if IP is in the list (supports CIDR notation)
      */
     private boolean isIPInRange(String ip, List<String> ipList) {
@@ -75,85 +92,89 @@ public class IPFilterGlobalFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * Check if IP is within CIDR range
+     * Check if IP is within CIDR range.
      * Supports both IPv4 and IPv6 CIDR notation.
+     * <p>
+     * FIX (performance): the CIDR network side is parsed once per unique CIDR
+     * string and cached, instead of being re-split/re-parsed on every request.
      */
     private boolean isIPInCIDR(String ip, String cidr) {
+        ParsedCidr parsed = cidrCache.get(cidr, this::parseCidr);
+        if (parsed == null || !parsed.valid()) {
+            return false;
+        }
+
+        // Classify the client IP (::ffff: mapped addresses are treated as IPv4,
+        // matching the previous ipv4ToLong behavior).
+        boolean ipIsV6 = !ip.startsWith("::ffff:") && ip.contains(":");
+        if (ipIsV6 != parsed.ipv6()) {
+            // Mixed address families never matched in the old implementation either.
+            return false;
+        }
+
+        if (parsed.ipv6()) {
+            byte[] ipBytes = ipv6ToBytes(ip);
+            if (ipBytes == null) {
+                return false;
+            }
+            byte[] networkBytes = parsed.networkBytes();
+            int prefixLength = parsed.prefixLength();
+
+            int fullBytes = prefixLength / 8;
+            int remainingBits = prefixLength % 8;
+
+            for (int i = 0; i < fullBytes; i++) {
+                if (ipBytes[i] != networkBytes[i]) {
+                    return false;
+                }
+            }
+            if (remainingBits > 0 && fullBytes < 16) {
+                int mask = (0xFF << (8 - remainingBits)) & 0xFF;
+                return (ipBytes[fullBytes] & mask) == (networkBytes[fullBytes] & mask);
+            }
+            return true;
+        }
+
+        long ipLong = ipv4ToLong(ip);
+        return (ipLong & parsed.mask()) == parsed.maskedNetworkLong();
+    }
+
+    /**
+     * Parse a CIDR string into its pre-computed matching components.
+     */
+    private ParsedCidr parseCidr(String cidr) {
         try {
             String[] parts = cidr.split("/");
             if (parts.length != 2) {
                 log.warn("Invalid CIDR format: {}", cidr);
-                return false;
+                return ParsedCidr.invalid();
             }
             String networkAddress = parts[0];
             int prefixLength = Integer.parseInt(parts[1]);
 
-            // Determine if IPv4 or IPv6
-            boolean isIPv6 = ip.contains(":") || networkAddress.contains(":");
-
-            if (isIPv6) {
-                return isIPv6InCIDR(ip, networkAddress, prefixLength);
-            } else {
-                return isIPv4InCIDR(ip, networkAddress, prefixLength);
+            if (networkAddress.contains(":")) {
+                if (prefixLength < 0 || prefixLength > 128) {
+                    log.warn("Invalid IPv6 prefix length: {}", prefixLength);
+                    return ParsedCidr.invalid();
+                }
+                byte[] networkBytes = ipv6ToBytes(networkAddress);
+                if (networkBytes == null) {
+                    return ParsedCidr.invalid();
+                }
+                return new ParsedCidr(true, true, 0L, 0L, networkBytes, prefixLength);
             }
+
+            if (prefixLength < 0 || prefixLength > 32) {
+                log.warn("Invalid IPv4 prefix length: {}", prefixLength);
+                return ParsedCidr.invalid();
+            }
+            long networkLong = ipv4ToLong(networkAddress);
+            long mask = prefixLength == 0 ? 0 : (-1L << (32 - prefixLength));
+            return new ParsedCidr(true, false, networkLong & mask, mask, null, prefixLength);
         } catch (Exception e) {
             log.warn("Invalid CIDR format: {}", cidr, e);
-            return false;
+            return ParsedCidr.invalid();
         }
-    }
-
-    /**
-     * Check if IPv4 is within CIDR range
-     */
-    private boolean isIPv4InCIDR(String ip, String networkAddress, int prefixLength) {
-        if (prefixLength < 0 || prefixLength > 32) {
-            log.warn("Invalid IPv4 prefix length: {}", prefixLength);
-            return false;
-        }
-
-        long ipLong = ipv4ToLong(ip);
-        long networkLong = ipv4ToLong(networkAddress);
-        long mask = prefixLength == 0 ? 0 : (-1L << (32 - prefixLength));
-
-        return (ipLong & mask) == (networkLong & mask);
-    }
-
-    /**
-     * Check if IPv6 is within CIDR range
-     */
-    private boolean isIPv6InCIDR(String ip, String networkAddress, int prefixLength) {
-        if (prefixLength < 0 || prefixLength > 128) {
-            log.warn("Invalid IPv6 prefix length: {}", prefixLength);
-            return false;
-        }
-
-        byte[] ipBytes = ipv6ToBytes(ip);
-        byte[] networkBytes = ipv6ToBytes(networkAddress);
-
-        if (ipBytes == null || networkBytes == null) {
-            return false;
-        }
-
-        // Compare bytes up to prefix length
-        int fullBytes = prefixLength / 8;
-        int remainingBits = prefixLength % 8;
-
-        // Compare full bytes
-        for (int i = 0; i < fullBytes; i++) {
-            if (ipBytes[i] != networkBytes[i]) {
-                return false;
-            }
-        }
-
-        // Compare remaining bits
-        if (remainingBits > 0 && fullBytes < 16) {
-            int mask = (0xFF << (8 - remainingBits)) & 0xFF;
-            if ((ipBytes[fullBytes] & mask) != (networkBytes[fullBytes] & mask)) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     /**
@@ -400,21 +421,21 @@ public class IPFilterGlobalFilter implements GlobalFilter, Ordered {
                 return true;
             }
             // IPv6 Unique Local Addresses (fc00::/7)
-            if (isIPv6InCIDR(ip, "fc00::", 7)) {
+            if (isIPInCIDR(ip, "fc00::/7")) {
                 return true;
             }
             // IPv6 Link-Local Addresses (fe80::/10)
-            if (isIPv6InCIDR(ip, "fe80::", 10)) {
+            if (isIPInCIDR(ip, "fe80::/10")) {
                 return true;
             }
             return false;
         }
 
         // IPv4 private networks
-        return isIPv4InCIDR(ip, "10.0.0.0", 8) ||
-                isIPv4InCIDR(ip, "172.16.0.0", 12) ||
-                isIPv4InCIDR(ip, "192.168.0.0", 16) ||
-                isIPv4InCIDR(ip, "127.0.0.0", 8);
+        return isIPInCIDR(ip, "10.0.0.0/8") ||
+                isIPInCIDR(ip, "172.16.0.0/12") ||
+                isIPInCIDR(ip, "192.168.0.0/16") ||
+                isIPInCIDR(ip, "127.0.0.0/8");
     }
 
     /**
@@ -439,9 +460,17 @@ public class IPFilterGlobalFilter implements GlobalFilter, Ordered {
             ip = ips[0].trim();
         }
 
-        // Remove port if present (e.g., "192.168.1.1:8080")
-        if (ip.contains(":") && !ip.startsWith("[")) {
-            ip = ip.substring(0, ip.lastIndexOf(":"));
+        // Remove port if present without corrupting IPv6 addresses:
+        // - "192.168.1.1:8080"   -> strip port (exactly one colon = IPv4 with port)
+        // - "[2001:db8::1]:8080" -> unwrap brackets and strip port
+        // - "2001:db8::1"        -> bare IPv6 (multiple colons), keep as-is
+        if (ip.startsWith("[")) {
+            int closeBracket = ip.indexOf(']');
+            if (closeBracket > 1) {
+                ip = ip.substring(1, closeBracket);
+            }
+        } else if (ip.indexOf(':') != -1 && ip.indexOf(':') == ip.lastIndexOf(':')) {
+            ip = ip.substring(0, ip.lastIndexOf(':'));
         }
 
         return ip;

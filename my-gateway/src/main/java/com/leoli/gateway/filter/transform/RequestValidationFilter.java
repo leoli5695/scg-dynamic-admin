@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.RequestValidationConfig;
+import com.leoli.gateway.model.StrategyDefinition;
 import com.leoli.gateway.util.RouteUtils;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +23,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpRequestDecorator;
+import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
@@ -48,6 +50,11 @@ import java.util.regex.Pattern;
 @Component
 @Slf4j
 public class RequestValidationFilter implements GlobalFilter, Ordered {
+
+    // FIX (OOM): upper bound for request body aggregation during validation.
+    // Previously DataBufferUtils.join was unbounded, so any POST to a validated route
+    // was fully buffered in heap regardless of size.
+    private static final int MAX_VALIDATION_BODY_SIZE = 1024 * 1024;
 
     @Autowired
     private StrategyManager strategyManager;
@@ -80,6 +87,15 @@ public class RequestValidationFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
+        // FIX (OOM): skip validation when Content-Length already exceeds the aggregation limit -
+        // the body stream stays untouched and is forwarded as-is.
+        long contentLength = exchange.getRequest().getHeaders().getContentLength();
+        if (contentLength > MAX_VALIDATION_BODY_SIZE) {
+            log.warn("Request body ({} bytes) exceeds validation limit ({} bytes) for route {}, skipping validation",
+                    contentLength, MAX_VALIDATION_BODY_SIZE, routeId);
+            return chain.filter(exchange);
+        }
+
         log.debug("RequestValidation filter - routeId: {}", routeId);
 
         // Cache and validate request body
@@ -88,19 +104,15 @@ public class RequestValidationFilter implements GlobalFilter, Ordered {
 
     /**
      * Get configuration from StrategyManager.
+     * <p>
+     * FIX (performance): uses the typed getter whose conversion result is
+     * cached per strategy version instead of running ObjectMapper.convertValue
+     * on every request.
      */
     private RequestValidationConfig getConfig(String routeId) {
-        Map<String, Object> configMap = strategyManager.getRequestValidationConfig(routeId);
-        if (configMap == null || configMap.isEmpty()) {
-            return null;
-        }
-
-        try {
-            return objectMapper.convertValue(configMap, RequestValidationConfig.class);
-        } catch (Exception e) {
-            log.warn("Failed to parse RequestValidationConfig for route {}: {}", routeId, e.getMessage());
-            return null;
-        }
+        return strategyManager.getConfig(routeId,
+                StrategyDefinition.TYPE_REQUEST_VALIDATION,
+                RequestValidationConfig.class);
     }
 
     /**
@@ -139,7 +151,9 @@ public class RequestValidationFilter implements GlobalFilter, Ordered {
                                              RequestValidationConfig config) {
         ServerHttpRequest request = exchange.getRequest();
 
-        return DataBufferUtils.join(request.getBody())
+        // FIX (OOM): bounded join; the Content-Length pre-check in filter() covers known sizes,
+        // this limit also guards chunked requests.
+        return DataBufferUtils.join(request.getBody(), MAX_VALIDATION_BODY_SIZE)
                 .defaultIfEmpty(new DefaultDataBufferFactory().wrap(new byte[0]))
                 .flatMap(dataBuffer -> {
                     // Read body bytes with guaranteed release to prevent direct buffer memory leak
@@ -195,8 +209,24 @@ public class RequestValidationFilter implements GlobalFilter, Ordered {
 
                     } catch (Exception e) {
                         log.error("Error validating request body: {}", e.getMessage(), e);
-                        return chain.filter(exchange);
+                        // FIX: body was already consumed by join - rebuild it before pass-through
+                        ServerHttpRequest rebuiltRequest = new ServerHttpRequestDecorator(request) {
+                            @Override
+                            public Flux<DataBuffer> getBody() {
+                                return Flux.just(exchange.getResponse().bufferFactory().wrap(bytes));
+                            }
+                        };
+                        return chain.filter(exchange.mutate().request(rebuiltRequest).build());
                     }
+                })
+                .onErrorResume(org.springframework.core.io.buffer.DataBufferLimitException.class, e -> {
+                    // Chunked body exceeded the limit mid-stream - the body is already partially
+                    // consumed and cannot be forwarded safely; reject with 413.
+                    log.warn("Request body exceeds validation limit ({} bytes), rejecting with 413",
+                            MAX_VALIDATION_BODY_SIZE);
+                    ServerHttpResponse response = exchange.getResponse();
+                    response.setStatusCode(org.springframework.http.HttpStatus.PAYLOAD_TOO_LARGE);
+                    return response.setComplete();
                 });
     }
 

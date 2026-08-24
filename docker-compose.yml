@@ -62,6 +62,13 @@ services:
       
       # JWT Configuration (REQUIRED - generate a strong secret)
       GATEWAY_ADMIN_JWT_SECRET: ${GATEWAY_ADMIN_JWT_SECRET:?JWT secret is required. Generate with: openssl rand -base64 64}
+
+      # Encryption key for AI API keys / SSL keystore passwords (REQUIRED, min 16 chars)
+      GATEWAY_ENCRYPTION_KEY: ${GATEWAY_ENCRYPTION_KEY:?Encryption key is required. Generate with: openssl rand -base64 32}
+
+      # Shared secret for gateway instance internal report endpoints (heartbeat/traces/health sync).
+      # REQUIRED - startup fails when empty. Must match gateway.admin.internal-token on gateway instances.
+      GATEWAY_INTERNAL_TOKEN: ${GATEWAY_INTERNAL_TOKEN:?Internal token is required. Generate with: openssl rand -base64 32}
       
       # Nacos Configuration
       NACOS_SERVER_ADDR: nacos:8848

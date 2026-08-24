@@ -215,6 +215,7 @@ public class MiddlewareMetadataReporter implements InitializingBean {
 
         webClient.post()
                 .uri(url)
+                .headers(h -> { if (properties.getInternalToken() != null && !properties.getInternalToken().isEmpty()) h.set("X-Internal-Token", properties.getInternalToken()); })
                 .bodyValue(metadata)
                 .retrieve()
                 .bodyToMono(Void.class)

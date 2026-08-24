@@ -2,6 +2,7 @@ package com.leoli.gateway.admin.service;
 
 import com.leoli.gateway.admin.model.EmailConfig;
 import com.leoli.gateway.admin.model.EmailSendResult;
+import com.leoli.gateway.admin.util.ApiKeyEncryptor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
@@ -28,12 +29,15 @@ import java.util.concurrent.atomic.AtomicReference;
 public class EmailSenderService {
 
     private final EmailConfigService emailConfigService;
+    private final ApiKeyEncryptor apiKeyEncryptor;  // FIX: decrypt stored SMTP password at use time
     
     private final AtomicReference<JavaMailSender> mailSenderRef = new AtomicReference<>();
     private final AtomicReference<EmailConfig> currentConfigRef = new AtomicReference<>();
 
-    public EmailSenderService(EmailConfigService emailConfigService) {
+    public EmailSenderService(EmailConfigService emailConfigService,
+                              ApiKeyEncryptor apiKeyEncryptor) {
         this.emailConfigService = emailConfigService;
+        this.apiKeyEncryptor = apiKeyEncryptor;
     }
 
     @PostConstruct
@@ -193,7 +197,10 @@ public class EmailSenderService {
         sender.setHost(config.getSmtpHost());
         sender.setPort(config.getSmtpPort());
         sender.setUsername(config.getSmtpUsername());
-        sender.setPassword(config.getSmtpPassword());
+        // FIX: password is stored encrypted; decrypt falls back to the raw value
+        // for legacy plaintext rows.
+        sender.setPassword(config.getSmtpPassword() != null
+                ? apiKeyEncryptor.decrypt(config.getSmtpPassword()) : null);
 
         Properties props = sender.getJavaMailProperties();
         props.put("mail.transport.protocol", "smtp");

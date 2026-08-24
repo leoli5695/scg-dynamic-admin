@@ -145,7 +145,7 @@ class HmacSignatureAuthProcessorTest {
         @DisplayName("Should validate valid signature")
         void testProcess_validSignature() {
             long timestamp = System.currentTimeMillis();
-            String nonce = "unique-nonce-123";
+            String nonce = uniqueNonce();
             String stringToSign = buildStringToSign("/api/test", null, timestamp, nonce);
             String signature = calculateSignature(stringToSign, SECRET_KEY, "HmacSHA256");
 
@@ -189,6 +189,7 @@ class HmacSignatureAuthProcessorTest {
                     .header("X-Access-Key", "unknown-key")
                     .header("X-Signature", "some-signature")
                     .header("X-Timestamp", String.valueOf(System.currentTimeMillis()))
+                    .header("X-Nonce", uniqueNonce())
                     .build();
             MockServerWebExchange exchange = MockServerWebExchange.builder(request).build();
             AuthConfig config = createBaseConfig();
@@ -209,13 +210,15 @@ class HmacSignatureAuthProcessorTest {
             config.setAccessKeySecrets(keySecrets);
 
             long timestamp = System.currentTimeMillis();
-            String stringToSign = buildStringToSign("/api/test", null, timestamp, null);
+            String nonce = uniqueNonce();
+            String stringToSign = buildStringToSign("/api/test", null, timestamp, nonce);
             String signature = calculateSignature(stringToSign, "secret1", "HmacSHA256");
 
             MockServerHttpRequest request = MockServerHttpRequest.get("/api/test")
                     .header("X-Access-Key", "key1")
                     .header("X-Signature", signature)
                     .header("X-Timestamp", String.valueOf(timestamp))
+                    .header("X-Nonce", nonce)
                     .build();
             MockServerWebExchange exchange = MockServerWebExchange.builder(request).build();
 
@@ -236,13 +239,15 @@ class HmacSignatureAuthProcessorTest {
         @DisplayName("Should accept valid timestamp")
         void testProcess_validTimestamp() {
             long timestamp = System.currentTimeMillis();
-            String stringToSign = buildStringToSign("/api/test", null, timestamp, null);
+            String nonce = uniqueNonce();
+            String stringToSign = buildStringToSign("/api/test", null, timestamp, nonce);
             String signature = calculateSignature(stringToSign, SECRET_KEY, "HmacSHA256");
 
             MockServerHttpRequest request = MockServerHttpRequest.get("/api/test")
                     .header("X-Access-Key", ACCESS_KEY)
                     .header("X-Signature", signature)
                     .header("X-Timestamp", String.valueOf(timestamp))
+                    .header("X-Nonce", nonce)
                     .build();
             MockServerWebExchange exchange = MockServerWebExchange.builder(request).build();
             AuthConfig config = createBaseConfig();
@@ -276,13 +281,15 @@ class HmacSignatureAuthProcessorTest {
         @DisplayName("Should accept ISO 8601 timestamp format")
         void testProcess_iso8601Timestamp() {
             String isoTimestamp = Instant.now().toString();
-            String stringToSign = buildStringToSign("/api/test", isoTimestamp, null, null);
+            String nonce = uniqueNonce();
+            String stringToSign = buildStringToSign("/api/test", isoTimestamp, null, nonce);
             String signature = calculateSignature(stringToSign, SECRET_KEY, "HmacSHA256");
 
             MockServerHttpRequest request = MockServerHttpRequest.get("/api/test")
                     .header("X-Access-Key", ACCESS_KEY)
                     .header("X-Signature", signature)
                     .header("X-Timestamp", isoTimestamp)
+                    .header("X-Nonce", nonce)
                     .build();
             MockServerWebExchange exchange = MockServerWebExchange.builder(request).build();
             AuthConfig config = createBaseConfig();
@@ -341,7 +348,7 @@ class HmacSignatureAuthProcessorTest {
         @DisplayName("Should reject replayed nonce")
         void testProcess_replayedNonce() {
             long timestamp = System.currentTimeMillis();
-            String nonce = "replayed-nonce-123";
+            String nonce = "replayed-nonce-" + System.nanoTime();
             String stringToSign = buildStringToSign("/api/test", null, timestamp, nonce);
             String signature = calculateSignature(stringToSign, SECRET_KEY, "HmacSHA256");
 
@@ -368,7 +375,7 @@ class HmacSignatureAuthProcessorTest {
         }
 
         @Test
-        @DisplayName("Should accept request without nonce")
+        @DisplayName("Should reject request without nonce (replay protection)")
         void testProcess_withoutNonce() {
             long timestamp = System.currentTimeMillis();
             String stringToSign = buildStringToSign("/api/test", null, timestamp, null);
@@ -382,8 +389,10 @@ class HmacSignatureAuthProcessorTest {
             MockServerWebExchange exchange = MockServerWebExchange.builder(request).build();
             AuthConfig config = createBaseConfig();
 
+            // SECURITY: requests without a nonce are rejected to prevent replay attacks
             StepVerifier.create(processor.process(exchange, config))
-                    .verifyComplete();
+                    .expectErrorMatches(error -> error.getMessage().matches(".*nonce.*"))
+                    .verify();
         }
     }
 
@@ -399,14 +408,16 @@ class HmacSignatureAuthProcessorTest {
         @DisplayName("Should validate with query parameters")
         void testProcess_withQueryParams() {
             long timestamp = System.currentTimeMillis();
+            String nonce = uniqueNonce();
             String queryString = "b=2&a=1"; // Note: will be sorted
-            String stringToSign = buildStringToSign("/api/test", queryString, timestamp, null);
+            String stringToSign = buildStringToSign("/api/test", queryString, timestamp, nonce);
             String signature = calculateSignature(stringToSign, SECRET_KEY, "HmacSHA256");
 
             MockServerHttpRequest request = MockServerHttpRequest.get("/api/test?b=2&a=1")
                     .header("X-Access-Key", ACCESS_KEY)
                     .header("X-Signature", signature)
                     .header("X-Timestamp", String.valueOf(timestamp))
+                    .header("X-Nonce", nonce)
                     .build();
             MockServerWebExchange exchange = MockServerWebExchange.builder(request).build();
             AuthConfig config = createBaseConfig();
@@ -419,8 +430,9 @@ class HmacSignatureAuthProcessorTest {
         @DisplayName("Should sort query parameters before signing")
         void testProcess_sortedQueryParams() {
             long timestamp = System.currentTimeMillis();
+            String nonce = uniqueNonce();
             // Query string will be sorted to "a=1&b=2&c=3"
-            String stringToSign = buildStringToSign("/api/test", "a=1&c=3&b=2", timestamp, null);
+            String stringToSign = buildStringToSign("/api/test", "a=1&c=3&b=2", timestamp, nonce);
             String signature = calculateSignature(stringToSign, SECRET_KEY, "HmacSHA256");
 
             // Request has unsorted params, but processor should sort them
@@ -428,6 +440,7 @@ class HmacSignatureAuthProcessorTest {
                     .header("X-Access-Key", ACCESS_KEY)
                     .header("X-Signature", signature)
                     .header("X-Timestamp", String.valueOf(timestamp))
+                    .header("X-Nonce", nonce)
                     .build();
             MockServerWebExchange exchange = MockServerWebExchange.builder(request).build();
             AuthConfig config = createBaseConfig();
@@ -488,13 +501,15 @@ class HmacSignatureAuthProcessorTest {
         @DisplayName("Should handle POST method")
         void testProcess_postMethod() {
             long timestamp = System.currentTimeMillis();
-            String stringToSign = "POST\n/api/test\n\n" + timestamp + "\n";
+            String nonce = uniqueNonce();
+            String stringToSign = "POST\n/api/test\n\n" + timestamp + "\n" + nonce;
             String signature = calculateSignature(stringToSign, SECRET_KEY, "HmacSHA256");
 
             MockServerHttpRequest request = MockServerHttpRequest.post("/api/test")
                     .header("X-Access-Key", ACCESS_KEY)
                     .header("X-Signature", signature)
                     .header("X-Timestamp", String.valueOf(timestamp))
+                    .header("X-Nonce", nonce)
                     .build();
             MockServerWebExchange exchange = MockServerWebExchange.builder(request).build();
             AuthConfig config = createBaseConfig();
@@ -507,14 +522,16 @@ class HmacSignatureAuthProcessorTest {
         @DisplayName("Should handle special characters in path")
         void testProcess_specialCharsInPath() {
             long timestamp = System.currentTimeMillis();
+            String nonce = uniqueNonce();
             String path = "/api/test/with%20spaces";
-            String stringToSign = buildStringToSign(path, null, timestamp, null);
+            String stringToSign = buildStringToSign(path, null, timestamp, nonce);
             String signature = calculateSignature(stringToSign, SECRET_KEY, "HmacSHA256");
 
             MockServerHttpRequest request = MockServerHttpRequest.get(path)
                     .header("X-Access-Key", ACCESS_KEY)
                     .header("X-Signature", signature)
                     .header("X-Timestamp", String.valueOf(timestamp))
+                    .header("X-Nonce", nonce)
                     .build();
             MockServerWebExchange exchange = MockServerWebExchange.builder(request).build();
             AuthConfig config = createBaseConfig();
@@ -559,15 +576,21 @@ class HmacSignatureAuthProcessorTest {
 
     private MockServerWebExchange createRequestWithAlgorithm(String hmacAlgo, AuthConfig config) {
         long timestamp = System.currentTimeMillis();
-        String stringToSign = buildStringToSign("/api/test", null, timestamp, null);
+        String nonce = uniqueNonce();
+        String stringToSign = buildStringToSign("/api/test", null, timestamp, nonce);
         String signature = calculateSignature(stringToSign, SECRET_KEY, hmacAlgo);
 
         MockServerHttpRequest request = MockServerHttpRequest.get("/api/test")
                 .header("X-Access-Key", ACCESS_KEY)
                 .header("X-Signature", signature)
                 .header("X-Timestamp", String.valueOf(timestamp))
+                .header("X-Nonce", nonce)
                 .build();
         return MockServerWebExchange.builder(request).build();
+    }
+
+    private static String uniqueNonce() {
+        return "nonce-" + System.nanoTime();
     }
 
     private String buildStringToSign(String path, String query, long timestamp, String nonce) {

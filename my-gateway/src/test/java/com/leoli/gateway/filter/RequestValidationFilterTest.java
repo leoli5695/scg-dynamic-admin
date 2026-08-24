@@ -1,8 +1,11 @@
 package com.leoli.gateway.filter;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.filter.transform.RequestValidationFilter;
 import com.leoli.gateway.manager.StrategyManager;
+import com.leoli.gateway.model.RequestValidationConfig;
+import com.leoli.gateway.model.StrategyDefinition;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -54,6 +57,8 @@ class RequestValidationFilterTest {
     @BeforeEach
     void setUp() {
         bufferFactory = new DefaultDataBufferFactory();
+        // Mirror the production ObjectMapper leniency for config conversion
+        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
         filter = new RequestValidationFilter(objectMapper);
         org.springframework.test.util.ReflectionTestUtils.setField(filter, "strategyManager", strategyManager);
     }
@@ -66,7 +71,7 @@ class RequestValidationFilterTest {
         @DisplayName("Filter should pass through when config is null")
         void testFilter_nullConfig() {
             MockServerWebExchange exchange = createPostExchange("/api/test", "{}", "test-route");
-            when(strategyManager.getRequestValidationConfig(anyString())).thenReturn(null);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_REQUEST_VALIDATION), eq(RequestValidationConfig.class))).thenReturn(null);
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -82,7 +87,7 @@ class RequestValidationFilterTest {
             MockServerWebExchange exchange = createPostExchange("/api/test", "{}", "test-route");
             Map<String, Object> config = new HashMap<>();
             config.put("enabled", false);
-            when(strategyManager.getRequestValidationConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_REQUEST_VALIDATION), eq(RequestValidationConfig.class))).thenReturn(typedConfig(config));
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -100,7 +105,7 @@ class RequestValidationFilterTest {
             exchange.getAttributes().put("org.springframework.cloud.gateway.support.ServerWebExchangeUtils.gatewayRouteId", "test-route");
 
             Map<String, Object> config = createBasicValidationConfig();
-            when(strategyManager.getRequestValidationConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_REQUEST_VALIDATION), eq(RequestValidationConfig.class))).thenReturn(typedConfig(config));
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -122,7 +127,7 @@ class RequestValidationFilterTest {
             MockServerWebExchange exchange = createPostExchange("/api/test", body, "test-route");
 
             Map<String, Object> config = createValidationConfigWithRequiredFields(List.of("name", "email"));
-            when(strategyManager.getRequestValidationConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_REQUEST_VALIDATION), eq(RequestValidationConfig.class))).thenReturn(typedConfig(config));
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -139,7 +144,7 @@ class RequestValidationFilterTest {
             MockServerWebExchange exchange = createPostExchange("/api/test", body, "test-route");
 
             Map<String, Object> config = createValidationConfigWithRequiredFields(List.of("name", "email"));
-            when(strategyManager.getRequestValidationConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_REQUEST_VALIDATION), eq(RequestValidationConfig.class))).thenReturn(typedConfig(config));
 
             StepVerifier.create(filter.filter(exchange, chain))
                     .expectComplete()
@@ -155,7 +160,7 @@ class RequestValidationFilterTest {
             MockServerWebExchange exchange = createPostExchange("/api/test", "", "test-route");
 
             Map<String, Object> config = createValidationConfigWithRequiredFields(List.of("name"));
-            when(strategyManager.getRequestValidationConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_REQUEST_VALIDATION), eq(RequestValidationConfig.class))).thenReturn(typedConfig(config));
 
             StepVerifier.create(filter.filter(exchange, chain))
                     .expectComplete()
@@ -177,7 +182,7 @@ class RequestValidationFilterTest {
             MockServerWebExchange exchange = createPostExchange("/api/test", body, "test-route");
 
             Map<String, Object> config = createValidationConfigWithTypeConstraint("age", "integer");
-            when(strategyManager.getRequestValidationConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_REQUEST_VALIDATION), eq(RequestValidationConfig.class))).thenReturn(typedConfig(config));
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -194,7 +199,7 @@ class RequestValidationFilterTest {
             MockServerWebExchange exchange = createPostExchange("/api/test", body, "test-route");
 
             Map<String, Object> config = createValidationConfigWithTypeConstraint("age", "integer");
-            when(strategyManager.getRequestValidationConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_REQUEST_VALIDATION), eq(RequestValidationConfig.class))).thenReturn(typedConfig(config));
 
             StepVerifier.create(filter.filter(exchange, chain))
                     .expectComplete()
@@ -217,7 +222,7 @@ class RequestValidationFilterTest {
 
             String schema = "{\"type\":\"object\",\"required\":[\"name\",\"age\"],\"properties\":{\"name\":{\"type\":\"string\"},\"age\":{\"type\":\"integer\"}}}";
             Map<String, Object> config = createValidationConfigWithSchema(schema);
-            when(strategyManager.getRequestValidationConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_REQUEST_VALIDATION), eq(RequestValidationConfig.class))).thenReturn(typedConfig(config));
             when(chain.filter(any())).thenReturn(Mono.empty());
 
             StepVerifier.create(filter.filter(exchange, chain))
@@ -235,7 +240,7 @@ class RequestValidationFilterTest {
 
             String schema = "{\"type\":\"object\",\"required\":[\"name\",\"age\"]}";
             Map<String, Object> config = createValidationConfigWithSchema(schema);
-            when(strategyManager.getRequestValidationConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_REQUEST_VALIDATION), eq(RequestValidationConfig.class))).thenReturn(typedConfig(config));
 
             StepVerifier.create(filter.filter(exchange, chain))
                     .expectComplete()
@@ -257,7 +262,7 @@ class RequestValidationFilterTest {
             MockServerWebExchange exchange = createPostExchange("/api/test", body, "test-route");
 
             Map<String, Object> config = createBasicValidationConfig();
-            when(strategyManager.getRequestValidationConfig(anyString())).thenReturn(config);
+            when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_REQUEST_VALIDATION), eq(RequestValidationConfig.class))).thenReturn(typedConfig(config));
 
             StepVerifier.create(filter.filter(exchange, chain))
                     .expectComplete()
@@ -280,6 +285,14 @@ class RequestValidationFilterTest {
     }
 
     // ============== Helper Methods ==============
+
+    /**
+     * Convert the legacy Map-style config to the typed config the filter now reads
+     * via StrategyManager.getConfig(routeId, type, class).
+     */
+    private RequestValidationConfig typedConfig(Map<String, Object> config) {
+        return config == null ? null : objectMapper.convertValue(config, RequestValidationConfig.class);
+    }
 
     private MockServerWebExchange createPostExchange(String path, String body, String routeId) {
         DataBuffer buffer = bufferFactory.wrap(body.getBytes(StandardCharsets.UTF_8));

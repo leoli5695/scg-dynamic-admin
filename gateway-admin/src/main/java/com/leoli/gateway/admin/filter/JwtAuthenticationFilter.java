@@ -1,39 +1,45 @@
 package com.leoli.gateway.admin.filter;
 
 import com.leoli.gateway.admin.config.JwtTokenProvider;
+import com.leoli.gateway.admin.service.TokenRevocationService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
-import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * JWT Authentication Filter.
  * Intercepts requests to validate JWT tokens and set authentication.
+ * Not a @Component on purpose: instantiated by SecurityConfig so it only runs
+ * on the Spring Security chain (no servlet-chain auto-registration).
  *
  * @author leoli
  */
-@Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
     private final JwtTokenProvider jwtTokenProvider;
+    private final TokenRevocationService tokenRevocationService;
 
-    public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider) {
+    public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider,
+                                    TokenRevocationService tokenRevocationService) {
         this.jwtTokenProvider = jwtTokenProvider;
+        this.tokenRevocationService = tokenRevocationService;
     }
 
     @Override
@@ -53,11 +59,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String jwt = getJwtFromRequest(request);
             logger.debug("Extracted JWT from request: {}", jwt != null ? "present" : "not present");
 
-            if (StringUtils.hasText(jwt) && jwtTokenProvider.validateToken(jwt)) {
+            if (StringUtils.hasText(jwt) && jwtTokenProvider.validateToken(jwt)
+                    && !tokenRevocationService.isRevoked(jwt)) {
                 String username = jwtTokenProvider.getUsernameFromToken(jwt);
 
+                // FIX: rebuild authorities from the token roles claim - they were
+                // previously discarded with Collections.emptyList().
+                List<String> roles = jwtTokenProvider.getRolesFromToken(jwt);
+                List<SimpleGrantedAuthority> authorities = roles != null
+                        ? roles.stream().map(SimpleGrantedAuthority::new).collect(Collectors.toList())
+                        : Collections.emptyList();
+
                 // Create Spring Security authentication object
-                User userDetails = new User(username, "", Collections.emptyList());
+                User userDetails = new User(username, "", authorities);
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));

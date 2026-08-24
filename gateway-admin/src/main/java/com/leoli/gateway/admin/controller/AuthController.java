@@ -3,6 +3,8 @@ package com.leoli.gateway.admin.controller;
 import com.leoli.gateway.admin.dto.ApiResponse;
 import com.leoli.gateway.admin.config.JwtTokenProvider;
 import com.leoli.gateway.admin.service.AuthService;
+import com.leoli.gateway.admin.service.TokenRevocationService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -27,6 +29,7 @@ public class AuthController {
 
     private final AuthService authService;
     private final JwtTokenProvider jwtTokenProvider;
+    private final TokenRevocationService tokenRevocationService;
 
     /**
      * User login endpoint.
@@ -86,13 +89,22 @@ public class AuthController {
     }
 
     /**
-     * Logout endpoint (currently just returns success).
+     * Logout endpoint - revokes the current token so it cannot be reused.
+     * After revocation the token will be rejected by JwtAuthenticationFilter
+     * even if it hasn't expired.
      *
      * @return success message
      */
     @PostMapping("/logout")
-    public ResponseEntity<ApiResponse<Void>> logout() {
-        log.info("Logout request received");
+    public ResponseEntity<ApiResponse<Void>> logout(HttpServletRequest request) {
+        String bearerToken = request.getHeader("Authorization");
+        if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
+            String token = bearerToken.substring(7);
+            tokenRevocationService.revoke(token);
+            log.info("Logout: token revoked");
+        } else {
+            log.info("Logout request received (no bearer token to revoke)");
+        }
         return ResponseEntity.ok(ApiResponse.success("Logout successful"));
     }
     

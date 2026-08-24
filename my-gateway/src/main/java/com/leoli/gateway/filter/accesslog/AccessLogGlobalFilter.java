@@ -78,6 +78,16 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
     // Dedicated logger for access logs (configured in logback-spring.xml)
     private static final Logger ACCESS_LOG_LOGGER = (Logger) LoggerFactory.getLogger(ACCESS_LOG_LOGGER_NAME);
 
+    // FIX: upper bound for response body aggregation in access log capture (default 1MB).
+    // Responses larger than this are passed through without body capture to avoid
+    // heap spikes and broken streaming behavior.
+    private static final long MAX_RESPONSE_BODY_LOG_SIZE = 1024L * 1024;
+
+    // FIX (OOM): upper bound for request body aggregation. Previously DataBufferUtils.join
+    // was called WITHOUT any limit, so a large POST to a body-logging route could be used
+    // to exhaust heap memory from outside.
+    private static final long MAX_REQUEST_BODY_LOG_SIZE = 1024L * 1024;
+
     private final ConfigCenterService configCenterService;
     private final RouteManager routeManager;
     private final AuthBindingManager authBindingManager;
@@ -268,6 +278,14 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
         // Determine if we need to cache request/response body using BinaryContentDetector
         boolean needRequestBody = config.isLogRequestBody() &&
                 binaryContentDetector.shouldCacheRequestBody(request, config);
+        // FIX (OOM): when Content-Length already exceeds the capture limit, skip body caching
+        // entirely - the body stream stays untouched and is forwarded as-is.
+        long requestContentLength = request.getHeaders().getContentLength();
+        if (needRequestBody && requestContentLength > MAX_REQUEST_BODY_LOG_SIZE) {
+            log.debug("Request body ({} bytes) exceeds access log capture limit ({} bytes), skipping body logging",
+                    requestContentLength, MAX_REQUEST_BODY_LOG_SIZE);
+            needRequestBody = false;
+        }
         boolean needResponseBody = config.isLogResponseBody();
         boolean isFileUpload = binaryContentDetector.isFileUpload(request, config);
 
@@ -301,60 +319,61 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
 
     private ServerWebExchange wrapExchangeForResponseBody(ServerWebExchange exchange, String routeId) {
         ServerHttpResponse originalResponse = exchange.getResponse();
-        DataBufferFactory bufferFactory = originalResponse.bufferFactory();
 
         ServerHttpResponseDecorator decoratedResponse = new ServerHttpResponseDecorator(originalResponse) {
             @Override
             public Mono<Void> writeWith(Publisher<? extends DataBuffer> body) {
-                // Check if file download using BinaryContentDetector
+                // FIX: response headers are only available at write time (NOT in the pre-chain
+                // phase where they were previously checked), so SSE/download detection must
+                // happen here to actually take effect.
                 if (binaryContentDetector.isFileDownload(getDelegate(), config)) {
                     log.debug("Skipping response body logging for file download, routeId: {}", routeId);
                     exchange.getAttributes().put(IS_FILE_DOWNLOAD_ATTR, true);
                     return super.writeWith(body);
                 }
+                if (binaryContentDetector.isSseResponse(getHeaders().getContentType())) {
+                    log.debug("Skipping response body logging for SSE response, routeId: {}", routeId);
+                    return super.writeWith(body);
+                }
 
-                return Flux.from(body)
-                        .collectList()
-                        .flatMap(buffers -> {
-                            if (buffers.isEmpty()) {
-                                return super.writeWith(Flux.empty());
-                            }
-
-                            // Merge all buffers with proper release tracking to prevent direct buffer memory leak
-                            int totalSize = buffers.stream().mapToInt(DataBuffer::readableByteCount).sum();
-                            byte[] allBytes = null;
-                            int releasedCount = 0;
-                            try {
-                                allBytes = new byte[totalSize];
-                                int offset = 0;
-                                for (DataBuffer buffer : buffers) {
-                                    int size = buffer.readableByteCount();
-                                    buffer.read(allBytes, offset, size);
-                                    offset += size;
-                                    DataBufferUtils.release(buffer);
-                                    releasedCount++;
+                // FIX (streaming + OOM): the previous implementation used collectList() to aggregate
+                // the ENTIRE response into memory before checking the size cap, so first-byte latency
+                // became the full response time, SSE/streaming responses were fully buffered, and large
+                // downloads piled up in heap. Now chunks stream through untouched while their content
+                // is copied into a bounded heap buffer for logging.
+                final java.io.ByteArrayOutputStream capture = new java.io.ByteArrayOutputStream();
+                final java.util.concurrent.atomic.AtomicBoolean exceeded = new java.util.concurrent.atomic.AtomicBoolean(false);
+                // var keeps the capture-of-? extends DataBuffer typing; writeWith accepts it
+                var streamingBody = Flux.from(body).doOnNext(buffer -> {
+                    if (!exceeded.get()) {
+                        int size = buffer.readableByteCount();
+                        if (capture.size() + size > MAX_RESPONSE_BODY_LOG_SIZE) {
+                            exceeded.set(true);
+                        } else {
+                            // Copy chunk content without consuming the buffer's read position
+                            java.nio.ByteBuffer view = buffer.asByteBuffer();
+                            byte[] tmp = new byte[view.remaining()];
+                            view.get(tmp);
+                            capture.write(tmp, 0, tmp.length);
+                        }
+                    }
+                });
+                return super.writeWith(streamingBody)
+                        .doFinally(signal -> {
+                            if (!exceeded.get() && capture.size() > 0) {
+                                try {
+                                    String bodyContent = sensitiveDataSanitizer.sanitizeBody(
+                                            capture.toString(StandardCharsets.UTF_8),
+                                            getHeaders().getContentType() != null ?
+                                                    getHeaders().getContentType().toString() : null,
+                                            config);
+                                    exchange.getAttributes().put(RESPONSE_BODY_ATTR, bodyContent);
+                                } catch (Exception e) {
+                                    log.error("Error sanitizing response body for access log: {}", e.getMessage());
                                 }
-
-                                // Use SensitiveDataSanitizer for masking and truncation
-                                String bodyContent = sensitiveDataSanitizer.sanitizeBody(
-                                        new String(allBytes, StandardCharsets.UTF_8),
-                                        getHeaders().getContentType() != null ?
-                                                getHeaders().getContentType().toString() : null,
-                                        config);
-                                exchange.getAttributes().put(RESPONSE_BODY_ATTR, bodyContent);
-
-                                return super.writeWith(Flux.just(bufferFactory.wrap(allBytes)));
-                            } catch (Exception e) {
-                                log.error("Error capturing response body for access log: {}", e.getMessage(), e);
-                                // Release any remaining unreleased buffers to prevent direct buffer memory leak
-                                for (int i = releasedCount; i < buffers.size(); i++) {
-                                    DataBufferUtils.release(buffers.get(i));
-                                }
-                                // Return original data if available, otherwise pass through
-                                if (allBytes != null) {
-                                    return super.writeWith(Flux.just(bufferFactory.wrap(allBytes)));
-                                }
-                                return super.writeWith(Flux.empty());
+                            } else if (exceeded.get()) {
+                                log.debug("Response body exceeded access log capture limit {} bytes, body not logged",
+                                        MAX_RESPONSE_BODY_LOG_SIZE);
                             }
                         });
             }
@@ -371,7 +390,10 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
                                                    boolean needResponseBody) {
         ServerHttpRequest request = exchange.getRequest();
 
-        return DataBufferUtils.join(request.getBody())
+        // FIX (OOM): bounded join. Content-Length pre-check happens in filter(); this limit also
+        // guards chunked requests. If the limit is exceeded mid-stream the body is already partially
+        // consumed and cannot be forwarded safely, so reject with 413 instead of forwarding garbage.
+        return DataBufferUtils.join(request.getBody(), (int) MAX_REQUEST_BODY_LOG_SIZE)
                 .defaultIfEmpty(new DefaultDataBufferFactory().wrap(new byte[0]))
                 .flatMap(dataBuffer -> {
                     // Read body bytes with guaranteed release to prevent direct buffer memory leak
@@ -401,13 +423,21 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
                             .build();
 
                     return chain.filter(mutatedExchange)
-                            .then(Mono.fromRunnable(() -> {
+                            .then(Mono.<Void>fromRunnable(() -> {
                                 String responseBody = needResponseBody ?
                                         exchange.getAttribute(RESPONSE_BODY_ATTR) : null;
                                 logRequest(exchange, traceId, requestId, routeId, serviceId, authInfo,
                                         method, path, query, clientIp, userAgent, contentType,
                                         requestBody, responseBody, startTime);
                             }));
+                })
+                .onErrorResume(org.springframework.core.io.buffer.DataBufferLimitException.class, e -> {
+                    log.warn("Request body exceeds access log capture limit ({} bytes) for route {}, "
+                            + "rejecting with 413 (body stream already partially consumed)",
+                            MAX_REQUEST_BODY_LOG_SIZE, routeId);
+                    ServerHttpResponse response = exchange.getResponse();
+                    response.setStatusCode(org.springframework.http.HttpStatus.PAYLOAD_TOO_LARGE);
+                    return response.setComplete();
                 });
     }
 

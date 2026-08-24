@@ -143,12 +143,11 @@ public class ApiVersionGlobalFilter implements GlobalFilter, Ordered {
         // Add version to response header if configured
         boolean includeVersionInResponse = getBoolValue(config, "includeVersionInResponse", true);
         if (includeVersionInResponse) {
-            String finalVersion = targetVersion;
-            return chain.filter(exchange.mutate().request(requestBuilder.build()).build())
-                    .then(Mono.fromRunnable(() -> {
-                        ServerHttpResponse response = exchange.getResponse();
-                        response.getHeaders().add("X-API-Version", finalVersion);
-                    }));
+            // FIX (dead header): the header was previously added in .then() after
+            // chain.filter, i.e. after the response was committed, so it was never
+            // sent. The version is known at request time, so add it before the
+            // response is written.
+            exchange.getResponse().getHeaders().add("X-API-Version", targetVersion);
         }
 
         return chain.filter(exchange.mutate().request(requestBuilder.build()).build());

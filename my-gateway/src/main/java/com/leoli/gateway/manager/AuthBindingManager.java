@@ -42,7 +42,10 @@ public class AuthBindingManager {
     private final Map<String, Set<String>> policyRoutesCache = new ConcurrentHashMap<>();
 
     // Index by auth type for quick lookup
-    private final Map<String, List<String>> policiesByType = new ConcurrentHashMap<>();
+    // FIX (thread safety): was Map<String, ArrayList>, whose check-then-add in
+    // putPolicy and concurrent iteration could corrupt the list. Use a
+    // concurrent set per type instead.
+    private final Map<String, Set<String>> policiesByType = new ConcurrentHashMap<>();
 
     // Reverse index: routeId -> Set<policyId> (for route-triggered auth)
     private final Map<String, Set<String>> routePoliciesCache = new ConcurrentHashMap<>();
@@ -94,11 +97,8 @@ public class AuthBindingManager {
         // Index by auth type
         String authType = config.getAuthType();
         if (authType != null) {
-            policiesByType.computeIfAbsent(authType, k -> new ArrayList<>());
-            List<String> policies = policiesByType.get(authType);
-            if (!policies.contains(policyId)) {
-                policies.add(policyId);
-            }
+            policiesByType.computeIfAbsent(authType, k -> ConcurrentHashMap.newKeySet())
+                    .add(policyId);
         }
 
         // Build credential indices for O(1) lookup
@@ -220,7 +220,7 @@ public class AuthBindingManager {
 
         // Remove from type index
         if (config != null && config.getAuthType() != null) {
-            List<String> policies = policiesByType.get(config.getAuthType());
+            Set<String> policies = policiesByType.get(config.getAuthType());
             if (policies != null) {
                 policies.remove(policyId);
             }
@@ -240,7 +240,8 @@ public class AuthBindingManager {
      * Get all policies of a specific type.
      */
     public List<String> getPoliciesByType(String authType) {
-        return policiesByType.getOrDefault(authType, Collections.emptyList());
+        Set<String> policies = policiesByType.get(authType);
+        return policies == null ? Collections.emptyList() : new ArrayList<>(policies);
     }
 
     /**

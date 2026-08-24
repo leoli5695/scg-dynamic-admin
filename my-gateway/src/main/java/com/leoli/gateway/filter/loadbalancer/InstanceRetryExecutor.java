@@ -8,11 +8,16 @@ import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.loadbalancer.LoadBalancerUriTools;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
+import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.core.io.buffer.DataBufferLimitException;
+import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.server.reactive.ServerHttpRequestDecorator;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.net.URI;
@@ -38,6 +43,15 @@ public class InstanceRetryExecutor {
     // Attribute key for cached request body
     private static final String CACHED_BODY_ATTR = "instanceRetryCachedBody";
 
+    // FIX (OOM): instance-level retry requires caching the whole request body in heap.
+    // Cap the cacheable size; larger requests run without instance-level retry instead of
+    // buffering unbounded uploads. Previously cacheRequestBodyAndRequest joined the body
+    // WITHOUT any limit, so one large upload could exhaust heap.
+    private static final int MAX_RETRY_BODY_SIZE = 1024 * 1024;
+
+    // Marks requests whose body cannot be cached, so doExecute must not switch instances on error
+    private static final String INSTANCE_RETRY_DISABLED_ATTR = "instanceRetryDisabled";
+
     /**
      * Execute request with instance-level retry support.
      * Request body is cached on first call to ensure retry has valid body.
@@ -49,16 +63,46 @@ public class InstanceRetryExecutor {
         boolean isFirstAttempt = !exchange.getAttributes().containsKey(CACHED_BODY_ATTR);
 
         if (isFirstAttempt) {
+            // FIX (OOM): pre-check Content-Length - large bodies are executed without instance retry
+            long contentLength = exchange.getRequest().getHeaders().getContentLength();
+            if (contentLength > MAX_RETRY_BODY_SIZE) {
+                log.warn("Request body ({} bytes) exceeds instance retry cache limit ({} bytes), "
+                        + "instance-level retry disabled for this request", contentLength, MAX_RETRY_BODY_SIZE);
+                exchange.getAttributes().put(INSTANCE_RETRY_DISABLED_ATTR, true);
+                exchange.getAttributes().put(CACHED_BODY_ATTR, true); // avoid re-entering this branch
+                return doExecute(exchange, chain, serviceId, instance, allInstances, triedInstances);
+            }
+
             // Cache request body before first execution to support potential retry
-            // Note: cacheRequestBodyAndRequest callback receives ServerHttpRequest, not ServerWebExchange
-            // We use the original exchange for attributes since request doesn't have getAttributes()
-            return ServerWebExchangeUtils.cacheRequestBodyAndRequest(exchange, (cachedRequest) -> {
-                // Mark that body has been cached (use original exchange for attributes)
-                exchange.getAttributes().put(CACHED_BODY_ATTR, true);
-                // Create new exchange with cached request
-                ServerWebExchange cachedExchange = exchange.mutate().request(cachedRequest).build();
-                return doExecute(cachedExchange, chain, serviceId, instance, allInstances, triedInstances);
-            });
+            // FIX: bounded join (MAX_RETRY_BODY_SIZE) with heap byte[] replay, replacing the unbounded
+            // ServerWebExchangeUtils.cacheRequestBodyAndRequest.
+            return DataBufferUtils.join(exchange.getRequest().getBody(), MAX_RETRY_BODY_SIZE)
+                    .defaultIfEmpty(exchange.getResponse().bufferFactory().wrap(new byte[0]))
+                    .flatMap(dataBuffer -> {
+                        final byte[] bodyBytes = new byte[dataBuffer.readableByteCount()];
+                        try {
+                            dataBuffer.read(bodyBytes);
+                        } finally {
+                            DataBufferUtils.release(dataBuffer);
+                        }
+                        exchange.getAttributes().put(CACHED_BODY_ATTR, true);
+                        ServerHttpRequestDecorator cachedRequest = new ServerHttpRequestDecorator(exchange.getRequest()) {
+                            @Override
+                            public Flux<DataBuffer> getBody() {
+                                return Flux.just(exchange.getResponse().bufferFactory().wrap(bodyBytes));
+                            }
+                        };
+                        ServerWebExchange cachedExchange = exchange.mutate().request(cachedRequest).build();
+                        return doExecute(cachedExchange, chain, serviceId, instance, allInstances, triedInstances);
+                    })
+                    .onErrorResume(DataBufferLimitException.class, e -> {
+                        // Chunked body exceeded the limit mid-stream - cannot forward safely
+                        log.warn("Request body exceeds instance retry cache limit ({} bytes), rejecting with 413",
+                                MAX_RETRY_BODY_SIZE);
+                        ServerHttpResponse response = exchange.getResponse();
+                        response.setStatusCode(HttpStatus.PAYLOAD_TOO_LARGE);
+                        return response.setComplete();
+                    });
         }
 
         // Already cached, proceed directly
@@ -138,6 +182,13 @@ public class InstanceRetryExecutor {
                     }
                     log.debug("[RETRY-OK] Response state clean, can retry safely: statusCode=null, headersCount={}",
                             response.getHeaders().size());
+
+                    // FIX: when the body could not be cached (too large), switching instances would
+                    // resend an already-consumed (empty) body - return the error instead.
+                    if (Boolean.TRUE.equals(exchange.getAttributes().get(INSTANCE_RETRY_DISABLED_ATTR))) {
+                        log.warn("Instance retry disabled for this request (body not cacheable), returning error");
+                        return Mono.error(buildServiceUnavailableError(serviceId, instance, error));
+                    }
 
                     ServiceInstance next = instanceFilter.findAlternative(serviceId, allInstances, triedInstances);
                     if (next != null) {

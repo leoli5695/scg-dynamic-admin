@@ -44,6 +44,10 @@ public class ServiceRefresher {
     // Service listeners cache: <serviceId, listener>
     private final ConcurrentHashMap<String, ConfigCenterService.ConfigListener> serviceListeners = new ConcurrentHashMap<>();
 
+    // FIX: keep index listener as a field so it can be removed on destroy
+    // (method references create a new instance per call and never match)
+    private final ConfigCenterService.ConfigListener indexListener = this::onServicesIndexChanged;
+
     @Autowired
     public ServiceRefresher(ConfigCenterService configService,
                             ObjectMapper objectMapper,
@@ -64,7 +68,6 @@ public class ServiceRefresher {
     @PostConstruct
     public void init() {
         // 1. Listen to services index changes
-        ConfigCenterService.ConfigListener indexListener = this::onServicesIndexChanged;
         configService.addListener(SERVICES_INDEX, GROUP, indexListener);
         log.info("✅ Registered listener for services index: {}", SERVICES_INDEX);
 
@@ -88,8 +91,8 @@ public class ServiceRefresher {
             }
         }
 
-        // Remove index listener
-        configService.removeListener(SERVICES_INDEX, GROUP, this::onServicesIndexChanged);
+        // Remove index listener (using the stored field instance)
+        configService.removeListener(SERVICES_INDEX, GROUP, indexListener);
 
         log.info("ServiceRefresher destroyed, all listeners removed");
     }

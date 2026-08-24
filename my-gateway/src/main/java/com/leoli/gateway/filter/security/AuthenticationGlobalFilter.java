@@ -1,5 +1,7 @@
 package com.leoli.gateway.filter.security;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.leoli.gateway.auth.AuthProcessManager;
 import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.manager.AuthBindingManager;
@@ -23,6 +25,9 @@ import reactor.core.publisher.Mono;
 import java.util.Base64;
 import java.util.Map;
 import java.util.Set;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.Duration;
 
 /**
  * Authentication Global Filter.
@@ -51,6 +56,34 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
     private final StrategyManager strategyManager;
     private final AuthBindingManager authBindingManager;
     private final AuthProcessManager authProcessManager;
+
+    /**
+     * FIX: previous hard-coded limit of 10 policies caused legitimate tokens to be
+     * rejected (401) when more than 10 JWT policies existed. Default 0 = try all
+     * policies (fail-closed correctness first); set a positive value to cap CPU usage.
+     */
+    @org.springframework.beans.factory.annotation.Value("${gateway.auth.max-jwt-policy-attempts:0}")
+    private int maxJwtPolicyAttempts;
+
+    /**
+     * FIX (DoS): cache derived secret keys. PBKDF2 with 10000 iterations previously ran on
+     * EVERY validation attempt on the Netty event loop - an attacker could exhaust CPU by
+     * flooding random invalid tokens. Keys are content-addressed (secret hash + algorithm),
+     * so they auto-invalidate when a policy's secret changes.
+     */
+    private final Cache<String, javax.crypto.SecretKey> derivedKeyCache = Caffeine.newBuilder()
+            .maximumSize(1024)
+            .build();
+
+    /**
+     * FIX (DoS): short-TTL negative cache for invalid tokens. Prevents paying
+     * N x full-JWT-verification (brute force across all policies) for tokens that
+     * were just proven invalid.
+     */
+    private final Cache<String, Boolean> invalidTokenCache = Caffeine.newBuilder()
+            .maximumSize(10_000)
+            .expireAfterWrite(Duration.ofSeconds(5))
+            .build();
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
@@ -256,13 +289,24 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
             return null;
         }
 
+        // FIX (DoS): skip expensive brute-force validation for tokens that were recently
+        // proven invalid (random-token flooding attack).
+        String tokenHash = sha256Hex(token);
+        if (invalidTokenCache.getIfPresent(tokenHash) != null) {
+            log.debug("Skipping JWT validation for recently-invalid token");
+            return null;
+        }
+
         // Get all policies of the required type and try to validate the token
         java.util.List<String> policies = authBindingManager.getPoliciesByType(requiredAuthType);
         
-        // SECURITY: Limit iteration count to prevent excessive brute-force
-        int maxAttempts = Math.min(policies.size(), 10);  // Max 10 policies to try
-        if (policies.size() > 10) {
-            log.warn("JWT validation attempting {} policies (max 10). " +
+        // FIX: configurable attempt cap (default 0 = try all) instead of the previous
+        // hard-coded 10 which wrongly rejected tokens belonging to the 11th+ policy.
+        int maxAttempts = maxJwtPolicyAttempts <= 0
+                ? policies.size()
+                : Math.min(policies.size(), maxJwtPolicyAttempts);
+        if (policies.size() > 20) {
+            log.debug("JWT validation may try {} policies. " +
                      "Consider using policyId in JWT claims or unique issuer per policy.", 
                      policies.size());
         }
@@ -284,7 +328,10 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
         if (policies.size() > maxAttempts) {
             log.debug("JWT validation exhausted max attempts ({}), token may belong to untried policy", maxAttempts);
         }
-        
+
+        // FIX (DoS): remember this token as invalid for a short time
+        invalidTokenCache.put(tokenHash, Boolean.TRUE);
+
         return null;
     }
 
@@ -297,15 +344,38 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
             if (secretKey == null || secretKey.isEmpty()) {
                 return false;
             }
-            // Validate token using derived key (PBKDF2 for short secrets)
+            // FIX (DoS): derive the key once per (secret, algorithm) instead of running
+            // PBKDF2 on every request.
+            String alg = config.getJwtAlgorithm();
+            String cacheKey = sha256Hex(secretKey) + ":" + alg;
+            javax.crypto.SecretKey key = derivedKeyCache.get(cacheKey, k ->
+                    io.jsonwebtoken.security.Keys.hmacShaKeyFor(
+                            deriveKeyToRequiredLength(secretKey.getBytes(), alg)));
             io.jsonwebtoken.Jwts.parser()
-                    .verifyWith(io.jsonwebtoken.security.Keys.hmacShaKeyFor(
-                            deriveKeyToRequiredLength(secretKey.getBytes(), config.getJwtAlgorithm())))
+                    .verifyWith(key)
                     .build().parseSignedClaims(token);
             return true;
         } catch (Exception e) {
             log.debug("JWT validation failed for policy {}: {}", config.getPolicyId(), e.getMessage());
             return false;
+        }
+    }
+
+    /**
+     * FIX: stable hex SHA-256 digest used as cache key (avoids storing raw secrets/tokens as keys).
+     */
+    private String sha256Hex(String input) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(input.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(digest.length * 2);
+            for (byte b : digest) {
+                sb.append(Character.forDigit((b >> 4) & 0xF, 16)).append(Character.forDigit(b & 0xF, 16));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            // Extremely unlikely; fall back to identity hash without leaking the raw value as key
+            return Integer.toHexString(input.hashCode());
         }
     }
 

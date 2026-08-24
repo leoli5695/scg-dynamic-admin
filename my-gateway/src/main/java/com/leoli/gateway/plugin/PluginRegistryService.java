@@ -1,6 +1,8 @@
 package com.leoli.gateway.plugin;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.beans.factory.support.AbstractBeanDefinition;
 import org.springframework.beans.factory.support.BeanDefinitionBuilder;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory;
@@ -80,8 +82,25 @@ public class PluginRegistryService {
             if (registeredBeans.containsKey(pluginId)) {
                 String existingBeanName = registeredBeans.get(pluginId);
                 if (beanFactory.containsBeanDefinition(existingBeanName)) {
-                    log.info("Plugin {} already registered as bean: {}", pluginId, existingBeanName);
-                    return existingBeanName;
+                    // FIX (hot update): only reuse the existing bean when the class
+                    // is unchanged. A reloaded plugin carries a NEW class (from a new
+                    // ClassLoader); keeping the old bean would silently discard the
+                    // update, so unregister it and register the new one below.
+                    Class<?> existingClass = null;
+                    try {
+                        BeanDefinition definition = beanFactory.getBeanDefinition(existingBeanName);
+                        if (definition instanceof AbstractBeanDefinition abstractDefinition) {
+                            existingClass = abstractDefinition.getBeanClass();
+                        }
+                    } catch (Exception ignored) {
+                        // fall through to re-registration
+                    }
+                    if (existingClass != null && existingClass.equals(factoryClass)) {
+                        log.info("Plugin {} already registered as bean: {}", pluginId, existingBeanName);
+                        return existingBeanName;
+                    }
+                    log.info("Plugin {} class changed, replacing bean: {}", pluginId, existingBeanName);
+                    unregisterPlugin(pluginId);
                 }
             }
 

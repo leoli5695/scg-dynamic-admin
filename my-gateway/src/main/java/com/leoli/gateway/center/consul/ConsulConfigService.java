@@ -41,19 +41,21 @@ public class ConsulConfigService extends AbstractConfigService {
         String key = buildConsulKey(dataId, group);
         try {
             Response<GetValue> response = consulClient.getKVValue(key);
+            markHealthy();
             if (Objects.nonNull(response.getValue())) {
                 String encodedValue = response.getValue().getValue();
                 String content = new String(Base64.getDecoder().decode(encodedValue));
                 // Update cache on success
                 contentCache.put(key, content);
-                markHealthy();
                 return content;
             }
-            // If Consul returns null, use cached version
-            String cachedContent = contentCache.get(key);
-            if (cachedContent != null) {
-                log.warn("Consul returned null for {}#{} - using cached content", dataId, group);
-                return cachedContent;
+            // FIX (deleted config resurrection): Consul responded SUCCESSFULLY
+            // but the key no longer exists (deleted). Previously this fell
+            // back to the cached copy, reviving deleted configs forever. Only
+            // use the cache when Consul is UNREACHABLE (exception path below).
+            String removed = contentCache.remove(key);
+            if (removed != null) {
+                log.info("Config {}#{} no longer exists in Consul - dropped cached copy", dataId, group);
             }
             return null;
         } catch (Exception e) {

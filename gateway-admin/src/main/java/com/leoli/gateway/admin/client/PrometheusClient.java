@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.*;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 /**
@@ -37,6 +38,17 @@ public class PrometheusClient {
     private volatile Map<String, String> instanceCache = new HashMap<>();
     private volatile long instanceCacheUpdateTime = 0;
     private static final long INSTANCE_CACHE_TTL_MS = 60000; // 缓存1分钟
+
+    /**
+     * FIX (virtual-thread pinning): the refresh used to run inside
+     * synchronized(this), and refreshInstanceCache() performs a blocking HTTP
+     * call (up to 40s with timeouts). On JDK 21 virtual threads
+     * (spring.threads.virtual.enabled=true) blocking inside a synchronized
+     * block pins the carrier thread, and threads contending the monitor pin as
+     * well. ReentrantLock avoids pinning; tryLock lets concurrent callers fall
+     * back to the stale cache instead of queueing behind the refresh.
+     */
+    private final ReentrantLock instanceCacheLock = new ReentrantLock();
 
     /**
      * 根据中间件类型获取对应的 exporter job 名称（用于匹配 instance）
@@ -374,10 +386,17 @@ public class PrometheusClient {
     private void refreshInstanceCacheIfNeeded() {
         long now = System.currentTimeMillis();
         if (now - instanceCacheUpdateTime > INSTANCE_CACHE_TTL_MS) {
-            synchronized (this) {
-                if (now - instanceCacheUpdateTime > INSTANCE_CACHE_TTL_MS) {
-                    refreshInstanceCache();
-                    instanceCacheUpdateTime = now;
+            // tryLock: if another thread is already refreshing (slow HTTP call),
+            // serve the stale cache instead of waiting - the data is a minute-level
+            // cache anyway, and waiting would pin virtual threads on the monitor.
+            if (instanceCacheLock.tryLock()) {
+                try {
+                    if (now - instanceCacheUpdateTime > INSTANCE_CACHE_TTL_MS) {
+                        refreshInstanceCache();
+                        instanceCacheUpdateTime = now;
+                    }
+                } finally {
+                    instanceCacheLock.unlock();
                 }
             }
         }

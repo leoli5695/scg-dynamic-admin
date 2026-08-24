@@ -1,7 +1,9 @@
 package com.leoli.gateway.admin.config;
 
+import com.leoli.gateway.admin.filter.InternalApiTokenFilter;
 import com.leoli.gateway.admin.filter.JwtAuthenticationFilter;
 import com.leoli.gateway.admin.properties.GatewayAdminProperties;
+import com.leoli.gateway.admin.service.TokenRevocationService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -33,11 +35,22 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final InternalApiTokenFilter internalApiTokenFilter;
     private final GatewayAdminProperties gatewayAdminProperties;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
+    /**
+     * FIX (double registration): the two filters used to be @Component beans,
+     * which made Spring Boot auto-register them in the servlet filter chain
+     * AND get them added again via addFilterBefore - the same filter instance
+     * present on two chains. OncePerRequestFilter masked the duplication, so it
+     * was pure redundancy. They are now plain objects owned by this config and
+     * registered only on the Spring Security chain.
+     */
+    public SecurityConfig(JwtTokenProvider jwtTokenProvider,
+                          TokenRevocationService tokenRevocationService,
                           GatewayAdminProperties gatewayAdminProperties) {
-        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.jwtAuthenticationFilter = new JwtAuthenticationFilter(jwtTokenProvider, tokenRevocationService);
+        this.internalApiTokenFilter = new InternalApiTokenFilter(gatewayAdminProperties);
         this.gatewayAdminProperties = gatewayAdminProperties;
     }
 
@@ -72,6 +85,10 @@ public class SecurityConfig {
                         // All other requests require authentication
                         .anyRequest().authenticated()
         );
+
+        // FIX: shared-secret guard for permitAll internal report endpoints,
+        // runs before JWT so heartbeat/trace/health upload calls are validated.
+        http.addFilterBefore(internalApiTokenFilter, UsernamePasswordAuthenticationFilter.class);
 
         // JWT filter for token validation
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
