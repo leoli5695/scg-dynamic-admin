@@ -1,344 +1,147 @@
-import { useState, useEffect, useMemo, lazy, Suspense, useCallback } from "react";
+/**
+ * App root — ConfigProvider + AuthProvider + declarative route table.
+ * Authenticated pages live under AppShell; the instance console uses its own
+ * layout with URL-driven tab sub-routes.
+ */
+import React, { lazy, Suspense } from 'react';
 import {
-  Layout,
-  Menu,
-  Avatar,
-  Dropdown,
-  Space,
-  message,
-  Tooltip,
-  ConfigProvider,
-  Spin,
-} from "antd";
-import type { MenuProps } from "antd";
-import zhCN from "antd/locale/zh_CN";
-import enUS from "antd/locale/en_US";
-import customTheme from "./theme";
-import GatewayLogo from "./components/GatewayLogo";
+  Navigate, Route, Routes,
+} from 'react-router-dom';
+import { ConfigProvider, Spin } from 'antd';
+import { App as AntdApp } from 'antd';
+import zhCN from 'antd/locale/zh_CN';
+import enUS from 'antd/locale/en_US';
+import { useTranslation } from 'react-i18next';
+import customTheme from './theme';
+import './i18n';
+import { AuthProvider, useAuth } from './features/auth/AuthContext';
+import AppShell from './features/layout/AppShell';
+import OverviewTab from './features/instance-detail/tabs/OverviewTab';
+import EventsTab from './features/instance-detail/tabs/EventsTab';
+import ResourcesTab from './features/instance-detail/tabs/ResourcesTab';
 import {
-  ClusterOutlined,
-  CloudServerOutlined,
-  UserOutlined,
-  LogoutOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
-  KeyOutlined,
-} from "@ant-design/icons";
-import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
+  AccessLogTab, AlertsTab, AuditLogsTab, AuthenticationTab, CertificatesTab,
+  CopilotTab, DiagnosticTab, FilterChainTab, MiddlewareTab, MonitorTab,
+  PluginBindingsTab, PluginsTab, RequestReplayTab, RoutesTab, ServicesTab,
+  StrategiesTab, StressTestTab, TopologyTab, TraceTab,
+} from './features/instance-detail/tabs/legacyTabs';
+import './App.css';
+import './App.premium.css';
+import { AntdStaticBridge } from './utils/antdStatic';
 
-// Lazy load page components for better performance
-const KubernetesPage = lazy(() => import("./pages/KubernetesPage"));
-const InstancesPage = lazy(() => import("./pages/InstancesPage"));
-const InstanceCreatePage = lazy(() => import("./pages/InstanceCreatePage"));
-const InstanceDetailPage = lazy(() => import("./pages/InstanceDetailPage"));
-const LoginPage = lazy(() => import("./pages/LoginPage"));
-const LicensePage = lazy(() => import("./pages/LicensePage"));
-const StressTestSharePage = lazy(() => import("./pages/StressTestSharePage"));
-const MiddlewareDetailPage = lazy(() => import("./pages/MiddlewareDetailPage"));
+const LoginPage = lazy(() => import('./features/auth/LoginPage'));
+const InstancesListPage = lazy(() => import('./features/instances/InstancesListPage'));
+const InstanceCreatePage = lazy(() => import('./features/instances/InstanceCreatePage'));
+const InstanceDetailLayout = lazy(() => import('./features/instance-detail/InstanceDetailLayout'));
+// Legacy top-level pages (rewritten in later phases)
+const KubernetesPage = lazy(() => import('./features/kubernetes'));
+const LicensePage = lazy(() => import('./features/license'));
+const StressTestSharePage = lazy(() => import('./features/stress-test/SharePage'));
+const MiddlewareDetailPage = lazy(() => import('./features/middleware-detail'));
 
-// Loading fallback component
-const PageLoadingFallback = () => (
+const PageLoadingFallback: React.FC = () => (
   <div style={{
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
     height: '100%',
-    minHeight: '400px',
-  }}>
+    minHeight: 400,
+  }}
+  >
     <Spin size="large" />
   </div>
 );
-import LanguageSwitcher from "./components/LanguageSwitcher";
-import { useTranslation } from "react-i18next";
-import i18n from "./i18n";
-import "./App.css";
-import "./App.premium.css";
 
-const { Header, Sider, Content } = Layout;
+/** Login route — already-authenticated users go straight to the console. */
+const LoginRoute: React.FC = () => {
+  const { isLoggedIn } = useAuth();
+  if (isLoggedIn) {
+    return <Navigate to="/" replace />;
+  }
+  return (
+    <Suspense fallback={<PageLoadingFallback />}>
+      <LoginPage />
+    </Suspense>
+  );
+};
 
-type MenuItem = Required<MenuProps>["items"][number];
+/** Guard for authenticated routes. */
+const RequireAuth: React.FC<{ children: React.ReactElement }> = ({ children }) => {
+  const { isLoggedIn } = useAuth();
+  if (!isLoggedIn) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+};
 
-function getItem(
-  label: React.ReactNode,
-  key: React.Key,
-  icon?: React.ReactNode,
-  children?: MenuItem[],
-): MenuItem {
-  return {
-    key,
-    icon,
-    children,
-    label,
-  } as MenuItem;
-}
+/** Public stress-test share page (no auth, no shell). */
+const SharePageRoute: React.FC = () => (
+  <Suspense fallback={<PageLoadingFallback />}>
+    <StressTestSharePage />
+  </Suspense>
+);
+
+const AppRoutes: React.FC = () => (
+  <Suspense fallback={<PageLoadingFallback />}>
+    <Routes>
+      <Route path="/login" element={<LoginRoute />} />
+      <Route path="/share/:shareId" element={<SharePageRoute />} />
+      <Route element={<RequireAuth><AppShell /></RequireAuth>}>
+        <Route path="/" element={<Navigate to="/instances" replace />} />
+        <Route path="/instances" element={<InstancesListPage />} />
+        <Route path="/instances/create" element={<InstanceCreatePage />} />
+        <Route path="/instances/:instanceId" element={<InstanceDetailLayout />}>
+          <Route index element={<OverviewTab />} />
+          <Route path="services" element={<ServicesTab />} />
+          <Route path="routes" element={<RoutesTab />} />
+          <Route path="plugins" element={<PluginsTab />} />
+          <Route path="plugin_bindings" element={<PluginBindingsTab />} />
+          <Route path="strategies" element={<StrategiesTab />} />
+          <Route path="authentication" element={<AuthenticationTab />} />
+          <Route path="certificates" element={<CertificatesTab />} />
+          <Route path="trace" element={<TraceTab />} />
+          <Route path="monitor" element={<MonitorTab />} />
+          <Route path="alerts" element={<AlertsTab />} />
+          <Route path="access_log" element={<AccessLogTab />} />
+          <Route path="audit_logs" element={<AuditLogsTab />} />
+          <Route path="diagnostic" element={<DiagnosticTab />} />
+          <Route path="topology" element={<TopologyTab />} />
+          <Route path="filter_chain" element={<FilterChainTab />} />
+          <Route path="request_replay" element={<RequestReplayTab />} />
+          <Route path="copilot" element={<CopilotTab />} />
+          <Route path="stress_test" element={<StressTestTab />} />
+          <Route path="events" element={<EventsTab />} />
+          <Route path="resources" element={<ResourcesTab />} />
+          <Route path="middleware" element={<MiddlewareTab />} />
+        </Route>
+        <Route path="/kubernetes" element={<KubernetesPage />} />
+        <Route path="/license" element={<LicensePage />} />
+        <Route path="/middleware-detail" element={<MiddlewareDetailPage />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  </Suspense>
+);
 
 const App: React.FC = () => {
-  const [current, setCurrent] = useState("instances");
-  const [collapsed, setCollapsed] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [user, setUser] = useState<{
-    username: string;
-    nickname: string;
-    role: string;
-    licenseEdition: string;
-  } | null>(null);
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { t } = useTranslation();
-
-  // Menu items with i18n - new structure with Instance Management and Cluster Management
-  const menuItems: MenuItem[] = useMemo(
-    () => [
-      getItem(t("menu.instances"), "instances", <CloudServerOutlined />),
-      getItem(t("menu.kubernetes"), "kubernetes", <ClusterOutlined />),
-      getItem("License", "license", <KeyOutlined />),
-    ],
-    [t],
-  );
-
-  // Check login status on mount - use useState initializer instead of useEffect to avoid cascading renders
-  const [initialAuthChecked, setInitialAuthChecked] = useState(false);
-  
-  useEffect(() => {
-    if (!initialAuthChecked) {
-      const token = localStorage.getItem("token");
-      const username = localStorage.getItem("username");
-      const nickname = localStorage.getItem("nickname");
-      const role = localStorage.getItem("role");
-      const licenseEdition = localStorage.getItem("licenseEdition") || "BASIC";
-
-      if (token && username) {
-        setIsLoggedIn(true);
-        setUser({
-          username,
-          nickname: nickname || username,
-          role: role || "USER",
-          licenseEdition,
-        });
-      }
-      setInitialAuthChecked(true);
-    }
-  }, [initialAuthChecked]);
-
-  // Update current menu selection based on URL - memoize the calculation
-  useEffect(() => {
-    const path = location.pathname;
-    let newCurrent = "instances"; // default
-    
-    if (path === "/kubernetes") {
-      newCurrent = "kubernetes";
-    }
-    
-    // Only update if different to avoid unnecessary re-renders
-    setCurrent((prev) => (prev !== newCurrent ? newCurrent : prev));
-  }, [location.pathname]);
-
-  const onClick: MenuProps["onClick"] = (e) => {
-    setCurrent(e.key);
-    navigate(`/${e.key}`);
-  };
-
-  const handleLogout = useCallback(() => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("username");
-    localStorage.removeItem("nickname");
-    localStorage.removeItem("role");
-    localStorage.removeItem("licenseEdition");
-    setIsLoggedIn(false);
-    setUser(null);
-    message.success("Logout successful");
-    window.location.href = "/login";
-  }, []);
-
-  // User dropdown menu items
-  const userMenuItems: MenuItem[] = useMemo(
-    () => [
-      {
-        key: "logout",
-        icon: <LogoutOutlined />,
-        label: t("common.logout"),
-        onClick: () => {
-          setUserMenuOpen(false);
-          handleLogout();
-        },
-      },
-    ],
-    [t, handleLogout],
-  );
-
-  // If not logged in, show login page only
-  if (!isLoggedIn) {
-    return (
-      <Suspense fallback={<PageLoadingFallback />}>
-        <LoginPage />
-      </Suspense>
-    );
-  }
-
-  // Check if we're in instance detail page
-  const isInstanceDetail = location.pathname.startsWith("/instances/") && location.pathname !== "/instances";
-
-  // Check if we're in share page (no login required)
-  const isSharePage = location.pathname.startsWith("/share/");
-
-  // Share page - no login required, no sidebar
-  if (isSharePage) {
-    const shareId = location.pathname.replace("/share/", "");
-    return (
-      <ConfigProvider
-        theme={customTheme}
-        locale={i18n.language?.startsWith("zh") ? zhCN : enUS}
-      >
-        <Suspense fallback={<PageLoadingFallback />}>
-          <StressTestSharePage shareId={shareId} />
-        </Suspense>
-      </ConfigProvider>
-    );
-  }
+  const { i18n } = useTranslation();
 
   return (
     <ConfigProvider
       theme={customTheme}
-      locale={i18n.language?.startsWith("zh") ? zhCN : enUS}
-      getPopupContainer={(triggerNode) =>
+      locale={i18n.language?.startsWith('zh') ? zhCN : enUS}
+      getPopupContainer={(triggerNode) => (
         triggerNode?.parentNode instanceof HTMLElement
           ? triggerNode.parentNode
           : document.body
-      }
+      )}
     >
-      <Layout style={{ minHeight: "100vh" }}>
-        {/* Left Sidebar - Fixed position */}
-        <Sider
-          width={220}
-          theme="dark"
-          className="sidebar-premium"
-          collapsible
-          collapsed={collapsed}
-          onCollapse={setCollapsed}
-          trigger={null}
-          style={{
-            overflow: "auto",
-            height: "100vh",
-            position: "fixed",
-            left: 0,
-            top: 0,
-            bottom: 0,
-          }}
-        >
-          <div className="sidebar-header">
-            <div className="sidebar-logo">
-              <GatewayLogo className="logo-icon" style={{ width: 28, height: 28 }} />
-              {!collapsed && <span className="logo-text">API Gateway</span>}
-            </div>
-            <div
-              className="sidebar-collapse-btn"
-              onClick={() => setCollapsed(!collapsed)}
-            >
-              <Tooltip
-                title={collapsed ? t("common.expand") : t("common.collapse")}
-                placement="right"
-              >
-                {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-              </Tooltip>
-            </div>
-          </div>
-          <Menu
-            theme="dark"
-            mode="inline"
-            selectedKeys={[current]}
-            items={menuItems}
-            onClick={onClick}
-          />
-        </Sider>
-
-        {/* Main Content Area */}
-        <Layout
-          style={{
-            marginLeft: collapsed ? 80 : 220,
-            transition: "margin-left 0.2s",
-          }}
-        >
-          {/* Show header only for non-instance-detail pages */}
-          {!isInstanceDetail && (
-            <Header className="main-header">
-              <div className="header-left">
-                <h1 className="header-title">{t("app.console_title")}</h1>
-                <span className="header-subtitle">{t("app.subtitle")}</span>
-              </div>
-              <div className="header-right">
-                <LanguageSwitcher />
-                {isLoggedIn && user && (
-                  <Dropdown
-                    menu={{ items: userMenuItems }}
-                    placement="bottomRight"
-                    arrow
-                    trigger={["click"]}
-                    open={userMenuOpen}
-                    onOpenChange={setUserMenuOpen}
-                  >
-                    <Space className="user-info">
-                      <Avatar
-                        style={{ backgroundColor: "#165DFF" }}
-                        icon={<UserOutlined />}
-                        size="small"
-                      />
-                      <span className="username">
-                        {user.nickname || user.username}
-                      </span>
-                    </Space>
-                  </Dropdown>
-                )}
-              </div>
-            </Header>
-          )}
-          <Content className="main-content" style={{ overflow: "auto" }}>
-            <Suspense fallback={<PageLoadingFallback />}>
-              <Routes>
-                <Route path="/" element={<InstancesPage />} />
-                <Route path="/instances" element={<InstancesPage />} />
-                <Route path="/instances/create" element={<InstanceCreatePage />} />
-                <Route path="/instances/:instanceId" element={<InstanceDetailPage />}>
-                  <Route index element={null} />
-                  <Route path="services" element={null} />
-                  <Route path="routes" element={null} />
-                  <Route path="strategies" element={null} />
-                  <Route path="authentication" element={null} />
-                  <Route path="certificates" element={null} />
-                  <Route path="trace" element={null} />
-                  <Route path="monitor" element={null} />
-                  <Route path="alerts" element={null} />
-                  <Route path="access_log" element={null} />
-                  <Route path="audit_logs" element={null} />
-                  <Route path="diagnostic" element={null} />
-                  <Route path="topology" element={null} />
-                  <Route path="filter_chain" element={null} />
-                  <Route path="request_replay" element={null} />
-                  <Route path="copilot" element={null} />
-                  <Route path="stress_test" element={null} />
-                  <Route path="events" element={null} />
-                  <Route path="resources" element={null} />
-                  <Route path="middleware" element={null} />
-                  <Route path="plugins" element={null} />
-                  <Route path="plugin_bindings" element={null} />
-                </Route>
-                <Route path="/kubernetes" element={<KubernetesPage />} />
-                <Route path="/license" element={<LicensePage />} />
-                <Route path="/middleware-detail" element={<MiddlewareDetailPage />} />
-              </Routes>
-            </Suspense>
-          </Content>
-
-          {/* Page Footer - only show for non-instance-detail pages */}
-          {!isInstanceDetail && (
-            <footer className="page-footer">
-              <p className="footer-text">
-                © {new Date().getFullYear()} leoli. All rights reserved.
-              </p>
-            </footer>
-          )}
-        </Layout>
-      </Layout>
+      <AuthProvider>
+        <AntdApp>
+          <AntdStaticBridge />
+          <AppRoutes />
+        </AntdApp>
+      </AuthProvider>
     </ConfigProvider>
   );
 };

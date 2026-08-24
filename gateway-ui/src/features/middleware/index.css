@@ -1,0 +1,185 @@
+/* Service middleware page styles (migrated from pages/ServiceMiddlewarePage.css).
+   Shared .stats-bar / .page-header-modern styles live in App.premium.css. */
+
+.service-middleware-page {
+  padding: 24px;
+  min-height: 100%;
+}
+
+/* Table Card */
+.middleware-table-card {
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  background: var(--bg-card, rgba(30, 41, 59, 0.8));
+}
+
+.middleware-table-card .ant-table {
+  border-radius: 8px;
+}
+
+.middleware-table-card .ant-table-thead > tr > th {
+  background: rgba(15, 23, 42, 0.5);
+  font-weight: 600;
+  color: var(--text-primary, #ffffff);
+}
+
+.middleware-table-card .ant-table-tbody > tr:hover > td {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+/* Drawer Styles */
+.middleware-detail-drawer .ant-drawer-body {
+  padding: 0;
+  background: var(--bg-primary, #0f172a);
+}
+
+.middleware-detail-drawer .drawer-content {
+  padding: 24px;
+  background: var(--bg-primary, #0f172a);
+}
+
+.middleware-detail-drawer .drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 24px;
+  background: linear-gradient(135deg, rgba(30, 58, 95, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
+  margin-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.middleware-detail-drawer .drawer-header-left {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.middleware-detail-drawer .drawer-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  border-radius: 12px;
+  color: white;
+  font-size: 24px;
+}
+
+.middleware-detail-drawer .drawer-title-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.middleware-detail-drawer .drawer-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary, #ffffff);
+}
+
+.middleware-detail-drawer .drawer-close-btn {
+  padding: 8px;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.7));
+}
+
+/* Health Section */
+.middleware-detail-drawer .drawer-health-section {
+  margin-bottom: 24px;
+}
+
+/* Sections */
+.middleware-detail-drawer .drawer-section {
+  background: var(--bg-card, rgba(30, 41, 59, 0.8));
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.middleware-detail-drawer .section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary, #ffffff);
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.middleware-detail-drawer .section-title .anticon {
+  color: #3b82f6;
+}
+
+/* Middleware Cards */
+.middleware-detail-drawer .middleware-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.middleware-detail-drawer .middleware-card {
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  background: rgba(30, 41, 59, 0.5);
+}
+
+.middleware-detail-drawer .middleware-card.success {
+  border-left: 3px solid #52c41a;
+  background: rgba(82, 196, 26, 0.1);
+}
+
+.middleware-detail-drawer .middleware-card.warning {
+  border-left: 3px solid #faad14;
+  background: rgba(250, 173, 20, 0.1);
+}
+
+.middleware-detail-drawer .middleware-card.error {
+  border-left: 3px solid #ff4d4f;
+  background: rgba(255, 77, 79, 0.1);
+}
+
+.middleware-detail-drawer .middleware-card.default {
+  border-left: 3px solid #d9d9d9;
+  background: rgba(30, 41, 59, 0.3);
+}
+
+.middleware-detail-drawer .middleware-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+/* Text colors */
+.service-middleware-page .text-green-600 {
+  color: #52c41a;
+}
+
+.service-middleware-page .text-blue-600 {
+  color: #3b82f6;
+}
+
+.service-middleware-page .text-red-600 {
+  color: #ff4d4f;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .service-middleware-page {
+    padding: 16px;
+  }
+
+  .middleware-detail-drawer .ant-drawer-body {
+    padding: 16px;
+  }
+
+  .middleware-detail-drawer .drawer-content {
+    padding: 16px;
+  }
+
+  .middleware-detail-drawer .drawer-header {
+    padding: 16px;
+  }
+}

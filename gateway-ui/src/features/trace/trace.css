@@ -1,0 +1,12 @@
+.trace-row-error {
+  background-color: rgba(255, 77, 79, 0.1) !important;
+}
+
+.trace-row-error:hover {
+  background-color: rgba(255, 77, 79, 0.15) !important;
+}
+
+/* Compact cells for the dense trace tables (overrides App.premium.css padding). */
+.tracing-table .ant-table-cell {
+  padding: 8px 12px !important;
+}

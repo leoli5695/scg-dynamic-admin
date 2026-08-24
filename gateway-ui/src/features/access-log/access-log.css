@@ -1,0 +1,35 @@
+/* Access log feature styles — page-scoped so they never leak to other tabs. */
+.access-log-config-page {
+  padding: 0;
+}
+
+.access-log-config-page .page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding: 16px 0;
+}
+
+.access-log-config-page .header-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.access-log-config-page .header-icon {
+  font-size: 24px;
+  color: #165dff;
+}
+
+.access-log-config-page .config-card {
+  height: 100%;
+}
+
+.access-log-config-page .config-card .ant-card-head-title {
+  color: #e2e8f0;
+}
+
+.access-log-config-page .ant-tabs-tab {
+  padding: 8px 16px !important;
+}

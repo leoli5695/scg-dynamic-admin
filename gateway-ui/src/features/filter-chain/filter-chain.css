@@ -1,0 +1,5 @@
+/* Filter chain page — rendered inside the console tab layout (no padding). */
+
+.filter-chain-page {
+  padding: 0;
+}

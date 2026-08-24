@@ -1,0 +1,14 @@
+{
+  "login.title": "API 网关控制台",
+  "login.username_placeholder": "请输入用户名",
+  "login.password_placeholder": "请输入密码",
+  "login.button": "登录",
+  "login.username_required": "请输入用户名",
+  "login.username_min_length": "用户名至少 3 个字符",
+  "login.password_required": "请输入密码",
+  "login.password_min_length": "密码至少 6 个字符",
+  "login.success": "欢迎回来，{{nickname}}！",
+  "login.failed": "用户名或密码错误",
+  "login.default_credentials": "默认账号：admin / Admin123456",
+  "login.subtitle": "企业级管理控制台"
+}

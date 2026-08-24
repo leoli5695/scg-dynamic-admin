@@ -1,0 +1,11 @@
+.diagnostic-page {
+  padding: 0;
+}
+
+.diagnostic-card {
+  height: 100%;
+}
+
+.diagnostic-card .ant-card-head {
+  background: rgba(255, 255, 255, 0.02);
+}

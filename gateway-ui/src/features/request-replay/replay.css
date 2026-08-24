@@ -1,0 +1,11 @@
+/* Request replay debugger page styles */
+.request-replay-page {
+  padding: 0;
+}
+
+.request-replay-page .replay-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}

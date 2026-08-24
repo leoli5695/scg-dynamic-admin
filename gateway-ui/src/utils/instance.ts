@@ -21,7 +21,7 @@ export type InstanceStatusCode = typeof INSTANCE_STATUS[keyof typeof INSTANCE_ST
  * @param statusCode - Instance status code
  * @returns Ant Design color string
  */
-export const getStatusColor = (statusCode: InstanceStatusCode): string => {
+export const getStatusColor = (statusCode: number): string => {
   switch (statusCode) {
     case INSTANCE_STATUS.RUNNING:
       return 'green';
@@ -46,7 +46,7 @@ export const getStatusColor = (statusCode: InstanceStatusCode): string => {
  * @returns Localized status text
  */
 export const getStatusText = (
-  statusCode: InstanceStatusCode,
+  statusCode: number,
   status: string,
   t: (key: string) => string
 ): string => {
@@ -136,7 +136,7 @@ export interface InstanceConfig {
  * @returns Spec description text
  */
 export const getSpecText = (
-  instance: InstanceConfig,
+  instance: { specType?: string; cpuCores?: number; memoryMB?: number },
   t: (key: string) => string
 ): string => {
   if (instance.specType === 'custom') {
