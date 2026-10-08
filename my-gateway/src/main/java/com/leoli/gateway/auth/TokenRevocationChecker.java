@@ -49,6 +49,15 @@ public class TokenRevocationChecker {
     public static final String REVOKED_KEY_PREFIX = "gateway:jwt:revoked:";
 
     /**
+     * Runtime on/off flag written by the admin console
+     * (PUT /api/gateway/jwt-revocations/enabled). Must stay in sync with
+     * GatewayTokenRevocationService.RUNTIME_FLAG_KEY. Absent means enabled, so the
+     * deployment-level {@code gateway.jwt.revocation.enabled} property governs until
+     * an operator flips the switch.
+     */
+    public static final String RUNTIME_FLAG_KEY = "gateway:jwt:revocation:enabled";
+
+    /**
      * Local verdict cache TTL. The check runs on every request including
      * {@link JwtValidationCache} hits, so a short local cache keeps Redis QPS
      * proportional to distinct tokens rather than to request rate. The cost is
@@ -68,6 +77,12 @@ public class TokenRevocationChecker {
 
     private final Cache<String, Boolean> verdictCache = Caffeine.newBuilder()
             .maximumSize(LOCAL_VERDICT_MAX_SIZE)
+            .expireAfterWrite(LOCAL_VERDICT_TTL)
+            .build();
+
+    // The console switch is read at most once per LOCAL_VERDICT_TTL per node.
+    private final Cache<String, Boolean> runtimeFlagCache = Caffeine.newBuilder()
+            .maximumSize(1)
             .expireAfterWrite(LOCAL_VERDICT_TTL)
             .build();
 
@@ -98,6 +113,34 @@ public class TokenRevocationChecker {
             return Mono.just(Boolean.FALSE);
         }
 
+        return runtimeCheckEnabled()
+                .flatMap(active -> active
+                        ? lookupBlacklist(claims, tokenHash)
+                        : Mono.just(Boolean.FALSE));
+    }
+
+    /**
+     * Console-controlled switch. Defaults to enabled when the key is absent, and
+     * stays enabled if the flag cannot be read - turning revocation off must be an
+     * explicit operator action, not a side effect of a Redis hiccup.
+     */
+    private Mono<Boolean> runtimeCheckEnabled() {
+        Boolean cached = runtimeFlagCache.getIfPresent(RUNTIME_FLAG_KEY);
+        if (cached != null) {
+            return Mono.just(cached);
+        }
+        return reactiveRedisTemplate.opsForValue().get(RUNTIME_FLAG_KEY)
+                .map(value -> !"false".equalsIgnoreCase(value))
+                .defaultIfEmpty(Boolean.TRUE)
+                .doOnNext(value -> runtimeFlagCache.put(RUNTIME_FLAG_KEY, value))
+                .onErrorResume(e -> {
+                    log.error("Could not read the JWT revocation switch, treating it as enabled: {}",
+                            e.getMessage());
+                    return Mono.just(Boolean.TRUE);
+                });
+    }
+
+    private Mono<Boolean> lookupBlacklist(Claims claims, String tokenHash) {
         List<String> ids = new ArrayList<>(2);
         String jti = claims != null ? claims.getId() : null;
         if (jti != null && !jti.isBlank()) {
@@ -125,10 +168,13 @@ public class TokenRevocationChecker {
     }
 
     /**
-     * Drop cached verdicts so a revocation takes effect immediately on this node.
+     * Drop locally cached verdicts and the cached console switch, so a revocation
+     * or a switch flip takes effect immediately on this node instead of after the
+     * local cache TTL (5s).
      */
     public void invalidateLocalCache() {
         verdictCache.invalidateAll();
+        runtimeFlagCache.invalidateAll();
     }
 
     private static String sha256Hex(String value) {

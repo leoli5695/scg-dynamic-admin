@@ -14,7 +14,7 @@ import {
   HistoryOutlined, HomeOutlined, KeyOutlined, LineChartOutlined, LinkOutlined,
   LockOutlined, MedicineBoxOutlined, PauseCircleOutlined, PlayCircleOutlined,
   PlusSquareOutlined, ReloadOutlined, RobotOutlined, RocketOutlined,
-  SafetyOutlined, ThunderboltOutlined,
+  SafetyOutlined, StopOutlined, ThunderboltOutlined,
 } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -44,6 +44,7 @@ const TAB_ICONS = {
   plugin_bindings: LinkOutlined,
   strategies: SafetyOutlined,
   authentication: LockOutlined,
+  token_revocation: StopOutlined,
   certificates: KeyOutlined,
   trace: LineChartOutlined,
   monitor: DashboardOutlined,

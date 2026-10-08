@@ -12,6 +12,7 @@
   "menu.monitor": "Monitor",
   "menu.alerts": "Alerts",
   "menu.authentication": "Authentication",
+  "menu.token_revocation": "Token Revocation",
   "menu.access_log": "Access Log",
   "menu.audit_logs": "Audit Logs",
   "menu.kubernetes": "Kubernetes",

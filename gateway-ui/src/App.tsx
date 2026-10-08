@@ -23,7 +23,7 @@ import {
   AccessLogTab, AlertsTab, AuditLogsTab, AuthenticationTab, CertificatesTab,
   CopilotTab, DiagnosticTab, FilterChainTab, MiddlewareTab, MonitorTab,
   PluginBindingsTab, PluginsTab, RequestReplayTab, RoutesTab, ServicesTab,
-  StrategiesTab, StressTestTab, TopologyTab, TraceTab,
+  StrategiesTab, StressTestTab, TokenRevocationTab, TopologyTab, TraceTab,
 } from './features/instance-detail/tabs/legacyTabs';
 import './App.css';
 import './App.premium.css';
@@ -98,6 +98,7 @@ const AppRoutes: React.FC = () => (
           <Route path="plugin_bindings" element={<PluginBindingsTab />} />
           <Route path="strategies" element={<StrategiesTab />} />
           <Route path="authentication" element={<AuthenticationTab />} />
+          <Route path="token_revocation" element={<TokenRevocationTab />} />
           <Route path="certificates" element={<CertificatesTab />} />
           <Route path="trace" element={<TraceTab />} />
           <Route path="monitor" element={<MonitorTab />} />

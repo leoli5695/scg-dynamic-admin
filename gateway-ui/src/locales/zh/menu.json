@@ -12,6 +12,7 @@
   "menu.monitor": "监控",
   "menu.alerts": "告警",
   "menu.authentication": "认证",
+  "menu.token_revocation": "Token吊销",
   "menu.access_log": "访问日志",
   "menu.audit_logs": "审计日志",
   "menu.kubernetes": "Kubernetes",

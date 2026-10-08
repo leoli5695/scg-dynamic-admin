@@ -5,8 +5,9 @@ import com.leoli.gateway.admin.service.GatewayTokenRevocationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -56,9 +57,11 @@ public class GatewayTokenRevocationController {
     }
 
     /**
-     * Lift a revocation before its TTL expires. Same body as the POST.
+     * Lift a revocation before its TTL expires. Same body as the POST above.
+     * Modelled as POST rather than DELETE because the raw token must travel in the
+     * body - a query parameter would land in access logs.
      */
-    @DeleteMapping
+    @PostMapping("/lift")
     public ResponseEntity<ApiResponse<Map<String, Object>>> unrevoke(@RequestBody Map<String, Object> body) {
         try {
             GatewayTokenRevocationService.Result result = revocationService.unrevoke(
@@ -73,6 +76,48 @@ public class GatewayTokenRevocationController {
             log.error("Failed to lift data-plane JWT revocation", e);
             return ResponseEntity.internalServerError()
                     .body(ApiResponse.error("Failed to lift revocation"));
+        }
+    }
+
+    /**
+     * Whether gateways currently honour the blacklist (runtime switch).
+     */
+    @GetMapping("/enabled")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getEnabled() {
+        try {
+            return ResponseEntity.ok(ApiResponse.success(
+                    Map.of("enabled", revocationService.isCheckEnabled())));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(503).body(ApiResponse.error(503, e.getMessage()));
+        } catch (Exception e) {
+            log.error("Failed to read data-plane JWT revocation switch", e);
+            return ResponseEntity.internalServerError()
+                    .body(ApiResponse.error("Failed to read revocation switch"));
+        }
+    }
+
+    /**
+     * Flip the runtime switch. Body: {@code {"enabled": true|false}}. Turning it off
+     * makes every gateway stop consulting the blacklist within its local cache
+     * window, so previously revoked tokens become usable again.
+     */
+    @PutMapping("/enabled")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> setEnabled(@RequestBody Map<String, Object> body) {
+        Object value = body != null ? body.get("enabled") : null;
+        if (!(value instanceof Boolean)) {
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.badRequest("enabled must be a boolean"));
+        }
+        try {
+            revocationService.setCheckEnabled((Boolean) value);
+            return ResponseEntity.ok(ApiResponse.success(
+                    Map.of("enabled", value), "Revocation switch updated"));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(503).body(ApiResponse.error(503, e.getMessage()));
+        } catch (Exception e) {
+            log.error("Failed to update data-plane JWT revocation switch", e);
+            return ResponseEntity.internalServerError()
+                    .body(ApiResponse.error("Failed to update revocation switch"));
         }
     }
 

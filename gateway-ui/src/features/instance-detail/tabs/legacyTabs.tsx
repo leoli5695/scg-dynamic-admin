@@ -13,6 +13,7 @@ const PluginsPage = lazy(() => import('../../plugins'));
 const RoutePluginBindingsPage = lazy(() => import('../../plugin-bindings'));
 const StrategiesPage = lazy(() => import('../../strategies'));
 const AuthPoliciesPage = lazy(() => import('../../auth-policies'));
+const TokenRevocationPage = lazy(() => import('../../token-revocation'));
 const CertificatePage = lazy(() => import('../../certificates'));
 const TracePage = lazy(() => import('../../trace'));
 const MonitorPage = lazy(() => import('../../monitor'));
@@ -55,6 +56,12 @@ export const StrategiesTab: React.FC = () => (
 // Auth policies page rewritten as a feature; reads instanceId from the route.
 export const AuthenticationTab: React.FC = () => (
   <ErrorBoundary><AuthPoliciesPage /></ErrorBoundary>
+);
+
+// Token revocation page; the blacklist is deployment-wide (shared Redis), so it
+// reads nothing from the route.
+export const TokenRevocationTab: React.FC = () => (
+  <ErrorBoundary><TokenRevocationPage /></ErrorBoundary>
 );
 
 // Certificates page rewritten as a feature; reads instanceId from the route.

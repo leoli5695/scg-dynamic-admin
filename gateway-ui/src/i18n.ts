@@ -10,6 +10,7 @@ import zhRoutes from './locales/zh/routes.json';
 import zhServices from './locales/zh/services.json';
 import zhStrategy from './locales/zh/strategy.json';
 import zhAuthPolicy from './locales/zh/authPolicy.json';
+import zhJwtRevocation from './locales/zh/jwtRevocation.json';
 import zhCert from './locales/zh/cert.json';
 import zhPlugins from './locales/zh/plugins.json';
 import zhMiddleware from './locales/zh/middleware.json';
@@ -34,6 +35,7 @@ import enRoutes from './locales/en/routes.json';
 import enServices from './locales/en/services.json';
 import enStrategy from './locales/en/strategy.json';
 import enAuthPolicy from './locales/en/authPolicy.json';
+import enJwtRevocation from './locales/en/jwtRevocation.json';
 import enCert from './locales/en/cert.json';
 import enPlugins from './locales/en/plugins.json';
 import enMiddleware from './locales/en/middleware.json';
@@ -61,7 +63,7 @@ const resources = {
       enCommon, enMenu, enLogin, enInstance, enRoutes, enServices, enStrategy,
       enAuthPolicy, enCert, enPlugins, enMiddleware, enMonitor, enAlert, enTrace,
       enAccessLog, enAudit, enDiagnostic, enTopology, enFilterChain, enReplay,
-      enCopilot, enStressTest, enK8s, enMisc,
+      enCopilot, enStressTest, enK8s, enMisc, enJwtRevocation,
     ),
   },
   zh: {
@@ -69,7 +71,7 @@ const resources = {
       zhCommon, zhMenu, zhLogin, zhInstance, zhRoutes, zhServices, zhStrategy,
       zhAuthPolicy, zhCert, zhPlugins, zhMiddleware, zhMonitor, zhAlert, zhTrace,
       zhAccessLog, zhAudit, zhDiagnostic, zhTopology, zhFilterChain, zhReplay,
-      zhCopilot, zhStressTest, zhK8s, zhMisc,
+      zhCopilot, zhStressTest, zhK8s, zhMisc, zhJwtRevocation,
     ),
   },
 };

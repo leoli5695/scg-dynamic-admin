@@ -41,6 +41,12 @@ public class GatewayTokenRevocationService {
      */
     private static final String REVOKED_KEY_PREFIX = "gateway:jwt:revoked:";
 
+    /**
+     * Runtime on/off flag read by the gateways. Must stay in sync with
+     * TokenRevocationChecker.RUNTIME_FLAG_KEY in my-gateway.
+     */
+    private static final String RUNTIME_FLAG_KEY = "gateway:jwt:revocation:enabled";
+
     /** Applied when no TTL can be derived (no token supplied, or exp missing). */
     private static final long DEFAULT_TTL_SECONDS = 3600;
     private static final long MIN_TTL_SECONDS = 60;
@@ -151,6 +157,23 @@ public class GatewayTokenRevocationService {
             return false;
         }
         return Boolean.TRUE.equals(redisTemplate.hasKey(REVOKED_KEY_PREFIX + key));
+    }
+
+    /**
+     * Runtime switch honoured by the gateways. Stored in Redis rather than pushed
+     * through the config center so flipping it needs no new configuration pipeline;
+     * gateways pick it up within their local verdict-cache window.
+     */
+    public boolean isCheckEnabled() {
+        requireRedis();
+        // Absent means "never switched off" - the deployment-level yaml flag governs.
+        return !"false".equalsIgnoreCase(redisTemplate.opsForValue().get(RUNTIME_FLAG_KEY));
+    }
+
+    public void setCheckEnabled(boolean enabled) {
+        requireRedis();
+        redisTemplate.opsForValue().set(RUNTIME_FLAG_KEY, Boolean.toString(enabled));
+        log.info("Data-plane JWT revocation switch set to {}", enabled);
     }
 
     private void requireRedis() {
