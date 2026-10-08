@@ -51,6 +51,20 @@ public class GatewayTraceProperties {
     private double sampleRate = 1.0;
 
     /**
+     * 强制采样兜底（mini tail-sampling）：未被头部采样命中的请求，
+     * 若响应码 >= 500 仍强制上报，避免低采样率恰好丢掉出错的 trace。
+     * Default: true
+     */
+    private boolean forceSampleOnError = true;
+
+    /**
+     * 强制采样兜底：慢请求阈值（毫秒）。未被采样命中但耗时超过该值的请求强制上报。
+     * 0 = 关闭慢请求强制采样。
+     * Default: 0
+     */
+    private long forceSampleSlowThresholdMs = 0;
+
+    /**
      * Enable Redis operation tracing
      * Default: true
      */
@@ -122,6 +136,66 @@ public class GatewayTraceProperties {
      * Default: empty (admin side enforcement is optional).
      */
     private String internalToken = "";
+
+    // ==================== OTLP Export (Optional) ====================
+
+    /**
+     * OTLP/HTTP trace 导出配置。
+     * <p>
+     * 配置 endpoint 即启用（配置驱动，与 middleware-exporters 同一风格），
+     * 数据以 OTLP/HTTP JSON 格式双写到任意 OpenTelemetry 兼容后端
+     * （OTel Collector、Jaeger、Tempo、SkyWalking 9+、阿里云 ARMS 等），
+     * admin 上报不受影响。
+     * <p>
+     * 配置示例（application.yml）:
+     * <pre>
+     * gateway:
+     *   trace:
+     *     otlp:
+     *       endpoint: http://otel-collector:4318/v1/traces
+     *       headers:
+     *         Authentication: "Bearer xxx"
+     * </pre>
+     */
+    private OtlpConfig otlp = new OtlpConfig();
+
+    /**
+     * OTLP/HTTP 导出配置项
+     */
+    @Data
+    public static class OtlpConfig {
+
+        /**
+         * OTLP/HTTP traces endpoint（完整 URL，含 /v1/traces 路径）。
+         * 为空则不启用 OTLP 导出。
+         */
+        private String endpoint;
+
+        /**
+         * 导出超时（毫秒）
+         */
+        private int timeoutMs = 2000;
+
+        /**
+         * 异步导出队列大小（队满丢弃并计数，不阻塞业务线程）
+         */
+        private int queueSize = 1000;
+
+        /**
+         * 单批导出的最大 trace 数
+         */
+        private int batchSize = 100;
+
+        /**
+         * 批量刷新间隔（毫秒）
+         */
+        private int flushIntervalMs = 200;
+
+        /**
+         * 附加请求头（如鉴权 token），随每次 OTLP 请求发送
+         */
+        private java.util.Map<String, String> headers = new java.util.LinkedHashMap<>();
+    }
 
     // ==================== Middleware Exporter Configuration ====================
     // 配置驱动：用户必须显式配置 exporter URL 才会上报该中间件

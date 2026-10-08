@@ -55,9 +55,23 @@ gateway:
     
     # Trace Configuration
     sample-rate: 1.0                       # Sampling rate (0.0-1.0), set to 0.1 for load testing
-    trace-redis: true                      # Enable Redis tracing
+    force-sample-on-error: true            # 5xx requests are always reported even when not sampled
+    force-sample-slow-threshold-ms: 0      # Force-report unsampled requests slower than this (0 = off)
+    trace-redis: true                      # Enable Redis tracing (connection-level command spans)
     trace-mq: true                         # Enable MQ tracing
     trace-db: true                         # Enable DB tracing
+
+    # OTLP Export (optional; configures => enabled)
+    # Dual-writes traces in OTLP/HTTP JSON to any OpenTelemetry-compatible backend
+    # (OTel Collector, Jaeger, Tempo, SkyWalking 9+, ARMS...). Admin reporting is unaffected.
+    otlp:
+      endpoint: http://otel-collector:4318/v1/traces
+      timeout-ms: 2000
+      queue-size: 1000
+      batch-size: 100
+      flush-interval-ms: 200
+      headers:                             # optional auth headers sent with every export
+        Authentication: "Bearer xxx"
     
     # Middleware Metadata Configuration
     report-middleware: true                # Enable middleware metadata reporting
@@ -178,16 +192,25 @@ No manual Exporter URL configuration needed - the Starter auto-reports.
 Request Flow:
 ┌─────────────────────────────────────────────────────────┐
 │ Gateway generates TraceId → Header: X-Trace-Id         │
+│                              + W3C traceparent          │
 │     ↓                                                    │
 │ Starter interceptor extracts TraceId → ThreadLocal      │
 │     ↓                                                    │
 │ Aspects auto-trace → Add Spans                          │
 │     ↓                                                    │
 │ Request ends → Async batch report to Gateway Admin     │
+│              (+ optional OTLP export, dual-write)       │
 │     ↓                                                    │
 │ Gateway Admin aggregates → AI Copilot queries          │
 └─────────────────────────────────────────────────────────┘
 ```
+
+**W3C Trace Context**: the gateway emits `traceparent: 00-{32hex trace-id}-{16hex parent-id}-{flags}`
+alongside the legacy headers, and Feign propagates it downstream. Inbound priority:
+`traceparent` > `X-Trace-Id` / `X-Span-Id`; sampling: traceparent sampled-flag `01` forces
+sampling, otherwise `X-Trace-Sampled` is inherited, otherwise local `sample-rate` applies.
+This lets OTel/Jaeger/SkyWalking-instrumented services join the same trace, and combined
+with `gateway.trace.otlp.*` the whole pipeline can dual-write to any OTLP backend.
 
 ---
 

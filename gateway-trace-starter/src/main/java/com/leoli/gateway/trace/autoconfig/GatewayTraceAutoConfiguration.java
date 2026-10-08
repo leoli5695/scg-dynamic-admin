@@ -183,12 +183,26 @@ class WebClientTraceConfiguration {
     }
 
     /**
+     * OTLP/HTTP JSON trace exporter (optional)
+     * <p>
+     * 配置驱动：仅当 gateway.trace.otlp.endpoint 配置后启用，
+     * 与 admin 上报双写，数据可流向任意 OTel 兼容后端。
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(prefix = "gateway.trace.otlp", name = "endpoint")
+    public com.leoli.gateway.trace.reporter.OtlpTraceExporter otlpTraceExporter(GatewayTraceProperties properties) {
+        return new com.leoli.gateway.trace.reporter.OtlpTraceExporter(properties.getOtlp());
+    }
+
+    /**
      * Trace report interceptor: reports on request completion
      */
     @Bean
     @ConditionalOnMissingBean
-    public TraceReportInterceptor traceReportInterceptor(AsyncTraceReporter reporter, GatewayTraceProperties properties) {
-        return new TraceReportInterceptor(reporter, properties);
+    public TraceReportInterceptor traceReportInterceptor(AsyncTraceReporter reporter, GatewayTraceProperties properties,
+            ObjectProvider<com.leoli.gateway.trace.reporter.OtlpTraceExporter> otlpExporterProvider) {
+        return new TraceReportInterceptor(reporter, properties, otlpExporterProvider.getIfAvailable());
     }
 }
 

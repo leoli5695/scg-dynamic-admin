@@ -8,8 +8,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.util.concurrent.TimeUnit;
-
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -57,19 +55,29 @@ class AsyncTraceReporterTest {
         assertEquals(0, reporter.getFallbackCount());
     }
 
+    /**
+     * 有界轮询等待条件成立（替代固定 sleep：fallbackCount 等统计在独立线程异步累加，
+     * 机器负载高时固定 sleep 会偶发误报）
+     */
+    private static void waitUntil(java.util.function.BooleanSupplier condition, long timeoutMs) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            if (condition.getAsBoolean()) {
+                return;
+            }
+            Thread.sleep(50);
+        }
+    }
+
     @Test
     @DisplayName("报告单个Trace到队列")
-    void testReportSingleTrace() {
+    void testReportSingleTrace() throws InterruptedException {
         DistributedTrace trace = createTestTrace("trace-001");
 
         reporter.report(trace);
 
-        // 等待一小段时间让trace进入队列
-        try {
-            TimeUnit.MILLISECONDS.sleep(100);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        waitUntil(() -> reporter.getQueueSize() + reporter.getReportedCount() + reporter.getFallbackCount() >= 1,
+                5000);
 
         // Trace应该被加入队列或立即处理
         assertTrue(reporter.getQueueSize() + reporter.getReportedCount() + reporter.getFallbackCount() >= 1);
@@ -77,18 +85,14 @@ class AsyncTraceReporterTest {
 
     @Test
     @DisplayName("报告多个Trace到队列")
-    void testReportMultipleTraces() {
+    void testReportMultipleTraces() throws InterruptedException {
         for (int i = 0; i < 20; i++) {
             DistributedTrace trace = createTestTrace("trace-" + i);
             reporter.report(trace);
         }
 
-        // 等待处理
-        try {
-            TimeUnit.MILLISECONDS.sleep(500);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        waitUntil(() -> reporter.getQueueSize() + reporter.getReportedCount()
+                + reporter.getFallbackCount() + reporter.getDroppedCount() >= 20, 10000);
 
         // 所有trace要么在队列中，要么已处理，要么写入fallback
         long total = reporter.getQueueSize() + reporter.getReportedCount() + reporter.getFallbackCount() + reporter.getDroppedCount();
@@ -131,8 +135,8 @@ class AsyncTraceReporterTest {
         reporter.report(createTestTrace("stats-001"));
         reporter.report(createTestTrace("stats-002"));
 
-        // Allow time for async processing (reportLoop + fallbackExecutor)
-        Thread.sleep(200);
+        waitUntil(() -> reporter.getQueueSize() + reporter.getReportedCount() + reporter.getFallbackCount() >= 2,
+                5000);
 
         // 统计值应该更新
         assertTrue(reporter.getQueueSize() + reporter.getReportedCount() + reporter.getFallbackCount() >= 2);
@@ -226,8 +230,8 @@ class AsyncTraceReporterTest {
             thread.join();
         }
 
-        // 等待处理
-        TimeUnit.MILLISECONDS.sleep(500);
+        waitUntil(() -> reporter.getQueueSize() + reporter.getReportedCount()
+                + reporter.getFallbackCount() + reporter.getDroppedCount() >= 50, 10000);
 
         // 验证所有trace被处理（队列、已上报、fallback或丢弃）
         long total = reporter.getQueueSize() + reporter.getReportedCount() + reporter.getFallbackCount() + reporter.getDroppedCount();

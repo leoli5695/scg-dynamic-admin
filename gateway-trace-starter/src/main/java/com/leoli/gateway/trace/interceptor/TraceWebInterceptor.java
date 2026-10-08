@@ -64,6 +64,13 @@ public class TraceWebInterceptor implements HandlerInterceptor {
      */
     private static final String BAGGAGE_HEADER = "X-Trace-Baggage";
 
+    /**
+     * W3C Trace Context header: 00-{trace-id 32hex}-{parent-id 16hex}-{flags 2hex}.
+     * Interop with OpenTelemetry/Jaeger/SkyWalking instrumented services.
+     * Priority: traceparent > X-Trace-Id / X-Span-Id / X-Trace-Sampled.
+     */
+    private static final String TRACEPARENT_HEADER = "traceparent";
+
     private final String serviceName;
     private final GatewayTraceProperties properties;
 
@@ -79,30 +86,38 @@ public class TraceWebInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        // Get TraceId from Header (passed by gateway)
-        String traceId = request.getHeader(TRACE_ID_HEADER);
+        // W3C traceparent takes priority (interop with OTel-instrumented callers)
+        String[] traceparent = parseTraceparent(request.getHeader(TRACEPARENT_HEADER));
+
+        // Get TraceId: traceparent > X-Trace-Id > generate
+        String traceId = traceparent != null ? traceparent[1] : request.getHeader(TRACE_ID_HEADER);
 
         if (traceId == null || !isValidTraceId(traceId)) {
             // Gateway didn't pass TraceId (or it's malformed/untrusted), generate one
             traceId = generateTraceId();
             log.debug("Generated new traceId: {}", traceId);
         } else {
-            log.debug("Received traceId from gateway: {}", traceId);
+            log.debug("Received traceId from upstream: {}", traceId);
         }
 
         // Set TraceId to ThreadLocal
         TraceContextHolder.setTraceId(traceId);
 
-        // Set sampling flag: inherit upstream decision when present (X-Trace-Sampled),
-        // otherwise sample locally. Independent per-service sampling would fragment traces.
-        String sampledHeader = request.getHeader(SAMPLED_HEADER);
+        // Set sampling flag: traceparent sampled bit (01) forces sampling; otherwise
+        // inherit upstream X-Trace-Sampled; otherwise sample locally. Independent
+        // per-service sampling would fragment traces.
         boolean sampled;
-        if ("true".equalsIgnoreCase(sampledHeader)) {
+        if (traceparent != null && (Integer.parseInt(traceparent[3], 16) & 0x01) == 1) {
             sampled = true;
-        } else if ("false".equalsIgnoreCase(sampledHeader)) {
-            sampled = false;
         } else {
-            sampled = properties.shouldSample();
+            String sampledHeader = request.getHeader(SAMPLED_HEADER);
+            if ("true".equalsIgnoreCase(sampledHeader)) {
+                sampled = true;
+            } else if ("false".equalsIgnoreCase(sampledHeader)) {
+                sampled = false;
+            } else {
+                sampled = properties.shouldSample();
+            }
         }
         TraceContextHolder.setSampled(sampled);
 
@@ -113,8 +128,8 @@ public class TraceWebInterceptor implements HandlerInterceptor {
 
         // === Enhanced: Span hierarchy support ===
         
-        // Get parentSpanId from upstream (X-Span-Id from caller)
-        String parentSpanId = request.getHeader(SPAN_ID_HEADER);
+        // Get parentSpanId from upstream: traceparent parent-id > X-Span-Id
+        String parentSpanId = traceparent != null ? traceparent[2] : request.getHeader(SPAN_ID_HEADER);
         
         // Get caller service name (for topology graph generation)
         String callerService = request.getHeader(CALLER_SERVICE_HEADER);
@@ -181,6 +196,49 @@ public class TraceWebInterceptor implements HandlerInterceptor {
      */
     private String generateTraceId() {
         return UUID.randomUUID().toString().replace("-", "");
+    }
+
+    /**
+     * Parse a W3C traceparent header: {version}-{trace-id}-{parent-id}-{flags}.
+     *
+     * @return String[4] of lowercase parts when valid, null otherwise
+     */
+    private String[] parseTraceparent(String header) {
+        if (header == null || header.isEmpty()) {
+            return null;
+        }
+        String[] parts = header.trim().toLowerCase().split("-");
+        if (parts.length != 4) {
+            return null;
+        }
+        // version: 2 hex, "ff" is invalid per spec
+        if (!isHex(parts[0], 2) || "ff".equals(parts[0])) {
+            return null;
+        }
+        // trace-id: 32 hex, all-zero invalid; parent-id: 16 hex, all-zero invalid
+        if (!isHex(parts[1], 32) || parts[1].chars().allMatch(c -> c == '0')) {
+            return null;
+        }
+        if (!isHex(parts[2], 16) || parts[2].chars().allMatch(c -> c == '0')) {
+            return null;
+        }
+        if (!isHex(parts[3], 2)) {
+            return null;
+        }
+        return parts;
+    }
+
+    private boolean isHex(String value, int expectedLength) {
+        if (value == null || value.length() != expectedLength) {
+            return false;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

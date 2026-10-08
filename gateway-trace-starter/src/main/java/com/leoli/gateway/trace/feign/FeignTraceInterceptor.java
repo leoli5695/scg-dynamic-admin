@@ -65,6 +65,11 @@ public class FeignTraceInterceptor implements RequestInterceptor {
     private static final String BAGGAGE_HEADER = "X-Trace-Baggage";
 
     /**
+     * W3C Trace Context header (interop with OTel-instrumented downstream services)
+     */
+    private static final String TRACEPARENT_HEADER = "traceparent";
+
+    /**
      * Max encoded baggage header length (bytes). Beyond this the header is not
      * propagated to avoid request header overflow (HTTP 431) on downstream hops.
      */
@@ -98,6 +103,18 @@ public class FeignTraceInterceptor implements RequestInterceptor {
             template.header(SPAN_ID_HEADER, currentSpanId);
             log.debug("Feign request: propagating spanId={} (downstream parentSpanId)", currentSpanId);
         }
+
+        // === W3C traceparent (interop with OTel-instrumented downstream) ===
+        // 00-{trace-id 32hex}-{parent-id 16hex}-{flags: 01 when sampled}
+        String hexTraceId = normalizeHex(traceId, 32);
+        if (hexTraceId != null) {
+            String hexParentId = normalizeHex(currentSpanId, 16);
+            if (hexParentId == null) {
+                hexParentId = generateHexId();
+            }
+            template.header(TRACEPARENT_HEADER,
+                    "00-" + hexTraceId + "-" + hexParentId + "-" + (sampled ? "01" : "00"));
+        }
         
         // Propagate caller service name (for topology graph generation)
         String callerService = properties.getServiceName();
@@ -128,6 +145,34 @@ public class FeignTraceInterceptor implements RequestInterceptor {
                         encodedBaggage.length(), MAX_BAGGAGE_HEADER_LENGTH);
             }
         }
+    }
+
+    /**
+     * Normalize an id to lowercase fixed-length hex (W3C requires 32-hex trace-id /
+     * 16-hex parent-id); returns null when the value doesn't qualify.
+     */
+    private static String normalizeHex(String value, int expectedLength) {
+        if (value == null) {
+            return null;
+        }
+        String cleaned = value.replace("-", "").toLowerCase();
+        if (cleaned.length() != expectedLength) {
+            return null;
+        }
+        for (int i = 0; i < cleaned.length(); i++) {
+            char c = cleaned.charAt(i);
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
+                return null;
+            }
+        }
+        return cleaned;
+    }
+
+    /**
+     * Generate a random 16-hex span/parent id
+     */
+    private static String generateHexId() {
+        return java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 16);
     }
 
     /**
