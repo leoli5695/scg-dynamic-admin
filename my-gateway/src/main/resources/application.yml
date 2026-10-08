@@ -142,6 +142,15 @@ gateway:
   admin:
     url: ${GATEWAY_ADMIN_URL:http://127.0.0.1:9090}
 
+  # Data-plane JWT revocation. The admin console blacklists tokens in Redis under
+  # gateway:jwt:revoked:* (POST /api/gateway/jwt-revocations); every JWT request,
+  # including validation-cache hits, is checked against it. Requires Redis - with
+  # Redis absent or unreachable the check is skipped (fail open) and tokens stay
+  # valid until their own exp.
+  jwt:
+    revocation:
+      enabled: ${GATEWAY_JWT_REVOCATION_ENABLED:true}
+
   # Timeout Configuration
   # Default timeout values applied when no timeout strategy is configured
   timeout:

@@ -47,6 +47,13 @@ class JwtAuthProcessorTest {
         Field cacheField = JwtAuthProcessor.class.getDeclaredField("jwtCache");
         cacheField.setAccessible(true);
         cacheField.set(processor, jwtValidationCache);
+
+        // The processor also consults a revocation checker. A real instance with no
+        // Redis template reports "not revoked", which keeps these tests on the
+        // pre-revocation behaviour (@InjectMocks has no mock to supply here).
+        Field revocationField = JwtAuthProcessor.class.getDeclaredField("revocationChecker");
+        revocationField.setAccessible(true);
+        revocationField.set(processor, new TokenRevocationChecker());
     }
     
     private AuthConfig createBaseConfig() {

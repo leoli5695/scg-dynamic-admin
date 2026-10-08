@@ -44,6 +44,9 @@ public class JwtAuthProcessor extends AbstractAuthProcessor {
     @Autowired
     private JwtValidationCache jwtCache;
 
+    @Autowired
+    private TokenRevocationChecker revocationChecker;
+
     /**
      * FIX (CPU exhaustion DoS): JwtParser instances are immutable and expensive to build
      * (PBKDF2 key derivation alone costs 10000 iterations for short secrets). Previously
@@ -99,27 +102,41 @@ public class JwtAuthProcessor extends AbstractAuthProcessor {
             return Mono.error(new RuntimeException("Invalid JWT token"));
         }
 
-        // Try cache first
+        // Try cache first. A hit skips signature verification entirely, so the
+        // revocation lookup below is the only thing that can still stop a
+        // blacklisted token from being honoured until its own exp.
         Claims cachedClaims = jwtCache.get(finalToken, policyId);
         if (cachedClaims != null) {
-            // Cache hit - use cached claims
-            addClaimsToExchange(exchange, cachedClaims);
-            log.debug("JWT validated from cache for subject: {}", cachedClaims.getSubject());
-            return Mono.empty();
+            return revocationChecker.isRevoked(cachedClaims, finalToken)
+                    .flatMap(revoked -> {
+                        if (Boolean.TRUE.equals(revoked)) {
+                            return rejectRevoked(negativeKey);
+                        }
+                        addClaimsToExchange(exchange, cachedClaims);
+                        log.debug("JWT validated from cache for subject: {}", cachedClaims.getSubject());
+                        return Mono.<Void>empty();
+                    });
         }
 
         // Cache miss - validate JWT token
         try {
             Claims claims = validateToken(finalToken, config);
 
-            // Cache the validation result
-            jwtCache.put(finalToken, policyId, claims);
+            return revocationChecker.isRevoked(claims, finalToken)
+                    .flatMap(revoked -> {
+                        if (Boolean.TRUE.equals(revoked)) {
+                            return rejectRevoked(negativeKey);
+                        }
 
-            // Add claims to exchange attributes for downstream use
-            addClaimsToExchange(exchange, claims);
+                        // Cache the validation result
+                        jwtCache.put(finalToken, policyId, claims);
 
-            logSuccess("JWT validated for subject: " + claims.getSubject());
-            return Mono.empty(); // Continue the filter chain
+                        // Add claims to exchange attributes for downstream use
+                        addClaimsToExchange(exchange, claims);
+
+                        logSuccess("JWT validated for subject: " + claims.getSubject());
+                        return Mono.<Void>empty(); // Continue the filter chain
+                    });
 
         } catch (ExpiredJwtException ex) {
             invalidTokenCache.put(negativeKey, Boolean.TRUE);
@@ -146,6 +163,17 @@ public class JwtAuthProcessor extends AbstractAuthProcessor {
             logFailure("JWT", "JWT validation error: " + ex.getMessage());
             return Mono.error(new RuntimeException("JWT validation failed: " + ex.getMessage()));
         }
+    }
+
+    /**
+     * Reject a token that is on the revocation blacklist. The verdict also goes into
+     * the negative cache, so a revoked token hammered in a loop costs one Redis
+     * lookup per cache window instead of one per request.
+     */
+    private Mono<Void> rejectRevoked(String negativeKey) {
+        invalidTokenCache.put(negativeKey, Boolean.TRUE);
+        logFailure("JWT", "Token has been revoked");
+        return Mono.error(new RuntimeException("JWT token has been revoked"));
     }
 
     /**
