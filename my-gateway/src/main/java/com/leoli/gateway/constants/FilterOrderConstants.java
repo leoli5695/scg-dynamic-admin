@@ -52,9 +52,11 @@ public interface FilterOrderConstants {
     int CORS = -301;
 
     /**
-     * Trace ID filter - Distributed tracing.
-     * Generate trace ID early for full request tracing.
-     * Execute after CORS to ensure trace ID in all responses.
+     * Trace ID filter - distributed tracing.
+     * <p>
+     * NOTE: TraceIdGlobalFilter 实际使用 Ordered.HIGHEST_PRECEDENCE（必须先于
+     * RemoveCachedBodyFilter 等 SCG 内置过滤器执行，保证 traceId 对所有过滤器可见）。
+     * 此常量仅为历史位置参考，勿据此推断实际执行顺序。
      */
     int TRACE_ID = -300;
 

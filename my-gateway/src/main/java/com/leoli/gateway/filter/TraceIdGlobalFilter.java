@@ -2,7 +2,6 @@ package com.leoli.gateway.filter;
 
 import com.leoli.gateway.util.RouteUtils;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.MDC;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
@@ -37,8 +36,10 @@ public class TraceIdGlobalFilter implements GlobalFilter, Ordered {
         // Store in exchange attributes for other filters to use
         exchange.getAttributes().put(TRACE_ID_ATTR, traceId);
 
-        // Add trace ID to MDC for logging
-        MDC.put("traceId", traceId);
+        // NOTE: no MDC here. Gateway runs on Reactor Netty event-loop threads that are
+        // shared by many concurrent requests — MDC.put would leak this traceId into
+        // other requests' logs and doFinally's clear would wipe theirs. Use the
+        // exchange attribute (and the X-Trace-Id header) for correlation instead.
 
         // Add trace ID to request headers (for downstream services)
         ServerWebExchange mutatedExchange = exchange.mutate()
@@ -56,22 +57,20 @@ public class TraceIdGlobalFilter implements GlobalFilter, Ordered {
                     if (!exchange.getResponse().isCommitted()) {
                         exchange.getResponse().getHeaders().add(TRACE_ID_HEADER, traceId);
                     }
-                })
-                .doFinally(signalType -> {
-                    // Clear MDC after request completes
-                    MDC.clear();
                 });
     }
 
     /**
      * Get trace ID from request header or generate a new one.
+     * Inbound IDs are format-validated: malformed/oversized values (spoofing or
+     * injection attempts) are replaced with a locally generated ID.
      */
     private String getOrGenerateTraceId(ServerWebExchange exchange) {
         // Check if trace ID already exists in request headers
         String traceId = exchange.getRequest().getHeaders().getFirst(TRACE_ID_HEADER);
 
-        if (traceId == null || traceId.isEmpty()) {
-            // Generate new trace ID if not present
+        if (traceId == null || !isValidTraceId(traceId)) {
+            // Generate new trace ID if not present or invalid
             traceId = generateTraceId();
             log.debug("Generated new trace ID: {}", traceId);
         } else {
@@ -82,11 +81,29 @@ public class TraceIdGlobalFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * Generate a unique trace ID.
-     * Uses UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+     * Generate a unique trace ID (32-char UUID without dashes, matching the
+     * format used by gateway-trace-starter).
      */
     private String generateTraceId() {
-        return UUID.randomUUID().toString();
+        return UUID.randomUUID().toString().replace("-", "");
+    }
+
+    /**
+     * Validate an inbound X-Trace-Id: 8-64 chars of [A-Za-z0-9-].
+     */
+    private boolean isValidTraceId(String traceId) {
+        if (traceId.length() < 8 || traceId.length() > 64) {
+            return false;
+        }
+        for (int i = 0; i < traceId.length(); i++) {
+            char c = traceId.charAt(i);
+            boolean ok = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z')
+                    || (c >= 'A' && c <= 'Z') || c == '-';
+            if (!ok) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override
