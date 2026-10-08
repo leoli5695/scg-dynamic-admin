@@ -22,6 +22,14 @@ import java.util.UUID;
 public class TraceIdGlobalFilter implements GlobalFilter, Ordered {
 
     private static final String TRACE_ID_HEADER = "X-Trace-Id";
+
+    /**
+     * W3C Trace Context header: 00-{trace-id 32hex}-{parent-id 16hex}-{flags 2hex}.
+     * Emitted alongside X-Trace-Id so OTel-instrumented downstream services can join
+     * the same trace; inbound traceparent trace-id/flags are preserved (pass-through).
+     */
+    private static final String TRACEPARENT_HEADER = "traceparent";
+
     /**
      * Attribute key for storing trace ID in exchange attributes.
      * Other filters can use this to get the trace ID without parsing headers.
@@ -30,8 +38,9 @@ public class TraceIdGlobalFilter implements GlobalFilter, Ordered {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        // Get or generate trace ID
+        // Get or generate trace ID (normalized to W3C-compatible 32-char lowercase hex)
         String traceId = getOrGenerateTraceId(exchange);
+        String traceparent = buildTraceparent(exchange, traceId);
 
         // Store in exchange attributes for other filters to use
         exchange.getAttributes().put(TRACE_ID_ATTR, traceId);
@@ -45,6 +54,7 @@ public class TraceIdGlobalFilter implements GlobalFilter, Ordered {
         ServerWebExchange mutatedExchange = exchange.mutate()
                 .request(exchange.getRequest().mutate()
                         .header(TRACE_ID_HEADER, traceId)
+                        .header(TRACEPARENT_HEADER, traceparent)
                         .build())
                 .build();
 
@@ -61,45 +71,102 @@ public class TraceIdGlobalFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * Get trace ID from request header or generate a new one.
-     * Inbound IDs are format-validated: malformed/oversized values (spoofing or
-     * injection attempts) are replaced with a locally generated ID.
+     * Get trace ID: inbound traceparent trace-id > inbound X-Trace-Id > generate.
+     * All candidates are normalized to 32-char lowercase hex (dashes stripped);
+     * malformed/oversized/non-hex values (spoofing or injection attempts) are
+     * replaced with a locally generated ID.
      */
     private String getOrGenerateTraceId(ServerWebExchange exchange) {
-        // Check if trace ID already exists in request headers
-        String traceId = exchange.getRequest().getHeaders().getFirst(TRACE_ID_HEADER);
+        String[] inboundTraceparent = parseTraceparent(
+                exchange.getRequest().getHeaders().getFirst(TRACEPARENT_HEADER));
+        String candidate = inboundTraceparent != null
+                ? inboundTraceparent[1]
+                : normalizeToHex32(exchange.getRequest().getHeaders().getFirst(TRACE_ID_HEADER));
 
-        if (traceId == null || !isValidTraceId(traceId)) {
-            // Generate new trace ID if not present or invalid
-            traceId = generateTraceId();
-            log.debug("Generated new trace ID: {}", traceId);
-        } else {
-            log.debug("Using existing trace ID: {}", traceId);
+        if (candidate == null) {
+            String generated = generateTraceId();
+            log.debug("Generated new trace ID: {}", generated);
+            return generated;
         }
-
-        return traceId;
+        log.debug("Using existing trace ID: {}", candidate);
+        return candidate;
     }
 
     /**
-     * Generate a unique trace ID (32-char UUID without dashes, matching the
-     * format used by gateway-trace-starter).
+     * Build the outbound traceparent. Trace-id and sampled flags are preserved from
+     * an inbound traceparent (pass-through); parent-id is always freshly generated —
+     * the gateway is its own hop, so the caller's span id must not be reused.
+     * Flags default to "00" (no sampling decision) so downstream services fall back
+     * to their own sampling configuration.
+     */
+    private String buildTraceparent(ServerWebExchange exchange, String traceId) {
+        String[] inbound = parseTraceparent(exchange.getRequest().getHeaders().getFirst(TRACEPARENT_HEADER));
+        String flags = inbound != null ? inbound[3] : "00";
+        return "00-" + traceId + "-" + generateHex(16) + "-" + flags;
+    }
+
+    /**
+     * Generate a unique trace ID (32-char lowercase hex, W3C trace-id compatible).
      */
     private String generateTraceId() {
-        return UUID.randomUUID().toString().replace("-", "");
+        return generateHex(32);
+    }
+
+    private String generateHex(int length) {
+        StringBuilder sb = new StringBuilder(length);
+        while (sb.length() < length) {
+            sb.append(UUID.randomUUID().toString().replace("-", ""));
+        }
+        return sb.substring(0, length);
     }
 
     /**
-     * Validate an inbound X-Trace-Id: 8-64 chars of [A-Za-z0-9-].
+     * Normalize an inbound id to exactly 32-char lowercase hex; null when it doesn't
+     * qualify (also rejects the all-zero trace-id per W3C).
      */
-    private boolean isValidTraceId(String traceId) {
-        if (traceId.length() < 8 || traceId.length() > 64) {
+    private String normalizeToHex32(String value) {
+        if (value == null) {
+            return null;
+        }
+        String cleaned = value.trim().replace("-", "").toLowerCase();
+        if (cleaned.length() != 32 || cleaned.chars().allMatch(c -> c == '0')) {
+            return null;
+        }
+        for (int i = 0; i < cleaned.length(); i++) {
+            char c = cleaned.charAt(i);
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
+                return null;
+            }
+        }
+        return cleaned;
+    }
+
+    /**
+     * Parse a W3C traceparent header: {version}-{trace-id}-{parent-id}-{flags}.
+     *
+     * @return String[4] of lowercase parts when valid, null otherwise
+     */
+    private String[] parseTraceparent(String header) {
+        if (header == null || header.isEmpty()) {
+            return null;
+        }
+        String[] parts = header.trim().toLowerCase().split("-");
+        if (parts.length != 4 || !isHex(parts[0], 2) || "ff".equals(parts[0])
+                || !isHex(parts[1], 32) || parts[1].chars().allMatch(c -> c == '0')
+                || !isHex(parts[2], 16) || parts[2].chars().allMatch(c -> c == '0')
+                || !isHex(parts[3], 2)) {
+            return null;
+        }
+        return parts;
+    }
+
+    private boolean isHex(String value, int expectedLength) {
+        if (value == null || value.length() != expectedLength) {
             return false;
         }
-        for (int i = 0; i < traceId.length(); i++) {
-            char c = traceId.charAt(i);
-            boolean ok = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z')
-                    || (c >= 'A' && c <= 'Z') || c == '-';
-            if (!ok) {
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
                 return false;
             }
         }
