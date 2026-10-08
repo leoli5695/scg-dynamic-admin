@@ -10,6 +10,7 @@ import com.leoli.gateway.limiter.ShadowQuotaManager;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.MultiDimRateLimiterConfig;
 import com.leoli.gateway.model.StrategyDefinition;
+import com.leoli.gateway.util.ClientIpResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -52,6 +53,9 @@ class MultiDimRateLimiterFilterTest {
     private ShadowQuotaManager shadowQuotaManager;
 
     @Mock
+    private ClientIpResolver clientIpResolver;
+
+    @Mock
     private GatewayFilterChain chain;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -65,8 +69,12 @@ class MultiDimRateLimiterFilterTest {
         ReflectionTestUtils.setField(filter, "distributedRateLimiter", distributedRateLimiter);
         ReflectionTestUtils.setField(filter, "shadowQuotaManager", shadowQuotaManager);
         ReflectionTestUtils.setField(filter, "objectMapper", objectMapper);
+        ReflectionTestUtils.setField(filter, "clientIpResolver", clientIpResolver);
         ReflectionTestUtils.setField(filter, "redisLimitEnabled", true);
         ReflectionTestUtils.setField(filter, "shadowQuotaEnabled", true);
+        // Trusted-proxy-aware resolution replaces the old spoofable XFF read; the mock
+        // exchanges carry X-Forwarded-For: 192.168.1.100, so keep the IP-dimension key stable.
+        lenient().when(clientIpResolver.resolve(any())).thenReturn("192.168.1.100");
     }
 
     @Nested

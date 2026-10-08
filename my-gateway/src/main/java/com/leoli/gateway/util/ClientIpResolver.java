@@ -14,7 +14,7 @@ import java.util.List;
  * Trusted-proxy-aware client IP resolver.
  * <p>
  * FIX (P0): rate limiting and quota checks previously derived their keys from the
- * raw first hop of {@code X-Forwarded-For} (via {@link IpAddressExtractor#extractClientIp}),
+ * raw first hop of {@code X-Forwarded-For} (via the retired {@code IpAddressExtractor#extractClientIp}),
  * which is fully client-controlled. An attacker could rotate the header to mint an
  * unbounded number of distinct limit keys, defeating IP/user/tenant rate limiting.
  * <p>

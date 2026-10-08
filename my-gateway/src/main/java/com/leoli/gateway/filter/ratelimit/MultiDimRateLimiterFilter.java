@@ -63,6 +63,9 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
     @Autowired
     private ObjectMapper objectMapper;  // Use injected ObjectMapper
 
+    @Autowired
+    private ClientIpResolver clientIpResolver;
+
     @Value("${gateway.rate-limiter.redis.enabled:true}")
     private boolean redisLimitEnabled;
 
@@ -91,7 +94,9 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
         // Extract dimension identifiers
         String tenantId = extractTenantId(exchange, config.multiDimConfig);
         String userId = extractUserId(exchange, config.multiDimConfig);
-        String clientIp = IpAddressExtractor.extractClientIp(exchange);
+        // FIX (P0 security): use trusted-proxy-aware resolver instead of the spoofable
+        // raw X-Forwarded-For first hop, so limit keys cannot be minted by the client.
+        String clientIp = clientIpResolver.resolve(exchange);
 
         if (log.isDebugEnabled()) {
             log.debug("Multi-dim rate limiter - routeId: {}, tenantId: {}, userId: {}, ip: {}",

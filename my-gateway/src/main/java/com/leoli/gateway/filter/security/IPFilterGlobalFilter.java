@@ -2,9 +2,9 @@ package com.leoli.gateway.filter.security;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import com.leoli.gateway.config.TrustedProxyProperties;
 import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.manager.StrategyManager;
+import com.leoli.gateway.util.ClientIpResolver;
 import com.leoli.gateway.util.RouteUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,7 +16,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
-import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -41,7 +40,7 @@ import java.util.concurrent.TimeUnit;
 public class IPFilterGlobalFilter implements GlobalFilter, Ordered {
 
     private final StrategyManager strategyManager;
-    private final TrustedProxyProperties trustedProxyProperties;
+    private final ClientIpResolver clientIpResolver;
 
     /**
      * FIX (M4): Caffeine cache for IPv4-to-long conversion.
@@ -330,153 +329,6 @@ public class IPFilterGlobalFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * Get client IP address from exchange.
-     * <p>
-     * Security-aware implementation that validates X-Forwarded-For header
-     * against trusted proxy configuration.
-     * </p>
-     */
-    private String getClientIp(ServerWebExchange exchange) {
-        // Get the direct remote address (the actual TCP connection source)
-        String remoteIp = getRemoteAddress(exchange);
-
-        // If trusted proxy feature is disabled, always use direct remote address
-        if (!trustedProxyProperties.isEnabled()) {
-            log.debug("Trusted proxy disabled, using direct remote IP: {}", remoteIp);
-            return remoteIp;
-        }
-
-        // Check if request comes from a trusted proxy
-        if (isTrustedProxy(remoteIp)) {
-            // Request is from trusted proxy, check X-Forwarded-For
-            String forwarded = exchange.getRequest().getHeaders().getFirst("X-Forwarded-For");
-
-            if (forwarded != null && !forwarded.isEmpty()) {
-                String clientIp = extractForwardedIp(forwarded);
-                log.debug("Request from trusted proxy {}, extracted client IP: {}", remoteIp, clientIp);
-                return clientIp;
-            } else {
-                log.debug("Request from trusted proxy {} but no X-Forwarded-For header, using remote IP", remoteIp);
-            }
-        } else {
-            // Request is NOT from trusted proxy, ignore X-Forwarded-For to prevent spoofing
-            log.debug("Request from non-trusted proxy {}, ignoring X-Forwarded-For header", remoteIp);
-        }
-
-        return remoteIp;
-    }
-
-    /**
-     * Get the remote address from exchange
-     */
-    private String getRemoteAddress(ServerWebExchange exchange) {
-        InetSocketAddress remoteAddress = exchange.getRequest().getRemoteAddress();
-        if (remoteAddress != null && remoteAddress.getAddress() != null) {
-            return remoteAddress.getAddress().getHostAddress();
-        }
-        return "unknown";
-    }
-
-    /**
-     * Check if the IP is from a trusted proxy
-     */
-    private boolean isTrustedProxy(String ip) {
-        // Check configured proxy IPs
-        List<String> proxyIps = trustedProxyProperties.getProxyIps();
-        if (proxyIps != null && !proxyIps.isEmpty()) {
-            if (isIPInRange(ip, proxyIps)) {
-                return true;
-            }
-        }
-
-        // Check if private networks are trusted
-        if (trustedProxyProperties.isTrustPrivateNetworks()) {
-            return isPrivateNetworkIP(ip);
-        }
-
-        return false;
-    }
-
-    /**
-     * Check if IP belongs to private networks.
-     * IPv4 (RFC 1918):
-     * - 10.0.0.0/8
-     * - 172.16.0.0/12
-     * - 192.168.0.0/16
-     * - 127.0.0.0/8 (loopback)
-     * IPv6:
-     * - fc00::/7 (Unique Local Addresses)
-     * - fe80::/10 (Link-Local Addresses)
-     * - ::1/128 (loopback)
-     */
-    private boolean isPrivateNetworkIP(String ip) {
-        if (ip == null || ip.isEmpty()) {
-            return false;
-        }
-
-        // IPv6 private networks
-        if (ip.contains(":")) {
-            // IPv6 loopback
-            if ("::1".equals(ip) || "0:0:0:0:0:0:0:1".equals(ip)) {
-                return true;
-            }
-            // IPv6 Unique Local Addresses (fc00::/7)
-            if (isIPInCIDR(ip, "fc00::/7")) {
-                return true;
-            }
-            // IPv6 Link-Local Addresses (fe80::/10)
-            if (isIPInCIDR(ip, "fe80::/10")) {
-                return true;
-            }
-            return false;
-        }
-
-        // IPv4 private networks
-        return isIPInCIDR(ip, "10.0.0.0/8") ||
-                isIPInCIDR(ip, "172.16.0.0/12") ||
-                isIPInCIDR(ip, "192.168.0.0/16") ||
-                isIPInCIDR(ip, "127.0.0.0/8");
-    }
-
-    /**
-     * Extract IP from X-Forwarded-For header based on configured position.
-     * Handles multiple IPs separated by comma.
-     */
-    private String extractForwardedIp(String forwarded) {
-        if (forwarded == null || forwarded.isEmpty()) {
-            return "unknown";
-        }
-
-        // Split by comma and trim
-        String[] ips = forwarded.split(",");
-        int maxIps = Math.min(ips.length, trustedProxyProperties.getMaxForwardedIps());
-
-        // Extract IP based on position configuration
-        String ip;
-        if (trustedProxyProperties.getPosition() == TrustedProxyProperties.ForwardedIpPosition.LAST) {
-            ip = ips[Math.min(maxIps - 1, ips.length - 1)].trim();
-        } else {
-            // Default: FIRST
-            ip = ips[0].trim();
-        }
-
-        // Remove port if present without corrupting IPv6 addresses:
-        // - "192.168.1.1:8080"   -> strip port (exactly one colon = IPv4 with port)
-        // - "[2001:db8::1]:8080" -> unwrap brackets and strip port
-        // - "2001:db8::1"        -> bare IPv6 (multiple colons), keep as-is
-        if (ip.startsWith("[")) {
-            int closeBracket = ip.indexOf(']');
-            if (closeBracket > 1) {
-                ip = ip.substring(1, closeBracket);
-            }
-        } else if (ip.indexOf(':') != -1 && ip.indexOf(':') == ip.lastIndexOf(':')) {
-            ip = ip.substring(0, ip.lastIndexOf(':'));
-        }
-
-        return ip;
-    }
-
-    /**
      * Write forbidden response
      */
     private Mono<Void> writeForbiddenResponse(ServerWebExchange exchange, String message) {
@@ -490,7 +342,7 @@ public class IPFilterGlobalFilter implements GlobalFilter, Ordered {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String routeId = RouteUtils.getRouteId(exchange);
-        String clientIp = getClientIp(exchange);
+        String clientIp = clientIpResolver.resolve(exchange);
 
         // Get IP filter config for this route
         Map<String, Object> ipFilterConfig = strategyManager.getIPFilterConfig(routeId);

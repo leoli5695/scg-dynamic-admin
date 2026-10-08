@@ -3,12 +3,12 @@ package com.leoli.gateway.filter;
 import com.leoli.gateway.filter.security.IPFilterGlobalFilter;
 import com.leoli.gateway.config.TrustedProxyProperties;
 import com.leoli.gateway.manager.StrategyManager;
+import com.leoli.gateway.util.ClientIpResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -46,13 +46,20 @@ class IPFilterGlobalFilterTest {
     @Mock
     private GatewayFilterChain chain;
 
-    @InjectMocks
     private IPFilterGlobalFilter filter;
 
     @BeforeEach
     void setUp() {
         lenient().when(chain.filter(any())).thenReturn(Mono.empty());
         lenient().when(trustedProxyProperties.isEnabled()).thenReturn(false);
+        // ClientIpResolver.extractForwardedIp bounds the chain by maxForwardedIps and
+        // returns "unknown" when the bound is <= 0; give it a sane positive default so
+        // the trusted-proxy tests exercise real extraction (mirrors production config).
+        lenient().when(trustedProxyProperties.getMaxForwardedIps()).thenReturn(10);
+        // Wire the filter with a REAL ClientIpResolver backed by the mocked properties so
+        // the trusted-proxy behaviour under test is genuine, not a stubbed resolve().
+        ClientIpResolver clientIpResolver = new ClientIpResolver(trustedProxyProperties);
+        filter = new IPFilterGlobalFilter(strategyManager, clientIpResolver);
     }
 
     // ============================================================
