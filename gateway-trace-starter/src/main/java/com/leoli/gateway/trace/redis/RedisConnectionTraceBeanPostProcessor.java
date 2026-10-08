@@ -71,13 +71,20 @@ public class RedisConnectionTraceBeanPostProcessor implements BeanPostProcessor 
         if (!(bean instanceof RedisConnectionFactory)) {
             return bean;
         }
-        Class<?>[] interfaces = bean.getClass().getInterfaces();
+        // 接口可能声明在父类上（如 LettuceConnection extends AbstractRedisConnection），
+        // getClass().getInterfaces() 会漏 → 必须遍历整个继承链收集
+        Class<?>[] interfaces = interfaceArrayOf(bean.getClass());
         if (interfaces.length == 0) {
             return bean;
         }
         log.debug("Wrapping RedisConnectionFactory bean '{}' for command-level tracing", beanName);
         return Proxy.newProxyInstance(bean.getClass().getClassLoader(), interfaces,
                 new FactoryHandler(bean));
+    }
+
+    private Class<?>[] interfaceArrayOf(Class<?> clazz) {
+        Set<Class<?>> interfaces = collectInterfaces(clazz);
+        return interfaces.toArray(new Class<?>[0]);
     }
 
     private boolean tracingConfigured() {
@@ -106,7 +113,7 @@ public class RedisConnectionTraceBeanPostProcessor implements BeanPostProcessor 
     }
 
     private Object wrapConnection(RedisConnection connection) {
-        Class<?>[] interfaces = connection.getClass().getInterfaces();
+        Class<?>[] interfaces = interfaceArrayOf(connection.getClass());
         if (interfaces.length == 0) {
             return connection;
         }
@@ -163,7 +170,7 @@ public class RedisConnectionTraceBeanPostProcessor implements BeanPostProcessor 
     }
 
     private Object wrapCommands(Object commands) {
-        Class<?>[] interfaces = commands.getClass().getInterfaces();
+        Class<?>[] interfaces = interfaceArrayOf(commands.getClass());
         if (interfaces.length == 0) {
             return commands;
         }
