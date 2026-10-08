@@ -67,6 +67,16 @@ spring:
         enabled: ${CONSUL_SERVICE_REGISTRY_ENABLED:false}
       enabled: false  # Explicitly disable Consul
 
+  # FIX (P1 scheduler starvation): @Scheduled defaults to a SINGLE-thread pool.
+  # With ~12 scheduled tasks (health checks, instance heartbeat, config refresh,
+  # shadow-quota snapshots), one blocking task delays all the others - notably the
+  # heartbeat, which made admin mark a healthy gateway as DOWN. Give the scheduler
+  # a small pool so tasks run concurrently instead of serializing behind a blocker.
+  task:
+    scheduling:
+      pool:
+        size: ${GATEWAY_SCHEDULER_POOL_SIZE:8}
+
   gateway:
     discovery:
       locator:
