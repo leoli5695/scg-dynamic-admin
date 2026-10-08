@@ -64,6 +64,12 @@ public class FeignTraceInterceptor implements RequestInterceptor {
      */
     private static final String BAGGAGE_HEADER = "X-Trace-Baggage";
 
+    /**
+     * Max encoded baggage header length (bytes). Beyond this the header is not
+     * propagated to avoid request header overflow (HTTP 431) on downstream hops.
+     */
+    private static final int MAX_BAGGAGE_HEADER_LENGTH = 2048;
+
     @Override
     public void apply(RequestTemplate template) {
         // Check if tracing is enabled (master switch)
@@ -113,8 +119,14 @@ public class FeignTraceInterceptor implements RequestInterceptor {
         Map<String, String> baggage = TraceContextHolder.getAllBaggage();
         if (baggage != null && !baggage.isEmpty()) {
             String encodedBaggage = encodeBaggage(baggage);
-            template.header(BAGGAGE_HEADER, encodedBaggage);
-            log.debug("Feign request: propagating baggage with {} keys", baggage.size());
+            // Cap header size: oversized headers cause 431s downstream and bloat every hop
+            if (encodedBaggage.length() <= MAX_BAGGAGE_HEADER_LENGTH) {
+                template.header(BAGGAGE_HEADER, encodedBaggage);
+                log.debug("Feign request: propagating baggage with {} keys", baggage.size());
+            } else {
+                log.warn("Feign request: baggage too large ({} chars > {}), skipping propagation",
+                        encodedBaggage.length(), MAX_BAGGAGE_HEADER_LENGTH);
+            }
         }
     }
 
@@ -160,17 +172,7 @@ public class FeignTraceInterceptor implements RequestInterceptor {
         if (spanId == null || targetService == null) {
             return;
         }
-        
-        com.leoli.gateway.trace.model.DistributedTrace trace = TraceContextHolder.getTrace();
-        if (trace == null) return;
-        
-        for (com.leoli.gateway.trace.model.ServiceSpan span : trace.getSpans()) {
-            if (span.getSpanId() != null && span.getSpanId().equals(spanId)) {
-                java.util.Map<String, Object> tags = span.getOrCreateTags();
-                tags.put(SpanTags.SERVICE_TARGET, targetService);
-                break;
-            }
-        }
+        TraceContextHolder.addSpanTag(spanId, SpanTags.SERVICE_TARGET, targetService);
     }
 
     /**

@@ -115,19 +115,19 @@ public class TraceTaskDecorator implements TaskDecorator {
 
     /**
      * 捕获当前线程的 TraceContext 快照
+     * <p>
+     * 注意：共享同一个 DistributedTrace 引用（不深拷贝）。
+     * spans 列表是 CopyOnWriteArrayList，子线程记录的 span 会进入主线程的 Trace
+     * 并随主请求一起上报；此前深拷贝（不含 spans）导致异步 span 全部静默丢失。
+     * <p>
+     * 边界：若子线程在主线程上报之后才写入 span，该 span 不会出现在本次上报中（可接受）。
      */
     private static TraceContextSnapshot captureSnapshot() {
         String traceId = TraceContextHolder.getTraceId();
         boolean sampled = TraceContextHolder.isSampled();
         DistributedTrace trace = TraceContextHolder.getTrace();
 
-        // Deep copy Trace object (prevent multiple threads modifying the same object)
-        DistributedTrace traceCopy = null;
-        if (trace != null) {
-            traceCopy = copyTrace(trace);
-        }
-
-        return new TraceContextSnapshot(traceId, sampled, traceCopy);
+        return new TraceContextSnapshot(traceId, sampled, trace);
     }
 
     /**
@@ -141,24 +141,6 @@ public class TraceTaskDecorator implements TaskDecorator {
         if (snapshot.trace != null) {
             TraceContextHolder.restoreTrace(snapshot.trace);
         }
-    }
-
-    /**
-     * Deep copy DistributedTrace (simplified version)
-     * <p>
-     * Note: Only copies basic fields, not spans list
-     * Spans added in child thread won't affect main thread's Trace
-     */
-    private static DistributedTrace copyTrace(DistributedTrace original) {
-        DistributedTrace copy = new DistributedTrace();
-        copy.setTraceId(original.getTraceId());
-        copy.setServiceName(original.getServiceName());
-        copy.setPath(original.getPath());
-        copy.setMethod(original.getMethod());
-        copy.setStartTime(original.getStartTime());
-        copy.setClientIp(original.getClientIp());
-        // 不拷贝 spans，子线程独立记录
-        return copy;
     }
 
     /**

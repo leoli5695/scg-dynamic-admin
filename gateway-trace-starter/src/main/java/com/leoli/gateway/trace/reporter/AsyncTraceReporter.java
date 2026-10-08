@@ -61,6 +61,16 @@ public class AsyncTraceReporter {
     private static final String FALLBACK_LOG_DIR = "./trace-fallback";
 
     /**
+     * Fallback 单文件大小上限：超过后滚动为 .old（覆盖旧 .old），防止只增不减撑爆磁盘
+     */
+    private static final long FALLBACK_FILE_MAX_BYTES = 50L * 1024 * 1024;
+
+    /**
+     * Fallback 文件保留天数：init 时清理更早的文件
+     */
+    private static final long FALLBACK_RETENTION_DAYS = 7;
+
+    /**
      * Retry backoff configuration
      * Base delay: 1 second, max delay: 60 seconds
      * Formula: delay = min(baseDelay * 2^retryCount, maxDelay)
@@ -112,6 +122,12 @@ public class AsyncTraceReporter {
 
         this.objectMapper = new ObjectMapper();
 
+        if (properties.getInternalToken() == null || properties.getInternalToken().isEmpty()) {
+            log.warn("gateway.trace.internal-token is empty: trace uploads are unauthenticated. " +
+                    "If the admin side enforces X-Internal-Token, reports will be rejected; " +
+                    "otherwise anyone can inject fake traces into the admin store.");
+        }
+
         // Initialize local log directory
         initFallbackLogDir();
 
@@ -162,8 +178,31 @@ public class AsyncTraceReporter {
                 Files.createDirectories(logDir);
                 log.info("Created trace fallback log directory: {}", FALLBACK_LOG_DIR);
             }
+            cleanupExpiredFallbackFiles(logDir);
         } catch (IOException e) {
             log.warn("Failed to create fallback log directory: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 清理超过保留期的 fallback 文件（fallback 日志此前只增不减，无回灌/清理机制）
+     */
+    private void cleanupExpiredFallbackFiles(Path logDir) {
+        try (var files = Files.list(logDir)) {
+            long cutoff = System.currentTimeMillis() - FALLBACK_RETENTION_DAYS * 24 * 3600 * 1000;
+            files.filter(p -> p.getFileName().toString().startsWith("trace-fallback-"))
+                    .forEach(p -> {
+                        try {
+                            if (Files.getLastModifiedTime(p).toMillis() < cutoff) {
+                                Files.deleteIfExists(p);
+                                log.info("Deleted expired trace fallback file: {}", p.getFileName());
+                            }
+                        } catch (IOException e) {
+                            log.warn("Failed to delete expired fallback file {}: {}", p.getFileName(), e.getMessage());
+                        }
+                    });
+        } catch (IOException e) {
+            log.warn("Failed to clean up fallback log directory: {}", e.getMessage());
         }
     }
 
@@ -175,9 +214,12 @@ public class AsyncTraceReporter {
     public void report(DistributedTrace trace) {
         if (!queue.offer(trace)) {
             // Queue full, record drop
-            droppedCount.incrementAndGet();
-            log.warn("Trace queue full, dropping trace: {}, totalDropped={}",
-                    trace.getTraceId(), droppedCount.get());
+            long dropped = droppedCount.incrementAndGet();
+            // Rate-limit the warning: at high drop rates per-event logs flood the disk
+            if (dropped == 1 || dropped % 100 == 0) {
+                log.warn("Trace queue full, dropping trace: {}, totalDropped={}",
+                        trace.getTraceId(), dropped);
+            }
 
             // Try writing to local disk (degraded handling)
             writeToFallbackLog(trace, "queue_full");
@@ -188,21 +230,38 @@ public class AsyncTraceReporter {
 
     /**
      * Reporting thread: batch sending
+     * <p>
+     * 吞吐修复：原实现每轮固定 drain 一批后 sleep(interval)，吞吐上限被卡在
+     * batchSize/interval（默认 ~1000 条/秒），高 QPS 下队列必然打满。
+     * 现改为 poll(interval) 等待首条 + 连续 drain：只要还能凑满整批就不休眠，
+     * 空闲时才按 interval 让出 CPU。
      */
     private void reportLoop() {
         while (!Thread.currentThread().isInterrupted()) {
             try {
-                // Batch retrieve
-                List<DistributedTrace> traces = new ArrayList<>();
-                queue.drainTo(traces, properties.getReportBatchSize());
-
-                if (!traces.isEmpty()) {
-                    // Batch report
-                    doBatchReport(traces);
+                // Wait for the first trace (also serves as the idle interval)
+                DistributedTrace first = queue.poll(properties.getReportIntervalMs(), TimeUnit.MILLISECONDS);
+                if (first == null) {
+                    continue;
                 }
 
-                // Wait for next batch
-                Thread.sleep(properties.getReportIntervalMs());
+                List<DistributedTrace> traces = new ArrayList<>(properties.getReportBatchSize());
+                traces.add(first);
+                queue.drainTo(traces, properties.getReportBatchSize() - 1);
+                doBatchReport(traces);
+
+                // Keep draining full batches without sleeping while backlog remains
+                while (true) {
+                    traces = new ArrayList<>(properties.getReportBatchSize());
+                    queue.drainTo(traces, properties.getReportBatchSize());
+                    if (traces.isEmpty()) {
+                        break;
+                    }
+                    doBatchReport(traces);
+                    if (traces.size() < properties.getReportBatchSize()) {
+                        break;
+                    }
+                }
 
             } catch (InterruptedException e) {
                 log.info("Trace reporter thread interrupted, shutting down");
@@ -344,12 +403,30 @@ public class AsyncTraceReporter {
                     StandardOpenOption.CREATE,
                     StandardOpenOption.APPEND);
 
+            rotateFallbackFileIfOversized(logFile);
+
             log.debug("Trace written to fallback log: traceId={}, reason={}, file={}",
                     trace.getTraceId(), reason, fileName);
 
         } catch (IOException e) {
             log.error("Failed to write trace to fallback log: traceId={}, error={}",
                     trace.getTraceId(), e.getMessage());
+        }
+    }
+
+    /**
+     * 单文件超过上限时滚动为 .old（覆盖上一个 .old），保证磁盘占用有界
+     */
+    private void rotateFallbackFileIfOversized(Path logFile) {
+        try {
+            if (Files.size(logFile) > FALLBACK_FILE_MAX_BYTES) {
+                Path old = logFile.resolveSibling(logFile.getFileName() + ".old");
+                Files.deleteIfExists(old);
+                Files.move(logFile, old);
+                log.info("Rotated oversized trace fallback file to {}", old.getFileName());
+            }
+        } catch (IOException e) {
+            log.warn("Failed to rotate fallback file {}: {}", logFile.getFileName(), e.getMessage());
         }
     }
 

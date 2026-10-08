@@ -1,9 +1,12 @@
 package com.leoli.gateway.trace.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Distributed trace record
@@ -67,8 +70,21 @@ public class DistributedTrace {
 
     /**
      * Span列表
+     * <p>
+     * CopyOnWriteArrayList: 异步线程（TraceTaskDecorator 共享同一 Trace 引用）
+     * 可能与主线程并发 addSpan，普通 ArrayList 会丢数据或抛 CME。
      */
-    private List<ServiceSpan> spans = new ArrayList<>();
+    private List<ServiceSpan> spans = new CopyOnWriteArrayList<>();
+
+    /**
+     * 进行中 Span 的注册表（spanId → span），用于 O(1) 定位 span 退出/打标签。
+     * 挂在 Trace 对象上（而非 ThreadLocal），异步子线程共享同一 Trace 引用时同样可查。
+     * 不参与序列化。
+     */
+    @JsonIgnore
+    @lombok.ToString.Exclude
+    @lombok.EqualsAndHashCode.Exclude
+    private final Map<String, ServiceSpan> spanRegistry = new ConcurrentHashMap<>();
 
     /**
      * Client IP
@@ -86,12 +102,17 @@ public class DistributedTrace {
      * Extracted from ServiceSpan metadata with SERVICE_TARGET tag
      * Used for topology graph generation
      */
-    private List<String> downstreamServices = new ArrayList<>();
+    private List<String> downstreamServices = new CopyOnWriteArrayList<>();
 
     /**
      * Global baggage (cross-service context propagated from upstream)
      */
-    private java.util.Map<String, String> baggage;
+    private Map<String, String> baggage;
+
+    /**
+     * 因超过 span 上限被丢弃的 span 数量（TraceContextHolder.MAX_SPANS_PER_TRACE）
+     */
+    private int droppedSpanCount = 0;
 
     /**
      * 重试次数（上报失败时递增）
@@ -115,6 +136,13 @@ public class DistributedTrace {
      */
     public void incrementRetry() {
         this.retryCount++;
+    }
+
+    /**
+     * 记录一个因超过上限被丢弃的 span（计数允许近似）
+     */
+    public void incrementDroppedSpans() {
+        this.droppedSpanCount++;
     }
 
     /**

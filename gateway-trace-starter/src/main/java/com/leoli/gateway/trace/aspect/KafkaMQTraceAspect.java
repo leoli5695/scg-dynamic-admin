@@ -1,7 +1,6 @@
 package com.leoli.gateway.trace.aspect;
 
 import com.leoli.gateway.trace.TraceContextHolder;
-import com.leoli.gateway.trace.model.DistributedTrace;
 import com.leoli.gateway.trace.model.ServiceSpan;
 import com.leoli.gateway.trace.model.SpanTags;
 import com.leoli.gateway.trace.model.SpanType;
@@ -88,30 +87,24 @@ public class KafkaMQTraceAspect {
      * Add standardized Kafka tags to span
      */
     private void addKafkaTags(String spanId, String methodName, Object[] args) {
-        DistributedTrace trace = TraceContextHolder.getTrace();
-        if (trace == null) return;
-        
-        for (ServiceSpan span : trace.getSpans()) {
-            if (span.getSpanId() != null && span.getSpanId().equals(spanId)) {
-                Map<String, Object> tags = span.getOrCreateTags();
-                tags.put(SpanTags.MQ_SYSTEM, "kafka");
-                
-                // Extract topic from args
-                if (args != null && args.length > 0 && args[0] != null) {
-                    String topic = args[0].toString();
-                    if (topic.length() > 100) {
-                        topic = topic.substring(0, 100) + "...";
-                    }
-                    tags.put(SpanTags.MQ_TOPIC, topic);
-                }
-                
-                // Extract partition if available
-                if (args != null && args.length > 1 && args[1] instanceof Integer) {
-                    tags.put(SpanTags.MQ_PARTITION, args[1]);
-                }
-                
-                break;
+        ServiceSpan span = TraceContextHolder.getSpan(spanId);
+        if (span == null) return;
+
+        Map<String, Object> tags = span.getOrCreateTags();
+        tags.put(SpanTags.MQ_SYSTEM, "kafka");
+
+        // Extract topic from args
+        if (args != null && args.length > 0 && args[0] != null) {
+            String topic = args[0].toString();
+            if (topic.length() > 100) {
+                topic = topic.substring(0, 100) + "...";
             }
+            tags.put(SpanTags.MQ_TOPIC, topic);
+        }
+
+        // Extract partition if available
+        if (args != null && args.length > 1 && args[1] instanceof Integer) {
+            tags.put(SpanTags.MQ_PARTITION, args[1]);
         }
     }
 }

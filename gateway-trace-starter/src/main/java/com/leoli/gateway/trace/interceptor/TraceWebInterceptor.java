@@ -43,6 +43,13 @@ public class TraceWebInterceptor implements HandlerInterceptor {
     private static final String TRACE_ID_HEADER = "X-Trace-Id";
     
     /**
+     * Sampling flag Header name (from upstream; sampling decision is made once
+     * at the entry point and inherited by all downstream services so a trace
+     * is never partially reported)
+     */
+    private static final String SAMPLED_HEADER = "X-Trace-Sampled";
+
+    /**
      * Span ID Header name (from upstream, becomes this service's parentSpanId)
      */
     private static final String SPAN_ID_HEADER = "X-Span-Id";
@@ -75,8 +82,8 @@ public class TraceWebInterceptor implements HandlerInterceptor {
         // Get TraceId from Header (passed by gateway)
         String traceId = request.getHeader(TRACE_ID_HEADER);
 
-        if (traceId == null || traceId.isEmpty()) {
-            // Gateway didn't pass TraceId, generate one (for requests not from gateway)
+        if (traceId == null || !isValidTraceId(traceId)) {
+            // Gateway didn't pass TraceId (or it's malformed/untrusted), generate one
             traceId = generateTraceId();
             log.debug("Generated new traceId: {}", traceId);
         } else {
@@ -86,8 +93,17 @@ public class TraceWebInterceptor implements HandlerInterceptor {
         // Set TraceId to ThreadLocal
         TraceContextHolder.setTraceId(traceId);
 
-        // Set sampling flag
-        boolean sampled = properties.shouldSample();
+        // Set sampling flag: inherit upstream decision when present (X-Trace-Sampled),
+        // otherwise sample locally. Independent per-service sampling would fragment traces.
+        String sampledHeader = request.getHeader(SAMPLED_HEADER);
+        boolean sampled;
+        if ("true".equalsIgnoreCase(sampledHeader)) {
+            sampled = true;
+        } else if ("false".equalsIgnoreCase(sampledHeader)) {
+            sampled = false;
+        } else {
+            sampled = properties.shouldSample();
+        }
         TraceContextHolder.setSampled(sampled);
 
         // Initialize Trace object
@@ -117,12 +133,9 @@ public class TraceWebInterceptor implements HandlerInterceptor {
             String entrySpanId = TraceContextHolder.enterSpan(serviceName + ".entry", SpanType.SERVICE);
             // Override parentSpanId from upstream
             if (parentSpanId != null && !parentSpanId.isEmpty()) {
-                // Update the entry span's parentSpanId
-                for (com.leoli.gateway.trace.model.ServiceSpan span : trace.getSpans()) {
-                    if (span.getSpanId() != null && span.getSpanId().equals(entrySpanId)) {
-                        span.setParentSpanId(parentSpanId);
-                        break;
-                    }
+                com.leoli.gateway.trace.model.ServiceSpan entrySpan = TraceContextHolder.getSpan(entrySpanId);
+                if (entrySpan != null) {
+                    entrySpan.setParentSpanId(parentSpanId);
                 }
                 log.debug("Set parentSpanId={} for entry span", parentSpanId);
             }
@@ -168,6 +181,26 @@ public class TraceWebInterceptor implements HandlerInterceptor {
      */
     private String generateTraceId() {
         return UUID.randomUUID().toString().replace("-", "");
+    }
+
+    /**
+     * Validate an inbound TraceId before trusting it.
+     * Rejects oversized/malformed values (log injection, storage pollution,
+     * correlation breakage) — falls back to a locally generated id.
+     */
+    private boolean isValidTraceId(String traceId) {
+        if (traceId.length() < 8 || traceId.length() > 64) {
+            return false;
+        }
+        for (int i = 0; i < traceId.length(); i++) {
+            char c = traceId.charAt(i);
+            boolean ok = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z')
+                    || (c >= 'A' && c <= 'Z') || c == '-';
+            if (!ok) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

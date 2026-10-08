@@ -3,13 +3,13 @@ package com.leoli.gateway.trace.autoconfig;
 import com.leoli.gateway.trace.aspect.DBTraceAspect;
 import com.leoli.gateway.trace.aspect.KafkaMQTraceAspect;
 import com.leoli.gateway.trace.aspect.MQTraceAspect;
-import com.leoli.gateway.trace.aspect.RedisTraceAspect;
 import com.leoli.gateway.trace.aspect.ServiceTraceAspect;
 import com.leoli.gateway.trace.config.TraceThreadPoolConfig;
 import com.leoli.gateway.trace.feign.FeignTraceInterceptor;
 import com.leoli.gateway.trace.interceptor.TraceReportInterceptor;
 import com.leoli.gateway.trace.interceptor.TraceWebInterceptor;
 import com.leoli.gateway.trace.properties.GatewayTraceProperties;
+import com.leoli.gateway.trace.redis.RedisConnectionTraceBeanPostProcessor;
 import com.leoli.gateway.trace.reporter.AsyncTraceReporter;
 import com.leoli.gateway.trace.reporter.MiddlewareMetadataReporter;
 import lombok.RequiredArgsConstructor;
@@ -49,7 +49,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnProperty(prefix = "gateway.trace", name = "enabled", havingValue = "true", matchIfMissing = true)
 @EnableConfigurationProperties(GatewayTraceProperties.class)
-@Import({TraceThreadPoolConfig.class, WebClientTraceConfiguration.class, FeignTraceConfiguration.class})
+@Import({TraceThreadPoolConfig.class, WebClientTraceConfiguration.class, FeignTraceConfiguration.class, RedisTraceConfiguration.class, TraceMetricsConfiguration.class})
 public class GatewayTraceAutoConfiguration implements WebMvcConfigurer {
 
     private final Environment environment;
@@ -110,17 +110,6 @@ public class GatewayTraceAutoConfiguration implements WebMvcConfigurer {
     }
 
     /**
-     * Redis operation tracing aspect
-     */
-    @Bean
-    @ConditionalOnClass(name = "org.springframework.data.redis.core.RedisTemplate")
-    @ConditionalOnProperty(prefix = "gateway.trace", name = "trace-redis", havingValue = "true", matchIfMissing = true)
-    @ConditionalOnMissingBean
-    public RedisTraceAspect redisTraceAspect() {
-        return new RedisTraceAspect(properties);
-    }
-
-    /**
      * MQ operation tracing aspect (RocketMQ)
      */
     @Bean
@@ -150,7 +139,7 @@ public class GatewayTraceAutoConfiguration implements WebMvcConfigurer {
     @ConditionalOnProperty(prefix = "gateway.trace", name = "trace-db", havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public DBTraceAspect dbTraceAspect() {
-        return new DBTraceAspect(properties);
+        return new DBTraceAspect(properties, environment);
     }
 
     // ==================== OpenFeign Propagation ====================
@@ -204,6 +193,28 @@ class WebClientTraceConfiguration {
 }
 
 /**
+ * Redis 命令级追踪配置（内部配置类）
+ * <p>
+ * 使用连接层 BeanPostProcessor 而非 AOP 切面：
+ * opsForValue() 等返回的 Operations 对象不是 Spring Bean，代理模式下切面永不生效。
+ * BPP 包装 RedisConnectionFactory，对 getConnection() 返回的连接做动态代理，
+ * 覆盖所有落到连接上的 Redis 命令。
+ */
+@Configuration(proxyBeanMethods = false)
+@ConditionalOnClass(name = "org.springframework.data.redis.connection.RedisConnectionFactory")
+@ConditionalOnProperty(prefix = "gateway.trace", name = "trace-redis", havingValue = "true", matchIfMissing = true)
+class RedisTraceConfiguration {
+
+    /**
+     * static @Bean：BeanPostProcessor 必须尽早注册，避免其它 bean 提前初始化告警。
+     */
+    @Bean
+    public static RedisConnectionTraceBeanPostProcessor redisConnectionTraceBeanPostProcessor(Environment environment) {
+        return new RedisConnectionTraceBeanPostProcessor(environment);
+    }
+}
+
+/**
  * Feign TraceId 传播配置（内部配置类）
  * <p>
  * 使用独立的配置类配合 @ConditionalOnClass，确保只有当 Feign 类存在时才加载此配置，
@@ -225,5 +236,24 @@ class FeignTraceConfiguration {
     @ConditionalOnMissingBean
     public FeignTraceInterceptor feignTraceInterceptor(GatewayTraceProperties properties) {
         return new FeignTraceInterceptor(properties);
+    }
+}
+
+/**
+ * Reporter 指标暴露（内部配置类）
+ * <p>
+ * 仅当消费方 classpath 存在 micrometer-core 时加载；
+ * MeterRegistry bean 不存在时 binder 静默跳过注册。
+ */
+@Configuration(proxyBeanMethods = false)
+@ConditionalOnClass(name = "io.micrometer.core.instrument.MeterRegistry")
+class TraceMetricsConfiguration {
+
+    @Bean
+    public com.leoli.gateway.trace.reporter.TraceReporterMetricsBinder traceReporterMetricsBinder(
+            AsyncTraceReporter reporter,
+            ObjectProvider<io.micrometer.core.instrument.MeterRegistry> registryProvider) {
+        return new com.leoli.gateway.trace.reporter.TraceReporterMetricsBinder(
+                reporter, registryProvider.getIfAvailable());
     }
 }

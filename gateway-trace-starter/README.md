@@ -365,8 +365,8 @@ A: No. The Starter reports directly to Gateway Admin via HTTP, bypassing Nacos. 
 │  │  Auto-traces Service methods                             │   │
 │  └──────────────────────────────────────────────────────────┘   │
 │  ┌──────────────────────────────────────────────────────────┐   │
-│  │ RedisTraceAspect                                          │   │
-│  │  Auto-traces Redis operations                            │   │
+│  │ RedisConnectionTraceBeanPostProcessor                     │   │
+│  │  Auto-traces Redis commands (connection-level proxy)     │   │
 │  └──────────────────────────────────────────────────────────┘   │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │ MQTraceAspect                                             │   │

@@ -33,6 +33,13 @@ import java.util.UUID;
 public class TraceContextHolder {
 
     /**
+     * 单条 Trace 允许的最大 Span 数。
+     * 防止循环内高频 Redis/DB 调用把 spans 列表和上报 payload 撑爆。
+     * 超限的 span 被丢弃并计入 DistributedTrace.droppedSpanCount。
+     */
+    public static final int MAX_SPANS_PER_TRACE = 500;
+
+    /**
      * TraceId storage
      */
     private static final ThreadLocal<String> TRACE_ID = new ThreadLocal<>();
@@ -181,6 +188,12 @@ public class TraceContextHolder {
             return null;
         }
 
+        // Span 上限保护：超限丢弃并计数，防止高频中间件调用撑爆内存与上报 payload
+        if (trace.getSpans().size() >= MAX_SPANS_PER_TRACE) {
+            trace.incrementDroppedSpans();
+            return null;
+        }
+
         // Generate new spanId
         String spanId = generateSpanId();
 
@@ -200,8 +213,9 @@ public class TraceContextHolder {
             span.setBaggage(new HashMap<>(currentBaggage));
         }
 
-        // Add span to trace
+        // Add span to trace and register for O(1) exit/tag lookup
         trace.addSpan(span);
+        trace.getSpanRegistry().put(spanId, span);
 
         // Update span stack
         Deque<String> stack = SPAN_STACK.get();
@@ -215,6 +229,29 @@ public class TraceContextHolder {
         CURRENT_SPAN_ID.set(spanId);
 
         return spanId;
+    }
+
+    /**
+     * Get an in-flight span by spanId (O(1), backed by the trace's span registry).
+     *
+     * @return the span, or null if it was already exited or never existed
+     */
+    public static ServiceSpan getSpan(String spanId) {
+        if (spanId == null) {
+            return null;
+        }
+        DistributedTrace trace = TRACE.get();
+        return trace != null ? trace.getSpanRegistry().get(spanId) : null;
+    }
+
+    /**
+     * Add a tag to an in-flight span (O(1) replacement for linear span list scans).
+     */
+    public static void addSpanTag(String spanId, String key, Object value) {
+        ServiceSpan span = getSpan(spanId);
+        if (span != null) {
+            span.addTag(key, value);
+        }
     }
 
     /**
@@ -239,26 +276,13 @@ public class TraceContextHolder {
             return;
         }
 
-        // Find and update the Span
-        long durationMs = 0;
-        for (ServiceSpan span : trace.getSpans()) {
-            if (span.getSpanId() != null && span.getSpanId().equals(spanId)) {
-                span.calculateDuration();
-                durationMs = span.getDurationMs();
-                span.setSuccess(success);
-                break;
-            }
+        ServiceSpan span = trace.getSpanRegistry().remove(spanId);
+        if (span != null) {
+            span.calculateDuration();
+            span.setSuccess(success);
         }
 
-        // Pop from stack and restore parent spanId
-        Deque<String> stack = SPAN_STACK.get();
-        if (stack != null && !stack.isEmpty()) {
-            String top = stack.peek();
-            if (top != null && top.equals(spanId)) {
-                stack.pop();
-                CURRENT_SPAN_ID.set(stack.isEmpty() ? null : stack.peek());
-            }
-        }
+        popSpanStack(spanId);
     }
 
     /**
@@ -277,24 +301,13 @@ public class TraceContextHolder {
             return;
         }
 
-        // Find and update the Span
-        for (ServiceSpan span : trace.getSpans()) {
-            if (span.getSpanId() != null && span.getSpanId().equals(spanId)) {
-                span.calculateDuration();
-                span.markFailed(errorMessage);
-                break;
-            }
+        ServiceSpan span = trace.getSpanRegistry().remove(spanId);
+        if (span != null) {
+            span.calculateDuration();
+            span.markFailed(errorMessage);
         }
 
-        // Pop from stack and restore parent spanId
-        Deque<String> stack = SPAN_STACK.get();
-        if (stack != null && !stack.isEmpty()) {
-            String top = stack.peek();
-            if (top != null && top.equals(spanId)) {
-                stack.pop();
-                CURRENT_SPAN_ID.set(stack.isEmpty() ? null : stack.peek());
-            }
-        }
+        popSpanStack(spanId);
     }
 
     /**
@@ -313,16 +326,19 @@ public class TraceContextHolder {
             return;
         }
 
-        // Find and update the Span
-        for (ServiceSpan span : trace.getSpans()) {
-            if (span.getSpanId() != null && span.getSpanId().equals(spanId)) {
-                span.calculateDuration();
-                span.markFailed(cause);
-                break;
-            }
+        ServiceSpan span = trace.getSpanRegistry().remove(spanId);
+        if (span != null) {
+            span.calculateDuration();
+            span.markFailed(cause);
         }
 
-        // Pop from stack and restore parent spanId
+        popSpanStack(spanId);
+    }
+
+    /**
+     * Pop the span stack and restore CURRENT_SPAN_ID to the parent span.
+     */
+    private static void popSpanStack(String spanId) {
         Deque<String> stack = SPAN_STACK.get();
         if (stack != null && !stack.isEmpty()) {
             String top = stack.peek();

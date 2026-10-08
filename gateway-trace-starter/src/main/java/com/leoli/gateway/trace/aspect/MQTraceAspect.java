@@ -1,7 +1,6 @@
 package com.leoli.gateway.trace.aspect;
 
 import com.leoli.gateway.trace.TraceContextHolder;
-import com.leoli.gateway.trace.model.DistributedTrace;
 import com.leoli.gateway.trace.model.ServiceSpan;
 import com.leoli.gateway.trace.model.SpanTags;
 import com.leoli.gateway.trace.model.SpanType;
@@ -94,33 +93,27 @@ public class MQTraceAspect {
      * Add standardized MQ tags to span
      */
     private void addMQTags(String spanId, String mqSystem, String methodName, Object[] args) {
-        DistributedTrace trace = TraceContextHolder.getTrace();
-        if (trace == null) return;
-        
-        for (ServiceSpan span : trace.getSpans()) {
-            if (span.getSpanId() != null && span.getSpanId().equals(spanId)) {
-                Map<String, Object> tags = span.getOrCreateTags();
-                tags.put(SpanTags.MQ_SYSTEM, mqSystem);
-                
-                // Extract topic from args (RocketMQTemplate methods usually have topic as first arg)
-                if (args != null && args.length > 0 && args[0] != null) {
-                    String topic = extractTopic(args[0]);
-                    if (topic != null) {
-                        tags.put(SpanTags.MQ_TOPIC, topic);
-                    }
-                }
-                
-                // Determine operation type from method name
-                if (methodName.toLowerCase().contains("sync")) {
-                    tags.put("mq.callType", "sync");
-                } else if (methodName.toLowerCase().contains("async")) {
-                    tags.put("mq.callType", "async");
-                } else if (methodName.toLowerCase().contains("oneway")) {
-                    tags.put("mq.callType", "oneway");
-                }
-                
-                break;
+        ServiceSpan span = TraceContextHolder.getSpan(spanId);
+        if (span == null) return;
+
+        Map<String, Object> tags = span.getOrCreateTags();
+        tags.put(SpanTags.MQ_SYSTEM, mqSystem);
+
+        // Extract topic from args (RocketMQTemplate methods usually have topic as first arg)
+        if (args != null && args.length > 0 && args[0] != null) {
+            String topic = extractTopic(args[0]);
+            if (topic != null) {
+                tags.put(SpanTags.MQ_TOPIC, topic);
             }
+        }
+
+        // Determine operation type from method name
+        if (methodName.toLowerCase().contains("sync")) {
+            tags.put("mq.callType", "sync");
+        } else if (methodName.toLowerCase().contains("async")) {
+            tags.put("mq.callType", "async");
+        } else if (methodName.toLowerCase().contains("oneway")) {
+            tags.put("mq.callType", "oneway");
         }
     }
 

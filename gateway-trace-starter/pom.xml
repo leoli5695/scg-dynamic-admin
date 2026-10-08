@@ -110,6 +110,13 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Micrometer (optional, exposes reporter queue/drop/fallback gauges when present) -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- ==================== Build-time Dependencies (not transitive) ==================== -->
 
         <!-- Spring Boot Configuration Processor (generates metadata for IDE auto-completion) -->
