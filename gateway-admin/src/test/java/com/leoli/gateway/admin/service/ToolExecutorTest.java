@@ -143,7 +143,7 @@ class ToolExecutorTest {
                 args.put("confirmed", true);  // Add confirmation
 
                 // When
-                ToolExecutor.ToolResult result = toolExecutor.execute("create_route", args);
+                ToolExecutor.ToolResult result = toolExecutor.executeConfirmed("create_route", args, "tester", "127.0.0.1");
 
                 // Then - route creation involves validation which may fail
                 // We just verify the tool handles the request correctly
@@ -168,7 +168,7 @@ class ToolExecutorTest {
                 args.put("confirmed", true);
 
                 // When
-                ToolExecutor.ToolResult result = toolExecutor.execute("create_route", args);
+                ToolExecutor.ToolResult result = toolExecutor.executeConfirmed("create_route", args, "tester", "127.0.0.1");
 
                 // Then - tool handles request with instanceId
                 assertTrue(result.isSuccess());
@@ -184,7 +184,7 @@ class ToolExecutorTest {
                 args.put("confirmed", true);
 
                 // When
-                ToolExecutor.ToolResult result = toolExecutor.execute("create_route", args);
+                ToolExecutor.ToolResult result = toolExecutor.executeConfirmed("create_route", args, "tester", "127.0.0.1");
 
                 // Then
                 assertTrue(result.isSuccess());
@@ -201,11 +201,31 @@ class ToolExecutorTest {
                 args.put("confirmed", true);  // Even with confirmed, missing required arg will error
 
                 // When
-                ToolExecutor.ToolResult result = toolExecutor.execute("create_route", args);
+                ToolExecutor.ToolResult result = toolExecutor.executeConfirmed("create_route", args, "tester", "127.0.0.1");
 
                 // Then - missing required arg triggers error
                 assertFalse(result.isSuccess());
                 assertTrue(result.getError().contains("Required argument missing"));
+            }
+
+            @Test
+            @DisplayName("AI path must not self-confirm: execute() returns pending even with confirmed=true")
+            void executeShouldNeverSelfConfirmWriteOps() {
+                // Given - a write tool invoked through the AI path with the model
+                // supplying confirmed=true (the P0-2 prompt-injection vector).
+                Map<String, Object> args = new HashMap<>();
+                args.put("routeJson", "{\"routeName\":\"x\",\"uri\":\"lb://demo-service\","
+                        + "\"predicates\":[{\"name\":\"Path\",\"args\":{\"pattern\":\"/x/**\"}}],\"filters\":[]}");
+                args.put("confirmed", true);
+
+                // When - execute() is the AI/model path
+                ToolExecutor.ToolResult result = toolExecutor.execute("create_route", args);
+
+                // Then - it must NOT execute; it returns a pending confirmation for a
+                // human to approve via executeConfirmed(). The model cannot self-confirm.
+                assertFalse(result.isSuccess());
+                assertTrue(result.isPendingConfirmation());
+                assertEquals("create_route", result.getToolName());
             }
         }
 
@@ -225,7 +245,7 @@ class ToolExecutorTest {
                 when(routeService.getRoute(ROUTE_ID)).thenReturn(route);
 
                 // When
-                ToolExecutor.ToolResult result = toolExecutor.execute("delete_route", args);
+                ToolExecutor.ToolResult result = toolExecutor.executeConfirmed("delete_route", args, "tester", "127.0.0.1");
 
                 // Then
                 assertTrue(result.isSuccess());
@@ -245,7 +265,7 @@ class ToolExecutorTest {
                 when(routeService.getRoute(ROUTE_ID)).thenReturn(null);
 
                 // When
-                ToolExecutor.ToolResult result = toolExecutor.execute("delete_route", args);
+                ToolExecutor.ToolResult result = toolExecutor.executeConfirmed("delete_route", args, "tester", "127.0.0.1");
 
                 // Then
                 assertTrue(result.isSuccess());
@@ -263,7 +283,7 @@ class ToolExecutorTest {
                 args.put("confirmed", true);
 
                 // When
-                ToolExecutor.ToolResult result = toolExecutor.execute("delete_route", args);
+                ToolExecutor.ToolResult result = toolExecutor.executeConfirmed("delete_route", args, "tester", "127.0.0.1");
 
                 // Then - missing required arg triggers error
                 assertFalse(result.isSuccess());
@@ -298,7 +318,7 @@ class ToolExecutorTest {
                 when(routeService.updateRouteByRouteId(anyString(), any(RouteDefinition.class))).thenReturn(entity);
 
                 // When
-                ToolExecutor.ToolResult result = toolExecutor.execute("modify_route", args);
+                ToolExecutor.ToolResult result = toolExecutor.executeConfirmed("modify_route", args, "tester", "127.0.0.1");
 
                 // Then
                 assertTrue(result.isSuccess());
@@ -323,7 +343,7 @@ class ToolExecutorTest {
                 when(routeService.getRoute(ROUTE_ID)).thenReturn(null);
 
                 // When
-                ToolExecutor.ToolResult result = toolExecutor.execute("modify_route", args);
+                ToolExecutor.ToolResult result = toolExecutor.executeConfirmed("modify_route", args, "tester", "127.0.0.1");
 
                 // Then
                 assertTrue(result.isSuccess());
@@ -342,7 +362,7 @@ class ToolExecutorTest {
                 args.put("confirmed", true);
 
                 // When
-                ToolExecutor.ToolResult result = toolExecutor.execute("modify_route", args);
+                ToolExecutor.ToolResult result = toolExecutor.executeConfirmed("modify_route", args, "tester", "127.0.0.1");
 
                 // Then - execute() catches the exception and returns error
                 assertFalse(result.isSuccess());
@@ -358,7 +378,7 @@ class ToolExecutorTest {
                 args.put("confirmed", true);
 
                 // When
-                ToolExecutor.ToolResult result = toolExecutor.execute("modify_route", args);
+                ToolExecutor.ToolResult result = toolExecutor.executeConfirmed("modify_route", args, "tester", "127.0.0.1");
 
                 // Then - execute() catches the exception and returns error
                 assertFalse(result.isSuccess());
@@ -380,7 +400,7 @@ class ToolExecutorTest {
                 args.put("confirmed", true);
 
                 // When
-                ToolExecutor.ToolResult result = toolExecutor.execute("toggle_route", args);
+                ToolExecutor.ToolResult result = toolExecutor.executeConfirmed("toggle_route", args, "tester", "127.0.0.1");
 
                 // Then
                 assertTrue(result.isSuccess());
@@ -400,7 +420,7 @@ class ToolExecutorTest {
                 args.put("confirmed", true);
 
                 // When
-                ToolExecutor.ToolResult result = toolExecutor.execute("toggle_route", args);
+                ToolExecutor.ToolResult result = toolExecutor.executeConfirmed("toggle_route", args, "tester", "127.0.0.1");
 
                 // Then
                 assertTrue(result.isSuccess());
@@ -965,7 +985,7 @@ class ToolExecutorTest {
             args.put("skipVersionCheck", false);  // 不跳过版本校验
 
             // When
-            ToolExecutor.ToolResult result = toolExecutor.execute("rollback_route", args);
+            ToolExecutor.ToolResult result = toolExecutor.executeConfirmed("rollback_route", args, "tester", "127.0.0.1");
 
             // Then
             assertTrue(result.isSuccess());
@@ -1009,7 +1029,7 @@ class ToolExecutorTest {
             args.put("skipVersionCheck", true);  // 跳过版本校验
 
             // When
-            ToolExecutor.ToolResult result = toolExecutor.execute("rollback_route", args);
+            ToolExecutor.ToolResult result = toolExecutor.executeConfirmed("rollback_route", args, "tester", "127.0.0.1");
 
             // Then
             assertTrue(result.isSuccess());
@@ -1058,7 +1078,7 @@ class ToolExecutorTest {
             doNothing().when(routeService).enableRouteByRouteId(anyString());
 
             // When
-            ToolExecutor.ToolResult result = toolExecutor.execute("batch_toggle_routes", args);
+            ToolExecutor.ToolResult result = toolExecutor.executeConfirmed("batch_toggle_routes", args, "tester", "127.0.0.1");
 
             // Then
             assertTrue(result.isSuccess());
@@ -1082,7 +1102,7 @@ class ToolExecutorTest {
                 .when(routeService).enableRouteByRouteId(eq("bad-route"));
 
             // When
-            ToolExecutor.ToolResult result = toolExecutor.execute("batch_toggle_routes", args);
+            ToolExecutor.ToolResult result = toolExecutor.executeConfirmed("batch_toggle_routes", args, "tester", "127.0.0.1");
 
             // Then
             assertTrue(result.isSuccess());
@@ -1128,7 +1148,7 @@ class ToolExecutorTest {
             args.put("confirmed", true);  // 确认标志
 
             // When
-            ToolExecutor.ToolResult result = toolExecutor.execute("rollback_route", args);
+            ToolExecutor.ToolResult result = toolExecutor.executeConfirmed("rollback_route", args, "tester", "127.0.0.1");
 
             // Then
             assertTrue(result.isSuccess());
@@ -1154,7 +1174,7 @@ class ToolExecutorTest {
             args.put("confirmed", true);  // 确认标志
 
             // When
-            ToolExecutor.ToolResult result = toolExecutor.execute("rollback_route", args);
+            ToolExecutor.ToolResult result = toolExecutor.executeConfirmed("rollback_route", args, "tester", "127.0.0.1");
 
             // Then
             assertTrue(result.isSuccess());

@@ -28,11 +28,22 @@ const STORAGE_KEYS = ['token', 'username', 'nickname', 'role', 'licenseEdition']
 export const loginRequest = (username: string, password: string, signal?: AbortSignal) =>
   httpClient.post<LoginResult>('/api/auth/login', { username, password }, { signal });
 
-/** POST /api/auth/logout (backend is stateless; fire-and-forget). */
-export const logoutRequest = (signal?: AbortSignal) =>
-  httpClient.post<void>('/api/auth/logout', undefined, { signal }).catch((err) => {
+/** POST /api/auth/logout (revokes the token server-side; fire-and-forget). */
+export const logoutRequest = (signal?: AbortSignal) => {
+  // FIX (P1 token revocation): capture the token NOW and send it explicitly.
+  // The backend revokes whatever is in the Authorization header, but local storage
+  // is cleared right after logout - so relying on the request interceptor to read
+  // localStorage raced the clear and often sent /auth/logout with NO token, leaving
+  // it valid until expiry. Also bound the wait so a slow backend can't block sign-out.
+  const token = localStorage.getItem('token');
+  return httpClient.post<void>('/api/auth/logout', undefined, {
+    signal,
+    timeout: 5000,
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  }).catch((err) => {
     logger.warn('Logout request failed (ignored):', err instanceof Error ? err.message : err);
   });
+};
 
 /** Persist login result into localStorage (keeps legacy key names). */
 export const persistLogin = (result: LoginResult): AuthUser => {

@@ -36,9 +36,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const logout = useCallback(async () => {
+    // FIX (P1): dispatch the logout request BEFORE clearing storage so it still
+    // carries the Bearer token and the backend can revoke it. Clearing first sent
+    // /auth/logout unauthenticated, so the token was never revoked server-side.
+    const pending = logoutRequest();
     clearStoredAuth();
     setUser(null);
-    await logoutRequest();
+    await pending;
   }, []);
 
   const value = useMemo<AuthContextValue>(() => ({
