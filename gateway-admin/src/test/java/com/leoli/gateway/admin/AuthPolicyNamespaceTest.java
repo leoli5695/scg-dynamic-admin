@@ -172,10 +172,11 @@ public class AuthPolicyNamespaceTest extends NamespaceIntegrationTest {
                 .andReturn();
         JsonNode currentPolicy = extractData(getResult);
 
+        // AuthPolicyDefinition is flat - there is no nested "config" object, and the DTO has
+        // no tokenPrefix field. Updating jwtIssuer exercises the same read-modify-write path
+        // against the contract the API actually serves.
         ObjectNode updatedPolicy = currentPolicy.deepCopy();
-        ObjectNode config = updatedPolicy.get("config").deepCopy();
-        config.put("tokenPrefix", "Token ");
-        updatedPolicy.set("config", config);
+        updatedPolicy.put("jwtIssuer", "updated-issuer");
 
         mockMvc.perform(put("/api/auth/policies/" + createdPolicyId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -186,7 +187,7 @@ public class AuthPolicyNamespaceTest extends NamespaceIntegrationTest {
         MvcResult verifyResult = mockMvc.perform(get("/api/auth/policies/" + createdPolicyId))
                 .andReturn();
         JsonNode verified = extractData(verifyResult);
-        assertEquals("Token ", verified.get("config").get("tokenPrefix").asText());
+        assertEquals("updated-issuer", verified.get("jwtIssuer").asText());
 
         System.out.println("[PASS] Auth policy updated successfully");
     }

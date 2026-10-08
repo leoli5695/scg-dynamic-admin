@@ -3,6 +3,7 @@ package com.leoli.gateway.admin;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -13,6 +14,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Instance Management API Integration Tests with Nacos Namespace Isolation
  * Tests instance CRUD, lifecycle management, and namespace configuration.
+ * <p>
+ * test06..test13 are gated behind GATEWAY_K8S_IT=true: they exercise scaling, spec/image
+ * changes, status refresh, pod listing and start/stop/delete, all of which drive a real
+ * Kubernetes API through the instance's cluster kubeconfig. updateReplicas additionally
+ * requires the instance to be RUNNING, which only a heartbeat from a deployed gateway can
+ * produce. Point GATEWAY_K8S_IT at a disposable cluster before enabling them - running
+ * them against a shared cluster would create and delete real Deployments.
  */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class InstanceManagementTest extends NamespaceIntegrationTest {
@@ -130,6 +138,7 @@ public class InstanceManagementTest extends NamespaceIntegrationTest {
     @Test
     @Order(6)
     @DisplayName("Update instance replicas - should scale instance")
+    @EnabledIfEnvironmentVariable(named = "GATEWAY_K8S_IT", matches = "true")
     void test06_UpdateInstanceReplicas() throws Exception {
         ObjectNode request = objectMapper.createObjectNode();
         request.put("replicas", 2);
@@ -150,6 +159,7 @@ public class InstanceManagementTest extends NamespaceIntegrationTest {
     @Test
     @Order(7)
     @DisplayName("Update instance spec - should change resource allocation")
+    @EnabledIfEnvironmentVariable(named = "GATEWAY_K8S_IT", matches = "true")
     void test07_UpdateInstanceSpec() throws Exception {
         ObjectNode request = objectMapper.createObjectNode();
         request.put("specType", "medium");
@@ -172,6 +182,7 @@ public class InstanceManagementTest extends NamespaceIntegrationTest {
     @Test
     @Order(8)
     @DisplayName("Update instance image - should change container image")
+    @EnabledIfEnvironmentVariable(named = "GATEWAY_K8S_IT", matches = "true")
     void test08_UpdateInstanceImage() throws Exception {
         ObjectNode request = objectMapper.createObjectNode();
         request.put("image", "gateway:latest");
@@ -192,6 +203,7 @@ public class InstanceManagementTest extends NamespaceIntegrationTest {
     @Test
     @Order(9)
     @DisplayName("Refresh instance status - should sync with actual state")
+    @EnabledIfEnvironmentVariable(named = "GATEWAY_K8S_IT", matches = "true")
     void test09_RefreshInstanceStatus() throws Exception {
         MvcResult result = mockMvc.perform(post("/api/instances/" + createdInstanceId + "/refresh"))
                 .andExpect(status().isOk())
@@ -207,6 +219,7 @@ public class InstanceManagementTest extends NamespaceIntegrationTest {
     @Test
     @Order(10)
     @DisplayName("Get instance pods - should return pod information")
+    @EnabledIfEnvironmentVariable(named = "GATEWAY_K8S_IT", matches = "true")
     void test10_GetInstancePods() throws Exception {
         MvcResult result = mockMvc.perform(get("/api/instances/" + createdInstanceId + "/pods"))
                 .andExpect(status().isOk())
@@ -222,6 +235,7 @@ public class InstanceManagementTest extends NamespaceIntegrationTest {
     @Test
     @Order(11)
     @DisplayName("Start instance - should start the gateway instance")
+    @EnabledIfEnvironmentVariable(named = "GATEWAY_K8S_IT", matches = "true")
     void test11_StartInstance() throws Exception {
         MvcResult result = mockMvc.perform(post("/api/instances/" + createdInstanceId + "/start"))
                 .andExpect(status().isOk())
@@ -237,6 +251,7 @@ public class InstanceManagementTest extends NamespaceIntegrationTest {
     @Test
     @Order(12)
     @DisplayName("Stop instance - should stop the gateway instance")
+    @EnabledIfEnvironmentVariable(named = "GATEWAY_K8S_IT", matches = "true")
     void test12_StopInstance() throws Exception {
         MvcResult result = mockMvc.perform(post("/api/instances/" + createdInstanceId + "/stop"))
                 .andExpect(status().isOk())
@@ -252,6 +267,7 @@ public class InstanceManagementTest extends NamespaceIntegrationTest {
     @Test
     @Order(13)
     @DisplayName("Delete instance - should remove instance and cleanup resources")
+    @EnabledIfEnvironmentVariable(named = "GATEWAY_K8S_IT", matches = "true")
     void test13_DeleteInstance() throws Exception {
         mockMvc.perform(delete("/api/instances/" + createdInstanceId))
                 .andExpect(status().isOk())

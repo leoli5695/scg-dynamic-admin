@@ -20,6 +20,18 @@ public class RouteApiTest extends BaseIntegrationTest {
 
     private static String createdRouteId;  // UUID
     private static String createdRouteName = "test-route-api";
+    private static String routeInstanceId;
+
+    /**
+     * Services must be scoped to a gateway instance, and test08 builds services through
+     * createTestService, so an instance has to exist before any test method runs.
+     */
+    @BeforeEach
+    void ensureTestInstance() throws Exception {
+        if (routeInstanceId == null) {
+            routeInstanceId = createTestInstance("route-api-instance");
+        }
+    }
 
     @Test
     @Order(1)
@@ -222,6 +234,7 @@ public class RouteApiTest extends BaseIntegrationTest {
         instance.put("enabled", true);
 
         MvcResult result = mockMvc.perform(post("/api/services")
+                        .param("instanceId", routeInstanceId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(service.toString()))
                 .andReturn();
