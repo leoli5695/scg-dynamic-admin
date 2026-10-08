@@ -79,9 +79,9 @@ class GatewayInstanceServiceTest {
         ReflectionTestUtils.setField(service, "defaultImage", "my-gateway:latest");
         ReflectionTestUtils.setField(service, "imagePullPolicy", "Never");
         ReflectionTestUtils.setField(service, "nacosServerAddr", "localhost:8848");
-        ReflectionTestUtils.setField(service, "nacosK8sNamespace", "test");
-        ReflectionTestUtils.setField(service, "nacosK8sServiceName", "nacos");
-        ReflectionTestUtils.setField(service, "nacosK8sPort", 8848);
+        ReflectionTestUtils.setField(service, "gatewayAdminHost", "localhost");
+        ReflectionTestUtils.setField(service, "gatewayAdminPort", 9090);
+        ReflectionTestUtils.setField(service, "gatewayInstancePort", 9090);
         ReflectionTestUtils.setField(service, "defaultServerPort", 80);
         ReflectionTestUtils.setField(service, "defaultManagementPort", 9091);
     }
@@ -102,12 +102,12 @@ class GatewayInstanceServiceTest {
                     createTestInstance(2L, "instance-2", "test-ns2")
             );
 
-            when(instanceRepository.findAll()).thenReturn(mockInstances);
+            when(instanceRepository.findByEnabledTrue()).thenReturn(mockInstances);
 
             List<GatewayInstanceEntity> result = service.getAllInstances();
 
             assertEquals(2, result.size());
-            verify(instanceRepository).findAll();
+            verify(instanceRepository).findByEnabledTrue();
         }
 
         @Test
@@ -150,45 +150,6 @@ class GatewayInstanceServiceTest {
     }
 
     // ============================================================
-    // Nacos Address Tests
-    // ============================================================
-
-    @Nested
-    @DisplayName("Nacos Address Tests")
-    class NacosAddressTests {
-
-        @Test
-        @DisplayName("Should use instance custom Nacos address")
-        void testGetNacosK8sAddress_customAddress() throws Exception {
-            GatewayInstanceEntity instance = createTestInstance(1L, "instance-1", "test-ns");
-            instance.setNacosServerAddr("custom-nacos:8848");
-
-            // Use reflection to test private method
-            java.lang.reflect.Method method = GatewayInstanceService.class.getDeclaredMethod(
-                    "getNacosK8sAddress", GatewayInstanceEntity.class);
-            method.setAccessible(true);
-            String address = (String) method.invoke(service, instance);
-
-            assertEquals("custom-nacos:8848", address);
-        }
-
-        @Test
-        @DisplayName("Should build K8s internal DNS address when not configured")
-        void testGetNacosK8sAddress_autoBuild() throws Exception {
-            // Use reflection to test private method
-            java.lang.reflect.Method method = GatewayInstanceService.class.getDeclaredMethod(
-                    "getNacosK8sAddress", GatewayInstanceEntity.class);
-            method.setAccessible(true);
-            String address = (String) method.invoke(service, (GatewayInstanceEntity) null);
-
-            // Should be: nacos.test.svc.cluster.local:8848
-            assertTrue(address.contains("nacos"));
-            assertTrue(address.contains("test"));
-            assertTrue(address.contains("8848"));
-        }
-    }
-
-    // ============================================================
     // Validation Tests
     // ============================================================
 
@@ -199,7 +160,7 @@ class GatewayInstanceServiceTest {
         @Test
         @DisplayName("Should handle empty instance list")
         void testGetAllInstances_empty() {
-            when(instanceRepository.findAll()).thenReturn(Collections.emptyList());
+            when(instanceRepository.findByEnabledTrue()).thenReturn(Collections.emptyList());
 
             List<GatewayInstanceEntity> result = service.getAllInstances();
 

@@ -271,6 +271,15 @@ public class GatewayInstanceService {
      */
     @Transactional
     public GatewayInstanceEntity createInstance(InstanceCreateRequest request) {
+        // Guard before findById: a null id makes Spring Data throw its own
+        // "The given id must not be null", which the persistence exception translator wraps
+        // into a non-IllegalArgumentException - so the controller's 400 branch never sees it
+        // and the caller gets an opaque 500 instead of a usable validation error.
+        if (request.getClusterId() == null) {
+            throw new IllegalArgumentException(
+                "clusterId is required: a gateway instance must belong to a Kubernetes cluster");
+        }
+
         // Validate cluster exists
         KubernetesCluster cluster = clusterRepository.findById(request.getClusterId())
                 .orElseThrow(() -> new IllegalArgumentException("Cluster not found: " + request.getClusterId()));

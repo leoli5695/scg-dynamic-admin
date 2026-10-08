@@ -18,7 +18,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 public class InstanceManagementTest extends NamespaceIntegrationTest {
 
     private static String createdInstanceId;
-    private static String instanceName = "test-instance-mgmt";
+    // The Spring context (and its create-drop database) is shared across all test classes in
+    // a surefire run, so fixed names/namespaces collide with instances other classes created.
+    private static final String RUN_SUFFIX = java.util.UUID.randomUUID().toString().substring(0, 8);
+    private static String instanceName = "test-instance-mgmt-" + RUN_SUFFIX;
+    private static final String MGMT_NAMESPACE = "mgmt-ns-" + RUN_SUFFIX;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -34,8 +38,9 @@ public class InstanceManagementTest extends NamespaceIntegrationTest {
         request.put("instanceName", instanceName);
         request.put("specType", "small");
         request.put("replicas", 1);
-        request.put("namespace", TEST_NAMESPACE);
+        request.put("namespace", MGMT_NAMESPACE);
         request.put("description", "Test instance for management tests");
+        request.put("clusterId", ensureTestCluster());
 
         MvcResult result = mockMvc.perform(post("/api/instances")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -51,7 +56,7 @@ public class InstanceManagementTest extends NamespaceIntegrationTest {
         assertEquals("small", data.get("specType").asText());
         assertEquals(1, data.get("replicas").asInt());
 
-        System.out.println("[PASS] Instance created: " + createdInstanceId + " with namespace: " + TEST_NAMESPACE);
+        System.out.println("[PASS] Instance created: " + createdInstanceId + " with namespace: " + MGMT_NAMESPACE);
     }
 
     @Test
@@ -262,8 +267,8 @@ public class InstanceManagementTest extends NamespaceIntegrationTest {
     @Order(14)
     @DisplayName("Create multiple instances - should support multi-tenancy")
     void test14_CreateMultipleInstances() throws Exception {
-        String[] instanceNames = {"tenant-a", "tenant-b", "tenant-c"};
-        String[] namespaces = {"ns-tenant-a", "ns-tenant-b", "ns-tenant-c"};
+        String[] instanceNames = {"tenant-a-" + RUN_SUFFIX, "tenant-b-" + RUN_SUFFIX, "tenant-c-" + RUN_SUFFIX};
+        String[] namespaces = {"ns-tenant-a-" + RUN_SUFFIX, "ns-tenant-b-" + RUN_SUFFIX, "ns-tenant-c-" + RUN_SUFFIX};
         String[] instanceIds = new String[3];
 
         try {
@@ -274,6 +279,7 @@ public class InstanceManagementTest extends NamespaceIntegrationTest {
                 request.put("specType", "small");
                 request.put("replicas", 1);
                 request.put("namespace", namespaces[i]);
+                request.put("clusterId", ensureTestCluster());
 
                 MvcResult result = mockMvc.perform(post("/api/instances")
                                 .contentType(MediaType.APPLICATION_JSON)

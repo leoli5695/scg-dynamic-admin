@@ -15,26 +15,29 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Tests audit trail, diff comparison, rollback, and export functionality.
  */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class AuditLogTest extends NamespaceIntegrationTest {
 
     private static String testRouteId;
     private static String auditLogId;
 
-    @BeforeAll
-    static void setupInstance() throws Exception {
-        NamespaceIntegrationTest test = new NamespaceIntegrationTest() {};
-        testInstanceId = test.createTestInstance("test-audit-instance");
+    @BeforeEach
+    @Order(0)
+    void setupInstance() throws Exception {
+        if (testInstanceId == null) {
+            testInstanceId = createTestInstance("test-audit-instance");
+        }
         System.out.println("[SETUP] Created test instance: " + testInstanceId);
     }
 
     @AfterAll
-    static void cleanupInstance() throws Exception {
-        NamespaceIntegrationTest test = new NamespaceIntegrationTest() {};
-        test.deleteTestInstance(testInstanceId);
+    void cleanupInstance() throws Exception {
+        deleteTestInstance(testInstanceId);
         System.out.println("[CLEANUP] Deleted test instance: " + testInstanceId);
     }
 
     @BeforeEach
+    @Order(1)
     void setUp() throws Exception {
         cleanAllData();
         // Create a route to generate audit logs

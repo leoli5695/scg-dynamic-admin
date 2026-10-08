@@ -15,26 +15,29 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Tests rate limiting, circuit breaker, retry, and other strategies.
  */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class StrategyNamespaceTest extends NamespaceIntegrationTest {
 
     private static String createdStrategyId;
     private static String strategyName = "test-strategy-namespace";
 
-    @BeforeAll
-    static void setupInstance() throws Exception {
-        NamespaceIntegrationTest test = new NamespaceIntegrationTest() {};
-        testInstanceId = test.createTestInstance("test-strategy-instance");
-        System.out.println("[SETUP] Created test instance: " + testInstanceId + " with namespace: " + TEST_NAMESPACE);
+    @BeforeEach
+    @Order(0)
+    void setupInstance() throws Exception {
+        if (testInstanceId == null) {
+            testInstanceId = createTestInstance("test-strategy-instance");
+        }
+        System.out.println("[SETUP] Created test instance: " + testInstanceId + " with namespace: " + lastUsedNamespace);
     }
 
     @AfterAll
-    static void cleanupInstance() throws Exception {
-        NamespaceIntegrationTest test = new NamespaceIntegrationTest() {};
-        test.deleteTestInstance(testInstanceId);
+    void cleanupInstance() throws Exception {
+        deleteTestInstance(testInstanceId);
         System.out.println("[CLEANUP] Deleted test instance: " + testInstanceId);
     }
 
     @BeforeEach
+    @Order(1)
     void setUp() throws Exception {
         cleanAllData();
     }
@@ -293,8 +296,7 @@ public class StrategyNamespaceTest extends NamespaceIntegrationTest {
     @Order(12)
     @DisplayName("Verify namespace isolation - strategies from different instances are separate")
     void test12_NamespaceIsolation() throws Exception {
-        NamespaceIntegrationTest test = new NamespaceIntegrationTest() {};
-        String otherInstanceId = test.createTestInstance("other-strategy-instance");
+        String otherInstanceId = createTestInstance("other-strategy-instance");
 
         try {
             // Create strategy in other instance
@@ -329,7 +331,7 @@ public class StrategyNamespaceTest extends NamespaceIntegrationTest {
 
             System.out.println("[PASS] Namespace isolation verified - instances have separate strategies");
         } finally {
-            test.deleteTestInstance(otherInstanceId);
+            deleteTestInstance(otherInstanceId);
         }
     }
 }

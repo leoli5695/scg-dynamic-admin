@@ -16,25 +16,28 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * All operations use instanceId to ensure tenant isolation via Nacos namespace.
  */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class ServiceNamespaceTest extends NamespaceIntegrationTest {
 
     private static String testServiceName = "test-service-namespace";
 
-    @BeforeAll
-    static void setupInstance() throws Exception {
-        NamespaceIntegrationTest test = new NamespaceIntegrationTest() {};
-        testInstanceId = test.createTestInstance("test-service-instance");
-        System.out.println("[SETUP] Created test instance: " + testInstanceId + " with namespace: " + TEST_NAMESPACE);
+    @BeforeEach
+    @Order(0)
+    void setupInstance() throws Exception {
+        if (testInstanceId == null) {
+            testInstanceId = createTestInstance("test-service-instance");
+        }
+        System.out.println("[SETUP] Created test instance: " + testInstanceId + " with namespace: " + lastUsedNamespace);
     }
 
     @AfterAll
-    static void cleanupInstance() throws Exception {
-        NamespaceIntegrationTest test = new NamespaceIntegrationTest() {};
-        test.deleteTestInstance(testInstanceId);
+    void cleanupInstance() throws Exception {
+        deleteTestInstance(testInstanceId);
         System.out.println("[CLEANUP] Deleted test instance: " + testInstanceId);
     }
 
     @BeforeEach
+    @Order(1)
     void setUp() throws Exception {
         cleanAllData();
     }
@@ -69,7 +72,7 @@ public class ServiceNamespaceTest extends NamespaceIntegrationTest {
         assertEquals(testServiceName, data.get("name").asText());
         assertNotNull(data.get("serviceId"), "Service ID should be generated");
 
-        System.out.println("[PASS] Service created with namespace: " + TEST_NAMESPACE);
+        System.out.println("[PASS] Service created with namespace: " + lastUsedNamespace);
     }
 
     @Test
@@ -278,8 +281,7 @@ public class ServiceNamespaceTest extends NamespaceIntegrationTest {
     @Order(11)
     @DisplayName("Verify namespace isolation - services from different instances are separate")
     void test11_NamespaceIsolation() throws Exception {
-        NamespaceIntegrationTest test = new NamespaceIntegrationTest() {};
-        String otherInstanceId = test.createTestInstance("other-service-instance");
+        String otherInstanceId = createTestInstance("other-service-instance");
 
         try {
             // Create service in other instance
@@ -313,7 +315,7 @@ public class ServiceNamespaceTest extends NamespaceIntegrationTest {
 
             System.out.println("[PASS] Namespace isolation verified - instances have separate services");
         } finally {
-            test.deleteTestInstance(otherInstanceId);
+            deleteTestInstance(otherInstanceId);
         }
     }
 

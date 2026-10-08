@@ -5,6 +5,7 @@ import com.leoli.gateway.admin.model.GatewayInstanceEntity;
 import com.leoli.gateway.admin.model.StressTest;
 import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
 import com.leoli.gateway.admin.repository.StressTestRepository;
+import com.leoli.gateway.admin.repository.StressTestShareRepository;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -35,7 +36,10 @@ public class StressTestServiceTest {
     private AiAnalysisService aiAnalysisService;
 
     @Mock
-    private StressTestValidator validator;
+    private StressTestShareRepository shareRepository;
+
+    @Mock
+    private StressTestPlaceholderResolver placeholderResolver;
 
     @InjectMocks
     private StressTestService stressTestService;
@@ -45,12 +49,6 @@ public class StressTestServiceTest {
     // Test data
     private static final String TEST_INSTANCE_ID = "test-instance-001";
     private static final String TEST_TARGET_URL = "http://localhost:8080/api/test";
-
-    @BeforeEach
-    void setUp() {
-        // Mock validator to allow all valid requests
-        doNothing().when(validator).validateAll(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyInt());
-    }
 
     @Test
     @Order(1)

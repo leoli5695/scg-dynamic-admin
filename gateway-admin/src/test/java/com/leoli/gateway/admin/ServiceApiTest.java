@@ -21,10 +21,22 @@ public class ServiceApiTest extends BaseIntegrationTest {
 
     private static String createdServiceId;
     private static String createdServiceName = "test-service-api";
+    private static String testInstanceId;
 
     @BeforeAll
     static void setup() {
         // Static setup
+    }
+
+    /**
+     * A service must be scoped to a gateway instance: the API rejects instanceId=null because
+     * it cannot resolve a nacosNamespace for it. Create one before the first test runs.
+     */
+    @BeforeEach
+    void ensureTestInstance() throws Exception {
+        if (testInstanceId == null) {
+            testInstanceId = createTestInstance("svc-api-instance");
+        }
     }
 
     @Test
@@ -49,7 +61,7 @@ public class ServiceApiTest extends BaseIntegrationTest {
         instance.put("weight", 1);
         instance.put("enabled", true);
 
-        MvcResult result = mockMvc.perform(post("/api/services")
+        MvcResult result = mockMvc.perform(post("/api/services").param("instanceId", testInstanceId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(service.toString()))
                 .andExpect(status().isOk())
@@ -67,7 +79,7 @@ public class ServiceApiTest extends BaseIntegrationTest {
     @Test
     @Order(2)
     void test02_CreateService_VerifyDatabase() throws Exception {
-        MvcResult result = mockMvc.perform(get("/api/services"))
+        MvcResult result = mockMvc.perform(get("/api/services").param("instanceId", testInstanceId))
                 .andExpect(status().isOk())
                 .andReturn();
 
@@ -125,7 +137,7 @@ public class ServiceApiTest extends BaseIntegrationTest {
     @Test
     @Order(5)
     void test05_GetServiceByName() throws Exception {
-        MvcResult result = mockMvc.perform(get("/api/services/" + createdServiceName))
+        MvcResult result = mockMvc.perform(get("/api/services/" + createdServiceName).param("instanceId", testInstanceId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andReturn();
@@ -146,7 +158,7 @@ public class ServiceApiTest extends BaseIntegrationTest {
         instance.put("weight", 2);
         instance.put("enabled", true);
 
-        MvcResult result = mockMvc.perform(post("/api/services/" + createdServiceName + "/instances")
+        MvcResult result = mockMvc.perform(post("/api/services/" + createdServiceName + "/instances").param("instanceId", testInstanceId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(instance.toString()))
                 .andExpect(status().isOk())
@@ -173,14 +185,14 @@ public class ServiceApiTest extends BaseIntegrationTest {
         ObjectNode statusRequest = objectMapper.createObjectNode();
         statusRequest.put("enabled", false);
 
-        mockMvc.perform(put("/api/services/" + createdServiceName + "/instances/127.0.0.1:9002/status")
+        mockMvc.perform(put("/api/services/" + createdServiceName + "/instances/127.0.0.1:9002/status").param("instanceId", testInstanceId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(statusRequest.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
 
         // Verify in database
-        MvcResult result = mockMvc.perform(get("/api/services/" + createdServiceName))
+        MvcResult result = mockMvc.perform(get("/api/services/" + createdServiceName).param("instanceId", testInstanceId))
                 .andReturn();
         JsonNode data = extractData(result);
 
@@ -215,13 +227,13 @@ public class ServiceApiTest extends BaseIntegrationTest {
         ObjectNode statusRequest = objectMapper.createObjectNode();
         statusRequest.put("enabled", true);
 
-        mockMvc.perform(put("/api/services/" + createdServiceName + "/instances/127.0.0.1:9002/status")
+        mockMvc.perform(put("/api/services/" + createdServiceName + "/instances/127.0.0.1:9002/status").param("instanceId", testInstanceId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(statusRequest.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
 
-        MvcResult result = mockMvc.perform(get("/api/services/" + createdServiceName))
+        MvcResult result = mockMvc.perform(get("/api/services/" + createdServiceName).param("instanceId", testInstanceId))
                 .andReturn();
         JsonNode data = extractData(result);
 
@@ -238,11 +250,11 @@ public class ServiceApiTest extends BaseIntegrationTest {
     @Test
     @Order(9)
     void test09_RemoveInstance() throws Exception {
-        mockMvc.perform(delete("/api/services/" + createdServiceName + "/instances/127.0.0.1:9002"))
+        mockMvc.perform(delete("/api/services/" + createdServiceName + "/instances/127.0.0.1:9002").param("instanceId", testInstanceId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
 
-        MvcResult result = mockMvc.perform(get("/api/services/" + createdServiceName))
+        MvcResult result = mockMvc.perform(get("/api/services/" + createdServiceName).param("instanceId", testInstanceId))
                 .andReturn();
         JsonNode data = extractData(result);
 
@@ -262,7 +274,7 @@ public class ServiceApiTest extends BaseIntegrationTest {
     @Test
     @Order(10)
     void test10_UpdateService() throws Exception {
-        MvcResult getResult = mockMvc.perform(get("/api/services/" + createdServiceName))
+        MvcResult getResult = mockMvc.perform(get("/api/services/" + createdServiceName).param("instanceId", testInstanceId))
                 .andReturn();
         JsonNode currentService = extractData(getResult);
 
@@ -270,13 +282,13 @@ public class ServiceApiTest extends BaseIntegrationTest {
         updatedService.put("description", "Updated description");
         updatedService.put("loadBalancer", "weighted");
 
-        mockMvc.perform(put("/api/services/" + createdServiceName)
+        mockMvc.perform(put("/api/services/" + createdServiceName).param("instanceId", testInstanceId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(updatedService.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
 
-        MvcResult verifyResult = mockMvc.perform(get("/api/services/" + createdServiceName))
+        MvcResult verifyResult = mockMvc.perform(get("/api/services/" + createdServiceName).param("instanceId", testInstanceId))
                 .andReturn();
         JsonNode verified = extractData(verifyResult);
         assertEquals("Updated description", verified.get("description").asText());
@@ -288,12 +300,12 @@ public class ServiceApiTest extends BaseIntegrationTest {
     @Test
     @Order(11)
     void test11_DeleteService() throws Exception {
-        mockMvc.perform(delete("/api/services/" + createdServiceName))
+        mockMvc.perform(delete("/api/services/" + createdServiceName).param("instanceId", testInstanceId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
 
         // Verify deleted from database
-        MvcResult result = mockMvc.perform(get("/api/services"))
+        MvcResult result = mockMvc.perform(get("/api/services").param("instanceId", testInstanceId))
                 .andReturn();
         JsonNode services = extractData(result);
         for (JsonNode service : services) {
@@ -325,7 +337,7 @@ public class ServiceApiTest extends BaseIntegrationTest {
         service.put("loadBalancer", "round-robin");
         service.putArray("instances"); // Empty instances
 
-        MvcResult result = mockMvc.perform(post("/api/services")
+        MvcResult result = mockMvc.perform(post("/api/services").param("instanceId", testInstanceId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(service.toString()))
                 .andExpect(status().isOk())
@@ -336,7 +348,7 @@ public class ServiceApiTest extends BaseIntegrationTest {
         assertTrue(data.get("instances").isEmpty(), "Instances should be empty");
 
         // Cleanup
-        mockMvc.perform(delete("/api/services/service-no-instances"));
+        mockMvc.perform(delete("/api/services/service-no-instances").param("instanceId", testInstanceId));
 
         System.out.println("[PASS] Service with no instances created");
     }
@@ -350,19 +362,19 @@ public class ServiceApiTest extends BaseIntegrationTest {
         service.put("loadBalancer", "round-robin");
         service.putArray("instances");
 
-        mockMvc.perform(post("/api/services")
+        mockMvc.perform(post("/api/services").param("instanceId", testInstanceId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(service.toString()))
                 .andExpect(status().isOk());
 
         // Try to create duplicate
-        mockMvc.perform(post("/api/services")
+        mockMvc.perform(post("/api/services").param("instanceId", testInstanceId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(service.toString()))
                 .andExpect(status().isBadRequest());
 
         // Cleanup
-        mockMvc.perform(delete("/api/services/duplicate-test"));
+        mockMvc.perform(delete("/api/services/duplicate-test").param("instanceId", testInstanceId));
 
         System.out.println("[PASS] Duplicate service name rejected");
     }

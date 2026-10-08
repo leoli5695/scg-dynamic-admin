@@ -13,19 +13,21 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Tests request tracing, health checks, diagnostics, and monitoring endpoints.
  */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class MonitoringTest extends NamespaceIntegrationTest {
 
-    @BeforeAll
-    static void setupInstance() throws Exception {
-        NamespaceIntegrationTest test = new NamespaceIntegrationTest() {};
-        testInstanceId = test.createTestInstance("test-monitoring-instance");
+    @BeforeEach
+    @Order(0)
+    void setupInstance() throws Exception {
+        if (testInstanceId == null) {
+            testInstanceId = createTestInstance("test-monitoring-instance");
+        }
         System.out.println("[SETUP] Created test instance: " + testInstanceId);
     }
 
     @AfterAll
-    static void cleanupInstance() throws Exception {
-        NamespaceIntegrationTest test = new NamespaceIntegrationTest() {};
-        test.deleteTestInstance(testInstanceId);
+    void cleanupInstance() throws Exception {
+        deleteTestInstance(testInstanceId);
         System.out.println("[CLEANUP] Deleted test instance: " + testInstanceId);
     }
 

@@ -16,28 +16,33 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * All operations use instanceId to ensure tenant isolation via Nacos namespace.
  */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class RouteNamespaceTest extends NamespaceIntegrationTest {
 
     private static String createdRouteId;
     private static String createdRouteName = "test-route-namespace";
     private static String testServiceId;
 
-    @BeforeAll
-    static void setupInstance() throws Exception {
-        // Create a dedicated test instance with its own namespace
-        NamespaceIntegrationTest test = new NamespaceIntegrationTest() {};
-        testInstanceId = test.createTestInstance("test-route-instance");
-        System.out.println("[SETUP] Created test instance: " + testInstanceId + " with namespace: " + TEST_NAMESPACE);
+    @BeforeEach
+    @Order(0)
+    void setupInstance() throws Exception {
+        // Create a dedicated test instance with its own namespace.
+        // Must be a @BeforeEach (not @BeforeAll): @WithMockUser only establishes a
+        // SecurityContext around test methods, so a @BeforeAll request would get 403.
+        if (testInstanceId == null) {
+            testInstanceId = createTestInstance("test-route-instance");
+        }
+        System.out.println("[SETUP] Created test instance: " + testInstanceId + " with namespace: " + lastUsedNamespace);
     }
 
     @AfterAll
-    static void cleanupInstance() throws Exception {
-        NamespaceIntegrationTest test = new NamespaceIntegrationTest() {};
-        test.deleteTestInstance(testInstanceId);
+    void cleanupInstance() throws Exception {
+        deleteTestInstance(testInstanceId);
         System.out.println("[CLEANUP] Deleted test instance: " + testInstanceId);
     }
 
     @BeforeEach
+    @Order(1)
     void setUp() throws Exception {
         cleanAllData();
     }
@@ -74,7 +79,7 @@ public class RouteNamespaceTest extends NamespaceIntegrationTest {
         assertNotNull(createdRouteId, "Route ID should not be null");
         assertEquals(createdRouteName, data.get("routeName").asText());
 
-        System.out.println("[PASS] Route created with UUID: " + createdRouteId + " in namespace: " + TEST_NAMESPACE);
+        System.out.println("[PASS] Route created with UUID: " + createdRouteId + " in namespace: " + lastUsedNamespace);
     }
 
     @Test
@@ -278,8 +283,7 @@ public class RouteNamespaceTest extends NamespaceIntegrationTest {
     @DisplayName("Verify namespace isolation - routes from different instances are separate")
     void test10_NamespaceIsolation() throws Exception {
         // Create another instance
-        NamespaceIntegrationTest test = new NamespaceIntegrationTest() {};
-        String otherInstanceId = test.createTestInstance("other-instance");
+        String otherInstanceId = createTestInstance("other-instance");
 
         try {
             // Create route in other instance
@@ -317,7 +321,7 @@ public class RouteNamespaceTest extends NamespaceIntegrationTest {
 
             System.out.println("[PASS] Namespace isolation verified - instances have separate routes");
         } finally {
-            test.deleteTestInstance(otherInstanceId);
+            deleteTestInstance(otherInstanceId);
         }
     }
 

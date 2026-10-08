@@ -15,26 +15,29 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Tests JWT, API Key, Basic Auth, and other authentication policies.
  */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class AuthPolicyNamespaceTest extends NamespaceIntegrationTest {
 
     private static String createdPolicyId;
     private static String policyName = "test-auth-policy-namespace";
 
-    @BeforeAll
-    static void setupInstance() throws Exception {
-        NamespaceIntegrationTest test = new NamespaceIntegrationTest() {};
-        testInstanceId = test.createTestInstance("test-auth-instance");
-        System.out.println("[SETUP] Created test instance: " + testInstanceId + " with namespace: " + TEST_NAMESPACE);
+    @BeforeEach
+    @Order(0)
+    void setupInstance() throws Exception {
+        if (testInstanceId == null) {
+            testInstanceId = createTestInstance("test-auth-instance");
+        }
+        System.out.println("[SETUP] Created test instance: " + testInstanceId + " with namespace: " + lastUsedNamespace);
     }
 
     @AfterAll
-    static void cleanupInstance() throws Exception {
-        NamespaceIntegrationTest test = new NamespaceIntegrationTest() {};
-        test.deleteTestInstance(testInstanceId);
+    void cleanupInstance() throws Exception {
+        deleteTestInstance(testInstanceId);
         System.out.println("[CLEANUP] Deleted test instance: " + testInstanceId);
     }
 
     @BeforeEach
+    @Order(1)
     void setUp() throws Exception {
         cleanAllData();
     }

@@ -1,6 +1,7 @@
 package com.leoli.gateway.admin.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leoli.gateway.admin.license.LicenseFeatureHelper;
 import com.leoli.gateway.admin.model.StressTest;
 import com.leoli.gateway.admin.service.StressTestService;
 import org.junit.jupiter.api.BeforeEach;
@@ -10,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
@@ -18,6 +20,7 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -25,6 +28,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Unit tests for StressTestController.
  */
 @WebMvcTest(StressTestController.class)
+// @WebMvcTest pulls in the security filter chain; without a principal every call is 401/403.
+@WithMockUser(username = "test-admin", authorities = {"ADMIN"})
 class StressTestControllerTest {
 
     @Autowired
@@ -35,6 +40,12 @@ class StressTestControllerTest {
 
     @MockBean
     private StressTestService stressTestService;
+
+    // StressTestController's second constructor dependency; without it the @WebMvcTest
+    // slice cannot build the controller and every test errors on context load.
+    // Its license gate is a void checkFeatureOrThrow, so the no-op mock default lets calls through.
+    @MockBean
+    private LicenseFeatureHelper licenseFeatureHelper;
 
     private StressTest testStressTest;
     private StressTestService.StressTestConfig testConfig;
@@ -65,14 +76,14 @@ class StressTestControllerTest {
         when(stressTestService.createAndStartTest(eq("test-instance"), any(StressTestService.StressTestConfig.class)))
                 .thenReturn(testStressTest);
 
-        mockMvc.perform(post("/api/stress-test/start")
+        mockMvc.perform(post("/api/stress-test/start").with(csrf())
                         .param("instanceId", "test-instance")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(testConfig)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.testId").value(1))
-                .andExpect(jsonPath("$.status").value("CREATED"));
+                .andExpect(jsonPath("$.data.testId").value(1))
+                .andExpect(jsonPath("$.data.status").value("CREATED"));
 
         verify(stressTestService).createAndStartTest(eq("test-instance"), any(StressTestService.StressTestConfig.class));
     }
@@ -83,13 +94,13 @@ class StressTestControllerTest {
         when(stressTestService.createAndStartTest(eq("non-existent"), any(StressTestService.StressTestConfig.class)))
                 .thenThrow(new RuntimeException("Instance not found: non-existent"));
 
-        mockMvc.perform(post("/api/stress-test/start")
+        mockMvc.perform(post("/api/stress-test/start").with(csrf())
                         .param("instanceId", "non-existent")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(testConfig)))
-                .andExpect(status().isBadRequest())
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.error").value("Instance not found: non-existent"));
+                .andExpect(jsonPath("$.message").value("Instance not found: non-existent"));
     }
 
     @Test
@@ -99,9 +110,9 @@ class StressTestControllerTest {
 
         mockMvc.perform(get("/api/stress-test/1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(1))
-                .andExpect(jsonPath("$.testName").value("Test Load"))
-                .andExpect(jsonPath("$.instanceId").value("test-instance"));
+                .andExpect(jsonPath("$.data.id").value(1))
+                .andExpect(jsonPath("$.data.testName").value("Test Load"))
+                .andExpect(jsonPath("$.data.instanceId").value("test-instance"));
 
         verify(stressTestService).getTest(1L);
     }
@@ -114,8 +125,8 @@ class StressTestControllerTest {
 
         mockMvc.perform(get("/api/stress-test/instance/test-instance"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(1))
-                .andExpect(jsonPath("$[0].testName").value("Test Load"));
+                .andExpect(jsonPath("$.data[0].id").value(1))
+                .andExpect(jsonPath("$.data[0].testName").value("Test Load"));
 
         verify(stressTestService).getTestsForInstance("test-instance");
     }
@@ -133,10 +144,10 @@ class StressTestControllerTest {
 
         mockMvc.perform(get("/api/stress-test/1/status"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.testId").value(1))
-                .andExpect(jsonPath("$.status").value("RUNNING"))
-                .andExpect(jsonPath("$.progress").value(0.5))
-                .andExpect(jsonPath("$.liveRps").value(100.0));
+                .andExpect(jsonPath("$.data.testId").value(1))
+                .andExpect(jsonPath("$.data.status").value("RUNNING"))
+                .andExpect(jsonPath("$.data.progress").value(0.5))
+                .andExpect(jsonPath("$.data.liveRps").value(100.0));
 
         verify(stressTestService).getTestStatus(1L);
     }
@@ -147,10 +158,10 @@ class StressTestControllerTest {
         testStressTest.setStatus("STOPPED");
         when(stressTestService.stopTest(1L)).thenReturn(testStressTest);
 
-        mockMvc.perform(post("/api/stress-test/1/stop"))
+        mockMvc.perform(post("/api/stress-test/1/stop").with(csrf()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.status").value("STOPPED"));
+                .andExpect(jsonPath("$.data.status").value("STOPPED"));
 
         verify(stressTestService).stopTest(1L);
     }
@@ -160,10 +171,10 @@ class StressTestControllerTest {
     void stopTest_shouldReturnError_whenTestNotRunning() throws Exception {
         when(stressTestService.stopTest(1L)).thenThrow(new RuntimeException("Test is not running"));
 
-        mockMvc.perform(post("/api/stress-test/1/stop"))
-                .andExpect(status().isBadRequest())
+        mockMvc.perform(post("/api/stress-test/1/stop").with(csrf()))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.error").value("Test is not running"));
+                .andExpect(jsonPath("$.message").value("Test is not running"));
     }
 
     @Test
@@ -177,7 +188,7 @@ class StressTestControllerTest {
                         .param("language", "zh"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.analysis").value("Test analysis result"));
+                .andExpect(jsonPath("$.data.analysis").value("Test analysis result"));
 
         verify(stressTestService).analyzeTestResults(1L, "BAILIAN", "zh");
     }
@@ -189,9 +200,9 @@ class StressTestControllerTest {
                 .thenThrow(new RuntimeException("Test must be completed before analysis"));
 
         mockMvc.perform(get("/api/stress-test/1/analyze"))
-                .andExpect(status().isBadRequest())
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.error").value("Test must be completed before analysis"));
+                .andExpect(jsonPath("$.message").value("Test must be completed before analysis"));
     }
 
     @Test
@@ -199,7 +210,7 @@ class StressTestControllerTest {
     void deleteTest_shouldDeleteTest() throws Exception {
         doNothing().when(stressTestService).deleteTest(1L);
 
-        mockMvc.perform(delete("/api/stress-test/1"))
+        mockMvc.perform(delete("/api/stress-test/1").with(csrf()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.message").value("Test deleted"));
@@ -212,10 +223,10 @@ class StressTestControllerTest {
     void deleteTest_shouldReturnError_whenDeletingRunningTest() throws Exception {
         doThrow(new RuntimeException("Cannot delete running test")).when(stressTestService).deleteTest(1L);
 
-        mockMvc.perform(delete("/api/stress-test/1"))
-                .andExpect(status().isBadRequest())
+        mockMvc.perform(delete("/api/stress-test/1").with(csrf()))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.error").value("Cannot delete running test"));
+                .andExpect(jsonPath("$.message").value("Cannot delete running test"));
     }
 
     @Test
@@ -224,13 +235,13 @@ class StressTestControllerTest {
         when(stressTestService.createAndStartTest(eq("test-instance"), any(StressTestService.StressTestConfig.class)))
                 .thenReturn(testStressTest);
 
-        mockMvc.perform(post("/api/stress-test/quick")
+        mockMvc.perform(post("/api/stress-test/quick").with(csrf())
                         .param("instanceId", "test-instance")
                         .param("requests", "100")
                         .param("concurrent", "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.testId").value(1));
+                .andExpect(jsonPath("$.data.testId").value(1));
 
         verify(stressTestService).createAndStartTest(eq("test-instance"), any(StressTestService.StressTestConfig.class));
     }
@@ -241,7 +252,7 @@ class StressTestControllerTest {
         when(stressTestService.createAndStartTest(eq("test-instance"), any(StressTestService.StressTestConfig.class)))
                 .thenReturn(testStressTest);
 
-        mockMvc.perform(post("/api/stress-test/quick")
+        mockMvc.perform(post("/api/stress-test/quick").with(csrf())
                         .param("instanceId", "test-instance"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
@@ -253,7 +264,7 @@ class StressTestControllerTest {
         when(stressTestService.createAndStartTest(eq("test-instance"), any(StressTestService.StressTestConfig.class)))
                 .thenReturn(testStressTest);
 
-        mockMvc.perform(post("/api/stress-test/quick")
+        mockMvc.perform(post("/api/stress-test/quick").with(csrf())
                         .param("instanceId", "test-instance")
                         .param("path", "/api/test"))
                 .andExpect(status().isOk())
