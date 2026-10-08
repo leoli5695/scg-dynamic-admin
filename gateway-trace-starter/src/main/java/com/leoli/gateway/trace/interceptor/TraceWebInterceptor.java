@@ -71,6 +71,13 @@ public class TraceWebInterceptor implements HandlerInterceptor {
      */
     private static final String TRACEPARENT_HEADER = "traceparent";
 
+    /**
+     * Request attribute carrying the entry span id, so TraceReportInterceptor can
+     * close it when the request completes (an un-exited entry span would report
+     * duration=0/success=false forever).
+     */
+    public static final String ENTRY_SPAN_ATTR = "gateway.trace.entrySpanId";
+
     private final String serviceName;
     private final GatewayTraceProperties properties;
 
@@ -146,6 +153,9 @@ public class TraceWebInterceptor implements HandlerInterceptor {
         // Create entry span for this service
         if (TraceContextHolder.isSampled()) {
             String entrySpanId = TraceContextHolder.enterSpan(serviceName + ".entry", SpanType.SERVICE);
+            if (entrySpanId != null) {
+                request.setAttribute(ENTRY_SPAN_ATTR, entrySpanId);
+            }
             // Override parentSpanId from upstream
             if (parentSpanId != null && !parentSpanId.isEmpty()) {
                 com.leoli.gateway.trace.model.ServiceSpan entrySpan = TraceContextHolder.getSpan(entrySpanId);

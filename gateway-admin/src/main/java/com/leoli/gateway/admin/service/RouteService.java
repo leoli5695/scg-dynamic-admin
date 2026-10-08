@@ -166,6 +166,25 @@ public class RouteService {
     }
 
     /**
+     * Publish a route to the config center, failing loudly when the publish does not take.
+     * <p>
+     * FIX (dual-write divergence): {@code configCenterService.publishConfig} swallows Nacos
+     * errors internally and returns {@code false} rather than throwing. The single-route write
+     * paths (create/update/enable) are {@code @Transactional(rollbackFor = Exception.class)}, so
+     * ignoring that boolean let the DB row commit while the config center never received it -
+     * a route that shows up in the console but is invisible to the gateway, with no error surfaced.
+     * Throwing here turns a silent {@code false} into a rollback.
+     */
+    private void publishRouteOrThrow(String routeDataId, String nacosNamespace, RouteDefinition mergedRoute) {
+        boolean published = configCenterService.publishConfig(routeDataId, nacosNamespace, mergedRoute);
+        if (!published) {
+            throw new IllegalStateException(
+                    "Failed to publish route config to config center: " + routeDataId
+                            + " (namespace: " + (nacosNamespace != null ? nacosNamespace : "default") + ")");
+        }
+    }
+
+    /**
      * Get all routes.
      */
     public List<RouteResponse> getAllRoutes() {
@@ -287,7 +306,7 @@ public class RouteService {
             try {
                 // Merge plugin bindings before publishing
                 RouteDefinition mergedRoute = mergePluginBindingsToRoute(route, entity.getRouteId());
-                configCenterService.publishConfig(routeDataId, nacosNamespace, mergedRoute);
+                publishRouteOrThrow(routeDataId, nacosNamespace, mergedRoute);
                 businessMetrics.recordConfigPublish();
                 businessMetrics.recordConfigPublishDuration(System.currentTimeMillis() - startTime);
                 log.info("Route pushed to Nacos: {} (namespace: {}, filters={})", routeDataId, nacosNamespace,
@@ -372,7 +391,7 @@ public class RouteService {
             // Merge plugin bindings before publishing
             RouteDefinition mergedRoute = mergePluginBindingsToRoute(route, entity.getRouteId());
             String routeDataId = ROUTE_PREFIX + entity.getRouteId();
-            configCenterService.publishConfig(routeDataId, nacosNamespace, mergedRoute);
+            publishRouteOrThrow(routeDataId, nacosNamespace, mergedRoute);
             log.info("Route updated in Nacos: {} (namespace: {}, filters={})", routeDataId, nacosNamespace,
                 mergedRoute.getFilters() != null ? mergedRoute.getFilters().size() : 0);
         }
@@ -445,7 +464,7 @@ public class RouteService {
             RouteDefinition route = routeConverter.toDefinition(entity);
             RouteDefinition mergedRoute = mergePluginBindingsToRoute(route, entity.getRouteId());
             String routeDataId = ROUTE_PREFIX + entity.getRouteId();
-            configCenterService.publishConfig(routeDataId, nacosNamespace, mergedRoute);
+            publishRouteOrThrow(routeDataId, nacosNamespace, mergedRoute);
 
             // Rebuild routes index
             rebuildRoutesIndex(nacosNamespace);

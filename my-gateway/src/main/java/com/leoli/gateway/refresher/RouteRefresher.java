@@ -140,7 +140,10 @@ public class RouteRefresher {
             }
 
         } catch (Exception e) {
-            log.error("Failed to process routes index change", e);
+            // Corrupt/unreadable index: abort WITHOUT touching listeners or routes so the
+            // currently-serving routing table stays intact until a valid index arrives.
+            log.error("Failed to process routes index change - keeping {} existing routes unchanged",
+                    listeningRouteIds.size(), e);
         }
     }
 
@@ -308,18 +311,18 @@ public class RouteRefresher {
 
     /**
      * Parse route IDs from index JSON.
+     * <p>
+     * A null/blank index means the key was intentionally deleted -> empty list (routes cleared).
+     * A malformed (non-blank) index is a CORRUPT payload, NOT an empty one: throwing here makes
+     * the caller abort the refresh and keep the previously-loaded routes, instead of silently
+     * treating every existing route as "removed" and wiping the whole routing table.
      */
-    private List<String> parseRouteIds(String json) {
-        try {
-            if (json == null || json.isBlank()) {
-                return new ArrayList<>();
-            }
-            return objectMapper.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {
-            });
-        } catch (Exception e) {
-            log.error("Failed to parse route IDs from index", e);
+    private List<String> parseRouteIds(String json) throws Exception {
+        if (json == null || json.isBlank()) {
             return new ArrayList<>();
         }
+        return objectMapper.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {
+        });
     }
 
     /**

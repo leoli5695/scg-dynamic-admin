@@ -1,7 +1,6 @@
 package com.leoli.gateway.trace.decorator;
 
 import com.leoli.gateway.trace.TraceContextHolder;
-import com.leoli.gateway.trace.model.DistributedTrace;
 import org.springframework.core.task.TaskDecorator;
 
 import java.util.function.Supplier;
@@ -25,9 +24,12 @@ import java.util.function.Supplier;
  * CompletableFuture.runAsync(TraceTaskDecorator.wrap(() -> {...}));
  * <p>
  * Principle:
- * - Captures TraceContext when creating task in main thread
- * - Restores TraceContext when executing task in child thread
- * - Clears TraceContext after task execution completes
+ * - Captures the FULL TraceContext when creating the task in the parent thread
+ *   (traceId, shared DistributedTrace reference, sampled flag, current span id,
+ *   span stack copy, baggage copy) via TraceContextHolder.captureContext()
+ * - Restores it in the child thread, so spans recorded there attach to the
+ *   correct parent and land in the shared trace (reported with the main request)
+ * - Clears the child thread's ThreadLocals after task completion
  */
 public class TraceTaskDecorator implements TaskDecorator {
 
@@ -38,21 +40,7 @@ public class TraceTaskDecorator implements TaskDecorator {
      */
     @Override
     public Runnable decorate(Runnable runnable) {
-        // 在主线程捕获 TraceContext
-        TraceContextSnapshot snapshot = captureSnapshot();
-
-        // Return wrapped Runnable
-        return () -> {
-            try {
-                // Restore TraceContext in child thread
-                restoreSnapshot(snapshot);
-                // Execute original task
-                runnable.run();
-            } finally {
-                // Clear child thread's TraceContext
-                TraceContextHolder.clear();
-            }
-        };
+        return wrap(runnable);
     }
 
     /**
@@ -62,10 +50,10 @@ public class TraceTaskDecorator implements TaskDecorator {
      * CompletableFuture.runAsync(TraceTaskDecorator.wrap(() -> doSomething()));
      */
     public static Runnable wrap(Runnable runnable) {
-        TraceContextSnapshot snapshot = captureSnapshot();
+        TraceContextHolder.TraceContextSnapshot snapshot = TraceContextHolder.captureContext();
         return () -> {
             try {
-                restoreSnapshot(snapshot);
+                TraceContextHolder.restoreContext(snapshot);
                 runnable.run();
             } finally {
                 TraceContextHolder.clear();
@@ -80,10 +68,10 @@ public class TraceTaskDecorator implements TaskDecorator {
      * Future<String> future = executor.submit(TraceTaskDecorator.wrap(() -> getResult()));
      */
     public static <T> java.util.concurrent.Callable<T> wrap(java.util.concurrent.Callable<T> callable) {
-        TraceContextSnapshot snapshot = captureSnapshot();
+        TraceContextHolder.TraceContextSnapshot snapshot = TraceContextHolder.captureContext();
         return () -> {
             try {
-                restoreSnapshot(snapshot);
+                TraceContextHolder.restoreContext(snapshot);
                 return callable.call();
             } finally {
                 TraceContextHolder.clear();
@@ -100,63 +88,14 @@ public class TraceTaskDecorator implements TaskDecorator {
      * );
      */
     public static <T> Supplier<T> wrapSupplier(Supplier<T> supplier) {
-        TraceContextSnapshot snapshot = captureSnapshot();
+        TraceContextHolder.TraceContextSnapshot snapshot = TraceContextHolder.captureContext();
         return () -> {
             try {
-                restoreSnapshot(snapshot);
+                TraceContextHolder.restoreContext(snapshot);
                 return supplier.get();
             } finally {
                 TraceContextHolder.clear();
             }
         };
-    }
-
-    // ==================== Internal Methods ====================
-
-    /**
-     * 捕获当前线程的 TraceContext 快照
-     * <p>
-     * 注意：共享同一个 DistributedTrace 引用（不深拷贝）。
-     * spans 列表是 CopyOnWriteArrayList，子线程记录的 span 会进入主线程的 Trace
-     * 并随主请求一起上报；此前深拷贝（不含 spans）导致异步 span 全部静默丢失。
-     * <p>
-     * 边界：若子线程在主线程上报之后才写入 span，该 span 不会出现在本次上报中（可接受）。
-     */
-    private static TraceContextSnapshot captureSnapshot() {
-        String traceId = TraceContextHolder.getTraceId();
-        boolean sampled = TraceContextHolder.isSampled();
-        DistributedTrace trace = TraceContextHolder.getTrace();
-
-        return new TraceContextSnapshot(traceId, sampled, trace);
-    }
-
-    /**
-     * 在子线程恢复 TraceContext
-     */
-    private static void restoreSnapshot(TraceContextSnapshot snapshot) {
-        if (snapshot.traceId != null) {
-            TraceContextHolder.setTraceId(snapshot.traceId);
-        }
-        TraceContextHolder.setSampled(snapshot.sampled);
-        if (snapshot.trace != null) {
-            TraceContextHolder.restoreTrace(snapshot.trace);
-        }
-    }
-
-    /**
-     * TraceContext snapshot
-     * <p>
-     * For cross-thread propagation
-     */
-    private static class TraceContextSnapshot {
-        final String traceId;
-        final boolean sampled;
-        final DistributedTrace trace;
-
-        TraceContextSnapshot(String traceId, boolean sampled, DistributedTrace trace) {
-            this.traceId = traceId;
-            this.sampled = sampled;
-            this.trace = trace;
-        }
     }
 }

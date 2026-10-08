@@ -71,6 +71,17 @@ public class AsyncTraceReporter {
     private static final long FALLBACK_RETENTION_DAYS = 7;
 
     /**
+     * FIX (unbounded fallback queue → OOM): the disk-IO executor used to be
+     * {@code Executors.newSingleThreadExecutor()}, whose internal queue is unbounded.
+     * writeToFallbackLog submits one task per trace on every degraded path (admin down,
+     * queue full, retries exhausted); when disk IO is slower than trace production the
+     * pending writes piled up without limit and could OOM the very process the fallback
+     * is meant to protect. The queue is now bounded; when it saturates the write is
+     * dropped and counted (see fallbackDroppedCount) instead of buffering forever.
+     */
+    private static final int FALLBACK_QUEUE_CAPACITY = 10_000;
+
+    /**
      * Retry backoff configuration
      * Base delay: 1 second, max delay: 60 seconds
      * Formula: delay = min(baseDelay * 2^retryCount, maxDelay)
@@ -87,6 +98,11 @@ public class AsyncTraceReporter {
      * Statistics: local disk written Trace count
      */
     private final AtomicLong fallbackCount = new AtomicLong(0);
+
+    /**
+     * Statistics: fallback writes dropped because the bounded disk-IO queue was saturated.
+     */
+    private final AtomicLong fallbackDroppedCount = new AtomicLong(0);
 
     /**
      * Statistics: successfully reported Trace count
@@ -107,11 +123,24 @@ public class AsyncTraceReporter {
         });
 
         // 【新增】独立的磁盘 IO 线程池 - 防止磁盘写入阻塞上报线程
-        this.fallbackExecutor = Executors.newSingleThreadExecutor(r -> {
-            Thread t = new Thread(r, "trace-fallback-writer");
-            t.setDaemon(true);  // daemon thread，不阻塞关闭
-            return t;
-        });
+        // FIX: bounded queue + drop-and-count rejection policy (was an unbounded
+        // single-thread executor whose queue could grow without limit under a slow/full
+        // disk and OOM the process). See FALLBACK_QUEUE_CAPACITY.
+        this.fallbackExecutor = new ThreadPoolExecutor(
+                1, 1, 0L, TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<>(FALLBACK_QUEUE_CAPACITY),
+                r -> {
+                    Thread t = new Thread(r, "trace-fallback-writer");
+                    t.setDaemon(true);  // daemon thread，不阻塞关闭
+                    return t;
+                },
+                (task, exec) -> {
+                    long n = fallbackDroppedCount.incrementAndGet();
+                    if (n == 1 || n % 1000 == 0) {
+                        log.warn("Trace fallback writer saturated (queue={}) - dropped {} fallback writes so far",
+                                FALLBACK_QUEUE_CAPACITY, n);
+                    }
+                });
 
         // 【新增】延迟重试调度器 - 指数退避防止重试风暴
         this.retryScheduler = Executors.newScheduledThreadPool(1, r -> {
@@ -523,8 +552,8 @@ public class AsyncTraceReporter {
         }
 
         // Output statistics
-        log.info("AsyncTraceReporter shutdown complete. Stats: reported={}, dropped={}, fallback={}",
-                reportedCount.get(), droppedCount.get(), fallbackCount.get());
+        log.info("AsyncTraceReporter shutdown complete. Stats: reported={}, dropped={}, fallback={}, fallbackDropped={}",
+                reportedCount.get(), droppedCount.get(), fallbackCount.get(), fallbackDroppedCount.get());
     }
 
     // ==================== Statistics Interface ====================
@@ -548,6 +577,13 @@ public class AsyncTraceReporter {
      */
     public long getFallbackCount() {
         return fallbackCount.get();
+    }
+
+    /**
+     * Get count of fallback writes dropped due to a saturated disk-IO queue.
+     */
+    public long getFallbackDroppedCount() {
+        return fallbackDroppedCount.get();
     }
 
     /**

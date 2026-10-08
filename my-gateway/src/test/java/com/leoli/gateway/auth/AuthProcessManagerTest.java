@@ -211,7 +211,7 @@ class AuthProcessManagerTest {
         }
 
         @Test
-        @DisplayName("Should return empty when processor not found")
+        @DisplayName("Should fail closed when a required processor is not found")
         void shouldReturnEmptyWhenProcessorNotFound() {
             // Given - AuthConfig with OAUTH2 type but no processor registered
             AuthConfig config = new AuthConfig();
@@ -222,9 +222,12 @@ class AuthProcessManagerTest {
             // When
             Mono<Void> result = manager.authenticate(exchange, config);
 
-            // Then - Should return empty since no OAUTH2 processor
+            // Then - a required (non-NONE) authType with no registered processor must
+            // fail closed rather than completing empty (which the caller treats as success).
             StepVerifier.create(result)
-                    .verifyComplete();
+                    .expectErrorMatches(e -> e instanceof IllegalStateException
+                            && e.getMessage().contains("No authentication processor registered for type: OAUTH2"))
+                    .verify();
         }
     }
 

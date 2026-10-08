@@ -102,7 +102,7 @@ public class FeatureGatekeeper {
         if (license == null) {
             throw new LicenseNotLoadedException();
         }
-        return checkQuota(quotaType.name().toLowerCase(), current);
+        return checkQuota(quotaType.getQuotaKey(), current);
     }
 
     /**
@@ -114,7 +114,7 @@ public class FeatureGatekeeper {
         if (license == null) {
             throw new LicenseNotLoadedException();
         }
-        requireQuota(quotaType.name().toLowerCase(), current);
+        requireQuota(quotaType.getQuotaKey(), current);
     }
 
     /**

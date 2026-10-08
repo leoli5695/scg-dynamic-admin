@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.client.RestTemplate;
 
@@ -14,6 +15,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.mockito.Mockito.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -21,6 +23,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Unit tests for FilterChainController.
  */
 @WebMvcTest(FilterChainController.class)
+// @WebMvcTest pulls in the security filter chain; without a principal every call is 403.
+@WithMockUser(username = "test-admin", authorities = {"ADMIN"})
 class FilterChainControllerTest {
 
     @Autowired
@@ -176,7 +180,7 @@ class FilterChainControllerTest {
         when(instanceService.getAccessUrl("test-instance")).thenReturn("http://localhost:8080");
         doNothing().when(restTemplate).delete("http://localhost:8080/internal/filter-chain/stats");
 
-        mockMvc.perform(delete("/api/filter-chain/test-instance/stats"))
+        mockMvc.perform(delete("/api/filter-chain/test-instance/stats").with(csrf()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.message").value("Filter chain stats cleared"));
@@ -190,7 +194,7 @@ class FilterChainControllerTest {
     void clearFilterStats_shouldReturn404_whenInstanceNotFound() throws Exception {
         when(instanceService.getAccessUrl("non-existent")).thenReturn(null);
 
-        mockMvc.perform(delete("/api/filter-chain/non-existent/stats"))
+        mockMvc.perform(delete("/api/filter-chain/non-existent/stats").with(csrf()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(404));
     }
@@ -201,7 +205,7 @@ class FilterChainControllerTest {
         when(instanceService.getAccessUrl("test-instance")).thenReturn("http://localhost:8080");
         doThrow(new RuntimeException("Connection refused")).when(restTemplate).delete(anyString());
 
-        mockMvc.perform(delete("/api/filter-chain/test-instance/stats"))
+        mockMvc.perform(delete("/api/filter-chain/test-instance/stats").with(csrf()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(500))
                 .andExpect(jsonPath("$.message").exists());

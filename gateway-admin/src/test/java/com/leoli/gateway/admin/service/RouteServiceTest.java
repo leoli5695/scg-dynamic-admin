@@ -66,6 +66,12 @@ class RouteServiceTest {
     @Mock
     private Span mockSpan;
 
+    // FIX (pre-existing red suite): RouteService collaborates with RoutePluginBindingService
+    // on every read/create/update/enable path (getEnabledGlobalBindings + mergePluginBindingsToRoute),
+    // but this mock was never declared, so @InjectMocks left the field null and 6 tests NPE'd.
+    @Mock
+    private RoutePluginBindingService routePluginBindingService;
+
     @InjectMocks
     private RouteService routeService;
 
@@ -269,6 +275,29 @@ class RouteServiceTest {
             assertNotNull(result);
             verify(configCenterService, atLeast(1)).publishConfig(anyString(), any(), any());
         }
+
+        @Test
+        @DisplayName("Should throw (roll back) when config publish returns false on create")
+        void shouldThrowWhenConfigPublishFailsOnCreate() {
+            // Given
+            RouteDefinition definition = createRouteDefinition(null);
+            definition.setRouteName(ROUTE_NAME);
+            RouteEntity entity = createRouteEntity(ROUTE_ID, ROUTE_NAME);
+
+            when(routeRepository.existsById(anyString())).thenReturn(false);
+            when(routeRepository.existsByRouteName(ROUTE_NAME)).thenReturn(false);
+            when(routeConverter.toEntity(any())).thenReturn(entity);
+            when(routeRepository.save(any())).thenReturn(entity);
+            // publishConfig swallows Nacos errors and returns false instead of throwing.
+            // The service must turn that false into an exception so the surrounding
+            // @Transactional(rollbackFor = Exception.class) rolls the DB row back rather
+            // than committing a route the gateway never receives.
+            when(configCenterService.publishConfig(anyString(), any(), any())).thenReturn(false);
+
+            // When & Then
+            assertThrows(IllegalStateException.class, () -> routeService.createRoute(definition));
+            verify(businessMetrics).recordConfigPublishError();
+        }
     }
 
     @Nested
@@ -286,6 +315,9 @@ class RouteServiceTest {
             
             when(routeRepository.findById(ROUTE_ID)).thenReturn(Optional.of(entity));
             when(routeRepository.save(any())).thenReturn(entity);
+            // updateRouteByRouteId reads the persisted definition to preserve
+            // serviceNamespace/serviceGroup when the inbound DTO omits them.
+            when(routeConverter.toDefinition(any())).thenReturn(createRouteDefinition(ROUTE_ID));
             when(configCenterService.publishConfig(anyString(), any(), any())).thenReturn(true);
 
             // When
@@ -328,6 +360,7 @@ class RouteServiceTest {
             
             when(routeRepository.findById(ROUTE_ID)).thenReturn(Optional.of(entity));
             when(routeRepository.save(any())).thenReturn(entity);
+            when(routeConverter.toDefinition(any())).thenReturn(createRouteDefinition(ROUTE_ID));
 
             // When
             RouteEntity result = routeService.updateRouteByRouteId(ROUTE_ID, definition);
@@ -335,6 +368,24 @@ class RouteServiceTest {
             // Then
             assertNotNull(result);
             verify(configCenterService, never()).publishConfig(anyString(), any(), any());
+        }
+
+        @Test
+        @DisplayName("Should throw (roll back) when config publish returns false on update")
+        void shouldThrowWhenConfigPublishFailsOnUpdate() {
+            // Given
+            RouteDefinition definition = createRouteDefinition(ROUTE_ID);
+            RouteEntity entity = createRouteEntity(ROUTE_ID, ROUTE_NAME);
+            entity.setEnabled(true);
+
+            when(routeRepository.findById(ROUTE_ID)).thenReturn(Optional.of(entity));
+            when(routeRepository.save(any())).thenReturn(entity);
+            when(routeConverter.toDefinition(any())).thenReturn(createRouteDefinition(ROUTE_ID));
+            when(configCenterService.publishConfig(anyString(), any(), any())).thenReturn(false);
+
+            // When & Then
+            assertThrows(IllegalStateException.class,
+                    () -> routeService.updateRouteByRouteId(ROUTE_ID, definition));
         }
     }
 
@@ -392,6 +443,23 @@ class RouteServiceTest {
             // Then
             verify(routeRepository).save(any());
             verify(configCenterService, atLeast(1)).publishConfig(anyString(), any(), any());
+        }
+
+        @Test
+        @DisplayName("Should throw (roll back) when config publish returns false on enable")
+        void shouldThrowWhenConfigPublishFailsOnEnable() {
+            // Given
+            RouteEntity entity = createRouteEntity(ROUTE_ID, ROUTE_NAME);
+            entity.setEnabled(false);
+            RouteDefinition definition = createRouteDefinition(ROUTE_ID);
+
+            when(routeRepository.findById(ROUTE_ID)).thenReturn(Optional.of(entity));
+            when(routeConverter.toDefinition(any())).thenReturn(definition);
+            when(routeRepository.save(any())).thenReturn(entity);
+            when(configCenterService.publishConfig(anyString(), any(), any())).thenReturn(false);
+
+            // When & Then
+            assertThrows(IllegalStateException.class, () -> routeService.enableRouteByRouteId(ROUTE_ID));
         }
 
         @Test

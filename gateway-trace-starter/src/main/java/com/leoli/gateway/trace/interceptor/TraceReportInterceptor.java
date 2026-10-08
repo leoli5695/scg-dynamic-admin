@@ -104,6 +104,13 @@ public class TraceReportInterceptor implements HandlerInterceptor {
                 TraceContextHolder.endTrace(statusCode, success);
             }
 
+            // Close the entry span opened by TraceWebInterceptor (it has no other exit
+            // point; without this it reports duration=0/success=false forever)
+            Object entrySpanAttr = request.getAttribute(TraceWebInterceptor.ENTRY_SPAN_ATTR);
+            if (entrySpanAttr instanceof String entrySpanId) {
+                TraceContextHolder.exitSpan(entrySpanId, success);
+            }
+
             // Get complete Trace and report
             trace = TraceContextHolder.getTrace();
 

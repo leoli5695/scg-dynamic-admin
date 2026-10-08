@@ -12,13 +12,19 @@ interface HistoryTableProps {
   loading: boolean;
   /** Whether the page is scoped to a single gateway instance. */
   hasInstance: boolean;
+  /** Total record count across all pages (server-side pagination). */
+  total: number;
+  /** Zero-based current page. */
+  page: number;
+  pageSize: number;
+  onPageChange: (page: number, pageSize: number) => void;
   onClear: () => void;
   onRefresh: () => void;
 }
 
 /** Alert history list with expandable content and clear/refresh actions. */
 const HistoryTable: React.FC<HistoryTableProps> = ({
-  history, loading, hasInstance, onClear, onRefresh,
+  history, loading, hasInstance, total, page, pageSize, onPageChange, onClear, onRefresh,
 }) => {
   const { t } = useTranslation();
 
@@ -78,7 +84,7 @@ const HistoryTable: React.FC<HistoryTableProps> = ({
             okText={t('common.confirm')}
             cancelText={t('common.cancel')}
           >
-            <Button danger icon={<DeleteOutlined />} disabled={history.length === 0}>
+            <Button danger icon={<DeleteOutlined />} disabled={total === 0}>
               {hasInstance ? t('alert.clear_instance_history') : t('alert.clear_history')}
             </Button>
           </Popconfirm>
@@ -92,10 +98,13 @@ const HistoryTable: React.FC<HistoryTableProps> = ({
         rowKey="id"
         loading={loading}
         pagination={{
-          pageSize: 10,
+          current: page + 1,
+          pageSize,
+          total,
           showSizeChanger: true,
           showQuickJumper: true,
-          showTotal: (total) => `${total} items`,
+          showTotal: (count) => `${count} items`,
+          onChange: (nextPage, nextSize) => onPageChange(nextPage - 1, nextSize),
         }}
         className="alert-history-table"
         expandable={{

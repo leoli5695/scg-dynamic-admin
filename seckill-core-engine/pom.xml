@@ -268,20 +268,6 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>run</id>
-                        <goals>
-                            <goal>run</goal>
-                        </goals>
-                        <configuration>
-                            <!-- Windows 命令行长度限制解决方案 -->
-                            <fork>false</fork>
-                            <useTestClasspath>false</useTestClasspath>
-                            <jvmArguments>-Djava.net.preferIPv4Stack=true</jvmArguments>
-                        </configuration>
-                    </execution>
-                </executions>
                 <configuration>
                     <excludes>
                         <exclude>
@@ -289,15 +275,6 @@
                             <artifactId>lombok</artifactId>
                         </exclude>
                     </excludes>
-                </configuration>
-            </plugin>
-
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <configuration>
-                    <source>17</source>
-                    <target>17</target>
                 </configuration>
             </plugin>
         </plugins>

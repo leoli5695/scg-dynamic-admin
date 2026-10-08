@@ -1,295 +1,260 @@
 package com.leoli.license.client.validator;
 
+import com.leoli.license.client.config.LicenseProperties;
+import com.leoli.license.client.exception.LicenseInvalidException;
 import com.leoli.license.client.model.LicenseInfo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.Arrays;
-import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * License Store Unit Tests.
- * Tests thread-safe license storage and retrieval.
+ * Covers startup loading, fallback degradation, renewal and periodic-validation bookkeeping.
  */
 class LicenseStoreTest {
 
-    private LicenseStore licenseStore;
+    private LicenseValidator validator;
+    private LicenseProperties properties;
+    private LicenseStore store;
 
     @BeforeEach
     void setUp() {
-        licenseStore = new LicenseStore();
+        validator = new LicenseValidator();
+        properties = new LicenseProperties();
+        store = new LicenseStore(validator, properties);
+    }
+
+    // ==================== Startup loading ====================
+
+    @Test
+    @DisplayName("Load valid license code from configuration")
+    void initialize_withValidLicenseCode_loadsLicense() {
+        properties.setLicenseCode(LicenseFixtures.advancedCode());
+
+        store.initialize();
+
+        LicenseInfo license = store.getLicense();
+        assertNotNull(license);
+        assertEquals("LIC-ADVANCED", license.getLicenseId());
+        assertEquals("ADVANCED", license.getEdition());
+        assertNotNull(store.getLastValidation());
     }
 
     @Test
-    @DisplayName("Set and Get License")
-    void setAndGetLicense_success() {
-        LicenseInfo license = createTestLicense();
+    @DisplayName("Load license code from file when no inline code is set")
+    void initialize_withLicenseFile_loadsLicense(@TempDir Path dir) throws Exception {
+        Path file = dir.resolve("license.lic");
+        Files.writeString(file, LicenseFixtures.enterpriseCode());
+        properties.setLicenseFile(file.toString());
 
-        licenseStore.setLicense(license);
+        store.initialize();
 
-        LicenseInfo retrieved = licenseStore.getLicense();
-
-        assertNotNull(retrieved);
-        assertEquals(license.getLicenseId(), retrieved.getLicenseId());
-        assertEquals(license.getEdition(), retrieved.getEdition());
+        assertEquals("LIC-ENTERPRISE", store.getLicense().getLicenseId());
     }
 
     @Test
-    @DisplayName("Get License - Not Set")
-    void getLicense_notSet_null() {
-        LicenseInfo retrieved = licenseStore.getLicense();
+    @DisplayName("Inline license code wins over license file")
+    void initialize_prefersLicenseCodeOverFile(@TempDir Path dir) throws Exception {
+        Path file = dir.resolve("license.lic");
+        Files.writeString(file, LicenseFixtures.enterpriseCode());
+        properties.setLicenseFile(file.toString());
+        properties.setLicenseCode(LicenseFixtures.basicCode());
 
-        assertNull(retrieved);
+        store.initialize();
+
+        assertEquals("LIC-BASIC", store.getLicense().getLicenseId());
     }
 
     @Test
-    @DisplayName("Clear License")
-    void clearLicense_success() {
-        LicenseInfo license = createTestLicense();
-        licenseStore.setLicense(license);
+    @DisplayName("No license configured - falls back")
+    void initialize_withoutAnyLicense_loadsFallback() {
+        store.initialize();
 
-        assertNotNull(licenseStore.getLicense());
-
-        licenseStore.clearLicense();
-
-        assertNull(licenseStore.getLicense());
+        LicenseInfo license = store.getLicense();
+        assertNotNull(license);
+        assertTrue(license.getLicenseId().startsWith("FALLBACK-"));
+        assertNull(store.getLastValidation(), "fallback loading is not a successful validation");
     }
 
     @Test
-    @DisplayName("Check Has License - True")
-    void hasLicense_true() {
-        LicenseInfo license = createTestLicense();
-        licenseStore.setLicense(license);
+    @DisplayName("Validation disabled - falls back without reading any license")
+    void initialize_disabled_loadsFallback() {
+        properties.setEnabled(false);
+        properties.setLicenseCode(LicenseFixtures.advancedCode());
 
-        assertTrue(licenseStore.hasLicense());
+        store.initialize();
+
+        assertTrue(store.getLicense().getLicenseId().startsWith("FALLBACK-"));
+    }
+
+    // ==================== Fallback degradation ====================
+
+    @Test
+    @DisplayName("Invalid license with allowBasicFallback - degrades to fallback")
+    void initialize_invalidLicense_fallsBackWhenAllowed() {
+        properties.setLicenseCode("corrupted-license-code");
+        properties.setAllowBasicFallback(true);
+
+        store.initialize();
+
+        assertTrue(store.getLicense().getLicenseId().startsWith("FALLBACK-"));
     }
 
     @Test
-    @DisplayName("Check Has License - False")
-    void hasLicense_false() {
-        assertFalse(licenseStore.hasLicense());
+    @DisplayName("Invalid license without allowBasicFallback - no license is loaded")
+    void initialize_invalidLicense_noLicenseWhenFallbackDisabled() {
+        properties.setLicenseCode("corrupted-license-code");
+        properties.setAllowBasicFallback(false);
+
+        store.initialize();
+
+        assertNull(store.getLicense());
     }
 
     @Test
-    @DisplayName("Update License")
-    void updateLicense_success() {
-        LicenseInfo license1 = createTestLicense();
-        license1.setLicenseId("license-1");
+    @DisplayName("Expired license with allowBasicFallback - degrades to fallback")
+    void initialize_expiredLicense_fallsBackWhenAllowed() {
+        properties.setLicenseCode(LicenseFixtures.expiredCode());
+        properties.setAllowBasicFallback(true);
 
-        licenseStore.setLicense(license1);
-        assertEquals("license-1", licenseStore.getLicense().getLicenseId());
+        store.initialize();
 
-        LicenseInfo license2 = createTestLicense();
-        license2.setLicenseId("license-2");
-
-        licenseStore.setLicense(license2);
-        assertEquals("license-2", licenseStore.getLicense().getLicenseId());
+        assertTrue(store.getLicense().getLicenseId().startsWith("FALLBACK-"));
     }
 
     @Test
-    @DisplayName("Concurrent Access - Thread Safety")
-    void concurrentAccess_threadSafety() throws InterruptedException {
-        int threadCount = 100;
-        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
-        CountDownLatch latch = new CountDownLatch(threadCount);
-        AtomicInteger successCount = new AtomicInteger(0);
+    @DisplayName("Expired license without allowBasicFallback - no license is loaded")
+    void initialize_expiredLicense_noLicenseWhenFallbackDisabled() {
+        properties.setLicenseCode(LicenseFixtures.expiredCode());
+        properties.setAllowBasicFallback(false);
 
-        for (int i = 0; i < threadCount; i++) {
-            final int index = i;
-            executor.submit(() -> {
-                try {
-                    if (index % 2 == 0) {
-                        // Half threads set license
-                        LicenseInfo license = createTestLicense();
-                        license.setLicenseId("concurrent-" + index);
-                        licenseStore.setLicense(license);
-                    } else {
-                        // Half threads get license
-                        LicenseInfo retrieved = licenseStore.getLicense();
-                        // May be null or some value set by another thread
-                    }
-                    successCount.incrementAndGet();
-                } finally {
-                    latch.countDown();
-                }
-            });
-        }
+        store.initialize();
 
-        latch.await();
-        executor.shutdown();
-
-        assertEquals(threadCount, successCount.get());
-        // Final license should be one of the values set
-        assertNotNull(licenseStore.getLicense());
+        assertNull(store.getLicense());
     }
 
     @Test
-    @DisplayName("Get License Edition")
-    void getLicenseEdition_success() {
-        LicenseInfo license = createTestLicense();
-        licenseStore.setLicense(license);
+    @DisplayName("Configured fallback-edition is honoured when degrading")
+    void initialize_invalidLicense_fallbackUsesConfiguredEdition() {
+        properties.setLicenseCode("corrupted-license-code");
+        properties.setFallbackEdition("ADVANCED");
 
-        LicenseInfo.Edition edition = licenseStore.getLicenseEdition();
+        store.initialize();
 
-        assertNotNull(edition);
-        assertEquals(LicenseInfo.Edition.ADVANCED, edition);
+        assertEquals("FALLBACK-ADVANCED", store.getLicense().getLicenseId());
+    }
+
+    // ==================== Expiry detected on access ====================
+
+    @Test
+    @DisplayName("License that expires after load is swapped for a fallback on access")
+    void getLicense_licenseExpiresAfterLoad_switchesToFallback() throws Exception {
+        properties.setLicenseCode(LicenseFixtures.codeExpiringIn(Duration.ofSeconds(1)));
+        store.initialize();
+        assertEquals("LIC-SHORT-LIVED", store.getLicense().getLicenseId());
+
+        Thread.sleep(1_600);
+
+        LicenseInfo after = store.getLicense();
+        assertNotNull(after);
+        assertTrue(after.getLicenseId().startsWith("FALLBACK-"),
+                "expired license should be replaced by a fallback but was " + after.getLicenseId());
+    }
+
+    // ==================== Renewal and refresh ====================
+
+    @Test
+    @DisplayName("Update license replaces the current one")
+    void updateLicense_validCode_replacesLicense() {
+        properties.setLicenseCode(LicenseFixtures.basicCode());
+        store.initialize();
+        assertEquals("LIC-BASIC", store.getLicense().getLicenseId());
+
+        store.updateLicense(LicenseFixtures.enterpriseCode());
+
+        assertEquals("LIC-ENTERPRISE", store.getLicense().getLicenseId());
     }
 
     @Test
-    @DisplayName("Get License Edition - Not Set")
-    void getLicenseEdition_notSet_null() {
-        assertNull(licenseStore.getLicenseEdition());
+    @DisplayName("Update license with an invalid code throws and keeps the previous license")
+    void updateLicense_invalidCode_throwsAndKeepsPrevious() {
+        properties.setLicenseCode(LicenseFixtures.advancedCode());
+        store.initialize();
+
+        assertThrows(LicenseInvalidException.class, () -> store.updateLicense("corrupted"));
+
+        assertEquals("LIC-ADVANCED", store.getLicense().getLicenseId());
     }
 
     @Test
-    @DisplayName("Get License Features")
-    void getLicenseFeatures_success() {
-        LicenseInfo license = createTestLicense();
-        licenseStore.setLicense(license);
+    @DisplayName("Refresh re-reads configuration and replaces the license")
+    void refreshLicense_picksUpNewlyConfiguredCode() {
+        properties.setLicenseCode(LicenseFixtures.advancedCode());
+        store.initialize();
+        assertEquals("LIC-ADVANCED", store.getLicense().getLicenseId());
 
-        List<LicenseInfo.Feature> features = licenseStore.getLicenseFeatures();
+        properties.setLicenseCode(LicenseFixtures.basicCode());
+        store.refreshLicense();
 
-        assertNotNull(features);
-        assertTrue(features.contains(LicenseInfo.Feature.WEIGHTED_ROUTING));
-        assertTrue(features.contains(LicenseInfo.Feature.DISTRIBUTED_RATE_LIMIT));
+        assertEquals("LIC-BASIC", store.getLicense().getLicenseId());
     }
 
     @Test
-    @DisplayName("Get License Features - Not Set")
-    void getLicenseFeatures_notSet_emptyList() {
-        List<LicenseInfo.Feature> features = licenseStore.getLicenseFeatures();
+    @DisplayName("Refresh with a broken code logs and keeps the current license")
+    void refreshLicense_invalidCode_keepsCurrentLicense() {
+        properties.setLicenseCode(LicenseFixtures.advancedCode());
+        store.initialize();
 
-        assertNotNull(features);
-        assertTrue(features.isEmpty());
+        properties.setLicenseCode("corrupted");
+        assertDoesNotThrow(() -> store.refreshLicense());
+
+        assertEquals("LIC-ADVANCED", store.getLicense().getLicenseId());
     }
 
     @Test
-    @DisplayName("Get License Quotas")
-    void getLicenseQuotas_success() {
-        LicenseInfo license = createTestLicense();
-        licenseStore.setLicense(license);
+    @DisplayName("Refresh without any configured code is a no-op")
+    void refreshLicense_noConfiguredCode_isNoOp() {
+        properties.setLicenseCode(LicenseFixtures.advancedCode());
+        store.initialize();
 
-        LicenseInfo.Quotas quotas = licenseStore.getLicenseQuotas();
+        properties.setLicenseCode(null);
+        store.refreshLicense();
 
-        assertNotNull(quotas);
-        assertEquals(5, quotas.getMaxInstances());
-        assertEquals(500, quotas.getMaxRoutes());
+        assertEquals("LIC-ADVANCED", store.getLicense().getLicenseId());
+    }
+
+    // ==================== Periodic validation ====================
+
+    @Test
+    @DisplayName("Periodic validation is needed before the first load")
+    void needsPeriodicValidation_beforeInitialize_true() {
+        assertTrue(store.needsPeriodicValidation());
+        assertNull(store.getLastValidation());
     }
 
     @Test
-    @DisplayName("Get License Quotas - Not Set")
-    void getLicenseQuotas_notSet_null() {
-        assertNull(licenseStore.getLicenseQuotas());
+    @DisplayName("Periodic validation is not needed right after a successful load")
+    void needsPeriodicValidation_afterInitialize_false() {
+        properties.setLicenseCode(LicenseFixtures.advancedCode());
+        store.initialize();
+
+        assertFalse(store.needsPeriodicValidation());
     }
 
     @Test
-    @DisplayName("Check License Valid - True")
-    void isLicenseValid_true() {
-        LicenseInfo license = createTestLicense();
-        license.setValid(true);
-        licenseStore.setLicense(license);
+    @DisplayName("Zero validation interval always requires revalidation")
+    void needsPeriodicValidation_zeroInterval_true() {
+        properties.setLicenseCode(LicenseFixtures.advancedCode());
+        properties.setValidationIntervalSeconds(0);
+        store.initialize();
 
-        assertTrue(licenseStore.isLicenseValid());
-    }
-
-    @Test
-    @DisplayName("Check License Valid - False")
-    void isLicenseValid_false() {
-        LicenseInfo license = createTestLicense();
-        license.setValid(false);
-        licenseStore.setLicense(license);
-
-        assertFalse(licenseStore.isLicenseValid());
-    }
-
-    @Test
-    @DisplayName("Check License Valid - Not Set")
-    void isLicenseValid_notSet_false() {
-        assertFalse(licenseStore.isLicenseValid());
-    }
-
-    @Test
-    @DisplayName("Check License Expired - Not Expired")
-    void isLicenseExpired_notExpired_false() {
-        LicenseInfo license = createTestLicense();
-        license.setExpiresAt(Instant.now().plus(365, ChronoUnit.DAYS));
-        licenseStore.setLicense(license);
-
-        assertFalse(licenseStore.isLicenseExpired());
-    }
-
-    @Test
-    @DisplayName("Check License Expired - Expired")
-    void isLicenseExpired_expired_true() {
-        LicenseInfo license = createTestLicense();
-        license.setExpiresAt(Instant.now().minus(1, ChronoUnit.DAYS));
-        licenseStore.setLicense(license);
-
-        assertTrue(licenseStore.isLicenseExpired());
-    }
-
-    @Test
-    @DisplayName("Get Remaining Days")
-    void getRemainingDays_success() {
-        LicenseInfo license = createTestLicense();
-        license.setExpiresAt(Instant.now().plus(30, ChronoUnit.DAYS));
-        licenseStore.setLicense(license);
-
-        int remainingDays = licenseStore.getRemainingDays();
-
-        assertTrue(remainingDays >= 29 && remainingDays <= 31);
-    }
-
-    @Test
-    @DisplayName("Get Remaining Days - Expired")
-    void getRemainingDays_expired_negative() {
-        LicenseInfo license = createTestLicense();
-        license.setExpiresAt(Instant.now().minus(10, ChronoUnit.DAYS));
-        licenseStore.setLicense(license);
-
-        int remainingDays = licenseStore.getRemainingDays();
-
-        assertTrue(remainingDays < 0);
-    }
-
-    @Test
-    @DisplayName("Set Null License")
-    void setNullLicense_success() {
-        licenseStore.setLicense(createTestLicense());
-        assertNotNull(licenseStore.getLicense());
-
-        licenseStore.setLicense(null);
-
-        assertNull(licenseStore.getLicense());
-    }
-
-    private LicenseInfo createTestLicense() {
-        return LicenseInfo.builder()
-                .licenseId("test-license-id")
-                .edition(LicenseInfo.Edition.ADVANCED)
-                .issuedAt(Instant.now())
-                .expiresAt(Instant.now().plus(365, ChronoUnit.DAYS))
-                .features(Arrays.asList(
-                        LicenseInfo.Feature.WEIGHTED_ROUTING,
-                        LicenseInfo.Feature.DISTRIBUTED_RATE_LIMIT,
-                        LicenseInfo.Feature.CIRCUIT_BREAKER
-                ))
-                .quotas(LicenseInfo.Quotas.builder()
-                        .maxInstances(5)
-                        .maxRoutes(500)
-                        .maxServices(100)
-                        .maxRateLimitQps(10000)
-                        .build())
-                .valid(true)
-                .build();
+        assertTrue(store.needsPeriodicValidation());
     }
 }

@@ -1,6 +1,10 @@
 /**
- * Request tracing page — error/slow trace tables with client-side filters,
+ * Request tracing page — error/slow trace tables with server-side pagination,
  * statistics, JSON/CSV export and the distributed full-chain tab.
+ *
+ * Paging + time range are resolved by the backend (/errors, /slow accept
+ * page/size/start/end). path/method/statusCode are NOT server-filterable on those
+ * endpoints, so they narrow the current page only.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -60,6 +64,11 @@ const TracePage: React.FC = () => {
   const [stats, setStats] = useState<TraceStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  // Server-side pagination for the error/slow tables (the old code fetched a fixed
+  // page=0,size=100 and client-paginated, so traces beyond the first 100 were unreachable).
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(20);
+  const [total, setTotal] = useState(0);
   const [detailTrace, setDetailTrace] = useState<RequestTrace | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
 
@@ -69,18 +78,26 @@ const TracePage: React.FC = () => {
     { onError: () => undefined },
   );
 
-  // Load error/slow traces + stats together; traceId goes to the backend,
-  // path/method/statusCode are applied client-side on the fetched page.
+  // Load error/slow traces + stats together. traceId, start/end (time range) and
+  // page/size go to the backend; path/method/statusCode are applied client-side on
+  // the fetched page (not supported by /errors,/slow).
   useEffect(() => {
     if (activeTab === 'distributed') return undefined;
     const controller = new AbortController();
     (async () => {
       setLoading(true);
       try {
-        const params: Record<string, unknown> = { page: 0, size: 100, instanceId };
+        const params: Record<string, unknown> = { page, size: pageSize, instanceId };
+        // Resolve the time range server-side for BOTH the custom picker and the preset
+        // (minutes) selector. The preset used to be applied client-side by filtering the
+        // capped page on traceTime, which was both incorrect and hid matching rows that
+        // fell outside the fetched window.
         if (customTimeRange) {
           params.start = customTimeRange[0].format('YYYY-MM-DDTHH:mm:ss');
           params.end = customTimeRange[1].format('YYYY-MM-DDTHH:mm:ss');
+        } else if (timeRange) {
+          params.start = dayjs().subtract(timeRange, 'minute').format('YYYY-MM-DDTHH:mm:ss');
+          params.end = dayjs().format('YYYY-MM-DDTHH:mm:ss');
         }
         const traceId = appliedFilters.traceId.trim();
         if (traceId) params.traceId = traceId;
@@ -104,6 +121,7 @@ const TracePage: React.FC = () => {
           rows = rows.filter((r) => r.statusCode?.toString() === appliedFilters.statusCode);
         }
         setTraces(rows);
+        setTotal(pageData.totalElements ?? 0);
         setStats(statsData ?? null);
       } catch {
         if (controller.signal.aborted) return;
@@ -113,16 +131,11 @@ const TracePage: React.FC = () => {
       }
     })();
     return () => controller.abort();
-  }, [instanceId, activeTab, timeRange, customTimeRange, appliedFilters, reloadKey, t]);
+  }, [instanceId, activeTab, timeRange, customTimeRange, appliedFilters, page, pageSize, reloadKey, t]);
 
-  // Preset ranges filter client-side by traceTime.
-  const filteredTraces = useMemo(() => {
-    if (!customTimeRange && timeRange) {
-      const cutoff = dayjs().subtract(timeRange, 'minute');
-      return traces.filter((trace) => dayjs(trace.traceTime).isAfter(cutoff));
-    }
-    return traces;
-  }, [traces, timeRange, customTimeRange]);
+  // Time filtering is server-side now; the fetched page is already range-bounded and
+  // path/method/statusCode were applied inside the effect above.
+  const filteredTraces = traces;
 
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
 
@@ -130,6 +143,7 @@ const TracePage: React.FC = () => {
     setActiveTab(key as 'errors' | 'slow' | 'distributed');
     setFilters(EMPTY_FILTERS);
     setAppliedFilters(EMPTY_FILTERS);
+    setPage(0);
   };
 
   const handleTimeRangeChange = (value: number | 'custom') => {
@@ -139,6 +153,7 @@ const TracePage: React.FC = () => {
       setTimeRange(value);
       setCustomTimeRange(null);
     }
+    setPage(0);
   };
 
   const handleDeleteOldTraces = async () => {
@@ -347,6 +362,7 @@ const TracePage: React.FC = () => {
                   } else {
                     setCustomTimeRange(null);
                   }
+                  setPage(0);
                 }}
                 format="YYYY-MM-DD HH:mm"
                 getPopupContainer={(triggerNode) => triggerNode.parentNode as HTMLElement}
@@ -395,7 +411,7 @@ const TracePage: React.FC = () => {
                 style={{ width: 150 }}
                 allowClear
               />
-              <Button icon={<SearchOutlined />} onClick={() => setAppliedFilters(filters)}>
+              <Button icon={<SearchOutlined />} onClick={() => { setAppliedFilters(filters); setPage(0); }}>
                 {t('common.search')}
               </Button>
             </Space>
@@ -475,7 +491,14 @@ const TracePage: React.FC = () => {
             dataSource={filteredTraces}
             columns={columns}
             rowKey="id"
-            pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (total) => `${total} items` }}
+            pagination={{
+              current: page + 1,
+              pageSize,
+              total,
+              showSizeChanger: true,
+              showTotal: (count) => `${count} items`,
+              onChange: (nextPage, nextSize) => { setPage(nextPage - 1); setPageSize(nextSize); },
+            }}
             rowClassName={getRowClassName}
             size="small"
             scroll={{ x: 500 }}

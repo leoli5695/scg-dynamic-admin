@@ -332,25 +332,37 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
                     // boundary was never inspected). The 10MB cap in MAX_BODY_SIZE_BYTES
                     // already bounds the worst-case decode/regex cost, so correctness
                     // wins over the marginal hot-path saving.
-                    String body = new String(bytes, StandardCharsets.UTF_8);
-                    List<String> threats = new ArrayList<>(existingThreats);
-                    checkValue(body, enableSqlInjection, enableXss, threats);
+                    //
+                    // PERF (EventLoop offload): the UTF-8 decode + multi-pattern regex
+                    // scan is CPU-bound and, on a body near the 10MB cap, can occupy the
+                    // Netty EventLoop for tens of milliseconds — stalling every other
+                    // connection multiplexed on that loop. The DataBuffer read/release
+                    // stays on the loop (cheap); only the scan is pushed to
+                    // boundedElastic so a single large request cannot block the gateway.
+                    return Mono.fromCallable(() -> {
+                        String body = new String(bytes, StandardCharsets.UTF_8);
+                        List<String> threats = new ArrayList<>(existingThreats);
+                        checkValue(body, enableSqlInjection, enableXss, threats);
+                        return threats;
+                    })
+                    .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
+                    .flatMap(threats -> {
+                        // Rebuild request with cached body BEFORE threat handling, so that
+                        // DETECT mode (which forwards the request) does not lose the consumed body.
+                        ServerHttpRequest newRequest = new org.springframework.http.server.reactive.ServerHttpRequestDecorator(request) {
+                            @Override
+                            public reactor.core.publisher.Flux<DataBuffer> getBody() {
+                                return reactor.core.publisher.Flux.just(exchange.getResponse().bufferFactory().wrap(bytes));
+                            }
+                        };
+                        ServerWebExchange rebuiltExchange = exchange.mutate().request(newRequest).build();
 
-                    // Rebuild request with cached body BEFORE threat handling, so that
-                    // DETECT mode (which forwards the request) does not lose the consumed body.
-                    ServerHttpRequest newRequest = new org.springframework.http.server.reactive.ServerHttpRequestDecorator(request) {
-                        @Override
-                        public reactor.core.publisher.Flux<DataBuffer> getBody() {
-                            return reactor.core.publisher.Flux.just(exchange.getResponse().bufferFactory().wrap(bytes));
+                        if (!threats.isEmpty()) {
+                            return handleThreat(rebuiltExchange, threats, mode, chain);
                         }
-                    };
-                    ServerWebExchange rebuiltExchange = exchange.mutate().request(newRequest).build();
 
-                    if (!threats.isEmpty()) {
-                        return handleThreat(rebuiltExchange, threats, mode, chain);
-                    }
-
-                    return chain.filter(rebuiltExchange);
+                        return chain.filter(rebuiltExchange);
+                    });
                 });
     }
 

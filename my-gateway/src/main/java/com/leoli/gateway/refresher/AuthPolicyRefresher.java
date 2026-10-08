@@ -99,13 +99,23 @@ public class AuthPolicyRefresher {
         try {
             // Get policies index
             String indexContent = configService.getConfig(AUTH_POLICIES_INDEX, GROUP);
-            if (indexContent == null || indexContent.isEmpty()) {
-                log.info("No auth policies index found");
-                return;
-            }
 
-            List<String> policyIds = objectMapper.readValue(indexContent, new TypeReference<List<String>>() {
-            });
+            List<String> policyIds;
+            if (indexContent == null || indexContent.isBlank()) {
+                // Index absent/empty. If we still hold policies in memory, this means the
+                // index was deleted -> we MUST revoke them (diff against empty set below),
+                // otherwise stale credentials keep working after being removed in admin.
+                if (listeningPolicyIds.isEmpty()) {
+                    log.info("No auth policies index found");
+                    return;
+                }
+                log.warn("Auth policies index removed/empty - revoking {} previously loaded policies",
+                        listeningPolicyIds.size());
+                policyIds = java.util.Collections.emptyList();
+            } else {
+                policyIds = objectMapper.readValue(indexContent, new TypeReference<List<String>>() {
+                });
+            }
             log.info("📋 Found {} policies in index", policyIds.size());
 
             // Sync listeners

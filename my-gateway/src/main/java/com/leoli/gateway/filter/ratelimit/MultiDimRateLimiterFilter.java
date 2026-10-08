@@ -279,7 +279,14 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
      * Apply the local rate limiter window (shared utility class) and fill the result.
      */
     private void applyLocalWindow(CheckResult result, String key, MultiDimRateLimiterConfig.QuotaConfig quota) {
-        com.leoli.gateway.util.RateLimiterWindow window = rateLimiterCache.get(key,
+        // FIX (stale window): the cache key must include the quota parameters. Previously it
+        // was keyed only by the business dimension, so a RateLimiterWindow created under an
+        // old qps/burst/windowSize kept being reused after the strategy was updated - the new
+        // limits never took effect until the entry expired (up to 1h). Folding the params into
+        // the key makes an updated quota resolve to a fresh window immediately.
+        String windowKey = key + "|q=" + quota.getQps() + "|b=" + quota.getBurstCapacity()
+                + "|w=" + quota.getWindowSizeMs();
+        com.leoli.gateway.util.RateLimiterWindow window = rateLimiterCache.get(windowKey,
                 k -> new com.leoli.gateway.util.RateLimiterWindow(quota.getQps(), quota.getBurstCapacity(), quota.getWindowSizeMs()));
 
         result.setAllowed(window.tryAcquire());

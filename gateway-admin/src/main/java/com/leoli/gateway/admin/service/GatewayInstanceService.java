@@ -474,25 +474,27 @@ public class GatewayInstanceService {
 
         log.info("Deleting instance {} (instanceId={}, nacosNamespace={})", id, instanceId, nacosNamespace);
 
-        // 1. Delete all related data from database
+        // 1. Delete from Kubernetes FIRST. FIX (orphaned resources): the previous order deleted
+        //    DB rows + Nacos configs, then attempted the K8s delete inside a catch that only
+        //    logged - and deleteFromKubernetes swallowed its own ApiException too, so a failed
+        //    cluster call still dropped the instance row. That leaked an unmanaged
+        //    Deployment/Service: pods keep running and heartbeating with no DB record to control
+        //    or retry them. Now the K8s delete runs before any destructive step and propagates
+        //    failure, so @Transactional rolls the whole delete back and the operator can retry.
+        KubernetesCluster cluster = clusterRepository.findById(instance.getClusterId())
+                .orElse(null);
+        if (cluster != null) {
+            deleteFromKubernetes(instance, cluster);
+        }
+
+        // 2. Delete all related data from database
         configCleanupHelper.deleteRelatedDataFromDatabase(instanceId);
 
-        // 2. Delete all configs from Nacos namespace
+        // 3. Delete all configs from Nacos namespace
         configCleanupHelper.deleteConfigsFromNacos(nacosNamespace);
 
-        // 2.1 Delete Nacos namespace itself
+        // 3.1 Delete Nacos namespace itself
         configCleanupHelper.deleteNacosNamespace(nacosNamespace);
-
-        // 3. Delete from Kubernetes
-        try {
-            KubernetesCluster cluster = clusterRepository.findById(instance.getClusterId())
-                    .orElse(null);
-            if (cluster != null) {
-                deleteFromKubernetes(instance, cluster);
-            }
-        } catch (Exception e) {
-            log.warn("Failed to delete instance {} from Kubernetes: {}", id, e.getMessage());
-        }
 
         // 4. Remove from namespace cache
         namespaceCache.remove(instanceId);
@@ -503,7 +505,11 @@ public class GatewayInstanceService {
     }
 
     /**
-     * Delete deployment from Kubernetes.
+     * Delete deployment and service from Kubernetes.
+     * <p>
+     * A 404 means the resource is already gone (idempotent success). Any other failure is
+     * propagated so the caller's {@code @Transactional} delete rolls back instead of dropping
+     * the instance record while cluster resources survive.
      */
     private void deleteFromKubernetes(GatewayInstanceEntity instance, KubernetesCluster cluster) {
         ApiClient client = getApiClient(cluster.getId(), cluster.getKubeconfig());
@@ -514,26 +520,32 @@ public class GatewayInstanceService {
         String deploymentName = instance.getDeploymentName();
         String serviceName = instance.getServiceName();
 
+        // Delete deployment
         try {
-            // Delete deployment
             appsApi.deleteNamespacedDeployment(deploymentName, namespace)
                     .pretty("true")
                     .execute();
             log.info("Deleted deployment: {}", deploymentName);
-
-            // Delete service
-            try {
-                coreApi.deleteNamespacedService(serviceName, namespace)
-                        .pretty("true")
-                        .execute();
-                log.info("Deleted service: {}", serviceName);
-            } catch (ApiException e) {
-                if (e.getCode() != 404) {
-                    log.warn("Failed to delete service: {}", e.getMessage());
-                }
-            }
         } catch (ApiException e) {
-            log.error("Failed to delete from Kubernetes: {}", e.getMessage());
+            if (e.getCode() != 404) {
+                throw new IllegalStateException("Failed to delete deployment " + deploymentName
+                        + " in namespace " + namespace + ": " + e.getMessage(), e);
+            }
+            log.info("Deployment already absent (404): {}", deploymentName);
+        }
+
+        // Delete service
+        try {
+            coreApi.deleteNamespacedService(serviceName, namespace)
+                    .pretty("true")
+                    .execute();
+            log.info("Deleted service: {}", serviceName);
+        } catch (ApiException e) {
+            if (e.getCode() != 404) {
+                throw new IllegalStateException("Failed to delete service " + serviceName
+                        + " in namespace " + namespace + ": " + e.getMessage(), e);
+            }
+            log.info("Service already absent (404): {}", serviceName);
         }
     }
 

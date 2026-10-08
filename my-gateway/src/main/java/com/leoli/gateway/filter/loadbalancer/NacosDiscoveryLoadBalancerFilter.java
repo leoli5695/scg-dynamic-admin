@@ -157,39 +157,48 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
     /**
      * Choose an instance using weighted round-robin.
      * Filters out disabled and unhealthy instances.
+     * <p>
+     * FIX (EventLoop blocking): {@code nacosDiscoveryService.getHealthyInstances} performs a
+     * synchronous Nacos SDK lookup (remote call on cache miss / registry churn). It used to run
+     * inline in {@link #filter}, i.e. on the Netty EventLoop thread, stalling every other
+     * connection pinned to that loop. The blocking lookup is now deferred onto
+     * {@code boundedElastic} so the EventLoop is never blocked. A null return maps to an empty
+     * Mono, preserving the downstream {@code switchIfEmpty} -> 503 semantics.
      */
     private Mono<org.springframework.cloud.client.ServiceInstance> chooseInstance(String serviceName, String namespace, String group) {
-        try {
-            List<ServiceInstance> instances = nacosDiscoveryService.getHealthyInstances(serviceName, namespace, group);
+        return Mono.fromCallable(() -> selectInstanceBlocking(serviceName, namespace, group))
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
 
-            if (instances == null || instances.isEmpty()) {
-                log.warn("No healthy instances found for service: {}, namespace: {}, group: {}",
-                        serviceName, namespace, group);
-                return Mono.empty();
-            }
+    /**
+     * Blocking instance selection (runs on boundedElastic, never on the EventLoop).
+     * Returns null when no usable instance is available.
+     */
+    private org.springframework.cloud.client.ServiceInstance selectInstanceBlocking(String serviceName, String namespace, String group) {
+        List<ServiceInstance> instances = nacosDiscoveryService.getHealthyInstances(serviceName, namespace, group);
 
-            // Filter out disabled instances (user set enabled=false in Nacos)
-            List<ServiceInstance> enabledInstances = instances.stream()
-                    .filter(ServiceInstance::isEnabled)
-                    .collect(Collectors.toList());
-
-            if (enabledInstances.isEmpty()) {
-                log.warn("All instances are DISABLED for service: {}, namespace: {}, group: {}",
-                        serviceName, namespace, group);
-                return Mono.empty();
-            }
-
-            // Select instance using weighted round-robin
-            ServiceInstance selected = selectByWeightedRoundRobin(serviceName, enabledInstances);
-
-            // Convert to Spring Cloud ServiceInstance
-            org.springframework.cloud.client.ServiceInstance springInstance = new SimpleServiceInstance(selected);
-            return Mono.just(springInstance);
-        } catch (Exception e) {
-            log.error("Error getting instances for service: {}, namespace: {}, group: {}",
-                    serviceName, namespace, group, e);
-            return Mono.error(e);
+        if (instances == null || instances.isEmpty()) {
+            log.warn("No healthy instances found for service: {}, namespace: {}, group: {}",
+                    serviceName, namespace, group);
+            return null;
         }
+
+        // Filter out disabled instances (user set enabled=false in Nacos)
+        List<ServiceInstance> enabledInstances = instances.stream()
+                .filter(ServiceInstance::isEnabled)
+                .collect(Collectors.toList());
+
+        if (enabledInstances.isEmpty()) {
+            log.warn("All instances are DISABLED for service: {}, namespace: {}, group: {}",
+                    serviceName, namespace, group);
+            return null;
+        }
+
+        // Select instance using weighted round-robin
+        ServiceInstance selected = selectByWeightedRoundRobin(serviceName, enabledInstances);
+
+        // Convert to Spring Cloud ServiceInstance
+        return new SimpleServiceInstance(selected);
     }
 
     /**

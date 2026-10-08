@@ -248,14 +248,29 @@ public class LicenseInfo {
      * Quota type enum for quota limit checks
      */
     public enum QuotaType {
-        INSTANCES,
-        ROUTES,
-        SERVICES,
-        STRATEGIES,
-        AUTH_POLICIES,
-        RATE_LIMIT_QPS,
-        AI_COPilot_CALLS,
-        TRACE_RETENTION,
-        AUDIT_LOG_RETENTION
+        INSTANCES("maxInstances"),
+        ROUTES("maxRoutes"),
+        SERVICES("maxServices"),
+        STRATEGIES("maxStrategies"),
+        AUTH_POLICIES("maxAuthPolicies"),
+        RATE_LIMIT_QPS("maxRateLimitQPS"),
+        AI_COPilot_CALLS("maxApiCopilotCalls"),
+        TRACE_RETENTION("maxTraceRetention"),
+        AUDIT_LOG_RETENTION("maxAuditLogRetention");
+
+        /**
+         * Quota lookups key off the {@link QuotaInfo} field names, which do not match the
+         * enum constant names (e.g. AI_COPilot_CALLS -> maxApiCopilotCalls). Deriving the key
+         * from {@code name()} silently resolves to no limit at all.
+         */
+        private final String quotaKey;
+
+        QuotaType(String quotaKey) {
+            this.quotaKey = quotaKey;
+        }
+
+        public String getQuotaKey() {
+            return quotaKey;
+        }
     }
 }

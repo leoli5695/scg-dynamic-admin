@@ -24,7 +24,7 @@ import java.time.LocalDateTime;
     @Index(name = "idx_binding_plugin", columnList = "plugin_id"),
     @Index(name = "idx_binding_enabled", columnList = "enabled"),
     @Index(name = "idx_binding_instance", columnList = "instance_id"),
-    @Index(name = "idx_binding_route_enabled_order", columnList = "route_id, enabled, order")
+    @Index(name = "idx_binding_route_enabled_order", columnList = "route_id, enabled, binding_order")
 }, uniqueConstraints = {
     @UniqueConstraint(name = "uk_binding_id", columnNames = "binding_id"),
     @UniqueConstraint(name = "uk_route_plugin", columnNames = {"route_id", "plugin_id"})
@@ -68,8 +68,10 @@ public class PluginBindingEntity {
 
     /**
      * Execution order (overrides plugin default order).
+     * Column is named {@code binding_order} because {@code order} is a MySQL reserved word:
+     * Hibernate emits it unquoted, which makes both the CREATE TABLE and every SELECT fail.
      */
-    @Column(name = "order")
+    @Column(name = "binding_order")
     private Integer order = 0;
 
     /**

@@ -114,6 +114,17 @@ const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onT
   );
   const pods = podsRequest.data ?? [];
 
+  // A pod's own namespace is authoritative for log reads: /k8s/entries and /k8s/stats
+  // declare `namespace` as a REQUIRED param, but /k8s/pods accepts an empty namespace and
+  // returns gateway pods spanning ALL namespaces (each pod carries its own namespace). When
+  // the namespace dropdown is left empty, sending `selectedNamespace` ('') made the log query
+  // omit a required param and the backend answered 400. Derive the selected pod's namespace
+  // so the query always targets the pod that was actually picked.
+  const selectedPodNamespace = useMemo(
+    () => pods.find((p) => p.name === selectedPod)?.namespace,
+    [pods, selectedPod],
+  );
+
   const handleClusterChange = (value: number) => {
     setClusterId(value);
     setSelectedNamespace('');
@@ -143,7 +154,7 @@ const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onT
         if (isK8s && clusterId !== null && selectedPod) {
           const k8sBase = {
             clusterId,
-            namespace: selectedNamespace || undefined,
+            namespace: selectedPodNamespace || selectedNamespace || undefined,
             podName: selectedPod,
             ...(logViewMode === 'history'
               ? { sinceSeconds: rangeToSeconds(historyTimeRange) }
@@ -192,7 +203,7 @@ const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onT
       }
     })();
     return () => controller.abort();
-  }, [isK8s, clusterId, selectedPod, selectedNamespace, logViewMode, historyTimeRange, viewDate, filters, logPage, logPageSize, instanceId, reloadKey, t]);
+  }, [isK8s, clusterId, selectedPod, selectedPodNamespace, selectedNamespace, logViewMode, historyTimeRange, viewDate, filters, logPage, logPageSize, instanceId, reloadKey, t]);
 
   const columns = useMemo<ColumnsType<AccessLogEntry>>(() => [
     {

@@ -31,6 +31,11 @@ const AlertPage: React.FC = () => {
   const [emails, setEmails] = useState<string[]>([]);
   const [emailInput, setEmailInput] = useState('');
   const [saving, setSaving] = useState(false);
+  // Alert history is server-paginated: the backend returns one page at a time, so
+  // page/size must be sent explicitly (the old call fetched only the default first
+  // page and the table client-paginated over those <=20 rows, hiding older alerts).
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyPageSize, setHistoryPageSize] = useState(10);
 
   const configRequest = useRequest(
     (signal) => getAlertConfig({ instanceId }, { signal }),
@@ -49,10 +54,16 @@ const AlertPage: React.FC = () => {
   const config = configRequest.data;
 
   const historyRequest = useRequest(
-    (signal) => getAlertHistory({ instanceId }, { signal }),
-    { deps: [instanceId] },
+    (signal) => getAlertHistory({ instanceId, page: historyPage, size: historyPageSize }, { signal }),
+    { deps: [instanceId, historyPage, historyPageSize] },
   );
   const history = useMemo(() => historyRequest.data?.content ?? [], [historyRequest.data]);
+  const historyTotal = historyRequest.data?.totalElements ?? 0;
+
+  const handleHistoryPageChange = (page: number, pageSize: number) => {
+    setHistoryPage(page);
+    setHistoryPageSize(pageSize);
+  };
 
   const metricsRequest = useRequest(
     (signal) => getAlertThresholdMetrics({ signal }),
@@ -150,7 +161,13 @@ const AlertPage: React.FC = () => {
     try {
       await clearAlertHistory({ instanceId });
       message.success(t('alert.clear_history_success'));
-      historyRequest.run();
+      // Jump back to the first page; if already there, re-run to refresh in place
+      // (avoids a double fetch from a no-op state change plus run()).
+      if (historyPage !== 0) {
+        setHistoryPage(0);
+      } else {
+        historyRequest.run();
+      }
     } catch (e) {
       message.error(e instanceof Error ? e.message : t('alert.clear_history_failed'));
     }
@@ -232,6 +249,10 @@ const AlertPage: React.FC = () => {
         history={history}
         loading={historyRequest.loading}
         hasInstance
+        total={historyTotal}
+        page={historyPage}
+        pageSize={historyPageSize}
+        onPageChange={handleHistoryPageChange}
         onClear={handleClearHistory}
         onRefresh={historyRequest.run}
       />

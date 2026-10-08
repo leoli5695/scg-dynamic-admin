@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -24,6 +25,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+// SecurityConfig requires hasAuthority("ADMIN") for mutating /api/** calls and
+// authenticated() for reads, so an unauthenticated MockMvc request gets 401/403.
+// authorities (not roles) because the matchers test the bare "ADMIN" authority.
+@WithMockUser(username = "test-admin", authorities = {"ADMIN"})
 public abstract class BaseIntegrationTest {
 
     @Autowired

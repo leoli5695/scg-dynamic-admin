@@ -1,7 +1,5 @@
 package com.leoli.gateway.constants;
 
-import org.springframework.core.Ordered;
-
 /**
  * Filter order constants for Spring Cloud Gateway.
  * <p>
@@ -127,27 +125,35 @@ public interface FilterOrderConstants {
     int RESPONSE_TRANSFORM = -45;
 
     // ============================================================
-    // Rate Limiter Filters (Using Ordered.HIGHEST_PRECEDENCE)
+    // Rate Limiter Filters (Execute AFTER authentication)
     // ============================================================
+    //
+    // FIX (ordering): these used to run at Ordered.HIGHEST_PRECEDENCE + 20/21/22
+    // (i.e. Integer.MIN_VALUE + n), which is BEFORE SecurityGlobalFilter (-500) and
+    // long before AuthenticationGlobalFilter (-250). The multi-dim/hybrid limiters key
+    // on identity dimensions (jwt_claims, jwt_subject, api_key_metadata) that are only
+    // populated by the auth filters, so running first made tenant/user quotas silently
+    // collapse to IP-only (or be skipped). They are now placed after MOCK_RESPONSE
+    // (-249) and before TIMEOUT (-200), so identity attributes are available.
 
     /**
      * Hybrid rate limiter filter - Redis + local rate limiting.
-     * Uses HIGHEST_PRECEDENCE + 20 for early execution.
+     * Executes after authentication so identity-based keys are populated.
      */
-    int HYBRID_RATE_LIMITER = Ordered.HIGHEST_PRECEDENCE + 20;
+    int HYBRID_RATE_LIMITER = -245;
 
     /**
      * Multi-dimensional rate limiter filter.
      * Execute right after hybrid rate limiter.
      */
-    int MULTI_DIM_RATE_LIMITER = Ordered.HIGHEST_PRECEDENCE + 21;
+    int MULTI_DIM_RATE_LIMITER = -244;
 
     /**
      * Token quota pre-check filter.
      * Execute after multi-dimensional rate limiter.
      * Checks token quota before processing AI requests.
      */
-    int TOKEN_QUOTA_PRE_CHECK = Ordered.HIGHEST_PRECEDENCE + 22;
+    int TOKEN_QUOTA_PRE_CHECK = -243;
 
     // ============================================================
     // Post-Processing Filters
@@ -227,6 +233,9 @@ public interface FilterOrderConstants {
     // -254     RequestValidationFilter         Request validation
     // -250     AuthenticationGlobalFilter      Authentication
     // -249     MockResponseFilter              Mock response
+    // -245     HybridRateLimiterFilter         Rate limiting (after auth -> identity keys ready)
+    // -244     MultiDimRateLimiterFilter       Multi-dimensional rate limiting
+    // -243     TokenQuotaPreCheckFilter        AI token quota pre-check
     // -200     TimeoutGlobalFilter             Timeout handling
     // -150     ApiVersionGlobalFilter          API version routing
     //   -3     CircuitBreakerGlobalFilter      Circuit breaker (records final status after retry)

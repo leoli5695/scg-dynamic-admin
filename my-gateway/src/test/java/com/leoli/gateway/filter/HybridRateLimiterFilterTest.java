@@ -7,6 +7,7 @@ import com.leoli.gateway.limiter.RateLimitResult;
 import com.leoli.gateway.limiter.RedisHealthChecker;
 import com.leoli.gateway.limiter.ShadowQuotaManager;
 import com.leoli.gateway.manager.StrategyManager;
+import com.leoli.gateway.util.ClientIpResolver;
 import com.leoli.gateway.util.RateLimiterWindow;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -60,6 +61,9 @@ class HybridRateLimiterFilterTest {
     private LicenseFeatureHelper licenseFeatureHelper;
 
     @Mock
+    private ClientIpResolver clientIpResolver;
+
+    @Mock
     private GatewayFilterChain chain;
 
     @InjectMocks
@@ -71,6 +75,7 @@ class HybridRateLimiterFilterTest {
         ReflectionTestUtils.setField(filter, "redisLimitEnabled", true);
         ReflectionTestUtils.setField(filter, "shadowQuotaEnabled", true);
         lenient().when(licenseFeatureHelper.hasFeature(any())).thenReturn(true);
+        lenient().when(clientIpResolver.resolve(any())).thenReturn("127.0.0.1");
     }
 
     // ============================================================
@@ -557,9 +562,9 @@ class HybridRateLimiterFilterTest {
     // ============================================================
 
     @Test
-    @DisplayName("Filter order should be HIGHEST_PRECEDENCE + 20")
+    @DisplayName("Filter order should match FilterOrderConstants.HYBRID_RATE_LIMITER")
     void testGetOrder() {
-        assertEquals(org.springframework.core.Ordered.HIGHEST_PRECEDENCE + 20, filter.getOrder());
+        assertEquals(com.leoli.gateway.constants.FilterOrderConstants.HYBRID_RATE_LIMITER, filter.getOrder());
     }
 
     // ============================================================

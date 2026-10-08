@@ -3,6 +3,9 @@ package com.leoli.gateway.discovery.nacos;
 import com.alibaba.nacos.api.NacosFactory;
 import com.alibaba.nacos.api.exception.NacosException;
 import com.alibaba.nacos.api.naming.NamingService;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.RemovalCause;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -10,7 +13,6 @@ import org.springframework.stereotype.Component;
 import jakarta.annotation.PreDestroy;
 import java.util.Map;
 import java.util.Properties;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Factory for creating and caching Nacos NamingService instances per namespace.
@@ -28,8 +30,31 @@ public class NacosNamingServiceFactory {
     @Value("${spring.cloud.nacos.server-addr:127.0.0.1:8848}")
     private String serverAddr;
 
-    // Cache: namespace -> NamingService
-    private final Map<String, NamingService> namingServiceCache = new ConcurrentHashMap<>();
+    /**
+     * Upper bound on cached NamingService instances. Each entry holds its own Nacos client
+     * threads/connections, so an unbounded map leaks resources when namespaces churn. In real
+     * deployments namespaces are bounded by the number of gateway instances (far below this),
+     * so size-based eviction should never fire; it is a safety net, not a hot path.
+     */
+    private static final long MAX_CACHED_NAMESPACES = 200;
+
+    // Cache: namespace -> NamingService (bounded; evicted clients are shut down to release threads)
+    private final Cache<String, NamingService> namingServiceCache = Caffeine.newBuilder()
+            .maximumSize(MAX_CACHED_NAMESPACES)
+            .removalListener((String ns, NamingService svc, RemovalCause cause) -> {
+                // Only auto-evictions (size) release the client here; explicit invalidateAll()
+                // during destroy() shuts each one down itself to avoid a double shutDown().
+                if (svc != null && cause != RemovalCause.EXPLICIT) {
+                    try {
+                        svc.shutDown();
+                        log.warn("Evicted NamingService for namespace '{}' (cache exceeded {}); released its resources",
+                                ns == null || ns.isEmpty() ? "public" : ns, MAX_CACHED_NAMESPACES);
+                    } catch (NacosException e) {
+                        log.warn("Error shutting down evicted NamingService for namespace '{}': {}", ns, e.getMessage());
+                    }
+                }
+            })
+            .build();
 
     // Default namespace (gateway's own namespace)
     @Value("${spring.cloud.nacos.namespace:}")
@@ -45,7 +70,7 @@ public class NacosNamingServiceFactory {
         // Normalize namespace: empty/null -> public (default)
         String targetNamespace = normalizeNamespace(namespace);
 
-        return namingServiceCache.computeIfAbsent(targetNamespace, ns -> {
+        return namingServiceCache.get(targetNamespace, ns -> {
             try {
                 return createNamingService(ns);
             } catch (NacosException e) {
@@ -107,7 +132,7 @@ public class NacosNamingServiceFactory {
     public void destroy() {
         log.info("Shutting down all cached NamingService instances...");
 
-        for (Map.Entry<String, NamingService> entry : namingServiceCache.entrySet()) {
+        for (Map.Entry<String, NamingService> entry : namingServiceCache.asMap().entrySet()) {
             String namespace = entry.getKey();
             NamingService namingService = entry.getValue();
 
@@ -121,7 +146,8 @@ public class NacosNamingServiceFactory {
             }
         }
 
-        namingServiceCache.clear();
+        // EXPLICIT removals are skipped by the removalListener (already shut down above).
+        namingServiceCache.invalidateAll();
         log.info("All NamingService instances cleaned up");
     }
 
@@ -129,13 +155,13 @@ public class NacosNamingServiceFactory {
      * Get the number of cached NamingService instances (for monitoring).
      */
     public int getCacheSize() {
-        return namingServiceCache.size();
+        return (int) namingServiceCache.estimatedSize();
     }
 
     /**
      * Get all cached namespaces (for monitoring).
      */
     public java.util.Set<String> getCachedNamespaces() {
-        return new java.util.HashSet<>(namingServiceCache.keySet());
+        return new java.util.HashSet<>(namingServiceCache.asMap().keySet());
     }
 }
