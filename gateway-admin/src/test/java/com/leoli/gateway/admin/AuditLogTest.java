@@ -70,8 +70,8 @@ public class AuditLogTest extends NamespaceIntegrationTest {
 
         JsonNode data = extractData(result);
         assertNotNull(data, "Audit logs should not be null");
-        assertTrue(data.has("content"), "Response should have content");
-        assertTrue(data.has("totalElements"), "Response should have totalElements");
+        assertTrue(data.has("logs"), "Response should have logs");
+        assertTrue(data.has("total"), "Response should have total");
 
         System.out.println("[PASS] Retrieved audit logs with pagination");
     }
@@ -149,12 +149,12 @@ public class AuditLogTest extends NamespaceIntegrationTest {
                 .andReturn();
 
         JsonNode listData = extractData(listResult);
-        if (listData.get("content").size() == 0) {
+        if (listData.get("logs").size() == 0) {
             System.out.println("[SKIP] No audit logs available");
             return;
         }
 
-        String logId = listData.get("content").get(0).get("id").asText();
+        String logId = listData.get("logs").get(0).get("id").asText();
 
         MvcResult result = mockMvc.perform(get("/api/audit-logs/" + logId))
                 .andExpect(status().isOk())
@@ -179,12 +179,12 @@ public class AuditLogTest extends NamespaceIntegrationTest {
                 .andReturn();
 
         JsonNode listData = extractData(listResult);
-        if (listData.get("content").size() == 0) {
+        if (listData.get("logs").size() == 0) {
             System.out.println("[SKIP] No audit logs available for diff");
             return;
         }
 
-        String logId = listData.get("content").get(0).get("id").asText();
+        String logId = listData.get("logs").get(0).get("id").asText();
 
         MvcResult result = mockMvc.perform(get("/api/audit-logs/" + logId + "/diff"))
                 .andExpect(status().isOk())

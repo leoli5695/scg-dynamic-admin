@@ -177,7 +177,9 @@ public class ServiceNamespaceTest extends NamespaceIntegrationTest {
         MvcResult getResult = mockMvc.perform(get("/api/services/" + testServiceName))
                 .andReturn();
         JsonNode service = extractData(getResult);
-        String instanceId = service.get("instances").get(0).get("id").asText();
+        // Service instances carry no "id"; the instance sub-resource endpoints key on "ip:port".
+        JsonNode firstInstance = service.get("instances").get(0);
+        String instanceId = firstInstance.get("ip").asText() + ":" + firstInstance.get("port").asInt();
 
         // Disable instance
         ObjectNode status = objectMapper.createObjectNode();
@@ -206,7 +208,9 @@ public class ServiceNamespaceTest extends NamespaceIntegrationTest {
         MvcResult getResult = mockMvc.perform(get("/api/services/" + testServiceName))
                 .andReturn();
         JsonNode service = extractData(getResult);
-        String instanceId = service.get("instances").get(0).get("id").asText();
+        // Service instances carry no "id"; the instance sub-resource endpoints key on "ip:port".
+        JsonNode firstInstance = service.get("instances").get(0);
+        String instanceId = firstInstance.get("ip").asText() + ":" + firstInstance.get("port").asInt();
         int initialSize = service.get("instances").size();
 
         mockMvc.perform(delete("/api/services/" + testServiceName + "/instances/" + instanceId))

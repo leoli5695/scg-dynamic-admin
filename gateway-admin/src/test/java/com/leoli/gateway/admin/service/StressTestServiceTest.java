@@ -11,6 +11,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.Optional;
 
@@ -58,21 +59,34 @@ public class StressTestServiceTest {
         GatewayInstanceEntity instance = new GatewayInstanceEntity();
         instance.setId(1L);
         instance.setInstanceId(TEST_INSTANCE_ID);
-        instance.setManualAccessUrl("http://localhost:8080");
+        // UrlSecurityValidator rejects loopback targets outright, so the fixture has to use a
+        // site-local address. Nothing is ever contacted: the afterCommit callback that would
+        // launch the load never fires because the test never commits.
+        instance.setManualAccessUrl("http://192.168.1.100:8080");
 
-        StressTest testConfig = new StressTest();
-        testConfig.setTestName("Quick Test");
-        testConfig.setConcurrentUsers(10);
-        testConfig.setTotalRequests(100);
+        StressTestService.StressTestConfig config = new StressTestService.StressTestConfig();
+        config.setTestName("Quick Test");
+        config.setMethod("GET");
+        config.setConcurrentUsers(10);
+        config.setTotalRequests(100);
 
         when(instanceRepository.findByInstanceId(TEST_INSTANCE_ID)).thenReturn(Optional.of(instance));
         when(stressTestRepository.save(any(StressTest.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        // When
-        // Note: In real scenario, this would start async execution
-        // For unit test, we verify the creation logic
+        // When. createAndStartTest registers an afterCommit synchronization that launches the
+        // load asynchronously. Activating synchronization without ever committing exercises the
+        // creation path while guaranteeing the callback - and therefore the traffic - never runs.
+        TransactionSynchronizationManager.initSynchronization();
+        StressTest created;
+        try {
+            created = stressTestService.createAndStartTest(TEST_INSTANCE_ID, config);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
 
         // Then
+        assertNotNull(created);
+        assertEquals("Quick Test", created.getTestName());
         verify(instanceRepository).findByInstanceId(TEST_INSTANCE_ID);
         verify(stressTestRepository).save(any(StressTest.class));
     }
@@ -118,9 +132,12 @@ public class StressTestServiceTest {
         when(stressTestRepository.findById(testId)).thenReturn(Optional.of(test));
         when(stressTestRepository.save(any(StressTest.class))).thenReturn(test);
 
-        // In real implementation, this would also signal the session to stop
-        // For unit test, we verify repository interactions
+        // Act - the service also signals the running session to stop, which is a no-op here
+        // because no session was ever started.
+        StressTest stopped = stressTestService.stopTest(testId);
 
+        // Assert
+        assertNotNull(stopped);
         verify(stressTestRepository).findById(testId);
     }
 
@@ -148,11 +165,19 @@ public class StressTestServiceTest {
     @DisplayName("Delete test - should remove from repository")
     void test07_DeleteTest() {
         Long testId = 1L;
-        when(stressTestRepository.existsById(testId)).thenReturn(true);
+        StressTest test = new StressTest();
+        test.setId(testId);
+        // deleteTest refuses to delete a RUNNING test, so the fixture must be in a terminal state.
+        test.setStatus("COMPLETED");
 
-        stressTestRepository.deleteById(testId);
+        when(stressTestRepository.findById(testId)).thenReturn(Optional.of(test));
 
-        verify(stressTestRepository).deleteById(testId);
+        // Act on the service. deleteTest resolves through getTest (findById) and then calls
+        // delete(entity) - not existsById/deleteById, which is what this test used to stub.
+        stressTestService.deleteTest(testId);
+
+        verify(stressTestRepository).findById(testId);
+        verify(stressTestRepository).delete(test);
     }
 
     @Test

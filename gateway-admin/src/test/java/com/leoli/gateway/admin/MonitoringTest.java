@@ -2,7 +2,12 @@ package com.leoli.gateway.admin;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.*;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MvcResult;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -29,6 +34,31 @@ public class MonitoringTest extends NamespaceIntegrationTest {
     void cleanupInstance() throws Exception {
         deleteTestInstance(testInstanceId);
         System.out.println("[CLEANUP] Deleted test instance: " + testInstanceId);
+    }
+
+    @Value("${gateway.admin.security.internal-token:}")
+    private String internalToken;
+
+    private final List<String> runningInstanceIds = new ArrayList<>();
+
+    /**
+     * The multi-instance endpoints only consider RUNNING instances, and an instance only
+     * reaches RUNNING after a heartbeat - a freshly created one is STARTING, so compare/all
+     * and ranking answer 404 and outliers answers 400 ("Need at least 3 instances").
+     * Drive the real state machine through the heartbeat endpoint rather than poking the
+     * status column, so the transition itself stays covered.
+     */
+    private void ensureRunningInstances(int count) throws Exception {
+        while (runningInstanceIds.size() < count) {
+            String id = createTestInstance("monitoring-running-" + runningInstanceIds.size());
+            mockMvc.perform(post("/api/instances/heartbeat")
+                            .param("instanceId", id)
+                            .header("X-Internal-Token", internalToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{}"))
+                    .andExpect(status().isOk());
+            runningInstanceIds.add(id);
+        }
     }
 
     // ==================== Health Check Tests ====================
@@ -107,9 +137,9 @@ public class MonitoringTest extends NamespaceIntegrationTest {
 
         JsonNode data = extractData(result);
         assertNotNull(data, "Full diagnostic should return data");
-        assertTrue(data.has("score"), "Should have health score");
+        assertTrue(data.has("overallScore"), "Should have health score");
 
-        System.out.println("[PASS] Full diagnostic completed, score: " + data.get("score").asInt());
+        System.out.println("[PASS] Full diagnostic completed, score: " + data.get("overallScore").asInt());
     }
 
     @Test
@@ -271,14 +301,15 @@ public class MonitoringTest extends NamespaceIntegrationTest {
     @Order(16)
     @DisplayName("Get trace statistics - should return trace stats")
     void test16_GetTraceStats() throws Exception {
-        MvcResult result = mockMvc.perform(get("/api/traces/stats")
+        // The trace endpoints return their payload directly - they are NOT wrapped in
+        // ApiResponse, so there is no $.code / $.data envelope to assert on.
+        mockMvc.perform(get("/api/traces/stats")
                         .param("instanceId", testInstanceId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200))
-                .andReturn();
-
-        JsonNode data = extractData(result);
-        assertNotNull(data, "Trace stats should return data");
+                .andExpect(jsonPath("$.total").isNumber())
+                .andExpect(jsonPath("$.errorsToday").isNumber())
+                .andExpect(jsonPath("$.errorsLastHour").isNumber())
+                .andExpect(jsonPath("$.recentErrors").isArray());
 
         System.out.println("[PASS] Trace statistics retrieved");
     }
@@ -287,16 +318,16 @@ public class MonitoringTest extends NamespaceIntegrationTest {
     @Order(17)
     @DisplayName("Get traces - should return paginated traces")
     void test17_GetTraces() throws Exception {
-        MvcResult result = mockMvc.perform(get("/api/traces")
+        // Returns a raw Spring Data Page, not an ApiResponse envelope.
+        mockMvc.perform(get("/api/traces")
                         .param("page", "0")
                         .param("size", "20")
                         .param("instanceId", testInstanceId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200))
-                .andReturn();
-
-        JsonNode data = extractData(result);
-        assertNotNull(data, "Traces should return data");
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.totalElements").isNumber())
+                .andExpect(jsonPath("$.number").value(0))
+                .andExpect(jsonPath("$.size").value(20));
 
         System.out.println("[PASS] Traces retrieved with pagination");
     }
@@ -305,15 +336,14 @@ public class MonitoringTest extends NamespaceIntegrationTest {
     @Order(18)
     @DisplayName("Get recent errors - should return error traces")
     void test18_GetRecentErrors() throws Exception {
-        MvcResult result = mockMvc.perform(get("/api/traces/errors/recent")
+        // Returns a bare JSON array, not an envelope.
+        String body = mockMvc.perform(get("/api/traces/errors/recent")
                         .param("limit", "50")
                         .param("instanceId", testInstanceId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200))
-                .andReturn();
+                .andReturn().getResponse().getContentAsString();
 
-        JsonNode data = extractData(result);
-        assertNotNull(data, "Recent errors should return data");
+        assertTrue(objectMapper.readTree(body).isArray(), "Recent errors should return a JSON array");
 
         System.out.println("[PASS] Recent errors retrieved");
     }
@@ -322,17 +352,15 @@ public class MonitoringTest extends NamespaceIntegrationTest {
     @Order(19)
     @DisplayName("Get slow traces - should return slow requests")
     void test19_GetSlowTraces() throws Exception {
-        MvcResult result = mockMvc.perform(get("/api/traces/slow")
+        // Returns a raw Spring Data Page, not an ApiResponse envelope.
+        mockMvc.perform(get("/api/traces/slow")
                         .param("page", "0")
                         .param("size", "20")
                         .param("thresholdMs", "1000")
                         .param("instanceId", testInstanceId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200))
-                .andReturn();
-
-        JsonNode data = extractData(result);
-        assertNotNull(data, "Slow traces should return data");
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.totalElements").isNumber());
 
         System.out.println("[PASS] Slow traces retrieved");
     }
@@ -341,14 +369,11 @@ public class MonitoringTest extends NamespaceIntegrationTest {
     @Order(20)
     @DisplayName("Delete old traces - should cleanup old trace data")
     void test20_DeleteOldTraces() throws Exception {
-        MvcResult result = mockMvc.perform(delete("/api/traces/old")
+        // Returns the delete count directly: {"deleted": N} - no envelope.
+        mockMvc.perform(delete("/api/traces/old")
                         .param("daysToKeep", "7"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200))
-                .andReturn();
-
-        JsonNode data = extractData(result);
-        assertNotNull(data, "Delete old traces should return data");
+                .andExpect(jsonPath("$.deleted").isNumber());
 
         System.out.println("[PASS] Old traces deleted");
     }
@@ -359,6 +384,8 @@ public class MonitoringTest extends NamespaceIntegrationTest {
     @Order(21)
     @DisplayName("Compare all instances - should return comparison data")
     void test21_CompareAllInstances() throws Exception {
+        ensureRunningInstances(3);
+
         MvcResult result = mockMvc.perform(get("/api/multi-instance/compare/all"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
@@ -374,6 +401,8 @@ public class MonitoringTest extends NamespaceIntegrationTest {
     @Order(22)
     @DisplayName("Get instance ranking - should return performance ranking")
     void test22_GetInstanceRanking() throws Exception {
+        ensureRunningInstances(3);
+
         MvcResult result = mockMvc.perform(get("/api/multi-instance/ranking"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
@@ -389,6 +418,8 @@ public class MonitoringTest extends NamespaceIntegrationTest {
     @Order(23)
     @DisplayName("Get performance outliers - should identify outlier instances")
     void test23_GetPerformanceOutliers() throws Exception {
+        ensureRunningInstances(3);
+
         MvcResult result = mockMvc.perform(get("/api/multi-instance/outliers"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))

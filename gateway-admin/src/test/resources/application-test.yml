@@ -52,6 +52,15 @@ gateway:
     ssl:
       encryption-key: test-only-encryption-key-0123456789abcdef
 
+# --- License edition for tests ---
+# No license code is configured in tests, so LicenseStore builds a fallback license.
+# The default BASIC fallback does not grant ADVANCED_AUDIT, which makes the audit
+# timeline/export endpoints throw LicenseFeatureNotAllowedException - those tests are
+# about audit behaviour, not licensing, so lift the fallback to ADVANCED here.
+license:
+  client:
+    fallback-edition: ADVANCED
+
 # Disable Nacos gRPC for tests to avoid connection errors
 nacos:
   naming:
