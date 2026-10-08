@@ -13,6 +13,7 @@ import type {
   CopilotChatRequest,
   CopilotChatResponse,
   DebugAnalysisResult,
+  ExecuteActionResult,
   OptimizationResult,
   RouteGenerationResult,
   SaveConfigResult,
@@ -26,6 +27,16 @@ export const sendCopilotChat = (
   body: CopilotChatRequest,
   options?: RequestOptions,
 ) => httpClient.post<CopilotChatResponse>(`${BASE}/chat`, body, options);
+
+/**
+ * POST /execute-action — run an AI-proposed write operation after the user has
+ * explicitly confirmed it in the UI. This is the only path that executes
+ * confirmation-required tools; the model can never self-confirm.
+ */
+export const executeCopilotAction = (
+  body: { toolName: string; arguments: Record<string, unknown> },
+  options?: RequestOptions,
+) => httpClient.post<ExecuteActionResult>(`${BASE}/execute-action`, body, options);
 
 /** DELETE /chat/{sessionId} — clear a chat session. */
 export const clearCopilotChat = (sessionId: string, options?: RequestOptions) =>

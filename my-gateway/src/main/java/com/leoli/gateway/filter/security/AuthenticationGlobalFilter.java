@@ -101,8 +101,13 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
         // Step 2: Get required authType from Strategy config
         String requiredAuthType = getAuthTypeFromStrategy(authStrategy);
         if (requiredAuthType == null || requiredAuthType.isEmpty()) {
-            log.warn("Auth strategy {} has no authType configured", authStrategy.getStrategyId());
-            return chain.filter(exchange);
+            // FIX (P1 fail-open): an ENABLED auth strategy with no authType used to
+            // pass the request through unauthenticated. Auth was explicitly turned on
+            // for this route, so a missing authType is a misconfiguration that must
+            // fail closed (reject), not silently allow traffic.
+            log.error("Auth strategy {} is enabled but has no authType configured - rejecting request to route {} (fail-closed)",
+                    authStrategy.getStrategyId(), routeId);
+            return writeUnauthorizedResponse(exchange, "Authentication misconfigured");
         }
 
         log.debug("Route {} requires authType: {}", routeId, requiredAuthType);

@@ -135,6 +135,25 @@ public class ToolCallOrchestrator {
                 log.info("Tool {} executed in {} ms, success={}",
                         toolCall.getName(), duration, result.isSuccess());
 
+                // FIX (P0): 模型提议需要确认的写操作时，绝不在循环内执行。
+                // 中止循环并把待确认动作交给前端，由用户人工确认后经
+                // /api/copilot/execute-action 端点执行（confirmed 来自人，而非模型）。
+                if (result.isPendingConfirmation()) {
+                    Map<String, Object> pendingAction = new LinkedHashMap<>();
+                    pendingAction.put("toolName", result.getToolName());
+                    pendingAction.put("arguments", toolCall.getArguments());
+                    pendingAction.put("preview", result.getConfirmationPreview());
+
+                    int pendingConfidence = confidenceCalculator.calculate(calledTools, successfulTools, dataTypes);
+                    ToolCallLoopResult pendingResult = new ToolCallLoopResult(
+                            "我已准备好执行一个需要确认的写操作，请在下方核对详情并点击确认后再执行。",
+                            pendingConfidence, "等待人工确认写操作", calledTools, dataTypes);
+                    pendingResult.setPendingAction(pendingAction);
+                    log.info("Tool {} requires human confirmation - returning pendingAction to caller",
+                            toolCall.getName());
+                    return pendingResult;
+                }
+
                 if (result.isSuccess()) {
                     successfulTools++;
                     confidenceCalculator.recordDataType(toolCall.getName(), dataTypes);

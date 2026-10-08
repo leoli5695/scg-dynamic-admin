@@ -57,6 +57,7 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
     private final StrategyManager strategyManager;
     private final ShadowQuotaManager shadowQuotaManager;
     private final LicenseFeatureHelper licenseFeatureHelper;
+    private final ClientIpResolver clientIpResolver;
 
     /**
      * Optional dependencies - may be null when Redis is disabled.
@@ -341,28 +342,53 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * Extract client identifier based on key resolver
+     * Extract client identifier based on key resolver.
+     * <p>
+     * FIX (P0): keys are now derived only from trusted sources. The IP dimension
+     * uses {@link ClientIpResolver} (X-Forwarded-For honoured solely from a
+     * configured trusted proxy, otherwise the real TCP peer), and the user
+     * dimension uses the authenticated identity set by the auth filters instead of
+     * the client-controlled {@code X-User-Id} header. This closes the bypass where
+     * rotating XFF / X-User-Id minted unlimited distinct rate-limit keys.
      */
     private String extractClientId(ServerWebExchange exchange, RateLimitConfig config) {
         switch (config.keyResolver) {
             case RateLimitConstants.KEY_RESOLVER_IP:
-                return IpAddressExtractor.extractClientIp(exchange);
-            case RateLimitConstants.KEY_RESOLVER_USER:
-                // Extract from authentication context
-                String user = exchange.getRequest().getHeaders().getFirst("X-User-Id");
-                return user != null ? user : IpAddressExtractor.extractClientIp(exchange);
+                return clientIpResolver.resolve(exchange);
+            case RateLimitConstants.KEY_RESOLVER_USER: {
+                String user = resolveAuthenticatedUser(exchange);
+                return user != null ? user : clientIpResolver.resolve(exchange);
+            }
             case RateLimitConstants.KEY_RESOLVER_HEADER:
-                // Extract from specific header
+                // Header-based keying is an explicit admin choice; still fall back to
+                // the trusted client IP rather than a spoofable default.
                 if (config.headerName != null) {
                     String headerValue = exchange.getRequest().getHeaders().getFirst(config.headerName);
-                    return headerValue != null ? headerValue : IpAddressExtractor.extractClientIp(exchange);
+                    return headerValue != null ? headerValue : clientIpResolver.resolve(exchange);
                 }
-                return IpAddressExtractor.extractClientIp(exchange);
+                return clientIpResolver.resolve(exchange);
             case RateLimitConstants.KEY_RESOLVER_GLOBAL:
                 return "global";
             default:
-                return IpAddressExtractor.extractClientIp(exchange);
+                return clientIpResolver.resolve(exchange);
         }
+    }
+
+    /**
+     * Read the authenticated identity established by the auth processors.
+     * Returns null when the request has not been authenticated (yet), in which
+     * case callers fall back to the trusted client IP.
+     */
+    private String resolveAuthenticatedUser(ServerWebExchange exchange) {
+        Map<String, Object> attrs = exchange.getAttributes();
+        String[] identityKeys = {"auth_user", "jwt_subject", "api_key", "auth_access_key", "oauth2_username"};
+        for (String key : identityKeys) {
+            Object value = attrs.get(key);
+            if (value != null && !value.toString().isEmpty()) {
+                return value.toString();
+            }
+        }
+        return null;
     }
 
     @Override

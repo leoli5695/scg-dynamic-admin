@@ -61,6 +61,12 @@
             <artifactId>spring-cloud-starter-consul-discovery</artifactId>
         </dependency>
 
+        <!-- BCrypt password verification for Basic auth (crypto only, no web security auto-config) -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-crypto</artifactId>
+        </dependency>
+
         <!-- Redis (optional for distributed rate limiting) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

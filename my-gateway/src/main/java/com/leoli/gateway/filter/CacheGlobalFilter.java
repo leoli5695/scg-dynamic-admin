@@ -244,7 +244,10 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
      */
     private String buildCacheKey(ServerWebExchange exchange, Map<String, Object> config) {
         ServerHttpRequest request = exchange.getRequest();
-        String keyExpression = getStringValue(config, "cacheKeyExpression", "${method}:${path}");
+        // FIX (P1 cache poisoning): the default key omitted the query string, so
+        // ?id=1 and ?id=2 collided on one cache entry and served each other's data.
+        // Include ${query} in the default expression.
+        String keyExpression = getStringValue(config, "cacheKeyExpression", "${method}:${path}:${query}");
 
         String method = request.getMethod().name();
         String path = request.getURI().getPath();
@@ -304,7 +307,12 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
         HttpHeaders headers = response.getHeaders();
         if (cached.headers != null) {
             cached.headers.forEach((name, values) -> {
-                if (!HttpHeaders.CONTENT_LENGTH.equalsIgnoreCase(name)) {
+                // FIX (P1 cross-user session leak): never replay Set-Cookie from a
+                // shared cache entry - a cookie captured from one user's upstream
+                // response would otherwise be handed to every cache hit. Content-Length
+                // is dropped because the body is written as a single buffer.
+                if (!HttpHeaders.CONTENT_LENGTH.equalsIgnoreCase(name)
+                        && !HttpHeaders.SET_COOKIE.equalsIgnoreCase(name)) {
                     headers.put(name, values);
                 }
             });

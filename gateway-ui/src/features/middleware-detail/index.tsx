@@ -60,21 +60,19 @@ const MiddlewareDetailPage: React.FC = () => {
     async (signal) => {
       const now = Math.floor(Date.now() / 1000);
       const start = now - (TIME_RANGE_SECONDS[timeRange] ?? 3600);
-      // Manual envelope: HTTP stays 200 even on internal errors (code=500)
-      // or unknown exporterUrl (code=404).
+      // httpClient unwraps the {code,data,message} envelope and throws ApiError on
+      // code!=200 (e.g. 500 internal error / 404 unknown exporterUrl), so the
+      // resolved value is already MiddlewareDetailData.
       const res = await getMiddlewareDetail(
         serviceName,
         middlewareType,
         { exporterUrl: exporterUrl || undefined, start, end: now },
         { signal },
       );
-      if (res.code !== 200) {
-        throw new Error(res.message || '加载指标失败');
-      }
-      if (!res.data) {
+      if (!res) {
         throw new Error('加载指标失败');
       }
-      return res.data;
+      return res;
     },
     {
       immediate: ready,

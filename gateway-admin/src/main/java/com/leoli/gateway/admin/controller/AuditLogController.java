@@ -37,7 +37,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/audit-logs")
 @RequiredArgsConstructor
-public class AuditLogController {
+public class AuditLogController extends BaseController {
 
     private final AuditLogRepository auditLogRepository;
     private final AuditLogService auditLogService;
@@ -132,7 +132,10 @@ public class AuditLogController {
             @RequestBody(required = false) Map<String, String> request) {
 
         try {
-            String operator = request != null ? request.getOrDefault("operator", "admin") : "admin";
+            // FIX (P1 impersonation): the operator is taken from the authenticated
+            // principal, not the request body, so a caller cannot attribute a
+            // rollback to someone else.
+            String operator = getOperator();
             Map<String, Object> rollbackResult = auditLogService.rollback(id, operator);
 
             if ((Boolean) rollbackResult.get("success")) {

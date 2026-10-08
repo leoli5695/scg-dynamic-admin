@@ -52,17 +52,31 @@ public class TrackedGlobalFilter implements GlobalFilter, Ordered {
         this(delegate, tracker, null);
     }
 
-    // Core filters that should NOT be circuit-breaked - they are gateway's essential functions
-    // If these fail, it indicates service problems that users need to investigate
+    // Core filters that should NOT be circuit-breaked - they are gateway's essential functions.
+    // If these fail, it indicates service problems that users need to investigate.
+    // FIX (P1): names MUST match getFilterName() output, which strips the
+    // "GlobalFilter"/"Filter" suffix from the class simple name. The previous entries
+    // ("AuthGlobalFilter", "RateLimiterGlobalFilter", "HybridRateLimiterFilter",
+    // "CircuitBreakerGlobalFilter") never matched, so authentication / WAF / IP /
+    // rate-limit / quota filters could be circuit-broken and SKIPPED - silently
+    // disabling security controls under load. SecurityGlobalFilter ("Security") and
+    // IPFilterGlobalFilter ("IPFilter") were also missing entirely.
     private static final java.util.Set<String> CORE_FILTERS = java.util.Set.of(
+        // Load balancing
         "ReactiveLoadBalancerClient",
         "NacosDiscoveryLoadBalancer",
         "DiscoveryLoadBalancer",
         "MultiServiceLoadBalancer",
-        "AuthGlobalFilter",
-        "RateLimiterGlobalFilter",
-        "HybridRateLimiterFilter",
-        "CircuitBreakerGlobalFilter"
+        // Security controls - must never be skipped
+        "Security",
+        "Authentication",
+        "IPFilter",
+        // Rate limiting / quota
+        "HybridRateLimiter",
+        "MultiDimRateLimiter",
+        "TokenQuotaPreCheck",
+        // Resilience
+        "CircuitBreaker"
     );
 
     @Override

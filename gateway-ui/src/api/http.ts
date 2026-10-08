@@ -46,7 +46,10 @@ const http = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '',
   // Long timeout: AI analysis endpoints can take minutes.
   timeout: 5 * 60 * 1000,
-  headers: { 'Content-Type': 'application/json' },
+  // NOTE: no instance-level Content-Type default. Forcing application/json here
+  // broke multipart uploads (FormData got JSON-serialized without a boundary).
+  // request() sets application/json only for non-FormData bodies; axios sets the
+  // multipart Content-Type (with boundary) automatically for FormData.
 });
 
 /** Guard against repeated 403 toasts from concurrent API calls. */
@@ -170,6 +173,13 @@ export interface RequestOptions {
 
 async function request<T>(method: string, url: string, body?: unknown, options?: RequestOptions): Promise<T> {
   try {
+    const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+    const headers: Record<string, string> = { ...(options?.headers || {}) };
+    // Set JSON content type for real bodies only; let axios assign the multipart
+    // boundary for FormData uploads.
+    if (!isFormData && body !== undefined && !headers['Content-Type']) {
+      headers['Content-Type'] = 'application/json';
+    }
     const response = await http.request({
       method,
       url,
@@ -177,7 +187,7 @@ async function request<T>(method: string, url: string, body?: unknown, options?:
       params: options?.params,
       signal: options?.signal,
       timeout: options?.timeout,
-      headers: options?.headers,
+      headers,
       responseType: options?.responseType,
       onUploadProgress: options?.onUploadProgress
         ? (e) => {

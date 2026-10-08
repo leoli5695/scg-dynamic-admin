@@ -135,6 +135,11 @@ public class ResponseTransformFilter implements GlobalFilter, Ordered {
                                 updateContentType(getHeaders(), config);
 
                                 byte[] newBytes = transformedBody.getBytes(StandardCharsets.UTF_8);
+                                // FIX (P1): the transformed body has a different size than the
+                                // upstream original, but the Content-Length header still carried
+                                // the old value - clients truncated (new larger) or hung waiting
+                                // (new smaller). Set it to the actual transformed length.
+                                getHeaders().setContentLength(newBytes.length);
                                 return super.writeWith(Flux.just(originalResponse.bufferFactory().wrap(newBytes)));
 
                             } catch (Exception e) {

@@ -171,6 +171,36 @@ public class SslServerConfig {
     }
 
     /**
+     * Headers that must not be blindly copied to the internal HTTP proxy hop:
+     * hop-by-hop headers, headers reactor-netty manages itself (Host, Content-Length,
+     * Transfer-Encoding), and the X-Forwarded-* set we assign explicitly.
+     */
+    private static boolean isHopByHopOrManagedHeader(String name) {
+        if (name == null) {
+            return true;
+        }
+        switch (name.toLowerCase()) {
+            case "connection":
+            case "keep-alive":
+            case "proxy-authenticate":
+            case "proxy-authorization":
+            case "te":
+            case "trailer":
+            case "transfer-encoding":
+            case "upgrade":
+            case "host":
+            case "content-length":
+            case "x-forwarded-proto":
+            case "x-forwarded-port":
+            case "x-forwarded-host":
+            case "x-forwarded-for":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /**
      * Proxy request to HTTP gateway
      */
     private Publisher<Void> proxyToHttpGateway(HttpServerRequest request, HttpServerResponse response, String host, String path) {
@@ -182,15 +212,25 @@ public class SslServerConfig {
                     headers.add("X-Forwarded-Proto", "https");
                     headers.add("X-Forwarded-Port", String.valueOf(sslPort));
                     headers.add("X-Forwarded-Host", host);
-                    // Copy select original headers
-                    String contentType = request.requestHeaders().get("Content-Type");
-                    if (contentType != null) {
-                        headers.add("Content-Type", contentType);
+                    // FIX (P1): add X-Forwarded-For with the real TLS peer address so
+                    // the HTTP side (and downstream IP extraction) sees the client IP
+                    // instead of the loopback address of this internal proxy hop.
+                    if (request.remoteAddress() != null
+                            && request.remoteAddress().getAddress() != null) {
+                        headers.add("X-Forwarded-For",
+                                request.remoteAddress().getAddress().getHostAddress());
                     }
-                    // Add content-length if present (important for POST/PUT with body)
-                    String contentLength = request.requestHeaders().get("Content-Length");
-                    if (contentLength != null) {
-                        headers.add("Content-Length", contentLength);
+                    // FIX (P1): previously only Content-Type/Content-Length were copied,
+                    // so Authorization, Cookie and every custom header were dropped and
+                    // HTTPS-side authentication always failed. Forward ALL original
+                    // request headers except hop-by-hop / connection-managed ones and
+                    // the X-Forwarded-* we just set (never trust client-sent XFF).
+                    for (java.util.Map.Entry<String, String> entry : request.requestHeaders()) {
+                        String name = entry.getKey();
+                        if (isHopByHopOrManagedHeader(name)) {
+                            continue;
+                        }
+                        headers.add(name, entry.getValue());
                     }
                 })
                 .request(request.method())

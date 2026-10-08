@@ -59,6 +59,26 @@ public class ToolCallLoopResult {
     private Set<String> dataTypes;
 
     /**
+     * FIX (P0): 待人工确认的写操作。当模型提议 requiresConfirmation 的工具时，
+     * 此字段承载 {toolName, arguments, preview}，由前端渲染确认弹窗；
+     * 用户确认后经 /api/copilot/execute-action 端点执行，模型无法自确认。
+     * 为 null 表示本轮无需确认的写操作。
+     */
+    private java.util.Map<String, Object> pendingAction;
+
+    /**
+     * 保留原有 5 参构造，避免新增字段后 @AllArgsConstructor 破坏既有调用点。
+     */
+    public ToolCallLoopResult(String content, int confidence, String confidenceReason,
+                              Set<String> calledTools, Set<String> dataTypes) {
+        this.content = content;
+        this.confidence = confidence;
+        this.confidenceReason = confidenceReason;
+        this.calledTools = calledTools;
+        this.dataTypes = dataTypes;
+    }
+
+    /**
      * 判断是否成功执行
      */
     public boolean isSuccess() {

@@ -14,6 +14,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -248,6 +250,16 @@ public class RequestTraceService {
             return Map.of("success", false, "error", "This trace cannot be replayed");
         }
 
+        // FIX (P1 SSRF): gatewayUrl is user-supplied. Replay legitimately targets a
+        // gateway (often localhost/internal), so we cannot block all private ranges,
+        // but we reject non-http(s) schemes and the cloud metadata / link-local
+        // endpoints that are never valid replay targets.
+        String targetError = validateReplayTarget(gatewayUrl);
+        if (targetError != null) {
+            log.warn("Rejected replay to unsafe target {}: {}", gatewayUrl, targetError);
+            return Map.of("success", false, "error", targetError);
+        }
+
         try {
             // Build request URL
             String url = gatewayUrl + trace.getPath();
@@ -341,6 +353,47 @@ public class RequestTraceService {
             requestTraceRepository.incrementReplayCount(traceId, "Error: " + e.getMessage());
             return Map.of("success", false, "error", e.getMessage());
         }
+    }
+
+    /**
+     * Validate a user-supplied replay target. Returns an error message when the
+     * target is unsafe, or null when it is acceptable.
+     * <p>
+     * Blocks non-http(s) schemes (file/gopher/jar/etc.) and the cloud instance
+     * metadata + link-local ranges (169.254.0.0/16, fe80::/10, fd00:ec2::254),
+     * which are classic SSRF targets and never legitimate gateway replay hosts.
+     */
+    private String validateReplayTarget(String gatewayUrl) {
+        if (gatewayUrl == null || gatewayUrl.isBlank()) {
+            return "gatewayUrl is required";
+        }
+        final URI uri;
+        try {
+            uri = new URI(gatewayUrl.trim());
+        } catch (URISyntaxException e) {
+            return "Invalid gateway URL";
+        }
+        String scheme = uri.getScheme();
+        if (scheme == null
+                || !(scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"))) {
+            return "Only http/https replay targets are allowed";
+        }
+        String host = uri.getHost();
+        if (host == null || host.isEmpty()) {
+            return "Invalid gateway URL host";
+        }
+        // URI.getHost() keeps brackets around IPv6 literals.
+        String h = host.toLowerCase();
+        if (h.startsWith("[") && h.endsWith("]")) {
+            h = h.substring(1, h.length() - 1);
+        }
+        boolean linkLocalIpv4 = h.startsWith("169.254.");
+        boolean restrictedIpv6 = h.startsWith("fe80:") || h.equals("fd00:ec2::254");
+        boolean metadataHost = h.equals("metadata.google.internal") || h.equals("169.254.169.254");
+        if (linkLocalIpv4 || restrictedIpv6 || metadataHost) {
+            return "Replay target resolves to a restricted metadata/link-local address";
+        }
+        return null;
     }
 
     /**

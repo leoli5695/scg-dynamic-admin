@@ -328,20 +328,21 @@ public class AuthPolicyService {
         try {
             String configJson = objectMapper.writeValueAsString(policy);
             entity.setConfig(configJson);
-            log.info("Policy input apiKey: {}, config JSON stored: {}", policy.getApiKey(), configJson);
+            // FIX (P1 secret leak): never log apiKey or the raw config JSON - it
+            // carries apiKey/secretKey/clientSecret in plaintext at INFO level.
+            log.debug("Stored config JSON for policy: {}", policy.getPolicyName());
         } catch (JsonProcessingException e) {
             log.warn("Failed to serialize policy config", e);
         }
 
         entity = authPolicyRepository.save(entity);
         log.info("Auth policy updated in database: {}", policy.getPolicyName());
-        log.info("entity.getConfig() = {}", entity.getConfig());
 
         // Update Nacos with correct namespace - use complete config from entity
         String policyDataId = AUTH_POLICY_PREFIX + policyId;
         String namespace = getNacosNamespace(entity.getInstanceId());
         AuthPolicyDefinition completePolicy = toDefinition(entity); // Get complete config from database
-        log.info("Complete policy for Nacos - apiKey: {}, apiKeyHeader: {}", completePolicy.getApiKey(), completePolicy.getApiKeyHeader());
+        log.debug("Publishing complete policy for Nacos - policyId: {}", policyId);
 
         // Use entity.getConfig() directly to ensure consistency
         if (completePolicy.isEnabled() && entity.getConfig() != null) {
@@ -736,7 +737,8 @@ public class AuthPolicyService {
                 policy.setAuthTypeEnum(entity.getAuthType());
                 policy.setEnabled(entity.getEnabled());
                 policy.setDescription(entity.getDescription());
-                log.info("toDefinition result: apiKey={}, apiKeyHeader={}", policy.getApiKey(), policy.getApiKeyHeader());
+                // FIX (P1 secret leak): do not log apiKey at INFO.
+                log.debug("toDefinition result for policy: {}", policy.getPolicyName());
                 return policy;
             } catch (JsonProcessingException e) {
                 log.warn("Failed to parse policy config JSON, using entity fields: {}", e.getMessage());

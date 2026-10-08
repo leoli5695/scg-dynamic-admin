@@ -37,6 +37,22 @@ export interface CopilotChatResponse {
   confidence?: number;
   confidenceReason?: string;
   sessionId: string;
+  /** Present when the AI proposed a write operation that needs human confirmation. */
+  pendingAction?: CopilotPendingAction;
+}
+
+/** A write action proposed by the AI, awaiting explicit user confirmation. */
+export interface CopilotPendingAction {
+  toolName: string;
+  arguments: Record<string, unknown>;
+  preview?: Record<string, unknown>;
+}
+
+/** POST /api/copilot/execute-action response. */
+export interface ExecuteActionResult {
+  success: boolean;
+  message?: string;
+  data?: unknown;
 }
 
 /** DELETE /api/copilot/chat/{sessionId} response. */

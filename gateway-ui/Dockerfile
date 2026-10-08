@@ -5,7 +5,11 @@ WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
-RUN npm ci --only=production
+# FIX: install ALL dependencies (including devDependencies). `npm run build`
+# runs `tsc && vite build`, which needs typescript/vite/@vitejs plugin — those
+# are devDependencies. `--only=production` omitted them and broke the image build.
+# This is a discarded build stage, so the final nginx image stays lean.
+RUN npm ci
 
 # Copy source code
 COPY . .

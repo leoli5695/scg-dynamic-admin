@@ -11,7 +11,6 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
-import java.util.Collections;
 import java.util.Map;
 
 /**
@@ -59,17 +58,38 @@ public class OAuth2AuthProcessor extends AbstractAuthProcessor {
 
         log.debug("Validating OAuth2 token...");
 
-        // Validate token with OAuth2 server
+        // Validate token with OAuth2 server and enforce the introspection result.
+        // FIX (P0): the introspection response's "active" flag was previously
+        // ignored - any token that reached the endpoint was accepted, and an
+        // empty response body silently passed. Both are now fail-closed.
         return validateTokenWithServer(accessToken, config)
-                .doOnNext(result -> {
+                .switchIfEmpty(Mono.error(new RuntimeException("Empty OAuth2 introspection response")))
+                .flatMap(result -> {
+                    if (!isTokenActive(result)) {
+                        logFailure("OAuth2", "Token reported inactive by introspection endpoint");
+                        return Mono.error(new RuntimeException("Token is not active"));
+                    }
                     logSuccess("OAuth2 token validated");
                     exchange.getAttributes().put("oauth2_token_active", true);
+                    return Mono.just(result);
                 })
                 .then()
                 .onErrorResume(ex -> {
                     log.error("OAuth2 validation failed: {}", ex.getMessage());
                     return Mono.error(new RuntimeException("Token validation failed: " + ex.getMessage()));
                 });
+    }
+
+    /**
+     * Determine whether an RFC 7662 introspection response marks the token active.
+     * Absent or non-true "active" is treated as inactive (fail-closed).
+     */
+    private boolean isTokenActive(Map<String, Object> result) {
+        Object active = result.get("active");
+        if (active instanceof Boolean b) {
+            return b;
+        }
+        return active != null && Boolean.parseBoolean(String.valueOf(active));
     }
 
     /**
@@ -80,9 +100,12 @@ public class OAuth2AuthProcessor extends AbstractAuthProcessor {
         String tokenEndpoint = config.getTokenEndpoint();
 
         if (tokenEndpoint == null || tokenEndpoint.isEmpty()) {
-            // Fallback: simple JWT validation without server
-            log.warn("No token endpoint configured, using simple validation");
-            return Mono.just(Collections.singletonMap("active", true));
+            // FIX (P0): previously fell back to a fake {active:true} result, which
+            // meant ANY Bearer token passed authentication when no introspection
+            // endpoint was configured. OAuth2 cannot be validated without an
+            // authorization server, so reject instead of silently accepting.
+            log.error("No OAuth2 token introspection endpoint configured - rejecting request (fail-closed)");
+            return Mono.error(new RuntimeException("OAuth2 token endpoint not configured"));
         }
         // OAuth2 Token Introspection (RFC 7662)
         return webClient.post()

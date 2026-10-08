@@ -38,6 +38,16 @@ export const renderRawJson = (str: string | undefined): string | null => {
   }
 };
 
+/** Escape HTML-significant characters for safe innerHTML injection. */
+const escapeHtml = (str: string): string => (
+  str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+);
+
 /** Syntax-highlighted JSON html (Postman style, consumed via json-* classes). */
 export const renderFormattedJson = (str: string | undefined): string | null => {
   if (!str) return null;
@@ -54,6 +64,9 @@ export const renderFormattedJson = (str: string | undefined): string | null => {
       .replace(/: (null)/g, ': <span class="json-null">$1</span>')
       .replace(/([{}[\]])/g, '<span class="json-bracket">$1</span>');
   } catch {
-    return str;
+    // FIX (P0): non-JSON bodies (e.g. upstream HTML error pages) reach here and
+    // are injected via dangerouslySetInnerHTML. Escape before returning so
+    // attacker-controlled response/request bodies cannot execute as markup.
+    return escapeHtml(str);
   }
 };

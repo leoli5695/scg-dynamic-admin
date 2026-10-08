@@ -63,14 +63,41 @@ public class ToolExecutor {
     private static final int TOOL_TIMEOUT_MS = 30000;
 
     /**
-     * 执行工具调用.
+     * 执行工具调用（AI 路径）.
+     * <p>
+     * FIX (P0): 需要二次确认的写操作在此路径下永远不会被执行——模型传入的
+     * {@code confirmed} 标志被忽略。模型只能"提议"写操作，得到 pendingConfirmation
+     * 结果后由前端向用户展示预览；真正的执行必须经人工确认走
+     * {@link #executeConfirmed(String, Map, String, String)}。
      *
      * @param toolName  工具名称
      * @param arguments 工具参数
      * @return 执行结果
      */
     public ToolResult execute(String toolName, Map<String, Object> arguments) {
-        log.info("Executing tool: {} with args: {}", toolName, arguments);
+        return doExecute(toolName, arguments, false, null, null);
+    }
+
+    /**
+     * 执行工具调用（人工确认路径）.
+     * <p>
+     * 仅由前端在用户明确点击确认后调用，允许执行 requiresConfirmation 的写操作，
+     * 并记录审计日志。confirmed 语义来自 API 调用方（人），而非模型。
+     *
+     * @param toolName  工具名称
+     * @param arguments 工具参数
+     * @param operator  操作者用户名
+     * @param clientIp  客户端 IP
+     * @return 执行结果
+     */
+    public ToolResult executeConfirmed(String toolName, Map<String, Object> arguments,
+                                       String operator, String clientIp) {
+        return doExecute(toolName, arguments, true, operator, clientIp);
+    }
+
+    private ToolResult doExecute(String toolName, Map<String, Object> arguments,
+                                 boolean humanConfirmed, String operator, String clientIp) {
+        log.info("Executing tool: {} with args: {} (humanConfirmed={})", toolName, arguments, humanConfirmed);
 
         long startTime = System.currentTimeMillis();
 
@@ -82,16 +109,14 @@ public class ToolExecutor {
 
             // 检查是否需要二次确认
             ToolDefinition toolDef = toolRegistry.getTool(toolName);
-            if (toolDef != null && toolDef.isRequiresConfirmation()) {
-                boolean confirmed = getBoolArg(arguments, "confirmed", false);
-                if (!confirmed) {
-                    // 返回待确认状态，而不是执行操作
-                    log.info("Tool {} requires confirmation, returning pending status", toolName);
-                    return ToolResult.pendingConfirmation(
-                            toolName,
-                            generateConfirmationPreview(toolName, arguments)
-                    );
-                }
+            if (toolDef != null && toolDef.isRequiresConfirmation() && !humanConfirmed) {
+                // FIX (P0): 忽略模型自带的 confirmed，绝不在 AI 路径执行写操作。
+                arguments.remove("confirmed");
+                log.info("Tool {} requires confirmation, returning pending status", toolName);
+                return ToolResult.pendingConfirmation(
+                        toolName,
+                        generateConfirmationPreview(toolName, arguments)
+                );
             }
 
             // 执行对应工具
@@ -189,6 +214,28 @@ public class ToolExecutor {
 
             long duration = System.currentTimeMillis() - startTime;
             log.info("Tool {} executed in {} ms", toolName, duration);
+
+            // FIX (P0): AI 写操作经人工确认后执行，必须留审计痕迹。
+            if (humanConfirmed && toolDef != null && toolDef.isRequiresConfirmation()) {
+                try {
+                    String instanceId = arguments.get("instanceId") != null
+                            ? String.valueOf(arguments.get("instanceId")) : null;
+                    String argsJson = objectMapper.writeValueAsString(arguments);
+                    auditLogService.recordAuditLog(
+                            instanceId,
+                            operator != null ? operator : "AI_COPILOT",
+                            "AI_COPILOT",
+                            toolName,
+                            toolName,
+                            null,
+                            null,
+                            argsJson,
+                            clientIp
+                    );
+                } catch (Exception auditEx) {
+                    log.warn("Failed to record audit log for AI tool {}: {}", toolName, auditEx.getMessage());
+                }
+            }
 
             return ToolResult.success(result);
 
@@ -714,7 +761,10 @@ public class ToolExecutor {
                 .toList();
 
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("cluster", cluster);
+        // FIX (P0): never hand the raw KubernetesCluster entity to the LLM - it
+        // carries the plaintext kubeconfig (client certs / tokens). Emit only a
+        // whitelist of non-credential operational metadata.
+        result.put("cluster", sanitizeClusterForAi(cluster));
         result.put("instances", instances.stream()
                 .map(i -> Map.of(
                         "instanceId", i.getInstanceId(),
@@ -727,6 +777,28 @@ public class ToolExecutor {
         result.put("instanceCount", instances.size());
 
         return result;
+    }
+
+    /**
+     * Build an AI-safe view of a cluster: operational metadata only, with the
+     * plaintext kubeconfig and other credential material stripped out.
+     */
+    private Map<String, Object> sanitizeClusterForAi(KubernetesCluster cluster) {
+        Map<String, Object> safe = new LinkedHashMap<>();
+        safe.put("id", cluster.getId());
+        safe.put("clusterName", cluster.getClusterName());
+        safe.put("contextName", cluster.getContextName());
+        safe.put("clusterVersion", cluster.getClusterVersion());
+        safe.put("nodeCount", cluster.getNodeCount());
+        safe.put("podCount", cluster.getPodCount());
+        safe.put("namespaceCount", cluster.getNamespaceCount());
+        safe.put("totalCpuCores", cluster.getTotalCpuCores());
+        safe.put("totalMemoryGb", cluster.getTotalMemoryGb());
+        safe.put("connectionStatus", cluster.getConnectionStatus());
+        safe.put("lastCheckedAt", cluster.getLastCheckedAt());
+        safe.put("enabled", cluster.getEnabled());
+        safe.put("description", cluster.getDescription());
+        return safe;
     }
 
     private Object executeCompareInstances(Map<String, Object> args) {

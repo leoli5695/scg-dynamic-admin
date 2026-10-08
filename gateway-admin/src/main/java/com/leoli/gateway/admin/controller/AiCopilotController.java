@@ -8,6 +8,7 @@ import com.leoli.gateway.admin.service.AiAnalysisService;
 import com.leoli.gateway.admin.service.AiCopilotService;
 import com.leoli.gateway.admin.service.AuditLogService;
 import com.leoli.gateway.admin.service.RouteService;
+import com.leoli.gateway.admin.service.ToolExecutor;
 import com.leoli.gateway.admin.validation.RouteValidator;
 import com.leoli.license.client.model.LicenseInfo;
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,7 +29,7 @@ import java.util.*;
 @RestController
 @RequestMapping("/api/copilot")
 @RequiredArgsConstructor
-public class AiCopilotController {
+public class AiCopilotController extends BaseController {
 
     private final AiCopilotService aiCopilotService;
     private final AiAnalysisService aiAnalysisService;
@@ -36,6 +37,7 @@ public class AiCopilotController {
     private final AuditLogService auditLogService;
     private final ObjectMapper objectMapper;
     private final LicenseFeatureHelper licenseFeatureHelper;
+    private final ToolExecutor toolExecutor;
 
     /**
      * Chat with AI Copilot.
@@ -68,6 +70,44 @@ public class AiCopilotController {
         result.put("sessionId", sessionId);
 
         return ResponseEntity.ok(result);
+    }
+
+    /**
+     * FIX (P0): 执行 AI 提议、并由用户在界面明确确认的写操作。
+     * 这是唯一会运行 requiresConfirmation 工具的路径——confirmed 语义来自此
+     * 人工触发的调用，而非模型入参。执行会记录审计日志（operator + clientIp）。
+     *
+     * @param request 待执行动作（toolName + arguments，来自 chat 返回的 pendingAction）
+     * @return 执行结果
+     */
+    @PostMapping("/execute-action")
+    public ResponseEntity<Map<String, Object>> executeAction(
+            @RequestBody ExecuteActionRequest request,
+            HttpServletRequest httpRequest) {
+        log.info("Executing user-confirmed AI action: tool={}", request.getToolName());
+
+        licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.AI_COPilot);
+
+        if (request.getToolName() == null || request.getToolName().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false, "message", "toolName is required"));
+        }
+
+        Map<String, Object> arguments = request.getArguments() != null
+                ? request.getArguments() : new LinkedHashMap<>();
+
+        ToolExecutor.ToolResult result = toolExecutor.executeConfirmed(
+                request.getToolName(), arguments, getOperator(), getIpAddress(httpRequest));
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("success", result.isSuccess());
+        if (result.isSuccess()) {
+            body.put("data", result.getData());
+            body.put("message", "操作已执行");
+        } else {
+            body.put("message", result.getError() != null ? result.getError() : "操作执行失败");
+        }
+        return ResponseEntity.ok(body);
     }
 
     /**
@@ -625,6 +665,27 @@ public class AiCopilotController {
 
         public void setInstanceId(String instanceId) {
             this.instanceId = instanceId;
+        }
+    }
+
+    public static class ExecuteActionRequest {
+        private String toolName;
+        private Map<String, Object> arguments;
+
+        public String getToolName() {
+            return toolName;
+        }
+
+        public void setToolName(String toolName) {
+            this.toolName = toolName;
+        }
+
+        public Map<String, Object> getArguments() {
+            return arguments;
+        }
+
+        public void setArguments(Map<String, Object> arguments) {
+            this.arguments = arguments;
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.leoli.gateway.admin.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.Data;
 import org.hibernate.annotations.CreationTimestamp;
@@ -35,7 +36,13 @@ public class KubernetesCluster {
 
     /**
      * Kubeconfig content (YAML format).
+     * <p>
+     * FIX (P1 credential leak): WRITE_ONLY means this field is accepted on input
+     * but NEVER serialized out. It carries plaintext client certs / tokens, so it
+     * must not appear in REST responses (getAllClusters / getClusterById / import /
+     * refresh) nor in audit-log newValue snapshots (writeValueAsString).
      */
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     @Column(columnDefinition = "TEXT")
     private String kubeconfig;
 

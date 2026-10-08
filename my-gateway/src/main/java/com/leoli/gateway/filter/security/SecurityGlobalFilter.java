@@ -58,8 +58,11 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
 
     // High-confidence SQL injection patterns - a single hit blocks in BLOCK mode
     private static final List<Pattern> SQL_INJECTION_PATTERNS = Arrays.asList(
-            // SQL keywords with context
-            Pattern.compile("(?i)(\\b(select|insert|update|delete|drop|create|alter|truncate|exec|execute)\\b.*\\b(from|into|table|database|set|where)\\b)"),
+            // SQL keywords with context. FIX (P1 ReDoS): the gap between the two
+            // keyword groups is bounded (.{0,200}) instead of an unbounded .* which
+            // backtracked O(n^2) on a large single-line body and could freeze the
+            // Netty event loop for one request. Real SQLi keeps these keywords close.
+            Pattern.compile("(?i)(\\b(select|insert|update|delete|drop|create|alter|truncate|exec|execute)\\b.{0,200}\\b(from|into|table|database|set|where)\\b)"),
             // Union-based
             Pattern.compile("(?i)(union\\s+(all\\s+)?select)"),
             // Boolean-based: only quote/number tautology forms. FIX (false positives):
@@ -231,8 +234,11 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
             return false;
         }
         HttpHeaders headers = request.getHeaders();
-        // Never consume WebSocket upgrade streams
-        if (headers.containsKey(HttpHeaders.UPGRADE)) {
+        // FIX (P0): only a genuine WebSocket handshake may skip body scanning.
+        // Previously ANY Upgrade header bypassed the scan, so a normal POST with
+        // "Upgrade: h2c" (or any value) smuggled its body past SQLi/XSS checks.
+        // A real WebSocket upgrade carries "Upgrade: websocket" + "Connection: upgrade".
+        if (isWebSocketUpgrade(headers)) {
             return false;
         }
         // Any declared content type means a body must be scanned (XML, multipart,
@@ -246,6 +252,21 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
         }
         String transferEncoding = headers.getFirst(HttpHeaders.TRANSFER_ENCODING);
         return transferEncoding != null && transferEncoding.toLowerCase().contains("chunked");
+    }
+
+    /**
+     * Detect a genuine WebSocket upgrade handshake.
+     * Requires both "Upgrade: websocket" and a "Connection" header containing
+     * "upgrade" (RFC 6455). Any other Upgrade value is treated as a normal
+     * request so its body is still scanned.
+     */
+    private boolean isWebSocketUpgrade(HttpHeaders headers) {
+        String upgrade = headers.getFirst(HttpHeaders.UPGRADE);
+        if (upgrade == null || !"websocket".equalsIgnoreCase(upgrade.trim())) {
+            return false;
+        }
+        String connection = headers.getFirst(HttpHeaders.CONNECTION);
+        return connection != null && connection.toLowerCase().contains("upgrade");
     }
 
     /**

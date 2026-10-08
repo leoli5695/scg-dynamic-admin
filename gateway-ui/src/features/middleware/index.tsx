@@ -28,12 +28,10 @@ const ServiceMiddlewarePage: React.FC = () => {
 
   const servicesRequest = useRequest<ServiceMiddlewareView[]>(
     async (signal) => {
-      // Manual envelope: HTTP stays 200 even on internal errors.
+      // httpClient unwraps the {code,data,message} envelope and throws on code!=200,
+      // so the resolved value is already the service list.
       const res = await listServiceMiddlewares({ signal });
-      if (res.code !== 200) {
-        throw new Error(res.message || '加载中间件信息失败');
-      }
-      return res.data ?? [];
+      return res ?? [];
     },
     {
       onError: (err) => message.error(t('middleware.load_failed', { error: err.message })),

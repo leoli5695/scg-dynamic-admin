@@ -134,7 +134,11 @@ public class AiCopilotService {
             chatSessionManager.addToHistory(sessionId, "user", userMessage);
             chatSessionManager.addToHistory(sessionId, "assistant", finalResponse);
 
-            return new ChatResponse(true, finalResponse, null, loopResult.getConfidence(), loopResult.getConfidenceReason());
+            ChatResponse chatResponse = new ChatResponse(true, finalResponse, null,
+                    loopResult.getConfidence(), loopResult.getConfidenceReason());
+            // FIX (P0): 把待人工确认的写操作透传给前端，由其渲染确认弹窗。
+            chatResponse.setPendingAction(loopResult.getPendingAction());
+            return chatResponse;
 
         } catch (Exception e) {
             log.error("AI Copilot chat failed", e);
@@ -398,6 +402,7 @@ public class AiCopilotService {
         private String error;
         private int confidence;
         private String confidenceReason;
+        private Map<String, Object> pendingAction;
 
         public ChatResponse(boolean success, String response, String error) {
             this(success, response, error, 70, "基于基础分析");
@@ -418,6 +423,7 @@ public class AiCopilotService {
             if (error != null) map.put("error", error);
             map.put("confidence", confidence);
             map.put("confidenceReason", confidenceReason);
+            if (pendingAction != null) map.put("pendingAction", pendingAction);
             return map;
         }
 
@@ -426,6 +432,8 @@ public class AiCopilotService {
         public String getError() { return error; }
         public int getConfidence() { return confidence; }
         public String getConfidenceReason() { return confidenceReason; }
+        public Map<String, Object> getPendingAction() { return pendingAction; }
+        public void setPendingAction(Map<String, Object> pendingAction) { this.pendingAction = pendingAction; }
     }
 
     public static class RouteGenerationResult {

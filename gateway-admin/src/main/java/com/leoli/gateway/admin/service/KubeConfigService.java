@@ -21,9 +21,13 @@ public class KubeConfigService {
 
     /**
      * TLS certificate verification for Kubernetes API connections.
-     * FIX: was hardcoded false; enable in production via gateway.kubernetes.verify-ssl.
+     * FIX (P1): default changed to true (secure by default). Previously the
+     * hardcoded/false default meant the K8s API was contacted without cert
+     * validation unless a profile explicitly opted in, which no prod profile did.
+     * Set gateway.kubernetes.verify-ssl=false only for dev clusters with
+     * self-signed certificates.
      */
-    @Value("${gateway.kubernetes.verify-ssl:false}")
+    @Value("${gateway.kubernetes.verify-ssl:true}")
     private boolean verifySsl;
 
     public ApiClient createApiClient(String kubeconfigContent) {

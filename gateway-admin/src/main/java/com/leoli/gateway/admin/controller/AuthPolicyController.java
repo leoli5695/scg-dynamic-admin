@@ -116,7 +116,8 @@ public class AuthPolicyController extends BaseController {
             @PathVariable String policyId,
             @RequestBody AuthPolicyDefinition policy) {
         try {
-            log.info("Updating auth policy: {}, apiKey: {}, apiKeyHeader: {}", policyId, policy.getApiKey(), policy.getApiKeyHeader());
+            // FIX (P1 secret leak): do not log apiKey at INFO.
+            log.info("Updating auth policy: {}", policyId);
             authPolicyService.updatePolicy(policyId, policy);
             return ResponseEntity.ok(ApiResponse.success(authPolicyService.getPolicy(policyId), "Policy updated successfully"));
         } catch (IllegalArgumentException e) {

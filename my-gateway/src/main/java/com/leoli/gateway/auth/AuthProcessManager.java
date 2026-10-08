@@ -59,9 +59,13 @@ public class AuthProcessManager {
         AuthProcessor processor = processorMap.get(authType.getCode());
 
         if (Objects.isNull(processor)) {
-            log.warn("No authentication processor found for type: {} on route: {}",
+            // FIX (P1 fail-open): a required (non-NONE) authType with no registered
+            // processor used to return Mono.empty(), which the caller treats as
+            // success and lets the request through unauthenticated. Fail closed instead.
+            log.error("No authentication processor found for type: {} on route: {} - rejecting (fail-closed)",
                     authType, config.getRouteId());
-            return Mono.empty();
+            return Mono.error(new IllegalStateException(
+                    "No authentication processor registered for type: " + authType));
         }
 
         log.debug("Processing authentication for route: {} using type: {}",

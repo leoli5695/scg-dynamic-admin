@@ -3,12 +3,15 @@ package com.leoli.gateway.admin.service;
 import com.leoli.gateway.admin.config.JwtTokenProvider;
 import com.leoli.gateway.admin.model.User;
 import com.leoli.gateway.admin.repository.UserRepository;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
@@ -29,6 +32,18 @@ public class AuthService {
     // so roles were dropped and the license edition was always BASIC.
     private final JwtTokenProvider jwtTokenProvider;
 
+    /**
+     * FIX (P1 brute force): login previously had no throttling, allowing unlimited
+     * password guessing. Track consecutive failures per username; after
+     * MAX_FAILED_ATTEMPTS the account is locked for the cache TTL (15 min). The
+     * counter auto-expires and is cleared on successful login.
+     */
+    private static final int MAX_FAILED_ATTEMPTS = 5;
+    private final Cache<String, Integer> failedLoginAttempts = Caffeine.newBuilder()
+            .maximumSize(10_000)
+            .expireAfterWrite(Duration.ofMinutes(15))
+            .build();
+
     @Autowired
     public AuthService(UserRepository userRepository,
                       PasswordEncoder passwordEncoder,
@@ -48,10 +63,21 @@ public class AuthService {
      */
     public String authenticate(String username, String password) {
         log.info("Authenticating user: {}", username);
-        
+
+        if (username == null || username.trim().isEmpty()) {
+            throw new IllegalArgumentException("Invalid username or password");
+        }
+
+        Integer priorFailures = failedLoginAttempts.getIfPresent(username);
+        if (priorFailures != null && priorFailures >= MAX_FAILED_ATTEMPTS) {
+            log.warn("Login temporarily locked due to too many failed attempts: {}", username);
+            throw new IllegalArgumentException("Too many failed login attempts. Please try again later.");
+        }
+
         Optional<User> userOpt = userRepository.findByUsername(username);
         
         if (userOpt.isEmpty()) {
+            recordFailedLogin(username);
             log.warn("User not found: {}", username);
             throw new IllegalArgumentException("Invalid username or password");
         }
@@ -60,9 +86,13 @@ public class AuthService {
         
         // Verify password
         if (!passwordEncoder.matches(password, user.getPassword())) {
+            recordFailedLogin(username);
             log.warn("Invalid password for user: {}", username);
             throw new IllegalArgumentException("Invalid username or password");
         }
+
+        // Successful login clears any failure counter.
+        failedLoginAttempts.invalidate(username);
 
         // Generate JWT token (roles + licenseEdition claims)
         List<String> roles = user.getRole() != null ? List.of(user.getRole()) : List.of();
@@ -70,6 +100,17 @@ public class AuthService {
         log.info("User authenticated successfully: {}", username);
         
         return token;
+    }
+
+    /**
+     * Atomically increment the failed-attempt counter for a username.
+     */
+    private void recordFailedLogin(String username) {
+        int attempts = failedLoginAttempts.asMap().merge(username, 1, Integer::sum);
+        if (attempts >= MAX_FAILED_ATTEMPTS) {
+            log.warn("User {} reached {} failed login attempts - locking for 15 minutes",
+                    username, attempts);
+        }
     }
 
     /**
