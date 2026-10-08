@@ -97,10 +97,12 @@ public class MiddlewareMetadataReporter implements InitializingBean {
 
     /**
      * 收集用户配置的 exporter URL
+     * <p>
+     * package-private for tests
      *
      * @return 配置的 exporter URL Map，key=中间件类型，value=exporter地址
      */
-    private Map<String, String> collectConfiguredExporters() {
+    Map<String, String> collectConfiguredExporters() {
         Map<String, String> exporters = new LinkedHashMap<>();
 
         // 从新的嵌套配置读取
@@ -128,11 +130,13 @@ public class MiddlewareMetadataReporter implements InitializingBean {
 
     /**
      * 构建中间件元数据
+     * <p>
+     * package-private for tests
      *
      * @param configuredExporters 配置的 exporter URL Map
      * @return 中间件元数据
      */
-    private MiddlewareMetadata buildMetadata(Map<String, String> configuredExporters) {
+    MiddlewareMetadata buildMetadata(Map<String, String> configuredExporters) {
         MiddlewareMetadata metadata = new MiddlewareMetadata();
 
         String serviceName = properties.getServiceName(
@@ -174,10 +178,10 @@ public class MiddlewareMetadataReporter implements InitializingBean {
     }
 
     /**
-     * 从 exporter URL 提取 host 部分
+     * 从 exporter URL 提取 host 部分（package-private for tests）
      * 例如: "redis-exporter:9121" -> "redis-exporter"
      */
-    private String extractHost(String exporterUrl) {
+    String extractHost(String exporterUrl) {
         if (exporterUrl == null || exporterUrl.isEmpty()) {
             return "unknown";
         }
@@ -189,10 +193,10 @@ public class MiddlewareMetadataReporter implements InitializingBean {
     }
 
     /**
-     * 从 exporter URL 提取 port 部分
+     * 从 exporter URL 提取 port 部分（package-private for tests）
      * 例如: "redis-exporter:9121" -> 9121
      */
-    private int extractPort(String exporterUrl) {
+    int extractPort(String exporterUrl) {
         if (exporterUrl == null || exporterUrl.isEmpty()) {
             return 0;
         }
