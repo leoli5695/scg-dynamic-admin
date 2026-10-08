@@ -90,39 +90,89 @@ public class StrategyService {
     /**
      * Publish strategy to Nacos.
      * For global strategies (scope=GLOBAL or instanceId=null), broadcast to all gateway namespaces.
+     * Each namespace publish is isolated: one failure does not abort the remaining namespaces.
+     * Unpublished namespaces are logged at ERROR and healed by the periodic StrategyReconcileTask.
      */
     private void publishStrategyToNacos(String strategyDataId, String primaryNamespace, StrategyDefinition strategy, boolean isGlobal) {
         if (isGlobal) {
             // Broadcast global strategy to all gateway namespaces
             List<String> namespaces = getAllGatewayNamespaces();
             for (String namespace : namespaces) {
-                configCenterService.publishConfig(strategyDataId, namespace, strategy);
-                log.info("Global strategy published to namespace: {}", namespace);
+                if (publishToNamespaceResilient(strategyDataId, namespace, strategy)) {
+                    log.info("Global strategy published to namespace: {}", namespace);
+                }
             }
         } else {
             // Publish only to the specific namespace
-            configCenterService.publishConfig(strategyDataId, primaryNamespace, strategy);
-            log.info("Strategy published to namespace: {}", primaryNamespace);
+            if (publishToNamespaceResilient(strategyDataId, primaryNamespace, strategy)) {
+                log.info("Strategy published to namespace: {}", primaryNamespace);
+            }
         }
+    }
+
+    /**
+     * Publish to a single namespace with one immediate retry, isolating failures so a
+     * transient error on one namespace cannot abort the broadcast to the others.
+     * No backoff sleep on purpose: callers run inside a @Transactional method, and the
+     * periodic reconcile task is the durable retry backstop for anything still missing.
+     *
+     * @return true if the config was published successfully
+     */
+    private boolean publishToNamespaceResilient(String strategyDataId, String namespace, StrategyDefinition strategy) {
+        for (int attempt = 1; attempt <= 2; attempt++) {
+            try {
+                if (configCenterService.publishConfig(strategyDataId, namespace, strategy)) {
+                    return true;
+                }
+                log.warn("publishConfig returned false for {} in namespace {} (attempt {}/2)", strategyDataId, namespace, attempt);
+            } catch (Exception e) {
+                log.warn("Failed to publish {} to namespace {} (attempt {}/2): {}", strategyDataId, namespace, attempt, e.getMessage());
+            }
+        }
+        log.error("Failed to publish {} to namespace {} after 2 attempts - StrategyReconcileTask will retry", strategyDataId, namespace);
+        return false;
     }
 
     /**
      * Remove strategy from Nacos.
      * For global strategies, remove from all gateway namespaces.
+     * Each namespace removal is isolated so one failure does not abort the rest.
      */
     private void removeStrategyFromNacos(String strategyDataId, String primaryNamespace, boolean isGlobal) {
         if (isGlobal) {
             // Remove global strategy from all gateway namespaces
             List<String> namespaces = getAllGatewayNamespaces();
             for (String namespace : namespaces) {
-                configCenterService.removeConfig(strategyDataId, namespace);
-                log.info("Global strategy removed from namespace: {}", namespace);
+                if (removeFromNamespaceResilient(strategyDataId, namespace)) {
+                    log.info("Global strategy removed from namespace: {}", namespace);
+                }
             }
         } else {
             // Remove only from the specific namespace
-            configCenterService.removeConfig(strategyDataId, primaryNamespace);
-            log.info("Strategy removed from namespace: {}", primaryNamespace);
+            if (removeFromNamespaceResilient(strategyDataId, primaryNamespace)) {
+                log.info("Strategy removed from namespace: {}", primaryNamespace);
+            }
         }
+    }
+
+    /**
+     * Remove from a single namespace with one immediate retry, isolating failures.
+     *
+     * @return true if the config was removed (or already absent) successfully
+     */
+    private boolean removeFromNamespaceResilient(String strategyDataId, String namespace) {
+        for (int attempt = 1; attempt <= 2; attempt++) {
+            try {
+                if (configCenterService.removeConfig(strategyDataId, namespace)) {
+                    return true;
+                }
+                log.warn("removeConfig returned false for {} in namespace {} (attempt {}/2)", strategyDataId, namespace, attempt);
+            } catch (Exception e) {
+                log.warn("Failed to remove {} from namespace {} (attempt {}/2): {}", strategyDataId, namespace, attempt, e.getMessage());
+            }
+        }
+        log.error("Failed to remove {} from namespace {} after 2 attempts - StrategyReconcileTask will retry", strategyDataId, namespace);
+        return false;
     }
 
     /**

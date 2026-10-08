@@ -7,6 +7,8 @@ import org.springframework.web.server.ServerWebExchange;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
@@ -21,8 +23,9 @@ import java.util.concurrent.ThreadLocalRandom;
 @Component
 public class InstanceSelector {
 
-    private final Map<String, Double> currentWeights = new ConcurrentHashMap<>();
-    private final Map<String, ConsistentHashRing> hashRingCache = new ConcurrentHashMap<>();
+    // Per-service WRR selector; each group owns its own lock inside SmoothWeightedRoundRobin.
+    private final Map<String, SmoothWeightedRoundRobin<ServiceInstance>> wrrSelectors = new ConcurrentHashMap<>();
+    private final Map<String, CachedRing> hashRingCache = new ConcurrentHashMap<>();
     private final Map<String, java.util.concurrent.atomic.AtomicInteger> roundRobinCounters = new ConcurrentHashMap<>();
 
     public ServiceInstance select(List<ServiceInstance> instances, String strategy,
@@ -60,10 +63,25 @@ public class InstanceSelector {
     private ServiceInstance selectByConsistentHash(List<ServiceInstance> instances, ServerWebExchange exchange) {
         String hashKey = getHashKey(exchange);
         String serviceId = instances.get(0).getServiceId();
-        ConsistentHashRing hashRing = hashRingCache.computeIfAbsent(serviceId,
-                k -> buildHashRing(instances));
-        ServiceInstance selected = hashRing.getNode(hashKey);
+        String fingerprint = instanceFingerprint(instances);
+        CachedRing cached = hashRingCache.get(serviceId);
+        if (cached == null || !cached.fingerprint.equals(fingerprint)) {
+            cached = new CachedRing(fingerprint, buildHashRing(instances));
+            hashRingCache.put(serviceId, cached);
+        }
+        ServiceInstance selected = cached.ring.getNode(hashKey);
         return selected != null ? selected : instances.get(0);
+    }
+
+    // Signature of the current instance set (host:port:weight), so the cached ring is
+    // rebuilt whenever membership or weights change instead of staying stale forever.
+    private String instanceFingerprint(List<ServiceInstance> instances) {
+        List<String> parts = new ArrayList<>(instances.size());
+        for (ServiceInstance instance : instances) {
+            parts.add(instance.getHost() + ":" + instance.getPort() + ":" + getWeight(instance));
+        }
+        Collections.sort(parts);
+        return String.join(",", parts);
     }
 
     private String getHashKey(ServerWebExchange exchange) {
@@ -86,7 +104,10 @@ public class InstanceSelector {
         ConsistentHashRing ring = new ConsistentHashRing();
         int virtualNodes = 150;
         for (ServiceInstance instance : instances) {
-            int nodes = virtualNodes * (int) getWeight(instance);
+            double weight = getWeight(instance);
+            // Round instead of truncate so fractional weights keep proportional presence,
+            // and floor at 1 for any positive weight so it is never dropped from the ring.
+            int nodes = weight > 0 ? Math.max(1, (int) Math.round(virtualNodes * weight)) : 0;
             for (int i = 0; i < nodes; i++) {
                 ring.addNode(instance.getHost() + ":" + instance.getPort() + "#" + i, instance);
             }
@@ -95,38 +116,12 @@ public class InstanceSelector {
     }
 
     private ServiceInstance selectByWeightedRoundRobin(List<ServiceInstance> instances) {
-        // Synchronize on currentWeights to ensure atomic read-modify-write for the three-step algorithm
-        synchronized (currentWeights) {
-        for (ServiceInstance instance : instances) {
-            String key = instance.getHost() + ":" + instance.getPort();
-            currentWeights.putIfAbsent(key, 0.0);
-        }
-
-        double totalWeight = 0;
-        for (ServiceInstance instance : instances) {
-            String key = instance.getHost() + ":" + instance.getPort();
-            double weight = getWeight(instance);
-            currentWeights.put(key, currentWeights.get(key) + weight);
-            totalWeight += weight;
-        }
-
-        ServiceInstance selected = null;
-        double maxWeight = -1;
-        for (ServiceInstance instance : instances) {
-            String key = instance.getHost() + ":" + instance.getPort();
-            double currentWeight = currentWeights.get(key);
-            if (currentWeight > maxWeight) {
-                maxWeight = currentWeight;
-                selected = instance;
-            }
-        }
-
-        if (selected != null) {
-            String key = selected.getHost() + ":" + selected.getPort();
-            currentWeights.put(key, currentWeights.get(key) - totalWeight);
-        }
-        return selected;
-        }
+        String serviceId = instances.get(0).getServiceId();
+        SmoothWeightedRoundRobin<ServiceInstance> selector =
+                wrrSelectors.computeIfAbsent(serviceId, k -> new SmoothWeightedRoundRobin<>());
+        return selector.select(instances,
+                instance -> instance.getHost() + ":" + instance.getPort(),
+                this::getWeight);
     }
 
     double getWeight(ServiceInstance instance) {
@@ -138,6 +133,19 @@ public class InstanceSelector {
             log.warn("Invalid weight '{}' for instance {}:{}, using default 1.0",
                     weightStr, instance.getHost(), instance.getPort());
             return 1.0;
+        }
+    }
+
+    // --- Inner classes ---
+
+    // Cached ring plus the instance-set fingerprint it was built from.
+    private static final class CachedRing {
+        final String fingerprint;
+        final ConsistentHashRing ring;
+
+        CachedRing(String fingerprint, ConsistentHashRing ring) {
+            this.fingerprint = fingerprint;
+            this.ring = ring;
         }
     }
 

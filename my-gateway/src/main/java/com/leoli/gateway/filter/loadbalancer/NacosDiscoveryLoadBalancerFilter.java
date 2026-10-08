@@ -19,7 +19,6 @@ import reactor.core.publisher.Mono;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static com.leoli.gateway.filter.loadbalancer.MultiServiceLoadBalancerFilter.SERVICE_BINDING_TYPE_ATTR;
@@ -59,11 +58,9 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
     public static final String SERVICE_NAMESPACE_ATTR = "serviceNamespace";
     public static final String SERVICE_GROUP_ATTR = "serviceGroup";
 
-    // Round-robin counter for weighted selection (fallback when all weights are 0)
-    private final Map<String, AtomicInteger> roundRobinCounters = new java.util.concurrent.ConcurrentHashMap<>();
-    
-    // Smooth weighted round-robin: service -> (instanceKey -> currentWeight)
-    private final Map<String, Map<String, AtomicInteger>> instanceCurrentWeights = new java.util.concurrent.ConcurrentHashMap<>();
+    // Per-service smooth weighted round-robin selector (shared implementation, per-service lock).
+    private final Map<String, SmoothWeightedRoundRobin<ServiceInstance>> wrrSelectors =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
     public NacosDiscoveryLoadBalancerFilter(NacosDiscoveryService nacosDiscoveryService) {
         this.nacosDiscoveryService = nacosDiscoveryService;
@@ -196,78 +193,17 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * Select instance using smooth weighted round-robin.
-     * This algorithm ensures even distribution based on weights without randomness.
-     * 
-     * Algorithm:
-     * 1. Each instance has static weight and dynamic currentWeight
-     * 2. On each selection:
-     *    - Add static weight to currentWeight for all instances
-     *    - Select instance with highest currentWeight
-     *    - Subtract total weight from selected instance's currentWeight
-     * 
-     * Example: A(weight=5), B(weight=3), C(weight=2), total=10
-     * Selection sequence: A, B, C, A, B, A, C, A, B, C...
+     * Select instance using the shared smooth weighted round-robin implementation.
+     * Delegates to {@link SmoothWeightedRoundRobin}, which keeps per-service state under
+     * a per-service lock, uses double weights (no fractional-weight truncation) and falls
+     * back to an overflow-safe round-robin when every weight is 0.
      */
     private ServiceInstance selectByWeightedRoundRobin(String serviceName, List<ServiceInstance> instances) {
-        if (instances.size() == 1) {
-            return instances.get(0);
-        }
-
-        // Calculate total weight
-        double totalWeight = instances.stream()
-                .mapToDouble(ServiceInstance::getWeight)
-                .sum();
-
-        if (totalWeight <= 0) {
-            // All weights are 0, use simple round-robin
-            AtomicInteger counter = roundRobinCounters.computeIfAbsent(serviceName, k -> new AtomicInteger(0));
-            // FIX (overflow): getAndIncrement eventually wraps negative, and Math.abs(Integer.MIN_VALUE)
-            // stays negative causing ArrayIndexOutOfBoundsException on long-running gateways.
-            // Math.floorMod always yields a valid non-negative index.
-            int index = Math.floorMod(counter.getAndIncrement(), instances.size());
-            return instances.get(index);
-        }
-
-        // Smooth weighted round-robin
-        // Each instance's currentWeight is stored in a map
-        Map<String, AtomicInteger> weightMap = instanceCurrentWeights.computeIfAbsent(
-                serviceName, k -> new java.util.concurrent.ConcurrentHashMap<>());
-
-        // FIX (atomicity): the add-weight / pick-max / subtract-total sequence must be atomic per
-        // service; otherwise concurrent requests all pick the same max instance and the weight
-        // distribution drifts away from the configured weights.
-        synchronized (weightMap) {
-            // Add static weight to currentWeight for all instances
-            ServiceInstance selected = null;
-            double maxCurrentWeight = -1;
-
-            for (ServiceInstance instance : instances) {
-                String instanceKey = instance.getHost() + ":" + instance.getPort();
-                AtomicInteger currentWeight = weightMap.computeIfAbsent(
-                        instanceKey, k -> new AtomicInteger(0));
-
-                // Add static weight to current weight
-                int newWeight = currentWeight.addAndGet((int) instance.getWeight());
-
-                // Track instance with highest current weight
-                if (newWeight > maxCurrentWeight) {
-                    maxCurrentWeight = newWeight;
-                    selected = instance;
-                }
-            }
-
-            // Subtract total weight from selected instance
-            if (selected != null) {
-                String selectedKey = selected.getHost() + ":" + selected.getPort();
-                AtomicInteger selectedWeight = weightMap.get(selectedKey);
-                if (selectedWeight != null) {
-                    selectedWeight.addAndGet(-(int) totalWeight);
-                }
-            }
-
-            return selected != null ? selected : instances.get(0);
-        }
+        SmoothWeightedRoundRobin<ServiceInstance> selector =
+                wrrSelectors.computeIfAbsent(serviceName, k -> new SmoothWeightedRoundRobin<>());
+        return selector.select(instances,
+                instance -> instance.getHost() + ":" + instance.getPort(),
+                ServiceInstance::getWeight);
     }
 
     /**

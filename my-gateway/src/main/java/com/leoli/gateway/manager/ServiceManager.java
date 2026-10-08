@@ -263,7 +263,9 @@ public class ServiceManager {
         }
 
         AtomicInteger counter = roundRobinCounters.computeIfAbsent(serviceId, k -> new AtomicInteger(0));
-        int index = Math.abs(counter.getAndIncrement() % totalWeight);
+        // floorMod stays non-negative even after the counter wraps past Integer.MAX_VALUE,
+        // unlike Math.abs(x % totalWeight) which returns a negative index at Integer.MIN_VALUE.
+        int index = Math.floorMod(counter.getAndIncrement(), totalWeight);
 
         int currentWeight = 0;
         for (ServiceInstance instance : instances) {

@@ -51,8 +51,10 @@ public class InternalApiTokenFilter extends OncePerRequestFilter {
             // session and force-logged the user out.
             "/api/services/traces",
             "/api/services/traces/batch",
-            "/api/services/middleware-metadata",
-            "/api/service-middleware/debug/**"
+            "/api/services/middleware-metadata"
+            // NOTE: "/api/service-middleware/debug/**" is intentionally NOT here. Those diagnostic
+            // endpoints have no gateway-pod callers, so they are gated behind an ADMIN JWT in
+            // SecurityConfig instead of the shared report token (#7 secret tiering).
     );
 
     private final AntPathMatcher pathMatcher = new AntPathMatcher();

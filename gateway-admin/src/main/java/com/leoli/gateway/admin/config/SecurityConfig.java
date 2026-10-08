@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 
@@ -32,6 +33,7 @@ import java.util.List;
  */
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -66,8 +68,11 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Allow CORS preflight requests (OPTIONS) without authentication - MUST be first!
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        // Public endpoints - login, register, health check
-                        .requestMatchers("/api/auth/login", "/api/auth/register", "/actuator/health").permitAll()
+                        // Public endpoints - login and health check.
+                        // NOTE: /api/auth/register is intentionally NOT whitelisted; there is no
+                        // self-service registration. Keeping it out means any future register handler
+                        // falls through to the ADMIN-only rule below instead of being wide open.
+                        .requestMatchers("/api/auth/login", "/actuator/health").permitAll()
                         // Gateway instance heartbeat endpoints (called by gateway pods, no JWT)
                         .requestMatchers("/api/instances/heartbeat", "/api/instances/started").permitAll()
                         // Gateway health sync endpoint (called by gateway pods for health status reporting, no JWT)
@@ -78,10 +83,25 @@ public class SecurityConfig {
                         .requestMatchers("/api/services/traces", "/api/services/traces/batch", "/api/services/middleware-metadata").permitAll()
                         // Prometheus HTTP Service Discovery endpoints (called by Prometheus without auth)
                         .requestMatchers("/api/prometheus/sd/**").permitAll()
-                        // Middleware status debug endpoint (no JWT required for monitoring checks)
-                        .requestMatchers("/api/service-middleware/debug/**").permitAll()
+                        // FIX (#7 secret tiering): middleware diagnostic debug endpoints are admin-only.
+                        // They expose Prometheus/RocketMQ internals, have no gateway-pod callers, so they
+                        // are moved OFF the shared X-Internal-Token report tier and gated behind an ADMIN
+                        // JWT instead - a leaked pod report token no longer grants access to diagnostics.
+                        .requestMatchers("/api/service-middleware/debug/**").hasAuthority("ADMIN")
                         // Swagger/OpenAPI documentation (optional - can be restricted in production)
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        // FIX (P0 RBAC): default-deny for state-changing operations.
+                        // Previously anyRequest().authenticated() meant EVERY logged-in
+                        // user was effectively a super-admin (delete routes, export
+                        // kubeconfig, clear audit...). Mutating verbs under /api/** now
+                        // require the ADMIN authority carried in the JWT roles claim;
+                        // read-only GETs remain open to any authenticated user. The
+                        // permitAll matchers above are declared first, so internal
+                        // report/heartbeat/login endpoints are unaffected (first-match).
+                        .requestMatchers(HttpMethod.POST, "/api/**").hasAuthority("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/**").hasAuthority("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/**").hasAuthority("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/**").hasAuthority("ADMIN")
                         // All other requests require authentication
                         .anyRequest().authenticated()
         );

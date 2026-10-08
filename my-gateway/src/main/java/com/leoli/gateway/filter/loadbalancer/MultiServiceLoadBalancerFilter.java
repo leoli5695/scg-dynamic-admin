@@ -64,8 +64,8 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
         this.objectMapper = objectMapper;
     }
 
-    // Smooth weighted round-robin state: routeId -> (version -> currentWeight)
-    private final Map<String, Map<String, Double>> smoothWeightState = new ConcurrentHashMap<>();
+    // Per-route smooth weighted round-robin selector over service bindings (shared implementation).
+    private final Map<String, SmoothWeightedRoundRobin<MultiServiceConfig.ServiceBinding>> weightSelectors = new ConcurrentHashMap<>();
 
     // Weight-based routing state: routeId -> (version -> assignedCount)
     private final Map<String, Map<String, Integer>> weightRoutingCount = new ConcurrentHashMap<>();
@@ -429,51 +429,15 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
             return binding.getVersion() != null ? binding.getVersion() : binding.getServiceId();
         }
 
-        // Smooth weighted round-robin (Nginx style)
-        Map<String, Double> routeWeights = smoothWeightState.computeIfAbsent(routeId, k -> new ConcurrentHashMap<>());
-
-        // Synchronize on routeWeights to ensure atomic read-modify-write for the three-step algorithm
-        synchronized (routeWeights) {
-        // Initialize weights if not exists
-        // Use version if present, otherwise use serviceId as unique identifier
-        for (MultiServiceConfig.ServiceBinding binding : enabledServices) {
-            String key = getBindingKey(binding);
-            routeWeights.putIfAbsent(key, 0.0);
+        // Shared smooth weighted round-robin (per-route lock inside the selector).
+        SmoothWeightedRoundRobin<MultiServiceConfig.ServiceBinding> selector =
+                weightSelectors.computeIfAbsent(routeId, k -> new SmoothWeightedRoundRobin<>());
+        MultiServiceConfig.ServiceBinding selected = selector.select(
+                enabledServices, this::getBindingKey, MultiServiceConfig.ServiceBinding::getWeight);
+        if (selected == null) {
+            return null;
         }
-
-        // Calculate total weight and add to current weights
-        double totalWeight = 0;
-        for (MultiServiceConfig.ServiceBinding binding : enabledServices) {
-            totalWeight += binding.getWeight();
-            String key = getBindingKey(binding);
-            routeWeights.put(key, routeWeights.getOrDefault(key, 0.0) + binding.getWeight());
-        }
-
-        // Find max current weight
-        String selectedKey = null;
-        double maxCurrentWeight = -1;
-
-        for (MultiServiceConfig.ServiceBinding binding : enabledServices) {
-            String key = getBindingKey(binding);
-            double currentWeight = routeWeights.getOrDefault(key, 0.0);
-            if (currentWeight > maxCurrentWeight) {
-                maxCurrentWeight = currentWeight;
-                selectedKey = key;
-            }
-        }
-
-        // Subtract total weight from selected
-        if (selectedKey != null) {
-            routeWeights.put(selectedKey, routeWeights.get(selectedKey) - totalWeight);
-            // Return the version if present, otherwise return the key (which is serviceId)
-            MultiServiceConfig.ServiceBinding selectedBinding = getBindingByKey(config, selectedKey);
-            if (selectedBinding != null) {
-                return selectedBinding.getVersion() != null ? selectedBinding.getVersion() : selectedKey;
-            }
-        }
-
-        return selectedKey;
-        }
+        return selected.getVersion() != null ? selected.getVersion() : getBindingKey(selected);
     }
 
     /**
@@ -482,21 +446,6 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
      */
     private String getBindingKey(MultiServiceConfig.ServiceBinding binding) {
         return binding.getVersion() != null ? binding.getVersion() : binding.getServiceId();
-    }
-
-    /**
-     * Get service binding by key (version or serviceId).
-     */
-    private MultiServiceConfig.ServiceBinding getBindingByKey(MultiServiceConfig config, String key) {
-        if (config.getServices() == null) {
-            return null;
-        }
-
-        return config.getServices().stream()
-                .filter(MultiServiceConfig.ServiceBinding::isEnabled)
-                .filter(s -> key.equals(s.getVersion()) || key.equals(s.getServiceId()))
-                .findFirst()
-                .orElse(null);
     }
 
     /**
@@ -538,7 +487,7 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
      * Clear weight state for a route (for testing/admin purposes).
      */
     public void clearWeightState(String routeId) {
-        smoothWeightState.remove(routeId);
+        weightSelectors.remove(routeId);
         weightRoutingCount.remove(routeId);
         totalRoutingCount.remove(routeId);
         log.info("Cleared weight state for route: {}", routeId);
@@ -548,6 +497,7 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
      * Get current weight state (for monitoring).
      */
     public Map<String, Double> getWeightState(String routeId) {
-        return new HashMap<>(smoothWeightState.getOrDefault(routeId, new HashMap<>()));
+        SmoothWeightedRoundRobin<MultiServiceConfig.ServiceBinding> selector = weightSelectors.get(routeId);
+        return selector != null ? selector.snapshotWeights() : new HashMap<>();
     }
 }
