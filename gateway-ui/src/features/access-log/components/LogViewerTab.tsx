@@ -121,8 +121,8 @@ const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onT
   // omit a required param and the backend answered 400. Derive the selected pod's namespace
   // so the query always targets the pod that was actually picked.
   const selectedPodNamespace = useMemo(
-    () => pods.find((p) => p.name === selectedPod)?.namespace,
-    [pods, selectedPod],
+    () => (podsRequest.data ?? []).find((p) => p.name === selectedPod)?.namespace,
+    [podsRequest.data, selectedPod],
   );
 
   const handleClusterChange = (value: number) => {
