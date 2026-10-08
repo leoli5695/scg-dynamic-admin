@@ -33,6 +33,17 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class DynamicSslContextManager {
 
+    /**
+     * Protocols every dynamically built context is pinned to.
+     * <p>
+     * FIX (implicit protocol negotiation): the builders previously inherited the JVM
+     * defaults. On JDK 21 those already exclude TLSv1/TLSv1.1 via
+     * jdk.tls.disabledAlgorithms (measured: enabledProtocols=[TLSv1.3, TLSv1.2]), but
+     * a customized java.security or an older JRE would silently widen negotiation on
+     * an internet-facing gateway. Pinning makes the floor explicit and portable.
+     */
+    private static final String[] TLS_PROTOCOLS = {"TLSv1.3", "TLSv1.2"};
+
     private final ObjectMapper objectMapper;
     private final ConfigCenterService configCenterService;
 
@@ -169,13 +180,13 @@ public class DynamicSslContextManager {
             KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
             kmf.init(keyStore, password);
 
-            // Create trust manager factory
-            TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-            tmf.init((KeyStore) null);
-
-            // Build SSL context
+            // Build SSL context.
+            // FIX (trust anchor): no CA material is supplied with a PEM cert/key pair,
+            // so the trust manager is left unset. Initializing it with a null keystore
+            // used to load the JVM default cacerts, which would have accepted a client
+            // certificate issued by any public CA once mTLS is enabled on this context.
             return SslContextBuilder.forServer(kmf)
-                    .trustManager(tmf)
+                    .protocols(TLS_PROTOCOLS)
                     .build();
 
         } catch (Exception e) {
@@ -212,13 +223,16 @@ public class DynamicSslContextManager {
             KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
             kmf.init(keyStore, password.toCharArray());
 
-            // Create trust manager factory
+            // Create trust manager factory. The configured keystore is the only
+            // trust anchor here - the operator supplied it, so client certificates
+            // are validated against that CA set and nothing else.
             TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
             tmf.init(keyStore);
 
             // Build SSL context
             return SslContextBuilder.forServer(kmf)
                     .trustManager(tmf)
+                    .protocols(TLS_PROTOCOLS)
                     .build();
 
         } catch (Exception e) {
@@ -271,19 +285,66 @@ public class DynamicSslContextManager {
         }
         
         try {
-            // Use first 32 bytes for AES-256
-            byte[] validKey = new byte[32];
-            System.arraycopy(keyBytes, 0, validKey, 0, 32);
-            
-            javax.crypto.spec.SecretKeySpec key = new javax.crypto.spec.SecretKeySpec(validKey, "AES");
-            javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES");
-            cipher.init(javax.crypto.Cipher.DECRYPT_MODE, key);
-            byte[] decrypted = cipher.doFinal(Base64.getDecoder().decode(encryptedPassword));
+            // FIX (P1): was Cipher.getInstance("AES") which defaults to AES/ECB.
+            // ECB is insecure (reveals plaintext patterns) AND mismatched the admin
+            // console, which encrypts keystore passwords with AES/GCM/NoPadding in the
+            // format Base64(IV[12] + ciphertext + authTag[16]) - so gateway decryption
+            // of admin-encrypted passwords failed outright. Align with
+            // SslCertificateService: AES-256-GCM, same key schedule, auth-tag verified.
+            byte[] combined = Base64.getDecoder().decode(encryptedPassword);
+            if (combined.length < GCM_IV_LENGTH + 16) {
+                throw new IllegalArgumentException("Encrypted data too short for GCM format");
+            }
+            byte[] iv = new byte[GCM_IV_LENGTH];
+            System.arraycopy(combined, 0, iv, 0, GCM_IV_LENGTH);
+            byte[] ciphertextWithTag = new byte[combined.length - GCM_IV_LENGTH];
+            System.arraycopy(combined, GCM_IV_LENGTH, ciphertextWithTag, 0, ciphertextWithTag.length);
+
+            javax.crypto.spec.SecretKeySpec key =
+                    new javax.crypto.spec.SecretKeySpec(normalizeAesKey(keyBytes), "AES");
+            javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
+            javax.crypto.spec.GCMParameterSpec spec =
+                    new javax.crypto.spec.GCMParameterSpec(GCM_TAG_LENGTH, iv);
+            cipher.init(javax.crypto.Cipher.DECRYPT_MODE, key, spec);
+            byte[] decrypted = cipher.doFinal(ciphertextWithTag);
             return new String(decrypted, StandardCharsets.UTF_8);
         } catch (Exception e) {
             log.error("Failed to decrypt SSL keystore password", e);
             throw new IllegalStateException("SSL password decryption failed", e);
         }
+    }
+
+    /** GCM IV length in bytes (must match admin SslCertificateService). */
+    private static final int GCM_IV_LENGTH = 12;
+    /** GCM auth tag length in bits (must match admin SslCertificateService). */
+    private static final int GCM_TAG_LENGTH = 128;
+
+    /**
+     * Normalize the configured key to a valid AES length (16/24/32 bytes),
+     * mirroring admin SslCertificateService.normalizeAesKey so both sides derive
+     * the same key from the same shared secret.
+     */
+    private byte[] normalizeAesKey(byte[] keyBytes) {
+        int keyLength = keyBytes.length;
+        if (keyLength == 16 || keyLength == 24 || keyLength == 32) {
+            return keyBytes;
+        }
+        if (keyLength > 32) {
+            byte[] truncated = new byte[32];
+            System.arraycopy(keyBytes, 0, truncated, 0, 32);
+            return truncated;
+        }
+        if (keyLength > 16 && keyLength < 24) {
+            byte[] padded = new byte[24];
+            System.arraycopy(keyBytes, 0, padded, 0, keyLength);
+            return padded;
+        }
+        if (keyLength > 24 && keyLength < 32) {
+            byte[] padded = new byte[32];
+            System.arraycopy(keyBytes, 0, padded, 0, keyLength);
+            return padded;
+        }
+        return keyBytes;
     }
 
     /**

@@ -8,6 +8,7 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Base64;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -20,7 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * - Standard HTTP Basic Auth (RFC 7617)
  * - Multiple user credentials support
  * - Realm configuration
- * - Password hashing support (MD5, SHA-256)
+ * - Password hashing support (BCRYPT, SHA-256, MD5)
  *
  * @author leoli
  */
@@ -128,26 +129,42 @@ public class BasicAuthProcessor extends AbstractAuthProcessor {
      * Verify password with optional hash algorithm.
      */
     private boolean verifyPassword(String inputPassword, String storedPassword, String hashAlgorithm) {
-        if (hashAlgorithm == null || hashAlgorithm.isEmpty() || "PLAIN".equalsIgnoreCase(hashAlgorithm)) {
-            return inputPassword.equals(storedPassword);
+        if (inputPassword == null || storedPassword == null) {
+            return false;
         }
 
-        String hashedInput;
+        if (hashAlgorithm == null || hashAlgorithm.isEmpty() || "PLAIN".equalsIgnoreCase(hashAlgorithm)) {
+            return constantTimeEquals(inputPassword, storedPassword);
+        }
+
         switch (hashAlgorithm.toUpperCase()) {
             case "MD5":
-                hashedInput = hashMD5(inputPassword);
-                break;
+                return constantTimeEquals(hashMD5(inputPassword), storedPassword);
             case "SHA256":
-                hashedInput = hashSHA256(inputPassword);
-                break;
+            case "SHA-256":
+                return constantTimeEquals(hashSHA256(inputPassword), storedPassword);
             case "BCRYPT":
-                // For bcrypt, the stored password is the hash, compare directly
+                // Stored value is a bcrypt hash - verifyBCrypt is the only correct check.
                 return verifyBCrypt(inputPassword, storedPassword);
             default:
-                log.warn("Unsupported hash algorithm: {}, using plain comparison", hashAlgorithm);
-                return inputPassword.equals(storedPassword);
+                // Fail closed: an unrecognized algorithm must never degrade into a
+                // plaintext comparison against the stored hash.
+                log.error("Unsupported password hash algorithm '{}', rejecting credentials", hashAlgorithm);
+                return false;
         }
-        return hashedInput != null && hashedInput.equals(storedPassword);
+    }
+
+    /**
+     * Length- and content-comparison in constant time (no early exit on first
+     * differing byte), so password verification does not leak a timing signal.
+     */
+    private boolean constantTimeEquals(String a, String b) {
+        if (a == null || b == null) {
+            return false;
+        }
+        return MessageDigest.isEqual(
+                a.getBytes(StandardCharsets.UTF_8),
+                b.getBytes(StandardCharsets.UTF_8));
     }
 
     /**
@@ -179,13 +196,22 @@ public class BasicAuthProcessor extends AbstractAuthProcessor {
     }
 
     /**
-     * Verify bcrypt password (simplified - would need BCryptPasswordEncoder in production).
+     * Verify a bcrypt-hashed password.
      */
     private boolean verifyBCrypt(String input, String hash) {
-        // In production, use Spring Security's BCryptPasswordEncoder
-        // This is a placeholder - actual bcrypt verification requires proper library
-        log.warn("BCrypt verification not fully implemented, consider using Spring Security");
-        return input.equals(hash);
+        if (input == null || hash == null || hash.isEmpty()) {
+            return false;
+        }
+        try {
+            // FIX (P1 auth bypass): the previous placeholder did input.equals(hash),
+            // so the raw password matched when the stored value equalled it (and the
+            // "hash" was never actually verified). Use real BCrypt verification.
+            return org.springframework.security.crypto.bcrypt.BCrypt.checkpw(input, hash);
+        } catch (IllegalArgumentException e) {
+            // Stored value is not a valid BCrypt hash - fail closed.
+            log.error("Stored password is not a valid BCrypt hash - rejecting credentials");
+            return false;
+        }
     }
 
     /**

@@ -618,11 +618,7 @@ public class FilterChainTracker {
 
             // Add to sliding window for total duration percentile
             recentDurations.addLast(duration);
-            int count = durationCount.incrementAndGet();
-            while (count > PERCENTILE_WINDOW) {
-                recentDurations.removeFirst();
-                count = durationCount.decrementAndGet();
-            }
+            trimWindow(recentDurations, durationCount);
 
             // Record self/independent duration (filter's own logic time)
             long selfTime = execution.getSelfTimeMicros();
@@ -642,10 +638,29 @@ public class FilterChainTracker {
 
             // Add to sliding window for selfTime percentile
             recentSelfDurations.addLast(selfTime);
-            int selfCount = selfDurationCount.incrementAndGet();
-            while (selfCount > PERCENTILE_WINDOW) {
-                recentSelfDurations.removeFirst();
-                selfCount = selfDurationCount.decrementAndGet();
+            trimWindow(recentSelfDurations, selfDurationCount);
+        }
+
+        /**
+         * Keep a sliding window at PERCENTILE_WINDOW entries.
+         * <p>
+         * FIX (window over-drained under contention): the previous loop re-read the
+         * shared counter into a local on every pass, so one thread could remove several
+         * entries for a single add - measured minimum window of 96 instead of 100 with
+         * 8 concurrent recorders, i.e. percentiles sampled fewer points than configured.
+         * removeFirst() also throws NoSuchElementException if the deque is ever empty.
+         * Each add now increments once and claims at most one removal slot via CAS,
+         * retrying until it owns a slot or another thread took it; pollFirst() is
+         * null-safe. Counter and window size stay in lockstep.
+         */
+        private static void trimWindow(ConcurrentLinkedDeque<Long> window, AtomicInteger count) {
+            int current = count.incrementAndGet();
+            while (current > PERCENTILE_WINDOW) {
+                if (count.compareAndSet(current, current - 1)) {
+                    window.pollFirst();
+                    return;
+                }
+                current = count.get();
             }
         }
 
