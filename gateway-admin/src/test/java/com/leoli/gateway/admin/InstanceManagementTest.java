@@ -27,7 +27,7 @@ public class InstanceManagementTest extends NamespaceIntegrationTest {
     @BeforeEach
     void setUp() throws Exception {
         // Clean up any existing test instances
-        cleanAllData();
+        cleanAllDataOnce();
     }
 
     @Test

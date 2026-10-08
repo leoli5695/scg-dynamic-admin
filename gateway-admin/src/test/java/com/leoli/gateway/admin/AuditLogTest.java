@@ -39,9 +39,12 @@ public class AuditLogTest extends NamespaceIntegrationTest {
     @BeforeEach
     @Order(1)
     void setUp() throws Exception {
-        cleanAllData();
-        // Create a route to generate audit logs
-        testRouteId = createTestRoute("audit-test-route");
+        cleanAllDataOnce();
+        // Create a route to generate audit logs. Guarded like the cleanup: this runs before
+        // every method, and re-creating the same route each time would duplicate or conflict.
+        if (testRouteId == null) {
+            testRouteId = createTestRoute("audit-test-route");
+        }
     }
 
     @AfterEach

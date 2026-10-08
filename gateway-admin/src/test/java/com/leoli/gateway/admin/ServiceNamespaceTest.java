@@ -39,7 +39,7 @@ public class ServiceNamespaceTest extends NamespaceIntegrationTest {
     @BeforeEach
     @Order(1)
     void setUp() throws Exception {
-        cleanAllData();
+        cleanAllDataOnce();
     }
 
     @Test

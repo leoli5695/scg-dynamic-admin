@@ -53,6 +53,8 @@ public abstract class NamespaceIntegrationTest {
     protected static Long testClusterId;
     /** Namespace actually used by the most recent {@link #createTestInstance(String)} call. */
     protected static String lastUsedNamespace = TEST_NAMESPACE;
+    /** Per-class guard for {@link #cleanAllDataOnce()}; valid because of PER_CLASS lifecycle. */
+    private boolean dataCleaned = false;
 
     /**
      * Seed the cluster row that instance creation requires.
@@ -104,8 +106,25 @@ public abstract class NamespaceIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
 
+        // The business instanceId, not the numeric primary key: service/route/strategy
+        // lookups resolve the Nacos namespace via findByInstanceId(instanceId).
         JsonNode data = extractData(result);
-        return data.get("id").asText();
+        return data.get("instanceId").asText();
+    }
+
+    /**
+     * Clean shared data once per test class rather than before every method.
+     * <p>
+     * These suites are @Order-sequenced and later tests read what test01 created, so a
+     * per-method cleanup deletes the fixtures out from under them. Safe to hold state
+     * because the subclasses run under {@code @TestInstance(PER_CLASS)}.
+     */
+    protected void cleanAllDataOnce() throws Exception {
+        if (dataCleaned) {
+            return;
+        }
+        cleanAllData();
+        dataCleaned = true;
     }
 
     /**

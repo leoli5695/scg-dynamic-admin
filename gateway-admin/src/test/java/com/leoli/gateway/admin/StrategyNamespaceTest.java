@@ -39,7 +39,7 @@ public class StrategyNamespaceTest extends NamespaceIntegrationTest {
     @BeforeEach
     @Order(1)
     void setUp() throws Exception {
-        cleanAllData();
+        cleanAllDataOnce();
     }
 
     @Test
@@ -48,7 +48,7 @@ public class StrategyNamespaceTest extends NamespaceIntegrationTest {
     void test01_CreateRateLimitStrategy() throws Exception {
         ObjectNode strategy = objectMapper.createObjectNode();
         strategy.put("strategyName", strategyName);
-        strategy.put("type", "RATE_LIMIT");
+        strategy.put("strategyType", "RATE_LIMIT");
         strategy.put("scope", "GLOBAL");
         strategy.put("enabled", true);
 
@@ -91,7 +91,7 @@ public class StrategyNamespaceTest extends NamespaceIntegrationTest {
         for (JsonNode s : data) {
             if (strategyName.equals(s.get("strategyName").asText())) {
                 found = true;
-                assertEquals("RATE_LIMIT", s.get("type").asText());
+                assertEquals("RATE_LIMIT", s.get("strategyType").asText());
                 assertEquals("GLOBAL", s.get("scope").asText());
                 break;
             }
@@ -112,7 +112,7 @@ public class StrategyNamespaceTest extends NamespaceIntegrationTest {
 
         JsonNode data = extractData(result);
         assertEquals(strategyName, data.get("strategyName").asText());
-        assertEquals("RATE_LIMIT", data.get("type").asText());
+        assertEquals("RATE_LIMIT", data.get("strategyType").asText());
 
         System.out.println("[PASS] Get strategy by ID works");
     }
@@ -214,7 +214,7 @@ public class StrategyNamespaceTest extends NamespaceIntegrationTest {
     void test09_CreateCircuitBreakerStrategy() throws Exception {
         ObjectNode strategy = objectMapper.createObjectNode();
         strategy.put("strategyName", "test-circuit-breaker");
-        strategy.put("type", "CIRCUIT_BREAKER");
+        strategy.put("strategyType", "CIRCUIT_BREAKER");
         strategy.put("scope", "ROUTE");
         strategy.put("enabled", true);
 
@@ -235,7 +235,7 @@ public class StrategyNamespaceTest extends NamespaceIntegrationTest {
 
         JsonNode data = extractData(result);
         String cbStrategyId = data.get("strategyId").asText();
-        assertEquals("CIRCUIT_BREAKER", data.get("type").asText());
+        assertEquals("CIRCUIT_BREAKER", data.get("strategyType").asText());
 
         // Cleanup
         mockMvc.perform(delete("/api/strategies/" + cbStrategyId));
@@ -249,7 +249,7 @@ public class StrategyNamespaceTest extends NamespaceIntegrationTest {
     void test10_CreateRetryStrategy() throws Exception {
         ObjectNode strategy = objectMapper.createObjectNode();
         strategy.put("strategyName", "test-retry");
-        strategy.put("type", "RETRY");
+        strategy.put("strategyType", "RETRY");
         strategy.put("scope", "ROUTE");
         strategy.put("enabled", true);
 
@@ -270,7 +270,7 @@ public class StrategyNamespaceTest extends NamespaceIntegrationTest {
 
         JsonNode data = extractData(result);
         String retryStrategyId = data.get("strategyId").asText();
-        assertEquals("RETRY", data.get("type").asText());
+        assertEquals("RETRY", data.get("strategyType").asText());
 
         // Cleanup
         mockMvc.perform(delete("/api/strategies/" + retryStrategyId));
@@ -302,7 +302,7 @@ public class StrategyNamespaceTest extends NamespaceIntegrationTest {
             // Create strategy in other instance
             ObjectNode strategy = objectMapper.createObjectNode();
             strategy.put("strategyName", "other-strategy");
-            strategy.put("type", "RATE_LIMIT");
+            strategy.put("strategyType", "RATE_LIMIT");
             strategy.put("scope", "GLOBAL");
             strategy.put("enabled", true);
             strategy.putObject("config").put("rate", 50);
