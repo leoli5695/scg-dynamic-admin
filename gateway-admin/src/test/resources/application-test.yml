@@ -40,6 +40,18 @@ logging:
     com.leoli.gateway: DEBUG
     org.springframework.web: DEBUG
 
+# --- Security secrets: JwtTokenProvider and InternalApiTokenFilter both fail fast
+# --- at startup when these are unset/weak. Provide fixed test-only values so the
+# --- Spring context can load in @SpringBootTest/@DataJpaTest slices. ---
+gateway:
+  admin:
+    jwt:
+      secret: test-only-jwt-secret-key-0123456789-abcdefghijklmnopqrstuvwxyz
+    security:
+      internal-token: test-only-internal-token
+    ssl:
+      encryption-key: test-only-encryption-key-0123456789abcdef
+
 # Disable Nacos gRPC for tests to avoid connection errors
 nacos:
   naming:
