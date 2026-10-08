@@ -152,6 +152,18 @@ gateway:
   admin:
     url: ${GATEWAY_ADMIN_URL:http://127.0.0.1:9090}
 
+  # Plugin loading security (P1 RCE hardening). Each plugin JAR is verified before
+  # its classes are loaded:
+  #  - base-dir: trusted directory JARs must reside in (canonical-path confinement).
+  #    Empty disables confinement - SET THIS IN PRODUCTION to the shared plugin dir
+  #    the admin console uploads to.
+  #  - require-hash: refuse a plugin whose Nacos config lacks a SHA-256 jarHash
+  #    matching the on-disk JAR (admin publishes jarHash at upload). Set false only
+  #    to migrate legacy configs published before jarHash existed.
+  plugin:
+    base-dir: ${GATEWAY_PLUGIN_BASE_DIR:}
+    require-hash: ${GATEWAY_PLUGIN_REQUIRE_HASH:true}
+
   # Data-plane JWT revocation. The admin console blacklists tokens in Redis under
   # gateway:jwt:revoked:* (POST /api/gateway/jwt-revocations); every JWT request,
   # including validation-cache hits, is checked against it. Requires Redis - with

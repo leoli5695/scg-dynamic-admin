@@ -37,6 +37,13 @@ public class PluginConfig {
     private String jarPath;
 
     /**
+     * Expected SHA-256 hash (hex) of the plugin JAR, published by the admin console
+     * at upload time. FIX (P1 RCE): the gateway verifies the on-disk JAR against
+     * this before loading, so a tampered/swapped JAR is rejected.
+     */
+    private String jarHash;
+
+    /**
      * Plugin version.
      */
     private String version;

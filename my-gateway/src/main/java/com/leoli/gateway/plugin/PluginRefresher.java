@@ -7,11 +7,17 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.event.RefreshRoutesEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.security.MessageDigest;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -47,6 +53,23 @@ public class PluginRefresher {
 
     @Autowired
     private ApplicationEventPublisher eventPublisher;
+
+    /**
+     * FIX (P1 RCE): trusted directory plugin JARs must live in. When set, a JAR
+     * whose canonical path escapes this directory is refused. Empty disables path
+     * confinement (hash verification still applies) - set it in production.
+     */
+    @Value("${gateway.plugin.base-dir:}")
+    private String pluginBaseDir;
+
+    /**
+     * FIX (P1 RCE): when true (default), a plugin JAR is refused unless the config
+     * carries a jarHash that matches the on-disk file. Prevents loading an
+     * unverified/arbitrary JAR. Set false only to migrate legacy configs that were
+     * published before the admin started emitting jarHash.
+     */
+    @Value("${gateway.plugin.require-hash:true}")
+    private boolean requireHash;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -237,6 +260,15 @@ public class PluginRefresher {
                 return;
             }
 
+            // FIX (P1 RCE): security gate before loading any classes from the JAR.
+            // Whoever can write the plugin config in Nacos could otherwise point
+            // jarPath at an arbitrary JAR and get remote code execution on the gateway.
+            // Confine the path to a trusted directory and verify the SHA-256 hash the
+            // admin recorded at upload time.
+            if (!isPluginJarAllowed(pluginId, jarFile, config)) {
+                return;
+            }
+
             // Load the factory class
             Class<?> factoryClass = pluginLoaderService.loadPluginClass(
                 pluginId,
@@ -257,6 +289,62 @@ public class PluginRefresher {
         } catch (Exception e) {
             log.error("Failed to load plugin: {}", pluginId, e);
         }
+    }
+
+    /**
+     * Security gate for loading a plugin JAR: path confinement + SHA-256 integrity.
+     * Returns true only when the JAR is safe to load.
+     *
+     * FIX (P1 RCE): closes the "whoever can write Nacos config can execute code"
+     * hole by (1) refusing JARs outside the trusted plugin directory and (2)
+     * refusing JARs whose content does not match the admin-published hash.
+     */
+    private boolean isPluginJarAllowed(String pluginId, File jarFile, PluginConfig config) {
+        // 1) Path confinement against the trusted plugin directory (when configured).
+        if (pluginBaseDir != null && !pluginBaseDir.isBlank()) {
+            try {
+                Path base = Paths.get(pluginBaseDir).toRealPath();
+                Path jar = jarFile.toPath().toRealPath();
+                if (!jar.startsWith(base)) {
+                    log.error("Rejecting plugin {} - JAR path {} is outside the trusted plugin directory {}",
+                            pluginId, jar, base);
+                    return false;
+                }
+            } catch (IOException e) {
+                log.error("Rejecting plugin {} - cannot resolve JAR/base path for confinement check: {}",
+                        pluginId, e.getMessage());
+                return false;
+            }
+        } else {
+            log.warn("gateway.plugin.base-dir is not set - plugin path confinement DISABLED (plugin {}). "
+                    + "Set it to the trusted plugin JAR directory in production.", pluginId);
+        }
+
+        // 2) SHA-256 integrity verification against the admin-published hash.
+        String expected = config.getJarHash();
+        if (expected == null || expected.isBlank()) {
+            if (requireHash) {
+                log.error("Rejecting plugin {} - config carries no jarHash and gateway.plugin.require-hash=true. "
+                        + "Re-publish the plugin from the admin console (or set require-hash=false to migrate).", pluginId);
+                return false;
+            }
+            log.warn("Plugin {} has no jarHash - integrity check skipped (require-hash=false)", pluginId);
+            return true;
+        }
+
+        String actual = pluginLoaderService.calculateHash(jarFile);
+        if (actual == null) {
+            log.error("Rejecting plugin {} - unable to compute JAR hash", pluginId);
+            return false;
+        }
+        boolean matches = MessageDigest.isEqual(
+                expected.trim().toLowerCase().getBytes(StandardCharsets.UTF_8),
+                actual.trim().toLowerCase().getBytes(StandardCharsets.UTF_8));
+        if (!matches) {
+            log.error("Rejecting plugin {} - JAR hash mismatch (expected={}, actual={}); possible tampering",
+                    pluginId, expected, actual);
+        }
+        return matches;
     }
 
     /**

@@ -553,6 +553,9 @@ public class PluginService {
             config.put("pluginClass", plugin.getPluginClass());
             config.put("configClass", plugin.getConfigClass());
             config.put("jarPath", plugin.getJarPath());
+            // FIX (P1 RCE): publish the SHA-256 hash so the gateway can verify the
+            // on-disk JAR before loading it (rejects tampered/swapped plugin JARs).
+            config.put("jarHash", plugin.getJarHash());
             config.put("version", plugin.getVersion());
             config.put("category", plugin.getCategory());
             config.put("enabled", plugin.getEnabled());
