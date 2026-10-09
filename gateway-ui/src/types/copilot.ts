@@ -34,11 +34,20 @@ export interface CopilotChatResponse {
   success: boolean;
   response?: string;
   error?: string;
-  confidence?: number;
-  confidenceReason?: string;
+  /** Honest evidence backing the answer (replaces the old fake confidence %). */
+  evidence?: CopilotEvidence;
   sessionId: string;
   /** Present when the AI proposed a write operation that needs human confirmation. */
   pendingAction?: CopilotPendingAction;
+}
+
+/** What live data (if any) backs an AI answer. */
+export interface CopilotEvidence {
+  level: 'DATA_BACKED' | 'PARTIAL' | 'NO_DATA';
+  note: string;
+  toolCount: number;
+  dataTypes: string[];
+  failedTools: string[];
 }
 
 /** A write action proposed by the AI, awaiting explicit user confirmation. */
@@ -79,8 +88,7 @@ export interface DebugAnalysisResult {
   success: boolean;
   analysis?: string;
   error?: string;
-  confidence?: number;
-  confidenceReason?: string;
+  evidence?: CopilotEvidence;
 }
 
 /** GET /api/copilot/optimizations/{instanceId} response (OptimizationResult.toMap()). */

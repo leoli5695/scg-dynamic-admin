@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
+import java.util.Set;
 
 /**
  * ============================================================================
@@ -33,6 +34,7 @@ import java.util.Map;
 public class CopilotResponseBuilder {
 
     private final ContextDataProvider contextDataProvider;
+    private final EvidenceAssessor evidenceAssessor;
 
     // ===================== 监控指标格式化 =====================
 
@@ -202,39 +204,31 @@ public class CopilotResponseBuilder {
     // ===================== 置信度标记 =====================
 
     /**
-     * 添加置信度标记到响应末尾
-     * <p>
-     * 格式：
-     * - 高置信度(≥90): ✅ 高置信度
-     * - 中置信度(70-89): ⚡ 中置信度
-     * - 低置信度(<70): ⚠️ 低置信度
-     *
-     * @param response      响应内容
-     * @param confidence    置信度分数
-     * @param confidenceReason 置信度原因
-     * @param language      语言 ("zh" 或 "en")
-     * @return 添加置信度标记后的响应
+     * 评估本次回答的证据强度（委托 EvidenceAssessor）。
      */
-    public String addConfidenceMark(String response, int confidence, String confidenceReason, String language) {
+    public EvidenceAssessor.Evidence assessEvidence(Set<String> calledTools, Set<String> dataTypes,
+                                                    Set<String> failedTools, String language) {
+        return evidenceAssessor.assess(calledTools, dataTypes, failedTools, language);
+    }
+
+    /**
+     * 在回复末尾附上"证据说明"。
+     * <p>
+     * 取代原先的置信度百分比标记——那个 0-100% 是按工具数量硬凑的假精确值，与答案
+     * 对错无关。这里只如实说明回答背后有无实时数据佐证（见 {@link EvidenceAssessor}）。
+     *
+     * @param response 回复内容
+     * @param evidence 证据评估结果
+     * @return 附证据说明后的回复
+     */
+    public String addEvidenceMark(String response, EvidenceAssessor.Evidence evidence) {
         if (response == null) {
             return null;
         }
-
-        String mark;
-        String label;
-
-        if (confidence >= 90) {
-            mark = "✅";
-            label = "zh".equals(language) ? "高置信度" : "High Confidence";
-        } else if (confidence >= 70) {
-            mark = "⚡";
-            label = "zh".equals(language) ? "中置信度" : "Medium Confidence";
-        } else {
-            mark = "⚠️";
-            label = "zh".equals(language) ? "低置信度" : "Low Confidence";
+        if (evidence == null || evidence.getNote() == null) {
+            return response;
         }
-
-        return response + "\n\n---\n" + mark + " **" + label + " (" + confidence + "%)**: " + confidenceReason;
+        return response + "\n\n---\n" + evidence.getNote();
     }
 
     // ===================== 辅助方法 =====================

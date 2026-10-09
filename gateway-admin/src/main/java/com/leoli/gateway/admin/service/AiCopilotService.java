@@ -122,19 +122,16 @@ public class AiCopilotService {
             // 8. 执行工具调用循环（委托给 ToolCallOrchestrator）
             ToolCallLoopResult loopResult = toolCallOrchestrator.runToolCallLoop(config, model, messages, tools, listener);
 
-            // 9. 构建最终响应（添加置信度标记）
-            String finalResponse = responseBuilder.addConfidenceMark(
-                    loopResult.getContent(),
-                    loopResult.getConfidence(),
-                    loopResult.getConfidenceReason(),
-                    language);
+            // 9. 构建最终响应（附证据说明，不再有假置信度百分比）
+            EvidenceAssessor.Evidence evidence = responseBuilder.assessEvidence(
+                    loopResult.getCalledTools(), loopResult.getDataTypes(), loopResult.getFailedTools(), language);
+            String finalResponse = responseBuilder.addEvidenceMark(loopResult.getContent(), evidence);
 
             // 10. 更新历史记录
             chatSessionManager.addToHistory(sessionId, "user", userMessage);
             chatSessionManager.addToHistory(sessionId, "assistant", finalResponse);
 
-            ChatResponse chatResponse = new ChatResponse(true, finalResponse, null,
-                    loopResult.getConfidence(), loopResult.getConfidenceReason());
+            ChatResponse chatResponse = new ChatResponse(true, finalResponse, null, evidence.toMap());
             // FIX (P0): 把待人工确认的写操作透传给前端，由其渲染确认弹窗。
             chatResponse.setPendingAction(loopResult.getPendingAction());
             return chatResponse;
@@ -255,20 +252,18 @@ public class AiCopilotService {
             messages.add(Map.of("role", "system", "content", systemPrompt));
             messages.add(Map.of("role", "user", "content", userMessage));
 
-            // 获取工具定义和配置
-            List<Map<String, Object>> tools = toolCallOrchestrator.getOpenAITools();
+            // 获取工具定义和配置（错误分析属排障域，按域筛选工具，避免全量塞入）
+            List<Map<String, Object>> tools = toolCallOrchestrator.getOpenAITools("debug");
             AiConfig config = toolCallOrchestrator.getAiConfig(provider);
 
             // 执行工具调用循环
             ToolCallLoopResult loopResult = toolCallOrchestrator.runToolCallLoop(config, model, messages, tools);
 
-            String finalAnalysis = responseBuilder.addConfidenceMark(
-                    loopResult.getContent(),
-                    loopResult.getConfidence(),
-                    loopResult.getConfidenceReason(),
-                    "zh");
+            EvidenceAssessor.Evidence evidence = responseBuilder.assessEvidence(
+                    loopResult.getCalledTools(), loopResult.getDataTypes(), loopResult.getFailedTools(), "zh");
+            String finalAnalysis = responseBuilder.addEvidenceMark(loopResult.getContent(), evidence);
 
-            return new DebugAnalysis(true, finalAnalysis, null, loopResult.getConfidence(), loopResult.getConfidenceReason());
+            return new DebugAnalysis(true, finalAnalysis, null, evidence.toMap());
 
         } catch (Exception e) {
             log.error("Error analysis failed", e);
@@ -403,20 +398,19 @@ public class AiCopilotService {
         private boolean success;
         private String response;
         private String error;
-        private int confidence;
-        private String confidenceReason;
+        /** 证据评估（level/note/toolCount/dataTypes/failedTools），取代原先的假置信度百分比。 */
+        private Map<String, Object> evidence;
         private Map<String, Object> pendingAction;
 
         public ChatResponse(boolean success, String response, String error) {
-            this(success, response, error, 70, "基于基础分析");
+            this(success, response, error, null);
         }
 
-        public ChatResponse(boolean success, String response, String error, int confidence, String confidenceReason) {
+        public ChatResponse(boolean success, String response, String error, Map<String, Object> evidence) {
             this.success = success;
             this.response = response;
             this.error = error;
-            this.confidence = confidence;
-            this.confidenceReason = confidenceReason;
+            this.evidence = evidence;
         }
 
         public Map<String, Object> toMap() {
@@ -424,8 +418,7 @@ public class AiCopilotService {
             map.put("success", success);
             if (response != null) map.put("response", response);
             if (error != null) map.put("error", error);
-            map.put("confidence", confidence);
-            map.put("confidenceReason", confidenceReason);
+            if (evidence != null) map.put("evidence", evidence);
             if (pendingAction != null) map.put("pendingAction", pendingAction);
             return map;
         }
@@ -433,8 +426,7 @@ public class AiCopilotService {
         public boolean isSuccess() { return success; }
         public String getResponse() { return response; }
         public String getError() { return error; }
-        public int getConfidence() { return confidence; }
-        public String getConfidenceReason() { return confidenceReason; }
+        public Map<String, Object> getEvidence() { return evidence; }
         public Map<String, Object> getPendingAction() { return pendingAction; }
         public void setPendingAction(Map<String, Object> pendingAction) { this.pendingAction = pendingAction; }
     }
@@ -467,19 +459,17 @@ public class AiCopilotService {
         private boolean success;
         private String analysis;
         private String error;
-        private int confidence;
-        private String confidenceReason;
+        private Map<String, Object> evidence;
 
         public DebugAnalysis(boolean success, String analysis, String error) {
-            this(success, analysis, error, 70, "基于基础分析");
+            this(success, analysis, error, null);
         }
 
-        public DebugAnalysis(boolean success, String analysis, String error, int confidence, String confidenceReason) {
+        public DebugAnalysis(boolean success, String analysis, String error, Map<String, Object> evidence) {
             this.success = success;
             this.analysis = analysis;
             this.error = error;
-            this.confidence = confidence;
-            this.confidenceReason = confidenceReason;
+            this.evidence = evidence;
         }
 
         public Map<String, Object> toMap() {
@@ -487,16 +477,14 @@ public class AiCopilotService {
             map.put("success", success);
             if (analysis != null) map.put("analysis", analysis);
             if (error != null) map.put("error", error);
-            map.put("confidence", confidence);
-            map.put("confidenceReason", confidenceReason);
+            if (evidence != null) map.put("evidence", evidence);
             return map;
         }
 
         public boolean isSuccess() { return success; }
         public String getAnalysis() { return analysis; }
         public String getError() { return error; }
-        public int getConfidence() { return confidence; }
-        public String getConfidenceReason() { return confidenceReason; }
+        public Map<String, Object> getEvidence() { return evidence; }
     }
 
     public static class OptimizationResult {

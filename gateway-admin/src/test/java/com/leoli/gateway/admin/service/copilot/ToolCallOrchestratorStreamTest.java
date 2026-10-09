@@ -36,7 +36,7 @@ class ToolCallOrchestratorStreamTest {
 
     private AiAnalysisService aiAnalysisService;
     private ToolExecutor toolExecutor;
-    private ConfidenceCalculator confidenceCalculator;
+    private EvidenceAssessor evidenceAssessor;
     private PendingActionStore pendingActionStore;
     private ToolCallOrchestrator orchestrator;
     private AiConfig config;
@@ -49,21 +49,18 @@ class ToolCallOrchestratorStreamTest {
     void setUp() {
         aiAnalysisService = mock(AiAnalysisService.class);
         toolExecutor = mock(ToolExecutor.class);
-        confidenceCalculator = mock(ConfidenceCalculator.class);
+        evidenceAssessor = mock(EvidenceAssessor.class);
         pendingActionStore = mock(PendingActionStore.class);
         ToolRegistry toolRegistry = mock(ToolRegistry.class);
         AiConfigRepository aiConfigRepository = mock(AiConfigRepository.class);
 
         orchestrator = new ToolCallOrchestrator(
-                aiAnalysisService, toolRegistry, toolExecutor, confidenceCalculator,
+                aiAnalysisService, toolRegistry, toolExecutor, evidenceAssessor,
                 aiConfigRepository, new ObjectMapper(), pendingActionStore);
 
         config = mock(AiConfig.class);
         when(config.getProvider()).thenReturn("OPENAI");
         when(config.getModel()).thenReturn("gpt-4o");
-
-        when(confidenceCalculator.calculate(any(), anyInt(), any())).thenReturn(85);
-        when(confidenceCalculator.buildReason(any(), any())).thenReturn("ok");
 
         events = new ArrayList<>();
         listener = (type, data) -> {

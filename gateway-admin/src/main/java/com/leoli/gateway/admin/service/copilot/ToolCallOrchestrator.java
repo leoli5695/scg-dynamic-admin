@@ -34,13 +34,13 @@ import java.util.*;
  * 4. AI 综合工具结果，生成最终回复
  * 5. 重复步骤 1-4，直到 AI 不再调用工具或达到上限
  * <p>
- * 置信度计算:
- * - 根据工具调用数量、成功率、数据完整性计算
- * - 由 ConfidenceCalculator 组件负责
+ * 证据评估:
+ * - 记录 calledTools / dataTypes / failedTools，由 EvidenceAssessor 如实评估回答
+ *   有无实时数据佐证（不再输出假置信度百分比）
  * <p>
  * 限制:
  * - 最大调用轮数: 15（防止无限循环）
- * - 工具执行超时: 30秒
+ * - 循环总时间预算: {@link #TOOL_LOOP_TOTAL_TIMEOUT_MS}（超时中断并返回降级回复）
  *
  * @author leoli
  */
@@ -52,7 +52,7 @@ public class ToolCallOrchestrator {
     private final AiAnalysisService aiAnalysisService;
     private final ToolRegistry toolRegistry;
     private final ToolExecutor toolExecutor;
-    private final ConfidenceCalculator confidenceCalculator;
+    private final EvidenceAssessor evidenceAssessor;
     private final AiConfigRepository aiConfigRepository;
     private final ObjectMapper objectMapper;
     private final PendingActionStore pendingActionStore;
@@ -109,11 +109,9 @@ public class ToolCallOrchestrator {
         String effectiveModel = (model != null && !model.isEmpty()) ? model : config.getModel();
         String provider = config.getProvider();
 
-        // 工具调用统计
+        // 工具调用统计（用于证据评估，不再算假置信度）
         Set<String> calledTools = new HashSet<>();
-        // 用去重的"成功过的工具名"集合，而非计数——同一工具多次成功会让计数超过
-        // calledTools.size()，导致成功率 >1、置信度计算失真。
-        Set<String> successfulToolNames = new HashSet<>();
+        Set<String> failedTools = new HashSet<>();
         Set<String> dataTypes = new HashSet<>();
 
         long loopStart = System.currentTimeMillis();
@@ -125,12 +123,9 @@ public class ToolCallOrchestrator {
             if (elapsed > TOOL_LOOP_TOTAL_TIMEOUT_MS) {
                 log.warn("Tool call loop exceeded total budget ({} ms > {} ms), stopping at iteration {}",
                         elapsed, TOOL_LOOP_TOTAL_TIMEOUT_MS, iteration + 1);
-                int timeoutConfidence = confidenceCalculator.calculate(calledTools, successfulToolNames.size(), dataTypes);
-                String timeoutReason = confidenceCalculator.buildReason(calledTools, dataTypes) + " (响应超时，已中断)";
                 return new ToolCallLoopResult(
                         "本次分析涉及的工具调用较多，已达到时间上限并中断。以上是基于已获取数据的部分结论，请缩小问题范围或分步提问。",
-                        Math.max(40, timeoutConfidence - 20),
-                        timeoutReason, calledTools, dataTypes);
+                        calledTools, dataTypes, failedTools);
             }
 
             log.info("Tool call iteration: {} for provider: {}", iteration + 1, provider);
@@ -143,13 +138,9 @@ public class ToolCallOrchestrator {
             // 如果没有工具调用，返回最终回复
             if (!response.hasToolCalls()) {
                 log.info("No tool calls, returning final response");
-
-                int confidence = confidenceCalculator.calculate(calledTools, successfulToolNames.size(), dataTypes);
-                String reason = confidenceCalculator.buildReason(calledTools, dataTypes);
-
                 return new ToolCallLoopResult(
                     response.getContent() != null ? response.getContent() : "AI 未返回有效回复。",
-                    confidence, reason, calledTools, dataTypes
+                    calledTools, dataTypes, failedTools
                 );
             }
 
@@ -193,19 +184,20 @@ public class ToolCallOrchestrator {
                     pendingAction.put("arguments", toolCall.getArguments());
                     pendingAction.put("preview", result.getConfirmationPreview());
 
-                    int pendingConfidence = confidenceCalculator.calculate(calledTools, successfulToolNames.size(), dataTypes);
                     ToolCallLoopResult pendingResult = new ToolCallLoopResult(
                             "我已准备好执行一个需要确认的写操作，请在下方核对详情并点击确认后再执行。",
-                            pendingConfidence, "等待人工确认写操作", calledTools, dataTypes);
+                            calledTools, dataTypes, failedTools);
                     pendingResult.setPendingAction(pendingAction);
+
                     log.info("Tool {} requires human confirmation - returning pendingAction to caller",
                             toolCall.getName());
                     return pendingResult;
                 }
 
                 if (result.isSuccess()) {
-                    successfulToolNames.add(toolCall.getName());
-                    confidenceCalculator.recordDataType(toolCall.getName(), dataTypes);
+                    evidenceAssessor.recordDataType(toolCall.getName(), dataTypes);
+                } else {
+                    failedTools.add(toolCall.getName());
                 }
 
                 // 将工具结果加入 messages
@@ -216,13 +208,9 @@ public class ToolCallOrchestrator {
 
         // 超过最大轮数
         log.warn("Max tool call iterations reached: {}", MAX_TOOL_CALL_ITERATIONS);
-        int confidence = confidenceCalculator.calculate(calledTools, successfulToolNames.size(), dataTypes);
-        String reason = confidenceCalculator.buildReason(calledTools, dataTypes) + " (达到调用上限)";
-
         return new ToolCallLoopResult(
             "工具调用次数达到上限，请简化您的问题或分步提问。",
-            Math.max(50, confidence - 20),
-            reason, calledTools, dataTypes
+            calledTools, dataTypes, failedTools
         );
     }
 
