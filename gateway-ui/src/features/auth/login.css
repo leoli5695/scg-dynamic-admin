@@ -1,6 +1,5 @@
 /**
- * Login Page - Minimalist, Professional Design
- * Clean, sophisticated styling for western-friendly aesthetic
+ * Login Page - Premium glassmorphism over an animated network-mesh backdrop
  */
 
 /* ==================== Container ==================== */
@@ -19,233 +18,253 @@
 /* ==================== Background ==================== */
 .login-background {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   overflow: hidden;
   z-index: 0;
-}
-
-/* Subtle gradient background */
-.login-background::before {
-  content: '';
-  position: absolute;
-  inset: 0;
   background:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(59, 130, 246, 0.08), transparent),
-    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(99, 102, 241, 0.05), transparent);
+    radial-gradient(ellipse 95% 62% at 50% -12%, rgba(43, 68, 140, 0.42), transparent 62%),
+    radial-gradient(ellipse 70% 52% at 102% 108%, rgba(76, 44, 132, 0.30), transparent 62%),
+    radial-gradient(ellipse 55% 40% at -4% 96%, rgba(13, 90, 96, 0.22), transparent 60%),
+    linear-gradient(180deg, #0b0f1d 0%, #09090c 52%, #06060a 100%);
 }
 
-/* Grid pattern - subtle */
+/* Aurora washes - slow drifting colour fields */
+.bg-aurora {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(110px);
+  pointer-events: none;
+  animation: auroraDrift 26s ease-in-out infinite alternate;
+}
+
+.bg-aurora-1 {
+  width: 46vw;
+  height: 46vw;
+  min-width: 420px;
+  min-height: 420px;
+  top: -18%;
+  left: -12%;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.22) 0%, transparent 68%);
+}
+
+.bg-aurora-2 {
+  width: 40vw;
+  height: 40vw;
+  min-width: 380px;
+  min-height: 380px;
+  bottom: -20%;
+  right: -10%;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.20) 0%, transparent 68%);
+  animation-delay: -13s;
+}
+
+.bg-aurora-3 {
+  width: 34vw;
+  height: 34vw;
+  min-width: 320px;
+  min-height: 320px;
+  bottom: -14%;
+  left: -8%;
+  background: radial-gradient(circle, rgba(45, 212, 191, 0.13) 0%, transparent 68%);
+  animation-delay: -7s;
+}
+
+@keyframes auroraDrift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(4%, 3%, 0) scale(1.08); }
+}
+
+/* Faint engineering grid, masked toward centre */
 .bg-grid {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-  background-size: 64px 64px;
-  mask-image: radial-gradient(ellipse at center, black 30%, transparent 70%);
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, black 20%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, black 20%, transparent 75%);
 }
 
-/* Tech rays canvas - keep but reduce opacity */
-.tech-rays-canvas {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 0;
-  opacity: 0.3;
-}
-
-/* ==================== Ambient Glow (Subtle) ==================== */
-.bg-ambient-1,
-.bg-ambient-2,
-.bg-ambient-3 {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(120px);
-  opacity: 0.15;
-  animation: ambientFloat 30s ease-in-out infinite;
-}
-
-.bg-ambient-1 {
-  width: 400px;
-  height: 400px;
-  background: radial-gradient(circle, rgba(59, 130, 246, 0.3) 0%, transparent 70%);
-  top: -100px;
-  left: -100px;
-}
-
-.bg-ambient-2 {
-  width: 500px;
-  height: 500px;
-  background: radial-gradient(circle, rgba(99, 102, 241, 0.2) 0%, transparent 70%);
-  bottom: -150px;
-  right: -150px;
-  animation-delay: 15s;
-}
-
-.bg-ambient-3 {
-  width: 300px;
-  height: 300px;
-  background: radial-gradient(circle, rgba(34, 197, 94, 0.15) 0%, transparent 70%);
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  animation-delay: 25s;
-}
-
-@keyframes ambientFloat {
-  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.15; }
-  50% { transform: translate(30px, -30px) scale(1.05); opacity: 0.2; }
-}
-
-/* ==================== Gradient Orbs (Minimal) ==================== */
-.gradient-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(100px);
-  opacity: 0.1;
-  animation: orbFloat 40s ease-in-out infinite;
-}
-
-.gradient-orb-1 {
-  width: 300px;
-  height: 300px;
-  background: radial-gradient(circle, rgba(59, 130, 246, 0.2) 0%, transparent 70%);
-  top: -80px;
-  right: -80px;
-}
-
-.gradient-orb-2 {
-  width: 350px;
-  height: 350px;
-  background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, transparent 70%);
-  bottom: -100px;
-  left: -100px;
-  animation-delay: 20s;
-}
-
-.gradient-orb-3 {
-  width: 250px;
-  height: 250px;
-  background: radial-gradient(circle, rgba(6, 182, 212, 0.1) 0%, transparent 70%);
-  top: 40%;
-  left: 60%;
-  transform: translate(-50%, -50%);
-  animation-delay: 30s;
-}
-
-@keyframes orbFloat {
-  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.1; }
-  50% { transform: translate(40px, -40px) scale(1.08); opacity: 0.12; }
-}
-
-/* ==================== Floating Particles (Minimal) ==================== */
-.particles {
+/* Gateway-flow canvas (converging traffic) */
+.gateway-flow-canvas {
   position: absolute;
   inset: 0;
-  overflow: hidden;
+  width: 100%;
+  height: 100%;
+}
+
+/* Horizon glow line separating the floor plane */
+.bg-horizon {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 66%;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 4%,
+    rgba(96, 165, 250, 0.28) 30%,
+    rgba(45, 212, 191, 0.24) 55%,
+    rgba(139, 92, 246, 0.22) 78%,
+    transparent 96%);
+  box-shadow: 0 0 26px rgba(59, 130, 246, 0.28);
+  filter: blur(0.4px);
   pointer-events: none;
 }
 
-.particle {
+/* Vignette to focus the eye on the card */
+.bg-vignette {
   position: absolute;
-  width: 2px;
-  height: 2px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 50%;
-  animation: particleFloat 20s linear infinite;
+  inset: 0;
+  background: radial-gradient(ellipse 80% 70% at 50% 50%, transparent 40%, rgba(0, 0, 0, 0.55) 100%);
+  pointer-events: none;
 }
 
-.particle:nth-child(1) { left: 10%; animation-delay: 0s; animation-duration: 18s; }
-.particle:nth-child(2) { left: 25%; animation-delay: 3s; animation-duration: 22s; }
-.particle:nth-child(3) { left: 40%; animation-delay: 6s; animation-duration: 20s; }
-.particle:nth-child(4) { left: 55%; animation-delay: 2s; animation-duration: 24s; }
-.particle:nth-child(5) { left: 70%; animation-delay: 5s; animation-duration: 19s; }
-.particle:nth-child(6) { left: 85%; animation-delay: 8s; animation-duration: 21s; }
-.particle:nth-child(7) { left: 15%; animation-delay: 10s; animation-duration: 23s; }
-.particle:nth-child(8) { left: 60%; animation-delay: 12s; animation-duration: 17s; }
-.particle:nth-child(9) { left: 90%; animation-delay: 15s; animation-duration: 25s; }
-
-@keyframes particleFloat {
-  0% { transform: translateY(0); opacity: 0; }
-  10% { opacity: 0.4; }
-  90% { opacity: 0.4; }
-  100% { transform: translateY(-100vh); opacity: 0; }
+/* Soft pool of light the card sits in */
+.bg-spotlight {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(760px, 90vw);
+  height: min(760px, 90vh);
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.14) 0%, rgba(99, 102, 241, 0.06) 40%, transparent 70%);
+  filter: blur(10px);
+  pointer-events: none;
 }
 
-/* ==================== Login Card ==================== */
+/* Film grain to kill gradient banding */
+.bg-grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+}
+
+/* ==================== Login Card (glass) ==================== */
 .login-card {
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 400px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xl);
+  max-width: 420px;
+  /* deliberately translucent so the converging traffic behind reads through */
+  background: linear-gradient(165deg, rgba(26, 28, 38, 0.40) 0%, rgba(12, 13, 18, 0.55) 100%);
+  backdrop-filter: blur(9px) saturate(140%);
+  -webkit-backdrop-filter: blur(9px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 20px;
   padding: var(--space-10) var(--space-8);
-  box-shadow: var(--shadow-lg);
-  animation: cardFadeIn 0.4s var(--ease-out);
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 0 90px rgba(59, 130, 246, 0.10);
+  animation: cardFadeIn 0.5s var(--ease-out);
+  overflow: hidden;
+}
+
+/* top inner highlight sheen */
+.login-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  pointer-events: none;
 }
 
 @keyframes cardFadeIn {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(16px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Rotating conic hairline around the card edge */
+.card-ring {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(from var(--ring-angle, 0deg),
+    transparent 0deg,
+    rgba(96, 165, 250, 0.55) 40deg,
+    rgba(167, 139, 250, 0.35) 90deg,
+    transparent 160deg,
+    transparent 360deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: ringRotate 8s linear infinite;
+  opacity: 0.7;
+}
+
+@property --ring-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes ringRotate {
+  from { --ring-angle: 0deg; }
+  to { --ring-angle: 360deg; }
+}
+
+/* Pointer-tracked inner spotlight */
+.login-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(240px circle at var(--mx, 50%) var(--my, 0%),
+    rgba(96, 165, 250, 0.10), transparent 65%);
+  opacity: 0;
+  transition: opacity var(--duration-normal) var(--ease-default);
+  pointer-events: none;
+}
+
+.login-card:hover::after {
+  opacity: 1;
 }
 
 /* ==================== Brand Section ==================== */
 .login-brand {
   text-align: center;
-  margin-bottom: var(--space-8);
-}
-
-.brand-icon-wrapper {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 64px;
-  height: 64px;
-  background: var(--bg-elevated);
-  border-radius: var(--radius-lg);
-  margin-bottom: var(--space-5);
-  border: 1px solid var(--border-subtle);
-  transition: all var(--duration-normal) var(--ease-default);
-}
-
-.brand-icon-wrapper:hover {
-  background: rgba(59, 130, 246, 0.08);
-  border-color: rgba(59, 130, 246, 0.2);
-}
-
-.brand-icon-content {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.brand-icon-main {
-  font-size: 28px;
-  color: var(--primary-color);
-}
-
-.brand-icon-bg {
-  position: absolute;
-  font-size: 48px;
-  color: rgba(59, 130, 246, 0.08);
-  transform: rotate(-15deg);
+  margin-bottom: var(--space-6);
 }
 
 .brand-title {
   margin: 0;
-  color: var(--text-primary);
-  font-weight: var(--weight-bold);
-  font-size: var(--text-xl);
-  letter-spacing: -0.02em;
+  font-weight: 800;
+  font-size: clamp(30px, 4vw, 42px);
+  line-height: 1.25;
+  letter-spacing: 0.02em;
+  /* hero gradient: white -> cyan -> blue -> violet (left to right) */
+  background: linear-gradient(90deg,
+    #ffffff 0%,
+    #e0f2fe 16%,
+    #67e8f9 38%,
+    #60a5fa 60%,
+    #a78bfa 82%,
+    #c4b5fd 100%);
+  background-size: 200% 100%;
+  background-position: 0% 50%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  filter: drop-shadow(0 2px 18px rgba(96, 165, 250, 0.35));
+  animation: titleSheen 9s ease-in-out infinite;
+}
+
+/* slow sheen sweeping across the gradient text */
+@keyframes titleSheen {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
 }
 
 .brand-subtitle {
@@ -253,11 +272,66 @@
   margin-top: var(--space-2);
   color: var(--text-muted);
   font-size: var(--text-sm);
+  letter-spacing: 0.02em;
+}
+
+/* Feature chips under the subtitle */
+.brand-chips {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: var(--space-4);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  color: var(--text-secondary);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  transition: background var(--duration-fast) var(--ease-default),
+              border-color var(--duration-fast) var(--ease-default),
+              color var(--duration-fast) var(--ease-default);
+}
+
+.chip:hover {
+  background: rgba(59, 130, 246, 0.10);
+  border-color: rgba(96, 165, 250, 0.30);
+  color: #cfe0ff;
+}
+
+.chip .anticon {
+  font-size: 11px;
+  color: #7fa8f5;
 }
 
 /* ==================== Form Section ==================== */
 .login-form-section {
-  margin-bottom: var(--space-4);
+  position: relative;
+  margin-bottom: var(--space-2);
+  padding-top: var(--space-5);
+}
+
+/* hairline divider separating brand block from the form */
+.login-form-section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(96, 165, 250, 0.42) 30%,
+    rgba(167, 139, 250, 0.42) 70%,
+    transparent);
 }
 
 .login-form .ant-form-item {
@@ -271,23 +345,31 @@
 
 /* ==================== Input Styles ==================== */
 .login-card .ant-input-affix-wrapper.modern-input {
-  height: 48px;
+  height: 50px;
   font-size: var(--text-sm);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-default);
-  background: var(--bg-input);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  /* !important: a global App.premium.css rule repaints .ant-input-password opaque */
+  background: rgba(9, 9, 12, 0.62) !important;
   color: var(--text-primary);
-  transition: all var(--duration-fast) var(--ease-default);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+  transition: border-color var(--duration-fast) var(--ease-default),
+              box-shadow var(--duration-fast) var(--ease-default),
+              background var(--duration-fast) var(--ease-default);
 }
 
 .login-card .ant-input-affix-wrapper.modern-input:hover {
-  border-color: var(--border-strong);
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(12, 12, 16, 0.70) !important;
 }
 
 .login-card .ant-input-affix-wrapper.modern-input:focus,
 .login-card .ant-input-affix-wrapper.modern-input-focused {
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
+  border-color: rgba(96, 165, 250, 0.65);
+  background: rgba(12, 12, 16, 0.80) !important;
+  box-shadow:
+    0 0 0 3px rgba(59, 130, 246, 0.16),
+    0 0 18px rgba(59, 130, 246, 0.12);
 }
 
 .login-card .ant-input-affix-wrapper.modern-input input {
@@ -295,8 +377,49 @@
   background: transparent;
 }
 
+/* Counter global App.premium.css `!important` rules that repaint the inner
+   <input> with a slate box + border, producing a double-frame look. */
+.login-card .ant-input-affix-wrapper.modern-input input.ant-input {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
 .login-card .ant-input-affix-wrapper.modern-input input::placeholder {
   color: var(--text-muted);
+}
+
+/* Neutralise browser autofill flash + credential icon clash */
+.login-card input:-webkit-autofill,
+.login-card input:-webkit-autofill:hover,
+.login-card input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #0c0c10 inset;
+  box-shadow: 0 0 0 1000px #0c0c10 inset;
+  -webkit-text-fill-color: #fafafa;
+  caret-color: #fafafa;
+  transition: background-color 9999s ease-out;
+}
+
+/* Hide Chrome's credentials / contact autofill button (grey box in inputs).
+   NOTE: each pseudo-element needs its OWN rule — if any selector in a
+   comma-list is unsupported by the browser, the whole rule is dropped. */
+.login-card input::-webkit-credentials-auto-fill-button {
+  display: none !important;
+  visibility: hidden;
+}
+
+.login-card input::-webkit-contacts-auto-fill-button {
+  display: none !important;
+  visibility: hidden;
+}
+
+.login-card input::-webkit-caps-lock-indicator {
+  visibility: hidden;
+}
+
+.login-card input::-webkit-textfield-decoration-container {
+  visibility: hidden;
 }
 
 .input-icon {
@@ -306,26 +429,56 @@
 }
 
 .login-card .ant-input-affix-wrapper.modern-input:focus-within .input-icon {
-  color: var(--primary-color);
+  color: var(--primary-light);
 }
 
 /* ==================== Button Styles ==================== */
 .login-button {
-  height: 48px;
-  font-size: var(--text-sm);
+  position: relative;
+  height: 50px;
+  font-size: var(--text-base);
   font-weight: var(--weight-semibold);
-  border-radius: var(--radius-md);
-  background: var(--primary-color);
+  letter-spacing: 0.08em;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
   border: none;
-  transition: all var(--duration-fast) var(--ease-default);
+  overflow: hidden;
+  /* !important to beat a global hard-shadow rule that drew a light bar under the button */
+  box-shadow:
+    0 8px 22px rgba(59, 130, 246, 0.28),
+    0 1px 0 rgba(255, 255, 255, 0.28) inset !important;
+  transition: transform var(--duration-fast) var(--ease-default),
+              box-shadow var(--duration-fast) var(--ease-default),
+              filter var(--duration-fast) var(--ease-default);
+}
+
+/* shine sweep */
+.login-button::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -60%;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+  transform: skewX(-20deg);
+  transition: left 0.5s var(--ease-out);
+  pointer-events: none;
 }
 
 .login-button:hover:not(:disabled) {
-  background: var(--primary-hover);
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+  box-shadow: 0 12px 30px rgba(59, 130, 246, 0.36) !important;
+}
+
+.login-button:hover:not(:disabled)::after {
+  left: 120%;
 }
 
 .login-button:active:not(:disabled) {
-  transform: scale(0.98);
+  transform: translateY(0) scale(0.985);
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.24) !important;
 }
 
 .login-button:disabled {
@@ -333,12 +486,30 @@
   cursor: not-allowed;
 }
 
+.login-button-label {
+  position: relative;
+  z-index: 1;
+}
+
+.login-button-arrow {
+  position: relative;
+  z-index: 1;
+  margin-left: 8px;
+  font-size: 14px;
+  opacity: 0.85;
+  transform: translateX(0);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.login-button:hover:not(:disabled) .login-button-arrow {
+  transform: translateX(4px);
+}
+
 /* ==================== Footer ==================== */
+/* Always in-flow directly under the card so it can never overlap the card
+   on any viewport height (a fixed footer collided with the tall card). */
 .login-page-footer {
-  position: fixed;
-  bottom: var(--space-6);
-  left: 0;
-  right: 0;
+  margin-top: var(--space-6);
   text-align: center;
   z-index: 10;
 }
@@ -346,20 +517,6 @@
 .page-footer-copyright {
   color: var(--text-muted);
   font-size: var(--text-xs);
-}
-
-.login-footer {
-  text-align: center;
-}
-
-.footer-text {
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-}
-
-.footer-divider {
-  margin: var(--space-5) 0 var(--space-4);
-  border-color: var(--border-subtle);
 }
 
 /* ==================== Responsive ==================== */
@@ -370,7 +527,7 @@
 
   .login-card {
     padding: var(--space-6) var(--space-5);
-    border-radius: var(--radius-lg);
+    border-radius: 16px;
     max-width: 100%;
   }
 
@@ -378,32 +535,23 @@
     margin-bottom: var(--space-6);
   }
 
-  .brand-icon-wrapper {
-    width: 56px;
-    height: 56px;
-    border-radius: var(--radius-md);
-  }
-
-  .brand-icon-main {
-    font-size: 24px;
-  }
-
-  .brand-icon-bg {
-    font-size: 40px;
-  }
-
   .brand-title {
-    font-size: var(--text-lg);
+    font-size: 24px;
   }
 
   .brand-subtitle {
     font-size: var(--text-xs);
   }
 
+  .chip {
+    font-size: 10px;
+    padding: 2px 8px;
+  }
+
   .login-card .ant-input-affix-wrapper.modern-input,
   .login-button {
-    height: 44px;
-    font-size: var(--text-xs);
+    height: 46px;
+    font-size: var(--text-sm);
   }
 
   .login-form .ant-form-item {
@@ -417,50 +565,28 @@
   .login-page-footer {
     bottom: var(--space-4);
   }
-
-  /* Reduce animations for mobile */
-  .bg-ambient-1,
-  .bg-ambient-2,
-  .bg-ambient-3,
-  .gradient-orb {
-    animation-duration: 60s;
-  }
-
-  .tech-rays-canvas {
-    opacity: 0.15;
-  }
 }
 
 @media (min-width: 481px) and (max-width: 768px) {
   .login-card {
-    max-width: 360px;
+    max-width: 380px;
     padding: var(--space-8) var(--space-6);
-  }
-
-  .brand-icon-wrapper {
-    width: 60px;
-    height: 60px;
-  }
-
-  .brand-icon-main {
-    font-size: 26px;
   }
 }
 
 @media (min-width: 1200px) {
   .login-card {
-    max-width: 420px;
+    max-width: 440px;
     padding: var(--space-12) var(--space-10);
   }
 
   .login-brand {
-    margin-bottom: var(--space-10);
+    margin-bottom: var(--space-8);
   }
 
   .login-card .ant-input-affix-wrapper.modern-input,
   .login-button {
-    height: 52px;
-    font-size: var(--text-base);
+    height: 54px;
   }
 }
 
@@ -485,18 +611,16 @@
 
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
-  .bg-ambient-1,
-  .bg-ambient-2,
-  .bg-ambient-3,
-  .gradient-orb,
+  .bg-aurora,
+  .gateway-flow-canvas,
   .bg-grid,
-  .particle,
-  .tech-rays-canvas {
+  .card-ring,
+  .brand-title {
     animation: none;
   }
 
-  .particle {
-    opacity: 0.2;
+  .card-ring {
+    opacity: 0.35;
   }
 
   .login-card {
@@ -504,9 +628,11 @@
   }
 
   .login-card,
-  .brand-icon-wrapper,
   .login-card .ant-input-affix-wrapper.modern-input,
-  .login-button {
+  .login-button,
+  .login-button::after,
+  .login-button-arrow,
+  .login-card::after {
     transition: none;
   }
 }
@@ -515,6 +641,7 @@
 @media (prefers-contrast: high) {
   .login-card {
     border: 2px solid var(--border-strong);
+    background: var(--bg-card);
   }
 
   .login-card .ant-input-affix-wrapper.modern-input {
@@ -524,28 +651,4 @@
   .login-button {
     border: 2px solid transparent;
   }
-}
-
-/* ==================== Legacy Compatibility ==================== */
-.bg-glow {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.1;
-}
-
-.glow-1 {
-  width: 300px;
-  height: 300px;
-  background: radial-gradient(circle, rgba(59, 130, 246, 0.2) 0%, transparent 70%);
-  top: -80px;
-  left: -80px;
-}
-
-.glow-2 {
-  width: 350px;
-  height: 350px;
-  background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, transparent 70%);
-  bottom: -100px;
-  right: -100px;
 }

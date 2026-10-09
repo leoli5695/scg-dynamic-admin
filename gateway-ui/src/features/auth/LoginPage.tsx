@@ -2,18 +2,19 @@
  * Login page (rewritten). Visual identical to the legacy page;
  * auth flow now goes through AuthContext instead of raw localStorage writes.
  */
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   Button, Form, Input, Typography  } from 'antd';
 import { message } from '../../utils/antdStatic';
 import {
-  ApiOutlined, CloudOutlined, LockOutlined, UserOutlined,
+  ArrowsAltOutlined, ArrowRightOutlined, EyeOutlined,
+  LockOutlined, SafetyCertificateOutlined, ThunderboltOutlined, UserOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from './AuthContext';
 import { ApiError } from '../../api/http';
-import TechRaysBackground from './TechRaysBackground';
+import GatewayFlowBackground from './GatewayFlowBackground';
 // Legacy stylesheet — will be moved into features/auth during final cleanup.
 import './login.css';
 
@@ -29,6 +30,13 @@ const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { login } = useAuth();
+
+  // Pointer-tracked spotlight inside the card (CSS vars consumed by .login-card::after)
+  const onCardMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    e.currentTarget.style.setProperty('--mx', `${e.clientX - rect.left}px`);
+    e.currentTarget.style.setProperty('--my', `${e.clientY - rect.top}px`);
+  }, []);
 
   const onFinish = async (values: LoginFormData) => {
     setLoading(true);
@@ -50,34 +58,31 @@ const LoginPage: React.FC = () => {
     <div className="login-container">
       {/* Premium animated background */}
       <div className="login-background">
-        <div className="bg-ambient-1" />
-        <div className="bg-ambient-2" />
-        <div className="bg-ambient-3" />
-        <div className="gradient-orb gradient-orb-1" />
-        <div className="gradient-orb gradient-orb-2" />
-        <div className="gradient-orb gradient-orb-3" />
+        <div className="bg-aurora bg-aurora-1" />
+        <div className="bg-aurora bg-aurora-2" />
+        <div className="bg-aurora bg-aurora-3" />
         <div className="bg-grid" />
-        <div className="particles">
-          {Array.from({ length: 9 }).map((_, i) => (
-            <div key={i} className="particle" />
-          ))}
-        </div>
-        <TechRaysBackground rayCount={80} particleCount={30} opacity={0.3} />
+        <GatewayFlowBackground curveCount={9} packetsPerCurve={3} opacity={0.9} />
+        <div className="bg-horizon" />
+        <div className="bg-spotlight" />
+        <div className="bg-grain" />
+        <div className="bg-vignette" />
       </div>
 
       {/* Login card - Glassmorphism */}
-      <div className="login-card">
+      <div className="login-card" onMouseMove={onCardMouseMove}>
+        <span className="card-ring" aria-hidden="true" />
         <div className="login-brand">
-          <div className="brand-icon-wrapper">
-            <div className="brand-icon-content">
-              <ApiOutlined className="brand-icon-main" />
-              <CloudOutlined className="brand-icon-bg" />
-            </div>
-          </div>
           <Title level={2} className="brand-title">
             {t('login.title')}
           </Title>
           <span className="brand-subtitle">{t('login.subtitle')}</span>
+          <div className="brand-chips">
+            <span className="chip"><ThunderboltOutlined />{t('login.chip.ha')}</span>
+            <span className="chip"><EyeOutlined />{t('login.chip.observability')}</span>
+            <span className="chip"><SafetyCertificateOutlined />{t('login.chip.security')}</span>
+            <span className="chip"><ArrowsAltOutlined />{t('login.chip.elastic')}</span>
+          </div>
         </div>
 
         <div className="login-form-section">
@@ -127,7 +132,8 @@ const LoginPage: React.FC = () => {
                 block
                 className="login-button"
               >
-                {t('login.button')}
+                <span className="login-button-label">{t('login.button')}</span>
+                <ArrowRightOutlined className="login-button-arrow" />
               </Button>
             </Form.Item>
           </Form>
