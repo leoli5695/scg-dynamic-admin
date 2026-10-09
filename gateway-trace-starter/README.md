@@ -37,7 +37,7 @@ gateway:
 | **RocketMQ** | ✅ | `RocketMQTemplate` message sending |
 | **Kafka** | ✅ | `KafkaTemplate` message sending |
 | **MySQL** | ✅ | MyBatis Mapper/JDBC operations |
-| **Middleware Metadata** | ✅ | Auto-report middleware dependencies at startup |
+| **Middleware Metadata** | ✅ | Report *configured* middleware exporters at startup (config-driven, not auto-detected) |
 
 ---
 
@@ -75,12 +75,17 @@ gateway:
     
     # Middleware Metadata Configuration
     report-middleware: true                # Enable middleware metadata reporting
-    
-    # Custom Exporter URLs (auto-detected if not configured)
-    redis-exporter-url: redis-exporter:9121
-    rocketmq-exporter-url: rocketmq-exporter:5557
-    mysql-exporter-url: mysql-exporter:9104
-    es-exporter-url: es-exporter:9114
+
+    # Exporter URLs are config-driven: a middleware is reported only if declared.
+    # Prefer the nested middleware-exporters.* block (see "Middleware Reporting").
+    # The flat keys below are deprecated legacy fallbacks.
+    middleware-exporters:
+      redis: redis-exporter:9121
+      mysql: mysql-exporter:9104
+    redis-exporter-url: redis-exporter:9121   # deprecated
+    rocketmq-exporter-url: rocketmq-exporter:5557  # deprecated
+    mysql-exporter-url: mysql-exporter:9104   # deprecated
+    es-exporter-url: es-exporter:9114         # deprecated
     
     # Reporting Configuration
     async-queue-size: 1000                 # Async queue size
@@ -170,19 +175,50 @@ Auto-configured 50-connection high-performance connection pool to resolve high-c
 
 ---
 
-## Middleware Auto-Detection
+## Middleware Reporting (config-driven)
 
-The Starter automatically detects the following Spring Boot standard configurations at startup:
+> **Breaking change — auto-detection removed.** Earlier versions probed
+> `spring.*` / `rocketmq.*` config at startup to *guess* which middleware a
+> service used (MySQL/Oracle SID-ServiceName-TNS, SQL Server named instances,
+> Redis Cluster/Sentinel/SSL, MongoDB SRV/replica-set, etc.). That whole
+> detection matrix was **intentionally deleted**, not lost: guessing a service's
+> topology from connection strings was brittle and produced false
+> positives/negatives. Reporting is now **explicitly config-driven** — a
+> middleware is reported if and only if you declare its exporter URL. The
+> removed detection logic and its ~60 unit tests were dropped together; there is
+> no replacement detector anywhere in the codebase.
 
-| Middleware | Configuration Key | Example |
-|------------|-------------------|---------|
-| Redis | `spring.data.redis.host/port` (SB3) or `spring.redis.host/port` (SB2) | `redis-cluster:6379` |
-| RocketMQ | `rocketmq.name-server` | `rocketmq-namesrv:9876` |
-| MySQL | `spring.datasource.url` | `jdbc:mysql://mysql-master:3306/db` |
-| Elasticsearch | `spring.elasticsearch.uris` | `http://es-cluster:9200` |
-| Kafka | `spring.kafka.bootstrap-servers` | `kafka-broker:9092` |
+Declare the Prometheus exporter URL for each middleware you want reported under
+`gateway.trace.middleware-exporters.*`. Anything you do not list is simply not
+reported.
 
-No manual Exporter URL configuration needed - the Starter auto-reports.
+```yaml
+gateway:
+  trace:
+    admin-url: http://gateway-admin:9090
+    middleware-exporters:
+      redis: redis-exporter:9121
+      elasticsearch: elasticsearch-exporter:9114
+      mysql: mysql-exporter:9104
+      postgresql: postgres-exporter:9187
+      oracle: oracledb-exporter:9161
+      sqlserver: mssql-exporter:4000
+      mongodb: mongodb-exporter:9216
+      rabbitmq: rabbitmq-exporter:9419
+      kafka: kafka-exporter:9308
+      rocketmq-console: rocketmq-console:8080   # Console API, not a Prometheus exporter
+```
+
+Supported keys: `redis`, `elasticsearch`, `mysql`, `postgresql`, `oracle`,
+`sqlserver`, `mongodb`, `rabbitmq`, `kafka`, `rocketmq-console`. Each exporter
+URL must match the `instance` label in your Prometheus scrape config.
+
+**Legacy fallback (deprecated).** The flat `redis-exporter-url` /
+`es-exporter-url` / `mysql-exporter-url` / `kafka-exporter-url` /
+`mongo-exporter-url` / `rabbitmq-exporter-url` / `rocketmq-exporter-url` keys
+still work for backward compatibility, but the nested `middleware-exporters.*`
+value wins when both are set. `oracle`, `sqlserver` and `postgresql` have no
+legacy flat key — they are nested-only.
 
 ---
 
@@ -303,13 +339,22 @@ gateway:
   trace:
     admin-url: http://gateway-admin:9090
     sample-rate: 0.1  # Only trace 10% requests during load testing
+    # Declare the exporters you want reported (config-driven; spring.* is NOT probed):
+    middleware-exporters:
+      redis: redis-exporter:9121
+      mysql: mysql-exporter:9104
+      rocketmq-console: rocketmq-console:8080
 ```
 
-**Auto-reported at startup:**
+**Reported at startup (only what you declared above):**
 - Service name: seckill-service
-- Redis: redis-cluster:6379 → redis-exporter:9121
-- RocketMQ: rocketmq-namesrv:9876 → rocketmq-exporter:5557
-- MySQL: mysql-master:3306 → mysql-exporter:9104
+- redis → redis-exporter:9121
+- mysql → mysql-exporter:9104
+- rocketmq → rocketmq-console:8080
+
+> The `spring.redis` / `spring.datasource` / `rocketmq` blocks configure the
+> service's own clients; they are **not** read for middleware reporting. Only the
+> `middleware-exporters.*` entries are reported.
 
 ### Example 2: AI Bottleneck Analysis
 
@@ -375,8 +420,8 @@ A: No. The Starter reports directly to Gateway Admin via HTTP, bypassing Nacos. 
 │                                                                  │
 │  At Startup:                                                     │
 │  └── MiddlewareMetadataReporter                                  │
-│      Auto-detects Redis/MQ/MySQL/ES configuration                │
-│      Reports Exporter URLs to Gateway Admin                      │
+│      Reads declared gateway.trace.middleware-exporters.*        │
+│      Reports configured Exporter URLs to Gateway Admin          │
 │                                                                  │
 │  At Runtime:                                                     │
 │  ┌──────────────────────────────────────────────────────────┐   │
