@@ -4,6 +4,7 @@ import { message } from '../../utils/antdStatic';
 import {
   BookOutlined,
   CheckCircleOutlined,
+  DatabaseOutlined,
   RobotOutlined,
   SettingOutlined,
   ThunderboltOutlined,
@@ -21,6 +22,7 @@ import { useInstanceDetail } from '../instance-detail/InstanceDetailContext';
 import ChatTab from './components/ChatTab';
 import ToolsTab from './components/ToolsTab';
 import LearnTab from './components/LearnTab';
+import KnowledgeTab from './components/KnowledgeTab';
 import ConfigModal from './components/ConfigModal';
 
 const { Text } = Typography;
@@ -176,6 +178,16 @@ const AiCopilotPage: React.FC = () => {
         </span>
       ),
       children: <LearnTab instanceId={instanceId} provider={selectedProvider} model={selectedModel} />,
+    },
+    {
+      key: 'knowledge',
+      label: (
+        <span>
+          <DatabaseOutlined />
+          {t('copilot.tab_knowledge')}
+        </span>
+      ),
+      children: <KnowledgeTab />,
     },
   ];
 

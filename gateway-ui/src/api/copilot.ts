@@ -14,6 +14,9 @@ import type {
   CopilotChatResponse,
   DebugAnalysisResult,
   ExecuteActionResult,
+  KnowledgeChunkPage,
+  KnowledgeSearchResult,
+  KnowledgeStats,
   OptimizationResult,
   RouteGenerationResult,
   SaveConfigResult,
@@ -235,3 +238,39 @@ export async function sendCopilotChatStream(
   }
   if (buffer.trim()) dispatchFrame(buffer);
 }
+
+// ============== Knowledge base (RAG) management ==============
+
+/** GET /knowledge/stats — 知识库概览统计。 */
+export const getKnowledgeStats = (options?: RequestOptions) =>
+  httpClient.get<KnowledgeStats>(`${BASE}/knowledge/stats`, options);
+
+/** GET /knowledge/chunks — 分页列出分块。 */
+export const listKnowledgeChunks = (
+  params: { type?: string; page?: number; size?: number },
+  options?: RequestOptions,
+) => httpClient.get<KnowledgeChunkPage>(`${BASE}/knowledge/chunks`, {
+  ...options,
+  params: params as Record<string, unknown>,
+});
+
+/** POST /knowledge/ingest — 摄取一篇文档（分块+嵌入+入库）。 */
+export const ingestKnowledge = (
+  body: { sourceType?: string; sourceRef?: string; title?: string; content: string },
+  options?: RequestOptions,
+) => httpClient.post<{ success: boolean; chunks?: number; message?: string }>(
+  `${BASE}/knowledge/ingest`, body, options);
+
+/** POST /knowledge/reindex — 重建内存向量索引。 */
+export const reindexKnowledge = (options?: RequestOptions) =>
+  httpClient.post<{ success: boolean; indexedChunks: number }>(`${BASE}/knowledge/reindex`, undefined, options);
+
+/** DELETE /knowledge/chunks/{id} — 删除单个分块。 */
+export const deleteKnowledgeChunk = (id: number, options?: RequestOptions) =>
+  httpClient.delete<{ success: boolean }>(`${BASE}/knowledge/chunks/${id}`, options);
+
+/** POST /knowledge/search — 测试检索（验证召回质量）。 */
+export const searchKnowledge = (
+  body: { query: string; topK?: number; sourceType?: string },
+  options?: RequestOptions,
+) => httpClient.post<KnowledgeSearchResult>(`${BASE}/knowledge/search`, body, options);

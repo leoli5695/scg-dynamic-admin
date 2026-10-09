@@ -9,7 +9,9 @@ import org.springframework.stereotype.Service;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * ============================================================================
@@ -115,6 +117,36 @@ public class KnowledgeIngestService {
     public int reindex() {
         vectorIndex.reload();
         return vectorIndex.size();
+    }
+
+    /** 删除单个分块并刷新索引。 */
+    public void deleteChunk(Long id) {
+        repository.deleteById(id);
+        vectorIndex.reload();
+    }
+
+    /** 分页列出分块（按更新时间倒序；type 为空则全部）。 */
+    public org.springframework.data.domain.Page<KnowledgeChunkEntity> listChunks(String sourceType, int page, int size) {
+        org.springframework.data.domain.Pageable p =
+                org.springframework.data.domain.PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 100));
+        return (sourceType == null || sourceType.isBlank())
+                ? repository.findAllByOrderByUpdatedAtDesc(p)
+                : repository.findBySourceTypeOrderByUpdatedAtDesc(sourceType, p);
+    }
+
+    /** 知识库概览统计（供管理 UI）。 */
+    public Map<String, Object> stats() {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("totalChunks", repository.count());
+        m.put("enabledChunks", repository.countByEnabledTrue());
+        m.put("indexedChunks", vectorIndex.size());
+        m.put("dim", vectorIndex.dim());
+        Map<String, Object> byType = new LinkedHashMap<>();
+        for (String t : List.of("runbook", "incident", "feedback", "doc")) {
+            byType.put(t, repository.countBySourceType(t));
+        }
+        m.put("byType", byType);
+        return m;
     }
 
     /**

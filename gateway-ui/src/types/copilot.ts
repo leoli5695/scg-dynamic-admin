@@ -146,3 +146,51 @@ export interface AiTimeRangeAnalysisRequest {
 export interface AiTimeRangeAnalysisResult {
   result: string;
 }
+
+// ============== Knowledge base (RAG) ==============
+
+/** GET /api/copilot/knowledge/stats */
+export interface KnowledgeStats {
+  totalChunks: number;
+  enabledChunks: number;
+  indexedChunks: number;
+  dim: number;
+  byType: Record<string, number>;
+}
+
+/** GET /api/copilot/knowledge/chunks item */
+export interface KnowledgeChunkItem {
+  id: number;
+  title?: string;
+  sourceType: string;
+  sourceRef?: string;
+  dim?: number;
+  model?: string;
+  enabled: boolean;
+  updatedAt?: string;
+  preview?: string;
+}
+
+/** GET /api/copilot/knowledge/chunks page */
+export interface KnowledgeChunkPage {
+  content: KnowledgeChunkItem[];
+  total: number;
+  page: number;
+  size: number;
+}
+
+/** POST /api/copilot/knowledge/search hit */
+export interface KnowledgeSearchHit {
+  title?: string;
+  sourceType?: string;
+  score?: number;
+  content: string;
+}
+
+/** POST /api/copilot/knowledge/search result */
+export interface KnowledgeSearchResult {
+  mode: string;
+  count: number;
+  results: KnowledgeSearchHit[];
+  hint?: string;
+}

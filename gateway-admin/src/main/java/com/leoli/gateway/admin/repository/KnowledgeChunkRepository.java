@@ -1,6 +1,8 @@
 package com.leoli.gateway.admin.repository;
 
 import com.leoli.gateway.admin.entity.KnowledgeChunkEntity;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -22,6 +24,13 @@ public interface KnowledgeChunkRepository extends JpaRepository<KnowledgeChunkEn
     Optional<KnowledgeChunkEntity> findByContentHash(String contentHash);
 
     long countByEnabledTrue();
+
+    long countBySourceType(String sourceType);
+
+    /** 管理列表（按更新时间倒序分页）。 */
+    Page<KnowledgeChunkEntity> findAllByOrderByUpdatedAtDesc(Pageable pageable);
+
+    Page<KnowledgeChunkEntity> findBySourceTypeOrderByUpdatedAtDesc(String sourceType, Pageable pageable);
 
     /**
      * embedding 不可用时的关键词兜底检索（MySQL LIKE）。

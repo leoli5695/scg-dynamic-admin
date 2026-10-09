@@ -16,6 +16,7 @@ import com.leoli.gateway.admin.service.copilot.CopilotStreamAbortedException;
 import com.leoli.gateway.admin.service.copilot.CopilotUsageGuard;
 import com.leoli.gateway.admin.service.copilot.PendingActionStore;
 import com.leoli.gateway.admin.service.knowledge.KnowledgeIngestService;
+import com.leoli.gateway.admin.service.knowledge.KnowledgeSearchService;
 import com.leoli.gateway.admin.validation.RouteValidator;
 import com.leoli.license.client.model.LicenseInfo;
 import jakarta.annotation.PreDestroy;
@@ -60,6 +61,7 @@ public class AiCopilotController extends BaseController {
     private final CopilotUsageGuard copilotUsageGuard;
     private final CopilotFeedbackRepository copilotFeedbackRepository;
     private final KnowledgeIngestService knowledgeIngestService;
+    private final KnowledgeSearchService knowledgeSearchService;
 
     /**
      * SSE 流式对话的异步执行器。SseEmitter 要求在独立线程上跑同步管线，绝不能阻塞
@@ -359,6 +361,60 @@ public class AiCopilotController extends BaseController {
         licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.AI_COPilot);
         int size = knowledgeIngestService.reindex();
         return ResponseEntity.ok(Map.of("success", true, "indexedChunks", size));
+    }
+
+    /** 知识库概览统计（总分块数、各来源计数、已索引数、维度）。 */
+    @GetMapping("/knowledge/stats")
+    public ResponseEntity<Map<String, Object>> knowledgeStats() {
+        return ResponseEntity.ok(knowledgeIngestService.stats());
+    }
+
+    /** 分页列出知识分块（不返回 embedding，仅元信息 + 正文预览）。 */
+    @GetMapping("/knowledge/chunks")
+    public ResponseEntity<Map<String, Object>> listKnowledge(
+            @RequestParam(required = false) String type,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        var result = knowledgeIngestService.listChunks(type, page, size);
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (var e : result.getContent()) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", e.getId());
+            m.put("title", e.getTitle());
+            m.put("sourceType", e.getSourceType());
+            m.put("sourceRef", e.getSourceRef());
+            m.put("dim", e.getDim());
+            m.put("model", e.getModel());
+            m.put("enabled", e.getEnabled());
+            m.put("updatedAt", e.getUpdatedAt());
+            String c = e.getContent();
+            m.put("preview", c != null && c.length() > 160 ? c.substring(0, 160) + "…" : c);
+            items.add(m);
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("content", items);
+        body.put("total", result.getTotalElements());
+        body.put("page", result.getNumber());
+        body.put("size", result.getSize());
+        return ResponseEntity.ok(body);
+    }
+
+    /** 删除单个知识分块（并刷新索引）。 */
+    @DeleteMapping("/knowledge/chunks/{id}")
+    public ResponseEntity<Map<String, Object>> deleteKnowledge(@PathVariable Long id) {
+        licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.AI_COPilot);
+        knowledgeIngestService.deleteChunk(id);
+        log.info("Knowledge chunk deleted: id={}, operator={}", id, getOperator());
+        return ResponseEntity.ok(Map.of("success", true));
+    }
+
+    /** 测试检索：直接对知识库做一次检索，供管理员验证召回质量（与模型调 search_knowledge 同源）。 */
+    @PostMapping("/knowledge/search")
+    public ResponseEntity<Map<String, Object>> searchKnowledge(@RequestBody KnowledgeSearchRequest request) {
+        licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.AI_COPilot);
+        Map<String, Object> result = knowledgeSearchService.search(
+                request.getQuery(), request.getTopK(), request.getSourceType());
+        return ResponseEntity.ok(result);
     }
 
     /** 截断过长文本，避免超出列宽。 */
@@ -969,5 +1025,18 @@ public class AiCopilotController extends BaseController {
         public void setTitle(String title) { this.title = title; }
         public String getContent() { return content; }
         public void setContent(String content) { this.content = content; }
+    }
+
+    public static class KnowledgeSearchRequest {
+        private String query;
+        private Integer topK;
+        private String sourceType;
+
+        public String getQuery() { return query; }
+        public void setQuery(String query) { this.query = query; }
+        public Integer getTopK() { return topK; }
+        public void setTopK(Integer topK) { this.topK = topK; }
+        public String getSourceType() { return sourceType; }
+        public void setSourceType(String sourceType) { this.sourceType = sourceType; }
     }
 }
