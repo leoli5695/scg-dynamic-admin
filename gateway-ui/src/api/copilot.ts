@@ -43,6 +43,12 @@ export const executeCopilotAction = (
 export const clearCopilotChat = (sessionId: string, options?: RequestOptions) =>
   httpClient.delete<ClearChatResult>(`${BASE}/chat/${encodeURIComponent(sessionId)}`, options);
 
+/** POST /feedback — record 👍/👎 (with Q&A snapshot) for an assistant answer. */
+export const submitCopilotFeedback = (
+  body: { sessionId?: string; question?: string; answer?: string; rating: 'UP' | 'DOWN'; comment?: string },
+  options?: RequestOptions,
+) => httpClient.post<{ success: boolean; id?: number }>(`${BASE}/feedback`, body, options);
+
 /** POST /generate-route — generate a route config from a description. */
 export const generateRoute = (
   body: { description: string; instanceId?: string; provider?: string; model?: string },

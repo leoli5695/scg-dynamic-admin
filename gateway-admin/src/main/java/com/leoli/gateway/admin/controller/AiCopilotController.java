@@ -1,9 +1,11 @@
 package com.leoli.gateway.admin.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leoli.gateway.admin.entity.CopilotFeedbackEntity;
 import com.leoli.gateway.admin.license.LicenseFeatureHelper;
 import com.leoli.gateway.admin.model.RouteDefinition;
 import com.leoli.gateway.admin.model.RouteEntity;
+import com.leoli.gateway.admin.repository.CopilotFeedbackRepository;
 import com.leoli.gateway.admin.service.AiAnalysisService;
 import com.leoli.gateway.admin.service.AiCopilotService;
 import com.leoli.gateway.admin.service.AuditLogService;
@@ -55,6 +57,7 @@ public class AiCopilotController extends BaseController {
     private final ToolExecutor toolExecutor;
     private final PendingActionStore pendingActionStore;
     private final CopilotUsageGuard copilotUsageGuard;
+    private final CopilotFeedbackRepository copilotFeedbackRepository;
 
     /**
      * SSE 流式对话的异步执行器。SseEmitter 要求在独立线程上跑同步管线，绝不能阻塞
@@ -283,6 +286,41 @@ public class AiCopilotController extends BaseController {
                 "success", true,
                 "message", "Conversation history cleared"
         ));
+    }
+
+    /**
+     * 记录用户对某条 AI 回答的 👍/👎 反馈（问答快照一并落库，供质量度量与后续 RAG/微调）。
+     *
+     * @param request 反馈内容（sessionId + question + answer + rating[UP|DOWN] + 可选 comment）
+     * @return 保存结果
+     */
+    @PostMapping("/feedback")
+    public ResponseEntity<Map<String, Object>> submitFeedback(@RequestBody FeedbackRequest request) {
+        licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.AI_COPilot);
+
+        String rating = request.getRating() != null ? request.getRating().toUpperCase(Locale.ROOT) : null;
+        if (!"UP".equals(rating) && !"DOWN".equals(rating)) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false, "message", "rating 必须是 UP 或 DOWN"));
+        }
+
+        CopilotFeedbackEntity entity = new CopilotFeedbackEntity();
+        entity.setSessionId(truncate(request.getSessionId(), 128));
+        entity.setQuestion(truncate(request.getQuestion(), 4000));
+        entity.setAnswer(truncate(request.getAnswer(), 60000));
+        entity.setRating(rating);
+        entity.setUserComment(truncate(request.getComment(), 1000));
+        entity.setOperatorName(getOperator());
+        copilotFeedbackRepository.save(entity);
+
+        log.info("Copilot feedback recorded: id={}, rating={}, operator={}", entity.getId(), rating, entity.getOperatorName());
+        return ResponseEntity.ok(Map.of("success", true, "id", entity.getId()));
+    }
+
+    /** 截断过长文本，避免超出列宽。 */
+    private static String truncate(String s, int max) {
+        if (s == null) return null;
+        return s.length() <= max ? s : s.substring(0, max);
     }
 
     /**
@@ -850,5 +888,25 @@ public class AiCopilotController extends BaseController {
         public void setArguments(Map<String, Object> arguments) {
             this.arguments = arguments;
         }
+    }
+
+    public static class FeedbackRequest {
+        private String sessionId;
+        private String question;
+        private String answer;
+        /** UP / DOWN */
+        private String rating;
+        private String comment;
+
+        public String getSessionId() { return sessionId; }
+        public void setSessionId(String sessionId) { this.sessionId = sessionId; }
+        public String getQuestion() { return question; }
+        public void setQuestion(String question) { this.question = question; }
+        public String getAnswer() { return answer; }
+        public void setAnswer(String answer) { this.answer = answer; }
+        public String getRating() { return rating; }
+        public void setRating(String rating) { this.rating = rating; }
+        public String getComment() { return comment; }
+        public void setComment(String comment) { this.comment = comment; }
     }
 }

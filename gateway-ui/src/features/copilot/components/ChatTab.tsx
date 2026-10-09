@@ -3,13 +3,17 @@ import { Button, Empty, Input, Spin, Tooltip, Typography } from 'antd';
 import { message } from '../../../utils/antdStatic';
 import {
   ClearOutlined,
+  DislikeFilled,
+  DislikeOutlined,
   ExclamationCircleOutlined,
+  LikeFilled,
+  LikeOutlined,
   RobotOutlined,
   SendOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import { clearCopilotChat, executeCopilotAction, sendCopilotChatStream } from '../../../api/copilot';
+import { clearCopilotChat, executeCopilotAction, sendCopilotChatStream, submitCopilotFeedback } from '../../../api/copilot';
 import { ApiError, isAbortError } from '../../../api/http';
 import type { CopilotPendingAction } from '../../../types/copilot';
 import AiReportRenderer from '../../../components/ai/AiReportRenderer';
@@ -22,6 +26,8 @@ interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  /** true 仅用于真正来自模型的回答（本地确认/取消提示不算），决定是否显示反馈按钮。 */
+  fromAi?: boolean;
 }
 
 interface ChatTabProps {
@@ -39,6 +45,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
   const [pendingAction, setPendingAction] = useState<CopilotPendingAction | null>(null);
   const [executing, setExecuting] = useState(false);
   const [streamNote, setStreamNote] = useState('');
+  const [feedback, setFeedback] = useState<Record<number, 'UP' | 'DOWN'>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -105,6 +112,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
                 role: 'assistant',
                 content: response.response || '',
                 timestamp: new Date(),
+                fromAi: true,
               }]);
               setSessionId(response.sessionId);
               // AI proposed a write operation — surface it for explicit human confirmation.
@@ -165,6 +173,30 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
     }]);
   };
 
+  const handleFeedback = async (index: number, rating: 'UP' | 'DOWN', answer: string) => {
+    if (feedback[index]) return; // 已评过，不重复提交
+    // 取该回答之前最近的一条用户消息作为问题快照
+    let question = '';
+    for (let i = index - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        question = messages[i].content;
+        break;
+      }
+    }
+    // 先乐观置位，避免连点重复提交
+    setFeedback(prev => ({ ...prev, [index]: rating }));
+    try {
+      await submitCopilotFeedback({ sessionId, question, answer, rating });
+    } catch {
+      setFeedback(prev => {
+        const next = { ...prev };
+        delete next[index];
+        return next;
+      });
+      message.error(t('copilot.feedback_failed'));
+    }
+  };
+
   const handleClearConversation = async () => {
     abortRef.current?.abort(); // 中止在途流式请求，避免旧会话的回复串进来
     try {
@@ -172,6 +204,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
       setMessages([]);
       setPendingAction(null);
       setStreamNote('');
+      setFeedback({});
       setSessionId(`session-${Date.now()}`);
       message.success(t('copilot.conversation_cleared'));
     } catch {
@@ -240,6 +273,32 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
                 <div style={{ color: 'rgba(255,255,255,0.85)' }}>
                   <AiReportRenderer content={msg.content} />
                 </div>
+                {msg.role === 'assistant' && msg.fromAi && (
+                  <div style={{ marginTop: '8px', display: 'flex', gap: '4px', alignItems: 'center' }}>
+                    <Tooltip title={t('copilot.feedback_up')}>
+                      <Button
+                        size="small"
+                        type="text"
+                        disabled={!!feedback[index]}
+                        icon={feedback[index] === 'UP'
+                          ? <LikeFilled style={{ color: '#52c41a' }} />
+                          : <LikeOutlined style={{ color: 'rgba(255,255,255,0.45)' }} />}
+                        onClick={() => handleFeedback(index, 'UP', msg.content)}
+                      />
+                    </Tooltip>
+                    <Tooltip title={t('copilot.feedback_down')}>
+                      <Button
+                        size="small"
+                        type="text"
+                        disabled={!!feedback[index]}
+                        icon={feedback[index] === 'DOWN'
+                          ? <DislikeFilled style={{ color: '#ff4d4f' }} />
+                          : <DislikeOutlined style={{ color: 'rgba(255,255,255,0.45)' }} />}
+                        onClick={() => handleFeedback(index, 'DOWN', msg.content)}
+                      />
+                    </Tooltip>
+                  </div>
+                )}
               </div>
             </div>
           ))
