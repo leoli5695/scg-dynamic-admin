@@ -1,5 +1,7 @@
 package com.leoli.gateway.admin.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.center.ConfigCenterService;
 import com.leoli.gateway.admin.model.GatewayInstanceEntity;
 import com.leoli.gateway.admin.repository.*;
@@ -11,7 +13,9 @@ import org.springframework.web.client.RestTemplate;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 实例配置清理助手.
@@ -66,8 +70,18 @@ public class InstanceConfigCleanupHelper {
     @Autowired
     private RestTemplate restTemplate;
 
+    @Autowired
+    private ObjectMapper objectMapper;
+
     @Value("${nacos.server-addr:localhost:8848}")
     private String nacosServerAddr;
+
+    /**
+     * Prefix of the per-instance Nacos namespace created by {@code createInstance}
+     * ("gateway-" + instanceId). Only namespaces with this prefix are ever candidates for
+     * orphan cleanup; {@code public} and any non-gateway namespace are always left untouched.
+     */
+    private static final String GATEWAY_NS_PREFIX = "gateway-";
 
     /**
      * Delete all related data from database by instance ID.
@@ -207,26 +221,20 @@ public class InstanceConfigCleanupHelper {
 
     /**
      * Delete Nacos namespace.
+     * <p>
+     * Best-effort: failures are logged, not propagated, so a Nacos outage cannot make an instance
+     * permanently undeletable. The trade-off is that a transient failure here can leave an orphan
+     * namespace behind; {@code NamespaceReconcileTask} self-heals those on the reconcile cadence.
      */
-    void deleteNacosNamespace(String namespaceId) {
+    public void deleteNacosNamespace(String namespaceId) {
         if (namespaceId == null || namespaceId.isEmpty()) {
             log.info("No Nacos namespace to delete");
             return;
         }
 
         try {
-            String nacosApiUrl = nacosServerAddr;
-            if (nacosApiUrl == null || nacosApiUrl.isEmpty()) {
-                nacosApiUrl = "localhost:8848";
-            }
-            // Tolerate a scheme already present in the configured address. Formatting
-            // "http://%s" over "http://nacos:8848" yields "http://http://nacos:8848", which
-            // throws, and the catch below only logs a warning - so the namespace leaks
-            // silently. NacosConfigCenterService already guards this way.
-            String baseUrl = nacosApiUrl.startsWith("http") ? nacosApiUrl : "http://" + nacosApiUrl;
-
             String url = String.format("%s/nacos/v1/console/namespaces?namespaceId=%s",
-                    baseUrl,
+                    resolveBaseUrl(),
                     URLEncoder.encode(namespaceId, StandardCharsets.UTF_8));
 
             log.info("Deleting Nacos namespace: {}", namespaceId);
@@ -235,5 +243,49 @@ public class InstanceConfigCleanupHelper {
         } catch (Exception e) {
             log.warn("Failed to delete Nacos namespace {}: {}", namespaceId, e.getMessage());
         }
+    }
+
+    /**
+     * List the ids of all {@code gateway-*} namespaces currently present in Nacos.
+     * <p>
+     * Used by {@code NamespaceReconcileTask} to find orphan namespaces (a {@code gateway-<id>}
+     * namespace whose instance no longer exists in the DB). The {@code public} namespace and any
+     * non-gateway namespace are excluded by the prefix filter. On any failure an empty set is
+     * returned, which makes the caller detect zero orphans and delete nothing (fail-closed).
+     */
+    public Set<String> listGatewayNamespaces() {
+        Set<String> gatewayNamespaces = new HashSet<>();
+        try {
+            String url = resolveBaseUrl() + "/nacos/v1/console/namespaces";
+            String body = restTemplate.getForObject(url, String.class);
+            if (body == null || body.isEmpty()) {
+                return gatewayNamespaces;
+            }
+            JsonNode data = objectMapper.readTree(body).path("data");
+            if (data.isArray()) {
+                for (JsonNode node : data) {
+                    // The custom namespace id lives in "namespace" ("" for public). trim() guards
+                    // against stray \r\n leaking in from the response (see the manual-cleanup trap).
+                    String id = node.path("namespace").asText("").trim();
+                    if (id.startsWith(GATEWAY_NS_PREFIX)) {
+                        gatewayNamespaces.add(id);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to list Nacos namespaces: {}", e.getMessage());
+        }
+        return gatewayNamespaces;
+    }
+
+    /**
+     * Resolve the Nacos base URL, tolerating a scheme already present in the configured address.
+     * Formatting "http://%s" over "http://nacos:8848" yields "http://http://nacos:8848", which
+     * throws - and since namespace deletion only logs on failure, that would leak the namespace
+     * silently. NacosConfigCenterService guards the same way.
+     */
+    private String resolveBaseUrl() {
+        String addr = (nacosServerAddr == null || nacosServerAddr.isEmpty()) ? "localhost:8848" : nacosServerAddr;
+        return addr.startsWith("http") ? addr : "http://" + addr;
     }
 }

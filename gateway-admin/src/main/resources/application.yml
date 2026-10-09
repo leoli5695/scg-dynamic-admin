@@ -214,6 +214,17 @@ gateway:
       # Services use incremental format with service_id UUID:
       #   Example: config.gateway.services-f47ac10b-58cc-4372-a567-0e02b2c3d479
     group: DEFAULT_GROUP
+    # Orphan namespace self-healing (NamespaceReconcileTask). Runs on the reconcile cadence
+    # (gateway.admin.reconcile.interval-ms) and removes gateway-* namespaces whose instance no
+    # longer exists in the DB - the residue left when a delete-time namespace removal failed.
+    # Never touches public/non-gateway namespaces, and skips removal entirely when the DB has no
+    # instances (mass-deletion guard). Set dry-run:true to log orphans without deleting.
+    # preserve: comma-separated namespaces kept even with no live instance (gateway-test is the
+    # integration-test profile's fixed namespace and has no gateway_instances row).
+    orphan-cleanup:
+      enabled: ${NACOS_ORPHAN_CLEANUP_ENABLED:true}
+      dry-run: ${NACOS_ORPHAN_CLEANUP_DRY_RUN:false}
+      preserve: ${NACOS_ORPHAN_CLEANUP_PRESERVE:gateway-test}
   
   # Health Check Configuration
   health:
