@@ -1,5 +1,6 @@
 package com.leoli.gateway.admin.exception;
 
+import com.leoli.license.client.exception.LicenseFeatureNotAllowedException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -67,6 +68,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(SecurityException.class)
     public ResponseEntity<Map<String, Object>> handleSecurity(SecurityException e) {
         log.warn("Security error: {}", e.getMessage());
+        return buildErrorResponse(HttpStatus.FORBIDDEN, e.getMessage());
+    }
+
+    /**
+     * Handle license feature gating: the feature exists but the active edition does not
+     * include it. Without this the catch-all below reports 500 "An unexpected error
+     * occurred", which hides the only actionable part - which edition is required.
+     */
+    @ExceptionHandler(LicenseFeatureNotAllowedException.class)
+    public ResponseEntity<Map<String, Object>> handleLicenseFeatureNotAllowed(LicenseFeatureNotAllowedException e) {
+        log.warn("License feature not allowed: feature={}, requiredEdition={}, currentEdition={}",
+                e.getFeature(), e.getRequiredEdition(), e.getCurrentEdition());
         return buildErrorResponse(HttpStatus.FORBIDDEN, e.getMessage());
     }
 

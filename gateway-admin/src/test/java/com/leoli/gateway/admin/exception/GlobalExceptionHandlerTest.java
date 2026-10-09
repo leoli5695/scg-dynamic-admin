@@ -1,5 +1,6 @@
 package com.leoli.gateway.admin.exception;
 
+import com.leoli.license.client.exception.LicenseFeatureNotAllowedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -70,6 +71,24 @@ class GlobalExceptionHandlerTest {
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
         assertEquals(403, response.getBody().get("code"));
         assertEquals("Access denied", response.getBody().get("message"));
+    }
+
+    @Test
+    void handleLicenseFeatureNotAllowed_shouldReturnForbiddenWithEditionDetail() {
+        LicenseFeatureNotAllowedException ex =
+                new LicenseFeatureNotAllowedException("ADVANCED_AUDIT", "ADVANCED", "BASIC");
+
+        ResponseEntity<Map<String, Object>> response = handler.handleLicenseFeatureNotAllowed(ex);
+
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+        assertEquals(403, response.getBody().get("code"));
+        assertNull(response.getBody().get("data"));
+        // The whole point of the handler: the message must carry the actionable detail instead
+        // of the catch-all's "An unexpected error occurred".
+        String message = (String) response.getBody().get("message");
+        assertTrue(message.contains("ADVANCED_AUDIT"), message);
+        assertTrue(message.contains("ADVANCED"), message);
+        assertTrue(message.contains("BASIC"), message);
     }
 
     @Test
