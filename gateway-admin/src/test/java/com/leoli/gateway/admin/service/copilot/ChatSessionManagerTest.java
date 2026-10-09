@@ -55,7 +55,8 @@ class ChatSessionManagerTest {
         int perThread = 2; // 合计 16 <= MAX_HISTORY_SIZE(20)，避免裁剪干扰计数
         ExecutorService pool = Executors.newFixedThreadPool(threads + 1);
         CountDownLatch start = new CountDownLatch(1);
-        CountDownLatch done = new CountDownLatch(threads);
+        // +1：把遍历线程也纳入，等它自然跑完再断言，避免 shutdownNow 提前中断造成假失败
+        CountDownLatch done = new CountDownLatch(threads + 1);
         AtomicReference<Throwable> error = new AtomicReference<>();
 
         for (int t = 0; t < threads; t++) {
@@ -66,6 +67,8 @@ class ChatSessionManagerTest {
                     for (int i = 0; i < perThread; i++) {
                         manager.addToHistory(s, "user", "t" + tid + "-" + i);
                     }
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt(); // 正常关闭信号，不算并发错误
                 } catch (Throwable e) {
                     error.compareAndSet(null, e);
                 } finally {
@@ -82,13 +85,17 @@ class ChatSessionManagerTest {
                         // no-op 遍历
                     }
                 }
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
             } catch (Throwable e) {
-                error.compareAndSet(null, e);
+                error.compareAndSet(null, e); // 真正要抓的是 ConcurrentModificationException 等
+            } finally {
+                done.countDown();
             }
         });
 
         start.countDown();
-        assertTrue(done.await(10, TimeUnit.SECONDS), "写入线程应在超时前完成");
+        assertTrue(done.await(15, TimeUnit.SECONDS), "所有线程应在超时前完成");
         pool.shutdownNow();
 
         assertNull(error.get(), "并发访问不应抛异常: " + error.get());

@@ -15,6 +15,7 @@ import com.leoli.gateway.admin.service.copilot.CopilotProgressListener;
 import com.leoli.gateway.admin.service.copilot.CopilotStreamAbortedException;
 import com.leoli.gateway.admin.service.copilot.CopilotUsageGuard;
 import com.leoli.gateway.admin.service.copilot.PendingActionStore;
+import com.leoli.gateway.admin.service.knowledge.KnowledgeIngestService;
 import com.leoli.gateway.admin.validation.RouteValidator;
 import com.leoli.license.client.model.LicenseInfo;
 import jakarta.annotation.PreDestroy;
@@ -58,6 +59,7 @@ public class AiCopilotController extends BaseController {
     private final PendingActionStore pendingActionStore;
     private final CopilotUsageGuard copilotUsageGuard;
     private final CopilotFeedbackRepository copilotFeedbackRepository;
+    private final KnowledgeIngestService knowledgeIngestService;
 
     /**
      * SSE 流式对话的异步执行器。SseEmitter 要求在独立线程上跑同步管线，绝不能阻塞
@@ -314,8 +316,49 @@ public class AiCopilotController extends BaseController {
         entity.setOperatorName(getOperator());
         copilotFeedbackRepository.save(entity);
 
+        // 👍 的问答对自动沉淀进知识库（RAG 语料种子，越用越准）；失败不影响反馈本身
+        if ("UP".equals(rating)) {
+            knowledgeIngestService.ingestFeedback(request.getQuestion(), request.getAnswer(), entity.getId());
+        }
+
         log.info("Copilot feedback recorded: id={}, rating={}, operator={}", entity.getId(), rating, entity.getOperatorName());
         return ResponseEntity.ok(Map.of("success", true, "id", entity.getId()));
+    }
+
+    /**
+     * 摄取一篇知识文档到 RAG 知识库（分块 + 嵌入 + 去重入库 + 刷新索引）。
+     *
+     * @param request {sourceType(runbook|incident|doc), sourceRef?, title?, content}
+     * @return 新增分块数
+     */
+    @PostMapping("/knowledge/ingest")
+    public ResponseEntity<Map<String, Object>> ingestKnowledge(@RequestBody KnowledgeIngestRequest request) {
+        licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.AI_COPilot);
+
+        if (request.getContent() == null || request.getContent().isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "message", "content 不能为空"));
+        }
+        try {
+            String sourceType = (request.getSourceType() != null && !request.getSourceType().isBlank())
+                    ? request.getSourceType() : "doc";
+            int chunks = knowledgeIngestService.ingestDocument(
+                    sourceType, request.getSourceRef(), request.getTitle(), request.getContent());
+            return ResponseEntity.ok(Map.of("success", true, "chunks", chunks));
+        } catch (Exception e) {
+            log.error("Knowledge ingest failed", e);
+            return ResponseEntity.ok(Map.of("success", false,
+                    "message", "摄取失败（嵌入服务不可用？）: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 仅重建内存向量索引（不重新嵌入）：多副本感知彼此的入库，或手工刷新。
+     */
+    @PostMapping("/knowledge/reindex")
+    public ResponseEntity<Map<String, Object>> reindexKnowledge() {
+        licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.AI_COPilot);
+        int size = knowledgeIngestService.reindex();
+        return ResponseEntity.ok(Map.of("success", true, "indexedChunks", size));
     }
 
     /** 截断过长文本，避免超出列宽。 */
@@ -909,5 +952,22 @@ public class AiCopilotController extends BaseController {
         public void setRating(String rating) { this.rating = rating; }
         public String getComment() { return comment; }
         public void setComment(String comment) { this.comment = comment; }
+    }
+
+    public static class KnowledgeIngestRequest {
+        /** runbook / incident / doc（默认 doc） */
+        private String sourceType;
+        private String sourceRef;
+        private String title;
+        private String content;
+
+        public String getSourceType() { return sourceType; }
+        public void setSourceType(String sourceType) { this.sourceType = sourceType; }
+        public String getSourceRef() { return sourceRef; }
+        public void setSourceRef(String sourceRef) { this.sourceRef = sourceRef; }
+        public String getTitle() { return title; }
+        public void setTitle(String title) { this.title = title; }
+        public String getContent() { return content; }
+        public void setContent(String content) { this.content = content; }
     }
 }

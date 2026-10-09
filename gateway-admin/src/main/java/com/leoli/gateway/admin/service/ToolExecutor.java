@@ -57,6 +57,9 @@ public class ToolExecutor {
     private final DistributedTraceService distributedTraceService;
     private final PrometheusClient prometheusClient;
 
+    // 知识库检索（RAG）
+    private final com.leoli.gateway.admin.service.knowledge.KnowledgeSearchService knowledgeSearchService;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     // 工具执行超时（毫秒）
@@ -208,6 +211,9 @@ public class ToolExecutor {
                 case "query_mongodb_during_period" -> executeQueryMongodbDuringPeriod(arguments);
                 case "query_rabbitmq_during_period" -> executeQueryRabbitmqDuringPeriod(arguments);
                 case "analyze_stress_test_with_middleware" -> executeAnalyzeStressTestWithMiddleware(arguments);
+
+                // 知识库检索（RAG）
+                case "search_knowledge" -> executeSearchKnowledge(arguments);
 
                 default -> Map.of("error", "Tool not implemented: " + toolName);
             };
@@ -4112,6 +4118,15 @@ public class ToolExecutor {
         String step = getStringArg(args, "step");
         String queue = getStringArg(args, "queue");
         return prometheusClient.queryRabbitmqDuringPeriod(exporterUrl, startTime, endTime, step, queue);
+    }
+
+    // ===================== 知识库检索（RAG） =====================
+
+    private Object executeSearchKnowledge(Map<String, Object> args) {
+        String query = getStringArg(args, "query");
+        int topK = getIntArg(args, "topK", 4);
+        String sourceType = getStringArg(args, "sourceType");
+        return knowledgeSearchService.search(query, topK, sourceType);
     }
 
     // ===================== 工具结果类 =====================

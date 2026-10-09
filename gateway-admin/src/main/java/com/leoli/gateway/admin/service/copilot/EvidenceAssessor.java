@@ -144,6 +144,9 @@ public class EvidenceAssessor {
                 || toolName.contains("postgre") || toolName.contains("_es_")) {
             dataTypes.add("middleware");
         }
+        if (toolName.contains("knowledge")) {
+            dataTypes.add("knowledge");
+        }
         log.debug("Recorded data type from tool: {} -> {}", toolName, dataTypes);
     }
 }

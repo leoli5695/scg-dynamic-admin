@@ -1024,8 +1024,9 @@ public class ToolRegistry {
 
     /**
      * 始终包含的核心工具类别，保证任何领域下模型都能做基本定位。
+     * knowledge 始终可用：模型任何领域都可能需要查内部知识库。
      */
-    private static final Set<String> CORE_TOOL_CATEGORIES = Set.of("monitor", "route", "service", "instance");
+    private static final Set<String> CORE_TOOL_CATEGORIES = Set.of("monitor", "route", "service", "instance", "knowledge");
 
     /**
      * 领域关键词 → 相关工具类别。意图字符串由数据库驱动、取值不固定，故用
