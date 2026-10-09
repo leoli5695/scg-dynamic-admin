@@ -3,6 +3,7 @@ package com.leoli.gateway.filter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.monitor.FilterChainTracker;
+import com.leoli.gateway.util.ClientIpResolver;
 import com.leoli.gateway.util.RouteUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -94,17 +95,6 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
     private boolean includeFilterChain;
 
     /**
-     * 可信代理 IP 列表（逗号分隔，支持 IPv4 CIDR）。
-     * 仅当 TCP 直连来源命中该列表（或私网开关）时才采信 X-Forwarded-For / X-Real-IP，
-     * 防止外部客户端伪造 clientIp 污染 trace 审计数据（对齐 starter 侧 H3 修复）。
-     */
-    @Value("${gateway.trace.trusted-proxy-ips:}")
-    private String trustedProxyIpsCsv;
-
-    @Value("${gateway.trace.trust-private-networks:true}")
-    private boolean trustPrivateNetworks;
-
-    /**
      * 对捕获的 body/queryString 中常见敏感字段脱敏（password/token/secret 等）
      */
     @Value("${gateway.trace.mask-sensitive-body:true}")
@@ -124,9 +114,12 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
 
     private final ObjectMapper objectMapper;
 
+    private final ClientIpResolver clientIpResolver;
+
     @Autowired
-    public TraceCaptureGlobalFilter(ObjectMapper objectMapper) {
+    public TraceCaptureGlobalFilter(ObjectMapper objectMapper, ClientIpResolver clientIpResolver) {
         this.objectMapper = objectMapper;
+        this.clientIpResolver = clientIpResolver;
     }
 
     @Override
@@ -438,7 +431,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
             }
             trace.put("latencyMs", correctLatencyMs);
             
-            trace.put("clientIp", getClientIp(request));
+            trace.put("clientIp", clientIpResolver.resolve(exchange));
             trace.put("userAgent", request.getHeaders().getFirst(HttpHeaders.USER_AGENT));
             trace.put("traceType", traceType);
             trace.put("replayType", replayType);
@@ -802,132 +795,6 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
                 contentType.includes(MediaType.APPLICATION_FORM_URLENCODED) ||
                 contentType.includes(MediaType.TEXT_PLAIN) ||
                 contentType.includes(MediaType.APPLICATION_XML);
-    }
-
-    /**
-     * Get client IP from request.
-     * <p>
-     * SECURITY FIX: X-Forwarded-For 只在 TCP 直连来源是可信代理时才采信，
-     * 否则外部客户端可任意伪造 clientIp 污染 trace/审计数据。
-     */
-    private String getClientIp(ServerHttpRequest request) {
-        String remoteIp = request.getRemoteAddress() != null && request.getRemoteAddress().getAddress() != null
-                ? request.getRemoteAddress().getAddress().getHostAddress()
-                : "unknown";
-
-        if (!isTrustedProxy(remoteIp)) {
-            return remoteIp;
-        }
-
-        String forwardedFor = request.getHeaders().getFirst("X-Forwarded-For");
-        if (forwardedFor != null && !forwardedFor.isEmpty() && !"unknown".equalsIgnoreCase(forwardedFor)) {
-            String candidate = forwardedFor.split(",")[0].trim();
-            if (isValidIpFormat(candidate)) {
-                return candidate;
-            }
-            log.warn("Invalid IP format in X-Forwarded-For from trusted proxy {}: {}", remoteIp, candidate);
-        }
-
-        String realIp = request.getHeaders().getFirst("X-Real-IP");
-        if (realIp != null && !realIp.isEmpty() && !"unknown".equalsIgnoreCase(realIp) && isValidIpFormat(realIp)) {
-            return realIp.trim();
-        }
-
-        return remoteIp;
-    }
-
-    /**
-     * TCP 直连来源是否为可信代理：配置列表（精确或 IPv4 CIDR）或私网地址。
-     */
-    private boolean isTrustedProxy(String remoteIp) {
-        if (remoteIp == null || remoteIp.isEmpty() || "unknown".equals(remoteIp)) {
-            return false;
-        }
-        if (trustedProxyIpsCsv != null && !trustedProxyIpsCsv.isBlank()) {
-            for (String entry : trustedProxyIpsCsv.split(",")) {
-                String proxy = entry.trim();
-                if (proxy.isEmpty()) {
-                    continue;
-                }
-                if (!proxy.contains("/")) {
-                    if (proxy.equals(remoteIp)) {
-                        return true;
-                    }
-                } else if (isIpInCidr(remoteIp, proxy)) {
-                    return true;
-                }
-            }
-        }
-        return trustPrivateNetworks && isPrivateNetworkIp(remoteIp);
-    }
-
-    private boolean isIpInCidr(String ip, String cidr) {
-        try {
-            String[] parts = cidr.split("/");
-            if (ip.contains(":") || parts[0].contains(":")) {
-                return false; // IPv6 CIDR not supported, fall through to private-network check
-            }
-            int prefixLength = Integer.parseInt(parts[1]);
-            long mask = prefixLength == 0 ? 0 : (-1L << (32 - prefixLength));
-            return (ipv4ToLong(ip) & mask) == (ipv4ToLong(parts[0]) & mask);
-        } catch (Exception e) {
-            log.warn("Invalid CIDR range in gateway.trace.trusted-proxy-ips: {}", cidr);
-            return false;
-        }
-    }
-
-    private long ipv4ToLong(String ip) {
-        String cleaned = ip.startsWith("::ffff:") ? ip.substring(7) : ip;
-        String[] octets = cleaned.split("\\.");
-        if (octets.length != 4) {
-            return -1;
-        }
-        long result = 0;
-        for (int i = 0; i < 4; i++) {
-            result = (result << 8) + Integer.parseInt(octets[i]);
-        }
-        return result;
-    }
-
-    private boolean isPrivateNetworkIp(String ip) {
-        if (ip.contains(":")) {
-            String lower = ip.toLowerCase();
-            return "::1".equals(lower) || "0:0:0:0:0:0:0:1".equals(lower)
-                    || lower.startsWith("fc") || lower.startsWith("fd")
-                    || lower.startsWith("fe8") || lower.startsWith("fe9")
-                    || lower.startsWith("fea") || lower.startsWith("feb");
-        }
-        return isIpInCidr(ip, "10.0.0.0/8")
-                || isIpInCidr(ip, "172.16.0.0/12")
-                || isIpInCidr(ip, "192.168.0.0/16")
-                || isIpInCidr(ip, "127.0.0.0/8");
-    }
-
-    private boolean isValidIpFormat(String ip) {
-        if (ip == null || ip.isEmpty()) {
-            return false;
-        }
-        if (!ip.toLowerCase().replaceAll("[0-9a-f.:]", "").isEmpty()) {
-            return false;
-        }
-        if (!ip.contains(":")) {
-            String[] octets = ip.split("\\.");
-            if (octets.length != 4) {
-                return false;
-            }
-            for (String octet : octets) {
-                try {
-                    int value = Integer.parseInt(octet);
-                    if (value < 0 || value > 255) {
-                        return false;
-                    }
-                } catch (NumberFormatException e) {
-                    return false;
-                }
-            }
-            return true;
-        }
-        return true;
     }
 
     /**
