@@ -182,6 +182,8 @@ public class KubernetesController extends BaseController {
             return ResponseEntity.ok(ApiResponse.success(cluster, "Connection refreshed"));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(404).body(ApiResponse.notFound(e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         } catch (Exception e) {
             log.error("Failed to refresh connection", e);
             return ResponseEntity.internalServerError().body(ApiResponse.error("Failed to refresh connection: " + e.getMessage()));

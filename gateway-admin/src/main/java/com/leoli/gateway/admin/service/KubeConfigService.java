@@ -31,6 +31,10 @@ public class KubeConfigService {
     private boolean verifySsl;
 
     public ApiClient createApiClient(String kubeconfigContent) {
+        if (kubeconfigContent == null || kubeconfigContent.isBlank()) {
+            log.warn("Cannot create ApiClient: kubeconfig content is null or blank");
+            return null;
+        }
         try {
             StringReader reader = new StringReader(kubeconfigContent);
             KubeConfig kubeConfig = KubeConfig.loadKubeConfig(reader);

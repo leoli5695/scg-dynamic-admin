@@ -100,6 +100,10 @@ public class KubernetesService {
     @Transactional
     public KubernetesCluster refreshConnection(Long id) {
         KubernetesCluster cluster = getClusterById(id);
+        if (cluster.getKubeconfig() == null || cluster.getKubeconfig().isBlank()) {
+            throw new IllegalStateException(
+                    "Cluster '" + cluster.getClusterName() + "' has no stored kubeconfig; re-import it to refresh the connection");
+        }
         connectionService.verifyClusterConnection(cluster);
         return cluster;
     }
