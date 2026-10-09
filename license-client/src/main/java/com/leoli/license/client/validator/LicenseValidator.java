@@ -60,6 +60,11 @@ public class LicenseValidator {
                 throw new LicenseInvalidException("Invalid license format - missing components");
             }
 
+            // Trust anchor: the license supplies its own publicKey, so signature
+            // verification alone proves nothing unless that key is pinned. Refuse
+            // any key the operator has not explicitly trusted (fail-closed).
+            assertKeyTrusted(publicKey, properties);
+
             // Verify signature
             byte[] payloadBytes = objectMapper.writeValueAsBytes(payload);
             if (!verifySignature(payloadBytes, signature, publicKey)) {
@@ -128,6 +133,96 @@ public class LicenseValidator {
 
         log.warn("Signature verification failed");
         return false;
+    }
+
+    /**
+     * Enforce the trust anchor: the license-embedded publicKey must match one of the
+     * operator-pinned trusted keys (by value or by SHA-256 fingerprint). If no trusted
+     * key is configured at all, validation fails closed rather than trusting the
+     * license-supplied key.
+     */
+    private void assertKeyTrusted(String publicKeyBase64, LicenseProperties properties)
+            throws LicenseInvalidException {
+        Set<String> trusted = buildTrustedFingerprints(properties);
+        if (trusted.isEmpty()) {
+            throw new LicenseInvalidException(
+                "No trusted license signing key configured - refusing to trust the "
+                + "license-supplied public key. Set license.client.trusted-public-keys "
+                + "(the license-server LICENSE_RSA_PUBLIC_KEY) or "
+                + "license.client.trusted-key-fingerprints.");
+        }
+
+        String presented = fingerprint(publicKeyBase64);
+        if (presented == null) {
+            throw new LicenseInvalidException("License public key is malformed");
+        }
+        if (!trusted.contains(presented)) {
+            throw new LicenseInvalidException(
+                "License signing key is not trusted (fingerprint " + presented
+                + " is not in the pinned allowlist)");
+        }
+    }
+
+    /**
+     * Build the allowlist of trusted key fingerprints from configured public keys and
+     * raw fingerprints. Malformed entries are skipped (logged) so one bad value cannot
+     * silently widen trust; an empty result triggers fail-closed upstream.
+     */
+    private Set<String> buildTrustedFingerprints(LicenseProperties properties) {
+        Set<String> trusted = new HashSet<>();
+        if (properties.getTrustedPublicKeys() != null) {
+            for (String key : properties.getTrustedPublicKeys()) {
+                if (key == null || key.isBlank()) continue;
+                String fp = fingerprint(key);
+                if (fp != null) {
+                    trusted.add(fp);
+                } else {
+                    log.warn("Ignoring malformed license.client.trusted-public-keys entry");
+                }
+            }
+        }
+        if (properties.getTrustedKeyFingerprints() != null) {
+            for (String fp : properties.getTrustedKeyFingerprints()) {
+                String normalized = normalizeFingerprint(fp);
+                if (normalized != null && !normalized.isEmpty()) {
+                    trusted.add(normalized);
+                }
+            }
+        }
+        return trusted;
+    }
+
+    /**
+     * SHA-256 hex fingerprint of a public key's X.509 DER encoding. Computed over the
+     * decoded bytes so PEM headers/whitespace do not affect the result. Returns null if
+     * the input is not a valid Base64 key blob.
+     */
+    private String fingerprint(String publicKeyBase64) {
+        try {
+            String content = publicKeyBase64
+                .replace("-----BEGIN PUBLIC KEY-----", "")
+                .replace("-----END PUBLIC KEY-----", "")
+                .replaceAll("\\s+", "");
+            byte[] der = Base64.getDecoder().decode(content);
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(der);
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                sb.append(Character.forDigit((b >> 4) & 0xF, 16));
+                sb.append(Character.forDigit(b & 0xF, 16));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Normalize a user-supplied fingerprint: strip colons/whitespace, lowercase hex.
+     */
+    private String normalizeFingerprint(String fingerprint) {
+        if (fingerprint == null) return null;
+        return fingerprint.replaceAll("[\\s:]", "").toLowerCase(Locale.ROOT);
     }
 
     /**

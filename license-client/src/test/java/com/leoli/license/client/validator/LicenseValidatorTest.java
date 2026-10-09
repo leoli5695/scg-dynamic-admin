@@ -12,8 +12,11 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
 import java.util.Base64;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -31,6 +34,68 @@ class LicenseValidatorTest {
     void setUp() {
         validator = new LicenseValidator();
         properties = new LicenseProperties();
+        // Pin the fixture signing key so the happy-path codes are trusted. The trust
+        // gate itself is exercised by the "Trust anchor" tests below, which override this.
+        properties.setTrustedPublicKeys(List.of(LicenseFixtures.publicKeyBase64()));
+    }
+
+    // ==================== Trust anchor (public key pinning) ====================
+
+    @Test
+    @DisplayName("No trusted key configured - fails closed even for a correctly signed license")
+    void validate_noTrustedKey_failsClosed() {
+        properties.setTrustedPublicKeys(List.of());
+        properties.setTrustedKeyFingerprints(List.of());
+
+        LicenseInvalidException e = assertThrows(LicenseInvalidException.class,
+                () -> validator.validate(LicenseFixtures.advancedCode(), properties));
+        assertTrue(e.getReason().contains("No trusted license signing key configured"), e.getReason());
+    }
+
+    @Test
+    @DisplayName("License signed by an unpinned key - rejected despite a valid signature")
+    void validate_untrustedSigningKey_rejected() throws Exception {
+        // A well-formed, correctly self-signed license from a key the operator never pinned.
+        KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA");
+        gen.initialize(2048);
+        KeyPair attacker = gen.generateKeyPair();
+        KeyPair legitimate = gen.generateKeyPair();
+        // Pin a valid but *different* key, so the trust set is non-empty yet excludes the attacker's.
+        properties.setTrustedPublicKeys(
+                List.of(Base64.getEncoder().encodeToString(legitimate.getPublic().getEncoded())));
+
+        String forged = LicenseFixtures.codeSignedWith(attacker,
+                LicenseFixtures.payload("LIC-FORGED", "ENTERPRISE", java.time.LocalDateTime.now().plusDays(3650)));
+
+        LicenseInvalidException e = assertThrows(LicenseInvalidException.class,
+                () -> validator.validate(forged, properties));
+        assertTrue(e.getReason().contains("not trusted"), e.getReason());
+    }
+
+    @Test
+    @DisplayName("Trusted key pinned by SHA-256 fingerprint - accepted")
+    void validate_trustedByFingerprint_accepted() {
+        properties.setTrustedPublicKeys(List.of());
+        properties.setTrustedKeyFingerprints(List.of(LicenseFixtures.publicKeyFingerprint()));
+
+        LicenseInfo info = validator.validate(LicenseFixtures.advancedCode(), properties);
+        assertEquals("LIC-ADVANCED", info.getLicenseId());
+    }
+
+    @Test
+    @DisplayName("Fingerprint allowlist supports rotation - second pinned key is accepted")
+    void validate_keyRotation_accepted() throws Exception {
+        KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA");
+        gen.initialize(2048);
+        KeyPair rotated = gen.generateKeyPair();
+        // Pin both the old fixture key and a newly rotated key.
+        properties.setTrustedPublicKeys(List.of(LicenseFixtures.publicKeyBase64()));
+        properties.setTrustedKeyFingerprints(List.of(LicenseFixtures.fingerprintOf(rotated.getPublic())));
+
+        String rotatedCode = LicenseFixtures.codeSignedWith(rotated,
+                LicenseFixtures.payload("LIC-ROTATED", "ADVANCED", java.time.LocalDateTime.now().plusDays(365)));
+
+        assertEquals("LIC-ROTATED", validator.validate(rotatedCode, properties).getLicenseId());
     }
 
     // ==================== Signature verification ====================

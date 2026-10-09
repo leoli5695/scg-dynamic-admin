@@ -7,6 +7,8 @@ import com.leoli.license.client.model.LicenseInfo;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.MessageDigest;
+import java.security.PublicKey;
 import java.security.Signature;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -40,19 +42,44 @@ final class LicenseFixtures {
 
     /** Sign {@code payload} and wrap it into a Base64 license code. */
     static String code(Map<String, Object> payload) {
+        return codeSignedWith(KEY_PAIR, payload);
+    }
+
+    /** Sign {@code payload} with an arbitrary key pair (for trust-anchor tests). */
+    static String codeSignedWith(KeyPair keyPair, Map<String, Object> payload) {
         try {
             Signature signer = Signature.getInstance("SHA256withRSA");
-            signer.initSign(KEY_PAIR.getPrivate());
+            signer.initSign(keyPair.getPrivate());
             signer.update(MAPPER.writeValueAsBytes(payload));
 
             Map<String, Object> license = new LinkedHashMap<>();
             license.put("payload", payload);
             license.put("signature", Base64.getEncoder().encodeToString(signer.sign()));
-            license.put("publicKey", Base64.getEncoder().encodeToString(KEY_PAIR.getPublic().getEncoded()));
+            license.put("publicKey", Base64.getEncoder().encodeToString(keyPair.getPublic().getEncoded()));
 
             return Base64.getEncoder().encodeToString(MAPPER.writeValueAsBytes(license));
         } catch (GeneralSecurityException | com.fasterxml.jackson.core.JsonProcessingException e) {
             throw new IllegalStateException("Failed to mint license code", e);
+        }
+    }
+
+    /** SHA-256 hex fingerprint of the fixture signing key, matching LicenseValidator. */
+    static String publicKeyFingerprint() {
+        return fingerprintOf(KEY_PAIR.getPublic());
+    }
+
+    /** SHA-256 hex of a public key's X.509 DER encoding (same algorithm as the validator). */
+    static String fingerprintOf(PublicKey publicKey) {
+        try {
+            byte[] hash = MessageDigest.getInstance("SHA-256").digest(publicKey.getEncoded());
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                sb.append(Character.forDigit((b >> 4) & 0xF, 16));
+                sb.append(Character.forDigit(b & 0xF, 16));
+            }
+            return sb.toString();
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException(e);
         }
     }
 

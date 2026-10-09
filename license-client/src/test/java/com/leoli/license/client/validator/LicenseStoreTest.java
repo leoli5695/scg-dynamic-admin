@@ -11,6 +11,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -28,6 +29,8 @@ class LicenseStoreTest {
     void setUp() {
         validator = new LicenseValidator();
         properties = new LicenseProperties();
+        // Pin the fixture signing key; the validator fails closed without a trusted key.
+        properties.setTrustedPublicKeys(List.of(LicenseFixtures.publicKeyBase64()));
         store = new LicenseStore(validator, properties);
     }
 

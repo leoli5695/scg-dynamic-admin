@@ -371,6 +371,13 @@ license:
     enabled: ${LICENSE_ENABLED:true}
     license-code: ${GATEWAY_LICENSE_CODE:}
     license-file: ${GATEWAY_LICENSE_FILE:}
+    # SECURITY: pin the license-server signing public key (same value as its
+    # LICENSE_RSA_PUBLIC_KEY). A license carries its own publicKey, so without
+    # pinning anyone can self-sign one. Comma-separate multiple keys/fingerprints
+    # to support rotation. If left empty the validator FAILS CLOSED and the gateway
+    # drops to fallback-edition.
+    trusted-public-keys: ${LICENSE_TRUSTED_PUBLIC_KEYS:}
+    trusted-key-fingerprints: ${LICENSE_TRUSTED_KEY_FINGERPRINTS:}
     fallback-edition: ${LICENSE_FALLBACK_EDITION:BASIC}
     allow-basic-fallback: ${LICENSE_ALLOW_BASIC_FALLBACK:true}
     log-unlicensed-access: ${LICENSE_LOG_UNLICENSED_ACCESS:true}
