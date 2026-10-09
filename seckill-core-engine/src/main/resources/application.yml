@@ -31,7 +31,7 @@ spring:
 
   # MySQL 数据源配置（使用HikariCP连接池）
   # SECURITY FIX (P1): 移除硬编码默认密码，强制使用环境变量
-  # 开发环境: 设置环境变量 SECKILL_DB_USER=root SECKILL_DB_PASSWORD=dev123456
+  # 开发环境: 将 SECKILL_DB_USER / SECKILL_DB_PASSWORD 设为本机 MySQL 的账号与密码
   # 生产环境: 必须设置 SECKILL_DB_USER 和 SECKILL_DB_PASSWORD
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
