@@ -50,13 +50,15 @@ public class AuthPolicyNamespaceTest extends NamespaceIntegrationTest {
         policy.put("policyName", policyName);
         policy.put("authType", "JWT");
         policy.put("enabled", true);
-
-        ObjectNode config = policy.putObject("config");
-        config.put("secretKey", "test-secret-key-for-jwt-signing");
-        config.put("algorithm", "HS256");
-        config.put("tokenPrefix", "Bearer ");
-        config.put("headerName", "Authorization");
-        config.put("expirationCheck", true);
+        // AuthPolicyDefinition is flat and carries @JsonIgnoreProperties(ignoreUnknown=true), so
+        // the nested "config" object this test used to send was silently discarded rather than
+        // rejected - and the assertions only checked policyId/policyName, so nothing noticed.
+        // Set the real fields and assert they come back.
+        policy.put("secretKey", "test-secret-key-for-jwt-signing");
+        policy.put("jwtAlgorithm", "HS256");
+        policy.put("jwtIssuer", "test-issuer");
+        policy.put("jwtAudience", "test-audience");
+        policy.put("jwtClockSkewSeconds", 90);
 
         MvcResult result = mockMvc.perform(post("/api/auth/policies")
                         .param("instanceId", testInstanceId)
@@ -70,6 +72,13 @@ public class AuthPolicyNamespaceTest extends NamespaceIntegrationTest {
         createdPolicyId = data.get("policyId").asText();
         assertNotNull(createdPolicyId, "Policy ID should be generated");
         assertEquals(policyName, data.get("policyName").asText());
+
+        // The JWT configuration has to survive, not just the identity fields.
+        assertEquals("test-secret-key-for-jwt-signing", data.get("secretKey").asText());
+        assertEquals("HS256", data.get("jwtAlgorithm").asText());
+        assertEquals("test-issuer", data.get("jwtIssuer").asText());
+        assertEquals("test-audience", data.get("jwtAudience").asText());
+        assertEquals(90, data.get("jwtClockSkewSeconds").asInt());
 
         System.out.println("[PASS] JWT auth policy created: " + createdPolicyId);
     }
@@ -111,6 +120,13 @@ public class AuthPolicyNamespaceTest extends NamespaceIntegrationTest {
         JsonNode data = extractData(result);
         assertEquals(policyName, data.get("policyName").asText());
         assertEquals("JWT", data.get("authType").asText());
+        // Read back from the store, so this covers persistence and not just the create
+        // response echoing what was posted.
+        assertEquals("test-secret-key-for-jwt-signing", data.get("secretKey").asText());
+        assertEquals("HS256", data.get("jwtAlgorithm").asText());
+        assertEquals("test-issuer", data.get("jwtIssuer").asText());
+        assertEquals("test-audience", data.get("jwtAudience").asText());
+        assertEquals(90, data.get("jwtClockSkewSeconds").asInt());
 
         System.out.println("[PASS] Get auth policy by ID works");
     }
@@ -215,11 +231,14 @@ public class AuthPolicyNamespaceTest extends NamespaceIntegrationTest {
         policy.put("policyName", "test-api-key");
         policy.put("authType", "API_KEY");
         policy.put("enabled", true);
-
-        ObjectNode config = policy.putObject("config");
-        config.put("headerName", "X-API-Key");
-        config.put("queryParamName", "api_key");
-        config.put("keyLength", 32);
+        // Flat fields, same reason as test01. Mapping from the old nested block:
+        // headerName -> apiKeyHeader, queryParamName -> apiKeyQueryParam. The old "keyLength"
+        // has no counterpart on AuthPolicyDefinition at all, so it is dropped rather than
+        // silently ignored - key generation is not this DTO's concern.
+        policy.put("apiKey", "test-api-key-value");
+        policy.put("apiKeyHeader", "X-API-Key");
+        policy.put("apiKeyQueryParam", "api_key");
+        policy.put("apiKeyPrefix", "sk-");
 
         MvcResult result = mockMvc.perform(post("/api/auth/policies")
                         .param("instanceId", testInstanceId)
@@ -232,6 +251,10 @@ public class AuthPolicyNamespaceTest extends NamespaceIntegrationTest {
         JsonNode data = extractData(result);
         String apiKeyPolicyId = data.get("policyId").asText();
         assertEquals("API_KEY", data.get("authType").asText());
+        assertEquals("test-api-key-value", data.get("apiKey").asText());
+        assertEquals("X-API-Key", data.get("apiKeyHeader").asText());
+        assertEquals("api_key", data.get("apiKeyQueryParam").asText());
+        assertEquals("sk-", data.get("apiKeyPrefix").asText());
 
         // Cleanup
         mockMvc.perform(delete("/api/auth/policies/" + apiKeyPolicyId));

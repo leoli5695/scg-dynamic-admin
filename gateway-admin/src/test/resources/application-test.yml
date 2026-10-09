@@ -20,7 +20,12 @@ spring:
   data:
     redis:
       host: 127.0.0.1
-      port: 6379
+      # Mirrors the main config's ${REDIS_PORT:30379}. This used to hardcode 6379, which on a
+      # developer machine is typically the password-protected instance, so every Redis call
+      # failed with RedisConnectionFailureException and surfaced as a 500 in whichever
+      # endpoint touched it. Redis is a hard requirement here: ShedLock uses the Redis lock
+      # provider, so scheduled tasks fail without it.
+      port: ${REDIS_PORT:30379}
       database: 1
   cache:
     type: simple
