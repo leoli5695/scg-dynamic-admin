@@ -670,36 +670,25 @@ public class ToolExecutor {
     private Object executeListInstances(Map<String, Object> args) {
         boolean enabledOnly = getBoolArg(args, "enabledOnly", false);
 
-        List<?> instances = gatewayInstanceService.getAllInstances();
+        // getAllInstances() 返回的是实体列表（不是 Map）。此前用 `instanceof Map` 判断恒为 false，
+        // 导致精简逻辑从未生效、直接序列化裸实体：既因 LocalDateTime 让裸 ObjectMapper 序列化失败
+        // ("JSON serialization failed")，又可能把 kubeConfig 等敏感字段泄进模型上下文。这里显式按
+        // 实体字段映射成精简 Map。
+        List<GatewayInstanceEntity> instances = gatewayInstanceService.getAllInstances();
 
-        if (enabledOnly) {
-            instances = instances.stream()
-                    .filter(i -> {
-                        if (i instanceof Map) {
-                            Object statusCode = ((Map<?, ?>) i).get("statusCode");
-                            return statusCode instanceof Integer && ((Integer) statusCode) == 1;  // RUNNING
-                        }
-                        return true;
-                    })
-                    .toList();
-        }
-
-        // 简化输出
         return instances.stream()
+                .filter(i -> !enabledOnly || (i.getStatusCode() != null && i.getStatusCode() == 1))  // 1=RUNNING
                 .map(i -> {
-                    if (i instanceof Map) {
-                        Map<?, ?> instance = (Map<?, ?>) i;
-                        Map<String, Object> simplified = new LinkedHashMap<>();
-                        simplified.put("instanceId", instance.get("instanceId"));
-                        simplified.put("instanceName", instance.get("instanceName"));
-                        simplified.put("status", instance.get("status"));
-                        simplified.put("statusCode", instance.get("statusCode"));
-                        simplified.put("specType", instance.get("specType"));
-                        simplified.put("replicas", instance.get("replicas"));
-                        simplified.put("effectiveAccessUrl", instance.get("effectiveAccessUrl"));
-                        return simplified;
-                    }
-                    return i;
+                    Map<String, Object> simplified = new LinkedHashMap<>();
+                    simplified.put("instanceId", i.getInstanceId());
+                    simplified.put("instanceName", i.getInstanceName());
+                    simplified.put("status", i.getStatus());
+                    simplified.put("statusCode", i.getStatusCode());
+                    simplified.put("statusMessage", i.getStatusMessage());
+                    simplified.put("specType", i.getSpecType());
+                    simplified.put("replicas", i.getReplicas());
+                    simplified.put("effectiveAccessUrl", i.getEffectiveAccessUrl());
+                    return simplified;
                 })
                 .toList();
     }
@@ -4132,8 +4121,9 @@ public class ToolExecutor {
     // ===================== 工具结果类 =====================
 
     public static class ToolResult {
-        // 复用单例，避免每次 toJson 都新建 ObjectMapper（构造开销大）
-        private static final ObjectMapper JSON = new ObjectMapper();
+        // 复用单例，避免每次 toJson 都新建 ObjectMapper（构造开销大）；
+        // findAndRegisterModules 自动注册 JavaTimeModule 等，防止结果含 LocalDateTime 时序列化直接失败。
+        private static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules();
 
         private final boolean success;
         private final boolean pendingConfirmation;  // 待确认状态
