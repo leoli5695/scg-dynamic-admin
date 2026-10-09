@@ -2,6 +2,7 @@ package com.leoli.gateway.admin.exception;
 
 import com.leoli.license.client.exception.LicenseFeatureNotAllowedException;
 import com.leoli.license.client.exception.LicenseNotLoadedException;
+import com.leoli.license.client.exception.QuotaExceededException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -81,6 +82,22 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleLicenseFeatureNotAllowed(LicenseFeatureNotAllowedException e) {
         log.warn("License feature not allowed: feature={}, requiredEdition={}, currentEdition={}",
                 e.getFeature(), e.getRequiredEdition(), e.getCurrentEdition());
+        return buildErrorResponse(HttpStatus.FORBIDDEN, e.getMessage());
+    }
+
+    /**
+     * Handle license quota exceeded: the operation would push a countable resource
+     * (instances/routes/services/strategies/auth policies) past the licensed limit.
+     * <p>
+     * 403 rather than 409/429 - the caller is authenticated and the request is well-formed,
+     * the active edition simply does not entitle them to more of this resource. Without this
+     * the catch-all below reports 500. Currently only reachable once quota enforcement is
+     * wired into the write paths ({@code LicenseFeatureHelper.checkQuotaOrThrow} has no callers yet).
+     */
+    @ExceptionHandler(QuotaExceededException.class)
+    public ResponseEntity<Map<String, Object>> handleQuotaExceeded(QuotaExceededException e) {
+        log.warn("License quota exceeded: quotaType={}, limit={}, current={}, errorCode={}",
+                e.getQuotaType(), e.getLimit(), e.getCurrent(), e.getErrorCode());
         return buildErrorResponse(HttpStatus.FORBIDDEN, e.getMessage());
     }
 

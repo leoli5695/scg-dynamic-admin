@@ -109,7 +109,7 @@ public class FeatureGatekeeper {
      * Check if quota is within limit - throws exception if exceeded
      */
     public void checkQuotaWithinLimit(LicenseInfo.QuotaType quotaType, int current) 
-            throws LicenseQuotaExceededException, LicenseNotLoadedException {
+            throws QuotaExceededException, LicenseNotLoadedException {
         LicenseInfo license = licenseStore.getLicense();
         if (license == null) {
             throw new LicenseNotLoadedException();

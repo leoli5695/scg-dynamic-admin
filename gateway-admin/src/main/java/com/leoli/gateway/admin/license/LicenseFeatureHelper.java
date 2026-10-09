@@ -2,6 +2,7 @@ package com.leoli.gateway.admin.license;
 
 import com.leoli.license.client.exception.LicenseFeatureNotAllowedException;
 import com.leoli.license.client.exception.LicenseNotLoadedException;
+import com.leoli.license.client.exception.QuotaExceededException;
 import com.leoli.license.client.model.LicenseInfo;
 import com.leoli.license.client.validator.FeatureGatekeeper;
 import com.leoli.license.client.validator.LicenseStore;
@@ -87,7 +88,7 @@ public class LicenseFeatureHelper {
      *
      * @param quotaType the quota type to check
      * @param currentUsage current usage count
-     * @throws LicenseQuotaExceededException if quota exceeds limit
+     * @throws QuotaExceededException if quota exceeds limit
      * @throws LicenseNotLoadedException if license is not loaded
      */
     public void checkQuotaOrThrow(LicenseInfo.QuotaType quotaType, int currentUsage) {

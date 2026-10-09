@@ -2,6 +2,7 @@ package com.leoli.gateway.admin.exception;
 
 import com.leoli.license.client.exception.LicenseFeatureNotAllowedException;
 import com.leoli.license.client.exception.LicenseNotLoadedException;
+import com.leoli.license.client.exception.QuotaExceededException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -103,6 +104,23 @@ class GlobalExceptionHandlerTest {
         assertEquals(503, response.getBody().get("code"));
         assertNull(response.getBody().get("data"));
         assertEquals("License is not loaded or invalid", response.getBody().get("message"));
+    }
+
+    @Test
+    void handleQuotaExceeded_shouldReturnForbiddenWithQuotaDetail() {
+        QuotaExceededException ex = new QuotaExceededException("maxInstances", 5, 6);
+
+        ResponseEntity<Map<String, Object>> response = handler.handleQuotaExceeded(ex);
+
+        // 403, not the catch-all 500: the caller is authenticated and the request is
+        // well-formed, the active edition just does not entitle them to more of this resource.
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+        assertEquals(403, response.getBody().get("code"));
+        assertNull(response.getBody().get("data"));
+        String message = (String) response.getBody().get("message");
+        assertTrue(message.contains("maxInstances"), message);
+        assertTrue(message.contains("limit=5"), message);
+        assertTrue(message.contains("current=6"), message);
     }
 
     @Test

@@ -344,8 +344,8 @@ class FeatureGatekeeperTest {
 
         assertDoesNotThrow(() -> gatekeeper.checkQuotaWithinLimit(LicenseInfo.QuotaType.INSTANCES, 4));
 
-        // checkQuotaWithinLimit declares LicenseQuotaExceededException but requireQuota throws
-        // its unrelated sibling QuotaExceededException; asserted as actually thrown.
+        // checkQuotaWithinLimit propagates the QuotaExceededException thrown by requireQuota
+        // (its declared type was aligned to the real one when the dead sibling class was removed).
         QuotaExceededException e = assertThrows(QuotaExceededException.class,
                 () -> gatekeeper.checkQuotaWithinLimit(LicenseInfo.QuotaType.INSTANCES, 10));
 
