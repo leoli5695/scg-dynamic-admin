@@ -9,8 +9,8 @@ import {
   UserOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import { clearCopilotChat, executeCopilotAction, sendCopilotChat } from '../../../api/copilot';
-import { ApiError } from '../../../api/http';
+import { clearCopilotChat, executeCopilotAction, sendCopilotChatStream } from '../../../api/copilot';
+import { ApiError, isAbortError } from '../../../api/http';
 import type { CopilotPendingAction } from '../../../types/copilot';
 import AiReportRenderer from '../../../components/ai/AiReportRenderer';
 import '../../../styles/ai-report.css';
@@ -38,7 +38,9 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
   const [sessionId, setSessionId] = useState('');
   const [pendingAction, setPendingAction] = useState<CopilotPendingAction | null>(null);
   const [executing, setExecuting] = useState(false);
+  const [streamNote, setStreamNote] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Initialize session
   useEffect(() => {
@@ -46,6 +48,9 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
       setSessionId(`session-${Date.now()}`);
     })();
   }, []);
+
+  // Abort any in-flight stream on unmount
+  useEffect(() => () => { abortRef.current?.abort(); }, []);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -65,33 +70,59 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
     setMessages(prev => [...prev, userMessage]);
     setInputMessage('');
     setLoading(true);
+    setStreamNote(t('copilot.ai_thinking'));
+
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
-      const response = await sendCopilotChat({
-        sessionId,
-        message: userMessage.content,
-        // context 不传递，让后端根据消息内容自动识别意图
-        instanceId,
-        provider: provider || undefined,
-        model: model || undefined,
-      });
-
-      if (response.success) {
-        const assistantMessage: ChatMessage = {
-          role: 'assistant',
-          content: response.response || '',
-          timestamp: new Date(),
-        };
-        setMessages(prev => [...prev, assistantMessage]);
-        setSessionId(response.sessionId);
-        // AI proposed a write operation — surface it for explicit human confirmation.
-        setPendingAction(response.pendingAction ?? null);
-      } else {
-        message.error(response.error || t('copilot.chat_failed'));
-      }
+      await sendCopilotChatStream(
+        {
+          sessionId,
+          message: userMessage.content,
+          // context 不传递，让后端根据消息内容自动识别意图
+          instanceId,
+          provider: provider || undefined,
+          model: model || undefined,
+        },
+        {
+          signal: controller.signal,
+          onStatus: () => setStreamNote(t('copilot.ai_thinking')),
+          onTool: (data) => {
+            if (data.status === 'running') {
+              setStreamNote(t('copilot.calling_tool', { tool: data.toolName }));
+            } else if (data.status === 'success') {
+              setStreamNote(t('copilot.tool_done', { tool: data.toolName, ms: data.durationMs ?? 0 }));
+            } else if (data.status === 'error') {
+              setStreamNote(t('copilot.tool_failed', { tool: data.toolName }));
+            } else if (data.status === 'confirm') {
+              setStreamNote(t('copilot.please_confirm'));
+            }
+          },
+          onMessage: (response) => {
+            if (response.success) {
+              setMessages(prev => [...prev, {
+                role: 'assistant',
+                content: response.response || '',
+                timestamp: new Date(),
+              }]);
+              setSessionId(response.sessionId);
+              // AI proposed a write operation — surface it for explicit human confirmation.
+              setPendingAction(response.pendingAction ?? null);
+            } else {
+              message.error(response.error || t('copilot.chat_failed'));
+            }
+          },
+          onError: (msg) => message.error(msg || t('copilot.chat_failed')),
+        },
+      );
     } catch (e) {
-      message.error(e instanceof ApiError && e.message ? e.message : t('copilot.send_message_failed'));
+      if (!isAbortError(e)) {
+        message.error(e instanceof ApiError && e.message ? e.message : t('copilot.send_message_failed'));
+      }
     } finally {
+      abortRef.current = null;
+      setStreamNote('');
       setLoading(false);
     }
   };
@@ -135,10 +166,12 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
   };
 
   const handleClearConversation = async () => {
+    abortRef.current?.abort(); // 中止在途流式请求，避免旧会话的回复串进来
     try {
       await clearCopilotChat(sessionId);
       setMessages([]);
       setPendingAction(null);
+      setStreamNote('');
       setSessionId(`session-${Date.now()}`);
       message.success(t('copilot.conversation_cleared'));
     } catch {
@@ -214,7 +247,10 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
         <div ref={messagesEndRef} />
         {loading && (
           <div style={{ textAlign: 'center', padding: '16px' }}>
-            <Spin tip={t('copilot.ai_thinking')} />
+            <Spin />
+            <div style={{ marginTop: 8, fontSize: 12, color: 'rgba(255,255,255,0.65)' }}>
+              {streamNote || t('copilot.ai_thinking')}
+            </div>
           </div>
         )}
       </div>

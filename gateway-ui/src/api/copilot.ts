@@ -3,7 +3,7 @@
  * Endpoints aligned with controller/AiCopilotController.java (/api/copilot).
  * All endpoints return raw bodies (no ApiResponse envelope).
  */
-import httpClient, { RequestOptions } from './http';
+import httpClient, { ApiError, RequestOptions } from './http';
 import type {
   AiProvider,
   ApiKeyValidationResult,
@@ -103,3 +103,124 @@ export const applyRouteJson = (
   body: { routeJson: string; instanceId: string },
   options?: RequestOptions,
 ) => httpClient.post<ApplyRouteResult>(`${BASE}/apply-route`, body, options);
+
+// ============== Streaming chat (SSE over POST via fetch) ==============
+
+/** Payload of a `status` SSE event. */
+export interface CopilotStreamStatus {
+  stage: string;
+  intent?: string;
+  language?: string;
+  iteration?: number;
+}
+
+/** Payload of a `tool` SSE event. */
+export interface CopilotStreamTool {
+  toolName: string;
+  status: 'running' | 'success' | 'error' | 'confirm';
+  durationMs?: number;
+}
+
+export interface CopilotStreamHandlers {
+  onStatus?: (data: CopilotStreamStatus) => void;
+  onTool?: (data: CopilotStreamTool) => void;
+  /** Terminal event: same shape as the non-streaming /chat response. */
+  onMessage: (data: CopilotChatResponse) => void;
+  onError?: (message: string) => void;
+  signal?: AbortSignal;
+}
+
+/**
+ * POST /chat/stream — stream an AI Copilot reply over Server-Sent Events.
+ * EventSource can't do POST, so this uses fetch + a streaming body reader and
+ * reuses the same bearer-token auth as httpClient. Each SSE frame is
+ * `event:<name>\ndata:<json>\n\n`; frames are dispatched to the handlers.
+ */
+export async function sendCopilotChatStream(
+  body: CopilotChatRequest,
+  handlers: CopilotStreamHandlers,
+): Promise<void> {
+  const baseURL = import.meta.env.VITE_API_BASE_URL || '';
+  const token = localStorage.getItem('token');
+
+  const resp = await fetch(`${baseURL}/api/copilot/chat/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+    signal: handlers.signal,
+  });
+
+  if (resp.status === 401) {
+    localStorage.removeItem('token');
+    if (!window.location.pathname.startsWith('/login')) {
+      window.location.href = '/login';
+    }
+    throw new ApiError('Unauthorized', 401);
+  }
+  if (!resp.ok || !resp.body) {
+    let detail = `HTTP ${resp.status}`;
+    try {
+      const text = await resp.text();
+      if (text) detail = text.slice(0, 300);
+    } catch {
+      // ignore body-read failure
+    }
+    throw new ApiError(detail, resp.status);
+  }
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+
+  const dispatchFrame = (frame: string) => {
+    let event = 'message';
+    const dataLines: string[] = [];
+    for (const raw of frame.split('\n')) {
+      const line = raw.replace(/\r$/, '');
+      if (line.startsWith('event:')) {
+        event = line.slice(6).trim();
+      } else if (line.startsWith('data:')) {
+        dataLines.push(line.slice(5).replace(/^ /, ''));
+      }
+    }
+    if (dataLines.length === 0) return;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(dataLines.join('\n'));
+    } catch {
+      return;
+    }
+    switch (event) {
+      case 'status':
+        handlers.onStatus?.(parsed as CopilotStreamStatus);
+        break;
+      case 'tool':
+        handlers.onTool?.(parsed as CopilotStreamTool);
+        break;
+      case 'error':
+        handlers.onError?.((parsed as { message?: string })?.message || 'AI error');
+        break;
+      default:
+        handlers.onMessage(parsed as CopilotChatResponse);
+        break;
+    }
+  };
+
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx = buffer.indexOf('\n\n');
+    while (idx >= 0) {
+      const frame = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      if (frame.trim()) dispatchFrame(frame);
+      idx = buffer.indexOf('\n\n');
+    }
+  }
+  if (buffer.trim()) dispatchFrame(buffer);
+}

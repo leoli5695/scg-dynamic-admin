@@ -9,16 +9,29 @@ import com.leoli.gateway.admin.service.AiCopilotService;
 import com.leoli.gateway.admin.service.AuditLogService;
 import com.leoli.gateway.admin.service.RouteService;
 import com.leoli.gateway.admin.service.ToolExecutor;
+import com.leoli.gateway.admin.service.copilot.CopilotProgressListener;
+import com.leoli.gateway.admin.service.copilot.CopilotStreamAbortedException;
 import com.leoli.gateway.admin.service.copilot.PendingActionStore;
 import com.leoli.gateway.admin.validation.RouteValidator;
 import com.leoli.license.client.model.LicenseInfo;
+import jakarta.annotation.PreDestroy;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * AI Copilot Controller.
@@ -40,6 +53,25 @@ public class AiCopilotController extends BaseController {
     private final LicenseFeatureHelper licenseFeatureHelper;
     private final ToolExecutor toolExecutor;
     private final PendingActionStore pendingActionStore;
+
+    /**
+     * SSE 流式对话的异步执行器。SseEmitter 要求在独立线程上跑同步管线，绝不能阻塞
+     * 容器请求线程。核心 4 / 最大 32、SynchronousQueue（不排队，满了直接拒绝并回退到
+     * 非流式体验），守护线程避免阻碍 JVM 退出。
+     */
+    private final ExecutorService streamExecutor = new ThreadPoolExecutor(
+            4, 32, 60L, TimeUnit.SECONDS, new SynchronousQueue<>(),
+            r -> {
+                Thread t = new Thread(r, "copilot-sse");
+                t.setDaemon(true);
+                return t;
+            },
+            new ThreadPoolExecutor.AbortPolicy());
+
+    @PreDestroy
+    public void shutdownStreamExecutor() {
+        streamExecutor.shutdownNow();
+    }
 
     /**
      * Chat with AI Copilot.
@@ -72,6 +104,95 @@ public class AiCopilotController extends BaseController {
         result.put("sessionId", sessionId);
 
         return ResponseEntity.ok(result);
+    }
+
+    /**
+     * FIX (P1 UX): 流式对话（SSE）。
+     * <p>
+     * 工具调用循环可能耗时较久，非流式 {@code /chat} 期间前端只能显示一个转圈。
+     * 此端点实时推送中间态事件，最后推送与 {@code /chat} 相同结构的终态消息：
+     * <ul>
+     *   <li>{@code status} → {stage: intent|thinking, ...}</li>
+     *   <li>{@code tool}   → {toolName, status: running|success|error|confirm, durationMs?}</li>
+     *   <li>{@code message}→ 终态：{success, response, confidence, confidenceReason, pendingAction?, sessionId}</li>
+     *   <li>{@code error}  → {message}</li>
+     * </ul>
+     * 采用 POST + text/event-stream，前端用 fetch 读取响应流（EventSource 不支持 POST）。
+     */
+    @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter chatStream(@RequestBody ChatRequest request, HttpServletResponse servletResponse) {
+        // POST /api/** 已由 SecurityConfig 要求 ADMIN；此处再校验 license 特性
+        licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.AI_COPilot);
+
+        // 防止反向代理（nginx 等）缓冲 SSE，导致事件被攒到一起、失去实时性
+        servletResponse.setHeader("X-Accel-Buffering", "no");
+        servletResponse.setHeader("Cache-Control", "no-cache");
+
+        final String sessionId = (request.getSessionId() == null || request.getSessionId().isEmpty())
+                ? UUID.randomUUID().toString() : request.getSessionId();
+
+        // 超时略大于工具循环总预算（90s），避免管线未结束就被容器断开
+        SseEmitter emitter = new SseEmitter(120_000L);
+
+        try {
+            streamExecutor.execute(() -> runChatStream(emitter, request, sessionId));
+        } catch (RejectedExecutionException rex) {
+            log.warn("Copilot SSE executor saturated; rejecting stream request");
+            sendErrorQuietly(emitter, "服务繁忙，请稍后重试");
+            emitter.complete();
+        }
+        return emitter;
+    }
+
+    /**
+     * 在独立线程上驱动同步的对话管线，把进度事件写入 SseEmitter。
+     */
+    private void runChatStream(SseEmitter emitter, ChatRequest request, String sessionId) {
+        AtomicBoolean clientGone = new AtomicBoolean(false);
+        CopilotProgressListener listener = (type, data) -> {
+            if (clientGone.get()) {
+                throw new CopilotStreamAbortedException("client already disconnected");
+            }
+            try {
+                emitter.send(SseEmitter.event().name(type).data(data, MediaType.APPLICATION_JSON));
+            } catch (IOException | IllegalStateException e) {
+                // 客户端断开：置位并抛出，尽快中断工具循环，避免继续消耗 token
+                clientGone.set(true);
+                throw new CopilotStreamAbortedException(e);
+            }
+        };
+
+        try {
+            AiCopilotService.ChatResponse response = aiCopilotService.chat(
+                    sessionId, request.getMessage(), request.getContext(), request.getInstanceId(),
+                    request.getProvider(), request.getModel(), listener);
+
+            if (clientGone.get()) {
+                emitter.complete();
+                return;
+            }
+            Map<String, Object> result = response.toMap();
+            result.put("sessionId", sessionId);
+            emitter.send(SseEmitter.event().name("message").data(result, MediaType.APPLICATION_JSON));
+            emitter.complete();
+        } catch (CopilotStreamAbortedException aborted) {
+            log.debug("Copilot SSE client disconnected, stream aborted");
+            emitter.complete();
+        } catch (Exception e) {
+            log.error("Copilot SSE chat failed", e);
+            sendErrorQuietly(emitter, e.getMessage() != null ? e.getMessage() : "AI 服务错误");
+            emitter.complete();
+        }
+    }
+
+    /** 尽力下发一个 error 事件；失败（多半已断开）则忽略。 */
+    private void sendErrorQuietly(SseEmitter emitter, String message) {
+        try {
+            emitter.send(SseEmitter.event().name("error")
+                    .data(Map.of("message", message), MediaType.APPLICATION_JSON));
+        } catch (IOException | IllegalStateException ignored) {
+            // 客户端已断开，无处可发
+        }
     }
 
     /**

@@ -68,6 +68,16 @@ public class AiCopilotService {
      */
     public ChatResponse chat(String sessionId, String userMessage, String context, String instanceId,
                              String provider, String model) {
+        return chat(sessionId, userMessage, context, instanceId, provider, model, CopilotProgressListener.NOOP);
+    }
+
+    /**
+     * Chat with the AI Copilot（带进度回调，用于 SSE 流式推送中间态）.
+     *
+     * @param listener 进度回调，非 null；非流式路径传 {@link CopilotProgressListener#NOOP}
+     */
+    public ChatResponse chat(String sessionId, String userMessage, String context, String instanceId,
+                             String provider, String model, CopilotProgressListener listener) {
         log.info("AI Copilot chat: session={}, context={}, instance={}, provider={}, model={}",
                 sessionId, context, instanceId, provider, model);
 
@@ -89,6 +99,10 @@ public class AiCopilotService {
             // 3. 意图记忆延续
             log.info("Final intent: {}, score: {}", intentResult.getIntent(), intentResult.getScore());
             chatSessionManager.setLastIntent(sessionId, intentResult.getIntent());
+            listener.onEvent("status", Map.of(
+                    "stage", "intent",
+                    "intent", intentResult.getIntent() != null ? intentResult.getIntent() : "general",
+                    "language", language != null ? language : "zh"));
 
             // 4. 构建系统提示词（委托给 PromptService）
             String effectiveContext = (context != null && !context.isEmpty()) ? context : intentResult.getIntent();
@@ -106,7 +120,7 @@ public class AiCopilotService {
             AiConfig config = toolCallOrchestrator.getAiConfig(provider);
 
             // 8. 执行工具调用循环（委托给 ToolCallOrchestrator）
-            ToolCallLoopResult loopResult = toolCallOrchestrator.runToolCallLoop(config, model, messages, tools);
+            ToolCallLoopResult loopResult = toolCallOrchestrator.runToolCallLoop(config, model, messages, tools, listener);
 
             // 9. 构建最终响应（添加置信度标记）
             String finalResponse = responseBuilder.addConfidenceMark(
@@ -125,6 +139,10 @@ public class AiCopilotService {
             chatResponse.setPendingAction(loopResult.getPendingAction());
             return chatResponse;
 
+        } catch (CopilotStreamAbortedException abort) {
+            // 流式路径客户端断开：安静中止，不当作错误，也不返回响应（调用方会感知断开）
+            log.debug("AI Copilot chat aborted (client disconnected)");
+            throw abort;
         } catch (Exception e) {
             log.error("AI Copilot chat failed", e);
             return new ChatResponse(false, null, "AI 服务错误: " + e.getMessage());

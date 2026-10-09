@@ -90,6 +90,21 @@ public class ToolCallOrchestrator {
     public ToolCallLoopResult runToolCallLoop(AiConfig config, String model,
                                                List<Map<String, Object>> messages,
                                                List<Map<String, Object>> tools) {
+        return runToolCallLoop(config, model, messages, tools, CopilotProgressListener.NOOP);
+    }
+
+    /**
+     * 执行工具调用循环（带进度回调）。
+     * <p>
+     * 与非流式版本逻辑一致，额外在每轮开始与每个工具执行前后通过 {@code listener}
+     * 推送中间态，供 SSE 端点实时下发，改善长耗时多轮调用的等待体验。
+     *
+     * @param listener 进度回调，非 null（非流式路径传 {@link CopilotProgressListener#NOOP}）
+     */
+    public ToolCallLoopResult runToolCallLoop(AiConfig config, String model,
+                                               List<Map<String, Object>> messages,
+                                               List<Map<String, Object>> tools,
+                                               CopilotProgressListener listener) {
 
         String effectiveModel = (model != null && !model.isEmpty()) ? model : config.getModel();
         String provider = config.getProvider();
@@ -119,6 +134,7 @@ public class ToolCallOrchestrator {
             }
 
             log.info("Tool call iteration: {} for provider: {}", iteration + 1, provider);
+            listener.onEvent("status", Map.of("stage", "thinking", "iteration", iteration + 1));
 
             // 调用 AI API（带工具）
             AiAnalysisService.AiResponse response = aiAnalysisService.chatWithTools(
@@ -149,6 +165,7 @@ public class ToolCallOrchestrator {
                 long startTime = System.currentTimeMillis();
 
                 calledTools.add(toolCall.getName());
+                listener.onEvent("tool", Map.of("toolName", toolCall.getName(), "status", "running"));
 
                 // 执行工具
                 ToolExecutor.ToolResult result = toolExecutor.execute(
@@ -157,6 +174,11 @@ public class ToolCallOrchestrator {
                 long duration = System.currentTimeMillis() - startTime;
                 log.info("Tool {} executed in {} ms, success={}",
                         toolCall.getName(), duration, result.isSuccess());
+
+                String toolStatus = result.isPendingConfirmation() ? "confirm"
+                        : (result.isSuccess() ? "success" : "error");
+                listener.onEvent("tool", Map.of(
+                        "toolName", toolCall.getName(), "status", toolStatus, "durationMs", duration));
 
                 // FIX (P0): 模型提议需要确认的写操作时，绝不在循环内执行。
                 // 中止循环并把待确认动作交给前端，由用户人工确认后经
