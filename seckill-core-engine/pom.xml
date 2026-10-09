@@ -28,10 +28,10 @@
     </repositories>
 
     <parent>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.2.5</version>
-        <relativePath/>
+        <groupId>com.leoli.gateway</groupId>
+        <artifactId>gateway-parent</artifactId>
+        <version>1.0.0</version>
+        <relativePath>../pom.xml</relativePath>
     </parent>
 
     <properties>
@@ -218,7 +218,6 @@
         <dependency>
             <groupId>com.leoli.gateway</groupId>
             <artifactId>gateway-trace-starter</artifactId>
-            <version>1.0.0</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.springframework.boot</groupId>

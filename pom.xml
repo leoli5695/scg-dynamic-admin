@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+      Aggregator + version-management parent for the gateway platform.
+
+      Inheriting this pom gives a module:
+        - the Spring Boot patch level (single source of truth - was previously
+          duplicated per module and had drifted across 3.2.0 / 3.2.4 / 3.2.5),
+        - the shared Java level and source encoding,
+        - managed versions for the internal modules (license-client,
+          gateway-trace-starter) so dependents do not pin them individually.
+
+      Modules keep their own groupId / artifactId / version, so published
+      coordinates are unchanged. gateway-trace-starter and plugin-example do NOT
+      inherit this pom (the former manages versions via the spring-boot-dependencies
+      BOM, the latter is a standalone com.example template); gateway-trace-starter is
+      still listed as a module so the reactor builds it before its dependents.
+    -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.2.5</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.leoli.gateway</groupId>
+    <artifactId>gateway-parent</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+
+    <name>Gateway Parent</name>
+    <description>Aggregator and version-management parent for the gateway platform modules</description>
+
+    <modules>
+        <module>license-client</module>
+        <module>gateway-trace-starter</module>
+        <module>license-server</module>
+        <module>my-gateway</module>
+        <module>gateway-admin</module>
+        <module>demo-service</module>
+        <module>seckill-core-engine</module>
+    </modules>
+
+    <properties>
+        <java.version>21</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- Internal module versions: single source of truth for dependents -->
+        <license-client.version>1.0.0</license-client.version>
+        <gateway-trace-starter.version>1.0.0</gateway-trace-starter.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.leoli</groupId>
+                <artifactId>license-client</artifactId>
+                <version>${license-client.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.leoli.gateway</groupId>
+                <artifactId>gateway-trace-starter</artifactId>
+                <version>${gateway-trace-starter.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+</project>
