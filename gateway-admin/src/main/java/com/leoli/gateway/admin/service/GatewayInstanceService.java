@@ -444,7 +444,14 @@ public class GatewayInstanceService {
      * Get ApiClient for a cluster.
      */
     private ApiClient getApiClient(Long clusterId, String kubeconfig) {
-        int configHash = kubeconfig != null ? kubeconfig.hashCode() : 0;
+        // Without this guard `new StringReader(null)` throws a bare
+        // NullPointerException("Cannot invoke String.length() because s is null"), which
+        // surfaces to callers as an opaque 500 that does not name the missing kubeconfig.
+        if (kubeconfig == null || kubeconfig.isBlank()) {
+            throw new IllegalStateException(
+                "Cluster " + clusterId + " has no kubeconfig configured - cannot build a Kubernetes client");
+        }
+        int configHash = kubeconfig.hashCode();
         ApiClient client = clientCache.get(clusterId);
         if (client != null && clientCacheConfigHash.getOrDefault(clusterId, 0) == configHash) {
             return client;
@@ -490,10 +497,18 @@ public class GatewayInstanceService {
         //    Deployment/Service: pods keep running and heartbeating with no DB record to control
         //    or retry them. Now the K8s delete runs before any destructive step and propagates
         //    failure, so @Transactional rolls the whole delete back and the operator can retry.
-        KubernetesCluster cluster = clusterRepository.findById(instance.getClusterId())
-                .orElse(null);
-        if (cluster != null) {
+        KubernetesCluster cluster = instance.getClusterId() == null ? null
+                : clusterRepository.findById(instance.getClusterId()).orElse(null);
+        if (cluster != null && cluster.getKubeconfig() != null && !cluster.getKubeconfig().isBlank()) {
             deleteFromKubernetes(instance, cluster);
+        } else if (cluster != null) {
+            // A cluster with no kubeconfig could never have had a Deployment created for this
+            // instance (deployToKubernetes fails at creation and is caught there), so there is
+            // nothing to orphan. Refusing to delete here - which is what happened when
+            // getApiClient threw - made such instances permanently undeletable and leaked their
+            // DB row, Nacos configs and Nacos namespace on every failed attempt.
+            log.warn("Skipping Kubernetes cleanup for instance {}: cluster {} ({}) has no kubeconfig",
+                    instanceId, cluster.getId(), cluster.getClusterName());
         }
 
         // 2. Delete all related data from database

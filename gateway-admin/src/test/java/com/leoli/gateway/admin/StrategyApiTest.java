@@ -22,10 +22,46 @@ public class StrategyApiTest extends BaseIntegrationTest {
     private static String rateLimiterStrategyId;
     private static String circuitBreakerStrategyId;
     private static String retryStrategyId;
+    private static String strategyInstanceId;
 
     @BeforeAll
     static void setup() {
         // Static setup
+    }
+
+    /**
+     * GLOBAL strategies are published into every gateway instance's own namespace
+     * (gateway-&lt;instanceId&gt;), which is what a gateway actually reads. The configured
+     * default namespace never receives them, so without an instance there is nowhere for the
+     * index to land and the Nacos assertions below have nothing to read. Must run before
+     * test01 so the instance already exists when the strategies are created.
+     */
+    @BeforeEach
+    void ensureTestInstance() throws Exception {
+        if (strategyInstanceId == null) {
+            strategyInstanceId = createTestInstance("strategy-api-instance");
+        }
+    }
+
+    private String strategyNamespace() {
+        return "gateway-" + strategyInstanceId;
+    }
+
+    /**
+     * Poll the instance-namespace strategies index until it holds {@code expectedSize} entries.
+     * Returns the last content read (possibly null) so callers can keep their existing
+     * null-tolerant assertions.
+     */
+    private String awaitStrategiesIndexSize(int expectedSize) throws Exception {
+        String content = null;
+        for (int i = 0; i < 10; i++) {
+            content = getConfigFromCenter("config.gateway.metadata.strategies-index", strategyNamespace());
+            if (content != null && objectMapper.readTree(content).size() == expectedSize) {
+                return content;
+            }
+            Thread.sleep(500);
+        }
+        return content;
     }
 
     @Test
@@ -137,9 +173,14 @@ public class StrategyApiTest extends BaseIntegrationTest {
     @Test
     @Order(5)
     void test05_VerifyStrategiesInNacos() throws Exception {
-        // Verify strategies index
-        String indexConfig = getConfigFromCenter("config.gateway.metadata.strategies-index");
-        assertNotNull(indexConfig, "Strategies index should exist");
+        // Read the index from the instance namespace, which is where GLOBAL strategies are
+        // actually published. Reading the default namespace picks up whatever stale index
+        // other test classes left behind - Nacos is not reset between classes, unlike the
+        // create-drop database. Poll rather than sample once: the Nacos client serves reads
+        // from its local snapshot, so a write made moments ago is not immediately visible
+        // (the write itself is confirmed by the absence of any index-update error in the log).
+        String indexConfig = awaitStrategiesIndexSize(3);
+        assertNotNull(indexConfig, "Strategies index should exist in " + strategyNamespace());
         JsonNode index = objectMapper.readTree(indexConfig);
         assertEquals(3, index.size(), "Should have 3 strategies in index");
 
@@ -253,8 +294,10 @@ public class StrategyApiTest extends BaseIntegrationTest {
         // Note: Local cache might still have it, so we check the database instead
         // which is the source of truth for delete operations
 
-        // Verify removed from index
-        String indexConfig = getConfigFromCenter("config.gateway.metadata.strategies-index");
+        // Verify removed from index (same instance namespace test05 reads). The Nacos client
+        // serves reads from its local snapshot, so the post-delete rewrite is not necessarily
+        // visible on the first read - poll briefly instead of asserting a single sample.
+        String indexConfig = awaitStrategiesIndexSize(2);
         if (indexConfig != null) {
             JsonNode index = objectMapper.readTree(indexConfig);
             assertEquals(2, index.size());

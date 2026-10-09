@@ -80,6 +80,13 @@ public class ConsulConfigCenterService implements ConfigCenterService {
 
             // Consul KV API returns value as Base64-encoded string, decode to UTF-8
             String content = new String(Base64.getDecoder().decode(value.getValue()), StandardCharsets.UTF_8);
+            // Callers asking for String want the raw payload. readValue() on a JSON array or
+            // object with String.class throws, which here would surface as a RuntimeException
+            // wrapping a Jackson error. Kept in step with NacosConfigCenterService so the
+            // ConfigCenterService contract does not depend on which backend is active.
+            if (type == String.class) {
+                return (T) content;
+            }
             T config = objectMapper.readValue(content, type);
             log.debug("Loaded configuration from Consul: dataId={}, key={}, type={}",
                     dataId, key, type.getSimpleName());
@@ -169,6 +176,7 @@ public class ConsulConfigCenterService implements ConfigCenterService {
     // Consul doesn't have native namespace support, so we use key prefix
 
     @Override
+    @SuppressWarnings("unchecked")
     public <T> T getConfig(String dataId, String namespace, Class<T> type) {
         // For Consul, namespace is added to key prefix
         String effectiveKey = buildKeyWithNamespace(dataId, namespace);
@@ -178,6 +186,12 @@ public class ConsulConfigCenterService implements ConfigCenterService {
                 return null;
             }
             String content = new String(Base64.getDecoder().decode(value.getValue()), StandardCharsets.UTF_8);
+            // Same String.class handling as the single-namespace overload above; without it this
+            // silently returns null for any JSON array/object payload, because the catch below
+            // swallows the Jackson failure.
+            if (type == String.class) {
+                return (T) content;
+            }
             return objectMapper.readValue(content, type);
         } catch (Exception ex) {
             log.error("Failed to get config from Consul: key={}, error={}", effectiveKey, ex.getMessage());

@@ -539,6 +539,14 @@ public class NacosConfigCenterService implements ConfigCenterService {
             ConfigService nsConfigService = getConfigServiceForNamespace(targetNamespace);
             String content = nsConfigService.getConfig(dataId, group, 5000);
             if (content != null && !content.trim().isEmpty()) {
+                // Mirror the single-namespace overload above: callers asking for String want the
+                // raw payload. Without this, readValue(jsonArrayOrObject, String.class) throws,
+                // the catch below swallows it at WARN and the method silently returns null -
+                // which made ServiceService's "is this config missing from Nacos?" check answer
+                // yes for every service on every pass, re-publishing them all each time.
+                if (type == String.class) {
+                    return (T) content;
+                }
                 return objectMapper.readValue(content, type);
             }
         } catch (Exception e) {

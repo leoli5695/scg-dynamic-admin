@@ -219,9 +219,14 @@ public class InstanceConfigCleanupHelper {
             if (nacosApiUrl == null || nacosApiUrl.isEmpty()) {
                 nacosApiUrl = "localhost:8848";
             }
+            // Tolerate a scheme already present in the configured address. Formatting
+            // "http://%s" over "http://nacos:8848" yields "http://http://nacos:8848", which
+            // throws, and the catch below only logs a warning - so the namespace leaks
+            // silently. NacosConfigCenterService already guards this way.
+            String baseUrl = nacosApiUrl.startsWith("http") ? nacosApiUrl : "http://" + nacosApiUrl;
 
-            String url = String.format("http://%s/nacos/v1/console/namespaces?namespaceId=%s",
-                    nacosApiUrl,
+            String url = String.format("%s/nacos/v1/console/namespaces?namespaceId=%s",
+                    baseUrl,
                     URLEncoder.encode(namespaceId, StandardCharsets.UTF_8));
 
             log.info("Deleting Nacos namespace: {}", namespaceId);

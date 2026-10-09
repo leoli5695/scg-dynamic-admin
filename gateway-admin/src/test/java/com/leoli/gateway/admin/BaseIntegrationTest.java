@@ -140,6 +140,27 @@ public abstract class BaseIntegrationTest {
     }
 
     /**
+     * Read a config from an explicit namespace. GLOBAL strategies, routes and services are
+     * published into each gateway instance's own namespace (gateway-&lt;instanceId&gt;), not into
+     * the configured default, so namespace-scoped assertions must use this overload.
+     */
+    protected String getConfigFromCenter(String dataId, String namespace) {
+        try {
+            return configCenterService.getConfig(dataId, namespace, String.class);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    protected boolean configCenterExists(String dataId, String namespace) {
+        try {
+            return configCenterService.configExists(dataId, namespace);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
      * Verify config exists in ConfigCenter (Nacos/Consul).
      * Uses ConfigCenterService instead of direct HTTP call.
      */

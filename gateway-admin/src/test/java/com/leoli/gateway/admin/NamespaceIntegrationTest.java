@@ -176,7 +176,10 @@ public abstract class NamespaceIntegrationTest {
      */
     protected String getConfigFromCenter(String dataId, String namespace) {
         try {
-            return configCenterService.getConfig(dataId, String.class);
+            // Was calling the namespace-less overload, so the namespace argument was silently
+            // ignored and callers read the default namespace while believing they were
+            // asserting on an isolated one.
+            return configCenterService.getConfig(dataId, namespace, String.class);
         } catch (Exception e) {
             return null;
         }
