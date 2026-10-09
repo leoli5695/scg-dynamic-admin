@@ -163,6 +163,13 @@
   background: var(--bg-hover);
 }
 
+/* rc-table measure row must stay zero-height despite !important cell padding elsewhere */
+.ant-table-tbody > tr.ant-table-measure-row > td {
+  padding: 0 !important;
+  border-bottom: none !important;
+  background: transparent !important;
+}
+
 .ant-table-placeholder {
   background: var(--bg-card);
 }

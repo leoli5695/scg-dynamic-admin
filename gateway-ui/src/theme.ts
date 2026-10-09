@@ -73,6 +73,14 @@ const theme: ThemeConfig = {
     Table: {
       colorBgContainer: '#18181b',    // aligned with --bg-secondary
       colorBorder: 'rgba(255, 255, 255, 0.10)',  // aligned with --border-default
+      // Header/hover backgrounds must be themed here: plain CSS overrides lose to antd v6 runtime CSS-in-JS
+      headerBg: '#18212f',
+      headerColor: '#a1a1aa',
+      headerSplitColor: 'transparent',
+      headerSortActiveBg: '#18212f',
+      headerSortHoverBg: '#1e2a3a',
+      borderColor: 'rgba(255, 255, 255, 0.08)',
+      rowHoverBg: 'rgba(59, 130, 246, 0.08)',
     },
   },
 };

@@ -81,9 +81,11 @@ const LicensePage: React.FC = () => {
       key: 'licenseId',
       width: 180,
       render: (id: string) => (
-        <Text copyable={{ text: id }} style={{ fontSize: 12 }}>
-          {id.substring(0, 8)}...
-        </Text>
+        <Tooltip title={id}>
+          <Text copyable={{ text: id }} style={{ fontSize: 12 }}>
+            {id.substring(0, 8)}...
+          </Text>
+        </Tooltip>
       ),
     },
     {

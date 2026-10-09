@@ -303,22 +303,7 @@
 }
 
 /* ==================== Table Styles ==================== */
-.license-page .ant-table {
-  background: var(--bg-card);
-}
-
-.license-page .ant-table-thead > tr > th {
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.license-page .ant-table-tbody > tr > td {
-  background: var(--bg-card);
-  color: var(--text-primary);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
+/* Table backgrounds are themed via theme.ts Table tokens; plain CSS here loses to antd v6 CSS-in-JS */
 .license-page .ant-table-tbody > tr:hover > td {
   background: var(--bg-elevated);
 }
