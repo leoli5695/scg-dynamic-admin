@@ -48,6 +48,7 @@ public class AiCopilotService {
     
     private final ChatSessionManager chatSessionManager;
     private final IntentRouter intentRouter;
+    private final SemanticIntentClassifier semanticIntentClassifier;
     private final ToolCallOrchestrator toolCallOrchestrator;
     private final ContextDataProvider contextDataProvider;
     private final CopilotResponseBuilder responseBuilder;
@@ -96,31 +97,50 @@ public class AiCopilotService {
                 return new ChatResponse(true, intentResult.getLocalFallback(), null);
             }
 
-            // 3. 意图记忆延续
-            log.info("Final intent: {}, score: {}", intentResult.getIntent(), intentResult.getScore());
-            chatSessionManager.setLastIntent(sessionId, intentResult.getIntent());
+            // 3. 关键词意图（快路）
+            log.info("Keyword intent: {}, score: {}", intentResult.getIntent(), intentResult.getScore());
+
+            // 4. 提前解析 AI 配置（语义兜底分类也要用）
+            AiConfig config = toolCallOrchestrator.getAiConfig(provider);
+            String effectiveModel = (model != null && !model.isEmpty()) ? model : config.getModel();
+
+            // 5. 领域判定：显式 context 最优先；否则关键词命中具体领域就直接用（零额外调用）；
+            //    关键词没命中（general/unknown/空）才发一次极小的语义分类兜底。
+            String domain = intentResult.getIntent();
+            boolean keywordMissed = domain == null || domain.isEmpty()
+                    || "general".equals(domain) || "unknown".equals(domain);
+            if (keywordMissed) {
+                String semantic = semanticIntentClassifier.classify(config.getProvider(), effectiveModel, userMessage);
+                if (semantic != null && !semantic.isEmpty() && !"general".equals(semantic)) {
+                    domain = semantic;
+                    log.info("Semantic fallback refined domain: {}", domain);
+                }
+            }
+            if (context != null && !context.isEmpty()) {
+                domain = context; // 前端显式指定域时以其为准
+            }
+            if (domain == null || domain.isEmpty()) {
+                domain = "general";
+            }
+            chatSessionManager.setLastIntent(sessionId, domain);
             listener.onEvent("status", Map.of(
                     "stage", "intent",
-                    "intent", intentResult.getIntent() != null ? intentResult.getIntent() : "general",
+                    "intent", domain,
                     "language", language != null ? language : "zh"));
 
-            // 4. 构建系统提示词（委托给 PromptService）
-            String effectiveContext = (context != null && !context.isEmpty()) ? context : intentResult.getIntent();
-            String systemPrompt = promptService.buildSystemPrompt(language, effectiveContext);
+            // 6. 构建系统提示词（委托给 PromptService）
+            String systemPrompt = promptService.buildSystemPrompt(language, domain);
 
-            // 5. 构建消息（委托给 ToolCallOrchestrator）——使用历史快照，避免并发遍历时被写坏
+            // 7. 构建消息（委托给 ToolCallOrchestrator）——使用历史快照，避免并发遍历时被写坏
             List<ChatMessage> history = chatSessionManager.getHistorySnapshot(sessionId);
             List<Map<String, Object>> messages = toolCallOrchestrator.buildMessagesForTools(
                     history, systemPrompt, userMessage, instanceId);
 
-            // 6. 获取工具定义（按意图领域筛选，降低每轮 token 开销；拿不准时回退全量）
-            List<Map<String, Object>> tools = toolCallOrchestrator.getOpenAITools(intentResult.getIntent());
+            // 8. 按领域收窄工具（拿不准时 getOpenAITools 内部 fail-safe 回退全量）
+            List<Map<String, Object>> tools = toolCallOrchestrator.getOpenAITools(domain);
 
-            // 7. 获取 AI 配置
-            AiConfig config = toolCallOrchestrator.getAiConfig(provider);
-
-            // 8. 执行工具调用循环（委托给 ToolCallOrchestrator）
-            ToolCallLoopResult loopResult = toolCallOrchestrator.runToolCallLoop(config, model, messages, tools, listener);
+            // 9. 执行工具调用循环（委托给 ToolCallOrchestrator）
+            ToolCallLoopResult loopResult = toolCallOrchestrator.runToolCallLoop(config, effectiveModel, messages, tools, listener);
 
             // 9. 构建最终响应（附证据说明，不再有假置信度百分比）
             EvidenceAssessor.Evidence evidence = responseBuilder.assessEvidence(
