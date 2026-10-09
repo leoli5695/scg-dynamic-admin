@@ -114,6 +114,8 @@ public class MiddlewareMetadataReporter implements InitializingBean {
         addIfConfigured(exporters, "mongodb", properties.getMongoExporterUrlResolved());
         addIfConfigured(exporters, "rabbitmq", properties.getRabbitmqExporterUrlResolved());
         addIfConfigured(exporters, "postgresql", properties.getPostgresqlExporterUrlResolved());
+        addIfConfigured(exporters, "oracle", properties.getOracleExporterUrlResolved());
+        addIfConfigured(exporters, "sqlserver", properties.getSqlserverExporterUrlResolved());
 
         return exporters;
     }

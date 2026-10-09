@@ -410,4 +410,18 @@ public class GatewayTraceProperties {
     public String getPostgresqlExporterUrlResolved() {
         return middlewareExporters.getPostgresql();
     }
+
+    /**
+     * Get Oracle exporter URL
+     */
+    public String getOracleExporterUrlResolved() {
+        return middlewareExporters.getOracle();
+    }
+
+    /**
+     * Get SQL Server exporter URL
+     */
+    public String getSqlserverExporterUrlResolved() {
+        return middlewareExporters.getSqlserver();
+    }
 }

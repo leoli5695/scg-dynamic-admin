@@ -168,6 +168,20 @@ class MiddlewareMetadataReporterTest {
     }
 
     @Test
+    @DisplayName("collect: oracle/sqlserver/postgresql 配置了就会被收集（回归：曾静默漏收）")
+    void testCollectOracleAndSqlServer() {
+        properties.getMiddlewareExporters().setOracle("oracledb-exporter:9161");
+        properties.getMiddlewareExporters().setSqlserver("mssql-exporter:4000");
+        properties.getMiddlewareExporters().setPostgresql("postgres-exporter:9187");
+
+        Map<String, String> exporters = reporter.collectConfiguredExporters();
+
+        assertEquals("oracledb-exporter:9161", exporters.get("oracle"));
+        assertEquals("mssql-exporter:4000", exporters.get("sqlserver"));
+        assertEquals("postgres-exporter:9187", exporters.get("postgresql"));
+    }
+
+    @Test
     @DisplayName("collect: legacy 配置回退生效")
     void testCollectLegacyFallback() {
         properties.setRedisExporterUrl("legacy-redis:9121");
