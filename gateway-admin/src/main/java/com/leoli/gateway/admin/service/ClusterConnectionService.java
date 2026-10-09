@@ -17,6 +17,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Manages cluster connectivity: health checks, connection verification, and ApiClient caching.
@@ -27,7 +28,9 @@ public class ClusterConnectionService {
 
     private final KubernetesClusterRepository clusterRepository;
     private final KubeConfigService kubeConfigService;
-    private final Map<Long, ApiClient> clientCache = new HashMap<>();
+    // Accessed concurrently by request threads (getApiClient) and the @Scheduled
+    // connectivity checker (verifyClusterConnection), so it must be thread-safe.
+    private final Map<Long, ApiClient> clientCache = new ConcurrentHashMap<>();
 
     @Value("${gateway.kubernetes.enabled:true}")
     private boolean kubernetesEnabled;
