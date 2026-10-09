@@ -152,6 +152,7 @@ public class AiCopilotService {
             chatSessionManager.addToHistory(sessionId, "assistant", finalResponse);
 
             ChatResponse chatResponse = new ChatResponse(true, finalResponse, null, evidence.toMap());
+            chatResponse.setTotalTokens(loopResult.getTotalTokens());
             // FIX (P0): 把待人工确认的写操作透传给前端，由其渲染确认弹窗。
             chatResponse.setPendingAction(loopResult.getPendingAction());
             return chatResponse;
@@ -283,7 +284,9 @@ public class AiCopilotService {
                     loopResult.getCalledTools(), loopResult.getDataTypes(), loopResult.getFailedTools(), "zh");
             String finalAnalysis = responseBuilder.addEvidenceMark(loopResult.getContent(), evidence);
 
-            return new DebugAnalysis(true, finalAnalysis, null, evidence.toMap());
+            DebugAnalysis analysisResult = new DebugAnalysis(true, finalAnalysis, null, evidence.toMap());
+            analysisResult.setTotalTokens(loopResult.getTotalTokens());
+            return analysisResult;
 
         } catch (Exception e) {
             log.error("Error analysis failed", e);
@@ -421,6 +424,8 @@ public class AiCopilotService {
         /** 证据评估（level/note/toolCount/dataTypes/failedTools），取代原先的假置信度百分比。 */
         private Map<String, Object> evidence;
         private Map<String, Object> pendingAction;
+        /** 本次对话累计消耗的 token（供成本闸门记账，也回传前端便于观测）。 */
+        private long totalTokens;
 
         public ChatResponse(boolean success, String response, String error) {
             this(success, response, error, null);
@@ -440,6 +445,7 @@ public class AiCopilotService {
             if (error != null) map.put("error", error);
             if (evidence != null) map.put("evidence", evidence);
             if (pendingAction != null) map.put("pendingAction", pendingAction);
+            if (totalTokens > 0) map.put("totalTokens", totalTokens);
             return map;
         }
 
@@ -447,6 +453,8 @@ public class AiCopilotService {
         public String getResponse() { return response; }
         public String getError() { return error; }
         public Map<String, Object> getEvidence() { return evidence; }
+        public long getTotalTokens() { return totalTokens; }
+        public void setTotalTokens(long totalTokens) { this.totalTokens = totalTokens; }
         public Map<String, Object> getPendingAction() { return pendingAction; }
         public void setPendingAction(Map<String, Object> pendingAction) { this.pendingAction = pendingAction; }
     }
@@ -480,6 +488,7 @@ public class AiCopilotService {
         private String analysis;
         private String error;
         private Map<String, Object> evidence;
+        private long totalTokens;
 
         public DebugAnalysis(boolean success, String analysis, String error) {
             this(success, analysis, error, null);
@@ -498,6 +507,7 @@ public class AiCopilotService {
             if (analysis != null) map.put("analysis", analysis);
             if (error != null) map.put("error", error);
             if (evidence != null) map.put("evidence", evidence);
+            if (totalTokens > 0) map.put("totalTokens", totalTokens);
             return map;
         }
 
@@ -505,6 +515,8 @@ public class AiCopilotService {
         public String getAnalysis() { return analysis; }
         public String getError() { return error; }
         public Map<String, Object> getEvidence() { return evidence; }
+        public long getTotalTokens() { return totalTokens; }
+        public void setTotalTokens(long totalTokens) { this.totalTokens = totalTokens; }
     }
 
     public static class OptimizationResult {

@@ -11,6 +11,7 @@ import com.leoli.gateway.admin.service.RouteService;
 import com.leoli.gateway.admin.service.ToolExecutor;
 import com.leoli.gateway.admin.service.copilot.CopilotProgressListener;
 import com.leoli.gateway.admin.service.copilot.CopilotStreamAbortedException;
+import com.leoli.gateway.admin.service.copilot.CopilotUsageGuard;
 import com.leoli.gateway.admin.service.copilot.PendingActionStore;
 import com.leoli.gateway.admin.validation.RouteValidator;
 import com.leoli.license.client.model.LicenseInfo;
@@ -53,6 +54,7 @@ public class AiCopilotController extends BaseController {
     private final LicenseFeatureHelper licenseFeatureHelper;
     private final ToolExecutor toolExecutor;
     private final PendingActionStore pendingActionStore;
+    private final CopilotUsageGuard copilotUsageGuard;
 
     /**
      * SSE 流式对话的异步执行器。SseEmitter 要求在独立线程上跑同步管线，绝不能阻塞
@@ -91,6 +93,12 @@ public class AiCopilotController extends BaseController {
             sessionId = UUID.randomUUID().toString();
         }
 
+        String operator = getOperator();
+        Optional<String> denial = copilotUsageGuard.checkRequestAllowed(operator);
+        if (denial.isPresent()) {
+            return ResponseEntity.ok(Map.of("success", false, "error", denial.get()));
+        }
+
         AiCopilotService.ChatResponse response = aiCopilotService.chat(
                 sessionId,
                 request.getMessage(),
@@ -99,6 +107,7 @@ public class AiCopilotController extends BaseController {
                 request.getProvider(),
                 request.getModel()
         );
+        copilotUsageGuard.recordUsage(operator, response.getTotalTokens());
 
         Map<String, Object> result = response.toMap();
         result.put("sessionId", sessionId);
@@ -134,8 +143,17 @@ public class AiCopilotController extends BaseController {
         // 超时略大于工具循环总预算（90s），避免管线未结束就被容器断开
         SseEmitter emitter = new SseEmitter(120_000L);
 
+        // 成本闸门须在请求线程校验（异步线程拿不到 SecurityContext）；operator 传入异步任务记账
+        final String operator = getOperator();
+        Optional<String> denial = copilotUsageGuard.checkRequestAllowed(operator);
+        if (denial.isPresent()) {
+            sendErrorQuietly(emitter, denial.get());
+            emitter.complete();
+            return emitter;
+        }
+
         try {
-            streamExecutor.execute(() -> runChatStream(emitter, request, sessionId));
+            streamExecutor.execute(() -> runChatStream(emitter, request, sessionId, operator));
         } catch (RejectedExecutionException rex) {
             log.warn("Copilot SSE executor saturated; rejecting stream request");
             sendErrorQuietly(emitter, "服务繁忙，请稍后重试");
@@ -147,7 +165,7 @@ public class AiCopilotController extends BaseController {
     /**
      * 在独立线程上驱动同步的对话管线，把进度事件写入 SseEmitter。
      */
-    private void runChatStream(SseEmitter emitter, ChatRequest request, String sessionId) {
+    private void runChatStream(SseEmitter emitter, ChatRequest request, String sessionId, String operator) {
         AtomicBoolean clientGone = new AtomicBoolean(false);
         CopilotProgressListener listener = (type, data) -> {
             if (clientGone.get()) {
@@ -166,6 +184,7 @@ public class AiCopilotController extends BaseController {
             AiCopilotService.ChatResponse response = aiCopilotService.chat(
                     sessionId, request.getMessage(), request.getContext(), request.getInstanceId(),
                     request.getProvider(), request.getModel(), listener);
+            copilotUsageGuard.recordUsage(operator, response.getTotalTokens());
 
             if (clientGone.get()) {
                 emitter.complete();
@@ -193,6 +212,16 @@ public class AiCopilotController extends BaseController {
         } catch (IOException | IllegalStateException ignored) {
             // 客户端已断开，无处可发
         }
+    }
+
+    /**
+     * 成本闸门：放行返回 null；否则返回 HTTP 200 + {success:false, error:原因}，
+     * 让前端按既有"业务失败"路径展示具体原因（而非笼统的 429）。
+     */
+    private ResponseEntity<Map<String, Object>> guardOrDeny() {
+        Optional<String> denial = copilotUsageGuard.checkRequestAllowed(getOperator());
+        return denial.map(msg -> ResponseEntity.ok(Map.<String, Object>of("success", false, "error", msg)))
+                .orElse(null);
     }
 
     /**
@@ -269,6 +298,9 @@ public class AiCopilotController extends BaseController {
         // License feature check
         licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.AI_COPilot);
 
+        ResponseEntity<Map<String, Object>> denied = guardOrDeny();
+        if (denied != null) return denied;
+
         AiCopilotService.RouteGenerationResult result = aiCopilotService.generateRoute(
                 request.getDescription(),
                 request.getInstanceId(),
@@ -293,12 +325,16 @@ public class AiCopilotController extends BaseController {
         // License feature check
         licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.AI_COPilot);
 
+        ResponseEntity<Map<String, Object>> denied = guardOrDeny();
+        if (denied != null) return denied;
+
         AiCopilotService.DebugAnalysis analysis = aiCopilotService.analyzeError(
                 request.getErrorMessage(),
                 request.getInstanceId(),
                 request.getProvider(),
                 request.getModel()
         );
+        copilotUsageGuard.recordUsage(getOperator(), analysis.getTotalTokens());
 
         return ResponseEntity.ok(analysis.toMap());
     }
@@ -321,6 +357,9 @@ public class AiCopilotController extends BaseController {
 
         // License feature check
         licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.AI_COPilot);
+
+        ResponseEntity<Map<String, Object>> denied = guardOrDeny();
+        if (denied != null) return denied;
 
         AiCopilotService.OptimizationResult result = aiCopilotService.suggestOptimizations(
                 instanceId, provider, model);
@@ -347,6 +386,9 @@ public class AiCopilotController extends BaseController {
 
         // License feature check
         licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.AI_COPilot);
+
+        ResponseEntity<Map<String, Object>> denied = guardOrDeny();
+        if (denied != null) return denied;
 
         String explanation = aiCopilotService.explainConcept(concept, provider, model, instanceId);
 

@@ -745,7 +745,9 @@ public class AiAnalysisService {
                 }
             }
 
-            return new AiResponse(content, toolCalls, finishReason);
+            AiResponse openAiResp = new AiResponse(content, toolCalls, finishReason);
+            openAiResp.setTotalTokens(root.path("usage").path("total_tokens").asLong(0));
+            return openAiResp;
 
         } catch (Exception e) {
             log.error("Failed to parse OpenAI response with tools", e);
@@ -841,7 +843,10 @@ public class AiAnalysisService {
             }
 
             String finishReason = "tool_use".equals(stopReason) ? "tool_calls" : stopReason;
-            return new AiResponse(textContent, toolCalls, finishReason);
+            AiResponse claudeResp = new AiResponse(textContent, toolCalls, finishReason);
+            JsonNode usage = root.path("usage");
+            claudeResp.setTotalTokens(usage.path("input_tokens").asLong(0) + usage.path("output_tokens").asLong(0));
+            return claudeResp;
 
         } catch (Exception e) {
             log.error("Failed to parse Claude response with tools", e);
@@ -946,7 +951,9 @@ public class AiAnalysisService {
             }
 
             String finishReason = toolCalls != null ? "tool_calls" : "stop";
-            return new AiResponse(textContent, toolCalls, finishReason);
+            AiResponse geminiResp = new AiResponse(textContent, toolCalls, finishReason);
+            geminiResp.setTotalTokens(root.path("usageMetadata").path("totalTokenCount").asLong(0));
+            return geminiResp;
 
         } catch (Exception e) {
             log.error("Failed to parse Gemini response with tools", e);
@@ -1018,6 +1025,8 @@ public class AiAnalysisService {
         private final String content;
         private final List<ToolCall> toolCalls;
         private final String finishReason;
+        /** 本次调用的 token 用量（各家 usage 字段归一化后的总数），用于成本闸门核算。 */
+        private long totalTokens;
 
         public AiResponse(String content, List<ToolCall> toolCalls, String finishReason) {
             this.content = content;
@@ -1035,6 +1044,14 @@ public class AiAnalysisService {
 
         public String getFinishReason() {
             return finishReason;
+        }
+
+        public long getTotalTokens() {
+            return totalTokens;
+        }
+
+        public void setTotalTokens(long totalTokens) {
+            this.totalTokens = totalTokens;
         }
 
         public boolean hasToolCalls() {

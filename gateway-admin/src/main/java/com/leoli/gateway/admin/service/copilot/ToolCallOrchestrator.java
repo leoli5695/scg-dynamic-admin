@@ -113,6 +113,7 @@ public class ToolCallOrchestrator {
         Set<String> calledTools = new HashSet<>();
         Set<String> failedTools = new HashSet<>();
         Set<String> dataTypes = new HashSet<>();
+        long totalTokens = 0; // 累计各轮模型调用的 token 用量（成本闸门核算）
 
         long loopStart = System.currentTimeMillis();
 
@@ -125,7 +126,7 @@ public class ToolCallOrchestrator {
                         elapsed, TOOL_LOOP_TOTAL_TIMEOUT_MS, iteration + 1);
                 return new ToolCallLoopResult(
                         "本次分析涉及的工具调用较多，已达到时间上限并中断。以上是基于已获取数据的部分结论，请缩小问题范围或分步提问。",
-                        calledTools, dataTypes, failedTools);
+                        calledTools, dataTypes, failedTools, totalTokens);
             }
 
             log.info("Tool call iteration: {} for provider: {}", iteration + 1, provider);
@@ -134,13 +135,14 @@ public class ToolCallOrchestrator {
             // 调用 AI API（带工具）
             AiAnalysisService.AiResponse response = aiAnalysisService.chatWithTools(
                     provider, effectiveModel, messages, tools);
+            totalTokens += response.getTotalTokens();
 
             // 如果没有工具调用，返回最终回复
             if (!response.hasToolCalls()) {
                 log.info("No tool calls, returning final response");
                 return new ToolCallLoopResult(
                     response.getContent() != null ? response.getContent() : "AI 未返回有效回复。",
-                    calledTools, dataTypes, failedTools
+                    calledTools, dataTypes, failedTools, totalTokens
                 );
             }
 
@@ -186,7 +188,7 @@ public class ToolCallOrchestrator {
 
                     ToolCallLoopResult pendingResult = new ToolCallLoopResult(
                             "我已准备好执行一个需要确认的写操作，请在下方核对详情并点击确认后再执行。",
-                            calledTools, dataTypes, failedTools);
+                            calledTools, dataTypes, failedTools, totalTokens);
                     pendingResult.setPendingAction(pendingAction);
 
                     log.info("Tool {} requires human confirmation - returning pendingAction to caller",
@@ -210,7 +212,7 @@ public class ToolCallOrchestrator {
         log.warn("Max tool call iterations reached: {}", MAX_TOOL_CALL_ITERATIONS);
         return new ToolCallLoopResult(
             "工具调用次数达到上限，请简化您的问题或分步提问。",
-            calledTools, dataTypes, failedTools
+            calledTools, dataTypes, failedTools, totalTokens
         );
     }
 

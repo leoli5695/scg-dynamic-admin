@@ -38,6 +38,9 @@ public class ToolCallLoopResult {
     /** 执行失败的工具名称集合（去重） */
     private Set<String> failedTools;
 
+    /** 本次工具调用循环累计消耗的 token 数（各轮模型调用 usage 之和），用于成本闸门核算。 */
+    private long totalTokens;
+
     /**
      * FIX (P0): 待人工确认的写操作。当模型提议 requiresConfirmation 的工具时，
      * 此字段承载 {ticket, toolName, arguments, preview}，由前端渲染确认弹窗；
@@ -47,10 +50,16 @@ public class ToolCallLoopResult {
     private Map<String, Object> pendingAction;
 
     public ToolCallLoopResult(String content, Set<String> calledTools, Set<String> dataTypes, Set<String> failedTools) {
+        this(content, calledTools, dataTypes, failedTools, 0L);
+    }
+
+    public ToolCallLoopResult(String content, Set<String> calledTools, Set<String> dataTypes,
+                              Set<String> failedTools, long totalTokens) {
         this.content = content;
         this.calledTools = calledTools;
         this.dataTypes = dataTypes;
         this.failedTools = failedTools;
+        this.totalTokens = totalTokens;
     }
 
     /** 判断是否成功执行 */
