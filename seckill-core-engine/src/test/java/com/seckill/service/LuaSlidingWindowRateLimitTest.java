@@ -162,22 +162,28 @@ class LuaSlidingWindowRateLimitTest {
         // 固定同一毫秒（模拟极端场景）
         long fixedTimestamp = System.currentTimeMillis();
 
+        // 本用例只验证「同毫秒不因去重塌缩」这一属性，必须把限流阈值抬到请求数之上，
+        // 否则 MAX_REQUESTS=10 的限流会先于去重问题触发，掩盖真正要测的行为。
+        int requestCount = 100;
+        int capForThisTest = requestCount;  // 阈值 == 请求数，限流不介入
+
         // 同一毫秒内发送 100 个请求（不同 random value）
         int successCount = 0;
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < requestCount; i++) {
             String randomValue = UUID.randomUUID().toString().substring(0, 8);
-            Long result = executeScriptWithTimestamp(key, fixedTimestamp, randomValue);
+            Long result = executeScriptWithTimestamp(key, fixedTimestamp, randomValue, capForThisTest);
             if (result >= 0) {
                 successCount++;
             }
         }
 
-        // 验证：同毫秒内 100 个请求都应成功（因为有不同 random value）
-        assertEquals(100, successCount, "同毫秒内 100 个不同 random 的请求都应成功");
+        // 验证：同一毫秒内、阈值足够高时，100 个不同 random 的请求都应放行
+        assertEquals(requestCount, successCount,
+                "同毫秒内 100 个不同 random 的请求都应放行（member=timestamp:random 唯一，未被去重塌缩）");
 
-        // 验证 ZSET 成员唯一
+        // 验证 ZSET 成员唯一（若按 timestamp 去重，card 会塌缩为 1）
         Long card = commands.zcard(key);
-        assertEquals(100, card, "ZSET 应有 100 个唯一成员（无去重）");
+        assertEquals(requestCount, card, "ZSET 应有 100 个唯一成员（无去重塌缩）");
 
         // 验证 member 格式
         // 取一个成员验证格式为 timestamp:random
@@ -393,10 +399,14 @@ class LuaSlidingWindowRateLimitTest {
     }
 
     private Long executeScriptWithTimestamp(String key, long timestamp, String randomValue) {
+        return executeScriptWithTimestamp(key, timestamp, randomValue, MAX_REQUESTS);
+    }
+
+    private Long executeScriptWithTimestamp(String key, long timestamp, String randomValue, int maxRequests) {
         String[] keys = { key };
         String[] args = {
             String.valueOf(WINDOW_MS),
-            String.valueOf(MAX_REQUESTS),
+            String.valueOf(maxRequests),
             String.valueOf(timestamp),
             randomValue
         };
