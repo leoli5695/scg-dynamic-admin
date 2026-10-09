@@ -1,12 +1,10 @@
 package com.leoli.gateway.admin.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.model.AiConfig;
 import com.leoli.gateway.admin.prompt.PromptService;
 import com.leoli.gateway.admin.repository.AiConfigRepository;
 import com.leoli.gateway.admin.service.copilot.*;
 import com.leoli.gateway.admin.service.copilot.model.*;
-import com.leoli.gateway.admin.tool.ToolRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -45,7 +43,6 @@ public class AiCopilotService {
     
     private final AiConfigRepository aiConfigRepository;
     private final AiAnalysisService aiAnalysisService;
-    private final ObjectMapper objectMapper;
 
     // ===================== 委托组件 =====================
     
@@ -55,18 +52,6 @@ public class AiCopilotService {
     private final ContextDataProvider contextDataProvider;
     private final CopilotResponseBuilder responseBuilder;
     private final PromptService promptService;
-    private final ToolRegistry toolRegistry;
-    private final ToolExecutor toolExecutor;
-
-    // ===================== 路由和服务管理 =====================
-    
-    private final RouteService routeService;
-    private final ServiceService serviceService;
-    private final GatewayInstanceService gatewayInstanceService;
-
-    // ===================== 配置常量 =====================
-
-    private static final int MAX_TOOL_CALL_ITERATIONS = 15;
 
     // ===================== Chat API =====================
 
@@ -109,13 +94,13 @@ public class AiCopilotService {
             String effectiveContext = (context != null && !context.isEmpty()) ? context : intentResult.getIntent();
             String systemPrompt = promptService.buildSystemPrompt(language, effectiveContext);
 
-            // 5. 构建消息（委托给 ToolCallOrchestrator）
-            List<ChatMessage> history = chatSessionManager.getOrCreateHistory(sessionId);
+            // 5. 构建消息（委托给 ToolCallOrchestrator）——使用历史快照，避免并发遍历时被写坏
+            List<ChatMessage> history = chatSessionManager.getHistorySnapshot(sessionId);
             List<Map<String, Object>> messages = toolCallOrchestrator.buildMessagesForTools(
                     history, systemPrompt, userMessage, instanceId);
 
-            // 6. 获取工具定义
-            List<Map<String, Object>> tools = toolCallOrchestrator.getOpenAITools();
+            // 6. 获取工具定义（按意图领域筛选，降低每轮 token 开销；拿不准时回退全量）
+            List<Map<String, Object>> tools = toolCallOrchestrator.getOpenAITools(intentResult.getIntent());
 
             // 7. 获取 AI 配置
             AiConfig config = toolCallOrchestrator.getAiConfig(provider);

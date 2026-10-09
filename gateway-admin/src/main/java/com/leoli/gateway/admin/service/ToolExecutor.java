@@ -400,8 +400,9 @@ public class ToolExecutor {
     }
 
     /**
-     * 创建路由（闭环能力）.
-     * AI 可以直接调用此工具创建路由，无需用户手动操作。
+     * 创建路由（写操作）.
+     * requiresConfirmation=true：AI 只能"提议"，真正执行必须经用户在界面确认后走
+     * {@link #executeConfirmed}（见 {@link #doExecute} 的确认守卫），模型无法自确认。
      */
     private Object executeCreateRoute(Map<String, Object> args) {
         String routeJson = getRequiredStringArg(args, "routeJson");
@@ -441,8 +442,9 @@ public class ToolExecutor {
     }
 
     /**
-     * 删除路由（闭环能力）.
-     * AI 可以直接调用此工具删除路由，会从数据库和 Nacos 同时删除。
+     * 删除路由（写操作）.
+     * requiresConfirmation=true：AI 只能"提议"删除，实际执行须经用户界面确认后走
+     * {@link #executeConfirmed}。删除会从数据库和 Nacos 同时移除，可用 rollback_route 回滚。
      */
     private Object executeDeleteRoute(Map<String, Object> args) {
         String routeId = getRequiredStringArg(args, "routeId");
@@ -477,8 +479,9 @@ public class ToolExecutor {
     }
 
     /**
-     * 修改路由（闭环能力）.
-     * AI 可以直接调用此工具修改路由配置，会更新数据库和 Nacos。
+     * 修改路由（写操作）.
+     * requiresConfirmation=true：AI 只能"提议"修改，实际执行须经用户界面确认后走
+     * {@link #executeConfirmed}，会更新数据库和 Nacos。
      */
     private Object executeModifyRoute(Map<String, Object> args) {
         String routeId = getRequiredStringArg(args, "routeId");
@@ -4114,6 +4117,9 @@ public class ToolExecutor {
     // ===================== 工具结果类 =====================
 
     public static class ToolResult {
+        // 复用单例，避免每次 toJson 都新建 ObjectMapper（构造开销大）
+        private static final ObjectMapper JSON = new ObjectMapper();
+
         private final boolean success;
         private final boolean pendingConfirmation;  // 待确认状态
         private final Object data;
@@ -4190,7 +4196,7 @@ public class ToolExecutor {
                 result.put("error", error);
             }
             try {
-                return new ObjectMapper().writeValueAsString(result);
+                return JSON.writeValueAsString(result);
             } catch (Exception e) {
                 return "{\"success\":false,\"error\":\"JSON serialization failed\"}";
             }

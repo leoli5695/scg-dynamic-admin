@@ -9,6 +9,7 @@ import com.leoli.gateway.admin.service.AiCopilotService;
 import com.leoli.gateway.admin.service.AuditLogService;
 import com.leoli.gateway.admin.service.RouteService;
 import com.leoli.gateway.admin.service.ToolExecutor;
+import com.leoli.gateway.admin.service.copilot.PendingActionStore;
 import com.leoli.gateway.admin.validation.RouteValidator;
 import com.leoli.license.client.model.LicenseInfo;
 import jakarta.servlet.http.HttpServletRequest;
@@ -38,6 +39,7 @@ public class AiCopilotController extends BaseController {
     private final ObjectMapper objectMapper;
     private final LicenseFeatureHelper licenseFeatureHelper;
     private final ToolExecutor toolExecutor;
+    private final PendingActionStore pendingActionStore;
 
     /**
      * Chat with AI Copilot.
@@ -76,28 +78,33 @@ public class AiCopilotController extends BaseController {
      * FIX (P0): 执行 AI 提议、并由用户在界面明确确认的写操作。
      * 这是唯一会运行 requiresConfirmation 工具的路径——confirmed 语义来自此
      * 人工触发的调用，而非模型入参。执行会记录审计日志（operator + clientIp）。
+     * <p>
+     * FIX (P2 加固): 凭 chat 返回的一次性 {@code ticket} 取出<b>服务端保存的</b>
+     * 工具名与参数来执行，不信任前端回传的 toolName/arguments——防止把某次确认的
+     * 票据替换成任意工具/任意参数。票据一次性消费，过期或重复提交都会被拒绝。
      *
-     * @param request 待执行动作（toolName + arguments，来自 chat 返回的 pendingAction）
+     * @param request 待执行动作票据（来自 chat 返回的 pendingAction.ticket）
      * @return 执行结果
      */
     @PostMapping("/execute-action")
     public ResponseEntity<Map<String, Object>> executeAction(
             @RequestBody ExecuteActionRequest request,
             HttpServletRequest httpRequest) {
-        log.info("Executing user-confirmed AI action: tool={}", request.getToolName());
 
         licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.AI_COPilot);
 
-        if (request.getToolName() == null || request.getToolName().isEmpty()) {
+        PendingActionStore.Entry entry = pendingActionStore.consume(request.getTicket());
+        if (entry == null) {
+            log.warn("Execute-action rejected: invalid or expired ticket");
             return ResponseEntity.badRequest().body(Map.of(
-                    "success", false, "message", "toolName is required"));
+                    "success", false,
+                    "message", "确认已失效或已过期，请重新向助手发起该操作"));
         }
 
-        Map<String, Object> arguments = request.getArguments() != null
-                ? request.getArguments() : new LinkedHashMap<>();
+        log.info("Executing user-confirmed AI action: tool={}", entry.getToolName());
 
         ToolExecutor.ToolResult result = toolExecutor.executeConfirmed(
-                request.getToolName(), arguments, getOperator(), getIpAddress(httpRequest));
+                entry.getToolName(), entry.getArguments(), getOperator(), getIpAddress(httpRequest));
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("success", result.isSuccess());
@@ -383,7 +390,7 @@ public class AiCopilotController extends BaseController {
                     route.getRouteName(),
                     null,
                     newValue,
-                    getClientIpAddress(httpRequest)
+                    getIpAddress(httpRequest)
             );
 
             Map<String, Object> result = new LinkedHashMap<>();
@@ -406,24 +413,6 @@ public class AiCopilotController extends BaseController {
                     "message", "路由创建失败: " + e.getMessage()
             ));
         }
-    }
-
-    /**
-     * Get client IP address from request.
-     */
-    private String getClientIpAddress(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("X-Real-IP");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getRemoteAddr();
-        }
-        // Handle multiple IPs in X-Forwarded-For
-        if (ip != null && ip.contains(",")) {
-            ip = ip.split(",")[0].trim();
-        }
-        return ip;
     }
 
     // ============== Request DTOs ==============
@@ -669,8 +658,19 @@ public class AiCopilotController extends BaseController {
     }
 
     public static class ExecuteActionRequest {
+        /** chat 返回的 pendingAction.ticket，一次性、服务端校验后据此取出真实动作。 */
+        private String ticket;
+        /** 仅为兼容/日志保留，执行时以服务端保存的动作快照为准，不信任此字段。 */
         private String toolName;
         private Map<String, Object> arguments;
+
+        public String getTicket() {
+            return ticket;
+        }
+
+        public void setTicket(String ticket) {
+            this.ticket = ticket;
+        }
 
         public String getToolName() {
             return toolName;

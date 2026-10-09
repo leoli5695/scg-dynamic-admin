@@ -6,9 +6,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * AI 工具注册中心.
@@ -273,11 +275,6 @@ public class ToolRegistry {
                         "instanceId", Map.of(
                                 "type", "string",
                                 "description", "网关实例ID（可选）。不提供时使用默认实例。"
-                        ),
-                        "confirmed", Map.of(
-                                "type", "boolean",
-                                "description", "用户是否已确认执行此操作。必须为 true 才会真正执行。",
-                                "default", false
                         )
                 ),
                 List.of("routeJson"),
@@ -294,11 +291,6 @@ public class ToolRegistry {
                         "routeId", Map.of(
                                 "type", "string",
                                 "description", "路由ID（UUID格式）。"
-                        ),
-                        "confirmed", Map.of(
-                                "type", "boolean",
-                                "description", "用户是否已确认执行此操作。必须为 true 才会真正执行。",
-                                "default", false
                         )
                 ),
                 List.of("routeId"),
@@ -319,11 +311,6 @@ public class ToolRegistry {
                         "routeJson", Map.of(
                                 "type", "string",
                                 "description", "完整的路由配置 JSON 字符串，包含要修改的所有字段。"
-                        ),
-                        "confirmed", Map.of(
-                                "type", "boolean",
-                                "description", "用户是否已确认执行此操作。必须为 true 才会真正执行。",
-                                "default", false
                         )
                 ),
                 List.of("routeId", "routeJson"),
@@ -344,11 +331,6 @@ public class ToolRegistry {
                         "enabled", Map.of(
                                 "type", "boolean",
                                 "description", "true 表示批量启用，false 表示批量禁用。"
-                        ),
-                        "confirmed", Map.of(
-                                "type", "boolean",
-                                "description", "用户是否已确认执行此操作。必须为 true 才会真正执行。",
-                                "default", false
                         )
                 ),
                 List.of("routeIds", "enabled"),
@@ -371,11 +353,6 @@ public class ToolRegistry {
                         "skipVersionCheck", Map.of(
                                 "type", "boolean",
                                 "description", "跳过版本校验（默认 false）。设为 true 可强制回滚，但可能导致数据不一致。",
-                                "default", false
-                        ),
-                        "confirmed", Map.of(
-                                "type", "boolean",
-                                "description", "用户确认标志（AI Copilot 二次确认流程使用）。",
                                 "default", false
                         )
                 ),
@@ -756,11 +733,6 @@ public class ToolRegistry {
                         "thresholdMs", Map.of(
                                 "type", "integer",
                                 "description", "慢请求阈值（毫秒，建议500-5000）。"
-                        ),
-                        "confirmed", Map.of(
-                                "type", "boolean",
-                                "description", "用户是否已确认执行此操作。必须为 true 才会真正执行。",
-                                "default", false
                         )
                 ),
                 List.of("instanceId", "thresholdMs"),
@@ -1046,6 +1018,134 @@ public class ToolRegistry {
      */
     public List<Map<String, Object>> getOpenAITools() {
         return tools.values().stream()
+                .map(ToolDefinition::toOpenAIFormat)
+                .toList();
+    }
+
+    /**
+     * 始终包含的核心工具类别，保证任何领域下模型都能做基本定位。
+     */
+    private static final Set<String> CORE_TOOL_CATEGORIES = Set.of("monitor", "route", "service", "instance");
+
+    /**
+     * 领域关键词 → 相关工具类别。意图字符串由数据库驱动、取值不固定，故用
+     * contains 匹配关键词，命中即并入对应类别。刻意做成"宽集合"：宁可多给几个
+     * 工具，也不让模型漏掉需要的能力。
+     */
+    private static final Map<String, Set<String>> DOMAIN_TOOL_CATEGORIES = buildDomainToolCategories();
+
+    private static Map<String, Set<String>> buildDomainToolCategories() {
+        Map<String, Set<String>> m = new LinkedHashMap<>();
+        Set<String> deepDebug = Set.of("monitor", "filter-chain", "trace", "prometheus",
+                "performance", "audit", "middleware", "analysis", "ai-filter-analysis");
+        m.put("route", Set.of("route", "filter-chain", "performance", "audit"));
+        m.put("路由", Set.of("route", "filter-chain", "performance", "audit"));
+        m.put("config", Set.of("route", "service", "filter-chain", "audit"));
+        m.put("配置", Set.of("route", "service", "filter-chain", "audit"));
+        m.put("service", Set.of("service", "middleware", "trace", "instance"));
+        m.put("服务", Set.of("service", "middleware", "trace", "instance"));
+        m.put("nacos", Set.of("service", "instance", "middleware"));
+        m.put("monitor", deepDebug);
+        m.put("监控", deepDebug);
+        m.put("diagnos", deepDebug);
+        m.put("诊断", deepDebug);
+        m.put("health", Set.of("monitor", "instance"));
+        m.put("健康", Set.of("monitor", "instance"));
+        m.put("debug", deepDebug);
+        m.put("排查", deepDebug);
+        m.put("故障", deepDebug);
+        m.put("error", Set.of("monitor", "filter-chain", "trace", "performance", "audit"));
+        m.put("错误", Set.of("monitor", "filter-chain", "trace", "performance", "audit"));
+        m.put("alert", Set.of("monitor", "audit"));
+        m.put("告警", Set.of("monitor", "audit"));
+        Set<String> perf = Set.of("performance", "filter-chain", "monitor", "prometheus",
+                "trace", "ai-filter-analysis", "analysis");
+        m.put("performance", perf);
+        m.put("性能", perf);
+        m.put("优化", perf);
+        m.put("optimiz", perf);
+        m.put("slow", Set.of("performance", "filter-chain", "trace", "prometheus"));
+        m.put("慢", Set.of("performance", "filter-chain", "trace", "prometheus"));
+        m.put("jvm", Set.of("performance", "monitor"));
+        m.put("gc", Set.of("performance", "monitor"));
+        Set<String> traceSet = Set.of("trace", "middleware", "prometheus", "service", "monitor", "performance");
+        m.put("trace", traceSet);
+        m.put("链路", traceSet);
+        m.put("追踪", traceSet);
+        m.put("span", traceSet);
+        Set<String> middlewareSet = Set.of("middleware", "prometheus", "trace", "analysis", "service");
+        m.put("middleware", middlewareSet);
+        m.put("中间件", middlewareSet);
+        m.put("redis", middlewareSet);
+        m.put("mysql", middlewareSet);
+        m.put("rocketmq", middlewareSet);
+        m.put("mq", middlewareSet);
+        m.put("rabbit", middlewareSet);
+        m.put("mongo", middlewareSet);
+        m.put("postgre", middlewareSet);
+        m.put("elasticsearch", middlewareSet);
+        m.put("exporter", Set.of("middleware", "prometheus"));
+        m.put("instance", Set.of("instance", "cluster", "monitor"));
+        m.put("实例", Set.of("instance", "cluster", "monitor"));
+        m.put("pod", Set.of("instance", "cluster", "monitor", "performance", "test"));
+        m.put("replica", Set.of("instance", "cluster"));
+        m.put("副本", Set.of("instance", "cluster"));
+        m.put("cluster", Set.of("cluster", "instance", "monitor"));
+        m.put("集群", Set.of("cluster", "instance", "monitor"));
+        m.put("k8s", Set.of("instance", "cluster"));
+        m.put("kubernetes", Set.of("instance", "cluster"));
+        Set<String> stress = Set.of("test", "analysis", "prometheus", "middleware", "monitor", "performance");
+        m.put("stress", stress);
+        m.put("压测", stress);
+        m.put("test", stress);
+        m.put("audit", Set.of("audit", "route"));
+        m.put("审计", Set.of("audit", "route"));
+        m.put("rollback", Set.of("audit", "route"));
+        m.put("回滚", Set.of("audit", "route"));
+        m.put("filter", Set.of("filter-chain", "ai-filter-analysis", "performance", "route"));
+        m.put("过滤器", Set.of("filter-chain", "ai-filter-analysis", "performance", "route"));
+        return m;
+    }
+
+    /**
+     * 领域为空/泛化时应回退到全量工具。
+     */
+    private static boolean isGenericDomain(String domain) {
+        if (domain == null) {
+            return true;
+        }
+        String d = domain.trim().toLowerCase();
+        return d.isEmpty() || "general".equals(d) || "unknown".equals(d) || "greeting".equals(d);
+    }
+
+    /**
+     * 按意图领域获取 OpenAI 格式的工具定义（降低每轮请求的工具 schema token 开销）。
+     * <p>
+     * 只下发与领域相关的工具，并始终并入核心定位工具。<b>fail-safe</b>：领域为空、
+     * 泛化（general/unknown）或匹配不到任何关键词时，返回全量工具，绝不因筛选而让
+     * 模型拿不到需要的能力。
+     *
+     * @param domain 意图领域字符串（可为 null）
+     * @return 工具定义列表
+     */
+    public List<Map<String, Object>> getOpenAITools(String domain) {
+        if (isGenericDomain(domain)) {
+            return getOpenAITools();
+        }
+        String d = domain.trim().toLowerCase();
+        Set<String> categories = new HashSet<>(CORE_TOOL_CATEGORIES);
+        boolean matched = false;
+        for (Map.Entry<String, Set<String>> e : DOMAIN_TOOL_CATEGORIES.entrySet()) {
+            if (d.contains(e.getKey())) {
+                categories.addAll(e.getValue());
+                matched = true;
+            }
+        }
+        if (!matched) {
+            return getOpenAITools();
+        }
+        return tools.values().stream()
+                .filter(t -> categories.contains(t.getCategory()))
                 .map(ToolDefinition::toOpenAIFormat)
                 .toList();
     }

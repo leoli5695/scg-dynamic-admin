@@ -53,6 +53,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
   }, [messages]);
 
   const handleSendMessage = async () => {
+    if (loading) return; // 发送中禁止重复提交（回车会绕过按钮的 loading 禁用，进而触发后端同会话并发）
     if (!inputMessage.trim()) return;
 
     const userMessage: ChatMessage = {
@@ -100,8 +101,8 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
     setExecuting(true);
     try {
       const result = await executeCopilotAction({
+        ticket: pendingAction.ticket,
         toolName: pendingAction.toolName,
-        arguments: pendingAction.arguments,
       });
       const assistantMessage: ChatMessage = {
         role: 'assistant',
@@ -284,6 +285,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
           onChange={e => setInputMessage(e.target.value)}
           placeholder={t('copilot.input_placeholder')}
           autoSize={{ minRows: 1, maxRows: 4 }}
+          disabled={loading}
           onPressEnter={e => {
             if (!e.shiftKey) {
               e.preventDefault();

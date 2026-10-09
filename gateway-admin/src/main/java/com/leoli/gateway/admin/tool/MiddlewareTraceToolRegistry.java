@@ -284,10 +284,13 @@ public class MiddlewareTraceToolRegistry {
     }
 
     /**
-     * 统计新增工具数量
+     * 统计本注册器新增的工具数量（按归属类别动态统计，避免硬编码与实现脱节）。
      */
     private int countNewTools() {
-        return 21; // middleware(4) + trace(6) + prometheus(4) + period_query(7)
+        java.util.Set<String> ownedCategories = java.util.Set.of("middleware", "trace", "prometheus", "analysis");
+        return (int) toolRegistry.getTools().values().stream()
+                .filter(t -> ownedCategories.contains(t.getCategory()))
+                .count();
     }
 
     /**

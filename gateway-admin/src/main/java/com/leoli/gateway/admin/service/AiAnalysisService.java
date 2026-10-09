@@ -281,15 +281,23 @@ public class AiAnalysisService {
                 .orElseThrow(() -> new RuntimeException("Provider not found: " + provider));
 
         config.setModel(model);
-        // FIX: encrypt at the service layer - the entity-level encryption was dead code
-        config.setApiKey(apiKey != null && !apiKey.isEmpty() ? apiKeyEncryptor.encrypt(apiKey) : null);
+        // FIX (P1 数据丢失): 空 apiKey 表示"本次不改密钥"（前端切换 provider 时会清空
+        // 输入框、或只改模型/baseUrl），必须保留已存的加密密钥，绝不能置 null 把用户
+        // 之前配好的 Key 抹掉。同理空 baseUrl 也视为"不改"，避免误清自定义地址。
+        if (apiKey != null && !apiKey.isEmpty()) {
+            config.setApiKey(apiKeyEncryptor.encrypt(apiKey));
+        }
         // FIX: SSRF guard - reject user-supplied baseUrl pointing to internal/metadata addresses
         if (baseUrl != null && !baseUrl.isEmpty()) {
             UrlSecurityValidator.validateExternalUrl(baseUrl);
+            config.setBaseUrl(baseUrl);
         }
-        config.setBaseUrl(baseUrl);
-        config.setIsValid(true);
-        config.setLastValidatedAt(LocalDateTime.now());
+        // isValid 只有在确实持有密钥时才为真，避免"标记有效但 Key 为空"的误导状态
+        boolean hasKey = config.getApiKey() != null && !config.getApiKey().isEmpty();
+        config.setIsValid(hasKey);
+        if (hasKey) {
+            config.setLastValidatedAt(LocalDateTime.now());
+        }
 
         return aiConfigRepository.save(config);
     }
@@ -698,10 +706,21 @@ public class AiAnalysisService {
     private AiResponse extractOpenAIResponseWithTools(String body) {
         try {
             JsonNode root = objectMapper.readTree(body);
-            JsonNode message = root.path("choices").get(0).path("message");
+            JsonNode choices = root.path("choices");
+            if (!choices.isArray() || choices.isEmpty()) {
+                // 提供商返回了错误体（限流/内容审核/鉴权失败等），透出原始信息便于排查，
+                // 而不是在 .get(0) 上抛 NPE 后降级成含糊的"解析响应失败"。
+                String err = root.path("error").path("message").asText(null);
+                String detail = err != null ? err
+                        : (body != null && body.length() > 500 ? body.substring(0, 500) : body);
+                log.error("Model API returned no choices: {}", detail);
+                return new AiResponse("AI 服务未返回有效结果：" + (detail != null ? detail : "空响应"), null, "error");
+            }
+            JsonNode first = choices.get(0);
+            JsonNode message = first.path("message");
 
             String content = message.path("content").isNull() ? null : message.path("content").asText();
-            String finishReason = root.path("choices").get(0).path("finish_reason").asText();
+            String finishReason = first.path("finish_reason").asText();
 
             // 提取 tool_calls
             List<ToolCall> toolCalls = null;

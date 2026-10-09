@@ -43,6 +43,12 @@ export interface CopilotChatResponse {
 
 /** A write action proposed by the AI, awaiting explicit user confirmation. */
 export interface CopilotPendingAction {
+  /**
+   * One-time ticket issued by the backend. On confirm, the client sends only this
+   * ticket; the server executes the toolName/arguments it stored for it, so the
+   * payload below cannot be tampered with to run a different action.
+   */
+  ticket: string;
   toolName: string;
   arguments: Record<string, unknown>;
   preview?: Record<string, unknown>;

@@ -52,7 +52,7 @@ public class CopilotResponseBuilder {
         StringBuilder sb = new StringBuilder();
 
         // HTTP 请求统计
-        Map<String, Object> http = (Map<String, Object>) metrics.get("httpRequests");
+        Map<String, Object> http = asMap(metrics.get("httpRequests"));
         if (http != null) {
             sb.append("- **QPS**: ").append(String.format("%.2f", getDoubleValue(http, "requestsPerSecond"))).append("\n");
             sb.append("- **平均响应时间**: ").append(String.format("%.2f ms", getDoubleValue(http, "avgResponseTimeMs"))).append("\n");
@@ -60,13 +60,13 @@ public class CopilotResponseBuilder {
         }
 
         // JVM 内存
-        Map<String, Object> jvmMemory = (Map<String, Object>) metrics.get("jvmMemory");
+        Map<String, Object> jvmMemory = asMap(metrics.get("jvmMemory"));
         if (jvmMemory != null) {
             sb.append("- **堆内存使用率**: ").append(String.format("%.1f%%", getDoubleValue(jvmMemory, "heapUsagePercent"))).append("\n");
         }
 
         // CPU
-        Map<String, Object> cpu = (Map<String, Object>) metrics.get("cpu");
+        Map<String, Object> cpu = asMap(metrics.get("cpu"));
         if (cpu != null) {
             sb.append("- **CPU 使用率**: ").append(String.format("%.1f%%", getDoubleValue(cpu, "processUsage"))).append("\n");
         }
@@ -90,7 +90,7 @@ public class CopilotResponseBuilder {
         StringBuilder sb = new StringBuilder();
 
         // JVM 内存
-        Map<String, Object> jvmMemory = (Map<String, Object>) metrics.get("jvmMemory");
+        Map<String, Object> jvmMemory = asMap(metrics.get("jvmMemory"));
         if (jvmMemory != null) {
             sb.append("- **堆内存使用率**: ")
                     .append(String.format("%.1f%%", getDoubleValue(jvmMemory, "heapUsagePercent")))
@@ -104,7 +104,7 @@ public class CopilotResponseBuilder {
         }
 
         // CPU
-        Map<String, Object> cpu = (Map<String, Object>) metrics.get("cpu");
+        Map<String, Object> cpu = asMap(metrics.get("cpu"));
         if (cpu != null) {
             sb.append("- **CPU 使用率**: 进程 ")
                     .append(String.format("%.1f%%", getDoubleValue(cpu, "processUsage")))
@@ -114,7 +114,7 @@ public class CopilotResponseBuilder {
         }
 
         // HTTP 请求
-        Map<String, Object> http = (Map<String, Object>) metrics.get("httpRequests");
+        Map<String, Object> http = asMap(metrics.get("httpRequests"));
         if (http != null) {
             sb.append("- **每秒请求数(QPS)**: ")
                     .append(String.format("%.2f", getDoubleValue(http, "requestsPerSecond")))
@@ -128,7 +128,7 @@ public class CopilotResponseBuilder {
         }
 
         // GC
-        Map<String, Object> gc = (Map<String, Object>) metrics.get("gc");
+        Map<String, Object> gc = asMap(metrics.get("gc"));
         if (gc != null) {
             sb.append("- **GC 开销**: ")
                     .append(String.format("%.2f%%", getDoubleValue(gc, "gcOverheadPercent")))
@@ -136,7 +136,7 @@ public class CopilotResponseBuilder {
         }
 
         // 线程
-        Map<String, Object> threads = (Map<String, Object>) metrics.get("threads");
+        Map<String, Object> threads = asMap(metrics.get("threads"));
         if (threads != null) {
             sb.append("- **活跃线程数**: ")
                     .append(getIntValue(threads, "liveThreads"))
@@ -251,9 +251,18 @@ public class CopilotResponseBuilder {
         if (bytes <= 0) return "0 B";
         String[] units = {"B", "KB", "MB", "GB"};
         int unitIndex = (int) (Math.log(bytes) / Math.log(1024));
-        unitIndex = Math.min(unitIndex, units.length - 1);
+        // 0 < bytes < 1 时 log 为负会得到负索引，需下限钳到 0，否则数组越界
+        unitIndex = Math.max(0, Math.min(unitIndex, units.length - 1));
         double value = bytes / Math.pow(1024, unitIndex);
         return String.format("%.2f %s", value, units[unitIndex]);
+    }
+
+    /**
+     * 安全地把 metrics 里的子对象当作 Map 取出，类型不符时返回 null（而非抛 ClassCastException）。
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> asMap(Object value) {
+        return value instanceof Map ? (Map<String, Object>) value : null;
     }
 
     /**

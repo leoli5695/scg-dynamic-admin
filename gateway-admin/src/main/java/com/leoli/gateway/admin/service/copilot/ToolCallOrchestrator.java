@@ -55,6 +55,7 @@ public class ToolCallOrchestrator {
     private final ConfidenceCalculator confidenceCalculator;
     private final AiConfigRepository aiConfigRepository;
     private final ObjectMapper objectMapper;
+    private final PendingActionStore pendingActionStore;
 
     // ===================== 配置常量 =====================
 
@@ -64,9 +65,14 @@ public class ToolCallOrchestrator {
     public static final int MAX_TOOL_CALL_ITERATIONS = 15;
 
     /**
-     * 工具执行超时时间（毫秒）
+     * 单次工具调用循环的总时间预算（毫秒）。
+     * <p>
+     * 每一轮都要同步调用一次大模型（单次读超时可达数分钟），若不设总时限，
+     * 15 轮最坏情况会把请求线程阻塞极久。这里在每轮开始前检查总耗时，超预算
+     * 即中断循环并返回已得到的内容，给用户一个可解释的降级回复。
+     * 单个工具的 HTTP 调用超时由共享 RestTemplate（连接 5s / 读取 30s）保证。
      */
-    public static final int TOOL_CALL_TIMEOUT_MS = 30000;
+    public static final long TOOL_LOOP_TOTAL_TIMEOUT_MS = 90_000L;
 
     // ===================== 核心方法 =====================
 
@@ -90,11 +96,28 @@ public class ToolCallOrchestrator {
 
         // 工具调用统计
         Set<String> calledTools = new HashSet<>();
-        int successfulTools = 0;
+        // 用去重的"成功过的工具名"集合，而非计数——同一工具多次成功会让计数超过
+        // calledTools.size()，导致成功率 >1、置信度计算失真。
+        Set<String> successfulToolNames = new HashSet<>();
         Set<String> dataTypes = new HashSet<>();
+
+        long loopStart = System.currentTimeMillis();
 
         // 执行循环
         for (int iteration = 0; iteration < MAX_TOOL_CALL_ITERATIONS; iteration++) {
+            // 总时间预算检查：超过则中断，返回降级回复，避免长时间阻塞请求线程
+            long elapsed = System.currentTimeMillis() - loopStart;
+            if (elapsed > TOOL_LOOP_TOTAL_TIMEOUT_MS) {
+                log.warn("Tool call loop exceeded total budget ({} ms > {} ms), stopping at iteration {}",
+                        elapsed, TOOL_LOOP_TOTAL_TIMEOUT_MS, iteration + 1);
+                int timeoutConfidence = confidenceCalculator.calculate(calledTools, successfulToolNames.size(), dataTypes);
+                String timeoutReason = confidenceCalculator.buildReason(calledTools, dataTypes) + " (响应超时，已中断)";
+                return new ToolCallLoopResult(
+                        "本次分析涉及的工具调用较多，已达到时间上限并中断。以上是基于已获取数据的部分结论，请缩小问题范围或分步提问。",
+                        Math.max(40, timeoutConfidence - 20),
+                        timeoutReason, calledTools, dataTypes);
+            }
+
             log.info("Tool call iteration: {} for provider: {}", iteration + 1, provider);
 
             // 调用 AI API（带工具）
@@ -105,7 +128,7 @@ public class ToolCallOrchestrator {
             if (!response.hasToolCalls()) {
                 log.info("No tool calls, returning final response");
 
-                int confidence = confidenceCalculator.calculate(calledTools, successfulTools, dataTypes);
+                int confidence = confidenceCalculator.calculate(calledTools, successfulToolNames.size(), dataTypes);
                 String reason = confidenceCalculator.buildReason(calledTools, dataTypes);
 
                 return new ToolCallLoopResult(
@@ -139,12 +162,16 @@ public class ToolCallOrchestrator {
                 // 中止循环并把待确认动作交给前端，由用户人工确认后经
                 // /api/copilot/execute-action 端点执行（confirmed 来自人，而非模型）。
                 if (result.isPendingConfirmation()) {
+                    // 登记待确认动作，签发一次性 ticket；执行时以服务端保存的参数为准（防篡改）。
+                    String ticket = pendingActionStore.register(result.getToolName(), toolCall.getArguments());
+
                     Map<String, Object> pendingAction = new LinkedHashMap<>();
+                    pendingAction.put("ticket", ticket);
                     pendingAction.put("toolName", result.getToolName());
                     pendingAction.put("arguments", toolCall.getArguments());
                     pendingAction.put("preview", result.getConfirmationPreview());
 
-                    int pendingConfidence = confidenceCalculator.calculate(calledTools, successfulTools, dataTypes);
+                    int pendingConfidence = confidenceCalculator.calculate(calledTools, successfulToolNames.size(), dataTypes);
                     ToolCallLoopResult pendingResult = new ToolCallLoopResult(
                             "我已准备好执行一个需要确认的写操作，请在下方核对详情并点击确认后再执行。",
                             pendingConfidence, "等待人工确认写操作", calledTools, dataTypes);
@@ -155,7 +182,7 @@ public class ToolCallOrchestrator {
                 }
 
                 if (result.isSuccess()) {
-                    successfulTools++;
+                    successfulToolNames.add(toolCall.getName());
                     confidenceCalculator.recordDataType(toolCall.getName(), dataTypes);
                 }
 
@@ -167,7 +194,7 @@ public class ToolCallOrchestrator {
 
         // 超过最大轮数
         log.warn("Max tool call iterations reached: {}", MAX_TOOL_CALL_ITERATIONS);
-        int confidence = confidenceCalculator.calculate(calledTools, successfulTools, dataTypes);
+        int confidence = confidenceCalculator.calculate(calledTools, successfulToolNames.size(), dataTypes);
         String reason = confidenceCalculator.buildReason(calledTools, dataTypes) + " (达到调用上限)";
 
         return new ToolCallLoopResult(
@@ -302,6 +329,17 @@ public class ToolCallOrchestrator {
      */
     public List<Map<String, Object>> getOpenAITools() {
         return toolRegistry.getOpenAITools();
+    }
+
+    /**
+     * 按意图领域获取 OpenAI 格式的工具定义（降低每轮 token 开销）。
+     * 领域不明确时回退到全量工具，保证不会漏掉模型需要的能力。
+     *
+     * @param domain 意图领域（如 route/service/monitor/trace...），可为 null
+     * @return 工具定义列表
+     */
+    public List<Map<String, Object>> getOpenAITools(String domain) {
+        return toolRegistry.getOpenAITools(domain);
     }
 
     // ===================== 辅助方法 =====================

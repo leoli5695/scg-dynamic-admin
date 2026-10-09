@@ -30,11 +30,12 @@ export const sendCopilotChat = (
 
 /**
  * POST /execute-action — run an AI-proposed write operation after the user has
- * explicitly confirmed it in the UI. This is the only path that executes
- * confirmation-required tools; the model can never self-confirm.
+ * explicitly confirmed it in the UI. The server executes the action it stored for
+ * the one-time `ticket` (never the client-supplied arguments), so this is the only
+ * path that runs confirmation-required tools and the model can never self-confirm.
  */
 export const executeCopilotAction = (
-  body: { toolName: string; arguments: Record<string, unknown> },
+  body: { ticket: string; toolName?: string },
   options?: RequestOptions,
 ) => httpClient.post<ExecuteActionResult>(`${BASE}/execute-action`, body, options);
 

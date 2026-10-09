@@ -59,6 +59,8 @@ public class ContextDataProvider {
         Map<String, Object> summary = new LinkedHashMap<>();
 
         try {
+            // 注意：runQuickDiagnostic() 目前是全局诊断，未按 instanceId 分实例。
+            // 参数保留用于将来接入按实例诊断；当前语义为"系统整体健康摘要"。
             DiagnosticService.DiagnosticReport report = diagnosticService.runQuickDiagnostic();
             summary.put("健康评分", report.getOverallScore());
             summary.put("数据库状态", report.getDatabase() != null ? report.getDatabase().getStatus() : "未知");

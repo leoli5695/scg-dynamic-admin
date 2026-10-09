@@ -94,9 +94,11 @@ public class ConfidenceCalculator {
     /**
      * 计算置信度分数
      *
-     * @param calledTools    调用的工具集合
-     * @param successfulTools 成功执行的工具数量
-     * @param dataTypes      获取的数据类型集合
+     * @param calledTools     调用的工具集合（去重后的工具名）
+     * @param successfulTools 成功执行的工具数量。<b>口径必须与 calledTools 一致</b>，
+     *                        即"去重后成功过的工具名个数"，而非成功执行的总次数——
+     *                        否则同一工具多次成功会让成功率 &gt; 1，导致加分失真。
+     * @param dataTypes       获取的数据类型集合
      * @return 置信度分数 (0-100)
      */
     public int calculate(Set<String> calledTools, int successfulTools, Set<String> dataTypes) {
@@ -125,9 +127,9 @@ public class ConfidenceCalculator {
             confidence += MULTI_TOOL_BONUS;
         }
 
-        // 成功率影响
-        if (successfulTools > 0 && calledTools != null && calledTools.size() > 0) {
-            double successRate = (double) successfulTools / calledTools.size();
+        // 成功率影响（clamp 到 [0,1]，防止调用方传入超过 calledTools.size() 的计数）
+        if (successfulTools > 0 && calledTools != null && !calledTools.isEmpty()) {
+            double successRate = Math.min(1.0, (double) successfulTools / calledTools.size());
             if (successRate >= HIGH_SUCCESS_RATE_THRESHOLD) {
                 confidence += HIGH_SUCCESS_RATE_BONUS;
             } else if (successRate < LOW_SUCCESS_RATE_THRESHOLD) {
