@@ -1,6 +1,7 @@
 package com.leoli.gateway.admin.exception;
 
 import com.leoli.license.client.exception.LicenseFeatureNotAllowedException;
+import com.leoli.license.client.exception.LicenseNotLoadedException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -81,6 +82,21 @@ public class GlobalExceptionHandler {
         log.warn("License feature not allowed: feature={}, requiredEdition={}, currentEdition={}",
                 e.getFeature(), e.getRequiredEdition(), e.getCurrentEdition());
         return buildErrorResponse(HttpStatus.FORBIDDEN, e.getMessage());
+    }
+
+    /**
+     * Handle "no license loaded": the server cannot determine entitlements at all.
+     * <p>
+     * Mapped to 503 rather than 403 on purpose - nothing the caller does (re-authenticating,
+     * asking for a different feature) can fix it, so a 403 would misdirect the operator into
+     * debugging their permissions instead of the missing or rejected license. Reachable from
+     * the gated endpoints because {@code LicenseFeatureHelper.hasFeature} catches this one but
+     * {@code checkFeatureOrThrow} delegates straight through to {@code checkFeatureAllowed}.
+     */
+    @ExceptionHandler(LicenseNotLoadedException.class)
+    public ResponseEntity<Map<String, Object>> handleLicenseNotLoaded(LicenseNotLoadedException e) {
+        log.error("License not loaded - gated endpoints cannot authorize requests: {}", e.getMessage());
+        return buildErrorResponse(HttpStatus.SERVICE_UNAVAILABLE, e.getMessage());
     }
 
     /**

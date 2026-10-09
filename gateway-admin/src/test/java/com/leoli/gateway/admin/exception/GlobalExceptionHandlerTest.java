@@ -1,6 +1,7 @@
 package com.leoli.gateway.admin.exception;
 
 import com.leoli.license.client.exception.LicenseFeatureNotAllowedException;
+import com.leoli.license.client.exception.LicenseNotLoadedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -89,6 +90,19 @@ class GlobalExceptionHandlerTest {
         assertTrue(message.contains("ADVANCED_AUDIT"), message);
         assertTrue(message.contains("ADVANCED"), message);
         assertTrue(message.contains("BASIC"), message);
+    }
+
+    @Test
+    void handleLicenseNotLoaded_shouldReturnServiceUnavailable() {
+        LicenseNotLoadedException ex = new LicenseNotLoadedException();
+
+        ResponseEntity<Map<String, Object>> response = handler.handleLicenseNotLoaded(ex);
+
+        // 503, not 403: the caller cannot fix a missing license by re-authenticating.
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
+        assertEquals(503, response.getBody().get("code"));
+        assertNull(response.getBody().get("data"));
+        assertEquals("License is not loaded or invalid", response.getBody().get("message"));
     }
 
     @Test
