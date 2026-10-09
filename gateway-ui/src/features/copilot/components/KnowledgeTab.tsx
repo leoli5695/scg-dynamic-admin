@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert, Button, Card, Empty, Input, Popconfirm, Select, Space, Statistic, Table, Tag, Typography,
+  Alert, Button, Card, Empty, Input, Popconfirm, Select, Space, Statistic, Table, Tag, Typography, Upload,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { DeleteOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
+import { DeleteOutlined, PlusOutlined, ReloadOutlined, SearchOutlined, UploadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { message } from '../../../utils/antdStatic';
 import {
@@ -31,6 +31,8 @@ const KnowledgeTab: React.FC = () => {
   const [formTitle, setFormTitle] = useState('');
   const [formContent, setFormContent] = useState('');
   const [ingesting, setIngesting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const pendingRef = useRef(0);
 
   // 测试检索
   const [query, setQuery] = useState('');
@@ -105,6 +107,36 @@ const KnowledgeTab: React.FC = () => {
     } finally {
       setIngesting(false);
     }
+  };
+
+  // 批量导入：浏览器本地读取 .md/.txt 文本后逐个走 /knowledge/ingest（复用现有端点，无需 multipart）
+  const handleFile = (file: File) => {
+    pendingRef.current += 1;
+    setImporting(true);
+    file.text()
+      .then(text => ingestKnowledge({
+        sourceType: formType,
+        sourceRef: file.name,
+        title: file.name,
+        content: text,
+      }))
+      .then(res => {
+        if (res.success) {
+          message.success(t('copilot.kb_import_success', { name: file.name, n: res.chunks ?? 0 }));
+        } else {
+          message.error(`${file.name}: ${res.message || t('copilot.kb_ingest_failed')}`);
+        }
+      })
+      .catch(e => message.error(`${file.name}: ${errText(e, t('copilot.kb_ingest_failed'))}`))
+      .finally(() => {
+        pendingRef.current -= 1;
+        if (pendingRef.current <= 0) {
+          setImporting(false);
+          setPage(0);
+          refreshAll();
+        }
+      });
+    return false; // 阻止 antd 自动上传，改由本地读取处理
   };
 
   const handleSearch = async () => {
@@ -282,9 +314,22 @@ const KnowledgeTab: React.FC = () => {
             autoSize={{ minRows: 4, maxRows: 12 }}
             style={{ background: 'rgba(0,0,0,0.2)', color: '#fff' }}
           />
-          <Button type="primary" icon={<PlusOutlined />} loading={ingesting} onClick={handleIngest}>
-            {t('copilot.kb_submit')}
-          </Button>
+          <Space wrap>
+            <Button type="primary" icon={<PlusOutlined />} loading={ingesting} onClick={handleIngest}>
+              {t('copilot.kb_submit')}
+            </Button>
+            <Upload
+              accept=".md,.markdown,.txt"
+              multiple
+              showUploadList={false}
+              beforeUpload={handleFile}
+            >
+              <Button icon={<UploadOutlined />} loading={importing}>
+                {t('copilot.kb_import')}
+              </Button>
+            </Upload>
+            <Text type="secondary" style={{ fontSize: 12 }}>{t('copilot.kb_import_hint')}</Text>
+          </Space>
         </Space>
       </Card>
 
