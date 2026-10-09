@@ -1,5 +1,7 @@
 # ============================================================================
-# ShardingSphere 5.5.0 分库分表配置
+# ShardingSphere 5.5.0 分库分表配置（参考配置）
+# 运行时实际由 ShardingDataSourceConfig 的 Java API 建源，本文件仅作分片规则参考。
+# 凭据不硬编码：与 application.yml 一致，走 SECKILL_DB_USER / SECKILL_DB_PASSWORD 环境变量。
 # ============================================================================
 
 dataSources:
@@ -8,57 +10,57 @@ dataSources:
     dataSourceClassName: com.zaxxer.hikari.HikariDataSource
     driverClassName: com.mysql.cj.jdbc.Driver
     jdbcUrl: jdbc:mysql://127.0.0.1:3306/seckill_db_0?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: root
-    password: 123456
+    username: ${SECKILL_DB_USER:root}
+    password: ${SECKILL_DB_PASSWORD:}
 
   ds_1:
     dataSourceClassName: com.zaxxer.hikari.HikariDataSource
     driverClassName: com.mysql.cj.jdbc.Driver
     jdbcUrl: jdbc:mysql://127.0.0.1:3306/seckill_db_1?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: root
-    password: 123456
+    username: ${SECKILL_DB_USER:root}
+    password: ${SECKILL_DB_PASSWORD:}
 
   ds_2:
     dataSourceClassName: com.zaxxer.hikari.HikariDataSource
     driverClassName: com.mysql.cj.jdbc.Driver
     jdbcUrl: jdbc:mysql://127.0.0.1:3306/seckill_db_2?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: root
-    password: 123456
+    username: ${SECKILL_DB_USER:root}
+    password: ${SECKILL_DB_PASSWORD:}
 
   ds_3:
     dataSourceClassName: com.zaxxer.hikari.HikariDataSource
     driverClassName: com.mysql.cj.jdbc.Driver
     jdbcUrl: jdbc:mysql://127.0.0.1:3306/seckill_db_3?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: root
-    password: 123456
+    username: ${SECKILL_DB_USER:root}
+    password: ${SECKILL_DB_PASSWORD:}
 
   ds_4:
     dataSourceClassName: com.zaxxer.hikari.HikariDataSource
     driverClassName: com.mysql.cj.jdbc.Driver
     jdbcUrl: jdbc:mysql://127.0.0.1:3306/seckill_db_4?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: root
-    password: 123456
+    username: ${SECKILL_DB_USER:root}
+    password: ${SECKILL_DB_PASSWORD:}
 
   ds_5:
     dataSourceClassName: com.zaxxer.hikari.HikariDataSource
     driverClassName: com.mysql.cj.jdbc.Driver
     jdbcUrl: jdbc:mysql://127.0.0.1:3306/seckill_db_5?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: root
-    password: 123456
+    username: ${SECKILL_DB_USER:root}
+    password: ${SECKILL_DB_PASSWORD:}
 
   ds_6:
     dataSourceClassName: com.zaxxer.hikari.HikariDataSource
     driverClassName: com.mysql.cj.jdbc.Driver
     jdbcUrl: jdbc:mysql://127.0.0.1:3306/seckill_db_6?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: root
-    password: 123456
+    username: ${SECKILL_DB_USER:root}
+    password: ${SECKILL_DB_PASSWORD:}
 
   ds_7:
     dataSourceClassName: com.zaxxer.hikari.HikariDataSource
     driverClassName: com.mysql.cj.jdbc.Driver
     jdbcUrl: jdbc:mysql://127.0.0.1:3306/seckill_db_7?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: root
-    password: 123456
+    username: ${SECKILL_DB_USER:root}
+    password: ${SECKILL_DB_PASSWORD:}
 
 rules:
   - !SHARDING
