@@ -15,14 +15,20 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.http.HttpClient;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.function.Consumer;
 
 @Slf4j
 @Service
@@ -675,6 +681,182 @@ public class AiAnalysisService {
             log.error("Failed to call model API with tools for provider: {}", provider, e);
             throw new RuntimeException("AI调用失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 带工具的<b>流式</b>调用（token 级）。
+     * <p>
+     * 目前仅 OpenAI / 百炼（OpenAI 兼容）走真流式：解析 SSE 增量，把文本片段通过
+     * {@code onDelta} 实时回调出去，同时累积 tool_calls 分片与 usage。Claude / Gemini
+     * 各家流式格式不同，暂回退到非流式 {@link #chatWithTools}（不产生 delta，但结果一致）。
+     *
+     * @param onDelta 文本增量回调（可为 null）；仅最终答案的 content 会触发
+     * @return 与非流式一致的 AiResponse（content 为完整累积文本）
+     */
+    public AiResponse chatWithToolsStream(String provider, String model,
+                                          List<Map<String, Object>> messages,
+                                          List<Map<String, Object>> tools,
+                                          Consumer<String> onDelta) {
+        AiConfig config = aiConfigRepository.findByProvider(provider)
+                .orElseThrow(() -> new RuntimeException("Provider not found: " + provider));
+        if (config.getApiKey() == null) {
+            throw new RuntimeException("API Key not configured for provider: " + provider);
+        }
+        String effectiveModel = (model != null && !model.isEmpty()) ? model : config.getModel();
+        if (effectiveModel == null) {
+            throw new RuntimeException("Model not configured for provider: " + provider);
+        }
+        String baseUrl = config.getBaseUrl() != null ? config.getBaseUrl() : DEFAULT_BASE_URLS.get(provider);
+
+        // 只有 OpenAI 兼容路径支持真流式；其余回退非流式
+        if (!"OPENAI".equals(provider) && !"BAILIAN".equals(provider)) {
+            return chatWithTools(provider, model, messages, tools);
+        }
+
+        try {
+            String apiKey = resolveApiKey(config);
+            return callOpenAIWithToolsStream(baseUrl, apiKey, effectiveModel, messages, tools, onDelta);
+        } catch (Exception e) {
+            log.error("Failed to stream model API with tools for provider: {}", provider, e);
+            throw new RuntimeException("AI流式调用失败: " + e.getMessage());
+        }
+    }
+
+    private AiResponse callOpenAIWithToolsStream(String baseUrl, String apiKey, String model,
+                                                 List<Map<String, Object>> messages,
+                                                 List<Map<String, Object>> tools,
+                                                 Consumer<String> onDelta) {
+        String url = baseUrl + "/chat/completions";
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("model", model);
+        body.put("messages", messages);
+        if (tools != null && !tools.isEmpty()) {
+            body.put("tools", tools);
+            body.put("tool_choice", "auto");
+        }
+        body.put("stream", true);
+        // 让最后一帧带上 usage，便于成本闸门核算
+        body.put("stream_options", Map.of("include_usage", true));
+
+        return restTemplate.execute(url, HttpMethod.POST,
+                request -> {
+                    request.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+                    request.getHeaders().setBearerAuth(apiKey);
+                    request.getHeaders().setAccept(List.of(MediaType.TEXT_EVENT_STREAM));
+                    objectMapper.writeValue(request.getBody(), body);
+                },
+                response -> parseOpenAIStream(response.getBody(), onDelta, objectMapper));
+    }
+
+    /**
+     * 解析 OpenAI 兼容的流式响应：逐行读 SSE，累积 content（并回调 onDelta）、
+     * 按 index 拼接 tool_calls 分片、捕获 finish_reason 与 usage.total_tokens。
+     * 提为包级静态方法便于单测（无需构造整个 service）。
+     */
+    static AiResponse parseOpenAIStream(InputStream in, Consumer<String> onDelta, ObjectMapper mapper)
+            throws java.io.IOException {
+        StringBuilder contentBuf = new StringBuilder();
+        Map<Integer, String> tcId = new HashMap<>();
+        Map<Integer, String> tcName = new HashMap<>();
+        Map<Integer, StringBuilder> tcArgs = new HashMap<>();
+        String finishReason = null;
+        long usageTotal = 0;
+
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isEmpty() || !line.startsWith("data:")) {
+                    continue;
+                }
+                String data = line.substring(5).trim();
+                if ("[DONE]".equals(data)) {
+                    break;
+                }
+                JsonNode chunk;
+                try {
+                    chunk = mapper.readTree(data);
+                } catch (Exception e) {
+                    continue; // 跳过无法解析的心跳/注释帧
+                }
+
+                JsonNode usage = chunk.path("usage");
+                if (usage.isObject()) {
+                    long t = usage.path("total_tokens").asLong(0);
+                    if (t > 0) {
+                        usageTotal = t;
+                    }
+                }
+
+                JsonNode choice0 = chunk.path("choices").path(0);
+                if (choice0.isMissingNode()) {
+                    continue;
+                }
+                JsonNode fr = choice0.path("finish_reason");
+                if (fr.isTextual()) {
+                    finishReason = fr.asText();
+                }
+                JsonNode delta = choice0.path("delta");
+
+                JsonNode contentNode = delta.path("content");
+                if (contentNode.isTextual()) {
+                    String piece = contentNode.asText();
+                    if (!piece.isEmpty()) {
+                        contentBuf.append(piece);
+                        if (onDelta != null) {
+                            onDelta.accept(piece);
+                        }
+                    }
+                }
+
+                JsonNode toolCalls = delta.path("tool_calls");
+                if (toolCalls.isArray()) {
+                    for (JsonNode tc : toolCalls) {
+                        int idx = tc.path("index").asInt(0);
+                        String id = tc.path("id").asText(null);
+                        if (id != null && !id.isEmpty()) {
+                            tcId.put(idx, id);
+                        }
+                        JsonNode fn = tc.path("function");
+                        String name = fn.path("name").asText(null);
+                        if (name != null && !name.isEmpty()) {
+                            tcName.put(idx, name);
+                        }
+                        String argPiece = fn.path("arguments").asText("");
+                        if (!argPiece.isEmpty()) {
+                            tcArgs.computeIfAbsent(idx, k -> new StringBuilder()).append(argPiece);
+                        }
+                    }
+                }
+            }
+        }
+
+        List<ToolCall> calls = null;
+        if (!tcId.isEmpty() || !tcName.isEmpty() || !tcArgs.isEmpty()) {
+            TreeSet<Integer> indices = new TreeSet<>();
+            indices.addAll(tcId.keySet());
+            indices.addAll(tcName.keySet());
+            indices.addAll(tcArgs.keySet());
+            calls = new ArrayList<>();
+            for (Integer idx : indices) {
+                String id = tcId.getOrDefault(idx, "call_" + idx);
+                String name = tcName.getOrDefault(idx, "");
+                String argsStr = tcArgs.containsKey(idx) ? tcArgs.get(idx).toString() : "{}";
+                Map<String, Object> args = new LinkedHashMap<>();
+                try {
+                    args = mapper.readValue(argsStr.isEmpty() ? "{}" : argsStr, Map.class);
+                } catch (Exception e) {
+                    log.warn("Failed to parse streamed tool arguments: {}", argsStr);
+                    args.put("_raw", argsStr);
+                }
+                calls.add(new ToolCall(id, name, args));
+            }
+        }
+
+        String content = contentBuf.length() > 0 ? contentBuf.toString() : null;
+        AiResponse resp = new AiResponse(content, calls, finishReason != null ? finishReason : "stop");
+        resp.setTotalTokens(usageTotal);
+        return resp;
     }
 
     // ========== OpenAI/Bailian 工具调用 ==========

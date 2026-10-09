@@ -89,7 +89,7 @@ class ToolCallOrchestratorStreamTest {
         AiResponse withTool = new AiResponse(null,
                 List.of(new ToolCall("call-1", "list_routes", new LinkedHashMap<>())), "tool_calls");
         AiResponse finalResp = new AiResponse("这是最终回复", null, "stop");
-        when(aiAnalysisService.chatWithTools(any(), any(), any(), any()))
+        when(aiAnalysisService.chatWithToolsStream(any(), any(), any(), any(), any()))
                 .thenReturn(withTool, finalResp);
         when(toolExecutor.execute(anyString(), any()))
                 .thenReturn(ToolExecutor.ToolResult.success(Map.of("routes", List.of())));
@@ -115,7 +115,7 @@ class ToolCallOrchestratorStreamTest {
         args.put("routeId", "r-1");
         AiResponse withTool = new AiResponse(null,
                 List.of(new ToolCall("call-2", "delete_route", args)), "tool_calls");
-        when(aiAnalysisService.chatWithTools(any(), any(), any(), any())).thenReturn(withTool);
+        when(aiAnalysisService.chatWithToolsStream(any(), any(), any(), any(), any())).thenReturn(withTool);
         when(toolExecutor.execute(anyString(), any()))
                 .thenReturn(ToolExecutor.ToolResult.pendingConfirmation("delete_route", Map.of("warning", "将删除路由")));
         when(pendingActionStore.register(anyString(), any())).thenReturn("ticket-abc");

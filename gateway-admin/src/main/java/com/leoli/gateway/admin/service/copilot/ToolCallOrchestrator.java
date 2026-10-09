@@ -90,7 +90,7 @@ public class ToolCallOrchestrator {
     public ToolCallLoopResult runToolCallLoop(AiConfig config, String model,
                                                List<Map<String, Object>> messages,
                                                List<Map<String, Object>> tools) {
-        return runToolCallLoop(config, model, messages, tools, CopilotProgressListener.NOOP);
+        return runToolCallLoop(config, model, messages, tools, CopilotProgressListener.NOOP, false);
     }
 
     /**
@@ -105,6 +105,20 @@ public class ToolCallOrchestrator {
                                                List<Map<String, Object>> messages,
                                                List<Map<String, Object>> tools,
                                                CopilotProgressListener listener) {
+        return runToolCallLoop(config, model, messages, tools, listener, true);
+    }
+
+    /**
+     * 执行工具调用循环（可开启 token 级流式）。
+     *
+     * @param stream true 时对 OpenAI 兼容 provider（含百炼）走 token 级流式，文本增量通过
+     *               listener 的 {@code delta} 事件实时下发；Claude/Gemini 内部回退非流式。
+     */
+    public ToolCallLoopResult runToolCallLoop(AiConfig config, String model,
+                                               List<Map<String, Object>> messages,
+                                               List<Map<String, Object>> tools,
+                                               CopilotProgressListener listener,
+                                               boolean stream) {
 
         String effectiveModel = (model != null && !model.isEmpty()) ? model : config.getModel();
         String provider = config.getProvider();
@@ -132,9 +146,11 @@ public class ToolCallOrchestrator {
             log.info("Tool call iteration: {} for provider: {}", iteration + 1, provider);
             listener.onEvent("status", Map.of("stage", "thinking", "iteration", iteration + 1));
 
-            // 调用 AI API（带工具）
-            AiAnalysisService.AiResponse response = aiAnalysisService.chatWithTools(
-                    provider, effectiveModel, messages, tools);
+            // 调用 AI API（带工具）；stream=true 且 provider 为 OpenAI 兼容时走 token 级流式
+            AiAnalysisService.AiResponse response = stream
+                    ? aiAnalysisService.chatWithToolsStream(provider, effectiveModel, messages, tools,
+                            piece -> listener.onEvent("delta", Map.of("text", piece)))
+                    : aiAnalysisService.chatWithTools(provider, effectiveModel, messages, tools);
             totalTokens += response.getTotalTokens();
 
             // 如果没有工具调用，返回最终回复

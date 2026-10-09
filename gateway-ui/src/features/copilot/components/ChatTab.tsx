@@ -45,6 +45,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
   const [pendingAction, setPendingAction] = useState<CopilotPendingAction | null>(null);
   const [executing, setExecuting] = useState(false);
   const [streamNote, setStreamNote] = useState('');
+  const [streamingContent, setStreamingContent] = useState('');
   const [feedback, setFeedback] = useState<Record<number, 'UP' | 'DOWN'>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -59,10 +60,10 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
   // Abort any in-flight stream on unmount
   useEffect(() => () => { abortRef.current?.abort(); }, []);
 
-  // Scroll to bottom when messages change
+  // Scroll to bottom when messages change or the answer streams in
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, streamingContent]);
 
   const handleSendMessage = async () => {
     if (loading) return; // 发送中禁止重复提交（回车会绕过按钮的 loading 禁用，进而触发后端同会话并发）
@@ -78,6 +79,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
     setInputMessage('');
     setLoading(true);
     setStreamNote(t('copilot.ai_thinking'));
+    setStreamingContent('');
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -97,6 +99,8 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
           onStatus: () => setStreamNote(t('copilot.ai_thinking')),
           onTool: (data) => {
             if (data.status === 'running') {
+              // 新一轮工具调用：清掉可能残留的分片文本，进度以 streamNote 呈现
+              setStreamingContent('');
               setStreamNote(t('copilot.calling_tool', { tool: data.toolName }));
             } else if (data.status === 'success') {
               setStreamNote(t('copilot.tool_done', { tool: data.toolName, ms: data.durationMs ?? 0 }));
@@ -106,7 +110,10 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
               setStreamNote(t('copilot.please_confirm'));
             }
           },
+          onDelta: (text) => setStreamingContent(prev => prev + text),
           onMessage: (response) => {
+            // 终态：用完整回答（含证据说明）替换打字机临时内容
+            setStreamingContent('');
             if (response.success) {
               setMessages(prev => [...prev, {
                 role: 'assistant',
@@ -131,6 +138,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
     } finally {
       abortRef.current = null;
       setStreamNote('');
+      setStreamingContent('');
       setLoading(false);
     }
   };
@@ -303,8 +311,28 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
             </div>
           ))
         )}
-        <div ref={messagesEndRef} />
-        {loading && (
+        {/* 打字机：最终答案的 token 流式增量，临时气泡，收到终态 message 后被正式消息替换 */}
+        {loading && streamingContent && (
+          <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'row' }}>
+            <div
+              style={{
+                maxWidth: '80%',
+                padding: '12px 16px',
+                borderRadius: '8px',
+                background: 'rgba(255,255,255,0.05)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+                <RobotOutlined style={{ color: '#52c41a', marginRight: '8px' }} />
+              </div>
+              <div style={{ color: 'rgba(255,255,255,0.85)' }}>
+                <AiReportRenderer content={streamingContent} />
+              </div>
+            </div>
+          </div>
+        )}
+        {/* 思考/调用工具阶段（尚无 token 流出）显示进度提示 */}
+        {loading && !streamingContent && (
           <div style={{ textAlign: 'center', padding: '16px' }}>
             <Spin />
             <div style={{ marginTop: 8, fontSize: 12, color: 'rgba(255,255,255,0.65)' }}>
@@ -312,6 +340,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
             </div>
           </div>
         )}
+        <div ref={messagesEndRef} />
       </div>
 
       {/* Pending write action — requires explicit human confirmation (P0 fix) */}

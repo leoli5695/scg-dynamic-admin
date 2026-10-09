@@ -126,7 +126,8 @@ public class AiCopilotController extends BaseController {
      * <ul>
      *   <li>{@code status} → {stage: intent|thinking, ...}</li>
      *   <li>{@code tool}   → {toolName, status: running|success|error|confirm, durationMs?}</li>
-     *   <li>{@code message}→ 终态：{success, response, confidence, confidenceReason, pendingAction?, sessionId}</li>
+     *   <li>{@code delta}  → {text}：最终答案的 token 级增量（OpenAI 兼容 provider），打字机效果</li>
+     *   <li>{@code message}→ 终态：{success, response, evidence?, pendingAction?, totalTokens?, sessionId}</li>
      *   <li>{@code error}  → {message}</li>
      * </ul>
      * 采用 POST + text/event-stream，前端用 fetch 读取响应流（EventSource 不支持 POST）。

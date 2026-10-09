@@ -130,6 +130,8 @@ export interface CopilotStreamTool {
 export interface CopilotStreamHandlers {
   onStatus?: (data: CopilotStreamStatus) => void;
   onTool?: (data: CopilotStreamTool) => void;
+  /** Token-level增量：最终答案的文本片段，按到达顺序回调（打字机效果）。 */
+  onDelta?: (text: string) => void;
   /** Terminal event: same shape as the non-streaming /chat response. */
   onMessage: (data: CopilotChatResponse) => void;
   onError?: (message: string) => void;
@@ -206,6 +208,9 @@ export async function sendCopilotChatStream(
         break;
       case 'tool':
         handlers.onTool?.(parsed as CopilotStreamTool);
+        break;
+      case 'delta':
+        handlers.onDelta?.((parsed as { text?: string })?.text ?? '');
         break;
       case 'error':
         handlers.onError?.((parsed as { message?: string })?.message || 'AI error');
