@@ -62,7 +62,7 @@
 
 /* Dark Select Dropdown for Modal */
 .dark-select .ant-select-selector {
-  background: #1e293b !important;
+  background: var(--bg-elevated) !important;
   border: 1px solid rgba(148, 163, 184, 0.3) !important;
   color: #f1f5f9 !important;
 }
@@ -80,7 +80,7 @@
 }
 
 .dark-select-dropdown {
-  background: #1e293b !important;
+  background: var(--bg-elevated) !important;
   border: 1px solid rgba(148, 163, 184, 0.2) !important;
   border-radius: var(--radius-lg) !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
@@ -315,18 +315,18 @@
 }
 
 .ant-tooltip-inner {
-  background: #27272a;
-  color: #fafafa;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
   padding: var(--space-3) var(--space-4);
   max-width: 350px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(148, 163, 184, 0.16);
 }
 
 .ant-tooltip-arrow-content {
-  background: #27272a;
+  background: var(--bg-elevated);
 }
 
 .ant-popover-inner {

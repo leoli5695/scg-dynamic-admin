@@ -7,80 +7,83 @@ import type { ThemeConfig } from 'antd';
  */
 const theme: ThemeConfig = {
   token: {
-    // Background - aligned with --bg-base (#09090b) and --bg-secondary
-    colorBgBase: '#09090b',
-    colorBgContainer: '#18181b',      // aligned with --bg-secondary
-    colorBgElevated: '#27272a',       // aligned with --bg-elevated
-    colorBorder: 'rgba(255, 255, 255, 0.10)',   // aligned with --border-default
+    // Background - aligned with --bg-base (#0a0f1e) and --bg-secondary
+    colorBgBase: '#0a0f1e',
+    colorBgContainer: '#101b30',      // aligned with --bg-card
+    colorBgElevated: '#1a2740',       // aligned with --bg-elevated
+    colorBorder: 'rgba(148, 163, 184, 0.18)',   // aligned with --border-default
     // Text - aligned with CSS variables
-    colorText: '#fafafa',             // aligned with --text-primary
-    colorTextSecondary: '#a1a1aa',    // aligned with --text-secondary
-    colorTextTertiary: '#71717a',     // aligned with --text-muted
+    colorText: '#eaf1fb',             // aligned with --text-primary
+    colorTextSecondary: '#a5b4cb',    // aligned with --text-secondary
+    colorTextTertiary: '#6b7c95',     // aligned with --text-muted
     borderRadius: 12,
-    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
+    boxShadow: '0 10px 15px -3px rgba(3, 7, 18, 0.45)',
     // Brand colors - aligned with CSS variables
     colorPrimary: '#3b82f6',          // aligned with --primary-color
     colorSuccess: '#22c55e',          // aligned with --success-color
     colorWarning: '#eab308',          // aligned with --warning-color
     colorError: '#ef4444',            // aligned with --error-color
-    colorBgContainerDisabled: 'rgba(255,255,255,0.05)',
+    colorBgContainerDisabled: 'rgba(148,163,184,0.08)',
   },
   components: {
     Card: {
-      colorBgContainer: '#18181b',    // aligned with --bg-secondary
+      colorBgContainer: '#101b30',    // aligned with --bg-card
       borderRadius: 12,
-      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)',
+      boxShadow: '0 1px 2px rgba(3, 7, 18, 0.30), 0 8px 24px -12px rgba(3, 7, 18, 0.60)',
     },
     Layout: {
-      colorBgHeader: '#09090b',       // aligned with --bg-base
-      colorBgBody: '#09090b',         // aligned with --bg-base
+      colorBgHeader: '#0e1728',       // aligned with --bg-secondary
+      colorBgBody: '#0c1424',         // aligned with --bg-primary
     },
     Menu: {
-      colorBgContainer: '#09090b',    // aligned with --bg-base
+      colorBgContainer: '#0e1728',    // aligned with --bg-secondary
     },
     Button: {
       borderRadius: 8,
       colorPrimary: '#3b82f6',        // aligned with --primary-color
     },
     Tag: {
-      colorBgContainer: 'rgba(255,255,255,0.08)',
+      colorBgContainer: 'rgba(148,163,184,0.10)',
     },
     Alert: {
       colorBgContainer: 'rgba(234, 179, 8, 0.1)',  // aligned with --warning-color
     },
     Statistic: {
-      colorText: '#fafafa',           // aligned with --text-primary
-      colorTextSecondary: '#a1a1aa',  // aligned with --text-secondary
+      colorText: '#eaf1fb',           // aligned with --text-primary
+      colorTextSecondary: '#a5b4cb',  // aligned with --text-secondary
+    },
+    Descriptions: {
+      labelBg: 'transparent',         // no highlight patch behind labels on dark cards
     },
     Input: {
-      colorBgContainer: '#09090b',    // aligned with --bg-input
-      colorBorder: 'rgba(255, 255, 255, 0.10)',  // aligned with --border-default
+      colorBgContainer: '#0a1120',    // aligned with --bg-input
+      colorBorder: 'rgba(148, 163, 184, 0.18)',  // aligned with --border-default
     },
     Select: {
-      colorBgContainer: '#18181b',    // aligned with --bg-secondary
-      colorBorder: 'rgba(255, 255, 255, 0.15)',  // aligned with --border-strong
-      colorText: '#fafafa',           // aligned with --text-primary
-      optionSelectedBg: '#27272a',    // aligned with --bg-elevated
+      colorBgContainer: '#101b30',    // aligned with --bg-card
+      colorBorder: 'rgba(148, 163, 184, 0.25)',  // aligned with --border-strong
+      colorText: '#eaf1fb',           // aligned with --text-primary
+      optionSelectedBg: '#1a2740',    // aligned with --bg-elevated
     },
     Modal: {
-      colorBgContainer: '#18181b',    // aligned with --bg-secondary
-      colorBgElevated: '#27272a',     // aligned with --bg-elevated
+      colorBgContainer: '#101b30',    // aligned with --bg-card
+      colorBgElevated: '#1a2740',     // aligned with --bg-elevated
       lineWidthFocus: 0,
     },
     Drawer: {
-      colorBgContainer: '#18181b',    // aligned with --bg-secondary
+      colorBgContainer: '#101b30',    // aligned with --bg-card
     },
     Table: {
-      colorBgContainer: '#18181b',    // aligned with --bg-secondary
-      colorBorder: 'rgba(255, 255, 255, 0.10)',  // aligned with --border-default
+      colorBgContainer: '#101b30',    // aligned with --bg-card
+      colorBorder: 'rgba(148, 163, 184, 0.12)',  // aligned with --border-subtle
       // Header/hover backgrounds must be themed here: plain CSS overrides lose to antd v6 runtime CSS-in-JS
-      headerBg: '#18212f',
-      headerColor: '#a1a1aa',
+      headerBg: '#15213a',
+      headerColor: '#a5b4cb',
       headerSplitColor: 'transparent',
-      headerSortActiveBg: '#18212f',
-      headerSortHoverBg: '#1e2a3a',
-      borderColor: 'rgba(255, 255, 255, 0.08)',
-      rowHoverBg: 'rgba(59, 130, 246, 0.08)',
+      headerSortActiveBg: '#15213a',
+      headerSortHoverBg: '#1b2a47',
+      borderColor: 'rgba(148, 163, 184, 0.10)',
+      rowHoverBg: 'rgba(96, 165, 250, 0.08)',
     },
   },
 };

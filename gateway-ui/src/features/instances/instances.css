@@ -86,7 +86,7 @@
 /* ==================== Instance Card ==================== */
 .instance-card {
   position: relative;
-  background: rgba(28, 28, 33, 0.95) !important;
+  background: rgba(16,27,48, 0.95) !important;
   backdrop-filter: blur(16px) !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-radius: 12px !important;
@@ -219,7 +219,7 @@
 .instance-card-name .ant-typography {
   font-size: 15px;
   font-weight: 600;
-  color: #fafafa;
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -277,7 +277,7 @@
 
 .instance-cluster {
   font-size: 13px;
-  color: #a1a1aa;
+  color: var(--text-secondary);
   font-weight: 500;
   display: inline-flex;
   align-items: center;
@@ -290,7 +290,7 @@
 
 .instance-namespace {
   font-size: 13px;
-  color: #71717a;
+  color: var(--text-muted);
   display: inline-flex;
   align-items: center;
 }
@@ -311,14 +311,14 @@
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  background: rgba(39, 39, 42, 0.5);
+  background: rgba(26,39,64, 0.5);
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.05);
   transition: all 0.15s ease;
 }
 
 .instance-card:hover .instance-metric-item {
-  background: rgba(39, 39, 42, 0.7);
+  background: rgba(26,39,64, 0.7);
   border-color: rgba(255, 255, 255, 0.08);
 }
 
@@ -343,7 +343,7 @@
 
 .instance-metric-label {
   font-size: 11px;
-  color: #71717a;
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.03em;
   font-weight: 500;
@@ -351,7 +351,7 @@
 
 .instance-metric-value {
   font-size: 13px;
-  color: #d4d4d8;
+  color: var(--text-secondary);
   font-weight: 600;
 }
 
@@ -390,15 +390,15 @@
   align-items: center !important;
   justify-content: center !important;
   border-radius: 8px !important;
-  background: rgba(39, 39, 42, 0.6) !important;
-  color: #71717a !important;
+  background: rgba(26,39,64, 0.6) !important;
+  color: var(--text-muted) !important;
   transition: all 0.15s ease !important;
   border: 1px solid transparent !important;
 }
 
 .instance-action-btn:hover {
   background: rgba(255, 255, 255, 0.1) !important;
-  color: #a1a1aa !important;
+  color: var(--text-secondary) !important;
   transform: scale(1.05);
 }
 
@@ -435,7 +435,7 @@
   justify-content: center;
   align-items: center;
   padding: 48px 32px;
-  background: rgba(28, 28, 33, 0.8);
+  background: rgba(16,27,48, 0.8);
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   margin-top: 24px;
@@ -446,7 +446,7 @@
 }
 
 .instances-empty .ant-empty-description {
-  color: #71717a;
+  color: var(--text-muted);
   font-size: 14px;
 }
 

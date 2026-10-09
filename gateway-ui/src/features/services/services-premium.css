@@ -153,7 +153,7 @@
   padding: 4px 10px;
   border-radius: 9999px;
   font-size: var(--text-xs);
-  background: rgba(39, 39, 42, 0.6);
+  background: rgba(26,39,64, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.08);
   color: var(--text-secondary);
 }
@@ -195,7 +195,7 @@
 
 /* ==================== Modal Styles - Enhanced Glassmorphism ==================== */
 .service-modal .ant-modal-content {
-  background: rgba(28, 28, 33, 0.95) !important;
+  background: rgba(16,27,48, 0.95) !important;
   backdrop-filter: blur(12px) !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-radius: 16px !important;
@@ -215,18 +215,18 @@
 }
 
 .service-modal .ant-modal-title {
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
   font-weight: 600 !important;
 }
 
 .service-modal .ant-modal-close {
-  color: #71717a !important;
+  color: var(--text-muted) !important;
   top: 16px !important;
   right: 16px !important;
 }
 
 .service-modal .ant-modal-close:hover {
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
   background: rgba(255, 255, 255, 0.08) !important;
   border-radius: 8px !important;
 }
@@ -254,7 +254,7 @@
 .service-modal .form-section-modern {
   margin-bottom: 24px;
   padding: 20px;
-  background: rgba(39, 39, 42, 0.5);
+  background: rgba(26,39,64, 0.5);
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
@@ -283,13 +283,13 @@
 .service-modal .section-title {
   font-size: 14px;
   font-weight: 600;
-  color: #fafafa;
+  color: var(--text-primary);
   letter-spacing: -0.01em;
 }
 
 .service-modal .section-subtitle {
   font-size: 12px;
-  color: #71717a;
+  color: var(--text-muted);
   margin-left: auto;
 }
 
@@ -304,10 +304,10 @@
 .service-modal .ant-input-number,
 .service-modal .ant-select-selector,
 .service-modal .ant-picker {
-  background: rgba(9, 9, 11, 0.8) !important;
+  background: rgba(10,15,30, 0.8) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 10px !important;
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
   transition: all 0.2s ease !important;
 }
 
@@ -324,23 +324,23 @@
 }
 
 .service-modal .ant-input::placeholder {
-  color: #52525b !important;
+  color: var(--border-strong) !important;
 }
 
 .service-modal .ant-select-arrow {
-  color: #71717a !important;
+  color: var(--text-muted) !important;
 }
 
 .service-modal .ant-select-selection-item {
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
 }
 
 .service-modal .ant-select-selection-placeholder {
-  color: #52525b !important;
+  color: var(--border-strong) !important;
 }
 
 .service-modal .ant-form-item-label > label {
-  color: #a1a1aa !important;
+  color: var(--text-secondary) !important;
   font-size: 13px !important;
   font-weight: 500 !important;
 }
@@ -365,7 +365,7 @@
 .instance-row-modern {
   padding: 16px;
   margin-bottom: 12px;
-  background: rgba(9, 9, 11, 0.6);
+  background: rgba(10,15,30, 0.6);
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   transition: all 0.2s ease;
@@ -373,7 +373,7 @@
 
 .instance-row-modern:hover {
   border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(9, 9, 11, 0.7);
+  background: rgba(10,15,30, 0.7);
 }
 
 .instance-row-header {
@@ -386,7 +386,7 @@
 .instance-label {
   font-size: 13px;
   font-weight: 500;
-  color: #a1a1aa;
+  color: var(--text-secondary);
 }
 
 .instance-row-grid {
@@ -407,7 +407,7 @@
 
 .instance-form-item .ant-input,
 .instance-form-item .ant-select-selector {
-  background: rgba(39, 39, 42, 0.6) !important;
+  background: rgba(26,39,64, 0.6) !important;
   border-radius: 8px !important;
 }
 
@@ -425,14 +425,14 @@
 }
 
 .status-dot-default {
-  background: #71717a;
+  background: var(--text-muted);
 }
 
 /* ==================== Add Instance Button ==================== */
 .add-instance-btn-modern {
   border: 1px dashed rgba(255, 255, 255, 0.15) !important;
-  background: rgba(39, 39, 42, 0.3) !important;
-  color: #a1a1aa !important;
+  background: rgba(26,39,64, 0.3) !important;
+  color: var(--text-secondary) !important;
   border-radius: 10px !important;
   transition: all 0.2s ease !important;
   height: 44px !important;
@@ -466,13 +466,13 @@
 .service-modal .modal-footer-modern .ant-btn-default {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #a1a1aa;
+  color: var(--text-secondary);
 }
 
 .service-modal .modal-footer-modern .ant-btn-default:hover {
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(255, 255, 255, 0.15);
-  color: #fafafa;
+  color: var(--text-primary);
 }
 
 .service-modal .modal-footer-modern .ant-btn-primary {
@@ -500,7 +500,7 @@
 
 .option-icon {
   font-size: 14px;
-  color: #71717a;
+  color: var(--text-muted);
 }
 
 .option-icon-weighted {
@@ -528,12 +528,12 @@
 .option-title {
   font-size: 14px;
   font-weight: 500;
-  color: #fafafa;
+  color: var(--text-primary);
 }
 
 .option-desc {
   font-size: 12px;
-  color: #71717a;
+  color: var(--text-muted);
 }
 
 .custom-select-label {
@@ -544,7 +544,7 @@
 
 /* ==================== Service Detail Drawer ==================== */
 .service-detail-drawer .ant-drawer-content {
-  background: rgba(28, 28, 33, 0.98) !important;
+  background: rgba(16,27,48, 0.98) !important;
   backdrop-filter: blur(12px) !important;
 }
 
@@ -589,7 +589,7 @@
 }
 
 .drawer-title {
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
   margin: 0 !important;
 }
 
@@ -600,11 +600,11 @@
 }
 
 .drawer-close-btn {
-  color: #71717a;
+  color: var(--text-muted);
 }
 
 .drawer-close-btn:hover {
-  color: #fafafa;
+  color: var(--text-primary);
   background: rgba(255, 255, 255, 0.08);
   border-radius: 8px;
 }
@@ -615,7 +615,7 @@
   gap: 12px;
   margin-bottom: 20px;
   padding: 12px 16px;
-  background: rgba(39, 39, 42, 0.5);
+  background: rgba(26,39,64, 0.5);
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
@@ -630,7 +630,7 @@
   gap: 8px;
   font-size: 14px;
   font-weight: 600;
-  color: #fafafa;
+  color: var(--text-primary);
   margin-bottom: 16px;
 }
 
@@ -650,7 +650,7 @@
 
 .instance-detail-card {
   padding: 12px 16px;
-  background: rgba(39, 39, 42, 0.4);
+  background: rgba(26,39,64, 0.4);
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
@@ -683,7 +683,7 @@
 
 .instance-address .ant-typography {
   font-family: var(--font-mono);
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
 }
 
 .instance-badges {
@@ -693,7 +693,7 @@
 
 .instance-meta {
   font-size: 12px;
-  color: #71717a;
+  color: var(--text-muted);
 }
 
 .drawer-actions {
@@ -739,7 +739,7 @@
 .stats-card {
   border-radius: 12px !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  background: rgba(28, 28, 33, 0.8) !important;
+  background: rgba(16,27,48, 0.8) !important;
 }
 
 .stats-card-content {
@@ -778,13 +778,13 @@
 }
 
 .stats-title {
-  color: #71717a;
+  color: var(--text-muted);
   font-size: 12px;
   font-weight: 500;
 }
 
 .stats-subtitle {
-  color: #52525b;
+  color: var(--border-strong);
   font-size: 11px;
 }
 

@@ -70,10 +70,13 @@
   background: var(--bg-card);
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-lg);
-  padding: var(--spacing-lg);
+  padding: var(--spacing-md) var(--spacing-lg);
   position: relative;
   overflow: hidden;
   transition: all var(--transition-normal);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
 }
 
 .stat-card-premium:hover {
@@ -92,15 +95,15 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-md);
-  margin-bottom: var(--spacing-md);
+  flex-shrink: 0;
   font-size: 20px;
   background: var(--bg-elevated);
   color: var(--text-secondary);
 }
 
 .stat-card-icon.default {
-  background: #27272a;
-  color: #a1a1aa;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
 }
 
 .stat-card-icon.success {
@@ -115,51 +118,79 @@
 
 .stat-card-label {
   font-size: 13px;
-  color: #71717a;
+  color: var(--text-muted);
   font-weight: 500;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+}
+
+.stat-card-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .stat-card-value {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 600;
-  color: #fafafa;
-  line-height: 1;
+  color: var(--text-primary);
+  line-height: 1.1;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
 
 .stat-card-subtitle {
   font-size: 12px;
-  color: #52525b;
-  margin-top: 4px;
+  color: var(--text-muted);
 }
 
 .stat-card-trend {
   display: none;
 }
 
-/* ==================== Action Bar ==================== */
-.k8s-action-bar {
+/* ==================== Section Header / Page Actions ==================== */
+.k8s-page-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  align-items: center;
+}
+
+.k8s-section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
-  padding: 12px 0;
-  background: transparent;
-  border: none;
+  margin: 4px 0 12px;
 }
 
-.k8s-action-bar-left,
-.k8s-action-bar-right {
-  display: flex;
-  gap: 8px;
-  align-items: center;
+.k8s-section-header .ant-typography {
+  color: var(--text-primary);
+}
+
+.k8s-section-count {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.cluster-card-status-text {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: 8px;
+  font-weight: 400;
+}
+
+.cluster-card-status-text.connected {
+  color: #34d399;
+}
+
+.cluster-card-status-text.error {
+  color: #f87171;
 }
 
 /* ==================== Buttons ==================== */
 .btn-premium-primary {
-  background: #fafafa !important;
+  background: var(--text-primary) !important;
   border: none !important;
-  color: #09090b !important;
+  color: var(--bg-base) !important;
   font-weight: 500 !important;
   padding: 8px 16px !important;
   border-radius: 8px !important;
@@ -167,13 +198,13 @@
 }
 
 .btn-premium-primary:hover {
-  background: #e4e4e7 !important;
+  background: var(--text-primary) !important;
 }
 
 .btn-premium-secondary {
   background: transparent !important;
-  border: 1px solid #3f3f46 !important;
-  color: #d4d4d8 !important;
+  border: 1px solid var(--border-strong) !important;
+  color: var(--text-secondary) !important;
   font-weight: 500 !important;
   padding: 8px 16px !important;
   border-radius: 8px !important;
@@ -181,23 +212,22 @@
 }
 
 .btn-premium-secondary:hover {
-  background: #27272a !important;
-  border-color: #52525b !important;
-  color: #fafafa !important;
+  background: var(--bg-elevated) !important;
+  border-color: var(--border-strong) !important;
+  color: var(--text-primary) !important;
 }
 
 /* ==================== Cluster Grid ==================== */
 .cluster-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-  gap: 16px;
-  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 /* ==================== Cluster Card ==================== */
 .cluster-card-premium {
-  background: #18181b;
-  border: 1px solid #27272a;
+  background: var(--bg-card);
+  border: 1px solid var(--bg-elevated);
   border-radius: 10px;
   overflow: hidden;
   transition: all 0.15s ease;
@@ -205,8 +235,8 @@
 }
 
 .cluster-card-premium:hover {
-  background: #1f1f23;
-  border-color: #3f3f46;
+  background: var(--bg-card);
+  border-color: var(--border-strong);
 }
 
 .cluster-card-premium::before,
@@ -231,9 +261,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #27272a;
+  background: var(--bg-elevated);
   border-radius: 8px;
-  color: #a1a1aa;
+  color: var(--text-secondary);
   font-size: 24px;
 }
 
@@ -255,8 +285,10 @@
 .cluster-card-name {
   font-size: 16px;
   font-weight: 600;
-  color: #fafafa;
+  color: var(--text-primary);
   margin-bottom: 4px;
+  display: flex;
+  align-items: center;
 }
 
 .cluster-card-meta {
@@ -269,8 +301,8 @@
 
 .cluster-card-version {
   font-size: 12px;
-  color: #71717a;
-  background: #27272a;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
   padding: 3px 8px;
   border-radius: 4px;
   font-weight: 500;
@@ -290,16 +322,16 @@
   justify-content: center;
   border-radius: 6px;
   background: transparent;
-  border: 1px solid #3f3f46;
-  color: #71717a;
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
   transition: all 0.15s ease;
   cursor: pointer;
 }
 
 .cluster-card-action-btn:hover {
-  background: #27272a;
-  border-color: #52525b;
-  color: #fafafa;
+  background: var(--bg-elevated);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
 }
 
 .cluster-card-action-btn.primary {
@@ -329,8 +361,8 @@
   align-items: center;
   gap: 10px;
   padding: 12px;
-  background: #27272a;
-  border: 1px solid #3f3f46;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   margin-bottom: 12px;
 }
@@ -339,7 +371,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #52525b;
+  background: var(--border-strong);
 }
 
 .cluster-card-status-dot.connected {
@@ -357,12 +389,12 @@
 .cluster-card-status-text {
   font-size: 13px;
   font-weight: 500;
-  color: #d4d4d8;
+  color: var(--text-secondary);
 }
 
 .cluster-card-status-label {
   font-size: 12px;
-  color: #71717a;
+  color: var(--text-muted);
   margin-left: auto;
 }
 
@@ -380,7 +412,7 @@
 
 .cluster-card-detail-label {
   font-size: 11px;
-  color: #71717a;
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   font-weight: 500;
@@ -388,7 +420,7 @@
 
 .cluster-card-detail-value {
   font-size: 13px;
-  color: #d4d4d8;
+  color: var(--text-secondary);
   font-weight: 500;
   word-break: break-all;
 }
@@ -409,85 +441,87 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #27272a;
+  background: var(--bg-elevated);
   border-radius: 20px;
   margin-bottom: 20px;
-  color: #71717a;
+  color: var(--text-muted);
   font-size: 40px;
 }
 
 .k8s-empty-state-title {
   font-size: 18px;
   font-weight: 600;
-  color: #fafafa;
+  color: var(--text-primary);
   margin-bottom: 8px;
 }
 
 .k8s-empty-state-description {
   font-size: 14px;
-  color: #71717a;
+  color: var(--text-muted);
   margin-bottom: 24px;
   max-width: 400px;
 }
 
 /* ==================== Drawer ==================== */
 .ant-drawer-content {
-  background: #18181b !important;
+  background: var(--bg-card) !important;
 }
 
 .ant-drawer-header {
   background: transparent !important;
-  border-bottom: 1px solid #27272a !important;
+  border-bottom: 1px solid var(--bg-elevated) !important;
   padding: 18px 24px !important;
 }
 
 .ant-drawer-title {
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
   font-size: 16px;
   font-weight: 600;
 }
 
 .ant-drawer-body {
   padding: 24px !important;
-  background: #18181b !important;
+  background: var(--bg-card) !important;
 }
 
 /* ==================== Table ==================== */
+/* Scoped via nesting: these rules were global and restyled every table/site-wide after visiting this page */
+.kubernetes-page {
 .ant-table {
   background: transparent !important;
 }
 
 .ant-table-thead > tr > th {
-  background: #18181b !important;
-  color: #a1a1aa !important;
+  background: var(--bg-card) !important;
+  color: var(--text-secondary) !important;
   font-weight: 500 !important;
   font-size: 13px !important;
-  border-bottom: 1px solid #27272a !important;
+  border-bottom: 1px solid var(--bg-elevated) !important;
   padding: 12px 16px !important;
 }
 
 .ant-table-tbody > tr > td {
   background: transparent !important;
-  color: #d4d4d8 !important;
-  border-bottom: 1px solid #27272a !important;
+  color: var(--text-secondary) !important;
+  border-bottom: 1px solid var(--bg-elevated) !important;
   padding: 12px 16px !important;
   font-size: 14px !important;
 }
 
 .ant-table-tbody > tr:hover > td {
-  background: #1f1f23 !important;
+  background: var(--bg-card) !important;
 }
 
 .ant-table-row-expand-icon {
   background: transparent !important;
-  border-color: #3f3f46 !important;
-  color: #71717a !important;
+  border-color: var(--border-strong) !important;
+  color: var(--text-muted) !important;
   border-radius: 6px !important;
 }
 
 .ant-table-row-expand-icon:hover {
-  color: #a1a1aa !important;
-  border-color: #52525b !important;
+  color: var(--text-secondary) !important;
+  border-color: var(--border-strong) !important;
 }
 
 /* ==================== Tag ==================== */
@@ -524,14 +558,14 @@
 }
 
 .ant-tag-gray {
-  background: #27272a !important;
-  border-color: #3f3f46 !important;
-  color: #71717a !important;
+  background: var(--bg-elevated) !important;
+  border-color: var(--border-strong) !important;
+  color: var(--text-muted) !important;
 }
 
 /* ==================== Progress ==================== */
 .ant-progress-bg {
-  background: #fafafa !important;
+  background: var(--text-primary) !important;
   border-radius: 2px !important;
 }
 
@@ -541,25 +575,26 @@
 
 /* ==================== Select ==================== */
 .namespace-select .ant-select-arrow {
-  color: #71717a !important;
+  color: var(--text-muted) !important;
 }
 
 .ant-select-dropdown {
-  background: #18181b !important;
-  border: 1px solid #27272a !important;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--bg-elevated) !important;
 }
 
 .ant-select-item {
-  color: #d4d4d8 !important;
+  color: var(--text-secondary) !important;
 }
 
 .ant-select-item:hover {
-  background: #27272a !important;
+  background: var(--bg-elevated) !important;
 }
 
 .ant-select-item-option-selected {
-  background: #27272a !important;
-  color: #fafafa !important;
+  background: var(--bg-elevated) !important;
+  color: var(--text-primary) !important;
+}
 }
 
 /* ==================== Responsive ==================== */
@@ -620,7 +655,7 @@
   display: inline-block;
   margin-left: 10px;
   vertical-align: middle;
-  background: #52525b;
+  background: var(--border-strong);
 }
 
 .cluster-card-status-dot-inline.connected {
@@ -636,13 +671,13 @@
 }
 
 .cluster-card-divider {
-  color: #3f3f46;
+  color: var(--border-strong);
   margin: 0 4px;
 }
 
 .cluster-card-stats {
   font-size: 12px;
-  color: #71717a;
+  color: var(--text-muted);
   display: inline-flex;
   align-items: center;
 }
@@ -663,12 +698,12 @@
 }
 
 .k8s-loading-spinner .ant-spin {
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
 }
 
 .k8s-loading-text {
   font-size: 14px;
-  color: #71717a;
+  color: var(--text-muted);
 }
 
 /* ==================== Remove Focus Outline ==================== */
@@ -680,8 +715,9 @@ body .ant-modal {
 }
 
 /* ==================== Form Elements ==================== */
+.kubernetes-page {
 .ant-form-item-label > label {
-  color: #a1a1aa !important;
+  color: var(--text-secondary) !important;
   font-size: 14px !important;
   font-weight: 500 !important;
 }
@@ -689,78 +725,78 @@ body .ant-modal {
 .ant-input,
 .ant-input-number,
 .ant-input-affix-wrapper {
-  background: #0f0f11 !important;
-  border: 1px solid #3f3f46 !important;
-  color: #fafafa !important;
+  background: var(--bg-base) !important;
+  border: 1px solid var(--border-strong) !important;
+  color: var(--text-primary) !important;
 }
 
 .ant-input:focus,
 .ant-input-number:focus,
 .ant-input-affix-wrapper:focus {
-  border-color: #52525b !important;
+  border-color: var(--border-strong) !important;
   box-shadow: none !important;
 }
 
 .ant-input::placeholder {
-  color: #52525b !important;
+  color: var(--border-strong) !important;
 }
 
 .ant-input-number {
-  background: #0f0f11 !important;
+  background: var(--bg-base) !important;
 }
 
 .ant-input-number-handler-wrap {
-  background: #27272a !important;
-  border-left: 1px solid #3f3f46 !important;
+  background: var(--bg-elevated) !important;
+  border-left: 1px solid var(--border-strong) !important;
 }
 
 .ant-input-number-handler-up,
 .ant-input-number-handler-down {
-  border-bottom: 1px solid #3f3f46 !important;
-  color: #a1a1aa !important;
+  border-bottom: 1px solid var(--border-strong) !important;
+  color: var(--text-secondary) !important;
 }
 
 .ant-input-number-handler-up:hover,
 .ant-input-number-handler-down:hover {
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
 }
 
 /* ==================== Select Content in Forms ==================== */
 .ant-select-selector {
-  background: #0f0f11 !important;
-  border: 1px solid #3f3f46 !important;
-  color: #fafafa !important;
+  background: var(--bg-base) !important;
+  border: 1px solid var(--border-strong) !important;
+  color: var(--text-primary) !important;
 }
 
 .ant-select-focused .ant-select-selector {
-  border-color: #52525b !important;
+  border-color: var(--border-strong) !important;
   box-shadow: none !important;
 }
 
 .ant-select-selection-item {
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
 }
 
 .ant-select-selection-placeholder {
-  color: #52525b !important;
+  color: var(--border-strong) !important;
 }
 
 .ant-select-arrow {
-  color: #71717a !important;
+  color: var(--text-muted) !important;
 }
 
 /* ==================== Tabs ==================== */
 .ant-tabs-tab {
-  color: #71717a !important;
+  color: var(--text-muted) !important;
   font-weight: 500 !important;
 }
 
 .ant-tabs-tab-active .ant-tabs-tab-btn {
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
 }
 
 .ant-tabs-ink-bar {
-  background: #fafafa !important;
+  background: var(--text-primary) !important;
 }
 
 .ant-tabs-content-holder {
@@ -769,18 +805,18 @@ body .ant-modal {
 
 /* ==================== Card ==================== */
 .ant-card {
-  background: #18181b !important;
-  border: 1px solid #27272a !important;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--bg-elevated) !important;
 }
 
 .ant-card-head {
   background: transparent !important;
-  border-bottom: 1px solid #27272a !important;
+  border-bottom: 1px solid var(--bg-elevated) !important;
   padding: 16px 20px !important;
 }
 
 .ant-card-head-title {
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
   font-weight: 600 !important;
 }
 
@@ -790,11 +826,11 @@ body .ant-modal {
 
 /* ==================== Descriptions ==================== */
 .ant-descriptions-item-label {
-  color: #71717a !important;
+  color: var(--text-muted) !important;
 }
 
 .ant-descriptions-item-content {
-  color: #d4d4d8 !important;
+  color: var(--text-secondary) !important;
 }
 
 .ant-descriptions-view {
@@ -803,13 +839,13 @@ body .ant-modal {
 
 /* ==================== Divider ==================== */
 .ant-divider {
-  border-color: #27272a !important;
+  border-color: var(--bg-elevated) !important;
 }
 
 /* ==================== Alert ==================== */
 .ant-alert {
-  background: #18181b !important;
-  border: 1px solid #27272a !important;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--bg-elevated) !important;
   border-radius: 8px !important;
 }
 
@@ -839,22 +875,23 @@ body .ant-modal {
 
 /* ==================== Tabs Enhancement ==================== */
 .ant-tabs-tab {
-  color: #71717a !important;
+  color: var(--text-muted) !important;
   font-weight: 500 !important;
   padding: 12px 16px !important;
 }
 
 .ant-tabs-tab-active .ant-tabs-tab-btn {
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
 }
 
 .ant-tabs-ink-bar {
-  background: #fafafa !important;
+  background: var(--text-primary) !important;
   height: 2px !important;
 }
 
 .ant-tabs-content-holder {
   padding-top: 20px;
+}
 }
 
 /* ==================== Namespace Selector ==================== */
@@ -863,46 +900,46 @@ body .ant-modal {
 }
 
 .namespace-select .ant-select-selector {
-  background: #0f0f11 !important;
-  border: 1px solid #3f3f46 !important;
+  background: var(--bg-base) !important;
+  border: 1px solid var(--border-strong) !important;
   border-radius: 8px !important;
   height: 40px !important;
 }
 
 .namespace-select .ant-select-selector:hover {
-  border-color: #52525b !important;
+  border-color: var(--border-strong) !important;
 }
 
 .namespace-select.ant-select-focused .ant-select-selector {
-  border-color: #52525b !important;
+  border-color: var(--border-strong) !important;
   box-shadow: none !important;
 }
 
 .namespace-select .ant-select-selection-item {
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
   line-height: 38px !important;
 }
 
 .namespace-select .ant-select-arrow {
-  color: #71717a !important;
+  color: var(--text-muted) !important;
 }
 
 /* ==================== K8s Info Card ==================== */
 .k8s-info-card {
-  background: #18181b !important;
-  border: 1px solid #27272a !important;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--bg-elevated) !important;
   border-radius: 10px !important;
 }
 
 .k8s-info-card .ant-card-head {
   background: transparent !important;
-  border-bottom: 1px solid #27272a !important;
+  border-bottom: 1px solid var(--bg-elevated) !important;
   padding: 14px 20px !important;
   min-height: auto !important;
 }
 
 .k8s-info-card .ant-card-head-title {
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
   font-weight: 600 !important;
   font-size: 14px !important;
 }
@@ -926,7 +963,7 @@ body .ant-modal {
 
 .k8s-description-label {
   font-size: 12px;
-  color: #71717a;
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   font-weight: 500;
@@ -934,14 +971,14 @@ body .ant-modal {
 
 .k8s-description-value {
   font-size: 14px;
-  color: #d4d4d8;
+  color: var(--text-secondary);
   font-weight: 500;
 }
 
 /* ==================== Deployment & Pods Table ==================== */
 .k8s-table-container {
-  background: #18181b;
-  border: 1px solid #27272a;
+  background: var(--bg-card);
+  border: 1px solid var(--bg-elevated);
   border-radius: 10px;
   overflow: hidden;
 }
@@ -952,20 +989,20 @@ body .ant-modal {
 }
 
 .k8s-table-container .ant-table-thead > tr > th {
-  background: #18181b !important;
-  color: #a1a1aa !important;
+  background: var(--bg-card) !important;
+  color: var(--text-secondary) !important;
   font-weight: 500 !important;
   font-size: 12px !important;
   text-transform: uppercase !important;
   letter-spacing: 0.5px !important;
-  border-bottom: 1px solid #27272a !important;
+  border-bottom: 1px solid var(--bg-elevated) !important;
   padding: 12px 16px !important;
 }
 
 .k8s-table-container .ant-table-tbody > tr > td {
   background: transparent !important;
-  color: #d4d4d8 !important;
-  border-bottom: 1px solid #27272a !important;
+  color: var(--text-secondary) !important;
+  border-bottom: 1px solid var(--bg-elevated) !important;
   padding: 12px 16px !important;
   font-size: 14px !important;
 }
@@ -975,13 +1012,13 @@ body .ant-modal {
 }
 
 .k8s-table-container .ant-table-tbody > tr:hover > td {
-  background: #1f1f23 !important;
+  background: var(--bg-card) !important;
 }
 
 .k8s-table-container .ant-table-row-expand-icon {
   background: transparent !important;
-  border: 1px solid #3f3f46 !important;
-  color: #71717a !important;
+  border: 1px solid var(--border-strong) !important;
+  color: var(--text-muted) !important;
   border-radius: 6px !important;
   width: 24px !important;
   height: 24px !important;
@@ -989,51 +1026,52 @@ body .ant-modal {
 }
 
 .k8s-table-container .ant-table-row-expand-icon:hover {
-  color: #a1a1aa !important;
-  border-color: #52525b !important;
+  color: var(--text-secondary) !important;
+  border-color: var(--border-strong) !important;
 }
 
 /* ==================== Table Pagination ==================== */
-.ant-table-pagination {
+/* Scoped to this page: these rules were global and leaked the light active item site-wide */
+.kubernetes-page .ant-table-pagination {
   margin: 16px 0 !important;
 }
 
-.ant-pagination-item {
-  background: #27272a !important;
-  border-color: #3f3f46 !important;
+.kubernetes-page .ant-pagination-item {
+  background: var(--bg-elevated) !important;
+  border-color: var(--border-strong) !important;
   border-radius: 6px !important;
 }
 
-.ant-pagination-item a {
-  color: #a1a1aa !important;
+.kubernetes-page .ant-pagination-item a {
+  color: var(--text-secondary) !important;
 }
 
-.ant-pagination-item-active {
-  background: #fafafa !important;
-  border-color: #fafafa !important;
+.kubernetes-page .ant-pagination-item-active {
+  background: #3b82f6 !important;
+  border-color: #3b82f6 !important;
 }
 
-.ant-pagination-item-active a {
-  color: #09090b !important;
+.kubernetes-page .ant-pagination-item-active a {
+  color: #ffffff !important;
 }
 
-.ant-pagination-prev .ant-pagination-item-link,
-.ant-pagination-next .ant-pagination-item-link {
-  background: #27272a !important;
-  border-color: #3f3f46 !important;
+.kubernetes-page .ant-pagination-prev .ant-pagination-item-link,
+.kubernetes-page .ant-pagination-next .ant-pagination-item-link {
+  background: var(--bg-elevated) !important;
+  border-color: var(--border-strong) !important;
   border-radius: 6px !important;
-  color: #a1a1aa !important;
+  color: var(--text-secondary) !important;
 }
 
-.ant-pagination-prev:hover .ant-pagination-item-link,
-.ant-pagination-next:hover .ant-pagination-item-link {
-  background: #3f3f46 !important;
-  color: #fafafa !important;
+.kubernetes-page .ant-pagination-prev:hover .ant-pagination-item-link,
+.kubernetes-page .ant-pagination-next:hover .ant-pagination-item-link {
+  background: var(--border-strong) !important;
+  color: var(--text-primary) !important;
 }
 
-.ant-pagination-options .ant-select-selector {
-  background: #27272a !important;
-  border-color: #3f3f46 !important;
+.kubernetes-page .ant-pagination-options .ant-select-selector {
+  background: var(--bg-elevated) !important;
+  border-color: var(--border-strong) !important;
   border-radius: 6px !important;
 }
 
@@ -1050,17 +1088,18 @@ body .ant-modal {
 }
 
 /* ==================== Progress Bar ==================== */
+.kubernetes-page {
 .ant-progress {
   margin-right: 8px;
 }
 
 .ant-progress-inner {
-  background: #27272a !important;
+  background: var(--bg-elevated) !important;
   border-radius: 2px !important;
 }
 
 .ant-progress-bg {
-  background: #fafafa !important;
+  background: var(--text-primary) !important;
   border-radius: 2px !important;
 }
 
@@ -1069,8 +1108,9 @@ body .ant-modal {
 }
 
 .ant-progress-text {
-  color: #a1a1aa !important;
+  color: var(--text-secondary) !important;
   font-size: 12px !important;
+}
 }
 
 /* ==================== Container Tags ==================== */
@@ -1087,20 +1127,20 @@ body .ant-modal {
 }
 
 .pod-detail-card {
-  background: #18181b !important;
-  border: 1px solid #27272a !important;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--bg-elevated) !important;
   border-radius: 10px !important;
 }
 
 .pod-detail-card .ant-card-head {
   background: transparent !important;
-  border-bottom: 1px solid #27272a !important;
+  border-bottom: 1px solid var(--bg-elevated) !important;
   padding: 14px 20px !important;
   min-height: auto !important;
 }
 
 .pod-detail-card .ant-card-head-title {
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
   font-weight: 600 !important;
   font-size: 14px !important;
 }
@@ -1112,7 +1152,7 @@ body .ant-modal {
 /* Pod Container Item */
 .pod-container-item {
   padding: 16px;
-  background: #27272a;
+  background: var(--bg-elevated);
   border-radius: 8px;
   margin-bottom: 12px;
 }
@@ -1131,13 +1171,13 @@ body .ant-modal {
 .pod-container-name {
   font-size: 14px;
   font-weight: 600;
-  color: #fafafa;
+  color: var(--text-primary);
 }
 
 /* Pod Events */
 .pod-event-item {
   padding: 12px 0;
-  border-bottom: 1px solid #27272a;
+  border-bottom: 1px solid var(--bg-elevated);
 }
 
 .pod-event-item:last-child {
@@ -1154,14 +1194,14 @@ body .ant-modal {
 
 .pod-event-message {
   font-size: 12px;
-  color: #a1a1aa;
+  color: var(--text-secondary);
   line-height: 1.5;
 }
 
 /* Pod Logs */
 .pod-logs-container {
-  background: #0f0f11;
-  border: 1px solid #27272a;
+  background: var(--bg-base);
+  border: 1px solid var(--bg-elevated);
   border-radius: 8px;
   padding: 16px;
   max-height: 500px;
@@ -1171,7 +1211,7 @@ body .ant-modal {
 .pod-logs-text {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 12px;
-  color: #a1a1aa;
+  color: var(--text-secondary);
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-all;
@@ -1179,8 +1219,8 @@ body .ant-modal {
 
 /* Pod YAML */
 .pod-yaml-container {
-  background: #0f0f11;
-  border: 1px solid #27272a;
+  background: var(--bg-base);
+  border: 1px solid var(--bg-elevated);
   border-radius: 8px;
   padding: 16px;
   max-height: 500px;
@@ -1190,7 +1230,7 @@ body .ant-modal {
 .pod-yaml-text {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 12px;
-  color: #a1a1aa;
+  color: var(--text-secondary);
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-all;
@@ -1208,8 +1248,9 @@ body .ant-modal {
 }
 
 /* ==================== Descriptions Enhancement ==================== */
+.kubernetes-page {
 .ant-descriptions-item-label {
-  color: #71717a !important;
+  color: var(--text-muted) !important;
   font-size: 12px !important;
   font-weight: 500 !important;
   text-transform: uppercase;
@@ -1217,19 +1258,20 @@ body .ant-modal {
 }
 
 .ant-descriptions-item-content {
-  color: #d4d4d8 !important;
+  color: var(--text-secondary) !important;
   font-size: 13px !important;
 }
 
 .ant-descriptions-row > th,
 .ant-descriptions-row > td {
   padding: 12px 16px !important;
-  border-bottom: 1px solid #27272a !important;
+  border-bottom: 1px solid var(--bg-elevated) !important;
 }
 
 .ant-descriptions-row:last-child > th,
 .ant-descriptions-row:last-child > td {
   border-bottom: none !important;
+}
 }
 
 /* ==================== Modal Pod Title ==================== */
@@ -1247,7 +1289,7 @@ body .ant-modal {
 .modal-pod-name {
   font-size: 18px;
   font-weight: 700;
-  color: #fafafa;
+  color: var(--text-primary);
   letter-spacing: -0.02em;
 }
 
@@ -1271,20 +1313,20 @@ body .ant-modal {
   flex-direction: column;
   gap: 6px;
   padding: 16px;
-  background: #27272a;
-  border: 1px solid #3f3f46;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   transition: all 0.15s ease;
 }
 
 .pod-info-item:hover {
   background: #2a2a2e;
-  border-color: #52525b;
+  border-color: var(--border-strong);
 }
 
 .pod-info-label {
   font-size: 11px;
-  color: #71717a;
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-weight: 600;
@@ -1292,7 +1334,7 @@ body .ant-modal {
 
 .pod-info-value {
   font-size: 14px;
-  color: #e4e4e7;
+  color: var(--text-primary);
   font-weight: 500;
   word-break: break-all;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
@@ -1306,8 +1348,8 @@ body .ant-modal {
 }
 
 .pod-container-card {
-  background: #0f0f11;
-  border: 1px solid #27272a;
+  background: var(--bg-base);
+  border: 1px solid var(--bg-elevated);
   border-radius: 10px;
   padding: 20px;
   transition: all 0.15s ease;
@@ -1315,7 +1357,7 @@ body .ant-modal {
 
 .pod-container-card:hover {
   background: #121216;
-  border-color: #3f3f46;
+  border-color: var(--border-strong);
 }
 
 .pod-container-card:last-child {
@@ -1328,13 +1370,13 @@ body .ant-modal {
   justify-content: space-between;
   margin-bottom: 16px;
   padding-bottom: 12px;
-  border-bottom: 1px solid #27272a;
+  border-bottom: 1px solid var(--bg-elevated);
 }
 
 .pod-container-name-text {
   font-size: 15px;
   font-weight: 600;
-  color: #fafafa;
+  color: var(--text-primary);
   letter-spacing: -0.01em;
 }
 
@@ -1352,7 +1394,7 @@ body .ant-modal {
 
 .pod-container-detail-label {
   font-size: 10px;
-  color: #71717a;
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-weight: 600;
@@ -1360,7 +1402,7 @@ body .ant-modal {
 
 .pod-container-detail-value {
   font-size: 13px;
-  color: #d4d4d8;
+  color: var(--text-secondary);
   font-weight: 500;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
@@ -1373,8 +1415,8 @@ body .ant-modal {
 }
 
 .pod-event-card {
-  background: #27272a;
-  border: 1px solid #3f3f46;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   padding: 16px;
   transition: all 0.15s ease;
@@ -1382,7 +1424,7 @@ body .ant-modal {
 
 .pod-event-card:hover {
   background: #2a2a2e;
-  border-color: #52525b;
+  border-color: var(--border-strong);
 }
 
 .pod-event-card:last-child {
@@ -1398,7 +1440,7 @@ body .ant-modal {
 
 .pod-event-timestamp {
   font-size: 11px;
-  color: #71717a;
+  color: var(--text-muted);
   margin-left: auto;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-weight: 500;
@@ -1406,7 +1448,7 @@ body .ant-modal {
 
 .pod-event-message-text {
   font-size: 13px;
-  color: #d4d4d8;
+  color: var(--text-secondary);
   line-height: 1.6;
   word-break: break-word;
   font-weight: 400;
@@ -1414,8 +1456,8 @@ body .ant-modal {
 
 /* ==================== Pod Code Container (Logs/YAML) ==================== */
 .pod-code-container {
-  background: #0f0f11;
-  border: 1px solid #27272a;
+  background: var(--bg-base);
+  border: 1px solid var(--bg-elevated);
   border-radius: 10px;
   overflow: hidden;
   margin-bottom: 16px;
@@ -1426,14 +1468,14 @@ body .ant-modal {
   justify-content: space-between;
   align-items: center;
   padding: 14px 20px;
-  background: #18181b;
-  border-bottom: 1px solid #27272a;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--bg-elevated);
 }
 
 .pod-code-header span {
   font-size: 12px;
   font-weight: 600;
-  color: #a1a1aa;
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -1451,23 +1493,23 @@ body .ant-modal {
 }
 
 .pod-code-body::-webkit-scrollbar-track {
-  background: #18181b;
+  background: var(--bg-card);
   border-radius: 4px;
 }
 
 .pod-code-body::-webkit-scrollbar-thumb {
-  background: #3f3f46;
+  background: var(--border-strong);
   border-radius: 4px;
 }
 
 .pod-code-body::-webkit-scrollbar-thumb:hover {
-  background: #52525b;
+  background: var(--border-strong);
 }
 
 .pod-code-text {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 13px;
-  color: #d4d4d8;
+  color: var(--text-secondary);
   line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-all;
@@ -1478,8 +1520,8 @@ body .ant-modal {
 /* ==================== Copy Button in YAML Tab ==================== */
 .copy-yaml-btn {
   background: transparent !important;
-  border: 1px solid #3f3f46 !important;
-  color: #a1a1aa !important;
+  border: 1px solid var(--border-strong) !important;
+  color: var(--text-secondary) !important;
   border-radius: 6px !important;
   font-size: 12px !important;
   font-weight: 500 !important;
@@ -1489,9 +1531,9 @@ body .ant-modal {
 }
 
 .copy-yaml-btn:hover {
-  background: #27272a !important;
-  border-color: #52525b !important;
-  color: #fafafa !important;
+  background: var(--bg-elevated) !important;
+  border-color: var(--border-strong) !important;
+  color: var(--text-primary) !important;
 }
 
 /* ==================== Pod Detail Card ==================== */
@@ -1504,14 +1546,14 @@ body .ant-modal {
 
 .pod-detail-card .ant-card-head {
   background: transparent !important;
-  border-bottom: 1px solid #27272a !important;
+  border-bottom: 1px solid var(--bg-elevated) !important;
   padding: 16px 0 !important;
   min-height: auto !important;
   margin-bottom: 16px;
 }
 
 .pod-detail-card .ant-card-head-title {
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
   font-weight: 700 !important;
   font-size: 14px !important;
   letter-spacing: -0.01em;
@@ -1527,7 +1569,7 @@ body .ant-modal {
 }
 
 .pod-detail-container .ant-spin {
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
 }
 
 /* ==================== Table Conditions ==================== */
@@ -1536,20 +1578,20 @@ body .ant-modal {
 }
 
 .pod-detail-card .ant-table-thead > tr > th {
-  background: #18181b !important;
-  color: #a1a1aa !important;
+  background: var(--bg-card) !important;
+  color: var(--text-secondary) !important;
   font-weight: 600 !important;
   font-size: 11px !important;
   text-transform: uppercase !important;
   letter-spacing: 0.08em !important;
-  border-bottom: 1px solid #27272a !important;
+  border-bottom: 1px solid var(--bg-elevated) !important;
   padding: 12px 16px !important;
 }
 
 .pod-detail-card .ant-table-tbody > tr > td {
   background: transparent !important;
-  color: #d4d4d8 !important;
-  border-bottom: 1px solid #27272a !important;
+  color: var(--text-secondary) !important;
+  border-bottom: 1px solid var(--bg-elevated) !important;
   padding: 12px 16px !important;
   font-size: 13px !important;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
@@ -1560,5 +1602,5 @@ body .ant-modal {
 }
 
 .pod-detail-card .ant-table-tbody > tr:hover > td {
-  background: #1f1f23 !important;
+  background: var(--bg-card) !important;
 }

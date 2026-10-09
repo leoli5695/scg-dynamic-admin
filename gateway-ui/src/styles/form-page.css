@@ -13,7 +13,7 @@
 
 /* ==================== Form Card ==================== */
 .form-card {
-  background: rgba(28, 28, 33, 0.95) !important;
+  background: rgba(16,27,48, 0.95) !important;
   backdrop-filter: blur(12px) !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-radius: 16px !important;
@@ -60,13 +60,13 @@
   justify-content: center;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.06);
-  color: #a1a1aa;
+  color: var(--text-secondary);
   transition: all 0.2s ease;
 }
 
 .form-header-back:hover {
   background: rgba(255, 255, 255, 0.1);
-  color: #fafafa;
+  color: var(--text-primary);
 }
 
 .form-header-icon {
@@ -84,7 +84,7 @@
 .form-header-title {
   font-size: 18px;
   font-weight: 600;
-  color: #fafafa;
+  color: var(--text-primary);
   margin: 0;
 }
 
@@ -92,7 +92,7 @@
 .form-section {
   margin-bottom: 28px;
   padding: 20px;
-  background: rgba(39, 39, 42, 0.4);
+  background: rgba(26,39,64, 0.4);
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
@@ -121,13 +121,13 @@
 .form-section-title {
   font-size: 14px;
   font-weight: 600;
-  color: #fafafa;
+  color: var(--text-primary);
   letter-spacing: -0.01em;
 }
 
 .form-section-subtitle {
   font-size: 12px;
-  color: #71717a;
+  color: var(--text-muted);
   margin-left: auto;
 }
 
@@ -139,7 +139,7 @@
 
 /* ==================== Form Items ==================== */
 .form-page-container .ant-form-item-label > label {
-  color: #a1a1aa;
+  color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
   letter-spacing: 0.02em;
@@ -156,7 +156,7 @@
 }
 
 .form-page-container .ant-form-item-extra {
-  color: #71717a;
+  color: var(--text-muted);
   font-size: 12px;
   margin-top: 6px;
 }
@@ -166,10 +166,10 @@
 .form-page-container .ant-input-number,
 .form-page-container .ant-select-selector,
 .form-page-container .ant-picker {
-  background: rgba(9, 9, 11, 0.8) !important;
+  background: rgba(10,15,30, 0.8) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 10px !important;
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
   font-size: 14px !important;
   transition: all 0.2s ease !important;
 }
@@ -191,11 +191,11 @@
 }
 
 .form-page-container .ant-input::placeholder {
-  color: #52525b !important;
+  color: var(--border-strong) !important;
 }
 
 .form-page-container .ant-input-affix-wrapper {
-  background: rgba(9, 9, 11, 0.8) !important;
+  background: rgba(10,15,30, 0.8) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 10px !important;
   padding: 8px 12px !important;
@@ -218,53 +218,53 @@
 
 /* ==================== Select Dropdown ==================== */
 .form-page-container .ant-select-arrow {
-  color: #71717a !important;
+  color: var(--text-muted) !important;
 }
 
 .form-page-container .ant-select-selection-item {
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
   font-weight: 500 !important;
 }
 
 .form-page-container .ant-select-selection-placeholder {
-  color: #52525b !important;
+  color: var(--border-strong) !important;
 }
 
 /* ==================== InputNumber ==================== */
 .form-page-container .ant-input-number-input {
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
 }
 
 .form-page-container .ant-input-number-handler-wrap {
-  background: rgba(39, 39, 42, 0.6) !important;
+  background: rgba(26,39,64, 0.6) !important;
   border-left: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
 .form-page-container .ant-input-number-handler {
-  color: #71717a !important;
+  color: var(--text-muted) !important;
 }
 
 .form-page-container .ant-input-number-handler:hover {
-  color: #a1a1aa !important;
+  color: var(--text-secondary) !important;
 }
 
 .form-page-container .ant-input-number-handler-up-inner,
 .form-page-container .ant-input-number-handler-down-inner {
-  color: #71717a !important;
+  color: var(--text-muted) !important;
 }
 
 /* ==================== TextArea ==================== */
 .form-page-container .ant-input-textarea textarea {
   background: transparent !important;
   border: none !important;
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
   font-size: 14px !important;
   line-height: 1.5 !important;
   resize: vertical;
 }
 
 .form-page-container .ant-input-textarea-show-count::after {
-  color: #71717a !important;
+  color: var(--text-muted) !important;
   font-size: 12px !important;
 }
 
@@ -275,10 +275,10 @@
 }
 
 .form-page-container .ant-radio-button-wrapper {
-  background: rgba(9, 9, 11, 0.8) !important;
+  background: rgba(10,15,30, 0.8) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 8px !important;
-  color: #a1a1aa !important;
+  color: var(--text-secondary) !important;
   font-size: 13px !important;
   padding: 8px 16px !important;
   transition: all 0.2s ease !important;
@@ -297,9 +297,9 @@
 }
 
 .form-page-container .ant-radio-button-wrapper:hover {
-  background: rgba(39, 39, 42, 0.8) !important;
+  background: rgba(26,39,64, 0.8) !important;
   border-color: rgba(255, 255, 255, 0.15) !important;
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
 }
 
 .form-page-container .ant-radio-button-wrapper-checked {
@@ -324,7 +324,7 @@
 }
 
 .form-page-container .ant-switch-handle::before {
-  background: #fafafa !important;
+  background: var(--text-primary) !important;
 }
 
 /* ==================== Alert ==================== */
@@ -339,7 +339,7 @@
 }
 
 .form-page-container .ant-alert-info .ant-alert-message {
-  color: #a1a1aa !important;
+  color: var(--text-secondary) !important;
   font-size: 13px !important;
 }
 
@@ -365,13 +365,13 @@
 .form-footer .ant-btn-default {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #a1a1aa;
+  color: var(--text-secondary);
 }
 
 .form-footer .ant-btn-default:hover {
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(255, 255, 255, 0.15);
-  color: #fafafa;
+  color: var(--text-primary);
 }
 
 .form-footer .ant-btn-primary {

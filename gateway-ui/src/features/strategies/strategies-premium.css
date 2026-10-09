@@ -358,7 +358,7 @@
 
 /* ==================== Modal Styles - Enhanced ==================== */
 .strategy-modal .ant-modal-content {
-  background: rgba(28, 28, 33, 0.95) !important;
+  background: rgba(16,27,48, 0.95) !important;
   backdrop-filter: blur(12px) !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-radius: 16px !important;
@@ -378,18 +378,18 @@
 }
 
 .strategy-modal .ant-modal-title {
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
   font-weight: 600 !important;
 }
 
 .strategy-modal .ant-modal-close {
-  color: #71717a !important;
+  color: var(--text-muted) !important;
   top: 16px !important;
   right: 16px !important;
 }
 
 .strategy-modal .ant-modal-close:hover {
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
   background: rgba(255, 255, 255, 0.08) !important;
   border-radius: 8px !important;
 }
@@ -431,20 +431,20 @@
 .modal-title {
   font-size: 16px;
   font-weight: 600;
-  color: #fafafa;
+  color: var(--text-primary);
   letter-spacing: -0.01em;
 }
 
 .modal-subtitle {
   font-size: 12px;
-  color: #71717a;
+  color: var(--text-muted);
 }
 
 /* ==================== Form Sections - Enhanced ==================== */
 .form-section-modern {
   margin-bottom: 24px;
   padding: 20px;
-  background: rgba(39, 39, 42, 0.5);
+  background: rgba(26,39,64, 0.5);
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
@@ -473,13 +473,13 @@
 .section-title {
   font-size: 14px;
   font-weight: 600;
-  color: #fafafa;
+  color: var(--text-primary);
   letter-spacing: -0.01em;
 }
 
 .section-subtitle {
   font-size: 12px;
-  color: #71717a;
+  color: var(--text-muted);
   margin-left: auto;
 }
 
@@ -494,10 +494,10 @@
 .strategy-modal .ant-input-number,
 .strategy-modal .ant-select-selector,
 .strategy-modal .ant-picker {
-  background: rgba(9, 9, 11, 0.8) !important;
+  background: rgba(10,15,30, 0.8) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 10px !important;
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
   transition: all 0.2s ease !important;
 }
 
@@ -514,23 +514,23 @@
 }
 
 .strategy-modal .ant-input::placeholder {
-  color: #52525b !important;
+  color: var(--border-strong) !important;
 }
 
 .strategy-modal .ant-select-arrow {
-  color: #71717a !important;
+  color: var(--text-muted) !important;
 }
 
 .strategy-modal .ant-select-selection-item {
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
 }
 
 .strategy-modal .ant-select-selection-placeholder {
-  color: #52525b !important;
+  color: var(--border-strong) !important;
 }
 
 .strategy-modal .ant-form-item-label > label {
-  color: #a1a1aa !important;
+  color: var(--text-secondary) !important;
   font-size: 13px !important;
   font-weight: 500 !important;
 }
@@ -540,9 +540,9 @@
 }
 
 .strategy-modal .ant-radio-button-wrapper {
-  background: rgba(9, 9, 11, 0.8) !important;
+  background: rgba(10,15,30, 0.8) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  color: #a1a1aa !important;
+  color: var(--text-secondary) !important;
   border-radius: 8px !important;
   margin-right: 8px !important;
 }
@@ -552,9 +552,9 @@
 }
 
 .strategy-modal .ant-radio-button-wrapper:hover {
-  background: rgba(39, 39, 42, 0.8) !important;
+  background: rgba(26,39,64, 0.8) !important;
   border-color: rgba(255, 255, 255, 0.15) !important;
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
 }
 
 .strategy-modal .ant-radio-button-wrapper-checked {
@@ -572,11 +572,11 @@
 }
 
 .strategy-modal .ant-input-number-handler-wrap {
-  background: rgba(39, 39, 42, 0.6) !important;
+  background: rgba(26,39,64, 0.6) !important;
 }
 
 .strategy-modal .ant-input-number-handler {
-  color: #71717a !important;
+  color: var(--text-muted) !important;
 }
 
 /* ==================== Modal Footer - Enhanced ==================== */
@@ -601,13 +601,13 @@
 .modal-footer-modern .ant-btn-default {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #a1a1aa;
+  color: var(--text-secondary);
 }
 
 .modal-footer-modern .ant-btn-default:hover {
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(255, 255, 255, 0.15);
-  color: #fafafa;
+  color: var(--text-primary);
 }
 
 .modal-footer-modern .ant-btn-primary {
@@ -625,7 +625,7 @@
 .stats-card {
   border-radius: 12px !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  background: rgba(28, 28, 33, 0.8) !important;
+  background: rgba(16,27,48, 0.8) !important;
 }
 
 .stats-card-content {
@@ -664,13 +664,13 @@
 }
 
 .stats-title {
-  color: #71717a;
+  color: var(--text-muted);
   font-size: 12px;
   font-weight: 500;
 }
 
 .stats-subtitle {
-  color: #52525b;
+  color: var(--border-strong);
   font-size: 11px;
 }
 

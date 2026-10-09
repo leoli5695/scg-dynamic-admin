@@ -21,33 +21,40 @@
   --info-color: #6366f1;
   
   /* ==================== Neutral Palette ==================== */
-  /* Background - Deep, sophisticated dark */
-  --bg-base: #09090b;
-  --bg-primary: #0c0c0f;
-  --bg-secondary: #18181b;
-  --bg-card: #1c1c21;
-  --bg-elevated: #27272a;
-  --bg-hover: rgba(39, 39, 42, 0.5);
-  --bg-input: #09090b;
-  
-  /* Text - Clean hierarchy */
-  --text-primary: #fafafa;
-  --text-secondary: #a1a1aa;
-  --text-muted: #71717a;
-  --text-disabled: #52525b;
-  
-  /* Border - Subtle, minimal */
-  --border-subtle: rgba(255, 255, 255, 0.06);
-  --border-default: rgba(255, 255, 255, 0.10);
-  --border-strong: rgba(255, 255, 255, 0.15);
+  /* Background - midnight slate blue, layered surfaces (no pure black) */
+  --bg-base: #0a0f1e;
+  --bg-primary: #0c1424;
+  --bg-secondary: #0e1728;
+  --bg-card: #101b30;
+  --bg-elevated: #1a2740;
+  --bg-hover: rgba(96, 165, 250, 0.10);
+  --bg-input: #0a1120;
+
+  /* Surfaces referenced by App.premium.css (previously missing, fell back to hex) */
+  --bg-section: rgba(148, 163, 184, 0.06);
+  --bg-table-head: #15213a;
+  --color-primary: #3b82f6;
+
+  /* Text - clean hierarchy */
+  --text-primary: #eaf1fb;
+  --text-secondary: #a5b4cb;
+  --text-muted: #6b7c95;
+  --text-disabled: #46566d;
+
+  /* Border - slate-tinted, minimal */
+  --border-subtle: rgba(148, 163, 184, 0.10);
+  --border-default: rgba(148, 163, 184, 0.18);
+  --border-strong: rgba(148, 163, 184, 0.30);
+  --border-color: rgba(148, 163, 184, 0.18);
+  --border-divider: rgba(148, 163, 184, 0.10);
   --border-focus: #3b82f6;
-  
-  /* ==================== Shadows - Subtle depth ==================== */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.08);
-  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.12);
-  --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.16);
-  --shadow-xl: 0 16px 32px rgba(0, 0, 0, 0.20);
+
+  /* ==================== Shadows - deep blue-black depth ==================== */
+  --shadow-xs: 0 1px 2px rgba(3, 7, 18, 0.30);
+  --shadow-sm: 0 2px 4px rgba(3, 7, 18, 0.35);
+  --shadow-md: 0 4px 10px rgba(3, 7, 18, 0.40);
+  --shadow-lg: 0 8px 20px rgba(3, 7, 18, 0.45);
+  --shadow-xl: 0 16px 36px rgba(3, 7, 18, 0.55);
 
   /* ==================== Advanced Visual Effects ==================== */
   /* Gradient borders and backgrounds */
@@ -70,8 +77,8 @@
   --shadow-card-active: 0 12px 40px rgba(0, 0, 0, 0.4), 0 0 0 2px rgba(59, 130, 246, 0.25);
 
   /* Glass effect */
-  --glass-bg: rgba(28, 28, 33, 0.85);
-  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-bg: rgba(14, 23, 40, 0.82);
+  --glass-border: rgba(148, 163, 184, 0.12);
   --glass-blur: blur(12px);
   
   /* ==================== Radius - Clean, modern ==================== */
@@ -146,12 +153,12 @@
 
 /* Dark theme (default) */
 [data-theme='dark'] {
-  --bg-base: #09090b;
-  --bg-primary: #0c0c0f;
-  --bg-secondary: #18181b;
-  --bg-card: #1c1c21;
-  --text-primary: #fafafa;
-  --text-secondary: #a1a1aa;
+  --bg-base: #0a0f1e;
+  --bg-primary: #0c1424;
+  --bg-secondary: #0e1728;
+  --bg-card: #101b30;
+  --text-primary: #eaf1fb;
+  --text-secondary: #a5b4cb;
 }
 
 /* Light theme option */

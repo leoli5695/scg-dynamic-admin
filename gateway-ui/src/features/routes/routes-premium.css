@@ -160,7 +160,7 @@
 
 /* ==================== Modal Styles - Enhanced Glassmorphism ==================== */
 .route-modal .ant-modal-content {
-  background: rgba(28, 28, 33, 0.95) !important;
+  background: rgba(16,27,48, 0.95) !important;
   backdrop-filter: blur(12px) !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-radius: 16px !important;
@@ -182,18 +182,18 @@
 }
 
 .route-modal .ant-modal-title {
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
   font-weight: 600 !important;
 }
 
 .route-modal .ant-modal-close {
-  color: #71717a !important;
+  color: var(--text-muted) !important;
   top: 16px !important;
   right: 16px !important;
 }
 
 .route-modal .ant-modal-close:hover {
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
   background: rgba(255, 255, 255, 0.08) !important;
   border-radius: 8px !important;
 }
@@ -221,7 +221,7 @@
 .route-modal .form-section-modern {
   margin-bottom: 24px;
   padding: 20px;
-  background: rgba(39, 39, 42, 0.5);
+  background: rgba(26,39,64, 0.5);
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
@@ -250,7 +250,7 @@
 .route-modal .section-title {
   font-size: 14px;
   font-weight: 600;
-  color: #fafafa;
+  color: var(--text-primary);
   letter-spacing: -0.01em;
 }
 
@@ -265,10 +265,10 @@
 .route-modal .ant-input-number,
 .route-modal .ant-select-selector,
 .route-modal .ant-picker {
-  background: rgba(9, 9, 11, 0.8) !important;
+  background: rgba(10,15,30, 0.8) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 10px !important;
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
   transition: all 0.2s ease !important;
 }
 
@@ -285,23 +285,23 @@
 }
 
 .route-modal .ant-input::placeholder {
-  color: #52525b !important;
+  color: var(--border-strong) !important;
 }
 
 .route-modal .ant-select-arrow {
-  color: #71717a !important;
+  color: var(--text-muted) !important;
 }
 
 .route-modal .ant-select-selection-item {
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
 }
 
 .route-modal .ant-select-selection-placeholder {
-  color: #52525b !important;
+  color: var(--border-strong) !important;
 }
 
 .route-modal .ant-form-item-label > label {
-  color: #a1a1aa !important;
+  color: var(--text-secondary) !important;
   font-size: 13px !important;
   font-weight: 500 !important;
 }
@@ -312,9 +312,9 @@
 
 /* ==================== Radio Button Group ==================== */
 .route-modal .ant-radio-button-wrapper {
-  background: rgba(9, 9, 11, 0.8) !important;
+  background: rgba(10,15,30, 0.8) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  color: #a1a1aa !important;
+  color: var(--text-secondary) !important;
   border-radius: 8px !important;
   margin-right: 8px !important;
 }
@@ -324,9 +324,9 @@
 }
 
 .route-modal .ant-radio-button-wrapper:hover {
-  background: rgba(39, 39, 42, 0.8) !important;
+  background: rgba(26,39,64, 0.8) !important;
   border-color: rgba(255, 255, 255, 0.15) !important;
-  color: #fafafa !important;
+  color: var(--text-primary) !important;
 }
 
 .route-modal .ant-radio-button-wrapper-checked {
@@ -363,7 +363,7 @@
   gap: 12px;
   padding: 12px 16px;
   margin-bottom: 8px;
-  background: rgba(9, 9, 11, 0.6);
+  background: rgba(10,15,30, 0.6);
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   transition: all 0.2s ease;
@@ -376,7 +376,7 @@
 /* Override inline styles in PredicateItem/FilterItem */
 .form-item-row .ant-select-selector,
 .form-item-row .ant-input {
-  background: rgba(39, 39, 42, 0.6) !important;
+  background: rgba(26,39,64, 0.6) !important;
   border-radius: 8px !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
@@ -403,7 +403,7 @@
 }
 
 .header-inputs .ant-input {
-  background: rgba(39, 39, 42, 0.6) !important;
+  background: rgba(26,39,64, 0.6) !important;
   border-radius: 8px 0 0 8px !important;
 }
 
@@ -469,7 +469,7 @@
 }
 
 .plugin-help-icon {
-  color: #71717a;
+  color: var(--text-muted);
   font-size: 14px;
   cursor: help;
   transition: color 0.2s ease;
@@ -503,8 +503,8 @@
 .add-predicate-btn-modern,
 .add-filter-btn-modern {
   border: 1px dashed rgba(255, 255, 255, 0.15) !important;
-  background: rgba(39, 39, 42, 0.3) !important;
-  color: #a1a1aa !important;
+  background: rgba(26,39,64, 0.3) !important;
+  color: var(--text-secondary) !important;
   border-radius: 10px !important;
   transition: all 0.2s ease !important;
   height: 44px !important;
@@ -524,7 +524,7 @@
 
 /* Override inline styles for service binding rows */
 .route-modal .ant-input-number {
-  background: rgba(39, 39, 42, 0.6) !important;
+  background: rgba(26,39,64, 0.6) !important;
 }
 
 /* ==================== Weight Indicator ==================== */
@@ -567,13 +567,13 @@
 .route-modal .modal-footer-modern .ant-btn-default {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #a1a1aa;
+  color: var(--text-secondary);
 }
 
 .route-modal .modal-footer-modern .ant-btn-default:hover {
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(255, 255, 255, 0.15);
-  color: #fafafa;
+  color: var(--text-primary);
 }
 
 .route-modal .modal-footer-modern .ant-btn-primary {
