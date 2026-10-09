@@ -147,9 +147,9 @@ public class AiCopilotService {
                     loopResult.getCalledTools(), loopResult.getDataTypes(), loopResult.getFailedTools(), language);
             String finalResponse = responseBuilder.addEvidenceMark(loopResult.getContent(), evidence);
 
-            // 10. 更新历史记录
+            // 10. 更新历史记录（assistant 带上本轮工具摘要，供多轮追问引用）
             chatSessionManager.addToHistory(sessionId, "user", userMessage);
-            chatSessionManager.addToHistory(sessionId, "assistant", finalResponse);
+            chatSessionManager.addToHistory(sessionId, "assistant", finalResponse, loopResult.getToolDigest(), null);
 
             ChatResponse chatResponse = new ChatResponse(true, finalResponse, null, evidence.toMap());
             chatResponse.setTotalTokens(loopResult.getTotalTokens());

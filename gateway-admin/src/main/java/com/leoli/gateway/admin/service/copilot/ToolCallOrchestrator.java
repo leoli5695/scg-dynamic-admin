@@ -128,6 +128,7 @@ public class ToolCallOrchestrator {
         Set<String> failedTools = new HashSet<>();
         Set<String> dataTypes = new HashSet<>();
         long totalTokens = 0; // 累计各轮模型调用的 token 用量（成本闸门核算）
+        StringBuilder toolDigest = new StringBuilder(); // 本轮工具发现的紧凑摘要，供多轮追问引用
 
         long loopStart = System.currentTimeMillis();
 
@@ -138,9 +139,11 @@ public class ToolCallOrchestrator {
             if (elapsed > TOOL_LOOP_TOTAL_TIMEOUT_MS) {
                 log.warn("Tool call loop exceeded total budget ({} ms > {} ms), stopping at iteration {}",
                         elapsed, TOOL_LOOP_TOTAL_TIMEOUT_MS, iteration + 1);
-                return new ToolCallLoopResult(
+                ToolCallLoopResult timeoutResult = new ToolCallLoopResult(
                         "本次分析涉及的工具调用较多，已达到时间上限并中断。以上是基于已获取数据的部分结论，请缩小问题范围或分步提问。",
                         calledTools, dataTypes, failedTools, totalTokens);
+                timeoutResult.setToolDigest(capDigest(toolDigest));
+                return timeoutResult;
             }
 
             log.info("Tool call iteration: {} for provider: {}", iteration + 1, provider);
@@ -156,10 +159,12 @@ public class ToolCallOrchestrator {
             // 如果没有工具调用，返回最终回复
             if (!response.hasToolCalls()) {
                 log.info("No tool calls, returning final response");
-                return new ToolCallLoopResult(
+                ToolCallLoopResult finalResult = new ToolCallLoopResult(
                     response.getContent() != null ? response.getContent() : "AI 未返回有效回复。",
                     calledTools, dataTypes, failedTools, totalTokens
                 );
+                finalResult.setToolDigest(capDigest(toolDigest));
+                return finalResult;
             }
 
             log.info("AI requested {} tool calls: {}",
@@ -214,6 +219,7 @@ public class ToolCallOrchestrator {
 
                 if (result.isSuccess()) {
                     evidenceAssessor.recordDataType(toolCall.getName(), dataTypes);
+                    appendDigest(toolDigest, toolCall.getName(), result);
                 } else {
                     failedTools.add(toolCall.getName());
                 }
@@ -226,10 +232,39 @@ public class ToolCallOrchestrator {
 
         // 超过最大轮数
         log.warn("Max tool call iterations reached: {}", MAX_TOOL_CALL_ITERATIONS);
-        return new ToolCallLoopResult(
+        ToolCallLoopResult maxIterResult = new ToolCallLoopResult(
             "工具调用次数达到上限，请简化您的问题或分步提问。",
             calledTools, dataTypes, failedTools, totalTokens
         );
+        maxIterResult.setToolDigest(capDigest(toolDigest));
+        return maxIterResult;
+    }
+
+    // ===================== 工具摘要（多轮上下文）=====================
+
+    /** 单个工具结果在摘要里的最大字符数。 */
+    static final int MAX_DIGEST_PER_TOOL_CHARS = 400;
+    /** 整轮摘要的最大字符数（控制注入下一轮的 token）。 */
+    static final int MAX_TOOL_DIGEST_CHARS = 1500;
+
+    /** 把一个成功的工具结果压成一行摘要追加进去。 */
+    private static void appendDigest(StringBuilder digest, String toolName, ToolExecutor.ToolResult result) {
+        if (digest.length() >= MAX_TOOL_DIGEST_CHARS) {
+            return; // 已达上限，后续工具不再追加
+        }
+        String json = result.toJson();
+        String snippet = json.length() <= MAX_DIGEST_PER_TOOL_CHARS
+                ? json : json.substring(0, MAX_DIGEST_PER_TOOL_CHARS) + "…";
+        digest.append('[').append(toolName).append("] ").append(snippet).append('\n');
+    }
+
+    /** 收敛摘要到总长度上限；空则返回 null（不占上下文）。 */
+    private static String capDigest(StringBuilder digest) {
+        if (digest == null || digest.length() == 0) {
+            return null;
+        }
+        String s = digest.toString();
+        return s.length() <= MAX_TOOL_DIGEST_CHARS ? s : s.substring(0, MAX_TOOL_DIGEST_CHARS) + "…";
     }
 
     // ===================== 消息构建 =====================
@@ -252,15 +287,20 @@ public class ToolCallOrchestrator {
         // 1. System prompt
         messages.add(Map.of("role", "system", "content", systemPrompt));
 
-        // 2. 注入当前上下文信息（实例ID）
+        // 2. 注入当前上下文（实例ID）+ 上一轮工具数据摘要（多轮追问时可引用，避免重复查询）
+        StringBuilder sysExtra = new StringBuilder();
         if (instanceId != null && !instanceId.isEmpty()) {
-            String contextInfo = String.format(
+            sysExtra.append(String.format(
                 "\n\n【当前上下文】\n- 当前选择的网关实例ID: %s\n- 你可以直接使用这个 instanceId 调用工具（如 get_filter_chain_stats、get_slowest_filters），无需先调用 list_instances 获取实例列表。",
-                instanceId
-            );
+                instanceId));
+        }
+        String lastDigest = lastAssistantToolDigest(history);
+        if (lastDigest != null) {
+            sysExtra.append("\n\n【上一轮工具查询到的数据（供本次追问引用，避免重复查询）】\n").append(lastDigest);
+        }
+        if (sysExtra.length() > 0) {
             Map<String, Object> firstMsg = messages.get(0);
-            String enhancedSystemPrompt = firstMsg.get("content") + contextInfo;
-            messages.set(0, Map.of("role", "system", "content", enhancedSystemPrompt));
+            messages.set(0, Map.of("role", "system", "content", firstMsg.get("content") + sysExtra.toString()));
         }
 
         // 3. 历史对话（不包含 tool 相关消息）
@@ -275,6 +315,20 @@ public class ToolCallOrchestrator {
         messages.add(Map.of("role", "user", "content", userMessage));
 
         return messages;
+    }
+
+    /** 取历史里最近一条 assistant 消息的工具摘要（用于多轮追问上下文），无则 null。 */
+    private static String lastAssistantToolDigest(List<ChatMessage> history) {
+        if (history == null) {
+            return null;
+        }
+        for (int i = history.size() - 1; i >= 0; i--) {
+            ChatMessage m = history.get(i);
+            if ("assistant".equals(m.getRole()) && m.getToolDigest() != null && !m.getToolDigest().isBlank()) {
+                return m.getToolDigest();
+            }
+        }
+        return null;
     }
 
     /**

@@ -42,6 +42,13 @@ public class ToolCallLoopResult {
     private long totalTokens;
 
     /**
+     * 本轮工具调用的紧凑摘要（工具名 + 截断结果），随 assistant 消息持久化。
+     * 多轮追问时注入上一轮的它，让模型能引用"刚才查到的原始数据"而不必重复查询，
+     * 又不必把完整工具结果重放进上下文（控制 token）。
+     */
+    private String toolDigest;
+
+    /**
      * FIX (P0): 待人工确认的写操作。当模型提议 requiresConfirmation 的工具时，
      * 此字段承载 {ticket, toolName, arguments, preview}，由前端渲染确认弹窗；
      * 用户确认后经 /api/copilot/execute-action 端点执行，模型无法自确认。
