@@ -418,6 +418,23 @@ class RouteServiceTest {
             // When & Then
             assertThrows(IllegalArgumentException.class, () -> routeService.deleteRouteByRouteId(ROUTE_ID));
         }
+
+        @Test
+        @DisplayName("Should throw (roll back, keep DB row) when Nacos removal returns false on delete")
+        void shouldThrowWhenConfigRemovalFailsOnDelete() {
+            // Given
+            RouteEntity entity = createRouteEntity(ROUTE_ID, ROUTE_NAME);
+            when(routeRepository.findById(ROUTE_ID)).thenReturn(Optional.of(entity));
+            // removeConfig swallows Nacos errors and returns false. If the service deleted the DB
+            // row anyway, the config would become a permanent orphan: reconcile resolves the
+            // namespace from the DB row, which would be gone. Throwing keeps the row so the
+            // @Transactional delete rolls back and the removal can be retried.
+            when(configCenterService.removeConfig(anyString(), any())).thenReturn(false);
+
+            // When & Then
+            assertThrows(IllegalStateException.class, () -> routeService.deleteRouteByRouteId(ROUTE_ID));
+            verify(routeRepository, never()).delete(any());
+        }
     }
 
     @Nested

@@ -138,21 +138,27 @@ public class StrategyService {
      * For global strategies, remove from all gateway namespaces.
      * Each namespace removal is isolated so one failure does not abort the rest.
      */
-    private void removeStrategyFromNacos(String strategyDataId, String primaryNamespace, boolean isGlobal) {
+    private boolean removeStrategyFromNacos(String strategyDataId, String primaryNamespace, boolean isGlobal) {
+        boolean allRemoved = true;
         if (isGlobal) {
             // Remove global strategy from all gateway namespaces
             List<String> namespaces = getAllGatewayNamespaces();
             for (String namespace : namespaces) {
                 if (removeFromNamespaceResilient(strategyDataId, namespace)) {
                     log.info("Global strategy removed from namespace: {}", namespace);
+                } else {
+                    allRemoved = false;
                 }
             }
         } else {
             // Remove only from the specific namespace
             if (removeFromNamespaceResilient(strategyDataId, primaryNamespace)) {
                 log.info("Strategy removed from namespace: {}", primaryNamespace);
+            } else {
+                allRemoved = false;
             }
         }
+        return allRemoved;
     }
 
     /**
@@ -691,9 +697,15 @@ public class StrategyService {
         String nacosNamespace = getNacosNamespace(entity.getInstanceId());
         boolean isGlobal = isGlobalStrategyEntity(entity);
 
-        // Remove from Nacos (with namespace)
+        // Remove from Nacos (with namespace). Throw on failure so the @Transactional delete rolls
+        // back and the DB row survives - otherwise a failed removal leaves a Nacos orphan the
+        // StrategyReconcileTask cannot clean (it resolves the namespace from the now-gone DB row).
         String strategyDataId = STRATEGY_PREFIX + strategyId;
-        removeStrategyFromNacos(strategyDataId, nacosNamespace, isGlobal);
+        if (!removeStrategyFromNacos(strategyDataId, nacosNamespace, isGlobal)) {
+            throw new IllegalStateException(
+                    "Failed to remove strategy config from config center: " + strategyDataId
+                            + " (namespace: " + (nacosNamespace != null ? nacosNamespace : "default") + ")");
+        }
 
         // Delete from database (flush immediately so query can see the updated data)
         strategyRepository.delete(entity);
@@ -862,7 +874,16 @@ public class StrategyService {
         List<StrategyEntity> entities = strategyRepository.findByRouteId(routeId);
         for (StrategyEntity entity : entities) {
             String strategyDataId = STRATEGY_PREFIX + entity.getStrategyId();
-            configCenterService.removeConfig(strategyDataId);
+            String nacosNamespace = getNacosNamespace(entity.getInstanceId());
+            // Namespace-aware removal (the old single-arg call always targeted the default
+            // namespace, silently missing strategies published elsewhere). Throw on failure so
+            // this cascade - and the parent route delete - rolls back, keeping the DB row so the
+            // orphan stays reconcilable instead of becoming permanent.
+            if (!configCenterService.removeConfig(strategyDataId, nacosNamespace)) {
+                throw new IllegalStateException(
+                        "Failed to remove strategy config from config center: " + strategyDataId
+                                + " (namespace: " + (nacosNamespace != null ? nacosNamespace : "default") + ")");
+            }
             strategyRepository.delete(entity);
             log.info("Deleted strategy {} for route {}", entity.getStrategyName(), routeId);
         }

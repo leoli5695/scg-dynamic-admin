@@ -376,14 +376,24 @@ public class AuthPolicyService {
         // Get namespace for this instance
         String namespace = getNacosNamespace(entity.getInstanceId());
 
-        // Remove policy config from Nacos
+        // Remove policy config from Nacos. Throw on failure so the @Transactional delete rolls
+        // back and the DB row survives - otherwise a failed removal leaves a Nacos orphan the
+        // reconcile task cannot clean (it resolves the namespace from the now-gone DB row).
         String policyDataId = AUTH_POLICY_PREFIX + policyId;
-        configCenterService.removeConfig(policyDataId, namespace);
+        if (!configCenterService.removeConfig(policyDataId, namespace)) {
+            throw new IllegalStateException(
+                    "Failed to remove auth policy config from config center: " + policyDataId
+                            + " (namespace: " + (namespace != null ? namespace : "default") + ")");
+        }
         log.info("Auth policy removed from Nacos: {} (namespace: {})", policyDataId, namespace);
 
         // Remove routes list from Nacos
         String routesDataId = AUTH_ROUTES_PREFIX + policyId;
-        configCenterService.removeConfig(routesDataId, namespace);
+        if (!configCenterService.removeConfig(routesDataId, namespace)) {
+            throw new IllegalStateException(
+                    "Failed to remove auth routes config from config center: " + routesDataId
+                            + " (namespace: " + (namespace != null ? namespace : "default") + ")");
+        }
         log.info("Auth routes removed from Nacos: {} (namespace: {})", routesDataId, namespace);
 
         // Delete all bindings for this policy

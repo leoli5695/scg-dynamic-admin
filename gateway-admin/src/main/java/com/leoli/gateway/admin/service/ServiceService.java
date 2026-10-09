@@ -342,9 +342,17 @@ public class ServiceService {
     serviceCache.remove(serviceName);
     log.info("Service removed from cache: {}", serviceName);
 
-    // 2. Delete from Nacos (remove config using service_id UUID)
+    // 2. Delete from Nacos (remove config using service_id UUID).
+    // Throw on failure so the @Transactional delete rolls back: deleting the DB row while the
+    // config survives would leave a Nacos orphan the reconcile task cannot clean (it resolves
+    // the namespace from the now-gone DB row).
     String serviceDataId = SERVICE_PREFIX + entity.getServiceId();
-    configCenterService.removeConfig(serviceDataId, nacosNamespace);
+    boolean removed = configCenterService.removeConfig(serviceDataId, nacosNamespace);
+    if (!removed) {
+      throw new IllegalStateException(
+          "Failed to remove service config from config center: " + serviceDataId
+              + " (namespace: " + (nacosNamespace != null ? nacosNamespace : "default") + ")");
+    }
     log.info("Service removed from Nacos: {} (namespace: {})", serviceDataId, nacosNamespace);
 
     // 3. Delete from database

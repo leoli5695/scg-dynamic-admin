@@ -185,6 +185,25 @@ public class RouteService {
     }
 
     /**
+     * Remove a route from the config center, failing loudly when the removal does not take.
+     * <p>
+     * FIX (delete orphan): {@code configCenterService.removeConfig} swallows errors and returns
+     * {@code false}. The old delete path ignored that boolean and deleted the DB row anyway, so a
+     * failed removal left a permanent Nacos orphan that the reconcile task can no longer clean -
+     * orphan removal resolves the namespace from the DB row, which by then is gone. Throwing here
+     * rolls back the {@code @Transactional} delete, keeping the DB row so state stays consistent
+     * and the removal can be retried. Mirrors {@link #publishRouteOrThrow}.
+     */
+    private void removeRouteOrThrow(String routeDataId, String nacosNamespace) {
+        boolean removed = configCenterService.removeConfig(routeDataId, nacosNamespace);
+        if (!removed) {
+            throw new IllegalStateException(
+                    "Failed to remove route config from config center: " + routeDataId
+                            + " (namespace: " + (nacosNamespace != null ? nacosNamespace : "default") + ")");
+        }
+    }
+
+    /**
      * Get all routes.
      */
     public List<RouteResponse> getAllRoutes() {
@@ -414,9 +433,9 @@ public class RouteService {
             // Get Nacos namespace from instance
             String nacosNamespace = getNacosNamespace(entity.getInstanceId());
 
-            // Remove from Nacos (with namespace)
+            // Remove from Nacos (with namespace) - throw on failure so the delete rolls back
             String routeDataId = ROUTE_PREFIX + entity.getRouteId();
-            configCenterService.removeConfig(routeDataId, nacosNamespace);
+            removeRouteOrThrow(routeDataId, nacosNamespace);
             log.info("Route removed from Nacos: {} (namespace: {})", routeDataId, nacosNamespace);
 
             // Delete from database
