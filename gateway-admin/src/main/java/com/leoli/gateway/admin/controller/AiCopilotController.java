@@ -294,6 +294,31 @@ public class AiCopilotController extends BaseController {
     }
 
     /**
+     * 回看某会话的历史消息（持久化后前端刷新/换端可恢复对话）。
+     *
+     * @param sessionId 会话ID
+     * @return {sessionId, messages:[{role, content}]}
+     */
+    @GetMapping("/chat/{sessionId}/history")
+    public ResponseEntity<Map<String, Object>> getHistory(@PathVariable String sessionId) {
+        List<Map<String, Object>> msgs = new ArrayList<>();
+        for (var m : aiCopilotService.getHistory(sessionId)) {
+            // 只回传 user/assistant 文本；toolDigest 是内部上下文，不展示
+            if (!"user".equals(m.getRole()) && !"assistant".equals(m.getRole())) {
+                continue;
+            }
+            Map<String, Object> mm = new LinkedHashMap<>();
+            mm.put("role", m.getRole());
+            mm.put("content", m.getContent());
+            msgs.add(mm);
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("sessionId", sessionId);
+        body.put("messages", msgs);
+        return ResponseEntity.ok(body);
+    }
+
+    /**
      * 记录用户对某条 AI 回答的 👍/👎 反馈（问答快照一并落库，供质量度量与后续 RAG/微调）。
      *
      * @param request 反馈内容（sessionId + question + answer + rating[UP|DOWN] + 可选 comment）

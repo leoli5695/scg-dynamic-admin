@@ -1,5 +1,7 @@
 package com.leoli.gateway.admin.service.copilot;
 
+import com.leoli.gateway.admin.entity.CopilotChatMessageEntity;
+import com.leoli.gateway.admin.repository.CopilotChatMessageRepository;
 import com.leoli.gateway.admin.service.copilot.model.ChatMessage;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -14,15 +16,39 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * ChatSessionManager 单元测试。
  * 回归重点：历史读取返回快照（隔离内部可变列表）、超限自动裁剪、并发写入不丢消息/不抛
- * ConcurrentModificationException、空闲 TTL 驱逐不误删活跃会话。
+ * ConcurrentModificationException、空闲 TTL 驱逐不误删活跃会话、缓存未命中从 DB 回填。
  */
 class ChatSessionManagerTest {
 
-    private final ChatSessionManager manager = new ChatSessionManager();
+    private final ChatSessionManager manager = new ChatSessionManager(mock(CopilotChatMessageRepository.class));
+
+    @Test
+    @DisplayName("缓存未命中时从 DB 回填历史（持久化生效，倒序反转为正序）")
+    void loadsFromDbOnCacheMiss() {
+        CopilotChatMessageRepository repo = mock(CopilotChatMessageRepository.class);
+        CopilotChatMessageEntity e1 = new CopilotChatMessageEntity();
+        e1.setRole("user");
+        e1.setContent("问题A");
+        CopilotChatMessageEntity e2 = new CopilotChatMessageEntity();
+        e2.setRole("assistant");
+        e2.setContent("回答A");
+        // findTop20 返回 id 倒序：e2, e1
+        when(repo.findTop20BySessionIdOrderByIdDesc("db-sess")).thenReturn(List.of(e2, e1));
+        ChatSessionManager mgr = new ChatSessionManager(repo);
+
+        List<ChatMessage> snap = mgr.getHistorySnapshot("db-sess");
+        assertEquals(2, snap.size());
+        assertEquals("user", snap.get(0).getRole());
+        assertEquals("问题A", snap.get(0).getContent());
+        assertEquals("assistant", snap.get(1).getRole());
+        assertEquals("回答A", snap.get(1).getContent());
+    }
 
     @Test
     @DisplayName("快照与内部列表隔离：修改快照不影响存储")

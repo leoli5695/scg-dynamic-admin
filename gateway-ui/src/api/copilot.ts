@@ -46,6 +46,17 @@ export const executeCopilotAction = (
 export const clearCopilotChat = (sessionId: string, options?: RequestOptions) =>
   httpClient.delete<ClearChatResult>(`${BASE}/chat/${encodeURIComponent(sessionId)}`, options);
 
+/** A persisted history message (user/assistant text only). */
+export interface CopilotHistoryMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+/** GET /chat/{sessionId}/history — reload a persisted conversation. */
+export const getCopilotHistory = (sessionId: string, options?: RequestOptions) =>
+  httpClient.get<{ sessionId: string; messages: CopilotHistoryMessage[] }>(
+    `${BASE}/chat/${encodeURIComponent(sessionId)}/history`, options);
+
 /** POST /feedback — record 👍/👎 (with Q&A snapshot) for an assistant answer. */
 export const submitCopilotFeedback = (
   body: { sessionId?: string; question?: string; answer?: string; rating: 'UP' | 'DOWN'; comment?: string },

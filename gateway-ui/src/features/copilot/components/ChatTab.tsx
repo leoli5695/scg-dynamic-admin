@@ -13,7 +13,7 @@ import {
   UserOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import { clearCopilotChat, executeCopilotAction, sendCopilotChatStream, submitCopilotFeedback } from '../../../api/copilot';
+import { clearCopilotChat, executeCopilotAction, getCopilotHistory, sendCopilotChatStream, submitCopilotFeedback } from '../../../api/copilot';
 import { ApiError, isAbortError } from '../../../api/http';
 import type { CopilotPendingAction } from '../../../types/copilot';
 import AiReportRenderer from '../../../components/ai/AiReportRenderer';
@@ -50,10 +50,29 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Initialize session
+  // Initialize session（稳定 sessionId 存 localStorage，刷新/换端可恢复；并载入持久化历史）
   useEffect(() => {
     (async () => {
-      setSessionId(`session-${Date.now()}`);
+      const SESSION_KEY = 'copilot.sessionId';
+      let sid = localStorage.getItem(SESSION_KEY);
+      if (!sid) {
+        sid = `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        localStorage.setItem(SESSION_KEY, sid);
+      }
+      setSessionId(sid);
+      try {
+        const h = await getCopilotHistory(sid);
+        if (h.messages && h.messages.length > 0) {
+          setMessages(h.messages.map(m => ({
+            role: m.role,
+            content: m.content,
+            timestamp: new Date(),
+            fromAi: m.role === 'assistant',
+          })));
+        }
+      } catch (e) {
+        console.error('load copilot history failed', e);
+      }
     })();
   }, []);
 
@@ -213,7 +232,9 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
       setPendingAction(null);
       setStreamNote('');
       setFeedback({});
-      setSessionId(`session-${Date.now()}`);
+      const newSid = `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      localStorage.setItem('copilot.sessionId', newSid);
+      setSessionId(newSid);
       message.success(t('copilot.conversation_cleared'));
     } catch {
       message.error(t('copilot.clear_failed'));

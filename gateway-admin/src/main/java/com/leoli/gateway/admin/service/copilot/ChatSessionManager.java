@@ -1,9 +1,12 @@
 package com.leoli.gateway.admin.service.copilot;
 
+import com.leoli.gateway.admin.entity.CopilotChatMessageEntity;
+import com.leoli.gateway.admin.repository.CopilotChatMessageRepository;
 import com.leoli.gateway.admin.service.copilot.model.ChatMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -12,22 +15,16 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * ============================================================================
- * 会话状态管理器
+ * 会话状态管理器（DB 持久化 + 内存缓存）
  * ============================================================================
  * <p>
- * 管理 AI Copilot 的会话历史和意图记忆。
+ * 管理 AI Copilot 的会话历史与意图记忆：
+ * - <b>持久化</b>：每条消息落库 {@code copilot_chat_message}，重启不丢、多副本共享、可回看；
+ * - <b>内存缓存</b>：每会话缓存最近 N 条用于快速构建上下文，未命中时从 DB 回填（load-on-miss）；
+ * - <b>TTL 驱逐</b>：只清内存缓存（DB 是真相源），空闲会话下次访问再回填。
  * <p>
- * 功能:
- * - 维护每个 session 的对话历史（支持多轮对话）
- * - 记录每个 session 的最后意图（用于意图延续）
- * - 支持历史大小限制（防止内存膨胀）
- * - 支持会话清除与空闲 TTL 驱逐（防止长期运行内存泄漏）
- * <p>
- * 线程安全: 每个 session 的状态封装在 {@link SessionState} 中，所有读写都在该
- * 对象的监视器锁内进行。ConcurrentHashMap 只保证 map 本身的并发安全，value 里的
- * ArrayList 若被并发 add/remove/iterate 会抛 ConcurrentModificationException，
- * 因此对列表的一切访问都必须持有 SessionState 锁。对外读取历史一律返回快照副本
- * （{@link #getHistorySnapshot}），调用方可安全遍历。
+ * 线程安全：每会话状态封装在 {@link SessionState}，对内部列表的一切读写都持有该对象锁；
+ * 对外读取一律返回快照副本。DB 写失败不影响内存对话（降级为不持久，记录告警）。
  *
  * @author leoli
  */
@@ -35,14 +32,16 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class ChatSessionManager {
 
-    // ===================== 会话状态存储 =====================
+    private final CopilotChatMessageRepository messageRepository;
 
-    /**
-     * 每个会话的可变状态。所有字段访问都必须在 synchronized(this) 内进行
-     * （lastAccessedAt 用 volatile 以便驱逐扫描无锁读取）。
-     */
+    public ChatSessionManager(CopilotChatMessageRepository messageRepository) {
+        this.messageRepository = messageRepository;
+    }
+
+    /** 每会话可变状态；字段访问须在 synchronized(this) 内（lastAccessedAt 用 volatile 供驱逐扫描）。 */
     private static final class SessionState {
         final List<ChatMessage> history = new ArrayList<>();
+        boolean loaded = false;   // 是否已从 DB 回填
         String lastIntent;
         volatile long lastAccessedAt = System.currentTimeMillis();
 
@@ -51,93 +50,93 @@ public class ChatSessionManager {
         }
     }
 
-    /**
-     * 会话存储。Key: sessionId
-     */
     private final Map<String, SessionState> sessions = new ConcurrentHashMap<>();
 
-    // ===================== 配置常量 =====================
-
-    /**
-     * 最大历史大小（防止内存膨胀）
-     */
     public static final int MAX_HISTORY_SIZE = 20;
-
-    /**
-     * 默认历史大小
-     */
     public static final int DEFAULT_HISTORY_SIZE = 10;
-
-    /**
-     * 会话空闲 TTL（毫秒）。超过此时长未访问的会话会被定时任务驱逐，
-     * 防止 sessionId 无限增长导致的内存泄漏。默认 30 分钟。
-     */
     public static final long SESSION_TTL_MS = 30 * 60 * 1000L;
-
-    /**
-     * TTL 驱逐扫描间隔（毫秒）。默认 10 分钟。
-     */
     public static final long EVICTION_INTERVAL_MS = 10 * 60 * 1000L;
 
-    // ===================== 内部辅助 =====================
-
-    /**
-     * 获取（或创建）会话状态并刷新访问时间。返回的对象需由调用方加锁使用。
-     */
     private SessionState stateFor(String sessionId) {
         SessionState state = sessions.computeIfAbsent(sessionId, k -> new SessionState());
         state.touch();
         return state;
     }
 
-    // ===================== 核心方法 ====================
+    /** 确保已从 DB 回填最近历史（load-on-miss）。必须在持有 state 锁时调用。 */
+    private void ensureLoadedLocked(SessionState state, String sessionId) {
+        if (state.loaded) {
+            return;
+        }
+        try {
+            List<CopilotChatMessageEntity> rows = messageRepository.findTop20BySessionIdOrderByIdDesc(sessionId);
+            if (rows != null && !rows.isEmpty()) {
+                // rows 为 id 倒序，反转为时间正序后载入
+                for (int i = rows.size() - 1; i >= 0; i--) {
+                    CopilotChatMessageEntity e = rows.get(i);
+                    state.history.add(new ChatMessage(e.getRole(), e.getContent(), e.getToolDigest()));
+                }
+            }
+        } catch (Exception ex) {
+            log.warn("Failed to load chat history from DB for session {}: {}", sessionId, ex.getMessage());
+        }
+        state.loaded = true;
+    }
+
+    // ===================== 读取 =====================
 
     /**
-     * 获取会话历史快照（副本），可安全遍历。会话不存在时返回空列表。
-     * <p>
-     * 用于构建发给模型的消息列表——绝不能把内部可变列表直接交给调用方遍历，
-     * 否则并发写入会触发 ConcurrentModificationException。
-     *
-     * @param sessionId 会话ID
-     * @return 历史消息的副本
+     * 获取会话历史快照（副本），可安全遍历。未命中缓存时从 DB 回填最近 N 条。
      */
     public List<ChatMessage> getHistorySnapshot(String sessionId) {
         SessionState state = stateFor(sessionId);
         synchronized (state) {
+            ensureLoadedLocked(state, sessionId);
             return new ArrayList<>(state.history);
         }
     }
 
     /**
-     * 获取会话历史（不创建新历史）的快照副本。
-     *
-     * @param sessionId 会话ID
-     * @return 历史消息副本，不存在则返回 null
+     * 获取完整历史（时间正序，直接读 DB）——供前端回看整段对话。
      */
-    public List<ChatMessage> getHistory(String sessionId) {
-        SessionState state = sessions.get(sessionId);
-        if (state == null) {
-            return null;
-        }
-        state.touch();
-        synchronized (state) {
-            return new ArrayList<>(state.history);
+    public List<ChatMessage> getFullHistory(String sessionId) {
+        try {
+            List<CopilotChatMessageEntity> rows = messageRepository.findBySessionIdOrderByIdAsc(sessionId);
+            List<ChatMessage> out = new ArrayList<>();
+            if (rows != null) {
+                for (CopilotChatMessageEntity e : rows) {
+                    out.add(new ChatMessage(e.getRole(), e.getContent(), e.getToolDigest()));
+                }
+            }
+            return out;
+        } catch (Exception ex) {
+            log.warn("Failed to load full history for session {}: {}", sessionId, ex.getMessage());
+            return new ArrayList<>();
         }
     }
 
-    /**
-     * 添加消息到历史
-     *
-     * @param sessionId 会话ID
-     * @param role      角色 (user/assistant/system)
-     * @param content   消息内容
-     */
+    // ===================== 写入 =====================
+
     public void addToHistory(String sessionId, String role, String content) {
+        addToHistory(sessionId, role, content, null, null);
+    }
+
+    public void addToHistory(String sessionId, ChatMessage chatMessage) {
+        addToHistory(sessionId, chatMessage.getRole(), chatMessage.getContent(), chatMessage.getToolDigest(), null);
+    }
+
+    /**
+     * 追加一条消息：更新内存缓存（含裁剪）并持久化到 DB。
+     *
+     * @param toolDigest 该轮工具调用摘要（仅 assistant 可能有），用于多轮追问上下文
+     * @param operator   操作者（可空）
+     */
+    public void addToHistory(String sessionId, String role, String content, String toolDigest, String operator) {
         SessionState state = stateFor(sessionId);
         int size;
         synchronized (state) {
-            state.history.add(new ChatMessage(role, content));
-            // 自动限制历史大小（保留最新的 DEFAULT_HISTORY_SIZE 条）
+            ensureLoadedLocked(state, sessionId);
+            state.history.add(new ChatMessage(role, content, toolDigest));
             if (state.history.size() > MAX_HISTORY_SIZE) {
                 int removeCount = state.history.size() - DEFAULT_HISTORY_SIZE;
                 for (int i = 0; i < removeCount; i++) {
@@ -146,25 +145,23 @@ public class ChatSessionManager {
             }
             size = state.history.size();
         }
-        log.debug("Added message to history: session={}, role={}, historySize={}", sessionId, role, size);
+        // 持久化（DB 是真相源；失败降级为不持久，不阻断对话）
+        try {
+            CopilotChatMessageEntity e = new CopilotChatMessageEntity();
+            e.setSessionId(sessionId);
+            e.setRole(role);
+            e.setContent(content);
+            e.setToolDigest(toolDigest);
+            e.setOperator(operator);
+            messageRepository.save(e);
+        } catch (Exception ex) {
+            log.warn("Failed to persist chat message for session {}: {}", sessionId, ex.getMessage());
+        }
+        log.debug("Added message to history: session={}, role={}, size={}", sessionId, role, size);
     }
 
-    /**
-     * 添加消息到历史（使用 ChatMessage 对象）
-     *
-     * @param sessionId   会话ID
-     * @param chatMessage 聊天消息对象
-     */
-    public void addToHistory(String sessionId, ChatMessage chatMessage) {
-        addToHistory(sessionId, chatMessage.getRole(), chatMessage.getContent());
-    }
+    // ===================== 裁剪 / 清除 =====================
 
-    /**
-     * 限制历史大小（保留最新的 maxSize 条消息）
-     *
-     * @param sessionId 会话ID
-     * @param maxSize   最大保留数量
-     */
     public void trimHistory(String sessionId, int maxSize) {
         SessionState state = sessions.get(sessionId);
         if (state == null) {
@@ -178,37 +175,29 @@ public class ChatSessionManager {
             for (int i = 0; i < removeCount; i++) {
                 state.history.remove(0);
             }
-            log.debug("Trimmed history: session={}, removed={}, remaining={}", sessionId, removeCount, state.history.size());
         }
     }
 
-    /**
-     * 清除会话历史
-     *
-     * @param sessionId 会话ID
-     */
+    /** 清除会话：移除内存缓存并删除 DB 中该会话的全部消息。 */
+    @Transactional
     public void clearHistory(String sessionId) {
         sessions.remove(sessionId);
+        try {
+            messageRepository.deleteBySessionId(sessionId);
+        } catch (Exception ex) {
+            log.warn("Failed to delete persisted history for session {}: {}", sessionId, ex.getMessage());
+        }
         log.info("Cleared session: {}", sessionId);
     }
 
-    /**
-     * 清除所有会话历史
-     */
     public void clearAllHistory() {
         int sessionCount = sessions.size();
         sessions.clear();
-        log.info("Cleared all sessions: count={}", sessionCount);
+        log.info("Cleared all in-memory sessions: count={}", sessionCount);
     }
 
-    // ===================== 意图记忆管理 =====================
+    // ===================== 意图记忆（内存态，重启丢失可接受）=====================
 
-    /**
-     * 获取上次意图
-     *
-     * @param sessionId 会话ID
-     * @return 上次检测到的意图，不存在则返回 null
-     */
     public String getLastIntent(String sessionId) {
         SessionState state = sessions.get(sessionId);
         if (state == null) {
@@ -220,25 +209,13 @@ public class ChatSessionManager {
         }
     }
 
-    /**
-     * 设置当前意图
-     *
-     * @param sessionId 会话ID
-     * @param intent    意图类别
-     */
     public void setLastIntent(String sessionId, String intent) {
         SessionState state = stateFor(sessionId);
         synchronized (state) {
             state.lastIntent = intent;
         }
-        log.debug("Set last intent: session={}, intent={}", sessionId, intent);
     }
 
-    /**
-     * 清除意图记忆
-     *
-     * @param sessionId 会话ID
-     */
     public void clearIntent(String sessionId) {
         SessionState state = sessions.get(sessionId);
         if (state != null) {
@@ -246,14 +223,11 @@ public class ChatSessionManager {
                 state.lastIntent = null;
             }
         }
-        log.debug("Cleared intent: session={}", sessionId);
     }
 
     // ===================== 生命周期 =====================
 
-    /**
-     * 定时驱逐空闲超时的会话，防止 sessionId 无限增长造成内存泄漏。
-     */
+    /** 定时驱逐空闲会话的<b>内存缓存</b>（DB 数据保留，下次访问回填）。 */
     @Scheduled(fixedDelay = EVICTION_INTERVAL_MS)
     public void evictExpiredSessions() {
         long now = System.currentTimeMillis();
@@ -261,78 +235,41 @@ public class ChatSessionManager {
         sessions.values().removeIf(state -> now - state.lastAccessedAt > SESSION_TTL_MS);
         int removed = before - sessions.size();
         if (removed > 0) {
-            log.info("Evicted {} expired copilot sessions, {} still active", removed, sessions.size());
+            log.info("Evicted {} idle copilot sessions from memory (DB retained), {} still cached",
+                    removed, sessions.size());
         }
     }
 
-    // ===================== 统计方法 =====================
+    // ===================== 统计 / 辅助 =====================
 
-    /**
-     * 获取活跃会话数量
-     */
     public int getActiveSessionCount() {
         return sessions.size();
     }
 
-    /**
-     * 获取指定会话的历史大小
-     *
-     * @param sessionId 会话ID
-     * @return 历史消息数量
-     */
     public int getHistorySize(String sessionId) {
-        SessionState state = sessions.get(sessionId);
-        if (state == null) {
-            return 0;
-        }
+        SessionState state = stateFor(sessionId);
         synchronized (state) {
+            ensureLoadedLocked(state, sessionId);
             return state.history.size();
         }
     }
 
-    /**
-     * 判断会话是否存在
-     *
-     * @param sessionId 会话ID
-     * @return 是否存在
-     */
     public boolean hasSession(String sessionId) {
         return sessions.containsKey(sessionId);
     }
 
-    // ===================== 辅助方法 =====================
-
-    /**
-     * 获取历史的最后一条消息
-     *
-     * @param sessionId 会话ID
-     * @return 最后一条消息，不存在则返回 null
-     */
     public ChatMessage getLastMessage(String sessionId) {
-        SessionState state = sessions.get(sessionId);
-        if (state == null) {
-            return null;
-        }
+        SessionState state = stateFor(sessionId);
         synchronized (state) {
-            if (state.history.isEmpty()) {
-                return null;
-            }
-            return state.history.get(state.history.size() - 1);
+            ensureLoadedLocked(state, sessionId);
+            return state.history.isEmpty() ? null : state.history.get(state.history.size() - 1);
         }
     }
 
-    /**
-     * 获取历史的最后一条用户消息
-     *
-     * @param sessionId 会话ID
-     * @return 最后一条用户消息，不存在则返回 null
-     */
     public ChatMessage getLastUserMessage(String sessionId) {
-        SessionState state = sessions.get(sessionId);
-        if (state == null) {
-            return null;
-        }
+        SessionState state = stateFor(sessionId);
         synchronized (state) {
+            ensureLoadedLocked(state, sessionId);
             for (int i = state.history.size() - 1; i >= 0; i--) {
                 ChatMessage msg = state.history.get(i);
                 if ("user".equals(msg.getRole())) {

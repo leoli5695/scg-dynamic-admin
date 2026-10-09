@@ -174,6 +174,13 @@ public class AiCopilotService {
         chatSessionManager.clearHistory(sessionId);
     }
 
+    /**
+     * 读取某会话的完整历史（时间正序），供前端回看持久化的对话。
+     */
+    public List<ChatMessage> getHistory(String sessionId) {
+        return chatSessionManager.getFullHistory(sessionId);
+    }
+
     // ===================== Route Generation =====================
 
     /**
