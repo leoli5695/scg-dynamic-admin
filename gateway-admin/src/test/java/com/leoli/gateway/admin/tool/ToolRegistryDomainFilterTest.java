@@ -87,4 +87,22 @@ class ToolRegistryDomainFilterTest {
         assertTrue(trace.contains("get_distributed_trace"));
         assertTrue(trace.contains("analyze_request_bottleneck"));
     }
+
+    @Test
+    @DisplayName("token 优化：monitor(健康) 窄集显著小于 debug(排障) 宽集与全量")
+    void monitorNarrowerThanDebug() {
+        Set<String> monitor = names(registry.getOpenAITools("monitor"));
+        Set<String> debug = names(registry.getOpenAITools("debug"));
+        int all = registry.getOpenAITools().size();
+
+        assertTrue(monitor.size() < all, "monitor 应少于全量: " + monitor.size() + "/" + all);
+        assertTrue(monitor.size() < debug.size(),
+                "monitor 窄集应小于 debug 宽集: " + monitor.size() + " vs " + debug.size());
+        // 健康类仍能用核心诊断工具，但不背链路/中间件查询
+        assertTrue(monitor.contains("run_quick_diagnostic"), "monitor 应含快速诊断");
+        assertFalse(monitor.contains("query_redis_metrics"), "monitor 不应含中间件查询（省 schema token）");
+        assertFalse(monitor.contains("get_distributed_trace"), "monitor 不应含链路工具");
+        // 排障域保留全套
+        assertTrue(debug.contains("get_distributed_trace"), "debug 排障应含链路工具");
+    }
 }

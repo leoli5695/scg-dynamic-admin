@@ -323,13 +323,27 @@ public class ToolCallOrchestrator {
      */
     public Map<String, Object> buildToolResultMessage(String provider, String toolCallId,
                                                        String toolName, ToolExecutor.ToolResult result) {
-        String resultJson = result.toJson();
+        String resultJson = capToolResult(result.toJson());
 
         return switch (provider) {
             case "CLAUDE" -> aiAnalysisService.buildClaudeToolResultMessage(toolCallId, resultJson);
             case "GEMINI" -> aiAnalysisService.buildGeminiToolResultMessage(toolName, resultJson);
             default -> aiAnalysisService.buildOpenAIToolResultMessage(toolCallId, resultJson);
         };
+    }
+
+    /**
+     * 工具结果回灌模型前的长度上限，防止个别工具（大路由表/链路/日志）的巨型 JSON
+     * 撑爆上下文、白烧 token。绝大多数工具结果远小于此，仅在极端情况兜底截断。
+     */
+    static final int MAX_TOOL_RESULT_CHARS = 8000;
+
+    private static String capToolResult(String json) {
+        if (json == null || json.length() <= MAX_TOOL_RESULT_CHARS) {
+            return json;
+        }
+        return json.substring(0, MAX_TOOL_RESULT_CHARS)
+                + "...[结果过长已截断；如需完整数据请用更精确的参数（如 instanceId/limit）再查]";
     }
 
     // ===================== 配置获取 =====================

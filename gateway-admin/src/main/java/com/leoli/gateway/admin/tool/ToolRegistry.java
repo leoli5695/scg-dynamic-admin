@@ -1046,15 +1046,24 @@ public class ToolRegistry {
         m.put("service", Set.of("service", "middleware", "trace", "instance"));
         m.put("服务", Set.of("service", "middleware", "trace", "instance"));
         m.put("nacos", Set.of("service", "instance", "middleware"));
-        m.put("monitor", deepDebug);
-        m.put("监控", deepDebug);
+        // monitor/健康/指标/状态 = 窄集：健康检查、状态与指标概览用不到 trace/prometheus/audit/middleware，
+        // 收窄后每次调用少发一大批工具 schema，直接省 token（实测健康类问题的大头就是 schema）。
+        Set<String> monitorNarrow = Set.of("monitor", "instance", "filter-chain");
+        m.put("monitor", monitorNarrow);
+        m.put("监控", monitorNarrow);
+        m.put("指标", monitorNarrow);
+        m.put("metric", monitorNarrow);
+        m.put("health", monitorNarrow);
+        m.put("健康", monitorNarrow);
+        m.put("状态", monitorNarrow);
+        // debug/排障/故障/诊断 = 宽集：真正排障可能需要链路/中间件/指标/审计全套
         m.put("diagnos", deepDebug);
         m.put("诊断", deepDebug);
-        m.put("health", Set.of("monitor", "instance"));
-        m.put("健康", Set.of("monitor", "instance"));
         m.put("debug", deepDebug);
         m.put("排查", deepDebug);
+        m.put("排障", deepDebug);
         m.put("故障", deepDebug);
+        m.put("troubleshoot", deepDebug);
         m.put("error", Set.of("monitor", "filter-chain", "trace", "performance", "audit"));
         m.put("错误", Set.of("monitor", "filter-chain", "trace", "performance", "audit"));
         m.put("alert", Set.of("monitor", "audit"));

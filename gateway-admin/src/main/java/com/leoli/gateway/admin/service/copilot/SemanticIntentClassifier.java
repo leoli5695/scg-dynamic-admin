@@ -37,7 +37,7 @@ public class SemanticIntentClassifier {
 
     /** 可归类的领域标签（与 ToolRegistry 的领域关键词一致）。 */
     static final List<String> DOMAINS = List.of(
-            "route", "service", "monitor", "performance",
+            "route", "service", "monitor", "debug", "performance",
             "trace", "middleware", "instance", "test", "audit");
 
     /**
@@ -55,7 +55,9 @@ public class SemanticIntentClassifier {
         String prompt = """
                 你是网关智能助手的意图分类器。把用户问题归类到且仅到以下标签之一：
                 route(路由配置/断言/过滤器/灰度), service(服务/注册发现/nacos), \
-                monitor(监控/诊断/健康/告警/排障), performance(性能/优化/慢/JVM/GPU/CPU/内存), \
+                monitor(健康检查/运行状态/指标/监控概览/告警), \
+                debug(排障/故障定位/报错/为什么失败/异常/503/超时/不通), \
+                performance(性能/优化/慢/JVM/GPU/CPU/内存), \
                 trace(链路追踪/span/traceId), middleware(中间件/redis/mysql/mq/kafka/es/mongo), \
                 instance(实例/pod/副本/扩缩容/集群/k8s), test(压测/压力测试/性能测试), \
                 audit(审计/操作日志/回滚)。
