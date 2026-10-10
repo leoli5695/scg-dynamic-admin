@@ -4,7 +4,7 @@
  * type metadata from StrategyTypeController (/api/strategy-types/enabled).
  */
 import React, { useCallback, useMemo, useState } from 'react';
-import { Button, Card, Divider, Empty, Select, Spin, Tabs, Typography } from 'antd';
+import { Button, Card, Empty, Select, Spin, Tabs, Typography } from 'antd';
 import { message } from '../../utils/antdStatic';
 import { PlusOutlined, RobotOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { useParams } from 'react-router-dom';
@@ -211,43 +211,36 @@ const StrategiesPage: React.FC = () => {
 
   return (
     <div className="strategies-page">
-      {/* Stats Bar */}
-      <div className="stats-bar">
-        <div
-          className={`stat-item ${statusFilter === 'all' ? 'stat-item-active' : ''}`}
-          onClick={() => setStatusFilter('all')}
-          style={{ cursor: 'pointer' }}
-        >
-          <div className="stat-value">{strategyStats.total}</div>
-          <div className="stat-label">{t('strategy.stats_total')}</div>
-        </div>
-        <Divider orientation="vertical" className="stat-divider" />
-        <div
-          className={`stat-item ${statusFilter === 'enabled' ? 'stat-item-active' : ''}`}
-          onClick={() => setStatusFilter('enabled')}
-          style={{ cursor: 'pointer' }}
-        >
-          <div className="stat-value text-green-600">{strategyStats.enabled}</div>
-          <div className="stat-label">{t('strategy.stats_enabled')}</div>
-        </div>
-        <Divider orientation="vertical" className="stat-divider" />
-        <div
-          className={`stat-item ${statusFilter === 'disabled' ? 'stat-item-active' : ''}`}
-          onClick={() => setStatusFilter('disabled')}
-          style={{ cursor: 'pointer' }}
-        >
-          <div className="stat-value text-red-600">{strategyStats.total - strategyStats.enabled}</div>
-          <div className="stat-label">{t('strategy.stats_disabled')}</div>
-        </div>
-      </div>
-
-      {/* Header */}
+      {/* Header with inline stat chips (clickable status filter, saves a full row) */}
       <div className="page-header-modern">
         <div className="page-header-left">
           <Title level={3} className="page-title-main">{t('strategy.title')}</Title>
           <Text type="secondary">{t('strategy.description')}</Text>
         </div>
         <div className="page-header-right">
+          <div className="strategy-stats-inline">
+            <div
+              className={`stat-chip ${statusFilter === 'all' ? 'stat-chip-active' : ''}`}
+              onClick={() => setStatusFilter('all')}
+            >
+              <span className="stat-chip-value">{strategyStats.total}</span>
+              <span className="stat-chip-label">{t('strategy.stats_total')}</span>
+            </div>
+            <div
+              className={`stat-chip ${statusFilter === 'enabled' ? 'stat-chip-active' : ''}`}
+              onClick={() => setStatusFilter('enabled')}
+            >
+              <span className="stat-chip-value text-green-600">{strategyStats.enabled}</span>
+              <span className="stat-chip-label">{t('strategy.stats_enabled')}</span>
+            </div>
+            <div
+              className={`stat-chip ${statusFilter === 'disabled' ? 'stat-chip-active' : ''}`}
+              onClick={() => setStatusFilter('disabled')}
+            >
+              <span className="stat-chip-value text-red-600">{strategyStats.total - strategyStats.enabled}</span>
+              <span className="stat-chip-label">{t('strategy.stats_disabled')}</span>
+            </div>
+          </div>
           <Select value={filterType} onChange={setFilterType} style={{ width: 160 }}>
             <Select.Option value="all">{t('common.all_types')}</Select.Option>
             {strategyTypeOptions.map((opt) => (

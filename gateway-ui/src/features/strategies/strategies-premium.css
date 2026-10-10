@@ -723,3 +723,38 @@
   align-items: center;
   text-align: center;
 }
+
+/* ===== 策略页：统计chip内联进标题行（省一整行；点击语义=状态筛选，与原stats-bar一致） ===== */
+.strategy-stats-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.stat-chip {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+.stat-chip:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+.stat-chip-active {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.14);
+}
+.stat-chip-value {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+}
+.stat-chip-label {
+  font-size: 12px;
+  color: #94a3b8;
+}
