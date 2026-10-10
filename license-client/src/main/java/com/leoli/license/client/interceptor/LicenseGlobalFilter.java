@@ -105,7 +105,6 @@ public class LicenseGlobalFilter implements GlobalFilter, Ordered {
                 return chain.filter(exchange);
             }
 
-            Integer days = license.getDaysRemaining();
             Map<String, Object> errorData = new HashMap<>();
             errorData.put("licenseId", license.getLicenseId());
             errorData.put("expiredAt", license.getExpiresAt() != null 
@@ -142,8 +141,10 @@ public class LicenseGlobalFilter implements GlobalFilter, Ordered {
      * Check if path is internal endpoint (skip license check)
      */
     private boolean isInternalEndpoint(String path) {
+        // /health must match exactly (or be a real sub-path): the bare prefix also
+        // exempted unrelated business routes such as /health-data from licensing.
         return path.startsWith("/actuator") ||
-               path.startsWith("/health") ||
+               path.equals("/health") || path.startsWith("/health/") ||
                path.startsWith("/favicon.ico");
     }
 
