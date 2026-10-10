@@ -172,10 +172,16 @@ public interface FilterOrderConstants {
 
     /**
      * Token usage collector filter.
-     * Execute after trace capture filter.
-     * Collects token usage from AI response and updates quota.
+     * <p>
+     * MUST be &lt; NettyWriteResponseFilter (-1). SCG only routes the client-bound
+     * response body through decorators installed by filters ordered BEFORE -1
+     * (same reason ResponseTransformFilter sits at -45). At the previous order (101)
+     * this filter's writeWith/writeAndFlushWith were never invoked on the real proxy
+     * path, so token usage always parsed as 0. Placed just inside ResponseTransform
+     * (-45) so it observes the raw upstream body (usage field intact) before any
+     * transform, and after TokenQuotaPreCheckFilter (-243) so the tenant attr is set.
      */
-    int TOKEN_USAGE_COLLECTOR = 101;
+    int TOKEN_USAGE_COLLECTOR = -44;
 
     // ============================================================
     // Load Balancing Filters (High Values)
@@ -253,6 +259,7 @@ public interface FilterOrderConstants {
     //   -3     CircuitBreakerGlobalFilter      Circuit breaker (records final status after retry)
     //  -50     HeaderOpGlobalFilter            Header operations
     //  -45     ResponseTransformFilter         Response transformation
+    //  -44     TokenUsageCollectorFilter       AI token usage capture (must be < -1 to be in write path)
     //   -2     RetryGlobalFilter               Retry logic (intercepts response after NettyWrite)
     //   -1     NettyWriteResponseFilter        Write response (SCG built-in)
     //  50      CacheGlobalFilter               Response caching

@@ -185,6 +185,36 @@ function buildTokenRateLimiterConfig(values: StrategyFormValues): StrategyConfig
   return config;
 }
 
+interface AiProxyCredentialRow { provider?: string; credentialRef?: string; }
+interface AiProxyModelRow { model?: string; provider?: string; }
+
+/**
+ * AI_PROXY form values -> config aligned with my-gateway model/AiProxyConfig.java.
+ * providerCredentials / modelRouting Form.Lists become maps.
+ */
+function buildAiProxyConfig(values: StrategyFormValues): StrategyConfig {
+  const providerApiKeyRefs: Record<string, string> = {};
+  ((values.providerCredentials ?? []) as AiProxyCredentialRow[]).forEach((row) => {
+    if (row.provider && row.credentialRef) providerApiKeyRefs[row.provider] = row.credentialRef;
+  });
+  const modelRouting: Record<string, string> = {};
+  ((values.modelRouting ?? []) as AiProxyModelRow[]).forEach((row) => {
+    if (row.model && row.provider) modelRouting[row.model] = row.provider;
+  });
+  return {
+    enabled: true,
+    providerSelection: values.providerSelection || 'MODEL',
+    fixedProvider: values.fixedProvider,
+    providerHeader: values.providerHeader || 'X-Provider',
+    defaultModel: values.defaultModel,
+    responseFormat: values.responseFormat || 'OPENAI',
+    stripClientAuth: values.stripClientAuth !== false,
+    maxBodySize: toInt(values.maxBodySize, 1048576),
+    providerApiKeyRefs,
+    modelRouting,
+  };
+}
+
 /** Build the backend config object from antd form values per strategy type. */
 export function buildStrategyConfig(
   values: StrategyFormValues,
@@ -203,6 +233,8 @@ export function buildStrategyConfig(
       return buildMultiDimConfig(values);
     case 'TOKEN_RATE_LIMITER':
       return buildTokenRateLimiterConfig(values);
+    case 'AI_PROXY':
+      return buildAiProxyConfig(values);
     case 'IP_FILTER':
       return {
         mode: values.mode || 'blacklist',
@@ -513,6 +545,14 @@ export function strategyToFormValues(strategy: StrategyDefinition): StrategyForm
     formValues.tenantQuotas = tokenQuotasToRows(config);
   }
 
+  if (strategy.strategyType === 'AI_PROXY') {
+    const refs = (config.providerApiKeyRefs ?? {}) as Record<string, string>;
+    formValues.providerCredentials = Object.entries(refs).map(([provider, credentialRef]) => ({ provider, credentialRef }));
+    const routing = (config.modelRouting ?? {}) as Record<string, string>;
+    formValues.modelRouting = Object.entries(routing).map(([model, provider]) => ({ model, provider }));
+    delete formValues.providerApiKeyRefs;
+  }
+
   if (strategy.strategyType === 'REQUEST_TRANSFORM') {
     formValues.maxBodySize = config.maxBodySize || 1048576;
     formValues.validateAfterTransform = config.validateAfterTransform || false;
@@ -605,6 +645,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
   transform: '数据转换',
   observability: '可观测性',
   misc: '其他',
+  ai: 'AI 能力',
 };
 
 /** CSS class mapping per strategy type category (StrategiesPage.premium.css). */
@@ -616,6 +657,7 @@ export function getStrategyTypeTagClass(category?: string): string {
     transform: 'enabled-global',
     observability: 'enabled-global',
     misc: 'enabled-global',
+    ai: 'enabled-global',
   };
   return (category && categoryColors[category]) || 'rate-limiter';
 }

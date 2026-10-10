@@ -23,6 +23,7 @@ import DynamicConfigFields, {
   RequestTransformFields, ResponseTransformFields,
 } from './DynamicConfigFields';
 import { TokenRateLimiterFields } from './TokenRateLimiterFields';
+import { AiProxyFields } from './AiProxyFields';
 
 const { Text } = Typography;
 
@@ -103,6 +104,9 @@ function renderConfigFields(
   }
   if (code === 'TOKEN_RATE_LIMITER' && schema.subSchemas) {
     return <TokenRateLimiterFields schema={schema} form={form} t={t} />;
+  }
+  if (code === 'AI_PROXY') {
+    return <AiProxyFields schema={schema} form={form} t={t} />;
   }
 
   // TIMEOUT gets a low-value warning on top of the generic fields.
