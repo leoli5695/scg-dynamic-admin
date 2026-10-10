@@ -90,8 +90,32 @@ public class AiProxyConfig {
     /** Max request body buffered to read the {@code model} field. */
     private long maxBodySize = 1048576;
 
+    // ============== Failover ==============
+
+    /**
+     * Ordered failover targets tried after the primary (model-resolved) provider.
+     * Failover reuses the route's RETRY strategy: bind a RETRY strategy with
+     * maxAttempts = 1 + fallbacks.size() and retryOnStatusCodes covering 429/5xx.
+     * RetryGlobalFilter re-invokes AiProviderRoutingFilter on each retry, which then
+     * selects the next target. Streaming can only fail over before the first byte.
+     */
+    private java.util.List<FallbackTarget> fallbacks = new java.util.ArrayList<>();
+
     /** Provider selection modes. */
     public enum Selection {
         MODEL, FIXED, HEADER
+    }
+
+    /** One failover target in the ordered chain. */
+    @Data
+    public static class FallbackTarget {
+        /** Provider id (deepseek/qwen/zhipu/moonshot/openai/anthropic/custom). */
+        private String provider;
+        /** Upstream model for this target; defaults to the requested model. */
+        private String model;
+        /** Credential ref; defaults to providerApiKeyRefs[provider] when omitted. */
+        private String credentialRef;
+        /** Optional base-url override (relay / self-hosted) for this target. */
+        private String baseUrlOverride;
     }
 }

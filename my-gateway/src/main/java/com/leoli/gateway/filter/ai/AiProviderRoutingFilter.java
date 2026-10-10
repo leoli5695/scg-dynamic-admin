@@ -33,7 +33,9 @@ import reactor.core.publisher.Mono;
 
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -111,46 +113,48 @@ public class AiProviderRoutingFilter implements GlobalFilter, Ordered {
                         model = config.getDefaultModel();
                     }
 
-                    Optional<LlmProvider> resolved = resolveProvider(exchange, config, model);
-                    if (resolved.isEmpty()) {
-                        log.warn("AI proxy: no provider resolved for model '{}' on route {}", model, routeId);
-                        return writeError(exchange, HttpStatus.BAD_REQUEST, 40001,
-                                "无法解析模型对应的 Provider: " + model);
-                    }
-                    LlmProvider provider = resolved.get();
-
-                    String credentialRef = config.getProviderApiKeyRefs() == null ? null
-                            : config.getProviderApiKeyRefs().get(provider.getId());
-                    if (credentialRef == null || credentialRef.isBlank()) {
-                        log.warn("AI proxy: no credential configured for provider {}", provider.getId());
-                        return writeError(exchange, HttpStatus.INTERNAL_SERVER_ERROR, 50001,
-                                "Provider 未配置凭据: " + provider.getId());
-                    }
-
                     final String requestedModel = model;
-                    final String upstreamModel = config.getModelMapping() != null
+                    final String mappedModel = config.getModelMapping() != null
                             ? config.getModelMapping().getOrDefault(requestedModel, requestedModel)
                             : requestedModel;
 
+                    // Ordered target list: primary (model-resolved) then configured fallbacks.
+                    List<Target> targets = buildTargets(exchange, config, requestedModel, mappedModel);
+                    if (targets.isEmpty()) {
+                        boolean providerKnown = resolveProvider(exchange, config, requestedModel).isPresent();
+                        log.warn("AI proxy: no routable provider/credential for model '{}' on route {}", model, routeId);
+                        return providerKnown
+                                ? writeError(exchange, HttpStatus.INTERNAL_SERVER_ERROR, 50001,
+                                        "Provider 未配置凭据: " + model)
+                                : writeError(exchange, HttpStatus.BAD_REQUEST, 40001,
+                                        "无法解析模型对应的 Provider: " + model);
+                    }
+
+                    // The attempt index advances each time RetryGlobalFilter re-invokes this
+                    // filter, so failover walks the target list. Self-managed to avoid coupling
+                    // to the retry filter's internal counters.
+                    int attempt = nextAttemptIndex(exchange);
+                    Target target = targets.get(Math.min(attempt, targets.size() - 1));
+
                     // switchIfEmpty is on Mono<String> (emits when present) - NOT on the
                     // downstream Mono<Void>, which would falsely trigger on normal completion.
-                    return keyResolver.resolveKey(credentialRef)
-                            .switchIfEmpty(Mono.error(new KeyResolutionException(provider.getId())))
+                    return keyResolver.resolveKey(target.credentialRef)
+                            .switchIfEmpty(Mono.error(new KeyResolutionException(target.provider.getId())))
                             .flatMap(key -> {
                                 byte[] outBytes = rewriteUpstreamBody(bytes, body, requestedModel,
-                                        upstreamModel, provider);
+                                        target.upstreamModel, target.provider);
 
-                                URI upstream = buildUpstreamUri(provider, config, exchange);
+                                URI upstream = buildUpstreamUri(target.provider, target.baseUrlOverride, exchange);
                                 exchange.getAttributes().put(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR, upstream);
-                                exchange.getAttributes().put(AI_PROVIDER_ATTR, provider.getId());
-                                exchange.getAttributes().put(AI_MODEL_ATTR, upstreamModel);
+                                exchange.getAttributes().put(AI_PROVIDER_ATTR, target.provider.getId());
+                                exchange.getAttributes().put(AI_MODEL_ATTR, target.upstreamModel);
                                 exchange.getAttributes().put(AI_RESPONSE_FORMAT_ATTR,
                                         config.getResponseFormat() != null ? config.getResponseFormat() : "OPENAI");
 
-                                ServerHttpRequest newRequest = decorateRequest(exchange, provider, key, upstream,
+                                ServerHttpRequest newRequest = decorateRequest(exchange, target.provider, key, upstream,
                                         outBytes, config);
-                                log.info("AI proxy routing: route={}, model={} -> provider={}, upstream={}",
-                                        routeId, requestedModel, provider.getId(), upstream);
+                                log.info("AI proxy routing: route={}, model={} -> provider={}, upstream={} (attempt {}/{})",
+                                        routeId, requestedModel, target.provider.getId(), upstream, attempt + 1, targets.size());
                                 return chain.filter(exchange.mutate().request(newRequest).build());
                             })
                             .onErrorResume(KeyResolutionException.class, e ->
@@ -185,15 +189,87 @@ public class AiProviderRoutingFilter implements GlobalFilter, Ordered {
         }
     }
 
-    private URI buildUpstreamUri(LlmProvider provider, AiProxyConfig config, ServerWebExchange exchange) {
-        String override = config.getProviderBaseUrlOverride() == null ? null
-                : config.getProviderBaseUrlOverride().get(provider.getId());
-        String url = provider.resolveChatUrl(override);
+    private URI buildUpstreamUri(LlmProvider provider, String baseUrlOverride, ServerWebExchange exchange) {
+        String url = provider.resolveChatUrl(baseUrlOverride);
         String query = exchange.getRequest().getURI().getRawQuery();
         if (query != null && !query.isBlank()) {
             url = url + "?" + query;
         }
         return URI.create(url);
+    }
+
+    /** Exchange attr carrying the failover attempt index (advances per RetryGlobalFilter re-invocation). */
+    private static final String ATTEMPT_INDEX_ATTR = "ai.target.attempt";
+
+    private int nextAttemptIndex(ServerWebExchange exchange) {
+        Object value = exchange.getAttributes().get(ATTEMPT_INDEX_ATTR);
+        int idx = (value instanceof Integer) ? (Integer) value : 0;
+        exchange.getAttributes().put(ATTEMPT_INDEX_ATTR, idx + 1);
+        return idx;
+    }
+
+    /**
+     * Build the ordered target list: the primary (model-resolved) provider first, then
+     * each configured fallback with a resolvable provider AND credential. Targets missing
+     * either are skipped so a partial config still routes to whatever is usable.
+     */
+    private List<Target> buildTargets(ServerWebExchange exchange, AiProxyConfig config,
+                                      String requestedModel, String mappedModel) {
+        List<Target> targets = new ArrayList<>();
+        Map<String, String> refs = config.getProviderApiKeyRefs();
+
+        Optional<LlmProvider> primary = resolveProvider(exchange, config, requestedModel);
+        if (primary.isPresent()) {
+            String ref = refs == null ? null : refs.get(primary.get().getId());
+            if (ref != null && !ref.isBlank()) {
+                targets.add(new Target(primary.get(), ref, mappedModel,
+                        overrideFor(config, primary.get().getId())));
+            }
+        }
+
+        if (config.getFallbacks() != null) {
+            for (AiProxyConfig.FallbackTarget fb : config.getFallbacks()) {
+                if (fb == null) {
+                    continue;
+                }
+                Optional<LlmProvider> provider = ProviderRegistry.byId(fb.getProvider());
+                if (provider.isEmpty()) {
+                    continue;
+                }
+                String ref = (fb.getCredentialRef() != null && !fb.getCredentialRef().isBlank())
+                        ? fb.getCredentialRef()
+                        : (refs == null ? null : refs.get(provider.get().getId()));
+                if (ref == null || ref.isBlank()) {
+                    continue;
+                }
+                String targetModel = (fb.getModel() != null && !fb.getModel().isBlank())
+                        ? fb.getModel() : requestedModel;
+                String override = (fb.getBaseUrlOverride() != null && !fb.getBaseUrlOverride().isBlank())
+                        ? fb.getBaseUrlOverride() : overrideFor(config, provider.get().getId());
+                targets.add(new Target(provider.get(), ref, targetModel, override));
+            }
+        }
+        return targets;
+    }
+
+    private String overrideFor(AiProxyConfig config, String providerId) {
+        return config.getProviderBaseUrlOverride() == null ? null
+                : config.getProviderBaseUrlOverride().get(providerId);
+    }
+
+    /** A resolved failover target: provider + credential ref + upstream model + base-url override. */
+    private static final class Target {
+        final LlmProvider provider;
+        final String credentialRef;
+        final String upstreamModel;
+        final String baseUrlOverride;
+
+        Target(LlmProvider provider, String credentialRef, String upstreamModel, String baseUrlOverride) {
+            this.provider = provider;
+            this.credentialRef = credentialRef;
+            this.upstreamModel = upstreamModel;
+            this.baseUrlOverride = baseUrlOverride;
+        }
     }
 
     private ServerHttpRequest decorateRequest(ServerWebExchange exchange, LlmProvider provider, String key,
