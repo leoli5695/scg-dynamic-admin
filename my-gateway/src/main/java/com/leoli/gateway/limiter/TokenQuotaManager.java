@@ -5,23 +5,31 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.leoli.gateway.config.RedisEnabledCondition;
 import com.leoli.gateway.model.TokenQuotaConfig;
 import com.leoli.gateway.model.TokenQuotaConfig.TenantTokenQuota;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Token Quota Manager - Core component for AI Token rate limiting.
@@ -54,11 +62,41 @@ public class TokenQuotaManager {
     /**
      * Local cache for fallback when Redis unavailable.
      * Key: tenantId, Value: QuotaSnapshot
+     * <p>
+     * FIX (点7 #1): was {@code expireAfterWrite(5min)}, so a tenant under sustained traffic had
+     * its snapshot discarded and rebuilt at used=0 every 5 minutes during a Redis outage - the
+     * local quota silently reset and stopped limiting. {@code expireAfterAccess} keeps the entry
+     * alive while it is being read/written (i.e. while there is traffic to limit) and only evicts
+     * genuinely idle tenants.
      */
     private final Cache<String, QuotaSnapshot> localCache = Caffeine.newBuilder()
             .maximumSize(10000)
-            .expireAfterWrite(Duration.ofMinutes(5))
+            .expireAfterAccess(Duration.ofMinutes(30))
             .build();
+
+    /**
+     * FIX (点7 #3): tokens granted from the local fallback while Redis was down, per tenant,
+     * awaiting back-deduct into Redis once it recovers. Unlike {@link #localCache} this has NO
+     * timer expiry - losing it would silently drop the reconcile. Bounded by
+     * {@link #MAX_PENDING_TENANTS}. The period stamp is frozen at the first local grant so the
+     * back-deduct lands in the same bucket the tokens were counted against.
+     * <p>
+     * NOTE (点7 #2, inherent): this is per-Pod. During an outage each Pod counts its own traffic
+     * independently - there is no shared store, which is precisely why we are in fallback - so the
+     * effective limit is temporarily widened by the Pod count. Reconcile back-deducts each Pod's
+     * own grants, so the Redis total is correct again after recovery.
+     */
+    private final Map<String, PendingUsage> pendingReconcile = new ConcurrentHashMap<>();
+    private static final int MAX_PENDING_TENANTS = 10_000;
+
+    /** Meter registry (optional); when present, exposes the degraded-mode signals. */
+    @Autowired(required = false)
+    private MeterRegistry meterRegistry;
+
+    /** Counts requests served from the local fallback while Redis was down. */
+    private Counter fallbackGrants;
+    /** Samples the degraded-mode WARN so a sustained outage does not flood the log. */
+    private final AtomicLong fallbackWarnCount = new AtomicLong();
 
     /**
      * Lua script for atomic quota check and deduction.
@@ -121,12 +159,38 @@ public class TokenQuotaManager {
         refundScript = new DefaultRedisScript<>();
         refundScript.setScriptText(refundScriptText);
         refundScript.setResultType(Long.class);
+
+        // Reconcile back-deduct: INCRBY the locally-granted tokens into Redis and (re)set a TTL.
+        String reconcileScriptText =
+            "local v = redis.call('INCRBY', KEYS[1], ARGV[1])\n" +
+            "redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))\n" +
+            "return v";
+        reconcileScript = new DefaultRedisScript<>();
+        reconcileScript.setScriptText(reconcileScriptText);
+        reconcileScript.setResultType(Long.class);
+
+        // Degraded-mode observability (点7): how often we served from local fallback, and how
+        // much is still waiting to be reconciled back into Redis.
+        if (meterRegistry != null) {
+            this.fallbackGrants = meterRegistry.counter("token.quota.fallback.grants",
+                    "reason", "redis-unavailable");
+            Gauge.builder("token.quota.pending.reconcile.tenants", pendingReconcile, Map::size)
+                    .description("Tenants with locally-granted tokens awaiting back-deduct to Redis")
+                    .register(meterRegistry);
+        }
     }
 
     /**
      * Lua script for atomic token refund (decrement with floor at zero).
      */
     private DefaultRedisScript<Long> refundScript;
+
+    /**
+     * Lua script for reconcile back-deduct: atomic INCRBY + EXPIRE so a back-deducted
+     * (possibly past-period) key never lingers without a TTL.
+     * KEYS[1]=usedKey, ARGV[1]=amount, ARGV[2]=ttlSeconds.
+     */
+    private DefaultRedisScript<Long> reconcileScript;
 
     // ============== Quota Check Methods ==============
 
@@ -682,8 +746,118 @@ public class TokenQuotaManager {
         snapshot.setDailyUsed(Math.max(0, snapshot.getDailyUsed() - tokens));
         localCache.put(tenantId, snapshot);
 
+        // A local refund also reduces what we will back-deduct into Redis on recovery.
+        PendingUsage pending = pendingReconcile.get(tenantId);
+        if (pending != null) {
+            pending.monthlyTokens.updateAndGet(v -> Math.max(0, v - tokens));
+            pending.dailyTokens.updateAndGet(v -> Math.max(0, v - tokens));
+        }
+
         log.info("Refunded {} tokens in local cache for tenant {}", tokens, tenantId);
         return true;
+    }
+
+    // ============== Local Fallback Reconcile (点7) ==============
+
+    /**
+     * Track a grant made from the local fallback so it can be back-deducted into Redis after
+     * recovery, and make the degraded state observable (counter + sampled WARN). The period stamp
+     * is frozen at the tenant's first local grant of the outage.
+     */
+    private void recordFallbackGrant(String tenantId, long tokens, TokenQuotaConfig config) {
+        if (tokens <= 0) {
+            return;
+        }
+        if (fallbackGrants != null) {
+            fallbackGrants.increment();
+        }
+        long n = fallbackWarnCount.incrementAndGet();
+        if (n == 1 || n % 100 == 0) {
+            log.warn("Token quota in LOCAL FALLBACK (Redis unavailable): granted {} tokens to tenant {} "
+                    + "(degraded grants={}). Quota is best-effort and per-Pod until Redis recovers.",
+                    tokens, tenantId, n);
+        }
+
+        TenantTokenQuota quota = config.getTenantQuota(tenantId);
+        boolean monthly = shouldCheckMonthly(quota, config);
+        boolean daily = shouldCheckDaily(quota, config);
+        if (!monthly && !daily) {
+            return;
+        }
+        if (pendingReconcile.size() >= MAX_PENDING_TENANTS && !pendingReconcile.containsKey(tenantId)) {
+            log.warn("Pending reconcile queue full ({} tenants); not tracking fallback usage for tenant {}",
+                    MAX_PENDING_TENANTS, tenantId);
+            return;
+        }
+        QuotaPeriodStamp stamp = currentPeriodStamp();
+        PendingUsage pending = pendingReconcile.computeIfAbsent(tenantId,
+                k -> new PendingUsage(stamp.monthId(), stamp.dayId(), monthly, daily));
+        if (monthly) {
+            pending.monthlyTokens.addAndGet(tokens);
+        }
+        if (daily) {
+            pending.dailyTokens.addAndGet(tokens);
+        }
+    }
+
+    /**
+     * Back-deduct locally-granted tokens into Redis once it recovers. Scheduled rather than
+     * lazy so reconciliation does not wait for the next request and adds nothing to the hot path.
+     * Each tenant is written to the period it was granted in (frozen stamp) and only removed after
+     * a successful write, so a partial failure retries on the next sweep.
+     */
+    @Scheduled(fixedDelay = 30_000L)
+    public void reconcilePendingUsage() {
+        if (pendingReconcile.isEmpty() || !isRedisAvailable()) {
+            return;
+        }
+        for (Map.Entry<String, PendingUsage> entry : pendingReconcile.entrySet()) {
+            String tenantId = entry.getKey();
+            PendingUsage pending = entry.getValue();
+            long monthly = pending.monthlyTokens.get();
+            long daily = pending.dailyTokens.get();
+            try {
+                QuotaPeriodStamp stamp = new QuotaPeriodStamp(pending.monthId, pending.dayId);
+                if (pending.trackMonthly && monthly > 0) {
+                    String key = buildKey("monthly", tenantId, "used", stamp);
+                    redisTemplate.execute(reconcileScript, Collections.singletonList(key),
+                            String.valueOf(monthly), String.valueOf(ttlForStampedMonth(pending.monthId)));
+                }
+                if (pending.trackDaily && daily > 0) {
+                    String key = buildKey("daily", tenantId, "used", stamp);
+                    redisTemplate.execute(reconcileScript, Collections.singletonList(key),
+                            String.valueOf(daily), String.valueOf(ttlForStampedDay(pending.dayId)));
+                }
+                pendingReconcile.remove(tenantId);
+                log.info("Reconciled local fallback usage into Redis for tenant {}: monthly={}, daily={} (period {}/{})",
+                        tenantId, monthly, daily, pending.monthId, pending.dayId);
+            } catch (Exception e) {
+                log.warn("Reconcile of fallback usage failed for tenant {}, will retry next sweep: {}",
+                        tenantId, e.getMessage());
+            }
+        }
+    }
+
+    /** Seconds until the end of the stamped month; a past month gets a short TTL so the key cleans up. */
+    private long ttlForStampedMonth(String monthId) {
+        try {
+            YearMonth ym = YearMonth.parse(monthId, DateTimeFormatter.ofPattern("yyyyMM"));
+            long secs = Duration.between(LocalDateTime.now(), ym.atEndOfMonth().atTime(23, 59, 59)).getSeconds();
+            return secs > 0 ? secs + 1 : 3600L;
+        } catch (Exception e) {
+            return 3600L;
+        }
+    }
+
+    /** Seconds until the end of the stamped day; a past day gets a short TTL so the key cleans up. */
+    private long ttlForStampedDay(String dayId) {
+        try {
+            LocalDate day = LocalDate.parse(dayId, DateTimeFormatter.ofPattern("yyyyMMdd"));
+            long secs = Duration.between(LocalDateTime.now(), day.atTime(23, 59, 59)).getSeconds();
+            return secs > 0 ? secs + 1 : 3600L;
+        } catch (Exception e) {
+            return 3600L;
+        }
     }
 
     // ============== Helper Methods ==============
@@ -821,6 +995,10 @@ public class TokenQuotaManager {
         snapshot.setDailyUsed(snapshot.getDailyUsed() + tokens);
         localCache.put(tenantId, snapshot);
 
+        // FIX (点7): remember the grant for back-deduct on Redis recovery, and surface that
+        // quota is currently running degraded.
+        recordFallbackGrant(tenantId, tokens, config);
+
         log.debug("Consumed {} tokens in local cache for tenant {}", tokens, tenantId);
         return true;
     }
@@ -873,6 +1051,27 @@ public class TokenQuotaManager {
      * the bucket the tokens were charged in.
      */
     public record QuotaPeriodStamp(String monthId, String dayId) {}
+
+    /**
+     * Locally-granted tokens awaiting back-deduct into Redis after an outage (点7). The period
+     * stamp is frozen at the tenant's first local grant so reconcile targets the bucket the tokens
+     * were counted in, not whichever period happens to be current when Redis comes back.
+     */
+    private static final class PendingUsage {
+        final String monthId;
+        final String dayId;
+        final boolean trackMonthly;
+        final boolean trackDaily;
+        final AtomicLong monthlyTokens = new AtomicLong();
+        final AtomicLong dailyTokens = new AtomicLong();
+
+        PendingUsage(String monthId, String dayId, boolean trackMonthly, boolean trackDaily) {
+            this.monthId = monthId;
+            this.dayId = dayId;
+            this.trackMonthly = trackMonthly;
+            this.trackDaily = trackDaily;
+        }
+    }
 
     /**
      * Quota check result with detailed status.
