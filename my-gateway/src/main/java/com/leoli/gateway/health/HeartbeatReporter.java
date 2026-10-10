@@ -1,6 +1,7 @@
 package com.leoli.gateway.health;
 
 import com.leoli.gateway.config.HeartbeatProperties;
+import com.leoli.gateway.constants.InternalApiConstants;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -138,7 +139,7 @@ public class HeartbeatReporter {
                 HttpHeaders headers = new HttpHeaders();
                 headers.setContentType(MediaType.APPLICATION_JSON);
                 if (internalToken != null && !internalToken.isEmpty()) {
-                    headers.set("X-Internal-Token", internalToken);
+                    headers.set(InternalApiConstants.TOKEN_HEADER, internalToken);
                 }
                 HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 

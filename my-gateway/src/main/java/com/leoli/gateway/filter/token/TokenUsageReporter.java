@@ -1,5 +1,6 @@
 package com.leoli.gateway.filter.token;
 
+import com.leoli.gateway.constants.InternalApiConstants;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
@@ -30,7 +31,7 @@ import java.util.concurrent.atomic.AtomicLong;
 @Component
 public class TokenUsageReporter {
 
-    private static final String TOKEN_HEADER = "X-Internal-Token";
+    private static final String TOKEN_HEADER = InternalApiConstants.TOKEN_HEADER;
     private static final String RECORD_PATH = "/api/token-quota/internal/record-usage";
 
     @Value("${gateway.admin.url:http://127.0.0.1:9090}")

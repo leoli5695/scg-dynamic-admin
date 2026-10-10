@@ -1,5 +1,6 @@
 package com.leoli.gateway.admin.config;
 
+import com.leoli.gateway.admin.filter.InternalApiTokenFilter;
 import com.leoli.gateway.admin.properties.GatewayAdminProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -46,7 +47,7 @@ public class RestTemplateConfig {
         if (internalToken != null && !internalToken.isEmpty()) {
             ClientHttpRequestInterceptor tokenInterceptor = (request, body, execution) -> {
                 if (request.getURI().getPath().startsWith("/internal/")) {
-                    request.getHeaders().set("X-Internal-Token", internalToken);
+                    request.getHeaders().set(InternalApiTokenFilter.TOKEN_HEADER, internalToken);
                 }
                 return execution.execute(request, body);
             };

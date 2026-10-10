@@ -2,6 +2,7 @@ package com.leoli.gateway.health;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.leoli.gateway.constants.InternalApiConstants;
 import com.leoli.gateway.manager.ServiceManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -393,7 +394,7 @@ public class HybridHealthChecker {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("X-Instance-Id", instanceId);
         if (internalToken != null && !internalToken.isEmpty()) {
-            headers.set("X-Internal-Token", internalToken);
+            headers.set(InternalApiConstants.TOKEN_HEADER, internalToken);
         }
 
         HttpEntity<List<InstanceHealth>> request = new HttpEntity<>(batch, headers);

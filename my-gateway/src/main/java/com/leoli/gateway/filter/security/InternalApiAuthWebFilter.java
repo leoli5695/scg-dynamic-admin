@@ -1,5 +1,6 @@
 package com.leoli.gateway.filter.security;
 
+import com.leoli.gateway.constants.InternalApiConstants;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,7 +37,7 @@ import java.security.MessageDigest;
 @Component
 public class InternalApiAuthWebFilter implements WebFilter, Ordered, InitializingBean {
 
-    public static final String TOKEN_HEADER = "X-Internal-Token";
+    public static final String TOKEN_HEADER = InternalApiConstants.TOKEN_HEADER;
 
     private static final String PROTECTED_PREFIX = "/internal/";
 
@@ -88,4 +89,4 @@ public class InternalApiAuthWebFilter implements WebFilter, Ordered, Initializin
         // Run before all gateway filters so rejected internal requests never enter the pipeline
         return Ordered.HIGHEST_PRECEDENCE + 10;
     }
-}
+}

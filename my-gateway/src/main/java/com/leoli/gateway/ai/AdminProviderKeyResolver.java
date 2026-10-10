@@ -3,6 +3,7 @@ package com.leoli.gateway.ai;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.leoli.gateway.constants.InternalApiConstants;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,7 +25,7 @@ import java.time.Duration;
 @Component
 public class AdminProviderKeyResolver implements ProviderKeyResolver {
 
-    private static final String TOKEN_HEADER = "X-Internal-Token";
+    private static final String TOKEN_HEADER = InternalApiConstants.TOKEN_HEADER;
 
     private final WebClient webClient;
 

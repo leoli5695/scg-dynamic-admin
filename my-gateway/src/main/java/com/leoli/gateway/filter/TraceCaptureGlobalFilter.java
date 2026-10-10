@@ -2,6 +2,7 @@ package com.leoli.gateway.filter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.constants.FilterOrderConstants;
+import com.leoli.gateway.constants.InternalApiConstants;
 import com.leoli.gateway.monitor.FilterChainTracker;
 import com.leoli.gateway.util.ClientIpResolver;
 import com.leoli.gateway.util.RouteUtils;
@@ -691,7 +692,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
                     .post()
                     .uri(adminUrl + "/api/traces/internal")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .headers(h -> { if (!internalToken.isEmpty()) h.set("X-Internal-Token", internalToken); })
+                    .headers(h -> { if (!internalToken.isEmpty()) h.set(InternalApiConstants.TOKEN_HEADER, internalToken); })
                     .bodyValue(trace)
                     .retrieve()
                     .bodyToMono(String.class)
@@ -753,7 +754,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
                     .post()
                     .uri(adminUrl + "/api/filter-executions/internal")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .headers(h -> { if (!internalToken.isEmpty()) h.set("X-Internal-Token", internalToken); })
+                    .headers(h -> { if (!internalToken.isEmpty()) h.set(InternalApiConstants.TOKEN_HEADER, internalToken); })
                     .bodyValue(executionData)
                     .retrieve()
                     .bodyToMono(String.class)

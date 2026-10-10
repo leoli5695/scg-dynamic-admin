@@ -1,6 +1,7 @@
 package com.leoli.gateway.exception;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leoli.gateway.constants.InternalApiConstants;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.web.reactive.error.ErrorWebExceptionHandler;
@@ -461,7 +462,7 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
                             .post()
                             .uri(adminUrl + "/api/traces/internal")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .headers(h -> { if (internalToken != null && !internalToken.isEmpty()) h.set("X-Internal-Token", internalToken); })
+                            .headers(h -> { if (internalToken != null && !internalToken.isEmpty()) h.set(InternalApiConstants.TOKEN_HEADER, internalToken); })
                             .bodyValue(trace)
                             .retrieve()
                             .bodyToMono(String.class)

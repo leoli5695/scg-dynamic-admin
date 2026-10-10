@@ -135,6 +135,9 @@ public class GatewayTraceProperties {
      * Must match gateway.admin.security.internal-token on the admin console.
      * Default: empty (admin side enforcement is optional).
      */
+    /** Header carrying the shared internal token (declared once per module; no shared dep). */
+    public static final String INTERNAL_TOKEN_HEADER = "X-Internal-Token";
+
     private String internalToken = "";
 
     // ==================== OTLP Export (Optional) ====================
