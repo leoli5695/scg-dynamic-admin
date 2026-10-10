@@ -65,11 +65,12 @@ public class DynamicRouteDefinitionLocator implements RouteDefinitionLocator {
 
             log.info("Loaded {} route(s) to SCG", allRoutes.size());
 
-            // Always log route details for debugging
-            allRoutes.forEach(r -> {
-                log.info("  >> Route id={}, uri={}, predicates={}, filters={}",
-                        r.getId(), r.getUri(), r.getPredicates(), r.getFilters());
-            });
+            // Debug-only: this runs on every SCG route refresh, and filter args carry
+            // strategy configuration that has no business sitting in INFO logs.
+            if (log.isDebugEnabled()) {
+                allRoutes.forEach(r -> log.debug("  >> Route id={}, uri={}, predicates={}, filters={}",
+                        r.getId(), r.getUri(), r.getPredicates(), r.getFilters()));
+            }
 
             return Flux.fromIterable(allRoutes);
         } catch (Exception e) {

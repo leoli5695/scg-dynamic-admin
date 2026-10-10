@@ -518,7 +518,9 @@ public class RouteRefresher {
             }
 
         } catch (Exception e) {
-            log.debug("Periodic sync check completed (no action needed)");
+            // This scheduled sync is the only safety net for routes whose per-route
+            // listener was missed; at debug (root level is INFO) it failed invisibly.
+            log.warn("Periodic route sync failed - missing routes stay unrecovered until it succeeds", e);
         }
     }
 }
