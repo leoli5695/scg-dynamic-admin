@@ -109,7 +109,8 @@ const StrategiesPage: React.FC = () => {
     return { all: strategies.length, ai, normal: strategies.length - ai };
   }, [strategies, isAiStrategy]);
 
-  // The create-flow type picker only offers types matching the active tab.
+  // The type filter dropdown follows the active tab; the create-flow picker
+  // always sees ALL types (it has its own general/AI tabs).
   const selectableStrategyTypes = useMemo(() => (
     categoryTab === 'ALL'
       ? strategyTypes
@@ -309,7 +310,8 @@ const StrategiesPage: React.FC = () => {
       {/* Type selection modal (step 1 of create flow) */}
       {typeSelectOpen && (
         <StrategyTypeSelectModal
-          strategyTypes={selectableStrategyTypes}
+          strategyTypes={strategyTypes}
+          initialTab={categoryTab === 'AI' ? 'ai' : 'general'}
           loading={typesRequest.loading}
           onSelect={handleSelectType}
           onCancel={() => setTypeSelectOpen(false)}

@@ -25,13 +25,15 @@ const AI_CATEGORY = 'ai';
 
 interface StrategyTypeSelectModalProps {
   strategyTypes: StrategyTypeInfo[];
+  /** Tab opened first; mirrors the page's category tab so AI-tab users land on AI types. */
+  initialTab?: 'general' | 'ai';
   loading: boolean;
   onSelect: (type: StrategyTypeInfo) => void;
   onCancel: () => void;
 }
 
 const StrategyTypeSelectModal: React.FC<StrategyTypeSelectModalProps> = ({
-  strategyTypes, loading, onSelect, onCancel,
+  strategyTypes, initialTab = 'general', loading, onSelect, onCancel,
 }) => {
   const { t } = useTranslation();
 
@@ -133,7 +135,7 @@ const StrategyTypeSelectModal: React.FC<StrategyTypeSelectModalProps> = ({
       <Spin spinning={loading}>
         <Tabs
           centered
-          defaultActiveKey="general"
+          defaultActiveKey={initialTab}
           items={[
             {
               key: 'general',
