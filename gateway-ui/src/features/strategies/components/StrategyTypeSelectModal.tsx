@@ -9,7 +9,7 @@
  *   manually here would fight that projection, so it is not offered.
  */
 import React, { useMemo } from 'react';
-import { Card, Col, Divider, Modal, Row, Spin, Tabs, Tag, Typography } from 'antd';
+import { Col, Divider, Modal, Row, Spin, Tabs, Tag, Typography } from 'antd';
 import { useTranslation } from 'react-i18next';
 import type { StrategyTypeInfo } from '../../../types/strategy';
 import { CATEGORY_LABELS } from '../utils';
@@ -62,17 +62,14 @@ const StrategyTypeSelectModal: React.FC<StrategyTypeSelectModalProps> = ({
           <Row gutter={[16, 16]} justify="center">
             {types.map((type) => (
               <Col span={6} key={type.typeCode}>
-                <Card
-                  hoverable
+                <div
                   className="strategy-type-card"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => onSelect(type)}
-                  style={{
-                    textAlign: 'center',
-                    borderRadius: 12,
-                    border: '1px solid #f0f0f0',
-                    transition: 'all 0.3s',
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') onSelect(type);
                   }}
-                  styles={{ body: { padding: '20px 12px' } }}
                 >
                   <div
                     style={{
@@ -101,7 +98,7 @@ const StrategyTypeSelectModal: React.FC<StrategyTypeSelectModalProps> = ({
                       {type.description.length > 30 ? `${type.description.substring(0, 30)}...` : type.description}
                     </Text>
                   )}
-                </Card>
+                </div>
               </Col>
             ))}
           </Row>

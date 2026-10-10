@@ -772,3 +772,28 @@
   overflow-y: auto;
   padding-right: 4px;
 }
+
+/* ===== 策略类型卡：轻量 div 版（替代 antd Card，节点减半） ===== */
+.strategy-type-select-modal .strategy-type-card {
+  background: var(--bg-card, #16161f);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 20px 12px;
+  text-align: center;
+  cursor: pointer;
+  /* 窄化 transition：只动边框色与位移，不用 all */
+  transition: border-color 0.2s ease, transform 0.2s ease;
+  /* 隔离布局失效范围，切 tab 重排时不向外扩散 */
+  contain: layout style;
+}
+.strategy-type-select-modal .strategy-type-card:hover,
+.strategy-type-select-modal .strategy-type-card:focus-visible {
+  border-color: rgba(59, 130, 246, 0.55);
+  transform: translateY(-2px);
+}
+.strategy-type-select-modal .ant-tabs-tabpane {
+  contain: layout style;
+}
+.strategy-type-select-modal .ant-tabs-ink-bar {
+  transition: none;
+}
