@@ -715,3 +715,11 @@
   .strategy-name { font-size: var(--text-sm); }
   .config-key { min-width: 60px; }
 }
+/* ===== 策略类型选择弹窗：头部居中（作用域覆盖，不动共享 .modal-header-modern） ===== */
+.strategy-type-select-modal .modal-title-wrapper {
+  justify-content: center;
+}
+.strategy-type-select-modal .modal-title-text {
+  align-items: center;
+  text-align: center;
+}

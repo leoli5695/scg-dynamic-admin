@@ -58,7 +58,7 @@ const StrategyTypeSelectModal: React.FC<StrategyTypeSelectModalProps> = ({
           <Divider style={{ margin: '0 0 16px 0' }}>
             <Tag color="blue">{CATEGORY_LABELS[category] || category}</Tag>
           </Divider>
-          <Row gutter={[16, 16]}>
+          <Row gutter={[16, 16]} justify="center">
             {types.map((type) => (
               <Col span={6} key={type.typeCode}>
                 <Card
@@ -136,6 +136,7 @@ const StrategyTypeSelectModal: React.FC<StrategyTypeSelectModalProps> = ({
     >
       <Spin spinning={loading}>
         <Tabs
+          centered
           defaultActiveKey="general"
           items={[
             {
