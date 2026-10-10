@@ -457,7 +457,9 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
                 .onErrorResume(e -> {
                     log.warn("Authentication failed for route {} with credential {}: {}",
                             routeId, policyId, e.getMessage());
-                    return writeUnauthorizedResponse(exchange, "Authentication failed: " + e.getMessage());
+                    // Reason stays server-side: echoing e.getMessage() handed internal
+                    // detail (library internals, policy state) to unauthenticated callers.
+                    return writeUnauthorizedResponse(exchange, "Authentication failed");
                 });
     }
 
