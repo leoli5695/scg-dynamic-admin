@@ -4,8 +4,9 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Button, Card, Divider, Empty, Input, Spin, Tabs, Typography  } from 'antd';
+  Button, Card, Empty, Input, Spin, Tabs, Typography  } from 'antd';
 import { message, modal } from '../../utils/antdStatic';
+import InlineStatChips from '../../components/InlineStatChips';
 import { ClusterOutlined, PlusOutlined, RobotOutlined, SearchOutlined } from '@ant-design/icons';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -205,30 +206,21 @@ const ServicesPage: React.FC = () => {
 
   return (
     <div className="services-page">
-      {/* Stats bar (also acts as health filter) */}
-      <div className="stats-bar">
-        {statsItems.map((item, idx) => (
-          <React.Fragment key={item.filter}>
-            {idx > 0 && <Divider type="vertical" className="stat-divider" />}
-            <div
-              className={`stat-item ${healthFilter === item.filter ? 'stat-item-active' : ''}`}
-              onClick={() => setHealthFilter(item.filter)}
-              style={{ cursor: 'pointer' }}
-            >
-              <div className={`stat-value ${item.className ?? ''}`}>{item.value}</div>
-              <div className="stat-label">{t(item.labelKey)}</div>
-            </div>
-          </React.Fragment>
-        ))}
-      </div>
-
-      {/* Header */}
+      {/* Header (stat chips double as health filter) */}
       <div className="page-header-modern">
         <div className="page-header-left">
           <Title level={3} className="page-title-main">{t('services.title')}</Title>
           <Text type="secondary">{t('services.description_helper')}</Text>
         </div>
         <div className="page-header-right">
+          <InlineStatChips items={statsItems.map((item) => ({
+            key: item.filter,
+            value: item.value,
+            label: t(item.labelKey),
+            tone: item.filter === 'healthy' ? 'green' : item.filter === 'unhealthy' ? 'red' : undefined,
+            active: healthFilter === item.filter,
+            onClick: () => setHealthFilter(item.filter),
+          }))} />
           <Input
             placeholder={t('services.search_placeholder')}
             value={searchTerm}

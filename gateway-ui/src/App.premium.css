@@ -5933,3 +5933,43 @@ kbd {
 
 
 
+
+/* ===== Inline stat chips (shared by all list pages; replaces full-width stats-bar) ===== */
+.stat-chips-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.stat-chip {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  transition: background 0.2s ease, border-color 0.2s ease;
+  user-select: none;
+}
+.stat-chip:not(.stat-chip-static) {
+  cursor: pointer;
+}
+.stat-chip:not(.stat-chip-static):hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+.stat-chip-active {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.14);
+}
+.stat-chip-value {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-primary, #e2e8f0);
+}
+.stat-chip-label {
+  font-size: 12px;
+  color: #94a3b8;
+}
+.text-amber-600 { color: #faad14; }

@@ -10,9 +10,10 @@
  * - PUT replaces the whole config → edit submits merged definition.
  */
 import React, { useCallback, useMemo, useState } from 'react';
-import { Button, Card, Empty, Select, Spin, Statistic, Typography } from 'antd';
+import { Button, Empty, Select, Spin, Typography } from 'antd';
 import { message } from '../../utils/antdStatic';
-import { KeyOutlined, LinkOutlined, PlusOutlined, SafetyOutlined } from '@ant-design/icons';
+import InlineStatChips from '../../components/InlineStatChips';
+import { KeyOutlined, PlusOutlined } from '@ant-design/icons';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useRequest } from '../../hooks/useRequest';
@@ -205,26 +206,18 @@ const AuthPoliciesPage: React.FC = () => {
 
   return (
     <div className="strategies-page">
-      {/* Stats Bar */}
-      <div className="stats-bar">
-        <Card className="stats-card">
-          <Statistic title={t('auth_policy.stats_total')} value={stats.total} prefix={<KeyOutlined />} />
-        </Card>
-        <Card className="stats-card">
-          <Statistic title={t('auth_policy.stats_enabled')} value={stats.enabled} prefix={<SafetyOutlined />} valueStyle={{ color: '#10b981' }} />
-        </Card>
-        <Card className="stats-card">
-          <Statistic title={t('auth_policy.stats_bound')} value={stats.boundRoutes} prefix={<LinkOutlined />} valueStyle={{ color: '#3b82f6' }} />
-        </Card>
-      </div>
-
-      {/* Header */}
+      {/* Header with inline stat chips */}
       <div className="page-header-modern">
         <div className="page-header-left">
           <KeyOutlined className="page-icon" />
           <Title level={2}>{t('auth_policy.title')}</Title>
         </div>
         <div className="page-header-right">
+          <InlineStatChips items={[
+            { key: 'total', value: stats.total, label: t('auth_policy.stats_total') },
+            { key: 'enabled', value: stats.enabled, label: t('auth_policy.stats_enabled'), tone: 'green' },
+            { key: 'bound', value: stats.boundRoutes, label: t('auth_policy.stats_bound'), tone: 'blue' },
+          ]} />
           <Select value={filterType} onChange={setFilterType} style={{ width: 150 }}>
             <Select.Option value="all">{t('auth_policy.all_types')}</Select.Option>
             {AUTH_TYPES.map((type) => (

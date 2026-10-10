@@ -8,6 +8,7 @@ import {
   Alert, Button, Card, Empty, Input, Progress, Space, Table, Tag,
   Tooltip, Typography  } from 'antd';
 import { message } from '../../utils/antdStatic';
+import InlineStatChips from '../../components/InlineStatChips';
 import {
   CloudServerOutlined, EyeOutlined, ReloadOutlined, SearchOutlined,
 } from '@ant-design/icons';
@@ -143,25 +144,7 @@ const ServiceMiddlewarePage: React.FC = () => {
 
   return (
     <div className="service-middleware-page">
-      {/* Stats Bar */}
-      <div className="stats-bar">
-        <div className="stat-item">
-          <div className="stat-value">{services.length}</div>
-          <div className="stat-label">{t('middleware.stats_services')}</div>
-        </div>
-        <div className="stat-divider" />
-        <div className="stat-item">
-          <div className="stat-value text-green-600">{healthyServices}</div>
-          <div className="stat-label">{t('middleware.stats_healthy')}</div>
-        </div>
-        <div className="stat-divider" />
-        <div className="stat-item">
-          <div className="stat-value text-blue-600">{totalMiddlewares}</div>
-          <div className="stat-label">{t('middleware.stats_middlewares')}</div>
-        </div>
-      </div>
-
-      {/* Header */}
+      {/* Header with inline stat chips */}
       <div className="page-header-modern">
         <div className="page-header-left">
           <Title level={3} className="page-title-main">
@@ -172,6 +155,11 @@ const ServiceMiddlewarePage: React.FC = () => {
           </Text>
         </div>
         <div className="page-header-right">
+          <InlineStatChips items={[
+            { key: 'services', value: services.length, label: t('middleware.stats_services') },
+            { key: 'healthy', value: healthyServices, label: t('middleware.stats_healthy'), tone: 'green' },
+            { key: 'middlewares', value: totalMiddlewares, label: t('middleware.stats_middlewares'), tone: 'blue' },
+          ]} />
           <Input
             placeholder={t('middleware.search_placeholder')}
             value={searchTerm}

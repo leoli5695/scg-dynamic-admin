@@ -18,6 +18,7 @@ import {
 import { listRoutes } from '../../api/routes';
 import type { StrategyDefinition, StrategyTypeInfo } from '../../types/strategy';
 import { findGlobalStrategy } from './utils';
+import InlineStatChips from '../../components/InlineStatChips';
 import StrategyCard from './components/StrategyCard';
 import StrategyFormModal from './components/StrategyFormModal';
 import StrategyTypeSelectModal from './components/StrategyTypeSelectModal';
@@ -219,29 +220,31 @@ const StrategiesPage: React.FC = () => {
           <Text type="secondary">{t('strategy.description')}</Text>
         </div>
         <div className="page-header-right">
-          <div className="strategy-stats-inline">
-            <div
-              className={`stat-chip ${statusFilter === 'all' ? 'stat-chip-active' : ''}`}
-              onClick={() => setStatusFilter('all')}
-            >
-              <span className="stat-chip-value">{strategyStats.total}</span>
-              <span className="stat-chip-label">{t('strategy.stats_total')}</span>
-            </div>
-            <div
-              className={`stat-chip ${statusFilter === 'enabled' ? 'stat-chip-active' : ''}`}
-              onClick={() => setStatusFilter('enabled')}
-            >
-              <span className="stat-chip-value text-green-600">{strategyStats.enabled}</span>
-              <span className="stat-chip-label">{t('strategy.stats_enabled')}</span>
-            </div>
-            <div
-              className={`stat-chip ${statusFilter === 'disabled' ? 'stat-chip-active' : ''}`}
-              onClick={() => setStatusFilter('disabled')}
-            >
-              <span className="stat-chip-value text-red-600">{strategyStats.total - strategyStats.enabled}</span>
-              <span className="stat-chip-label">{t('strategy.stats_disabled')}</span>
-            </div>
-          </div>
+          <InlineStatChips items={[
+            {
+              key: 'all',
+              value: strategyStats.total,
+              label: t('strategy.stats_total'),
+              active: statusFilter === 'all',
+              onClick: () => setStatusFilter('all'),
+            },
+            {
+              key: 'enabled',
+              value: strategyStats.enabled,
+              label: t('strategy.stats_enabled'),
+              tone: 'green',
+              active: statusFilter === 'enabled',
+              onClick: () => setStatusFilter('enabled'),
+            },
+            {
+              key: 'disabled',
+              value: strategyStats.total - strategyStats.enabled,
+              label: t('strategy.stats_disabled'),
+              tone: 'red',
+              active: statusFilter === 'disabled',
+              onClick: () => setStatusFilter('disabled'),
+            },
+          ]} />
           <Select value={filterType} onChange={setFilterType} style={{ width: 160 }}>
             <Select.Option value="all">{t('common.all_types')}</Select.Option>
             {strategyTypeOptions.map((opt) => (

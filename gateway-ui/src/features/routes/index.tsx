@@ -200,14 +200,13 @@ const RoutesPage: React.FC = () => {
 
   return (
     <div className="routes-page">
-      <RouteStatsBar total={stats.total} enabled={stats.enabled} disabled={stats.disabled} />
-
       <RouteSearchBar
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
         onCreateClick={() => setCreateOpen(true)}
+        stats={<RouteStatsBar total={stats.total} enabled={stats.enabled} disabled={stats.disabled} />}
       />
 
       {/* Category tabs: normal vs AI routes */}

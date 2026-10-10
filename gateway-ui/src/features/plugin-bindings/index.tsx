@@ -6,8 +6,9 @@
  */
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-  Badge, Button, Card, Divider, Empty, Popconfirm, Space, Table, Tag, Tooltip, Typography  } from 'antd';
+  Badge, Button, Card, Empty, Popconfirm, Space, Table, Tag, Tooltip, Typography  } from 'antd';
 import { message } from '../../utils/antdStatic';
+import InlineStatChips from '../../components/InlineStatChips';
 import type { ColumnsType } from 'antd/es/table';
 import {
   ApiOutlined, DeleteOutlined, EditOutlined, GlobalOutlined,
@@ -307,39 +308,7 @@ const RoutePluginBindingsPage: React.FC = () => {
 
   return (
     <div style={{ padding: '24px' }}>
-      {/* Stats Bar */}
-      <div className="stats-bar" style={{
-        display: 'flex',
-        alignItems: 'center',
-        marginBottom: 24,
-        padding: '16px 24px',
-        background: 'var(--bg-card)',
-        borderRadius: 12,
-        border: '1px solid var(--border-subtle)',
-      }}
-      >
-        <div style={{ textAlign: 'center', paddingRight: 24 }}>
-          <div style={{ fontSize: 24, fontWeight: 600, color: 'var(--text-primary)' }}>{bindingStats.total}</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('plugin_bindings.stats_total')}</div>
-        </div>
-        <Divider type="vertical" style={{ height: 40, borderColor: 'var(--border-default)' }} />
-        <div style={{ textAlign: 'center', padding: '0 24px' }}>
-          <div style={{ fontSize: 24, fontWeight: 600, color: '#faad14' }}>{bindingStats.global}</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('plugin_bindings.stats_global')}</div>
-        </div>
-        <Divider type="vertical" style={{ height: 40, borderColor: 'var(--border-default)' }} />
-        <div style={{ textAlign: 'center', padding: '0 24px' }}>
-          <div style={{ fontSize: 24, fontWeight: 600, color: '#52c41a' }}>{bindingStats.route}</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('plugin_bindings.stats_route')}</div>
-        </div>
-        <Divider type="vertical" style={{ height: 40, borderColor: 'var(--border-default)' }} />
-        <div style={{ textAlign: 'center', paddingLeft: 24 }}>
-          <div style={{ fontSize: 24, fontWeight: 600, color: '#3b82f6' }}>{bindingStats.enabled}</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('plugin_bindings.stats_enabled')}</div>
-        </div>
-      </div>
-
-      {/* Page Header with Create Button */}
+      {/* Page Header with inline stat chips and Create Button */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -355,6 +324,12 @@ const RoutePluginBindingsPage: React.FC = () => {
           <Text type="secondary" style={{ color: 'var(--text-muted)' }}>{t('plugin_bindings.plugins_desc')}</Text>
         </div>
         <Space>
+          <InlineStatChips items={[
+            { key: 'total', value: bindingStats.total, label: t('plugin_bindings.stats_total') },
+            { key: 'global', value: bindingStats.global, label: t('plugin_bindings.stats_global'), tone: 'amber' },
+            { key: 'route', value: bindingStats.route, label: t('plugin_bindings.stats_route'), tone: 'green' },
+            { key: 'enabled', value: bindingStats.enabled, label: t('plugin_bindings.stats_enabled'), tone: 'blue' },
+          ]} />
           <Button
             type="primary"
             icon={<PlusOutlined />}

@@ -18,6 +18,8 @@ interface RouteSearchBarProps {
   statusFilter: RouteStatusFilter;
   onStatusFilterChange: (value: RouteStatusFilter) => void;
   onCreateClick: () => void;
+  /** Optional inline stat chips rendered before the search input. */
+  stats?: React.ReactNode;
 }
 
 const RouteSearchBar: React.FC<RouteSearchBarProps> = ({
@@ -26,6 +28,7 @@ const RouteSearchBar: React.FC<RouteSearchBarProps> = ({
   statusFilter,
   onStatusFilterChange,
   onCreateClick,
+  stats,
 }) => {
   const { t } = useTranslation();
 
@@ -36,6 +39,7 @@ const RouteSearchBar: React.FC<RouteSearchBarProps> = ({
         <Text type="secondary">{t('routes.page_description_helper')}</Text>
       </div>
       <div className="page-header-right">
+        {stats}
         <Input
           placeholder={t('routes.search_placeholder')}
           value={searchTerm}

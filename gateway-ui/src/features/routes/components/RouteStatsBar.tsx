@@ -1,9 +1,10 @@
 /**
- * Stats bar showing route counts (total, enabled, disabled).
+ * Route count chips (total, enabled, disabled), rendered inline in the page
+ * header instead of a full-width stats row.
  */
 import React from 'react';
-import { Divider } from 'antd';
 import { useTranslation } from 'react-i18next';
+import InlineStatChips from '../../../components/InlineStatChips';
 
 interface RouteStatsBarProps {
   total: number;
@@ -15,22 +16,13 @@ const RouteStatsBar: React.FC<RouteStatsBarProps> = ({ total, enabled, disabled 
   const { t } = useTranslation();
 
   return (
-    <div className="stats-bar">
-      <div className="stat-item">
-        <div className="stat-value">{total}</div>
-        <div className="stat-label">{t('routes.stats_routes')}</div>
-      </div>
-      <Divider type="vertical" className="stat-divider" />
-      <div className="stat-item">
-        <div className="stat-value text-green-600">{enabled}</div>
-        <div className="stat-label">{t('routes.stats_enabled')}</div>
-      </div>
-      <Divider type="vertical" className="stat-divider" />
-      <div className="stat-item">
-        <div className="stat-value text-red-600">{disabled}</div>
-        <div className="stat-label">{t('routes.stats_disabled')}</div>
-      </div>
-    </div>
+    <InlineStatChips
+      items={[
+        { key: 'total', value: total, label: t('routes.stats_routes') },
+        { key: 'enabled', value: enabled, label: t('routes.stats_enabled'), tone: 'green' },
+        { key: 'disabled', value: disabled, label: t('routes.stats_disabled'), tone: 'red' },
+      ]}
+    />
   );
 };
 
