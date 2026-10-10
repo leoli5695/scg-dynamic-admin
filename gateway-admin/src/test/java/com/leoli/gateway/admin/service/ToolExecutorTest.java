@@ -922,6 +922,32 @@ class ToolExecutorTest {
         }
 
         @Test
+        @DisplayName("Pending preview must not invite the model to self-confirm (点3 regression)")
+        void pendingPreviewMustNotInviteModelSelfConfirm() {
+            // Given - a write tool through the AI path, no human confirmation.
+            Map<String, Object> args = new HashMap<>();
+            args.put("routeId", ROUTE_ID);
+
+            // When
+            ToolExecutor.ToolResult result = toolExecutor.execute("delete_route", args);
+
+            // Then - the preview is fed back to the model via toJson(); it must NOT tell the
+            // model that re-calling with confirmed:true will execute (that caused self-confirm
+            // loops and false "已执行" claims). It must state the model cannot self-confirm and
+            // point at the human confirm endpoint.
+            assertTrue(result.isPendingConfirmation());
+            String howToConfirm = String.valueOf(result.getConfirmationPreview().get("howToConfirm"));
+            assertFalse(howToConfirm.contains("confirmed: true"),
+                    "preview must not instruct the model to re-call with confirmed:true");
+            assertTrue(howToConfirm.contains("无法自行确认"),
+                    "preview must state the model cannot self-confirm");
+            assertTrue(howToConfirm.contains("/api/copilot/execute-action"),
+                    "preview must point to the human confirm endpoint");
+            assertFalse(result.toJson().contains("confirmed: true"),
+                    "model-facing JSON must carry no self-confirm instruction");
+        }
+
+        @Test
         @DisplayName("Should not require confirmation for read operations")
         void shouldNotRequireConfirmationForReadOperations() {
             // Given

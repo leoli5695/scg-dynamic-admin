@@ -2780,8 +2780,13 @@ public class ToolExecutor {
             }
         }
 
-        preview.put("confirmationPrompt", "请确认是否执行此操作？回复 '确认执行' 或 '取消'。");
-        preview.put("howToConfirm", "如需执行，请再次调用此工具并添加参数 confirmed: true");
+        preview.put("confirmationPrompt", "此操作需要用户在控制台确认后才能执行。请向用户说明操作内容与风险，等待其明确同意。");
+        // FIX (P0 自确认诱导): 此预览会随 toJson() 回传给模型。旧文案告诉模型「再次调用并加
+        // confirmed:true 即可执行」，与 doExecute 里 arguments.remove("confirmed") 的防线矛盾——
+        // 模型据此反复自确认空转烧 token，甚至向用户谎称「已执行」。改为明确模型不可自确认。
+        preview.put("howToConfirm", "确认只能由用户在控制台点击完成（前端随后调用 POST /api/copilot/execute-action）。"
+                + "模型无法自行确认：即使再次调用本工具并传入 confirmed=true 也不会执行，只会重复返回待确认状态。"
+                + "请勿尝试自确认，也不要向用户声称操作已执行。");
 
         return preview;
     }
