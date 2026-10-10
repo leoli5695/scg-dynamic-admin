@@ -218,6 +218,18 @@ public interface FilterOrderConstants {
      */
     int DISCOVERY_LOAD_BALANCER = 10150;
 
+    /**
+     * AI provider routing filter (multi-provider LLM proxy).
+     * <p>
+     * MUST run AFTER SCG's RouteToRequestUrlFilter (10000), which sets
+     * GATEWAY_REQUEST_URL_ATTR from the route uri - this filter overwrites that
+     * attribute with the resolved provider's absolute https URL (chosen by the
+     * request's model), injects the upstream credential and rewrites the Host.
+     * Placed after MultiServiceLoadBalancerFilter (10001) and before the lb://
+     * discovery filters (10100/10150), which skip non-lb URLs.
+     */
+    int AI_PROVIDER_ROUTING = 10005;
+
     // ============================================================
     // Filter Order Summary (Ascending = Execution Order)
     // ============================================================

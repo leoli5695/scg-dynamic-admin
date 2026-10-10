@@ -44,6 +44,14 @@ public class GatewayAdminProperties {
          * posture as the JWT secret), so the endpoints can never run unprotected.
          */
         private String internalToken = "";
+
+        /**
+         * Passphrase used to AES-GCM encrypt provider API keys at rest
+         * (env {@code GATEWAY_ADMIN_SECURITY_CREDENTIAL_KEY}). When unset the app
+         * still boots, but provider-credential encrypt/decrypt fail closed so a
+         * missing key can never silently store plaintext.
+         */
+        private String credentialKey = "";
     }
 
     @Data

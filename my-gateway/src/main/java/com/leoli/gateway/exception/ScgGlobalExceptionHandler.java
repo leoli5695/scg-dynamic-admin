@@ -291,6 +291,10 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
         // contain internal details (class names, upstream hosts, connection strings).
         // Return only the generic reason phrase to clients; full detail stays in logs.
         String message = status.is5xxServerError() ? status.getReasonPhrase() : extractMessage(ex);
+        // Gateway 404 means no route matched: make the client-facing message explicit
+        if (status == HttpStatus.NOT_FOUND && message != null && message.startsWith("404 NOT_FOUND")) {
+            message = "404 ROUTE_NOT_FOUND" + message.substring("404 NOT_FOUND".length());
+        }
         if (message != null && !message.isEmpty()) {
             body.put("message", message);
         }

@@ -2,6 +2,7 @@ package com.leoli.gateway.filter.token;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.constants.FilterOrderConstants;
+import com.leoli.gateway.filter.ai.AiProviderRoutingFilter;
 import com.leoli.gateway.limiter.TokenQuotaManager;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.StrategyDefinition;
@@ -144,7 +145,7 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                                     bufferedChars.addAndGet(responseBody.length());
 
                                     try {
-                                        TokenUsage usage = processJsonUsage(config.tokenQuotaConfig, responseBody);
+                                        TokenUsage usage = processJsonUsage(config.tokenQuotaConfig, responseBody, aiResponseFormat(exchange));
                                         addTokenUsageHeaders(exchange.getResponse(), usage, 0L, preDeductedTokens, false);
                                     } catch (Exception e) {
                                         log.debug("Failed to pre-parse token usage for headers: {}", e.getMessage());
@@ -339,7 +340,13 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                 usage = processSseUsage(config, buffer, incrementalTokens, interrupted);
             } else {
                 // JSON response processing
-                usage = processJsonUsage(config, buffer.getJsonBody());
+                usage = processJsonUsage(config, buffer.getJsonBody(), aiResponseFormat(exchange));
+            }
+
+            // Attribute the AI-proxy-resolved model so per-model usage breakdown works.
+            Object aiModel = exchange.getAttributes().get(AiProviderRoutingFilter.AI_MODEL_ATTR);
+            if (usage != null && aiModel != null) {
+                usage.setModel(aiModel.toString());
             }
 
             long actualTokens = usage != null && usage.hasUsage() ? usage.getTotalTokens() : 0;
@@ -499,16 +506,30 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
 
     /**
      * Process JSON response usage.
+     *
+     * @param formatOverride AI-proxy-resolved response format (set by
+     *                       AiProviderRoutingFilter). When present it wins over the
+     *                       strategy's static responseFormat so per-provider formats work.
      */
-    private TokenUsage processJsonUsage(TokenQuotaConfig config, String responseBody) {
+    private TokenUsage processJsonUsage(TokenQuotaConfig config, String responseBody, String formatOverride) {
         if (responseBody == null || responseBody.isEmpty()) {
             return TokenUsage.empty();
         }
 
-        String format = config.getResponseFormat();
+        String format = (formatOverride != null && !formatOverride.isBlank())
+                ? formatOverride
+                : config.getResponseFormat();
         Map<String, String> fieldMapping = config.getCustomFieldMapping();
 
         return tokenUsageParser.parseJsonResponse(responseBody, format, fieldMapping);
+    }
+
+    /**
+     * Response format resolved by AiProviderRoutingFilter, if this is an AI-proxy route.
+     */
+    private String aiResponseFormat(ServerWebExchange exchange) {
+        Object value = exchange.getAttributes().get(AiProviderRoutingFilter.AI_RESPONSE_FORMAT_ATTR);
+        return value != null ? value.toString() : null;
     }
 
     /**

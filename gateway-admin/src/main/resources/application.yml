@@ -160,6 +160,10 @@ gateway:
       # Must match gateway.admin.internal-token on gateway instances.
       # Generate with: openssl rand -base64 32
       internal-token: ${GATEWAY_INTERNAL_TOKEN:}
+      # Passphrase for AES-GCM encryption of AI provider API keys at rest.
+      # Defaults to GATEWAY_ENCRYPTION_KEY so no new secret is required; override
+      # with GATEWAY_ADMIN_SECURITY_CREDENTIAL_KEY for a dedicated key.
+      credential-key: ${GATEWAY_ADMIN_SECURITY_CREDENTIAL_KEY:${GATEWAY_ENCRYPTION_KEY:}}
   # ============================================================================
   # Jaeger 分布式追踪配置（K8s test 命名空间，NodePort 映射）
   # ============================================================================

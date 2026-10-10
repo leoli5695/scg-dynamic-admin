@@ -51,7 +51,11 @@ public class InternalApiTokenFilter extends OncePerRequestFilter {
             // session and force-logged the user out.
             "/api/services/traces",
             "/api/services/traces/batch",
-            "/api/services/middleware-metadata"
+            "/api/services/middleware-metadata",
+            // Gateway pods fetch decrypted provider API keys here (AI proxy). permitAll
+            // in SecurityConfig (no JWT) and guarded by the shared internal token, so a
+            // leaked pod token is the only way to reach plaintext keys.
+            "/api/provider-credentials/internal/**"
             // NOTE: "/api/service-middleware/debug/**" is intentionally NOT here. Those diagnostic
             // endpoints have no gateway-pod callers, so they are gated behind an ADMIN JWT in
             // SecurityConfig instead of the shared report token (#7 secret tiering).

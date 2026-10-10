@@ -85,6 +85,9 @@ public class StrategyDefinition {
     public static final String TYPE_REQUEST_VALIDATION = "REQUEST_VALIDATION";
     public static final String TYPE_MOCK_RESPONSE = "MOCK_RESPONSE";
 
+    // AI gateway: multi-provider LLM proxy (northbound OpenAI-compatible)
+    public static final String TYPE_AI_PROXY = "AI_PROXY";
+
     // ============================================================
     // Scope Types
     // ============================================================
