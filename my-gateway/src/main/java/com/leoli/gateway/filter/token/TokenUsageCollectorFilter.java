@@ -109,9 +109,6 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
         Long preDeductedAttr = exchange.getAttribute(ATTR_PRE_DEDUCTED);
         final long preDeductedTokens = preDeductedAttr != null ? preDeductedAttr : 0L;
 
-        // Detect response type from Accept header or route config
-        boolean isSse = isSseRequest(exchange);
-
         // Memory-controlled buffer for response capture
         MemoryAwareBuffer buffer = new MemoryAwareBuffer(
                 config.tokenQuotaConfig.getSseMaxBufferSize(),
@@ -122,6 +119,10 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
         // Track stream state
         AtomicInteger totalTokens = new AtomicInteger(0);
         AtomicInteger bufferedChars = new AtomicInteger(0);
+        // Netty's read boundaries have nothing to do with SSE event boundaries: one
+        // buffer can hold several events, and an event can be split across two.
+        // Reassemble before parsing or the usage block is silently lost.
+        SseFrameAccumulator frames = new SseFrameAccumulator();
 
         // Wrap response to intercept body
         ServerHttpResponse decoratedResponse = new ServerHttpResponseDecorator(exchange.getResponse()) {
@@ -129,7 +130,12 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
             public Mono<Void> writeWith(org.reactivestreams.Publisher<? extends DataBuffer> body) {
                 Flux<? extends DataBuffer> flux = Flux.from(body);
 
-                if (!isSse) {
+                // Evaluated here, not in the pre-phase: the upstream Content-Type only
+                // exists once SCG has copied the response headers, i.e. at write time.
+                // Deciding earlier left SSE detection depending solely on the client's
+                // Accept header, so a streaming response requested with Accept:*/* was
+                // parsed as JSON and billed as 0 tokens.
+                if (!isSseRequest(exchange)) {
                     // FIX (dead headers): X-Token-Usage-* were added in doFinally,
                     // AFTER the response was committed, so they were never sent.
                     // For JSON responses aggregate the body first, parse usage and
@@ -181,7 +187,9 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                     String chunk = new String(bytes, StandardCharsets.UTF_8);
 
                     // SSE mode: smart buffering based on usage info
-                    handleSseChunk(chunk, buffer, totalTokens, bufferedChars, config.tokenQuotaConfig);
+                    for (String event : frames.accept(chunk)) {
+                        handleSseChunk(event, buffer, totalTokens, bufferedChars, config.tokenQuotaConfig);
+                    }
 
                     // Reset buffer position for actual write
                     dataBuffer.readPosition(0);
@@ -200,7 +208,9 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                             byte[] bytes = new byte[dataBuffer.readableByteCount()];
                             dataBuffer.read(bytes);
                             String chunk = new String(bytes, StandardCharsets.UTF_8);
-                            handleSseChunk(chunk, buffer, totalTokens, bufferedChars, config.tokenQuotaConfig);
+                            for (String event : frames.accept(chunk)) {
+                                handleSseChunk(event, buffer, totalTokens, bufferedChars, config.tokenQuotaConfig);
+                            }
                             dataBuffer.readPosition(0);
                         }));
                 return super.writeAndFlushWith(groups);
@@ -214,6 +224,14 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
         // Continue filter chain and process response in doFinally
         return chain.filter(decoratedExchange)
                 .doFinally(signalType -> {
+                    // The last event may still be sitting in the accumulator when the
+                    // stream ends without a trailing blank line.
+                    for (String event : frames.flush()) {
+                        handleSseChunk(event, buffer, totalTokens, bufferedChars, config.tokenQuotaConfig);
+                    }
+                    // By now the upstream Content-Type is known, so this no longer
+                    // depends on the client having sent Accept: text/event-stream.
+                    boolean isSse = isSseRequest(exchange);
                     // Check for stream interruption
                     boolean interrupted = isStreamInterrupted(signalType, isSse, buffer);
 
@@ -677,6 +695,55 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
     private static class ConfigWrapper {
         private boolean enabled = false;
         private TokenQuotaConfig tokenQuotaConfig = new TokenQuotaConfig();
+    }
+
+    /**
+     * Reassembles SSE event frames across DataBuffer boundaries.
+     * <p>
+     * One Netty read can carry several events, and one event can be split across two
+     * reads - including the terminal {@code data: [DONE]}. Parsing per buffer made the
+     * usage block vanish whenever the boundaries did not line up, which settled the
+     * request at 0 tokens. Events are separated by a blank line; CR is dropped so CRLF,
+     * LF and a CRLF split across two buffers all normalise to the same boundary.
+     */
+    private static final class SseFrameAccumulator {
+
+        private static final String BOUNDARY = "\n\n";
+
+        private final StringBuilder carry = new StringBuilder();
+
+        /** Complete events contained in this chunk, in wire order. */
+        List<String> accept(String chunk) {
+            if (chunk == null || chunk.isEmpty()) {
+                return List.of();
+            }
+            carry.append(chunk.indexOf('\r') >= 0 ? chunk.replace("\r", "") : chunk);
+
+            List<String> events = new ArrayList<>();
+            int from = 0;
+            int boundary;
+            while ((boundary = carry.indexOf(BOUNDARY, from)) >= 0) {
+                String event = carry.substring(from, boundary);
+                if (!event.isEmpty()) {
+                    events.add(event);
+                }
+                from = boundary + BOUNDARY.length();
+            }
+            if (from > 0) {
+                carry.delete(0, from);
+            }
+            return events;
+        }
+
+        /** Trailing event that never received its blank line, emitted at end of stream. */
+        List<String> flush() {
+            if (carry.length() == 0) {
+                return List.of();
+            }
+            String rest = carry.toString();
+            carry.setLength(0);
+            return rest.isBlank() ? List.of() : List.of(rest);
+        }
     }
 
     /**
