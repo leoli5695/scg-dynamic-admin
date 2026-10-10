@@ -58,6 +58,15 @@ public class AiPromptTemplateConfig {
     /** Remove the variables / template-selector fields before forwarding upstream. */
     private boolean stripControlFields = true;
 
+    /**
+     * What to do when decoration throws (点10). FORWARD (default) keeps the historical
+     * fail-open behaviour - log and forward the original body. REJECT fails the request
+     * instead, for templates whose injection is a compliance control (e.g. a mandatory
+     * "must declare AI-generated" / "no PII" system prompt) that must never be silently
+     * skipped. Values are matched case-insensitively; anything unrecognised means FORWARD.
+     */
+    private String onError = "FORWARD";
+
     /** Max request body buffered to rewrite the prompt. */
     private long maxBodySize = 1048576;
 

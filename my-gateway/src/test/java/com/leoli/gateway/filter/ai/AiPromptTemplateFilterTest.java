@@ -199,6 +199,39 @@ class AiPromptTemplateFilterTest {
     }
 
     @Test
+    @DisplayName("点10: decoration failure with onError=REJECT fails the request instead of forwarding")
+    void decorationErrorRejectsWhenPolicyReject() {
+        AiPromptTemplateConfig config = enabled();
+        config.setSystemPrompt("compliance system prompt");
+        config.setOnError("REJECT");
+        when(strategyManager.getConfig(anyString(), eq(StrategyDefinition.TYPE_AI_PROMPT_TEMPLATE),
+                eq(AiPromptTemplateConfig.class))).thenReturn(config);
+
+        // Invalid JSON makes decorate() throw.
+        MockServerWebExchange exchange = post("{ not valid json ");
+        StepVerifier.create(filter.filter(exchange, chain)).expectComplete().verify();
+
+        assertEquals(500, exchange.getResponse().getStatusCode().value());
+        verify(chain, never()).filter(any());
+    }
+
+    @Test
+    @DisplayName("点10: decoration failure with default onError=FORWARD still forwards the original")
+    void decorationErrorForwardsByDefault() {
+        AiPromptTemplateConfig config = enabled();
+        config.setSystemPrompt("compliance system prompt");
+        // onError defaults to FORWARD.
+        stub(config);
+
+        MockServerWebExchange exchange = post("{ not valid json ");
+        StepVerifier.create(filter.filter(exchange, chain)).expectComplete().verify();
+
+        verify(chain).filter(any());
+        assertNotEquals(500, exchange.getResponse().getStatusCode() == null
+                ? null : exchange.getResponse().getStatusCode().value());
+    }
+
+    @Test
     @DisplayName("Filter order is just before AI provider routing")
     void orderIsBeforeProviderRouting() {
         assertEquals(10004, filter.getOrder());

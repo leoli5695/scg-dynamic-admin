@@ -22,6 +22,7 @@ import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpRequestDecorator;
 import org.springframework.http.server.reactive.ServerHttpResponse;
@@ -99,7 +100,15 @@ public class AiPromptTemplateFilter implements GlobalFilter, Ordered {
                     try {
                         out = decorate(bytes, exchange, config);
                     } catch (Exception e) {
-                        // Never break the request on a decoration error - forward the original.
+                        if ("REJECT".equalsIgnoreCase(config.getOnError())) {
+                            // Compliance-style template: a decoration failure must NOT silently
+                            // skip the injected policy, so fail the request instead of forwarding.
+                            log.warn("AI prompt template: decoration failed on route {}, rejecting per onError=REJECT: {}",
+                                    routeId, e.getMessage());
+                            return writeError(exchange, HttpStatus.INTERNAL_SERVER_ERROR, 50002,
+                                    "Prompt 模板装饰失败，已按 onError=REJECT 策略拒绝请求");
+                        }
+                        // FORWARD (default): never break the request on a decoration error.
                         log.warn("AI prompt template: decoration failed on route {}, forwarding original: {}",
                                 routeId, e.getMessage());
                         out = bytes;
@@ -259,6 +268,27 @@ public class AiPromptTemplateFilter implements GlobalFilter, Ordered {
                 return headers;
             }
         };
+    }
+
+    /** Write a JSON error and complete the response (used by the onError=REJECT path). */
+    private Mono<Void> writeError(ServerWebExchange exchange, HttpStatus status, int code, String message) {
+        ServerHttpResponse response = exchange.getResponse();
+        response.setStatusCode(status);
+        response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("httpStatus", status.value());
+        body.put("code", code);
+        body.put("error", status.getReasonPhrase());
+        body.put("message", message);
+        body.put("data", null);
+        byte[] bytes;
+        try {
+            bytes = objectMapper.writeValueAsBytes(body);
+        } catch (Exception e) {
+            bytes = ("{\"httpStatus\":" + status.value() + ",\"code\":" + code
+                    + ",\"message\":\"AI prompt template error\"}").getBytes(StandardCharsets.UTF_8);
+        }
+        return response.writeWith(Mono.just(response.bufferFactory().wrap(bytes)));
     }
 
     private ObjectNode messageNode(String role, String content) {
