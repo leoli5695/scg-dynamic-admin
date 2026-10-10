@@ -1,5 +1,6 @@
 package com.leoli.gateway.admin.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -89,6 +90,7 @@ public class ServiceDefinition {
     }
 
     /** True when this is an AI (LLM provider) service. */
+    @JsonIgnore
     public boolean isAiService() {
         return ServiceCategory.AI.equalsIgnoreCase(category);
     }
