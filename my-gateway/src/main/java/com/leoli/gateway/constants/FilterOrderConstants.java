@@ -225,6 +225,14 @@ public interface FilterOrderConstants {
     int DISCOVERY_LOAD_BALANCER = 10150;
 
     /**
+     * AI prompt template/decorator filter.
+     * Runs just before AiProviderRoutingFilter (10005) so the decorated messages
+     * (system-prompt injection, {{var}} substitution, optional model override) are
+     * what the provider router reads and forwards.
+     */
+    int AI_PROMPT_TEMPLATE = 10004;
+
+    /**
      * AI provider routing filter (multi-provider LLM proxy).
      * <p>
      * MUST run AFTER SCG's RouteToRequestUrlFilter (10000), which sets

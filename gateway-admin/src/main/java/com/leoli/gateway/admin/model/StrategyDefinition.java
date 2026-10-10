@@ -88,6 +88,9 @@ public class StrategyDefinition {
     // AI gateway: multi-provider LLM proxy (northbound OpenAI-compatible)
     public static final String TYPE_AI_PROXY = "AI_PROXY";
 
+    // AI gateway: prompt template / decorator (system-prompt injection, variables)
+    public static final String TYPE_AI_PROMPT_TEMPLATE = "AI_PROMPT_TEMPLATE";
+
     // ============================================================
     // Scope Types
     // ============================================================
