@@ -263,6 +263,42 @@ class TokenUsageParserTest {
     }
 
     @Test
+    @DisplayName("Aggregate real stream_options.include_usage shape - usage arrives in a trailing choices:[] chunk")
+    void aggregateSseUsage_includeUsageShape() {
+        // Verbatim shape emitted by dashscope compatible-mode with include_usage on.
+        List<String> chunks = List.of(
+                "data: {\"model\":\"qwen-plus\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":null}],\"usage\":null}",
+                "data: {\"model\":\"qwen-plus\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"1\"},\"finish_reason\":null}],\"usage\":null}",
+                "data: {\"model\":\"qwen-plus\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"  \\n2\"},\"finish_reason\":null}],\"usage\":null}",
+                "data: {\"model\":\"qwen-plus\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\"},\"finish_reason\":\"stop\"}],\"usage\":null}",
+                "data: {\"model\":\"qwen-plus\",\"choices\":[],\"usage\":{\"prompt_tokens\":22,\"completion_tokens\":18,\"total_tokens\":40}}",
+                "data: [DONE]"
+        );
+
+        TokenUsage usage = parser.aggregateSseUsage(chunks);
+
+        assertTrue(usage.hasUsage(), "the trailing usage-only chunk must be picked up");
+        assertEquals(22, usage.getPromptTokens());
+        assertEquals(18, usage.getCompletionTokens());
+        assertEquals(40, usage.getTotalTokens());
+    }
+
+    @Test
+    @DisplayName("Stream with usage:null on every chunk aggregates to empty - the reason include_usage is injected")
+    void aggregateSseUsage_noUsageAnywhere() {
+        List<String> chunks = List.of(
+                "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"1\"},\"finish_reason\":null}],\"usage\":null}",
+                "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\"},\"finish_reason\":\"stop\"}],\"usage\":null}",
+                "data: [DONE]"
+        );
+
+        TokenUsage usage = parser.aggregateSseUsage(chunks);
+
+        assertFalse(usage.hasUsage(),
+                "no usage means the collector settles 0 tokens and refunds the pre-deducted estimate");
+    }
+
+    @Test
     @DisplayName("Check SSE stream complete - has [DONE]")
     void isSseStreamComplete_hasDone() {
         List<String> chunks = List.of(

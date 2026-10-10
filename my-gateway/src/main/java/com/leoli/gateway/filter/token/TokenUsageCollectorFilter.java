@@ -43,9 +43,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Collects token usage AFTER response is received.
  * Parses usage field from response body and updates Redis counter.
  *
- * Execution Order: TRACE_CAPTURE + 1 (101)
- * - After TraceCaptureGlobalFilter to reuse response body capture if available
- * - In post-phase after response is complete
+ * Execution Order: -44 (MUST be < NettyWriteResponseFilter's -1)
+ * - SCG only writes the client-bound body through response decorators installed by
+ *   filters ordered BEFORE NettyWriteResponseFilter (-1). At the old order (101) this
+ *   decorator's writeWith/writeAndFlushWith were never invoked on the real proxy path,
+ *   so usage always parsed as 0 (only unit tests that called writeWith directly passed).
+ * - Runs after TokenQuotaPreCheckFilter (-243), so the tenant attribute is already set.
  *
  * Response Type Detection:
  * - JSON: Parse usage field from complete response body
@@ -184,6 +187,24 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                     dataBuffer.readPosition(0);
                 }));
             }
+
+            @Override
+            public Mono<Void> writeAndFlushWith(
+                    org.reactivestreams.Publisher<? extends org.reactivestreams.Publisher<? extends DataBuffer>> body) {
+                // Streaming (SSE) responses are written via writeAndFlushWith, which
+                // BYPASSES writeWith - without this override the usage carried in the
+                // streamed chunks was never captured. Side-copy each chunk for parsing
+                // while preserving flush boundaries (keeps time-to-first-token intact).
+                Flux<? extends org.reactivestreams.Publisher<? extends DataBuffer>> groups =
+                        Flux.from(body).map(group -> Flux.from(group).doOnNext(dataBuffer -> {
+                            byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                            dataBuffer.read(bytes);
+                            String chunk = new String(bytes, StandardCharsets.UTF_8);
+                            handleSseChunk(chunk, buffer, totalTokens, bufferedChars, config.tokenQuotaConfig);
+                            dataBuffer.readPosition(0);
+                        }));
+                return super.writeAndFlushWith(groups);
+            }
         };
 
         ServerWebExchange decoratedExchange = exchange.mutate()
@@ -245,25 +266,60 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
     /**
      * Check if chunk should be buffered (contains potential usage info).
      */
-    private boolean shouldBufferChunk(String chunk) {
+    boolean shouldBufferChunk(String chunk) {
         // Skip empty chunks and [DONE] markers
         if (chunk == null || chunk.trim().isEmpty() || chunk.contains("[DONE]")) {
             return true;  // Buffer [DONE] for completion detection
         }
 
-        // Check for usage-related fields
-        if (chunk.contains("usage") || chunk.contains("tokens") ||
-            chunk.contains("message_stop") || chunk.contains("message_delta")) {
+        // Usage and finish_reason only carry a value on the terminal chunks. Matching
+        // the bare field names would buffer the entire stream, because OpenAI-compatible
+        // providers emit "usage":null AND "finish_reason":null on every single chunk.
+        if (hasNonNullField(chunk, "usage")) {
             return true;
         }
 
-        // For OpenAI format, last chunk usually contains usage
-        // Buffer chunks near end (contain finish_reason)
-        if (chunk.contains("finish_reason")) {
+        // Anthropic native SSE carries usage on message_delta / message_stop events
+        if (chunk.contains("message_stop") || chunk.contains("message_delta")) {
+            return true;
+        }
+
+        if (hasNonNullField(chunk, "finish_reason")) {
             return true;
         }
 
         return false;  // Skip content-only chunks to save memory
+    }
+
+    /**
+     * True when {@code "field"} appears with a value that is not JSON null.
+     * Whitespace tolerant.
+     */
+    static boolean hasNonNullField(String chunk, String field) {
+        String quoted = "\"" + field + "\"";
+        int from = 0;
+        while (true) {
+            int start = chunk.indexOf(quoted, from);
+            if (start < 0) {
+                return false;
+            }
+            int i = skipWhitespace(chunk, start + quoted.length());
+            if (i < chunk.length() && chunk.charAt(i) == ':') {
+                i = skipWhitespace(chunk, i + 1);
+                if (i < chunk.length() && !chunk.startsWith("null", i)) {
+                    return true;
+                }
+            }
+            from = start + 1;
+        }
+    }
+
+    private static int skipWhitespace(String s, int from) {
+        int i = from;
+        while (i < s.length() && Character.isWhitespace(s.charAt(i))) {
+            i++;
+        }
+        return i;
     }
 
     /**
@@ -610,7 +666,8 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        // After TraceCaptureGlobalFilter (100)
+        // Must be < NettyWriteResponseFilter (-1) so this filter's response decorator
+        // is actually in the client-write path (see FilterOrderConstants).
         return FilterOrderConstants.TOKEN_USAGE_COLLECTOR;
     }
 

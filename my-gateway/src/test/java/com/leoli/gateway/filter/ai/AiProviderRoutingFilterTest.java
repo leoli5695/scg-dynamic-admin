@@ -1,6 +1,7 @@
 package com.leoli.gateway.filter.ai;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.ai.LlmProvider;
 import com.leoli.gateway.ai.ProviderKeyResolver;
@@ -254,5 +255,125 @@ class AiProviderRoutingFilterTest {
 
     private LlmProvider ProviderRegistryResolve(String model) {
         return com.leoli.gateway.ai.ProviderRegistry.resolveByModel(model).orElseThrow();
+    }
+
+    // ============== stream_options.include_usage injection ==============
+    // Without usage in the stream the collector settles 0 tokens and the pre-deducted
+    // estimate is refunded in full, i.e. streaming traffic would be free.
+
+    private org.springframework.web.server.ServerWebExchange runStreaming(
+            String body, AiProxyConfig config, String providerId, String ref) {
+        MockServerWebExchange exchange = post(body);
+        config.setProviderApiKeyRefs(Map.of(providerId, ref));
+        stubConfig(config);
+        when(keyResolver.resolveKey(ref)).thenReturn(Mono.just("sk-test"));
+        when(chain.filter(any())).thenReturn(Mono.empty());
+
+        StepVerifier.create(filter.filter(exchange, chain)).expectComplete().verify();
+
+        ArgumentCaptor<org.springframework.web.server.ServerWebExchange> captor =
+                ArgumentCaptor.forClass(org.springframework.web.server.ServerWebExchange.class);
+        verify(chain).filter(captor.capture());
+        return captor.getValue();
+    }
+
+    @Test
+    @DisplayName("Injects stream_options.include_usage on streaming requests")
+    void injectsIncludeUsageOnStreamingRequest() throws Exception {
+        String out = bodyOf(runStreaming(
+                "{\"model\":\"qwen-plus\",\"stream\":true,\"messages\":[]}",
+                enabledConfig(), "qwen", "ref-qwen"));
+
+        JsonNode sent = objectMapper.readTree(out);
+        assertTrue(sent.path("stream_options").path("include_usage").asBoolean(false),
+                "gateway must ask upstream for usage, otherwise streaming settles 0 tokens");
+        assertEquals("qwen-plus", sent.path("model").asText());
+    }
+
+    @Test
+    @DisplayName("Content-Length matches the rewritten body")
+    void contentLengthMatchesRewrittenBody() {
+        org.springframework.web.server.ServerWebExchange sent = runStreaming(
+                "{\"model\":\"qwen-plus\",\"stream\":true,\"messages\":[]}",
+                enabledConfig(), "qwen", "ref-qwen");
+
+        String out = bodyOf(sent);
+        assertEquals(out.getBytes(StandardCharsets.UTF_8).length,
+                sent.getRequest().getHeaders().getContentLength(),
+                "a stale Content-Length would truncate or hang the upstream call");
+    }
+
+    @Test
+    @DisplayName("Non-streaming body is forwarded byte-identical (no re-serialization)")
+    void nonStreamingBodyUntouched() {
+        String original = "{\"model\":\"qwen-plus\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}";
+        String out = bodyOf(runStreaming(original, enabledConfig(), "qwen", "ref-qwen"));
+
+        assertEquals(original, out);
+    }
+
+    @Test
+    @DisplayName("stream:false is not treated as streaming")
+    void explicitStreamFalseNotInjected() throws Exception {
+        String out = bodyOf(runStreaming(
+                "{\"model\":\"qwen-plus\",\"stream\":false,\"messages\":[]}",
+                enabledConfig(), "qwen", "ref-qwen"));
+
+        assertTrue(objectMapper.readTree(out).path("stream_options").isMissingNode());
+    }
+
+    @Test
+    @DisplayName("Preserves other client stream_options keys and overrides include_usage:false")
+    void preservesClientStreamOptions() throws Exception {
+        String out = bodyOf(runStreaming(
+                "{\"model\":\"qwen-plus\",\"stream\":true,"
+                        + "\"stream_options\":{\"continuous_usage_stats\":true,\"include_usage\":false},"
+                        + "\"messages\":[]}",
+                enabledConfig(), "qwen", "ref-qwen"));
+
+        JsonNode options = objectMapper.readTree(out).path("stream_options");
+        assertTrue(options.path("include_usage").asBoolean(false));
+        assertTrue(options.path("continuous_usage_stats").asBoolean(false),
+                "client-supplied stream_options keys must survive");
+    }
+
+    @Test
+    @DisplayName("Already-requested usage is left as-is (idempotent)")
+    void idempotentWhenAlreadyRequested() throws Exception {
+        String out = bodyOf(runStreaming(
+                "{\"model\":\"qwen-plus\",\"stream\":true,"
+                        + "\"stream_options\":{\"include_usage\":true},\"messages\":[]}",
+                enabledConfig(), "qwen", "ref-qwen"));
+
+        JsonNode sent = objectMapper.readTree(out);
+        assertTrue(sent.path("stream_options").path("include_usage").asBoolean(false));
+        assertEquals(1, sent.path("stream_options").size());
+    }
+
+    @Test
+    @DisplayName("Model mapping and usage injection happen in one rewrite pass")
+    void modelMappingAndUsageInjectionTogether() throws Exception {
+        AiProxyConfig config = enabledConfig();
+        config.setModelRouting(Map.of("gpt-4o", "qwen"));
+        config.setModelMapping(Map.of("gpt-4o", "qwen-max"));
+
+        String out = bodyOf(runStreaming(
+                "{\"model\":\"gpt-4o\",\"stream\":true,\"messages\":[]}",
+                config, "qwen", "ref-qwen"));
+
+        JsonNode sent = objectMapper.readTree(out);
+        assertEquals("qwen-max", sent.path("model").asText());
+        assertTrue(sent.path("stream_options").path("include_usage").asBoolean(false));
+    }
+
+    @Test
+    @DisplayName("Malformed JSON body is forwarded rather than rejected by the rewrite")
+    void malformedBodyForwarded() {
+        AiProxyConfig config = enabledConfig();
+        config.setDefaultModel("qwen-plus");
+        String original = "{\"model\":\"qwen-plus\",\"stream\":true,,,}";
+        String out = bodyOf(runStreaming(original, config, "qwen", "ref-qwen"));
+
+        assertEquals(original, out);
     }
 }

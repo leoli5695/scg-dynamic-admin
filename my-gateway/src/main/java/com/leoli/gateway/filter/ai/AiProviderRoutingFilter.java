@@ -44,7 +44,9 @@ import java.util.Optional;
  * the request's {@code model} selects the upstream provider (built-in registry),
  * the provider's credential is fetched and injected, and the upstream URL is
  * rewritten to that provider. For OpenAI-compatible providers the body passes
- * through untouched (only an optional model-name rewrite).
+ * through with at most two edits: an optional model-name rewrite, and
+ * {@code stream_options.include_usage} on streaming calls so token quota can be
+ * settled against real usage instead of a refunded estimate.
  * <p>
  * Runs at {@link FilterOrderConstants#AI_PROVIDER_ROUTING} - after SCG's
  * RouteToRequestUrlFilter (10000) so overwriting GATEWAY_REQUEST_URL_ATTR sticks,
@@ -135,9 +137,8 @@ public class AiProviderRoutingFilter implements GlobalFilter, Ordered {
                     return keyResolver.resolveKey(credentialRef)
                             .switchIfEmpty(Mono.error(new KeyResolutionException(provider.getId())))
                             .flatMap(key -> {
-                                byte[] outBytes = (upstreamModel != null && !upstreamModel.equals(requestedModel))
-                                        ? rewriteModel(bytes, body, upstreamModel)
-                                        : bytes;
+                                byte[] outBytes = rewriteUpstreamBody(bytes, body, requestedModel,
+                                        upstreamModel, provider);
 
                                 URI upstream = buildUpstreamUri(provider, config, exchange);
                                 exchange.getAttributes().put(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR, upstream);
@@ -240,17 +241,59 @@ public class AiProviderRoutingFilter implements GlobalFilter, Ordered {
         }
     }
 
-    private byte[] rewriteModel(byte[] original, String body, String upstreamModel) {
+    /**
+     * Build the bytes to send upstream in a single parse/serialize pass: apply the
+     * model-name mapping and, for streaming calls, make sure usage is reported.
+     * Returns the original bytes untouched when neither applies, so non-streaming
+     * traffic pays no re-serialization cost.
+     */
+    private byte[] rewriteUpstreamBody(byte[] original, String body, String requestedModel,
+                                       String upstreamModel, LlmProvider provider) {
+        boolean modelRewrite = upstreamModel != null && !upstreamModel.equals(requestedModel);
+        // Substring pre-check keeps the JSON parse off the non-streaming hot path.
+        boolean usageCandidate = provider.getProtocol() == LlmProvider.Protocol.OPENAI_COMPAT
+                && body.contains("\"stream\"");
+        if (!modelRewrite && !usageCandidate) {
+            return original;
+        }
         try {
             JsonNode root = objectMapper.readTree(body);
-            if (root instanceof ObjectNode) {
-                ((ObjectNode) root).put("model", upstreamModel);
-                return objectMapper.writeValueAsBytes(root);
+            if (!(root instanceof ObjectNode)) {
+                return original;
             }
+            ObjectNode obj = (ObjectNode) root;
+            boolean changed = false;
+            if (modelRewrite) {
+                obj.put("model", upstreamModel);
+                changed = true;
+            }
+            if (usageCandidate && obj.path("stream").asBoolean(false) && forceIncludeUsage(obj)) {
+                changed = true;
+            }
+            return changed ? objectMapper.writeValueAsBytes(obj) : original;
         } catch (Exception e) {
-            log.warn("AI proxy: failed to rewrite model field, forwarding original body: {}", e.getMessage());
+            log.warn("AI proxy: failed to rewrite request body, forwarding original: {}", e.getMessage());
+            return original;
         }
-        return original;
+    }
+
+    /**
+     * Streaming responses only carry a usage block if the caller asked for one, and
+     * without usage the gateway cannot settle token quota - the pre-deducted estimate
+     * would be refunded in full and streaming traffic would cost the tenant nothing.
+     * So ask on the caller's behalf. Returns false when it was already requested.
+     */
+    private boolean forceIncludeUsage(ObjectNode body) {
+        JsonNode existing = body.get("stream_options");
+        ObjectNode options = existing instanceof ObjectNode ? (ObjectNode) existing : null;
+        if (options != null && options.path("include_usage").asBoolean(false)) {
+            return false;
+        }
+        if (options == null) {
+            options = body.putObject("stream_options");
+        }
+        options.put("include_usage", true);
+        return true;
     }
 
     private Mono<Void> writeError(ServerWebExchange exchange, HttpStatus status, int code, String message) {
