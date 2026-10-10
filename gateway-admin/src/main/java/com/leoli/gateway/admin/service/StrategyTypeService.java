@@ -300,6 +300,8 @@ public class StrategyTypeService {
                 createNumberField("monthlyQuota", "月配额", 1000000, 0, null, "tokens"),
                 createNumberField("dailyQuota", "日配额", 50000, 0, null, "tokens"),
                 createNumberField("burstQuota", "突发配额", 0, 0, null, "tokens"),
+                createNumberField("windowTokenPerMinute", "窗口Token/分覆盖", null, 0, null, "tokens"),
+                createNumberField("windowTokenPerHour", "窗口Token/时覆盖", null, 0, null, "tokens"),
                 createSelectFieldWithLabels("quotaPeriod", "配额周期", "BOTH",
                         List.of(Map.of("value", "MONTHLY", "label", "仅月度"),
                                 Map.of("value", "DAILY", "label", "仅日度"),
@@ -384,6 +386,21 @@ public class StrategyTypeService {
                 createNumberField("maxRefundPerRequest", "单次最大退款", 10000, 100, 100000, "tokens")
         ));
         TOKEN_RATE_LIMITER_SUB_SCHEMAS.put("preDeduct", preDeductSchema);
+
+        // Fixed-window token rate limit section (Higress ai-token-ratelimit counterpart)
+        Map<String, Object> windowLimitSchema = new HashMap<>();
+        windowLimitSchema.put("sectionLabel", "窗口Token限流");
+        windowLimitSchema.put("sectionDescription", "固定窗口限流:请求阶段检查窗口已用量,响应阶段按实际usage扣减(对标Higress ai-token-ratelimit);0表示不启用该窗口");
+        windowLimitSchema.put("fields", List.of(
+                createSwitchField("windowLimitEnabled", "启用窗口限流", false),
+                createField("windowRuleName", "text", "规则名", "default"),
+                createNumberField("tokenPerMinute", "租户Token/分", 0, 0, null, "tokens"),
+                createNumberField("tokenPerHour", "租户Token/时", 0, 0, null, "tokens"),
+                createNumberField("globalTokenPerMinute", "全局Token/分", 0, 0, null, "tokens"),
+                createNumberField("rejectedCode", "拒绝状态码", 429, 400, 599, null),
+                createField("rejectedMsg", "text", "拒绝提示语", "Too many requests")
+        ));
+        TOKEN_RATE_LIMITER_SUB_SCHEMAS.put("windowLimit", windowLimitSchema);
     }
 
     private static Map<String, Object> createField(String name, String type, String label, Object defaultValue) {

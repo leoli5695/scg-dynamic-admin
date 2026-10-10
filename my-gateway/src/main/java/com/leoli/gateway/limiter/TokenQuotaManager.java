@@ -1166,4 +1166,61 @@ public class TokenQuotaManager {
             return (double) dailyUsed / dailyQuota * 100;
         }
     }
+
+    // ============================================================
+    // Fixed-window token rate limiting (Higress ai-token-ratelimit)
+    // ============================================================
+
+    /**
+     * Request-phase check: tokens already consumed in the current fixed window
+     * must not exceed the threshold (Higress rejects on current &gt; threshold and
+     * does NOT add the request estimate here). Fail-open on Redis errors, same as
+     * Higress resuming the request when the redis call fails.
+     */
+    public boolean windowAllowed(String key, long threshold) {
+        if (redisTemplate == null) {
+            return true;
+        }
+        try {
+            String value = redisTemplate.opsForValue().get(key);
+            long current = value == null ? 0L : Long.parseLong(value);
+            return current <= threshold;
+        } catch (Exception e) {
+            countWindowLimitFailure();
+            log.warn("Window rate limit redis check failed for key {}, failing open: {}", key, e.getMessage());
+            return true;
+        }
+    }
+
+    /**
+     * Response-phase increment: add the settled usage to the window counter and
+     * arm the TTL when the key is new (Higress response-phase fixed-window script).
+     */
+    public void incrementWindowUsage(String key, long tokens, long windowSec) {
+        if (redisTemplate == null || tokens <= 0 || windowSec <= 0) {
+            return;
+        }
+        try {
+            Long after = redisTemplate.opsForValue().increment(key, tokens);
+            if (after != null && after == tokens) {
+                long elapsed = (System.currentTimeMillis() / 1000) % windowSec;
+                redisTemplate.expire(key, windowSec - elapsed + 1, TimeUnit.SECONDS);
+            }
+        } catch (Exception e) {
+            countWindowLimitFailure();
+            log.warn("Window rate limit redis increment failed for key {}: {}", key, e.getMessage());
+        }
+    }
+
+    /** Fixed-window Redis key: prefix + rule + scope + window length + window index. */
+    public String windowKey(String keyPrefix, String ruleName, String scope, long windowSec) {
+        long windowIndex = (System.currentTimeMillis() / 1000) / windowSec;
+        return keyPrefix + "win:" + ruleName + ":" + scope + ":" + windowSec + ":" + windowIndex;
+    }
+
+    private void countWindowLimitFailure() {
+        if (meterRegistry != null) {
+            meterRegistry.counter("token.windowlimit.redis.failures").increment();
+        }
+    }
 }

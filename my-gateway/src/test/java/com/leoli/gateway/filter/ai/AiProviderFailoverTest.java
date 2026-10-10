@@ -68,7 +68,7 @@ class AiProviderFailoverTest {
     @BeforeEach
     void setUp() {
         bufferFactory = new DefaultDataBufferFactory();
-        filter = new AiProviderRoutingFilter(strategyManager, keyResolver, objectMapper);
+        filter = new AiProviderRoutingFilter(strategyManager, keyResolver, new com.leoli.gateway.ai.ProviderKeyPoolSelector(), objectMapper);
     }
 
     private MockServerWebExchange post(String body) {

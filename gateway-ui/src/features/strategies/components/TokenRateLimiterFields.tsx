@@ -362,6 +362,31 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
           </Row>
         </Card>
       )}
+
+      {/* Window Token Rate Limit Section (Higress ai-token-ratelimit) */}
+      {subSchemas.windowLimit?.fields && (
+        <Card
+          size="small"
+          style={{ marginBottom: 16 }}
+          title={
+            <Space>
+              <ThunderboltOutlined />
+              <span>{subSchemas.windowLimit.sectionLabel || '窗口Token限流'}</span>
+              {subSchemas.windowLimit.sectionDescription && (
+                <Tooltip title={subSchemas.windowLimit.sectionDescription}>
+                  <InfoCircleOutlined style={{ color: '#999' }} />
+                </Tooltip>
+              )}
+            </Space>
+          }
+        >
+          <Row gutter={16}>
+            {subSchemas.windowLimit.fields.map((field) => (
+              <React.Fragment key={field.name}>{renderField(field)}</React.Fragment>
+            ))}
+          </Row>
+        </Card>
+      )}
     </>
   );
 }

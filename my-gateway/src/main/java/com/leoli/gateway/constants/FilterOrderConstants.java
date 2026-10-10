@@ -141,7 +141,7 @@ public interface FilterOrderConstants {
      * <p>
      * Order -246 is BOTH &lt; NettyWriteResponseFilter (-1) so its response decorator
      * is in the client-write path (outbound moderation), AND after authentication
-     * (-250) but before the rate limiters / token quota (-245..-243) so a blocked
+     * (-250) but before the rate limiters / token quota (-245..-242) so a blocked
      * request never spends quota. Inbound scanning runs in the pre-phase.
      */
     int AI_SECURITY = -246;
@@ -159,20 +159,34 @@ public interface FilterOrderConstants {
     int MULTI_DIM_RATE_LIMITER = -244;
 
     /**
-     * Token quota pre-check filter.
-     * Execute after multi-dimensional rate limiter.
-     * Checks token quota before processing AI requests.
+     * AI context-window limit filter (Higress ai-context-limit counterpart).
+     * <p>
+     * After authentication (-250) and BEFORE TokenQuotaPreCheckFilter so an
+     * oversized request never spends a pre-deduction. Joins the request body
+     * itself (the cachedRequestBody attribute is not populated this early) and
+     * replays it through a decorator, publishing the body for downstream filters.
      */
-    int TOKEN_QUOTA_PRE_CHECK = -243;
+    int AI_CONTEXT_LIMIT = -243;
+
+    /**
+     * Token quota pre-check filter.
+     * Execute after the AI context-window limit AND the semantic cache, so a cache HIT
+     * short-circuits before any pre-deduction happens. Checks/pre-deducts token quota
+     * before the request is proxied to the LLM.
+     */
+    int TOKEN_QUOTA_PRE_CHECK = -241;
 
     /**
      * AI semantic cache filter.
      * <p>
-     * After token pre-check (-243) and &lt; NettyWriteResponseFilter (-1): on a cache
-     * HIT it short-circuits by writing the stored response (like MockResponseFilter) so
-     * routing and the token collector never run - a hit consumes no LLM tokens. On a
-     * MISS it decorates the response (order &lt; -1 keeps the decorator in the write
-     * path) to capture and store the upstream answer.
+     * After the rate limiters and the context-window limit but BEFORE the token-quota
+     * pre-check (-241), and &lt; NettyWriteResponseFilter (-1). On a cache HIT it
+     * short-circuits by writing the stored response (like MockResponseFilter) so routing,
+     * the token pre-check and the token collector never run - a hit consumes no LLM tokens
+     * AND pre-deducts no quota. (Running it AFTER the pre-check stranded the pre-deducted
+     * estimate on every hit: the collector that settles/refunds never ran, so the tenant was
+     * billed for tokens it never spent.) On a MISS it decorates the response (order &lt; -1
+     * keeps the decorator in the write path) to capture and store the upstream answer.
      */
     int AI_SEMANTIC_CACHE = -242;
 
@@ -200,9 +214,20 @@ public interface FilterOrderConstants {
      * this filter's writeWith/writeAndFlushWith were never invoked on the real proxy
      * path, so token usage always parsed as 0. Placed just inside ResponseTransform
      * (-45) so it observes the raw upstream body (usage field intact) before any
-     * transform, and after TokenQuotaPreCheckFilter (-243) so the tenant attr is set.
+     * transform, and after TokenQuotaPreCheckFilter (-241) so the tenant attr is set.
      */
     int TOKEN_USAGE_COLLECTOR = -44;
+
+    /**
+     * AI statistics filter (Higress ai-statistics counterpart).
+     * <p>
+     * MUST be &lt; NettyWriteResponseFilter (-1) so its pass-through decorator sees
+     * the first response chunk (TTFT) on the write path. Ordered after the token
+     * usage collector (-44) so the collector's decorator stays closest to the raw
+     * upstream body; this filter only timestamps, never buffers. Reads the settled
+     * usage published by the collector via exchange attributes in its post-phase.
+     */
+    int AI_STATISTICS = -43;
 
     // ============================================================
     // Load Balancing Filters (High Values)
@@ -282,7 +307,9 @@ public interface FilterOrderConstants {
     // -249     MockResponseFilter              Mock response
     // -245     HybridRateLimiterFilter         Rate limiting (after auth -> identity keys ready)
     // -244     MultiDimRateLimiterFilter       Multi-dimensional rate limiting
-    // -243     TokenQuotaPreCheckFilter        AI token quota pre-check
+    // -243     AiContextLimitFilter            AI context-window limit (rejects oversized inputs)
+    // -242     AiSemanticCacheFilter           AI semantic cache (hit short-circuits before quota)
+    // -241     TokenQuotaPreCheckFilter        AI token quota pre-check
     // -200     TimeoutGlobalFilter             Timeout handling
     // -150     ApiVersionGlobalFilter          API version routing
     //   -3     CircuitBreakerGlobalFilter      Circuit breaker (records final status after retry)

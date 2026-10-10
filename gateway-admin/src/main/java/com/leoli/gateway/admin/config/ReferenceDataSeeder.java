@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import javax.sql.DataSource;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * ============================================================================
@@ -53,6 +54,13 @@ public class ReferenceDataSeeder implements ApplicationRunner {
         SEEDS.put("route_plugins", "classpath:sql/builtin-plugins.sql");
     }
 
+    /**
+     * 表 -> 每次启动都重跑种子脚本（脚本必须全篇 INSERT IGNORE 幂等）。
+     * strategy_types 是产品目录：新增策略类型要靠它演进到存量库，
+     * 空表才播会让老环境永远拿不到新目录行。
+     */
+    private static final Set<String> UPSERT_EVERY_START = Set.of("strategy_types");
+
     public ReferenceDataSeeder(DataSource dataSource, ResourceLoader resourceLoader, JdbcTemplate jdbcTemplate) {
         this.dataSource = dataSource;
         this.resourceLoader = resourceLoader;
@@ -62,7 +70,30 @@ public class ReferenceDataSeeder implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         for (Map.Entry<String, String> e : SEEDS.entrySet()) {
-            seedIfEmpty(e.getKey(), e.getValue());
+            if (UPSERT_EVERY_START.contains(e.getKey())) {
+                seedUpsert(e.getKey(), e.getValue());
+            } else {
+                seedIfEmpty(e.getKey(), e.getValue());
+            }
+        }
+    }
+
+    private void seedUpsert(String table, String location) {
+        try {
+            Resource resource = resourceLoader.getResource(location);
+            if (!resource.exists()) {
+                log.warn("Reference seed script not found: {}", location);
+                return;
+            }
+            ResourceDatabasePopulator populator = new ResourceDatabasePopulator();
+            populator.addScript(resource);
+            populator.setSqlScriptEncoding("UTF-8");
+            populator.setContinueOnError(false);
+            populator.execute(dataSource);
+            Integer after = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM " + table, Integer.class);
+            log.info("Reference data upserted: {} <- {} ({} rows)", table, location, after);
+        } catch (Exception ex) {
+            log.warn("Reference data upsert failed for {} (skipped): {}", table, ex.getMessage());
         }
     }
 

@@ -29,6 +29,7 @@ import reactor.test.StepVerifier;
 
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -65,7 +66,7 @@ class AiProviderRoutingFilterTest {
     @BeforeEach
     void setUp() {
         bufferFactory = new DefaultDataBufferFactory();
-        filter = new AiProviderRoutingFilter(strategyManager, keyResolver, objectMapper);
+        filter = new AiProviderRoutingFilter(strategyManager, keyResolver, new com.leoli.gateway.ai.ProviderKeyPoolSelector(), objectMapper);
     }
 
     private MockServerWebExchange post(String body) {
@@ -206,7 +207,7 @@ class AiProviderRoutingFilterTest {
     }
 
     @Test
-    @DisplayName("Unresolvable key returns 502")
+    @DisplayName("Unresolvable key with no fallback left returns 502")
     void keyResolutionFailureReturns502() {
         MockServerWebExchange exchange = post("{\"model\":\"kimi-k2\"}");
         AiProxyConfig config = enabledConfig();
@@ -218,6 +219,31 @@ class AiProviderRoutingFilterTest {
 
         assertEquals(HttpStatus.BAD_GATEWAY, exchange.getResponse().getStatusCode());
         verify(chain, never()).filter(any());
+    }
+
+    @Test
+    @DisplayName("Unresolvable primary credential fails over to the fallback in the SAME invocation (no RETRY needed)")
+    void credentialFailureFailsOverToFallbackInFilter() {
+        MockServerWebExchange exchange = post("{\"model\":\"gpt-4o\",\"messages\":[]}");
+        AiProxyConfig config = enabledConfig();
+        config.setProviderApiKeyRefs(Map.of("openai", "ref-openai"));
+        AiProxyConfig.FallbackTarget fb = new AiProxyConfig.FallbackTarget();
+        fb.setProvider("deepseek");
+        fb.setCredentialRef("ref-deepseek");
+        config.setFallbacks(List.of(fb));
+        stubConfig(config);
+        // Primary credential is dead (revoked/expired); the fallback's is usable.
+        when(keyResolver.resolveKey("ref-openai")).thenReturn(Mono.empty());
+        when(keyResolver.resolveKey("ref-deepseek")).thenReturn(Mono.just("sk-fallback"));
+        when(chain.filter(any())).thenReturn(Mono.empty());
+
+        StepVerifier.create(filter.filter(exchange, chain)).expectComplete().verify();
+
+        // A config-level credential failure must skip to the next target immediately, without
+        // depending on a RETRY strategy to re-invoke the filter.
+        verify(chain).filter(any());
+        assertEquals("deepseek", exchange.getAttribute(AiProviderRoutingFilter.AI_PROVIDER_ATTR),
+                "dead primary credential must fail over to the fallback provider in-filter");
     }
 
     @Test
@@ -320,6 +346,21 @@ class AiProviderRoutingFilterTest {
                 enabledConfig(), "qwen", "ref-qwen"));
 
         assertTrue(objectMapper.readTree(out).path("stream_options").isMissingNode());
+    }
+
+    @Test
+    @DisplayName("response_format passes through untouched (native structured output needs no gateway plugin)")
+    void responseFormatPassesThrough() throws Exception {
+        String out = bodyOf(runStreaming(
+                "{\"model\":\"qwen-plus\",\"stream\":true,\"response_format\":"
+                        + "{\"type\":\"json_schema\",\"json_schema\":{\"name\":\"t\",\"schema\":{\"type\":\"object\"}}},"
+                        + "\"messages\":[]}",
+                enabledConfig(), "qwen", "ref-qwen"));
+
+        JsonNode sent = objectMapper.readTree(out);
+        assertEquals("json_schema", sent.path("response_format").path("type").asText());
+        assertEquals("t", sent.path("response_format").path("json_schema").path("name").asText());
+        assertTrue(sent.path("stream_options").path("include_usage").asBoolean(false));
     }
 
     @Test

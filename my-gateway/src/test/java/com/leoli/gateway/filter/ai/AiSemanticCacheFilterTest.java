@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.ai.cache.GatewayEmbeddingClient;
 import com.leoli.gateway.ai.cache.SemanticCacheStore;
+import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.AiSemanticCacheConfig;
 import com.leoli.gateway.model.StrategyDefinition;
@@ -168,9 +169,19 @@ class AiSemanticCacheFilterTest {
     }
 
     @Test
-    @DisplayName("Order is AI_SEMANTIC_CACHE (-242): before routing, and < -1 for response capture")
+    @DisplayName("Order is AI_SEMANTIC_CACHE (-242): before quota pre-check and routing, and < -1 for response capture")
     void orderIsSemanticCache() {
         assertEquals(-242, filter.getOrder());
         assertTrue(filter.getOrder() < -1);
+    }
+
+    @Test
+    @DisplayName("Semantic cache runs BEFORE token pre-check so a HIT never strands a pre-deduction")
+    void orderIsBeforeTokenQuotaPreCheck() {
+        // A cache HIT short-circuits the chain, so the collector that settles/refunds the
+        // pre-deducted estimate never runs. If the cache sat AFTER the pre-check, every hit
+        // would leave the pre-deducted tokens permanently charged for zero LLM usage.
+        assertTrue(FilterOrderConstants.AI_SEMANTIC_CACHE < FilterOrderConstants.TOKEN_QUOTA_PRE_CHECK,
+                "AI_SEMANTIC_CACHE must run before TOKEN_QUOTA_PRE_CHECK so a hit pre-deducts nothing");
     }
 }

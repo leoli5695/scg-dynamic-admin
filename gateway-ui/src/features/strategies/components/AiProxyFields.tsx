@@ -233,6 +233,69 @@ export function AiProxyFields({ schema, form, t }: AiProxyFieldsProps) {
         style={{ marginBottom: 16 }}
         title={
           <Space>
+            <ApiOutlined />
+            <span>{t('strategy.ai.key_pools', { defaultValue: '多密钥池与负载均衡' })}</span>
+            <Tooltip title={t('strategy.ai.key_pools_help', { defaultValue: '为同一 Provider 配置多个凭据并按策略选择(轮询/最少在途)，规避单钥限流；配置后优先于上方单凭据绑定(对标 Higress ai-load-balancer)。' })}>
+              <InfoCircleOutlined style={{ color: '#999' }} />
+            </Tooltip>
+          </Space>
+        }
+      >
+        <Form.List name="keyPools">
+          {(fields, { add, remove }) => (
+            <>
+              {fields.map(({ key, name }) => (
+                <Row gutter={12} key={key} align="middle" style={{ marginBottom: 8 }}>
+                  <Col span={6}>
+                    <Form.Item name={[name, 'provider']} style={{ marginBottom: 0 }}>
+                      <Select placeholder={t('strategy.ai.provider', { defaultValue: 'Provider' })} options={PROVIDERS} />
+                    </Form.Item>
+                  </Col>
+                  <Col span={6}>
+                    <Form.Item name={[name, 'strategy']} style={{ marginBottom: 0 }} initialValue="ROUND_ROBIN">
+                      <Select
+                        options={[
+                          { value: 'ROUND_ROBIN', label: t('strategy.ai.lb_rr', { defaultValue: '轮询' }) },
+                          { value: 'LEAST_INFLIGHT', label: t('strategy.ai.lb_least', { defaultValue: '最少在途' }) },
+                        ]}
+                      />
+                    </Form.Item>
+                  </Col>
+                  <Col span={9}>
+                    <Form.Item name={[name, 'credentialRefs']} style={{ marginBottom: 0 }}>
+                      <Select
+                        mode="multiple"
+                        placeholder={t('strategy.ai.pool_refs', { defaultValue: '选择凭据(可多选)' })}
+                        showSearch
+                        optionFilterProp="label"
+                        options={credentialOptions}
+                        notFoundContent={t('strategy.ai.no_credentials', { defaultValue: '暂无凭据，请先新建' })}
+                      />
+                    </Form.Item>
+                  </Col>
+                  <Col span={3}>
+                    <Button type="text" danger icon={<DeleteOutlined />} onClick={() => remove(name)} />
+                  </Col>
+                </Row>
+              ))}
+              <Button
+                type="dashed"
+                block
+                icon={<PlusOutlined />}
+                onClick={() => add({ provider: undefined, strategy: 'ROUND_ROBIN', credentialRefs: [] })}
+              >
+                {t('strategy.ai.add_key_pool', { defaultValue: '添加密钥池' })}
+              </Button>
+            </>
+          )}
+        </Form.List>
+      </Card>
+
+      <Card
+        size="small"
+        style={{ marginBottom: 16 }}
+        title={
+          <Space>
             <BranchesOutlined />
             <span>{t('strategy.ai.model_routing', { defaultValue: 'Model 路由别名（可选）' })}</span>
             <Tooltip title={t('strategy.ai.model_routing_help', { defaultValue: '把自定义 model 名显式指向某 Provider；不配则按内置前缀自动识别（gpt-→openai、qwen→qwen、deepseek-→deepseek、glm-→zhipu、kimi-→moonshot、claude-→anthropic）。' })}>

@@ -153,6 +153,8 @@ interface TokenQuotaFormRow {
   dailyQuota?: unknown;
   burstQuota?: unknown;
   quotaPeriod?: string;
+  windowTokenPerMinute?: unknown;
+  windowTokenPerHour?: unknown;
 }
 
 /**
@@ -178,6 +180,8 @@ function buildTokenRateLimiterConfig(values: StrategyFormValues): StrategyConfig
       dailyQuota: toInt(row.dailyQuota, 50000),
       burstQuota: row.burstQuota ? toInt(row.burstQuota, 0) : 0,
       quotaPeriod: row.quotaPeriod || 'BOTH',
+      ...(row.windowTokenPerMinute ? { windowTokenPerMinute: toInt(row.windowTokenPerMinute, 0) } : {}),
+      ...(row.windowTokenPerHour ? { windowTokenPerHour: toInt(row.windowTokenPerHour, 0) } : {}),
     };
   });
   config.tenantQuotas = tenantQuotas;
@@ -187,6 +191,7 @@ function buildTokenRateLimiterConfig(values: StrategyFormValues): StrategyConfig
 
 interface AiProxyCredentialRow { provider?: string; credentialRef?: string; }
 interface AiProxyModelRow { model?: string; provider?: string; }
+interface AiProxyPoolRow { provider?: string; strategy?: string; credentialRefs?: string[]; }
 
 /**
  * AI_PROXY form values -> config aligned with my-gateway model/AiProxyConfig.java.
@@ -201,6 +206,15 @@ function buildAiProxyConfig(values: StrategyFormValues): StrategyConfig {
   ((values.modelRouting ?? []) as AiProxyModelRow[]).forEach((row) => {
     if (row.model && row.provider) modelRouting[row.model] = row.provider;
   });
+  const providerKeyPools: Record<string, { credentialRefs: string[]; strategy: string }> = {};
+  ((values.keyPools ?? []) as AiProxyPoolRow[]).forEach((row) => {
+    if (row.provider && (row.credentialRefs ?? []).length > 0) {
+      providerKeyPools[row.provider] = {
+        credentialRefs: row.credentialRefs ?? [],
+        strategy: row.strategy || 'ROUND_ROBIN',
+      };
+    }
+  });
   return {
     enabled: true,
     providerSelection: values.providerSelection || 'MODEL',
@@ -212,6 +226,7 @@ function buildAiProxyConfig(values: StrategyFormValues): StrategyConfig {
     maxBodySize: toInt(values.maxBodySize, 1048576),
     providerApiKeyRefs,
     modelRouting,
+    providerKeyPools,
   };
 }
 
@@ -550,6 +565,12 @@ export function strategyToFormValues(strategy: StrategyDefinition): StrategyForm
     formValues.providerCredentials = Object.entries(refs).map(([provider, credentialRef]) => ({ provider, credentialRef }));
     const routing = (config.modelRouting ?? {}) as Record<string, string>;
     formValues.modelRouting = Object.entries(routing).map(([model, provider]) => ({ model, provider }));
+    const pools = (config.providerKeyPools ?? {}) as Record<string, { credentialRefs?: string[]; strategy?: string }>;
+    formValues.keyPools = Object.entries(pools).map(([provider, pool]) => ({
+      provider,
+      strategy: pool.strategy || 'ROUND_ROBIN',
+      credentialRefs: pool.credentialRefs ?? [],
+    }));
     delete formValues.providerApiKeyRefs;
   }
 

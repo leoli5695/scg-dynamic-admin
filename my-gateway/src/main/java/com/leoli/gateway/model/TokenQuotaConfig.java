@@ -210,6 +210,33 @@ public class TokenQuotaConfig {
      */
     private long maxRefundPerRequest = 10000;
 
+    // ============== Time-Window Token Rate Limit (Higress ai-token-ratelimit) ==============
+
+    /**
+     * Enable fixed-window token rate limiting on top of the period quotas.
+     * The request phase checks the tokens already consumed in the current window;
+     * the response phase increments the window counter by the settled usage.
+     */
+    private boolean windowLimitEnabled = false;
+
+    /** Rule name embedded in the Redis window key (Higress rule_name). */
+    private String windowRuleName = "default";
+
+    /** Per-tenant tokens allowed per minute window; 0 disables. */
+    private long tokenPerMinute = 0;
+
+    /** Per-tenant tokens allowed per hour window; 0 disables. */
+    private long tokenPerHour = 0;
+
+    /** Route-wide (all tenants combined) tokens per minute window; 0 disables. */
+    private long globalTokenPerMinute = 0;
+
+    /** HTTP status returned when a window limit rejects (Higress rejected_code). */
+    private int rejectedCode = 429;
+
+    /** Message returned when a window limit rejects (Higress rejected_msg). */
+    private String rejectedMsg = "Too many requests";
+
     // ============== Inner Classes ==============
 
     /**
@@ -247,6 +274,12 @@ public class TokenQuotaConfig {
          * Alert threshold override for this tenant.
          */
         private Integer alertThresholdPercent;
+
+        /**
+         * Window limit overrides for this tenant; null inherits the global value.
+         */
+        private Long windowTokenPerMinute;
+        private Long windowTokenPerHour;
     }
 
     /**

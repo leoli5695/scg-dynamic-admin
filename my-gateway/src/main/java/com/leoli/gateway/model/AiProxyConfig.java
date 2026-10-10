@@ -94,12 +94,36 @@ public class AiProxyConfig {
 
     /**
      * Ordered failover targets tried after the primary (model-resolved) provider.
-     * Failover reuses the route's RETRY strategy: bind a RETRY strategy with
-     * maxAttempts = 1 + fallbacks.size() and retryOnStatusCodes covering 429/5xx.
-     * RetryGlobalFilter re-invokes AiProviderRoutingFilter on each retry, which then
-     * selects the next target. Streaming can only fail over before the first byte.
+     * <p>
+     * Two triggers, two mechanisms:
+     * <ul>
+     *   <li><b>Unresolvable credential</b> (revoked/expired/deleted ref): walked past
+     *       IMMEDIATELY inside AiProviderRoutingFilter, no RETRY strategy required - a
+     *       config-level failure will not heal after a backoff, so the next target's
+     *       credential is tried at once.</li>
+     *   <li><b>Transient downstream error</b> (429/5xx returned by the provider): fails over
+     *       via the route's RETRY strategy - bind one with maxAttempts = 1 + fallbacks.size()
+     *       and retryOnStatusCodes covering 429/5xx; RetryGlobalFilter re-invokes the router,
+     *       which advances to the next target. Streaming can only fail over before the first byte.</li>
+     * </ul>
      */
     private java.util.List<FallbackTarget> fallbacks = new java.util.ArrayList<>();
+
+    /**
+     * Per-provider credential pools with load balancing across multiple keys
+     * (Higress ai-load-balancer counterpart at credential level). When a pool
+     * exists for a provider it takes precedence over {@link #providerApiKeyRefs}.
+     */
+    private java.util.Map<String, KeyPool> providerKeyPools = new java.util.HashMap<>();
+
+    /** Credential pool for one provider. */
+    @Data
+    public static class KeyPool {
+        /** Credential refs in selection order. */
+        private java.util.List<String> credentialRefs = new java.util.ArrayList<>();
+        /** ROUND_ROBIN (default) or LEAST_INFLIGHT (local ongoing-request count). */
+        private String strategy = "ROUND_ROBIN";
+    }
 
     /** Provider selection modes. */
     public enum Selection {

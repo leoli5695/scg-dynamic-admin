@@ -44,11 +44,12 @@ import java.util.Optional;
  * calling the LLM - saving tokens, cost and latency. On a miss it forwards and
  * captures the upstream answer to populate the cache.
  * <p>
- * Order {@link FilterOrderConstants#AI_SEMANTIC_CACHE} (-242): after auth/token
- * pre-check, and &lt; NettyWriteResponseFilter (-1) so the response-capture decorator
- * is in the client-write path. A HIT short-circuits (writes the cached body, never
- * calls the chain) so it consumes no LLM tokens. MVP scope: non-streaming only,
- * in-memory per-instance store; embedding/store failures fail OPEN (pass through).
+ * Order {@link FilterOrderConstants#AI_SEMANTIC_CACHE} (-242): after auth and the rate
+ * limiters but BEFORE the token-quota pre-check (-241), and &lt; NettyWriteResponseFilter
+ * (-1) so the response-capture decorator is in the client-write path. A HIT short-circuits
+ * (writes the cached body, never calls the chain) so it consumes no LLM tokens and
+ * pre-deducts no quota. MVP scope: non-streaming only, in-memory per-instance store;
+ * embedding/store failures fail OPEN (pass through).
  *
  * @author leoli
  */
@@ -57,6 +58,9 @@ import java.util.Optional;
 public class AiSemanticCacheFilter implements GlobalFilter, Ordered {
 
     public static final String CACHE_HEADER = "X-AI-Cache";
+
+    /** Exchange attribute flagging a cache HIT for AiStatisticsFilter. */
+    public static final String AI_CACHE_HIT_ATTR = "ai.cache_hit";
     private static final String TENANT_HEADER = "X-Tenant-Id";
 
     private final StrategyManager strategyManager;
@@ -218,6 +222,7 @@ public class AiSemanticCacheFilter implements GlobalFilter, Ordered {
         response.setStatusCode(HttpStatus.OK);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
         response.getHeaders().add(CACHE_HEADER, "HIT");
+        exchange.getAttributes().put(AI_CACHE_HIT_ATTR, Boolean.TRUE);
         byte[] bytes = cachedResponse.getBytes(StandardCharsets.UTF_8);
         response.getHeaders().setContentLength(bytes.length);
         return response.writeWith(Mono.just(response.bufferFactory().wrap(bytes)));

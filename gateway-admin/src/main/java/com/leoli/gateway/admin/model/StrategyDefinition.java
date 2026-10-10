@@ -97,6 +97,12 @@ public class StrategyDefinition {
     // AI gateway: semantic cache (embed prompt, reuse similar cached response)
     public static final String TYPE_AI_SEMANTIC_CACHE = "AI_SEMANTIC_CACHE";
 
+    // AI gateway: context-window limit (reject oversized inputs, Higress ai-context-limit)
+    public static final String TYPE_AI_CONTEXT_LIMIT = "AI_CONTEXT_LIMIT";
+
+    // AI gateway: observability (token/duration metrics, AI log line, span tags)
+    public static final String TYPE_AI_STATISTICS = "AI_STATISTICS";
+
     // ============================================================
     // Scope Types
     // ============================================================

@@ -25,7 +25,7 @@ class TokenUsageCollectorFilterOrderTest {
 
     @Test
     void orderIsAfterTokenQuotaPreCheckSoTenantIsResolved() {
-        // Pre-check (-243) sets the tenant attribute the collector settles against.
+        // Pre-check (-241) sets the tenant attribute the collector settles against.
         assertTrue(FilterOrderConstants.TOKEN_USAGE_COLLECTOR > FilterOrderConstants.TOKEN_QUOTA_PRE_CHECK,
                 "collector must run after TokenQuotaPreCheckFilter so the tenant attribute is set");
     }

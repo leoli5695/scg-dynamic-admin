@@ -1,6 +1,5 @@
 package com.leoli.gateway.filter.token;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.limiter.TokenQuotaManager;
@@ -10,6 +9,7 @@ import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.StrategyDefinition;
 import com.leoli.gateway.model.TokenQuotaConfig;
 import com.leoli.gateway.util.GatewayResponseHelper;
+import com.leoli.gateway.util.AiTokenEstimator;
 import com.leoli.gateway.util.RouteUtils;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -87,12 +87,36 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
         // Extract tenant ID
         String tenantId = extractTenantId(exchange, config.tokenQuotaConfig);
 
-        if (tenantId == null) {
-            log.warn("No tenant ID found for token quota check, routeId: {}", routeId);
-            // Allow request to proceed if no tenant ID (will be caught by auth filter)
-            return chain.filter(exchange);
-        }
+        // Window rate limit (Higress ai-token-ratelimit counterpart): the global
+        // scope applies even without a tenant identity; tenant scopes need one.
+        // Empty string is the "no rejection" sentinel: Mono.fromCallable would turn
+        // a null return into an empty Mono and skip the flatMap entirely.
+        List<WindowSpec> windows = buildWindowSpecs(config.tokenQuotaConfig, tenantId);
+        Mono<String> windowRejection = (windows.isEmpty() || tokenQuotaManager == null)
+                ? Mono.just("")
+                : Mono.fromCallable(() -> {
+                    String rejection = firstWindowRejection(exchange, windows, config.tokenQuotaConfig);
+                    return rejection == null ? "" : rejection;
+                }).subscribeOn(Schedulers.boundedElastic());
 
+        return windowRejection.flatMap(rejected -> {
+            if (!rejected.isEmpty()) {
+                return rejectWindowLimit(exchange, tenantId, config.tokenQuotaConfig);
+            }
+            if (tenantId == null) {
+                log.warn("No tenant ID found for token quota check, routeId: {}", routeId);
+                // Allow request to proceed if no tenant ID (will be caught by auth filter)
+                return chain.filter(exchange);
+            }
+            return quotaFlow(exchange, chain, tenantId, config);
+        });
+    }
+
+    /**
+     * Period quota flow: tenant attributes, pre-deduct strategy, quota check, headers.
+     */
+    private Mono<Void> quotaFlow(ServerWebExchange exchange, GatewayFilterChain chain,
+                                 String tenantId, ConfigWrapper config) {
         // Store tenant ID in exchange attributes for later use
         exchange.getAttributes().put("token_quota_tenant_id", tenantId);
         // 计量延迟起点（含上游往返）：Collector 结算时据此算 latencyMs
@@ -155,7 +179,7 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
 
     /**
      * Estimate input tokens from request body.
-     * Uses cached body from previous filter (TraceCaptureGlobalFilter).
+     * Uses cached body published by AiContextLimitFilter; math in AiTokenEstimator.
      *
      * Estimation methods:
      * 1. Parse messages from OpenAI/Anthropic request format
@@ -172,73 +196,7 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
             return config.getHybridThreshold();  // Use hybrid threshold as fallback
         }
 
-        try {
-            JsonNode root = objectMapper.readTree(cachedBody);
-
-            // OpenAI chat completion format
-            JsonNode messages = root.path("messages");
-            if (!messages.isMissingNode() && messages.isArray()) {
-                return estimateTokensFromMessages(messages);
-            }
-
-            // Anthropic format
-            JsonNode prompt = root.path("prompt");
-            if (!prompt.isMissingNode()) {
-                return estimateTokensFromPrompt(prompt);
-            }
-
-            // Generic text estimation: ~4 chars per token for English
-            // For mixed content (code, math, Chinese): ~2-3 chars per token
-            return cachedBody.length() / 3;
-
-        } catch (Exception e) {
-            log.debug("Failed to parse request body for token estimation: {}", e.getMessage());
-            return cachedBody.length() / 4;  // Conservative estimate
-        }
-    }
-
-    /**
-     * Estimate tokens from OpenAI messages array.
-     */
-    private long estimateTokensFromMessages(JsonNode messages) {
-        long totalChars = 0;
-
-        for (JsonNode message : messages) {
-            String role = message.path("role").asText("");
-            JsonNode contentNode = message.path("content");
-
-            if (contentNode.isTextual()) {
-                totalChars += contentNode.asText().length();
-            } else if (contentNode.isArray()) {
-                // Multi-modal content
-                for (JsonNode part : contentNode) {
-                    if (part.path("type").asText("").equals("text")) {
-                        totalChars += part.path("text").asText("").length();
-                    }
-                }
-            }
-
-            // Add overhead for role and message structure (~4 tokens per message)
-            totalChars += 16;  // ~4 tokens * 4 chars
-        }
-
-        return totalChars / 3;  // ~3 chars per token for mixed content
-    }
-
-    /**
-     * Estimate tokens from Anthropic prompt.
-     */
-    private long estimateTokensFromPrompt(JsonNode prompt) {
-        if (prompt.isTextual()) {
-            return prompt.asText().length() / 3;
-        } else if (prompt.isArray()) {
-            long totalChars = 0;
-            for (JsonNode part : prompt) {
-                totalChars += part.asText().length();
-            }
-            return totalChars / 3;
-        }
-        return 100;  // Default
+        return AiTokenEstimator.estimate(cachedBody, objectMapper).orElse((long) (cachedBody.length() / 4));
     }
 
     /**
@@ -465,6 +423,109 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
     public int getOrder() {
         // After MultiDimRateLimiterFilter (HIGHEST_PRECEDENCE + 21)
         return FilterOrderConstants.TOKEN_QUOTA_PRE_CHECK;
+    }
+
+    // ============== Fixed-Window Token Rate Limit (Higress ai-token-ratelimit) ==============
+
+    /** Exchange attribute: window keys the collector increments by settled usage. */
+    public static final String ATTR_WINDOW_USAGE_KEYS = "token_quota_window_keys";
+
+    /** One fixed-window limit enforced in the request phase. */
+    private static final class WindowSpec {
+        final String key;
+        final long threshold;
+        final long windowSec;
+
+        WindowSpec(String key, long threshold, long windowSec) {
+            this.key = key;
+            this.threshold = threshold;
+            this.windowSec = windowSec;
+        }
+    }
+
+    private List<WindowSpec> buildWindowSpecs(TokenQuotaConfig config, String tenantId) {
+        List<WindowSpec> specs = new java.util.ArrayList<>();
+        if (tokenQuotaManager == null || !config.isWindowLimitEnabled()) {
+            return specs;
+        }
+        String rule = config.getWindowRuleName() == null || config.getWindowRuleName().isBlank()
+                ? "default" : config.getWindowRuleName();
+        if (config.getGlobalTokenPerMinute() > 0) {
+            specs.add(new WindowSpec(
+                    tokenQuotaManager.windowKey(config.getKeyPrefix(), rule, "global", 60),
+                    config.getGlobalTokenPerMinute(), 60));
+        }
+        if (tenantId != null) {
+            TokenQuotaConfig.TenantTokenQuota tenant = config.getTenantQuotas() == null ? null
+                    : config.getTenantQuotas().get(tenantId);
+            long tpm = tenant != null && tenant.getWindowTokenPerMinute() != null
+                    ? tenant.getWindowTokenPerMinute() : config.getTokenPerMinute();
+            long tph = tenant != null && tenant.getWindowTokenPerHour() != null
+                    ? tenant.getWindowTokenPerHour() : config.getTokenPerHour();
+            if (tpm > 0) {
+                specs.add(new WindowSpec(
+                        tokenQuotaManager.windowKey(config.getKeyPrefix(), rule, "t:" + tenantId, 60), tpm, 60));
+            }
+            if (tph > 0) {
+                specs.add(new WindowSpec(
+                        tokenQuotaManager.windowKey(config.getKeyPrefix(), rule, "t:" + tenantId, 3600), tph, 3600));
+            }
+        }
+        return specs;
+    }
+
+    /**
+     * Request-phase check across all configured windows (Higress: current &gt;
+     * threshold rejects; the estimate is NOT added here). Passed windows are
+     * published for the collector's response-phase increment.
+     *
+     * @return the rejection message of the first exceeded window, null when all pass
+     */
+    private String firstWindowRejection(ServerWebExchange exchange, List<WindowSpec> specs, TokenQuotaConfig config) {
+        List<Object[]> passed = new java.util.ArrayList<>();
+        for (WindowSpec spec : specs) {
+            if (!tokenQuotaManager.windowAllowed(spec.key, spec.threshold)) {
+                log.info("Token window rate limit exceeded: key={}, threshold={}", spec.key, spec.threshold);
+                String msg = config.getRejectedMsg();
+                return msg == null || msg.isBlank() ? "Too many requests" : msg;
+            }
+            passed.add(new Object[]{spec.key, spec.windowSec});
+        }
+        if (!passed.isEmpty()) {
+            exchange.getAttributes().put(ATTR_WINDOW_USAGE_KEYS, passed);
+        }
+        return null;
+    }
+
+    private Mono<Void> rejectWindowLimit(ServerWebExchange exchange, String tenantId, TokenQuotaConfig config) {
+        ServerHttpResponse response = exchange.getResponse();
+        HttpStatus status = HttpStatus.resolve(config.getRejectedCode());
+        if (status == null) {
+            status = HttpStatus.TOO_MANY_REQUESTS;
+        }
+        response.setStatusCode(status);
+        response.getHeaders().add("Content-Type", "application/json;charset=UTF-8");
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("httpStatus", status.value());
+        body.put("code", 52903);
+        body.put("error", "Token Window Rate Limited");
+        body.put("message", config.getRejectedMsg() == null ? "Too many requests" : config.getRejectedMsg());
+        body.put("data", null);
+        body.put("tenantId", tenantId);
+        body.put("exceededType", "WINDOW");
+
+        String jsonBody;
+        try {
+            jsonBody = objectMapper.writeValueAsString(body);
+        } catch (Exception e) {
+            log.error("Failed to serialize window limit response", e);
+            jsonBody = "{\"httpStatus\":429,\"code\":52903,\"error\":\"Token Window Rate Limited\"}";
+        }
+
+        return response.writeWith(
+                Mono.just(response.bufferFactory().wrap(jsonBody.getBytes(StandardCharsets.UTF_8)))
+        );
     }
 
     // ============== Inner Classes ==============

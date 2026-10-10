@@ -51,7 +51,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *   filters ordered BEFORE NettyWriteResponseFilter (-1). At the old order (101) this
  *   decorator's writeWith/writeAndFlushWith were never invoked on the real proxy path,
  *   so usage always parsed as 0 (only unit tests that called writeWith directly passed).
- * - Runs after TokenQuotaPreCheckFilter (-243), so the tenant attribute is already set.
+ * - Runs after TokenQuotaPreCheckFilter (-241), so the tenant attribute is already set.
  *
  * Response Type Detection:
  * - JSON: Parse usage field from complete response body
@@ -62,6 +62,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Component
 @Slf4j
 public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
+
+    /** Exchange attribute: settled usage {prompt, completion, total} for AiStatisticsFilter. */
+    public static final String AI_USAGE_ATTR = "ai.usage";
 
     @Autowired
     private StrategyManager strategyManager;
@@ -478,6 +481,24 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
 
             log.info("Token usage settled: tenant={}, preDeducted={}, actual={}, interrupted={}",
                     tenantId, preDeductedTokens, actualTokens, interrupted);
+
+            // Publish settled usage for AiStatisticsFilter (metrics/log/span tags).
+            exchange.getAttributes().put(AI_USAGE_ATTR, new long[]{
+                    usage != null ? usage.getPromptTokens() : 0,
+                    usage != null ? usage.getCompletionTokens() : 0,
+                    actualTokens});
+
+            // Fixed-window token rate limit (Higress ai-token-ratelimit response
+            // phase): charge the settled usage to the windows checked pre-request.
+            if (tokenQuotaManager != null) {
+                java.util.List<Object[]> windowKeys =
+                        exchange.getAttribute(TokenQuotaPreCheckFilter.ATTR_WINDOW_USAGE_KEYS);
+                if (windowKeys != null) {
+                    for (Object[] wk : windowKeys) {
+                        tokenQuotaManager.incrementWindowUsage((String) wk[0], actualTokens, (Long) wk[1]);
+                    }
+                }
+            }
 
             // 旁路上报 admin 计量库（可观测页数据源）；失败静默，不影响代理与结算
             reportUsageToAdmin(exchange, tenantId, usage, actualTokens);

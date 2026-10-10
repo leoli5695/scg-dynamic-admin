@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.leoli.gateway.ai.LlmProvider;
+import com.leoli.gateway.ai.ProviderKeyPoolSelector;
 import com.leoli.gateway.ai.ProviderKeyResolver;
 import com.leoli.gateway.ai.ProviderRegistry;
 import com.leoli.gateway.constants.FilterOrderConstants;
@@ -67,14 +68,17 @@ public class AiProviderRoutingFilter implements GlobalFilter, Ordered {
 
     private final StrategyManager strategyManager;
     private final ProviderKeyResolver keyResolver;
+    private final ProviderKeyPoolSelector keyPoolSelector;
     private final ObjectMapper objectMapper;
 
     @Autowired
     public AiProviderRoutingFilter(StrategyManager strategyManager,
                                    ProviderKeyResolver keyResolver,
+                                   ProviderKeyPoolSelector keyPoolSelector,
                                    ObjectMapper objectMapper) {
         this.strategyManager = strategyManager;
         this.keyResolver = keyResolver;
+        this.keyPoolSelector = keyPoolSelector;
         this.objectMapper = objectMapper;
     }
 
@@ -131,39 +135,67 @@ public class AiProviderRoutingFilter implements GlobalFilter, Ordered {
                     }
 
                     // The attempt index advances each time RetryGlobalFilter re-invokes this
-                    // filter, so failover walks the target list. Self-managed to avoid coupling
-                    // to the retry filter's internal counters.
+                    // filter, so a transient DOWNSTREAM failure fails over to the next target.
+                    // An unresolvable CREDENTIAL, by contrast, is walked past immediately within
+                    // this invocation (see routeTarget) - it is a config-level failure, so routing
+                    // it through RETRY would only back off and re-resolve the same dead ref.
                     int attempt = nextAttemptIndex(exchange);
-                    Target target = targets.get(Math.min(attempt, targets.size() - 1));
-
-                    // switchIfEmpty is on Mono<String> (emits when present) - NOT on the
-                    // downstream Mono<Void>, which would falsely trigger on normal completion.
-                    return keyResolver.resolveKey(target.credentialRef)
-                            .switchIfEmpty(Mono.error(new KeyResolutionException(target.provider.getId())))
-                            .flatMap(key -> {
-                                byte[] outBytes = rewriteUpstreamBody(bytes, body, requestedModel,
-                                        target.upstreamModel, target.provider);
-
-                                URI upstream = buildUpstreamUri(target.provider, target.baseUrlOverride, exchange);
-                                exchange.getAttributes().put(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR, upstream);
-                                exchange.getAttributes().put(AI_PROVIDER_ATTR, target.provider.getId());
-                                exchange.getAttributes().put(AI_MODEL_ATTR, target.upstreamModel);
-                                exchange.getAttributes().put(AI_RESPONSE_FORMAT_ATTR,
-                                        config.getResponseFormat() != null ? config.getResponseFormat() : "OPENAI");
-
-                                ServerHttpRequest newRequest = decorateRequest(exchange, target.provider, key, upstream,
-                                        outBytes, config);
-                                log.info("AI proxy routing: route={}, model={} -> provider={}, upstream={} (attempt {}/{})",
-                                        routeId, requestedModel, target.provider.getId(), upstream, attempt + 1, targets.size());
-                                return chain.filter(exchange.mutate().request(newRequest).build());
-                            })
-                            .onErrorResume(KeyResolutionException.class, e ->
-                                    writeError(exchange, HttpStatus.BAD_GATEWAY, 50201,
-                                            "无法获取 Provider 密钥: " + e.providerId));
+                    return routeTarget(exchange, chain, config, routeId, targets, bytes, body,
+                            requestedModel, Math.min(attempt, targets.size() - 1));
                 })
                 .onErrorResume(DataBufferLimitException.class, e -> {
                     log.warn("AI proxy: request body exceeds maxBodySize {} on route {}", maxBodySize, routeId);
                     return writeError(exchange, HttpStatus.PAYLOAD_TOO_LARGE, 41301, "请求体超过 AI 代理上限");
+                });
+    }
+
+    /**
+     * Route to {@code targets[index]}. If its credential cannot be resolved, fail over to the
+     * next target WITHIN this invocation: credential resolution is a local lookup with no upstream
+     * round-trip, so a revoked/expired/deleted ref is skipped immediately rather than being turned
+     * into a 502 that only fails over when a RETRY strategy happens to re-invoke us (and then only
+     * after a backoff that cannot heal a config-level failure). Downstream (post-routing) errors are
+     * deliberately NOT caught here - they propagate so RetryGlobalFilter can advance the attempt
+     * index and re-enter at the next target. Exhausting the list yields a single 502.
+     */
+    private Mono<Void> routeTarget(ServerWebExchange exchange, GatewayFilterChain chain, AiProxyConfig config,
+                                   String routeId, List<Target> targets, byte[] bytes, String body,
+                                   String requestedModel, int index) {
+        if (index >= targets.size()) {
+            return writeError(exchange, HttpStatus.BAD_GATEWAY, 50201,
+                    "无法获取任何 Provider 密钥（已尝试 " + targets.size() + " 个目标）");
+        }
+        Target target = targets.get(index);
+
+        // switchIfEmpty is on Mono<String> (emits when present) - NOT on the downstream
+        // Mono<Void>, which would falsely trigger on normal completion.
+        return keyResolver.resolveKey(target.credentialRef)
+                .switchIfEmpty(Mono.error(new KeyResolutionException(target.provider.getId())))
+                .flatMap(key -> {
+                    byte[] outBytes = rewriteUpstreamBody(bytes, body, requestedModel,
+                            target.upstreamModel, target.provider);
+
+                    URI upstream = buildUpstreamUri(target.provider, target.baseUrlOverride, exchange);
+                    exchange.getAttributes().put(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR, upstream);
+                    exchange.getAttributes().put(AI_PROVIDER_ATTR, target.provider.getId());
+                    exchange.getAttributes().put(AI_MODEL_ATTR, target.upstreamModel);
+                    exchange.getAttributes().put(AI_RESPONSE_FORMAT_ATTR,
+                            config.getResponseFormat() != null ? config.getResponseFormat() : "OPENAI");
+
+                    ServerHttpRequest newRequest = decorateRequest(exchange, target.provider, key, upstream,
+                            outBytes, config);
+                    log.info("AI proxy routing: route={}, model={} -> provider={}, upstream={} (attempt {}/{})",
+                            routeId, requestedModel, target.provider.getId(), upstream, index + 1, targets.size());
+                    keyPoolSelector.acquire(target.provider.getId(), target.credentialRef, config);
+                    return chain.filter(exchange.mutate().request(newRequest).build())
+                            .doFinally(signal -> keyPoolSelector.release(
+                                    target.provider.getId(), target.credentialRef, config));
+                })
+                .onErrorResume(KeyResolutionException.class, e -> {
+                    log.warn("AI proxy: credential for provider '{}' unresolvable, failing over to next target",
+                            e.providerId);
+                    return routeTarget(exchange, chain, config, routeId, targets, bytes, body,
+                            requestedModel, index + 1);
                 });
     }
 
@@ -216,11 +248,12 @@ public class AiProviderRoutingFilter implements GlobalFilter, Ordered {
     private List<Target> buildTargets(ServerWebExchange exchange, AiProxyConfig config,
                                       String requestedModel, String mappedModel) {
         List<Target> targets = new ArrayList<>();
-        Map<String, String> refs = config.getProviderApiKeyRefs();
 
         Optional<LlmProvider> primary = resolveProvider(exchange, config, requestedModel);
         if (primary.isPresent()) {
-            String ref = refs == null ? null : refs.get(primary.get().getId());
+            // Pool-aware selection (Higress ai-load-balancer counterpart); falls back
+            // to the legacy single providerApiKeyRefs entry when no pool is configured.
+            String ref = keyPoolSelector.selectRef(primary.get().getId(), config);
             if (ref != null && !ref.isBlank()) {
                 targets.add(new Target(primary.get(), ref, mappedModel,
                         overrideFor(config, primary.get().getId())));
@@ -238,7 +271,7 @@ public class AiProviderRoutingFilter implements GlobalFilter, Ordered {
                 }
                 String ref = (fb.getCredentialRef() != null && !fb.getCredentialRef().isBlank())
                         ? fb.getCredentialRef()
-                        : (refs == null ? null : refs.get(provider.get().getId()));
+                        : keyPoolSelector.selectRef(provider.get().getId(), config);
                 if (ref == null || ref.isBlank()) {
                     continue;
                 }
