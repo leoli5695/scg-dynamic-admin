@@ -4,9 +4,9 @@
  * type metadata from StrategyTypeController (/api/strategy-types/enabled).
  */
 import React, { useCallback, useMemo, useState } from 'react';
-import { Button, Card, Divider, Empty, Select, Spin, Typography } from 'antd';
+import { Button, Card, Divider, Empty, Select, Spin, Tabs, Typography } from 'antd';
 import { message } from '../../utils/antdStatic';
-import { PlusOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { PlusOutlined, RobotOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useRequest } from '../../hooks/useRequest';
@@ -48,6 +48,8 @@ const StrategiesPage: React.FC = () => {
   const [filterType, setFilterType] = useState<string>('all');
   const [filterScope, setFilterScope] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  // Category tab: ALL / NORMAL / AI. A strategy is AI when its type's category is 'ai'.
+  const [categoryTab, setCategoryTab] = useState<'ALL' | 'NORMAL' | 'AI'>('ALL');
   const [typeSelectOpen, setTypeSelectOpen] = useState(false);
   const [creatingType, setCreatingType] = useState<StrategyTypeInfo | null>(null);
   const [editingStrategy, setEditingStrategy] = useState<StrategyDefinition | null>(null);
@@ -79,6 +81,11 @@ const StrategiesPage: React.FC = () => {
   const getStrategyType = (typeCode: string): StrategyTypeInfo | undefined =>
     strategyTypes.find((st) => st.typeCode === typeCode);
 
+  /** A strategy is AI when its type's category is 'ai' (strategy_types.category). */
+  const isAiStrategy = useCallback((s: StrategyDefinition): boolean => (
+    (strategyTypes.find((st) => st.typeCode === s.strategyType)?.category || '').toLowerCase() === 'ai'
+  ), [strategyTypes]);
+
   // Locale-aware type label (Chinese name for zh, English name for en).
   const typeLabel = useCallback((info?: StrategyTypeInfo, rawCode?: string): string => {
     if (!info) return rawCode || '';
@@ -91,18 +98,37 @@ const StrategiesPage: React.FC = () => {
     const matchesStatus = statusFilter === 'all'
       || (statusFilter === 'enabled' && s.enabled)
       || (statusFilter === 'disabled' && !s.enabled);
-    return matchesType && matchesScope && matchesStatus;
-  }), [strategies, filterType, filterScope, statusFilter]);
+    const matchesCategory = categoryTab === 'ALL'
+      || (categoryTab === 'AI' ? isAiStrategy(s) : !isAiStrategy(s));
+    return matchesType && matchesScope && matchesStatus && matchesCategory;
+  }), [strategies, filterType, filterScope, statusFilter, categoryTab, isAiStrategy]);
+
+  // Per-tab counts for the tab labels.
+  const categoryCounts = useMemo(() => {
+    const ai = strategies.filter(isAiStrategy).length;
+    return { all: strategies.length, ai, normal: strategies.length - ai };
+  }, [strategies, isAiStrategy]);
+
+  // The create-flow type picker only offers types matching the active tab.
+  const selectableStrategyTypes = useMemo(() => (
+    categoryTab === 'ALL'
+      ? strategyTypes
+      : strategyTypes.filter((st) => (
+        categoryTab === 'AI'
+          ? (st.category || '').toLowerCase() === 'ai'
+          : (st.category || '').toLowerCase() !== 'ai'
+      ))
+  ), [strategyTypes, categoryTab]);
 
   const strategyStats = useMemo(() => ({
     total: strategies.length,
     enabled: strategies.filter((s) => s.enabled).length,
   }), [strategies]);
 
-  const strategyTypeOptions = useMemo(() => strategyTypes.map((st) => ({
+  const strategyTypeOptions = useMemo(() => selectableStrategyTypes.map((st) => ({
     value: st.typeCode,
     label: typeLabel(st),
-  })), [strategyTypes, typeLabel]);
+  })), [selectableStrategyTypes, typeLabel]);
 
   // ============================================================
   // CRUD handlers
@@ -239,6 +265,24 @@ const StrategiesPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Category tabs: normal vs AI strategies */}
+      <Tabs
+        activeKey={categoryTab}
+        onChange={(k) => setCategoryTab(k as 'ALL' | 'NORMAL' | 'AI')}
+        className="strategy-category-tabs"
+        items={[
+          { key: 'ALL', label: `${t('strategy.tab_all')} (${categoryCounts.all})` },
+          {
+            key: 'NORMAL',
+            label: (<span><ThunderboltOutlined /> {t('strategy.tab_normal')} ({categoryCounts.normal})</span>),
+          },
+          {
+            key: 'AI',
+            label: (<span><RobotOutlined /> {t('strategy.tab_ai')} ({categoryCounts.ai})</span>),
+          },
+        ]}
+      />
+
       {/* Strategies Grid */}
       <Spin spinning={strategiesRequest.loading}>
         {filteredStrategies.length === 0 ? (
@@ -272,7 +316,7 @@ const StrategiesPage: React.FC = () => {
       {/* Type selection modal (step 1 of create flow) */}
       {typeSelectOpen && (
         <StrategyTypeSelectModal
-          strategyTypes={strategyTypes}
+          strategyTypes={selectableStrategyTypes}
           loading={typesRequest.loading}
           onSelect={handleSelectType}
           onCancel={() => setTypeSelectOpen(false)}

@@ -45,14 +45,24 @@ public class ServiceController extends BaseController {
      * Get all services with instance health status.
      *
      * @param instanceId Optional instance ID to filter services
+     * @param category   Optional category filter: NORMAL or AI (e.g. AI route forms list only AI services)
      */
     @GetMapping
-    public ResponseEntity<ApiResponse<List<Object>>> getAllServices(@RequestParam(required = false) String instanceId) {
+    public ResponseEntity<ApiResponse<List<Object>>> getAllServices(@RequestParam(required = false) String instanceId,
+                                                                    @RequestParam(required = false) String category) {
         List<ServiceDefinition> services;
         if (instanceId != null && !instanceId.isEmpty()) {
             services = serviceManager.getAllServicesByInstanceId(instanceId);
         } else {
             services = serviceManager.getAllServices();
+        }
+
+        // Optional category filter (case-insensitive); blank returns everything.
+        if (category != null && !category.isEmpty()) {
+            services = services.stream()
+                    .filter(s -> category.equalsIgnoreCase(
+                            s.getCategory() == null ? ServiceDefinition.ServiceCategory.NORMAL : s.getCategory()))
+                    .collect(java.util.stream.Collectors.toList());
         }
 
         // Get ALL instance health records
@@ -74,6 +84,12 @@ public class ServiceController extends BaseController {
             serviceMap.put("loadBalancer", service.getLoadBalancer());
             serviceMap.put("serviceId", service.getServiceId());
             serviceMap.put("description", service.getDescription());
+            serviceMap.put("category", service.getCategory() == null
+                    ? ServiceDefinition.ServiceCategory.NORMAL : service.getCategory());
+            // AI-service fields (null for normal services) - credentialRef is a reference, never the key.
+            serviceMap.put("providerType", service.getProviderType());
+            serviceMap.put("baseUrl", service.getBaseUrl());
+            serviceMap.put("credentialRef", service.getCredentialRef());
 
             List<Map<String, Object>> instancesList = new ArrayList<>();
             if (service.getInstances() != null) {

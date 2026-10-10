@@ -107,6 +107,40 @@ public class RouteDefinition implements Serializable {
      */
     private Map<String, Object> metadata = new HashMap<>();
 
+    // ============== AI route (category = AI) ==============
+    // Mirrors Higress AiRoute: an AI route binds AI services (upstreams), matches by
+    // model predicates, and can fail over across upstreams. On save the backend projects
+    // these into the route's companion AI_PROXY strategy config, so the data plane only
+    // ever routes to the bound AI services.
+
+    /**
+     * Route category: NORMAL (default) or AI. AI routes may only bind AI services.
+     */
+    private String category = ServiceDefinition.ServiceCategory.NORMAL;
+
+    /**
+     * AI upstreams - the AI services this route binds, each with weight + model mapping.
+     * Only meaningful when {@link #category} is AI.
+     */
+    private List<AiUpstream> aiUpstreams = new ArrayList<>();
+
+    /**
+     * Model predicates - which requested model names this AI route handles (EXACT/PREFIX).
+     * Only meaningful when {@link #category} is AI.
+     */
+    private List<AiModelPredicate> modelPredicates = new ArrayList<>();
+
+    /**
+     * Fallback configuration across AI upstreams. Only meaningful when category is AI.
+     */
+    private AiRouteFallbackConfig aiFallback;
+
+    /** True when this is an AI route. */
+    @JsonIgnore
+    public boolean isAiRoute() {
+        return ServiceDefinition.ServiceCategory.AI.equalsIgnoreCase(category);
+    }
+
     /**
      * Routing mode enumeration.
      */

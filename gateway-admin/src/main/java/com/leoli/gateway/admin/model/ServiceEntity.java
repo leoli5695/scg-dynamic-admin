@@ -18,7 +18,8 @@ import java.time.LocalDateTime;
     @Index(name = "idx_service_id", columnList = "service_id"),
     @Index(name = "idx_service_enabled", columnList = "enabled"),
     @Index(name = "idx_service_instance_enabled", columnList = "instance_id, enabled"),
-    @Index(name = "idx_service_name_instance", columnList = "service_name, instance_id")
+    @Index(name = "idx_service_name_instance", columnList = "service_name, instance_id"),
+    @Index(name = "idx_service_category_instance", columnList = "category, instance_id")
 })
 public class ServiceEntity {
 
@@ -31,6 +32,15 @@ public class ServiceEntity {
      */
     @Column(name = "service_name", nullable = false, unique = true, length = 255)
     private String serviceName;
+
+    /**
+     * Service category: NORMAL (default) or AI (an LLM provider service).
+     * AI services can only be bound by AI routes and carry provider/credential config
+     * inside {@link #metadata}.
+     */
+    @Column(name = "category", length = 16)
+    private String category = ServiceDefinition.ServiceCategory.NORMAL;
+
 
     /**
      * Instance ID (UUID) - Associated gateway instance.

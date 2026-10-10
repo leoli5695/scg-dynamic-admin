@@ -6,16 +6,16 @@
  */
 import React, { useState } from 'react';
 import {
-  Alert, Button, Form, Input, Modal, Typography  } from 'antd';
+  Alert, Button, Form, Input, Modal, Segmented, Typography  } from 'antd';
 import { message } from '../../../utils/antdStatic';
 import {
-  ApiOutlined, EditOutlined, FileTextOutlined, LinkOutlined,
-  PlusOutlined, RocketOutlined, ThunderboltOutlined,
+  ApiOutlined, ClusterOutlined, EditOutlined, FileTextOutlined, LinkOutlined,
+  PlusOutlined, RobotOutlined, RocketOutlined, ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import type {
-  RouteDefinition, RouteResponse, RoutingMode,
+  RouteCategory, RouteDefinition, RouteResponse, RoutingMode,
 } from '../../../types/route';
 import type { NacosDiscoveryServiceInfo, ServiceDefinition } from '../../../types/service';
 import {
@@ -24,6 +24,7 @@ import {
 import type { RouteFormValues } from '../utils';
 import PredicateItem from './PredicateItem';
 import ServiceBindingForm from './ServiceBindingForm';
+import AiUpstreamsForm from './AiUpstreamsForm';
 import GrayRulesForm from './GrayRulesForm';
 
 const { Text } = Typography;
@@ -50,6 +51,12 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
 
   const isEdit = mode === 'edit';
 
+  // Route category drives the target-config section: AI routes bind AI services only.
+  const category = (Form.useWatch('category', form)
+    ?? (isEdit ? route?.category : 'NORMAL')) as RouteCategory;
+  const isAi = category === 'AI';
+  const aiServices = services.filter((s) => s.category === 'AI');
+
   // Edit-time bindings with protocol-prefixed serviceIds for the Select.
   const [initialBindings] = useState(() => (
     isEdit ? (route?.services ?? []).map((s) => toFormBinding(s, services, nacosServices)) : []
@@ -71,6 +78,7 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
     routeName: route?.routeName,
     order: route?.order,
     description: route?.description,
+    category: route?.category || 'NORMAL',
     routingMode: route?.mode || 'SINGLE',
     serviceId: route?.uri || undefined,
     serviceNamespace: route?.serviceNamespace || '',
@@ -82,7 +90,13 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
       args: stringifyPredicateArgs(p.name, p.args as Record<string, unknown>),
     })),
     grayRules: route?.grayRules?.rules ?? [],
-  } : { order: 0, routingMode: 'SINGLE' };
+    aiUpstreams: (route?.aiUpstreams ?? []).map((u) => ({
+      provider: u.provider, weight: u.weight ?? 100, modelMapping: u.modelMapping,
+    })),
+    modelPredicates: (route?.modelPredicates ?? []).map((p) => ({
+      matchType: p.matchType || 'PREFIX', value: p.value,
+    })),
+  } : { order: 0, routingMode: 'SINGLE', category: 'NORMAL' };
 
   const handleFinish = async (values: RouteFormValues) => {
     const predicateList = values.predicates ?? [];
@@ -94,19 +108,27 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
       message.error(t('routes.path_predicate_required'));
       return;
     }
-    if (routingMode === 'SINGLE' && !values.serviceId && !values.uri) {
-      message.error(t('routes.uri_required'));
-      return;
-    }
-    if (routingMode === 'MULTI') {
-      if (!values.services || values.services.length === 0) {
-        message.error(t('routes.at_least_one_service'));
+    if (isAi) {
+      const ups = (values.aiUpstreams ?? []).filter((u) => u && u.provider);
+      if (ups.length === 0) {
+        message.error(t('routes.ai_at_least_one_upstream'));
         return;
       }
-      const total = sumWeights(values.services);
-      if (total !== 100) {
-        message.error(t('routes.weight_must_be_100', { total }));
+    } else {
+      if (routingMode === 'SINGLE' && !values.serviceId && !values.uri) {
+        message.error(t('routes.uri_required'));
         return;
+      }
+      if (routingMode === 'MULTI') {
+        if (!values.services || values.services.length === 0) {
+          message.error(t('routes.at_least_one_service'));
+          return;
+        }
+        const total = sumWeights(values.services);
+        if (total !== 100) {
+          message.error(t('routes.weight_must_be_100', { total }));
+          return;
+        }
       }
     }
 
@@ -173,6 +195,19 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
           </div>
           <div className="section-content">
             <Form.Item
+              name="category"
+              label={t('routes.category')}
+              tooltip={isEdit ? t('routes.category_locked') : t('routes.category_helper')}
+            >
+              <Segmented
+                disabled={isEdit}
+                options={[
+                  { label: (<span><ClusterOutlined /> {t('routes.category_normal')}</span>), value: 'NORMAL' },
+                  { label: (<span><RobotOutlined /> {t('routes.category_ai')}</span>), value: 'AI' },
+                ]}
+              />
+            </Form.Item>
+            <Form.Item
               name="routeName"
               label={t('routes.route_name')}
               rules={isEdit ? undefined : [{ required: true }]}
@@ -197,27 +232,34 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
         {/* Target configuration */}
         <div className="form-section-modern">
           <div className="section-header">
-            <ApiOutlined className="section-icon" />
-            <span className="section-title">{t('routes.target_configuration')}</span>
+            {isAi ? <RobotOutlined className="section-icon" /> : <ApiOutlined className="section-icon" />}
+            <span className="section-title">{isAi ? t('routes.ai_target_configuration') : t('routes.target_configuration')}</span>
+            {isAi && <span className="section-subtitle">{t('routes.ai_target_helper')}</span>}
           </div>
           <div className="section-content">
-            <ServiceBindingForm
-              form={form}
-              routingMode={routingMode}
-              onRoutingModeChange={(m) => {
-                setRoutingMode(m);
-                form.setFieldsValue({ serviceId: undefined, services: [], uri: '' });
-              }}
-              services={services}
-              nacosServices={nacosServices}
-            />
-            <GrayRulesForm
-              form={form}
-              grayRulesEnabled={grayRulesEnabled}
-              onGrayRulesToggle={setGrayRulesEnabled}
-              configuredServices={configuredServices}
-              services={services}
-            />
+            {isAi ? (
+              <AiUpstreamsForm form={form} aiServices={aiServices} />
+            ) : (
+              <>
+                <ServiceBindingForm
+                  form={form}
+                  routingMode={routingMode}
+                  onRoutingModeChange={(m) => {
+                    setRoutingMode(m);
+                    form.setFieldsValue({ serviceId: undefined, services: [], uri: '' });
+                  }}
+                  services={services}
+                  nacosServices={nacosServices}
+                />
+                <GrayRulesForm
+                  form={form}
+                  grayRulesEnabled={grayRulesEnabled}
+                  onGrayRulesToggle={setGrayRulesEnabled}
+                  configuredServices={configuredServices}
+                  services={services}
+                />
+              </>
+            )}
           </div>
         </div>
 

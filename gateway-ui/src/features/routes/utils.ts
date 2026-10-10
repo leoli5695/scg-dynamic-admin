@@ -3,8 +3,11 @@
  * building. Payload shape follows model/RouteDefinition.java.
  */
 import type {
+  AiModelPredicate,
+  AiUpstream,
   GrayRule,
   GrayRules,
+  RouteCategory,
   RouteDefinition,
   RoutePredicate,
   RouteResponse,
@@ -344,6 +347,12 @@ export interface RouteFormValues {
   predicates?: Array<{ name: string; args?: unknown }>;
   filters?: Array<{ name: string; args?: unknown }>;
   grayRules?: GrayRule[];
+  /** Route category: NORMAL (default) or AI. */
+  category?: RouteCategory;
+  /** AI mode: bound AI services (upstreams). */
+  aiUpstreams?: Array<Partial<AiUpstream>>;
+  /** AI mode: model match predicates. */
+  modelPredicates?: Array<Partial<AiModelPredicate>>;
 }
 
 export interface PayloadBuildContext {
@@ -376,6 +385,40 @@ export const buildRoutePayload = (
     args: { ...(f.args ?? {}) },
   }));
 
+  // AI route: bind AI services (upstreams) instead of a normal service target.
+  // The upstream URL is resolved by the data plane from the bound providers, so the
+  // uri is a placeholder (the backend also normalizes it). A Path predicate is still
+  // required - it is the northbound OpenAI-compatible path, e.g. /v1/chat/completions.
+  if (values.category === 'AI') {
+    const aiUpstreams: AiUpstream[] = (values.aiUpstreams || [])
+      .filter((u) => u && u.provider)
+      .map((u) => ({
+        provider: u.provider as string,
+        weight: u.weight ?? 100,
+        modelMapping: (u.modelMapping && Object.keys(u.modelMapping).length > 0)
+          ? u.modelMapping : undefined,
+      }));
+    if (aiUpstreams.length === 0) return null;
+
+    const modelPredicates: AiModelPredicate[] = (values.modelPredicates || [])
+      .filter((p) => p && p.value)
+      .map((p) => ({ matchType: p.matchType || 'PREFIX', value: p.value as string }));
+
+    return {
+      routeName: values.routeName,
+      order: values.order !== undefined && values.order !== '' ? Number(values.order) : 0,
+      description: values.description,
+      predicates,
+      filters,
+      metadata: ctx.existing?.metadata,
+      mode: 'SINGLE',
+      category: 'AI',
+      uri: 'https://ai-gateway.invalid',
+      aiUpstreams,
+      modelPredicates,
+    };
+  }
+
   const body: RouteDefinition = {
     routeName: values.routeName,
     order: values.order !== undefined && values.order !== '' ? Number(values.order) : 0,
@@ -384,6 +427,7 @@ export const buildRoutePayload = (
     filters,
     metadata: ctx.existing?.metadata,
     mode,
+    category: 'NORMAL',
   };
 
   if (mode === 'SINGLE') {

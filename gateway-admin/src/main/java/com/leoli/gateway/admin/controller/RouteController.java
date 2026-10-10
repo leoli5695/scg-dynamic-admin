@@ -105,6 +105,10 @@ public class RouteController extends BaseController {
             response.setMetadata(route.getMetadata());
             response.setEnabled(true);
             response.setDescription(route.getDescription());
+            response.setCategory(route.getCategory());
+            response.setAiUpstreams(route.getAiUpstreams());
+            response.setModelPredicates(route.getModelPredicates());
+            response.setAiFallback(route.getAiFallback());
 
             return ResponseEntity.ok(ApiResponse.success(response, "Route created successfully"));
         } catch (IllegalArgumentException e) {

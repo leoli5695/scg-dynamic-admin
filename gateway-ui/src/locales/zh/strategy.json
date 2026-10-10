@@ -235,5 +235,9 @@
   "strategies.btn_edit": "编辑",
   "strategies.btn_delete": "删除",
   "strategy.edit_description": "更新策略配置",
-  "strategy.route_id_helper": "输入要绑定的路由 ID"
+  "strategy.route_id_helper": "输入要绑定的路由 ID",
+  "strategy.route_id_ai_helper": "AI 类策略只能绑定 AI 路由；请先创建 AI 路由并绑定 AI 服务",
+  "strategy.tab_all": "全部策略",
+  "strategy.tab_normal": "普通策略",
+  "strategy.tab_ai": "AI 策略"
 }

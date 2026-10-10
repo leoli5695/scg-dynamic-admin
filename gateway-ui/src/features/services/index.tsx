@@ -4,9 +4,9 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Button, Card, Divider, Empty, Input, Spin, Typography  } from 'antd';
+  Button, Card, Divider, Empty, Input, Spin, Tabs, Typography  } from 'antd';
 import { message, modal } from '../../utils/antdStatic';
-import { ClusterOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
+import { ClusterOutlined, PlusOutlined, RobotOutlined, SearchOutlined } from '@ant-design/icons';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useRequest } from '../../hooks/useRequest';
@@ -14,7 +14,7 @@ import { ApiError } from '../../api/http';
 import {
   checkServiceUsage, createService, deleteService, listServices, updateService,
 } from '../../api/services';
-import type { ServiceDefinition, ServiceInstanceItem } from '../../types/service';
+import type { ServiceCategory, ServiceDefinition, ServiceInstanceItem } from '../../types/service';
 import ServiceCard from './components/ServiceCard';
 import ServiceDetailDrawer from './components/ServiceDetailDrawer';
 import ServiceFormModal from './components/ServiceFormModal';
@@ -26,6 +26,10 @@ interface ServiceFormValues {
   name: string;
   loadBalancer?: string;
   description?: string;
+  category?: ServiceCategory;
+  providerType?: string;
+  baseUrl?: string;
+  apiKey?: string;
 }
 
 type HealthFilter = 'all' | 'healthy' | 'unhealthy';
@@ -41,6 +45,8 @@ const ServicesPage: React.FC = () => {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [healthFilter, setHealthFilter] = useState<HealthFilter>('all');
+  // Category tab: ALL / NORMAL / AI (a service's category comes from the backend).
+  const [categoryTab, setCategoryTab] = useState<'ALL' | 'NORMAL' | 'AI'>('ALL');
   const [selectedService, setSelectedService] = useState<ServiceDefinition | null>(null);
   const [editingService, setEditingService] = useState<ServiceDefinition | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -68,28 +74,47 @@ const ServicesPage: React.FC = () => {
     }
   }, [services, searchParams, setSearchParams]);
 
+  const isAiService = (s: ServiceDefinition): boolean => s.category === 'AI';
+
   const filteredServices = useMemo(() => services.filter((s) => {
     const matchesSearch = !searchTerm || s.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = categoryTab === 'ALL'
+      || (categoryTab === 'AI' ? isAiService(s) : !isAiService(s));
+    // Health is an instance-level concept that only applies to normal services.
     const isHealthy = s.instances && s.instances.some((i) => i.healthy !== false);
-    const matchesHealth = healthFilter === 'all'
+    const matchesHealth = isAiService(s) || healthFilter === 'all'
       || (healthFilter === 'healthy' && isHealthy)
       || (healthFilter === 'unhealthy' && !isHealthy);
-    return matchesSearch && matchesHealth;
-  }), [services, searchTerm, healthFilter]);
+    return matchesSearch && matchesCategory && matchesHealth;
+  }), [services, searchTerm, healthFilter, categoryTab]);
 
-  const totalServices = services.length;
+  const categoryCounts = useMemo(() => {
+    const ai = services.filter(isAiService).length;
+    return { all: services.length, ai, normal: services.length - ai };
+  }, [services]);
+
+  // Health stats are meaningful for normal (instance-backed) services only.
+  const normalServices = useMemo(() => services.filter((s) => !isAiService(s)), [services]);
+  const totalServices = normalServices.length;
   const healthyServices = useMemo(
-    () => services.filter((s) => s.instances && s.instances.some((i) => i.healthy !== false)).length,
-    [services],
+    () => normalServices.filter((s) => s.instances && s.instances.some((i) => i.healthy !== false)).length,
+    [normalServices],
   );
 
   const handleCreate = async (values: ServiceFormValues, instances: ServiceInstanceItem[]): Promise<boolean> => {
     try {
+      const isAi = values.category === 'AI';
       await createService({
         name: values.name,
         description: values.description,
         loadBalancer: values.loadBalancer || 'weighted',
-        instances,
+        instances: isAi ? [] : instances,
+        category: values.category || 'NORMAL',
+        ...(isAi ? {
+          providerType: values.providerType,
+          baseUrl: values.baseUrl,
+          apiKey: values.apiKey,
+        } : {}),
       }, instanceId);
       message.success(t('message.create_success'));
       servicesRequest.run();
@@ -103,11 +128,20 @@ const ServicesPage: React.FC = () => {
   const handleUpdate = async (values: ServiceFormValues, instances: ServiceInstanceItem[]): Promise<boolean> => {
     if (!editingService) return false;
     try {
+      const isAi = (values.category || editingService.category) === 'AI';
       await updateService(editingService.name, {
         name: editingService.name,
         description: values.description,
         loadBalancer: values.loadBalancer || 'weighted',
-        instances,
+        instances: isAi ? [] : instances,
+        category: values.category || editingService.category || 'NORMAL',
+        ...(isAi ? {
+          providerType: values.providerType ?? editingService.providerType,
+          baseUrl: values.baseUrl ?? editingService.baseUrl,
+          // apiKey is write-only: only sent when the operator rotated it.
+          ...(values.apiKey ? { apiKey: values.apiKey } : {}),
+          credentialRef: editingService.credentialRef,
+        } : {}),
       }, instanceId);
       message.success(t('message.update_success'));
       servicesRequest.run();
@@ -219,6 +253,24 @@ const ServicesPage: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {/* Category tabs: normal vs AI services */}
+      <Tabs
+        activeKey={categoryTab}
+        onChange={(k) => setCategoryTab(k as 'ALL' | 'NORMAL' | 'AI')}
+        className="service-category-tabs"
+        items={[
+          { key: 'ALL', label: `${t('services.tab_all')} (${categoryCounts.all})` },
+          {
+            key: 'NORMAL',
+            label: (<span><ClusterOutlined /> {t('services.tab_normal')} ({categoryCounts.normal})</span>),
+          },
+          {
+            key: 'AI',
+            label: (<span><RobotOutlined /> {t('services.tab_ai')} ({categoryCounts.ai})</span>),
+          },
+        ]}
+      />
 
       {/* Services grid */}
       <Spin spinning={servicesRequest.loading}>

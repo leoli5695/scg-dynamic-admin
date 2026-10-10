@@ -182,17 +182,24 @@ const StrategyFormModal: React.FC<StrategyFormModalProps> = ({
     <Form.Item noStyle shouldUpdate>
       {({ getFieldValue }) => {
         if (getFieldValue('scope') !== 'ROUTE') return null;
+        // AI-category strategies (AI_PROXY / TOKEN_RATE_LIMITER / prompt / guard) may only
+        // bind AI routes; general strategies are unrestricted.
+        const isAiStrategy = (typeInfo.category || '').toLowerCase() === 'ai';
+        const selectableRoutes = isAiStrategy
+          ? routes.filter((r) => (r.category || 'NORMAL') === 'AI')
+          : routes;
         return (
           <Form.Item
             name="routeId"
             label={t('strategy.route_id')}
             rules={[{ required: true }]}
-            extra={t('strategy.route_id_helper')}
+            extra={isAiStrategy ? t('strategy.route_id_ai_helper') : t('strategy.route_id_helper')}
           >
             <Select placeholder={t('strategy.route_id_placeholder')} size="large" showSearch optionFilterProp="children">
-              {routes.map((route) => (
+              {selectableRoutes.map((route) => (
                 <Select.Option key={route.id} value={route.id}>
                   {route.routeName || route.id}
+                  {(route.category || 'NORMAL') === 'AI' ? ' (AI)' : ''}
                 </Select.Option>
               ))}
             </Select>

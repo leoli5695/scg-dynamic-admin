@@ -72,6 +72,11 @@ class RouteServiceTest {
     @Mock
     private RoutePluginBindingService routePluginBindingService;
 
+    // RouteService.createRoute/updateRouteByRouteId call AiRouteProjector on every save
+    // (no-op for NORMAL routes). Declared so @InjectMocks does not leave the field null.
+    @Mock
+    private AiRouteProjector aiRouteProjector;
+
     @InjectMocks
     private RouteService routeService;
 

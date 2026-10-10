@@ -53,6 +53,9 @@ public class ServiceService {
   @Autowired
   private GatewayInstanceRepository gatewayInstanceRepository;
 
+  @Autowired
+  private ProviderCredentialService providerCredentialService;
+
   // Local cache: serviceName -> ServiceDefinition
   private final ConcurrentHashMap<String, ServiceDefinition> serviceCache = new ConcurrentHashMap<>();
 
@@ -164,6 +167,10 @@ public class ServiceService {
     // Set serviceId in ServiceDefinition BEFORE converting to entity
     service.setServiceId(generatedServiceId);
 
+    // AI services: encrypt the supplied API key into provider_credentials and keep only the ref.
+    // Runs inside this @Transactional method, so a later failure rolls the credential back too.
+    applyAiCredential(service);
+
     // Get Nacos namespace from instance
     String nacosNamespace = getNacosNamespace(instanceId);
 
@@ -228,6 +235,10 @@ public class ServiceService {
     // Ensure serviceId is set (use existing one from entity)
     service.setServiceId(entity.getServiceId());
 
+    // AI services: rotate the API key when a new one is supplied; keep the existing ref otherwise.
+    // Must run before metadata serialization so the (possibly new) credentialRef is persisted.
+    applyAiCredential(service);
+
     // Get Nacos namespace from instance
     String nacosNamespace = getNacosNamespace(entity.getInstanceId());
 
@@ -244,6 +255,8 @@ public class ServiceService {
     log.info("Updating service in database: {}, namespace={}", serviceName, nacosNamespace);
     // Update description
     entity.setDescription(service.getDescription());
+    // Update category (NORMAL / AI)
+    entity.setCategory(normalizeCategory(service.getCategory()));
     // Update metadata JSON backup
     try {
       String configJson = objectMapper.writeValueAsString(service);
@@ -573,16 +586,68 @@ public class ServiceService {
   }
 
   /**
+   * AI services hold their upstream API key encrypted in provider_credentials, never in the
+   * service metadata. When a plaintext {@code apiKey} is supplied it is encrypted (created or
+   * rotated) and only the resulting {@code credentialRef} is kept on the definition. A normal
+   * service, or an AI service edited without a new key, keeps whatever ref it already has.
+   */
+  private void applyAiCredential(ServiceDefinition service) {
+    if (service == null) {
+      return;
+    }
+    if (!service.isAiService()) {
+      // Never let a plaintext key linger on a non-AI service.
+      service.setApiKey(null);
+      return;
+    }
+    if (!hasText(service.getProviderType())) {
+      throw new IllegalArgumentException("AI 服务必须指定 provider 类型 (providerType)");
+    }
+
+    String apiKey = service.getApiKey();
+    if (hasText(apiKey)) {
+      boolean rotate = hasText(service.getCredentialRef());
+      String ref = rotate ? service.getCredentialRef() : "svc-" + service.getServiceId();
+      if (rotate) {
+        providerCredentialService.update(ref, service.getName(), apiKey, null, null, null);
+      } else {
+        providerCredentialService.create(ref, service.getName(), service.getProviderType(), apiKey, null, null);
+      }
+      service.setCredentialRef(ref);
+      log.info("AI service '{}' credential {} (provider={}, ref={})",
+          service.getName(), rotate ? "rotated" : "created", service.getProviderType(), ref);
+    } else if (!hasText(service.getCredentialRef())) {
+      throw new IllegalArgumentException("AI 服务必须提供 API Key");
+    }
+
+    // Plaintext is transient and must never be serialized into metadata.
+    service.setApiKey(null);
+  }
+
+  /** Normalize a service category to NORMAL/AI, defaulting blank/unknown to NORMAL. */
+  private String normalizeCategory(String category) {
+    return ServiceDefinition.ServiceCategory.AI.equalsIgnoreCase(category)
+        ? ServiceDefinition.ServiceCategory.AI
+        : ServiceDefinition.ServiceCategory.NORMAL;
+  }
+
+  private static boolean hasText(String s) {
+    return s != null && !s.trim().isEmpty();
+  }
+
+  /**
    * Convert ServiceDefinition to ServiceEntity.
    * Stores complete configuration as JSON for backup purposes.
    */
-  private ServiceEntity toEntity(ServiceDefinition service) {
-    ServiceEntity entity = new ServiceEntity();
+  private ServiceEntity toEntity(ServiceDefinition service) {    ServiceEntity entity = new ServiceEntity();
     // Don't set name field, use service_name instead
     // entity.setName(...) - removed
 
     // Set enabled to true by default for new services
     entity.setEnabled(true);
+
+    // Set category (NORMAL / AI)
+    entity.setCategory(normalizeCategory(service.getCategory()));
 
     // Set description
     entity.setDescription(service.getDescription());

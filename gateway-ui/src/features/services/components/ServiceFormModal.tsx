@@ -5,14 +5,15 @@
  */
 import React, { useState } from 'react';
 import {
-  Alert, Button, Form, Input, Modal  } from 'antd';
+  Alert, Button, Form, Input, Modal, Segmented, Select  } from 'antd';
 import { message } from '../../../utils/antdStatic';
 import {
   ApiOutlined, ClusterOutlined, EditOutlined, ExclamationCircleOutlined,
-  PlusOutlined,
+  PlusOutlined, RobotOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import type { ServiceDefinition, ServiceInstanceItem } from '../../../types/service';
+import type { ServiceCategory, ServiceDefinition, ServiceInstanceItem } from '../../../types/service';
+import { AI_PROVIDER_TYPES } from '../../../types/service';
 import { isValidIP, isValidPort } from '../utils';
 import InstanceRow from './InstanceRow';
 import LoadBalancerSelect from './LoadBalancerSelect';
@@ -21,6 +22,10 @@ interface ServiceFormValues {
   name: string;
   loadBalancer?: string;
   description?: string;
+  category?: ServiceCategory;
+  providerType?: string;
+  baseUrl?: string;
+  apiKey?: string;
 }
 
 interface ServiceFormModalProps {
@@ -48,6 +53,9 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
 
   const isEdit = mode === 'edit';
 
+  const category = (Form.useWatch('category', form) ?? (isEdit ? service?.category : 'NORMAL')) as ServiceCategory;
+  const isAi = category === 'AI';
+
   const handleInstanceChange = (index: number, patch: Partial<ServiceInstanceItem>) => {
     setInstances((prev) => prev.map((item, i) => (i === index ? { ...item, ...patch } : item)));
   };
@@ -57,14 +65,16 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
   };
 
   const handleFinish = async (values: ServiceFormValues) => {
-    for (const inst of instances) {
-      if (!isValidIP(inst.ip)) {
-        message.error(t('message.invalid_ip_format', { index: 1, ip: inst.ip }));
-        return;
-      }
-      if (!isValidPort(inst.port)) {
-        message.error(t('message.invalid_port', { index: 1, port: inst.port }));
-        return;
+    if (!isAi) {
+      for (const inst of instances) {
+        if (!isValidIP(inst.ip)) {
+          message.error(t('message.invalid_ip_format', { index: 1, ip: inst.ip }));
+          return;
+        }
+        if (!isValidPort(inst.port)) {
+          message.error(t('message.invalid_port', { index: 1, port: inst.port }));
+          return;
+        }
       }
     }
     setSubmitting(true);
@@ -112,7 +122,10 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
           name: service?.name,
           loadBalancer: service?.loadBalancer,
           description: service?.description,
-        } : { loadBalancer: 'weighted' }}
+          category: service?.category || 'NORMAL',
+          providerType: service?.providerType,
+          baseUrl: service?.baseUrl,
+        } : { loadBalancer: 'weighted', category: 'NORMAL' }}
       >
         <div className="form-section-modern">
           <div className="section-header">
@@ -120,6 +133,19 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
             <span className="section-title">{t('services.basic_config')}</span>
           </div>
           <div className="section-content">
+            <Form.Item
+              name="category"
+              label={t('services.category')}
+              tooltip={isEdit ? t('services.category_locked') : t('services.category_helper')}
+            >
+              <Segmented
+                disabled={isEdit}
+                options={[
+                  { label: (<span><ClusterOutlined /> {t('services.category_normal')}</span>), value: 'NORMAL' },
+                  { label: (<span><RobotOutlined /> {t('services.category_ai')}</span>), value: 'AI' },
+                ]}
+              />
+            </Form.Item>
             <div className="form-row">
               <Form.Item
                 name="name"
@@ -144,6 +170,50 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
           </div>
         </div>
 
+        {isAi && (
+          <div className="form-section-modern">
+            <div className="section-header">
+              <RobotOutlined className="section-icon" />
+              <span className="section-title">{t('services.ai_config')}</span>
+              <span className="section-subtitle">{t('services.ai_config_helper')}</span>
+            </div>
+            <div className="section-content">
+              <Form.Item
+                name="providerType"
+                label={t('services.provider_type')}
+                rules={[{ required: true, message: t('services.provider_type_required') }]}
+              >
+                <Select
+                  placeholder={t('services.provider_type_placeholder')}
+                  size="large"
+                  showSearch
+                  options={AI_PROVIDER_TYPES.map((p) => ({ label: p, value: p }))}
+                />
+              </Form.Item>
+              <Form.Item
+                name="apiKey"
+                label={t('services.api_key')}
+                rules={isEdit ? undefined : [{ required: true, message: t('services.api_key_required') }]}
+                tooltip={isEdit && service?.credentialRef ? t('services.credential_configured') : t('services.credential_none')}
+              >
+                <Input.Password
+                  size="large"
+                  autoComplete="new-password"
+                  placeholder={isEdit ? t('services.api_key_rotate_placeholder') : t('services.api_key_placeholder')}
+                />
+              </Form.Item>
+              <Form.Item
+                name="baseUrl"
+                label={t('services.base_url')}
+                tooltip={t('services.base_url_helper')}
+              >
+                <Input size="large" placeholder={t('services.base_url_placeholder')} />
+              </Form.Item>
+            </div>
+          </div>
+        )}
+
+        {!isAi && (
         <div className="form-section-modern">
           <div className="section-header">
             <ApiOutlined className="section-icon" />
@@ -184,6 +254,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
             </div>
           </div>
         </div>
+        )}
 
         <div className="modal-footer-modern">
           <Button onClick={onCancel} size="large">{t('common.cancel')}</Button>

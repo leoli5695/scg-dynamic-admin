@@ -14,7 +14,7 @@ const BASE = '/api/services';
 
 /** GET /api/services — list services with injected instance health. */
 export const listServices = (
-  params?: { instanceId?: string },
+  params?: { instanceId?: string; category?: string },
   options?: RequestOptions,
 ) => httpClient.get<ServiceDefinition[]>(BASE, {
   ...options,

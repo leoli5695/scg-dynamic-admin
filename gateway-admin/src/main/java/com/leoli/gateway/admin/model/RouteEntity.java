@@ -23,7 +23,8 @@ import java.time.LocalDateTime;
     @Index(name = "idx_route_name", columnList = "route_name"),
     @Index(name = "idx_route_enabled", columnList = "enabled"),
     @Index(name = "idx_route_instance_enabled", columnList = "instance_id, enabled"),
-    @Index(name = "idx_route_name_instance", columnList = "route_name, instance_id")
+    @Index(name = "idx_route_name_instance", columnList = "route_name, instance_id"),
+    @Index(name = "idx_route_category_instance", columnList = "category, instance_id")
 })
 public class RouteEntity {
 
@@ -34,6 +35,14 @@ public class RouteEntity {
     @Id
     @Column(name = "route_id", length = 36, nullable = false)
     private String routeId;
+
+    /**
+     * Route category: NORMAL (default) or AI. AI routes bind AI services and carry
+     * aiUpstreams/modelPredicates/fallback config inside {@link #metadata}.
+     */
+    @Column(name = "category", length = 16)
+    private String category = ServiceDefinition.ServiceCategory.NORMAL;
+
 
     /**
      * Instance ID (UUID) - Associated gateway instance.

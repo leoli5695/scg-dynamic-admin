@@ -81,6 +81,9 @@ public class RouteService {
     private RoutePluginBindingService routePluginBindingService;
 
     @Autowired
+    private AiRouteProjector aiRouteProjector;
+
+    @Autowired
     private CacheManager cacheManager;
 
     @PostConstruct
@@ -288,6 +291,10 @@ public class RouteService {
                 route.setId(UUID.randomUUID().toString());
             }
 
+            // AI routes: fill placeholder URI and validate bound AI services before structural validation
+            aiRouteProjector.normalizeAiRoute(route);
+            aiRouteProjector.validateAiRoute(route);
+
             // Validate
             RouteValidator.validateAndThrow(route);
 
@@ -338,6 +345,9 @@ public class RouteService {
             // Rebuild routes index for this namespace
             rebuildRoutesIndex(nacosNamespace);
 
+            // AI routes: project the bound AI services into the companion AI_PROXY strategy
+            aiRouteProjector.syncProxyStrategy(route, entity.getRouteId(), instanceId);
+
             // Record metrics
             businessMetrics.recordRouteCreate();
             tracingHelper.tag("route.name", entity.getRouteName());
@@ -367,6 +377,10 @@ public class RouteService {
 
         // Set the route ID for validation (from path parameter)
         route.setId(routeId);
+
+        // AI routes: fill placeholder URI and validate bound AI services before structural validation
+        aiRouteProjector.normalizeAiRoute(route);
+        aiRouteProjector.validateAiRoute(route);
 
         // Validate
         RouteValidator.validateAndThrow(route);
@@ -414,6 +428,10 @@ public class RouteService {
             log.info("Route updated in Nacos: {} (namespace: {}, filters={})", routeDataId, nacosNamespace,
                 mergedRoute.getFilters() != null ? mergedRoute.getFilters().size() : 0);
         }
+
+        // AI routes: re-project the bound AI services into the companion AI_PROXY strategy
+        // (also disables a stale companion when a route is switched back to NORMAL).
+        aiRouteProjector.syncProxyStrategy(route, routeId, entity.getInstanceId());
 
         log.info("Route updated successfully: {}", routeId);
         return entity;
@@ -570,6 +588,10 @@ public class RouteService {
         response.setMetadata(def.getMetadata());
         response.setEnabled(entity.getEnabled());
         response.setDescription(entity.getDescription());
+        response.setCategory(entity.getCategory() != null ? entity.getCategory() : def.getCategory());
+        response.setAiUpstreams(def.getAiUpstreams());
+        response.setModelPredicates(def.getModelPredicates());
+        response.setAiFallback(def.getAiFallback());
         return response;
     }
 

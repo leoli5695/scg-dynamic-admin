@@ -88,4 +88,24 @@ public class RouteResponse implements Serializable {
      * Description
      */
     private String description;
+
+    /**
+     * Route category: NORMAL or AI.
+     */
+    private String category;
+
+    /**
+     * AI upstreams (bound AI services) - only for AI routes.
+     */
+    private java.util.List<AiUpstream> aiUpstreams;
+
+    /**
+     * AI model predicates - only for AI routes.
+     */
+    private java.util.List<AiModelPredicate> modelPredicates;
+
+    /**
+     * AI fallback configuration - only for AI routes.
+     */
+    private AiRouteFallbackConfig aiFallback;
 }

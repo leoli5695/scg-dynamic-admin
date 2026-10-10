@@ -68,6 +68,32 @@ export interface RouteServiceBinding {
   serviceGroup?: string;
 }
 
+/** Route/service category discriminator. */
+export type RouteCategory = 'NORMAL' | 'AI';
+
+/** model/AiUpstream — binds an AI route to one AI service (LLM provider). */
+export interface AiUpstream {
+  /** AI service name (the bound LLM provider service). */
+  provider: string;
+  /** Weight for multi-upstream load balancing (1-100). */
+  weight?: number;
+  /** Requested model -> upstream model rewrites for this upstream. */
+  modelMapping?: Record<string, string>;
+}
+
+/** model/AiModelPredicate — EXACT or PREFIX match on the requested model (no regex). */
+export interface AiModelPredicate {
+  matchType?: 'EXACT' | 'PREFIX';
+  value: string;
+}
+
+/** model/AiRouteFallbackConfig — ordered failover across AI upstreams. */
+export interface AiRouteFallbackConfig {
+  enabled?: boolean;
+  upstreams?: AiUpstream[];
+  fallbackStrategy?: 'SEQ' | 'RANDOM';
+}
+
 /**
  * model/RouteDefinition — POST /api/routes and PUT /api/routes/{id} bodies.
  * Note: the backend model has no "enabled" field; enable/disable is done
@@ -92,6 +118,14 @@ export interface RouteDefinition {
   predicates?: RoutePredicate[];
   filters?: RouteFilter[];
   metadata?: Record<string, unknown>;
+  /** NORMAL (default) or AI. AI routes bind AI services only. */
+  category?: RouteCategory;
+  /** AI routes: bound AI services with weight + model mapping. */
+  aiUpstreams?: AiUpstream[];
+  /** AI routes: model match predicates. */
+  modelPredicates?: AiModelPredicate[];
+  /** AI routes: fallback across upstreams. */
+  aiFallback?: AiRouteFallbackConfig;
 }
 
 /** model/RouteResponse — what GET endpoints return. */
@@ -111,4 +145,8 @@ export interface RouteResponse {
   metadata?: Record<string, unknown>;
   enabled?: boolean;
   description?: string;
+  category?: RouteCategory;
+  aiUpstreams?: AiUpstream[];
+  modelPredicates?: AiModelPredicate[];
+  aiFallback?: AiRouteFallbackConfig;
 }

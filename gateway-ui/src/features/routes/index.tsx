@@ -4,9 +4,9 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Button, Card, Empty, Pagination, Spin  } from 'antd';
+  Button, Card, Empty, Pagination, Spin, Tabs  } from 'antd';
 import { message, modal } from '../../utils/antdStatic';
-import { CompassOutlined, PlusOutlined } from '@ant-design/icons';
+import { CompassOutlined, PlusOutlined, RobotOutlined } from '@ant-design/icons';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useRequest } from '../../hooks/useRequest';
@@ -34,6 +34,8 @@ const RoutesPage: React.FC = () => {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<RouteStatusFilter>('all');
+  // Category tab: ALL / NORMAL / AI (a route's category comes from the backend).
+  const [categoryTab, setCategoryTab] = useState<'ALL' | 'NORMAL' | 'AI'>('ALL');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
   const [selectedRoute, setSelectedRoute] = useState<RouteResponse | null>(null);
@@ -91,8 +93,16 @@ const RoutesPage: React.FC = () => {
     const matchesStatus = statusFilter === 'all'
       || (statusFilter === 'enabled' && route.enabled)
       || (statusFilter === 'disabled' && !route.enabled);
-    return matchesSearch && matchesStatus;
-  }), [routes, searchTerm, statusFilter]);
+    const isAi = (route.category || 'NORMAL') === 'AI';
+    const matchesCategory = categoryTab === 'ALL'
+      || (categoryTab === 'AI' ? isAi : !isAi);
+    return matchesSearch && matchesStatus && matchesCategory;
+  }), [routes, searchTerm, statusFilter, categoryTab]);
+
+  const categoryCounts = useMemo(() => {
+    const ai = routes.filter((r) => (r.category || 'NORMAL') === 'AI').length;
+    return { all: routes.length, ai, normal: routes.length - ai };
+  }, [routes]);
 
   const stats = useMemo(() => ({
     total: routes.length,
@@ -198,6 +208,27 @@ const RoutesPage: React.FC = () => {
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
         onCreateClick={() => setCreateOpen(true)}
+      />
+
+      {/* Category tabs: normal vs AI routes */}
+      <Tabs
+        activeKey={categoryTab}
+        onChange={(k) => {
+          setCategoryTab(k as 'ALL' | 'NORMAL' | 'AI');
+          setCurrentPage(1);
+        }}
+        className="route-category-tabs"
+        items={[
+          { key: 'ALL', label: `${t('routes.tab_all')} (${categoryCounts.all})` },
+          {
+            key: 'NORMAL',
+            label: (<span><CompassOutlined /> {t('routes.tab_normal')} ({categoryCounts.normal})</span>),
+          },
+          {
+            key: 'AI',
+            label: (<span><RobotOutlined /> {t('routes.tab_ai')} ({categoryCounts.ai})</span>),
+          },
+        ]}
       />
 
       <Spin spinning={routesRequest.loading}>

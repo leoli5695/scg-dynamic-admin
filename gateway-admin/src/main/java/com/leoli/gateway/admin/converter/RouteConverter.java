@@ -48,6 +48,7 @@ public class RouteConverter {
         entity.setRouteName(route.getRouteName());
         entity.setEnabled(true);
         entity.setDescription(route.getDescription());
+        entity.setCategory(normalizeCategory(route.getCategory()));
 
         // Store complete configuration in metadata
         try {
@@ -71,6 +72,7 @@ public class RouteConverter {
         // Keep the same routeId (primary key doesn't change)
         existingEntity.setRouteName(route.getRouteName());
         existingEntity.setDescription(route.getDescription());
+        existingEntity.setCategory(normalizeCategory(route.getCategory()));
 
         // Store complete configuration in metadata
         try {
@@ -80,6 +82,14 @@ public class RouteConverter {
         }
 
         return existingEntity;
+    }
+
+    /** Normalize a route category to NORMAL/AI, defaulting blank/unknown to NORMAL. */
+    private String normalizeCategory(String category) {
+        if (com.leoli.gateway.admin.model.ServiceDefinition.ServiceCategory.AI.equalsIgnoreCase(category)) {
+            return com.leoli.gateway.admin.model.ServiceDefinition.ServiceCategory.AI;
+        }
+        return com.leoli.gateway.admin.model.ServiceDefinition.ServiceCategory.NORMAL;
     }
 
     /**
