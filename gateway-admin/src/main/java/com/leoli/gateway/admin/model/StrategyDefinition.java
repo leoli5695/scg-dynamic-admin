@@ -91,6 +91,9 @@ public class StrategyDefinition {
     // AI gateway: prompt template / decorator (system-prompt injection, variables)
     public static final String TYPE_AI_PROMPT_TEMPLATE = "AI_PROMPT_TEMPLATE";
 
+    // AI gateway: content security guard (sensitive words / regex / PII moderation)
+    public static final String TYPE_AI_SECURITY = "AI_SECURITY";
+
     // ============================================================
     // Scope Types
     // ============================================================

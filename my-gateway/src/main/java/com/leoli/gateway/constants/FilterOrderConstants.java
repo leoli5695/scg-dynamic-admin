@@ -137,6 +137,16 @@ public interface FilterOrderConstants {
     // (-249) and before TIMEOUT (-200), so identity attributes are available.
 
     /**
+     * AI security guard filter (content moderation: sensitive words / regex / PII).
+     * <p>
+     * Order -246 is BOTH &lt; NettyWriteResponseFilter (-1) so its response decorator
+     * is in the client-write path (outbound moderation), AND after authentication
+     * (-250) but before the rate limiters / token quota (-245..-243) so a blocked
+     * request never spends quota. Inbound scanning runs in the pre-phase.
+     */
+    int AI_SECURITY = -246;
+
+    /**
      * Hybrid rate limiter filter - Redis + local rate limiting.
      * Executes after authentication so identity-based keys are populated.
      */
