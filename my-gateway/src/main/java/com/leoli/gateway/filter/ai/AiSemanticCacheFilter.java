@@ -33,8 +33,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -49,7 +51,10 @@ import java.util.Optional;
  * (-1) so the response-capture decorator is in the client-write path. A HIT short-circuits
  * (writes the cached body, never calls the chain) so it consumes no LLM tokens and
  * pre-deducts no quota. MVP scope: non-streaming only, in-memory per-instance store;
- * embedding/store failures fail OPEN (pass through).
+ * embedding/store failures fail OPEN (pass through). The tenant half of the scope comes only
+ * from server-verified auth results: a request that asserts {@code X-Tenant-Id} without any
+ * authenticated tenant bypasses the cache, since a client-chosen scope would let it read and
+ * poison another tenant's entries.
  *
  * @author leoli
  */
@@ -127,7 +132,15 @@ public class AiSemanticCacheFilter implements GlobalFilter, Ordered {
 
                     String model = root.path("model").isTextual() ? root.path("model").asText() : null;
                     String prompt = extractPromptText(root);
-                    String tenant = exchange.getRequest().getHeaders().getFirst(TENANT_HEADER);
+                    String tenant = trustedTenantId(exchange);
+                    if (config.isScopeByTenant() && tenant == null
+                            && !isBlank(exchange.getRequest().getHeaders().getFirst(TENANT_HEADER))) {
+                        // The client asserts a tenant it cannot prove: caching would let it read
+                        // and poison that tenant's scope, so bypass the cache for this request.
+                        log.debug("AI cache bypassed on route {}: {} sent without an authenticated tenant",
+                                routeId, TENANT_HEADER);
+                        return chain.filter(rebuild(exchange, bytes));
+                    }
                     String scope = scope(config, model, tenant);
 
                     LlmProvider embeddingProvider = ProviderRegistry.byId(config.getEmbeddingProvider()).orElse(null);
@@ -146,18 +159,27 @@ public class AiSemanticCacheFilter implements GlobalFilter, Ordered {
                                     return chain.filter(rebuild(exchange, bytes)); // embedding failed: fail open
                                 }
                                 float[] vector = vecOpt.get();
-                                Optional<String> hit = cacheStore.search(scope, vector, config.getSimilarityThreshold());
-                                if (hit.isPresent()) {
-                                    log.info("AI cache HIT on route {} scope={}", routeId, scope);
-                                    return writeCached(exchange, hit.get());
-                                }
-                                log.debug("AI cache MISS on route {} scope={}", routeId, scope);
-                                ServerWebExchange decorated = exchange.mutate()
-                                        .request(rebuildRequest(exchange, bytes))
-                                        .response(captureDecorator(exchange, scope, vector, config))
-                                        .build();
-                                decorated.getResponse().getHeaders().add(CACHE_HEADER, "MISS");
-                                return chain.filter(decorated);
+                                // search() scans every entry under one global lock, and this flatMap
+                                // runs on the WebClient EventLoop thread - offload the lookup so a slow
+                                // scan cannot stall unrelated routes sharing that loop, then hop to
+                                // parallel() so the downstream chain is not run on a blocking-pool thread.
+                                return Mono.fromCallable(() -> cacheStore.search(scope, vector,
+                                                config.getSimilarityThreshold()))
+                                        .subscribeOn(Schedulers.boundedElastic())
+                                        .publishOn(Schedulers.parallel())
+                                        .flatMap(hit -> {
+                                            if (hit.isPresent()) {
+                                                log.info("AI cache HIT on route {} scope={}", routeId, scope);
+                                                return writeCached(exchange, hit.get());
+                                            }
+                                            log.debug("AI cache MISS on route {} scope={}", routeId, scope);
+                                            ServerWebExchange decorated = exchange.mutate()
+                                                    .request(rebuildRequest(exchange, bytes))
+                                                    .response(captureDecorator(exchange, scope, vector, config))
+                                                    .build();
+                                            decorated.getResponse().getHeaders().add(CACHE_HEADER, "MISS");
+                                            return chain.filter(decorated);
+                                        });
                             });
                 })
                 .onErrorResume(DataBufferLimitException.class, e -> {
@@ -206,11 +228,19 @@ public class AiSemanticCacheFilter implements GlobalFilter, Ordered {
                             byte[] b = new byte[buf.readableByteCount()];
                             buf.read(b);
                             DataBufferUtils.release(buf);
-                            try {
-                                cacheStore.put(scope, vector, new String(b, StandardCharsets.UTF_8), config.getTtlSeconds());
-                            } catch (Exception e) {
-                                log.warn("AI cache: failed to store entry for scope {}: {}", scope, e.getMessage());
-                            }
+                            String bodyText = new String(b, StandardCharsets.UTF_8);
+                            // Populate off the write path: put() normalizes and takes the same global
+                            // lock as search(), while writeWith runs on the Netty EventLoop.
+                            Mono.fromRunnable(() -> {
+                                        try {
+                                            cacheStore.put(scope, vector, bodyText, config.getTtlSeconds());
+                                        } catch (Exception e) {
+                                            log.warn("AI cache: failed to store entry for scope {}: {}",
+                                                    scope, e.getMessage());
+                                        }
+                                    })
+                                    .subscribeOn(Schedulers.boundedElastic())
+                                    .subscribe();
                             return super.writeWith(Mono.just(original.bufferFactory().wrap(b)));
                         });
             }
@@ -248,6 +278,23 @@ public class AiSemanticCacheFilter implements GlobalFilter, Ordered {
                 return headers;
             }
         };
+    }
+
+    /**
+     * Tenant identity from server-verified auth results only, with the same precedence the
+     * token-quota filter uses (API key metadata, then JWT claim). Deliberately never the raw
+     * {@code X-Tenant-Id} header: the scope is an isolation boundary, so a client-supplied
+     * value would let any caller select another tenant's cached answers.
+     */
+    private static String trustedTenantId(ServerWebExchange exchange) {
+        Map<String, Object> attrs = exchange.getAttributes();
+        if (attrs.get("api_key_metadata") instanceof Map<?, ?> metadata && metadata.get("tenantId") != null) {
+            return String.valueOf(metadata.get("tenantId"));
+        }
+        if (attrs.get("jwt_claims") instanceof Map<?, ?> claims && claims.get("tenant_id") != null) {
+            return String.valueOf(claims.get("tenant_id"));
+        }
+        return null;
     }
 
     private static boolean isBlank(String s) {

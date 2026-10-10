@@ -27,6 +27,7 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -72,6 +73,19 @@ class AiSemanticCacheFilterTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(Flux.just(buffer));
         MockServerWebExchange exchange = MockServerWebExchange.from(request);
+        exchange.getAttributes().put(ROUTE_ATTR, "ai-route");
+        return exchange;
+    }
+
+    /** As {@link #post(String)} but with a client-supplied X-Tenant-Id on the request. */
+    private MockServerWebExchange post(String body, String tenantHeader) {
+        DataBuffer buffer = bufferFactory.wrap(body.getBytes(StandardCharsets.UTF_8));
+        MockServerHttpRequest.BodyBuilder builder = MockServerHttpRequest.post("/v1/chat/completions")
+                .contentType(MediaType.APPLICATION_JSON);
+        if (tenantHeader != null) {
+            builder.header("X-Tenant-Id", tenantHeader);
+        }
+        MockServerWebExchange exchange = MockServerWebExchange.from(builder.body(Flux.just(buffer)));
         exchange.getAttributes().put(ROUTE_ATTR, "ai-route");
         return exchange;
     }
@@ -183,5 +197,56 @@ class AiSemanticCacheFilterTest {
         // would leave the pre-deducted tokens permanently charged for zero LLM usage.
         assertTrue(FilterOrderConstants.AI_SEMANTIC_CACHE < FilterOrderConstants.TOKEN_QUOTA_PRE_CHECK,
                 "AI_SEMANTIC_CACHE must run before TOKEN_QUOTA_PRE_CHECK so a hit pre-deducts nothing");
+    }
+
+    @Test
+    @DisplayName("A client-supplied X-Tenant-Id with no authenticated tenant bypasses the cache")
+    void unprovenTenantHeaderBypassesCache() {
+        stubConfig(config());
+        // An entry sitting in exactly the scope the forged header would select.
+        store.put("qwen-plus|victim", new float[]{1f, 0f}, "{\"cached\":true}", 60);
+        when(chain.filter(any())).thenReturn(Mono.empty());
+
+        MockServerWebExchange exchange = post("{\"model\":\"qwen-plus\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}", "victim");
+        StepVerifier.create(filter.filter(exchange, chain)).expectComplete().verify();
+
+        // Not served and not even embedded: an unprovable tenant claim selects no scope.
+        verify(chain).filter(any());
+        verifyNoInteractions(embeddingClient);
+        assertFalse(exchange.getResponse().getHeaders().containsKey(AiSemanticCacheFilter.CACHE_HEADER));
+    }
+
+    @Test
+    @DisplayName("Tenant from verified API key metadata scopes the cache and can HIT")
+    void trustedTenantFromApiKeyMetadataHits() {
+        stubConfig(config());
+        store.put("qwen-plus|acme", new float[]{1f, 0f}, "{\"cached\":true}", 60);
+        when(embeddingClient.embed(anyString(), any(), any(), any(), any()))
+                .thenReturn(Mono.just(new float[]{1f, 0f}));
+
+        MockServerWebExchange exchange = post("{\"model\":\"qwen-plus\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}", null);
+        exchange.getAttributes().put("api_key_metadata", Map.of("tenantId", "acme"));
+        StepVerifier.create(filter.filter(exchange, chain)).expectComplete().verify();
+
+        verify(chain, never()).filter(any());
+        assertEquals("HIT", exchange.getResponse().getHeaders().getFirst(AiSemanticCacheFilter.CACHE_HEADER));
+    }
+
+    @Test
+    @DisplayName("An authenticated tenant cannot read another tenant entry via a forged header")
+    void forgedHeaderCannotCrossAuthenticatedTenant() {
+        stubConfig(config());
+        store.put("qwen-plus|victim", new float[]{1f, 0f}, "{\"cached\":true}", 60);
+        when(embeddingClient.embed(anyString(), any(), any(), any(), any()))
+                .thenReturn(Mono.just(new float[]{1f, 0f}));
+        when(chain.filter(any())).thenReturn(Mono.empty());
+
+        // Caller claims to be "victim" but authenticates as "acme": the verified identity wins.
+        MockServerWebExchange exchange = post("{\"model\":\"qwen-plus\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}", "victim");
+        exchange.getAttributes().put("jwt_claims", Map.of("tenant_id", "acme"));
+        StepVerifier.create(filter.filter(exchange, chain)).expectComplete().verify();
+
+        verify(chain).filter(any());
+        assertEquals("MISS", exchange.getResponse().getHeaders().getFirst(AiSemanticCacheFilter.CACHE_HEADER));
     }
 }
