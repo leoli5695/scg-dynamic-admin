@@ -89,4 +89,4 @@ public class InternalApiAuthWebFilter implements WebFilter, Ordered, Initializin
         // Run before all gateway filters so rejected internal requests never enter the pipeline
         return Ordered.HIGHEST_PRECEDENCE + 10;
     }
-}
+}
