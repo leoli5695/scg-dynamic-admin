@@ -93,9 +93,10 @@ const ServicesPage: React.FC = () => {
     return { all: services.length, ai, normal: services.length - ai };
   }, [services]);
 
-  // Health stats are meaningful for normal (instance-backed) services only.
+  // Health stats are meaningful for normal (instance-backed) services only; the total
+  // counts every service so it agrees with the "全部服务" tab.
   const normalServices = useMemo(() => services.filter((s) => !isAiService(s)), [services]);
-  const totalServices = normalServices.length;
+  const totalServices = services.length;
   const healthyServices = useMemo(
     () => normalServices.filter((s) => s.instances && s.instances.some((i) => i.healthy !== false)).length,
     [normalServices],
@@ -199,7 +200,7 @@ const ServicesPage: React.FC = () => {
   const statsItems: Array<{ filter: HealthFilter; value: number; labelKey: string; className?: string }> = [
     { filter: 'all', value: totalServices, labelKey: 'services.stats_services' },
     { filter: 'healthy', value: healthyServices, labelKey: 'services.stats_healthy', className: 'text-green-600' },
-    { filter: 'unhealthy', value: totalServices - healthyServices, labelKey: 'services.stats_unhealthy', className: 'text-red-600' },
+    { filter: 'unhealthy', value: normalServices.length - healthyServices, labelKey: 'services.stats_unhealthy', className: 'text-red-600' },
   ];
 
   return (
