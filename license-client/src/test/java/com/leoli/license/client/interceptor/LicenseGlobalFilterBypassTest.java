@@ -46,25 +46,30 @@ class LicenseGlobalFilterBypassTest {
     }
 
     @Test
-    @DisplayName("/health and its real sub-paths still bypass the license check")
+    @DisplayName("/health, /actuator and their real sub-paths still bypass the license check")
     void healthAndSubPathsBypass() {
         givenUnlicensed();
 
         filter.filter(exchangeFor("/health"), chain).block();
         filter.filter(exchangeFor("/health/liveness"), chain).block();
+        filter.filter(exchangeFor("/actuator"), chain).block();
+        filter.filter(exchangeFor("/actuator/info"), chain).block();
 
-        verify(chain, times(2)).filter(any());
+        verify(chain, times(4)).filter(any());
     }
 
     @Test
-    @DisplayName("A look-alike business path under /health is NOT exempt")
+    @DisplayName("Look-alike business paths under /health or /actuator are NOT exempt")
     void lookAlikeBusinessPathIsNotExempt() {
         givenUnlicensed();
 
-        MockServerWebExchange exchange = exchangeFor("/health-data");
-        filter.filter(exchange, chain).block();
+        for (String path : new String[]{"/health-data", "/actuator-data"}) {
+            MockServerWebExchange exchange = exchangeFor(path);
+            filter.filter(exchange, chain).block();
+            assertEquals(HttpStatus.FORBIDDEN, exchange.getResponse().getStatusCode(),
+                    path + " must not bypass the license check");
+        }
 
         verify(chain, never()).filter(any());
-        assertEquals(HttpStatus.FORBIDDEN, exchange.getResponse().getStatusCode());
     }
 }

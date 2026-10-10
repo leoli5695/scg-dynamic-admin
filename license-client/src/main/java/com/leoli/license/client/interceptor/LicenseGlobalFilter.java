@@ -141,9 +141,9 @@ public class LicenseGlobalFilter implements GlobalFilter, Ordered {
      * Check if path is internal endpoint (skip license check)
      */
     private boolean isInternalEndpoint(String path) {
-        // /health must match exactly (or be a real sub-path): the bare prefix also
-        // exempted unrelated business routes such as /health-data from licensing.
-        return path.startsWith("/actuator") ||
+        // /health and /actuator must match exactly (or be a real sub-path): a bare prefix
+        // also exempted look-alike business routes such as /health-data from licensing.
+        return path.equals("/actuator") || path.startsWith("/actuator/") ||
                path.equals("/health") || path.startsWith("/health/") ||
                path.startsWith("/favicon.ico");
     }
