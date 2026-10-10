@@ -10,7 +10,7 @@
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2-brightgreen)](https://spring.io/projects/spring-boot)
 [![Spring Cloud Gateway](https://img.shields.io/badge/Spring%20Cloud%20Gateway-4.1-blue)](https://spring.io/projects/spring-cloud-gateway)
 [![React](https://img.shields.io/badge/React-19-blue)](https://react.dev/)
-[![Tests](https://img.shields.io/badge/Tests-561%20Tests-success)]()
+[![Tests](https://img.shields.io/badge/Tests-1674%20Tests-yellow)]()
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 ---
@@ -487,13 +487,18 @@ Default credentials: `admin` / `admin123`
 
 ## Testing
 
-The project has comprehensive test coverage:
+Counts below come from `mvn test` on 2026-10-11 (JDK 21). The seckill-core-engine failures predate that run - the same 8 failures / 17 errors reproduce at commit `358d9a5`.
 
 | Module | Tests | Status |
 |--------|-------|--------|
-| **my-gateway** | 332 | ✅ All Passing |
-| **gateway-admin** | 229 | ✅ All Passing |
-| **Total** | **561** | ✅ **All Passing** |
+| **my-gateway** | 550 | ✅ All passing |
+| **gateway-admin** | 440 (+8 skipped) | ✅ All passing |
+| **gateway-trace-starter** | 444 | ✅ All passing |
+| **license-client** | 82 | ✅ All passing |
+| **license-server** | 37 | ✅ All passing |
+| **seckill-core-engine** | 121 | ⚠️ 8 failures + 17 errors (pre-existing) |
+| **gateway-ui** | 0 | ❌ No frontend tests yet |
+| **Total (JVM)** | **1674** | ⚠️ **5 of 6 tested modules green** |
 
 Run tests:
 ```bash
