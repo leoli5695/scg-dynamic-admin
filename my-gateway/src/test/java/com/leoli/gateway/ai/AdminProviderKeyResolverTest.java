@@ -7,11 +7,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import java.net.URI;
 import java.time.Duration;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
@@ -55,5 +57,24 @@ class AdminProviderKeyResolverTest {
         resolver.init();
 
         assertEquals(Duration.ofSeconds(300), writeTtl(cacheOf(resolver)));
+    }
+
+    @Test
+    @DisplayName("A credential ref cannot escape its own path segment")
+    void credentialRefStaysInOnePathSegment() {
+        AdminProviderKeyResolver resolver = new AdminProviderKeyResolver(mock(WebClient.class));
+        ReflectionTestUtils.setField(resolver, "adminUrl", "http://127.0.0.1:9090");
+
+        assertEquals(URI.create("http://127.0.0.1:9090/api/provider-credentials/internal/ref-1/key"),
+                resolver.keyUri("ref-1"));
+
+        // Reserved characters are percent-encoded, so a ref can neither walk out of its
+        // segment nor smuggle a query string into the internal key endpoint.
+        URI traversal = resolver.keyUri("../../secrets");
+        assertEquals("/api/provider-credentials/internal/..%2F..%2Fsecrets/key", traversal.getRawPath());
+
+        URI injection = resolver.keyUri("ref?x=1");
+        assertEquals("/api/provider-credentials/internal/ref%3Fx%3D1/key", injection.getRawPath());
+        assertNull(injection.getRawQuery());
     }
 }

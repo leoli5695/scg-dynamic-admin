@@ -11,6 +11,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
+import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 
 /**
@@ -72,9 +75,8 @@ public class AdminProviderKeyResolver implements ProviderKeyResolver {
             return Mono.empty();
         }
 
-        String url = adminUrl + "/api/provider-credentials/internal/" + credentialRef + "/key";
         return webClient.get()
-                .uri(url)
+                .uri(keyUri(credentialRef))
                 .header(TOKEN_HEADER, internalToken)
                 .retrieve()
                 .bodyToMono(JsonNode.class)
@@ -85,6 +87,16 @@ public class AdminProviderKeyResolver implements ProviderKeyResolver {
                     log.warn("Failed to fetch provider key for ref {}: {}", credentialRef, e.getMessage());
                     return Mono.empty();
                 });
+    }
+
+    /**
+     * Builds the internal key endpoint URI. The ref must occupy exactly one path segment:
+     * {@code uri(String)} treats its argument as a URI template and leaves reserved characters
+     * alone, so a ref carrying "/" or "?" could otherwise reach a different internal endpoint.
+     */
+    URI keyUri(String credentialRef) {
+        String encodedRef = URLEncoder.encode(credentialRef, StandardCharsets.UTF_8).replace("+", "%20");
+        return URI.create(adminUrl + "/api/provider-credentials/internal/" + encodedRef + "/key");
     }
 
     /** Drop a cached key (e.g. after rotation). */
