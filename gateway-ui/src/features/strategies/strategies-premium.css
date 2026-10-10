@@ -763,3 +763,12 @@
   font-size: 12px;
   color: #94a3b8;
 }
+
+/* ===== 策略类型选择弹窗：tab 内容定高内滚 =====
+   切换 tab 不再改变弹窗高度 → 头部/遮罩的 backdrop-filter Blur 层不重绘；
+   配合 forceRender 双 tab 预挂载，切换只剩显示切换，消除卡顿 */
+.strategy-type-select-modal .ant-tabs-content-holder {
+  height: 460px;
+  overflow-y: auto;
+  padding-right: 4px;
+}

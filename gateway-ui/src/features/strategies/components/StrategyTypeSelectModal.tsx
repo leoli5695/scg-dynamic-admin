@@ -130,7 +130,6 @@ const StrategyTypeSelectModal: React.FC<StrategyTypeSelectModalProps> = ({
       footer={null}
       width={800}
       className="strategy-type-select-modal"
-      styles={{ body: { maxHeight: '62vh', overflowY: 'auto' } }}
     >
       <Spin spinning={loading}>
         <Tabs
@@ -139,11 +138,13 @@ const StrategyTypeSelectModal: React.FC<StrategyTypeSelectModalProps> = ({
           items={[
             {
               key: 'general',
+              forceRender: true,
               label: `${t('strategy.tab_general', { defaultValue: '普通策略' })} (${generalCount})`,
               children: renderGroups(generalGroups),
             },
             {
               key: 'ai',
+              forceRender: true,
               label: `${t('strategy.tab_ai', { defaultValue: 'AI 策略' })} (${aiCount})`,
               children: renderGroups(aiGroups),
             },
