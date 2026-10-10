@@ -10,7 +10,6 @@
  */
 import React, { useMemo } from 'react';
 import { Card, Col, Divider, Modal, Row, Spin, Tabs, Tag, Typography } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { StrategyTypeInfo } from '../../../types/strategy';
 import { CATEGORY_LABELS } from '../utils';
@@ -117,9 +116,6 @@ const StrategyTypeSelectModal: React.FC<StrategyTypeSelectModalProps> = ({
       title={
         <div className="modal-header-modern">
           <div className="modal-title-wrapper">
-            <div className="modal-icon-wrapper">
-              <PlusOutlined />
-            </div>
             <div className="modal-title-text">
               <div className="modal-title">{t('strategy.select_type')}</div>
               <div className="modal-subtitle">{t('strategy.select_type_description')}</div>
