@@ -55,7 +55,10 @@ public class InternalApiTokenFilter extends OncePerRequestFilter {
             // Gateway pods fetch decrypted provider API keys here (AI proxy). permitAll
             // in SecurityConfig (no JWT) and guarded by the shared internal token, so a
             // leaked pod token is the only way to reach plaintext keys.
-            "/api/provider-credentials/internal/**"
+            "/api/provider-credentials/internal/**",
+            // Gateway pods report settled token usage here (metering/observability page).
+            // Same posture: permitAll (no JWT) + shared internal token guard.
+            "/api/token-quota/internal/**"
             // NOTE: "/api/service-middleware/debug/**" is intentionally NOT here. Those diagnostic
             // endpoints have no gateway-pod callers, so they are gated behind an ADMIN JWT in
             // SecurityConfig instead of the shared report token (#7 secret tiering).

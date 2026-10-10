@@ -32,6 +32,7 @@ import { AntdStaticBridge } from './utils/antdStatic';
 const LoginPage = lazy(() => import('./features/auth/LoginPage'));
 const InstancesListPage = lazy(() => import('./features/instances/InstancesListPage'));
 const InstanceCreatePage = lazy(() => import('./features/instances/InstanceCreatePage'));
+const TokenUsagePage = lazy(() => import('./features/token-usage/TokenUsagePage'));
 const InstanceDetailLayout = lazy(() => import('./features/instance-detail/InstanceDetailLayout'));
 // Legacy top-level pages (rewritten in later phases)
 const KubernetesPage = lazy(() => import('./features/kubernetes'));
@@ -90,6 +91,7 @@ const AppRoutes: React.FC = () => (
         <Route path="/" element={<Navigate to="/instances" replace />} />
         <Route path="/instances" element={<InstancesListPage />} />
         <Route path="/instances/create" element={<InstanceCreatePage />} />
+        <Route path="/token-usage" element={<TokenUsagePage />} />
         <Route path="/instances/:instanceId" element={<InstanceDetailLayout />}>
           <Route index element={<OverviewTab />} />
           <Route path="services" element={<ServicesTab />} />

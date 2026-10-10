@@ -95,6 +95,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/services/traces", "/api/services/traces/batch", "/api/services/middleware-metadata").permitAll()
                         // Provider credential internal fetch (gateway pods pull decrypted AI provider keys, no JWT; X-Internal-Token guarded)
                         .requestMatchers("/api/provider-credentials/internal/**").permitAll()
+                        // Token usage report from gateway pods (metering observability, no JWT; X-Internal-Token guarded)
+                        .requestMatchers("/api/token-quota/internal/**").permitAll()
                         // Prometheus HTTP Service Discovery endpoints (called by Prometheus without auth)
                         .requestMatchers("/api/prometheus/sd/**").permitAll()
                         // FIX (broken share links): a stress-test share link is a capability URL -

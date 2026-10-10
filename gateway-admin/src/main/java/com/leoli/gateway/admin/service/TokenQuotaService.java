@@ -431,9 +431,9 @@ public class TokenQuotaService {
         history.setRouteId((String) usageData.get("routeId"));
         history.setModel((String) usageData.get("model"));
 
-        Integer promptTokens = (Integer) usageData.get("promptTokens");
-        Integer completionTokens = (Integer) usageData.get("completionTokens");
-        Integer totalTokens = (Integer) usageData.get("totalTokens");
+        Integer promptTokens = asInt(usageData.get("promptTokens"));
+        Integer completionTokens = asInt(usageData.get("completionTokens"));
+        Integer totalTokens = asInt(usageData.get("totalTokens"));
 
         history.setPromptTokens(promptTokens != null ? promptTokens : 0);
         history.setCompletionTokens(completionTokens != null ? completionTokens : 0);
@@ -442,7 +442,7 @@ public class TokenQuotaService {
         history.setResponseFormat((String) usageData.get("responseFormat"));
         history.setInstanceId((String) usageData.get("instanceId"));
 
-        Long latencyMs = (Long) usageData.get("latencyMs");
+        Long latencyMs = asLong(usageData.get("latencyMs"));
         history.setLatencyMs(latencyMs);
 
         Object requestTimeObj = usageData.get("requestTime");
@@ -456,6 +456,15 @@ public class TokenQuotaService {
 
         tokenUsageHistoryRepository.save(history);
         log.debug("Recorded token usage for tenant {}: total={}", tenantId, history.getTotalTokens());
+    }
+
+    /** JSON 数字进 Map 后类型不定（Integer/Long），统一按 Number 取，避免强转 ClassCastException。 */
+    private static Integer asInt(Object value) {
+        return value instanceof Number n ? n.intValue() : null;
+    }
+
+    private static Long asLong(Object value) {
+        return value instanceof Number n ? n.longValue() : null;
     }
 
     // ============== Alert Operations ==============

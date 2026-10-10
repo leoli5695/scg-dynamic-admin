@@ -8,7 +8,7 @@ import {
 } from 'antd';
 import type { MenuProps } from 'antd';
 import {
-  CloudServerOutlined, ClusterOutlined, KeyOutlined,
+  CloudServerOutlined, ClusterOutlined, KeyOutlined, FundOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined,
 } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -31,6 +31,7 @@ const getItem = (
 const selectedKeyFromPath = (pathname: string): string => {
   if (pathname.startsWith('/kubernetes')) return 'kubernetes';
   if (pathname.startsWith('/license')) return 'license';
+  if (pathname.startsWith('/token-usage')) return 'token-usage';
   return 'instances';
 };
 
@@ -42,6 +43,7 @@ const AppShell: React.FC = () => {
 
   const menuItems: MenuItem[] = useMemo(() => [
     getItem(t('menu.instances'), 'instances', <CloudServerOutlined />),
+    getItem(t('menu.token_usage'), 'token-usage', <FundOutlined />),
     getItem(t('menu.kubernetes'), 'kubernetes', <ClusterOutlined />),
     getItem('License', 'license', <KeyOutlined />),
   ], [t]);

@@ -31,5 +31,6 @@
   "menu.resources": "资源",
   "app.title": "API 网关",
   "app.subtitle": "统一管理平台",
-  "app.console_title": "API 网关控制台"
+  "app.console_title": "API 网关控制台",
+  "menu.token_usage": "Token 计量"
 }

@@ -2,6 +2,7 @@ package com.leoli.gateway.filter.token;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.constants.FilterOrderConstants;
+import com.leoli.gateway.filter.TraceIdGlobalFilter;
 import com.leoli.gateway.filter.ai.AiProviderRoutingFilter;
 import com.leoli.gateway.limiter.TokenQuotaManager;
 import com.leoli.gateway.manager.StrategyManager;
@@ -32,7 +33,9 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -71,6 +74,12 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired(required = false)
+    private TokenUsageReporter tokenUsageReporter;
+
+    @Value("${gateway.instance-id:gateway-1}")
+    private String instanceId;
 
     @Value("${gateway.token-usage.max-body-size:65536}")
     private int maxBodySize;
@@ -378,9 +387,18 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
      */
     private boolean isStreamInterrupted(reactor.core.publisher.SignalType signalType,
                                            boolean isSse, MemoryAwareBuffer buffer) {
-        // Signal types indicating interruption
+        // A stream that delivered its terminal [DONE] marker COMPLETED normally.
+        // Clients routinely close the connection right after [DONE], which surfaces
+        // as a CANCEL signal - that is a clean finish, NOT an interruption, and must
+        // not trigger the min-charge fallback (doing so overbilled every small stream:
+        // a 22-token completion was charged the 100-token floor).
+        if (isSse && tokenUsageParser.isSseStreamComplete(buffer.getSseChunks())) {
+            return false;
+        }
+
+        // Signal types indicating interruption (only when the stream did not complete)
         if (signalType == reactor.core.publisher.SignalType.CANCEL) {
-            log.warn("Stream cancelled by client");
+            log.warn("Stream cancelled by client before completion");
             return true;
         }
 
@@ -389,8 +407,8 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
             return true;
         }
 
-        // For SSE, check if [DONE] marker received
-        if (isSse && !tokenUsageParser.isSseStreamComplete(buffer.getSseChunks())) {
+        // For SSE, no [DONE] marker means the stream ended prematurely
+        if (isSse) {
             log.warn("SSE stream incomplete (no [DONE] marker)");
             return true;
         }
@@ -453,6 +471,9 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
             log.info("Token usage settled: tenant={}, preDeducted={}, actual={}, interrupted={}",
                     tenantId, preDeductedTokens, actualTokens, interrupted);
 
+            // 旁路上报 admin 计量库（可观测页数据源）；失败静默，不影响代理与结算
+            reportUsageToAdmin(exchange, tenantId, usage, actualTokens);
+
         } catch (Exception e) {
             log.error("Error processing token usage for tenant {}: {}", tenantId, e.getMessage());
 
@@ -460,6 +481,37 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
             if (preDeductedTokens > 0 && config.isAutoRefundEnabled()) {
                 tokenQuotaManager.refundTokens(tenantId, preDeductedTokens, config, "PROCESSING_ERROR");
             }
+        }
+    }
+
+    /**
+     * 把本轮已结算用量上报 admin（字段契约 = admin TokenQuotaService.recordTokenUsage）。
+     * 延迟取自 PreCheckFilter 打的起点戳（含上游往返）；起点缺失则不报 latency。
+     */
+    private void reportUsageToAdmin(ServerWebExchange exchange, String tenantId,
+                                    TokenUsage usage, long actualTokens) {
+        if (tokenUsageReporter == null) {
+            return;
+        }
+        try {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("tenantId", tenantId);
+            payload.put("traceId", exchange.getAttribute(TraceIdGlobalFilter.TRACE_ID_ATTR));
+            payload.put("routeId", RouteUtils.getRouteId(exchange));
+            payload.put("model", usage != null ? usage.getModel() : null);
+            payload.put("promptTokens", usage != null ? usage.getPromptTokens() : 0);
+            payload.put("completionTokens", usage != null ? usage.getCompletionTokens() : 0);
+            payload.put("totalTokens", actualTokens);
+            payload.put("responseFormat", aiResponseFormat(exchange));
+            payload.put("instanceId", instanceId);
+            Long startNs = exchange.getAttribute(TokenQuotaPreCheckFilter.ATTR_START_NS);
+            if (startNs != null) {
+                payload.put("latencyMs", (System.nanoTime() - startNs) / 1_000_000L);
+            }
+            payload.put("requestTime", LocalDateTime.now().toString());
+            tokenUsageReporter.report(payload);
+        } catch (Exception e) {
+            log.debug("Failed to build token usage report (ignored): {}", e.getMessage());
         }
     }
 
@@ -492,17 +544,19 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
         long chargeTokens;
 
         if (config.isSsePartialBillingOnInterrupt()) {
-            // Partial billing: charge minimum or actual/incremental
+            // Partial billing on a genuinely interrupted stream.
             long minCharge = config.getSseMinChargeOnInterrupt();
 
             if (actualTokens > 0) {
-                // Use actual parsed tokens
-                chargeTokens = Math.max(actualTokens, minCharge);
+                // Trust the provider-reported usage; the min-charge floor is only a
+                // fallback for when usage is unknown. (Previously max(actual, min)
+                // overbilled small interrupted streams.)
+                chargeTokens = actualTokens;
             } else if (incrementalTokens > 0) {
                 // Use incremental tracking tokens
-                chargeTokens = Math.max(incrementalTokens, minCharge);
+                chargeTokens = incrementalTokens;
             } else {
-                // No token info, charge minimum
+                // No token info at all - charge the safety floor.
                 chargeTokens = minCharge;
             }
 

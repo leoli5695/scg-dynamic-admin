@@ -55,6 +55,9 @@ import java.util.Map;
 @Slf4j
 public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
 
+    /** 计量延迟起点（nanoTime）：Collector 结算时据此计算 latencyMs 上报。 */
+    public static final String ATTR_START_NS = "token_usage_start_ns";
+
     @Autowired
     private StrategyManager strategyManager;
 
@@ -86,6 +89,8 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
 
         // Store tenant ID in exchange attributes for later use
         exchange.getAttributes().put("token_quota_tenant_id", tenantId);
+        // 计量延迟起点（含上游往返）：Collector 结算时据此算 latencyMs
+        exchange.getAttributes().put(ATTR_START_NS, System.nanoTime());
 
         // Check token quota
         if (tokenQuotaManager == null) {

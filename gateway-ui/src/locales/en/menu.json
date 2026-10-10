@@ -31,5 +31,6 @@
   "menu.resources": "Resources",
   "app.title": "API Gateway",
   "app.subtitle": "Unified Management Platform",
-  "app.console_title": "API Gateway Console"
+  "app.console_title": "API Gateway Console",
+  "menu.token_usage": "Token Metering"
 }

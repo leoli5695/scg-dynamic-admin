@@ -24,6 +24,7 @@ import zhTopology from './locales/zh/topology.json';
 import zhFilterChain from './locales/zh/filterChain.json';
 import zhReplay from './locales/zh/replay.json';
 import zhCopilot from './locales/zh/copilot.json';
+import zhTokenUsage from './locales/zh/tokenUsage.json';
 import zhStressTest from './locales/zh/stressTest.json';
 import zhK8s from './locales/zh/k8s.json';
 import zhMisc from './locales/zh/misc.json';
@@ -49,6 +50,7 @@ import enTopology from './locales/en/topology.json';
 import enFilterChain from './locales/en/filterChain.json';
 import enReplay from './locales/en/replay.json';
 import enCopilot from './locales/en/copilot.json';
+import enTokenUsage from './locales/en/tokenUsage.json';
 import enStressTest from './locales/en/stressTest.json';
 import enK8s from './locales/en/k8s.json';
 import enMisc from './locales/en/misc.json';
@@ -63,7 +65,7 @@ const resources = {
       enCommon, enMenu, enLogin, enInstance, enRoutes, enServices, enStrategy,
       enAuthPolicy, enCert, enPlugins, enMiddleware, enMonitor, enAlert, enTrace,
       enAccessLog, enAudit, enDiagnostic, enTopology, enFilterChain, enReplay,
-      enCopilot, enStressTest, enK8s, enMisc, enJwtRevocation,
+      enCopilot, enStressTest, enK8s, enMisc, enJwtRevocation, enTokenUsage,
     ),
   },
   zh: {
@@ -71,7 +73,7 @@ const resources = {
       zhCommon, zhMenu, zhLogin, zhInstance, zhRoutes, zhServices, zhStrategy,
       zhAuthPolicy, zhCert, zhPlugins, zhMiddleware, zhMonitor, zhAlert, zhTrace,
       zhAccessLog, zhAudit, zhDiagnostic, zhTopology, zhFilterChain, zhReplay,
-      zhCopilot, zhStressTest, zhK8s, zhMisc, zhJwtRevocation,
+      zhCopilot, zhStressTest, zhK8s, zhMisc, zhJwtRevocation, zhTokenUsage,
     ),
   },
 };
