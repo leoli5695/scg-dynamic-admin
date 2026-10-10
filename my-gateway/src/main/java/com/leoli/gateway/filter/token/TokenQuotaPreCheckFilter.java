@@ -58,6 +58,12 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
     /** 计量延迟起点（nanoTime）：Collector 结算时据此计算 latencyMs 上报。 */
     public static final String ATTR_START_NS = "token_usage_start_ns";
 
+    /**
+     * 预扣时冻结的配额周期标识（{@link TokenQuotaManager.QuotaPeriodStamp}）。
+     * Collector 结算/退款时复用它，避免请求跨日/跨月边界时退款落到新周期的桶。
+     */
+    public static final String ATTR_PERIOD_STAMP = "token_quota_period_stamp";
+
     @Autowired
     private StrategyManager strategyManager;
 
@@ -109,13 +115,20 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
         final String strategy = config.tokenQuotaConfig.getPreDeductStrategy();
         return Mono.fromCallable(() -> {
                     if ("ESTIMATE".equalsIgnoreCase(strategy) || "HYBRID".equalsIgnoreCase(strategy)) {
-                        long preDeducted = applyPreDeductStrategy(tenantId, estimatedInputTokens, config.tokenQuotaConfig);
+                        // Freeze the period ids NOW so settlement (which may run after a
+                        // day/month boundary) refunds into the same bucket pre-deduct charged.
+                        TokenQuotaManager.QuotaPeriodStamp stamp = tokenQuotaManager.currentPeriodStamp();
+                        long preDeducted = applyPreDeductStrategy(tenantId, estimatedInputTokens,
+                                config.tokenQuotaConfig, stamp);
                         if (preDeducted < 0) {
                             // Pre-deduct failed (quota exceeded)
                             return tokenQuotaManager.checkQuota(tenantId, config.tokenQuotaConfig);
                         }
                         // Store pre-deducted amount for settlement in collector filter
                         exchange.getAttributes().put("token_quota_pre_deducted", preDeducted);
+                        if (preDeducted > 0) {
+                            exchange.getAttributes().put(ATTR_PERIOD_STAMP, stamp);
+                        }
                         return QuotaCheckResult.allowed(0, 0);
                     } else {
                         // NONE strategy: just check quota
@@ -233,7 +246,8 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
      *
      * @return pre-deducted tokens, or -1 if quota exceeded
      */
-    private long applyPreDeductStrategy(String tenantId, long estimatedInputTokens, TokenQuotaConfig config) {
+    private long applyPreDeductStrategy(String tenantId, long estimatedInputTokens, TokenQuotaConfig config,
+                                        TokenQuotaManager.QuotaPeriodStamp stamp) {
         String strategy = config.getPreDeductStrategy();
         long threshold = config.getHybridThreshold();
 
@@ -251,7 +265,7 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
         long preDeductAmount = estimatedInputTokens * config.getEstimateMultiplier();
 
         // Pre-deduct tokens
-        return tokenQuotaManager.preDeductTokens(tenantId, preDeductAmount, config);
+        return tokenQuotaManager.preDeductTokens(tenantId, preDeductAmount, config, stamp);
     }
 
     /**

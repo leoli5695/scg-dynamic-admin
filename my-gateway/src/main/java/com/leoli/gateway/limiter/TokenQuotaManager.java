@@ -221,6 +221,11 @@ public class TokenQuotaManager {
      * @return true if consumption successful, false if quota exceeded
      */
     public boolean consumeTokens(String tenantId, long tokens, TokenQuotaConfig config) {
+        return consumeTokens(tenantId, tokens, config, currentPeriodStamp());
+    }
+
+    /** Stamp-aware variant: increments the buckets captured at pre-deduct time. */
+    public boolean consumeTokens(String tenantId, long tokens, TokenQuotaConfig config, QuotaPeriodStamp stamp) {
         if (tokens <= 0) {
             log.debug("No tokens to consume for tenant {}", tenantId);
             return true;
@@ -237,14 +242,14 @@ public class TokenQuotaManager {
 
             // Consume monthly tokens
             if (shouldCheckMonthly(quota, config)) {
-                String monthlyUsedKey = buildKey("monthly", tenantId, "used");
+                String monthlyUsedKey = buildKey("monthly", tenantId, "used", stamp);
                 redisTemplate.opsForValue().increment(monthlyUsedKey, tokens);
                 ensureMonthlyKeyTTL(monthlyUsedKey);
             }
 
             // Consume daily tokens
             if (shouldCheckDaily(quota, config)) {
-                String dailyUsedKey = buildKey("daily", tenantId, "used");
+                String dailyUsedKey = buildKey("daily", tenantId, "used", stamp);
                 redisTemplate.opsForValue().increment(dailyUsedKey, tokens);
                 ensureDailyKeyTTL(dailyUsedKey);
             }
@@ -266,6 +271,14 @@ public class TokenQuotaManager {
      * Returns remaining tokens if successful, -1 if quota exceeded.
      */
     public long checkAndConsume(String tenantId, long tokens, TokenQuotaConfig config) {
+        return checkAndConsume(tenantId, tokens, config, currentPeriodStamp());
+    }
+
+    /**
+     * Stamp-aware variant: charges the period buckets captured at pre-deduct time so a
+     * request settling after a day/month boundary does not drift into the new period's key.
+     */
+    public long checkAndConsume(String tenantId, long tokens, TokenQuotaConfig config, QuotaPeriodStamp stamp) {
         if (!isRedisAvailable()) {
             return checkAndConsumeFromLocalCache(tenantId, tokens, config);
         }
@@ -281,10 +294,10 @@ public class TokenQuotaManager {
 
             // Use Lua script for atomic check-and-consume to prevent TOCTOU race condition
             List<String> keys = new ArrayList<>();
-            keys.add(buildKey("monthly", tenantId, "used"));
-            keys.add(buildKey("monthly", tenantId, "total"));
-            keys.add(buildKey("daily", tenantId, "used"));
-            keys.add(buildKey("daily", tenantId, "total"));
+            keys.add(buildKey("monthly", tenantId, "used", stamp));
+            keys.add(buildKey("monthly", tenantId, "total", stamp));
+            keys.add(buildKey("daily", tenantId, "used", stamp));
+            keys.add(buildKey("daily", tenantId, "total", stamp));
 
             String[] args = {
                 String.valueOf(tokens),
@@ -502,6 +515,16 @@ public class TokenQuotaManager {
      * @return true if refund successful
      */
     public boolean refundTokens(String tenantId, long tokensToRefund, TokenQuotaConfig config, String reason) {
+        return refundTokens(tenantId, tokensToRefund, config, reason, currentPeriodStamp());
+    }
+
+    /**
+     * Stamp-aware variant: refunds into the buckets captured at pre-deduct time. Without
+     * this, a refund settling after a day/month boundary would decrement the NEW period's
+     * key (often 0, floored away) while the original charge stays stuck in the old period.
+     */
+    public boolean refundTokens(String tenantId, long tokensToRefund, TokenQuotaConfig config,
+                                String reason, QuotaPeriodStamp stamp) {
         if (tokensToRefund <= 0) {
             log.debug("No tokens to refund for tenant {}", tenantId);
             return true;
@@ -531,7 +554,7 @@ public class TokenQuotaManager {
 
             // Refund monthly tokens (decrease used count)
             if (shouldCheckMonthly(quota, config)) {
-                String monthlyUsedKey = buildKey("monthly", tenantId, "used");
+                String monthlyUsedKey = buildKey("monthly", tenantId, "used", stamp);
                 // FIX (GET->SET race): atomic decrement-with-floor via Lua script
                 redisTemplate.execute(refundScript,
                         Collections.singletonList(monthlyUsedKey),
@@ -541,7 +564,7 @@ public class TokenQuotaManager {
 
             // Refund daily tokens
             if (shouldCheckDaily(quota, config)) {
-                String dailyUsedKey = buildKey("daily", tenantId, "used");
+                String dailyUsedKey = buildKey("daily", tenantId, "used", stamp);
                 // FIX (GET->SET race): atomic decrement-with-floor via Lua script
                 redisTemplate.execute(refundScript,
                         Collections.singletonList(dailyUsedKey),
@@ -575,6 +598,15 @@ public class TokenQuotaManager {
      * @return Estimated tokens pre-deducted (for later refund calculation)
      */
     public long preDeductTokens(String tenantId, long estimatedTokens, TokenQuotaConfig config) {
+        return preDeductTokens(tenantId, estimatedTokens, config, currentPeriodStamp());
+    }
+
+    /**
+     * Stamp-aware variant: the caller freezes the period via {@link #currentPeriodStamp()}
+     * at pre-deduct time and reuses the same stamp at settlement, so charge and refund land
+     * in the same bucket even if the request spans a day/month boundary.
+     */
+    public long preDeductTokens(String tenantId, long estimatedTokens, TokenQuotaConfig config, QuotaPeriodStamp stamp) {
         if (estimatedTokens <= 0) {
             return 0;
         }
@@ -586,7 +618,7 @@ public class TokenQuotaManager {
         }
 
         // Atomic check + deduct in one Redis round-trip (no TOCTOU window)
-        long remaining = checkAndConsume(tenantId, preDeductAmount, config);
+        long remaining = checkAndConsume(tenantId, preDeductAmount, config, stamp);
         if (remaining >= 0) {
             log.debug("Pre-deducted {} tokens for tenant {} (estimated: {}, remaining: {})",
                     preDeductAmount, tenantId, estimatedTokens, remaining);
@@ -607,10 +639,21 @@ public class TokenQuotaManager {
      */
     public void settleTokenUsage(String tenantId, long preDeductedTokens, long actualTokens,
                                   TokenQuotaConfig config) {
+        settleTokenUsage(tenantId, preDeductedTokens, actualTokens, config, currentPeriodStamp());
+    }
+
+    /**
+     * Stamp-aware settlement: refunds/consumes against the period buckets captured at
+     * pre-deduct time. This is the fix for cross-period drift - without the stamp, a
+     * request pre-deducted late in a day/month but settled after the boundary would refund
+     * into the new period's key, leaving the old period over-charged and the new one under.
+     */
+    public void settleTokenUsage(String tenantId, long preDeductedTokens, long actualTokens,
+                                  TokenQuotaConfig config, QuotaPeriodStamp stamp) {
         if (preDeductedTokens <= 0) {
             // No pre-deduct, just consume actual
             if (actualTokens > 0) {
-                consumeTokens(tenantId, actualTokens, config);
+                consumeTokens(tenantId, actualTokens, config, stamp);
             }
             return;
         }
@@ -619,11 +662,11 @@ public class TokenQuotaManager {
 
         if (diff > 0) {
             // Pre-deducted more than actual, refund excess
-            refundTokens(tenantId, diff, config, "ESTIMATE_DIFF");
+            refundTokens(tenantId, diff, config, "ESTIMATE_DIFF", stamp);
         } else if (diff < 0) {
             // Actual exceeds pre-deducted, consume additional
             long additional = Math.abs(diff);
-            consumeTokens(tenantId, additional, config);
+            consumeTokens(tenantId, additional, config, stamp);
             log.debug("Additional {} tokens consumed for tenant {} (actual > estimate)",
                     additional, tenantId);
         } else {
@@ -661,11 +704,26 @@ public class TokenQuotaManager {
     }
 
     private String buildKey(String period, String tenantId, String field) {
-        // Include period identifier in key
-        String periodId = "MONTHLY".equalsIgnoreCase(period)
-                ? getCurrentMonthId()
-                : getCurrentDayId();
+        return buildKey(period, tenantId, field, currentPeriodStamp());
+    }
+
+    /**
+     * Stamp-aware key build. The period identifier comes from a {@link QuotaPeriodStamp}
+     * frozen at pre-deduct time instead of {@code LocalDate.now()}, so a request that
+     * settles after a day/month boundary refunds/consumes into the SAME bucket it was
+     * charged in rather than the new period's key.
+     */
+    private String buildKey(String period, String tenantId, String field, QuotaPeriodStamp stamp) {
+        String periodId = "MONTHLY".equalsIgnoreCase(period) ? stamp.monthId() : stamp.dayId();
         return "token_quota:" + period + ":" + tenantId + ":" + periodId + ":" + field;
+    }
+
+    /**
+     * The period identifiers in effect right now. Captured once per request at pre-deduct
+     * time and threaded through settlement (see TokenQuotaPreCheckFilter / TokenUsageCollectorFilter).
+     */
+    public QuotaPeriodStamp currentPeriodStamp() {
+        return new QuotaPeriodStamp(getCurrentMonthId(), getCurrentDayId());
     }
 
     private String getCurrentMonthId() {
@@ -808,6 +866,13 @@ public class TokenQuotaManager {
     }
 
     // ============== Inner Classes ==============
+
+    /**
+     * Frozen monthly/daily period identifiers for one request's quota lifecycle.
+     * Captured at pre-deduct time so settlement after a period boundary still targets
+     * the bucket the tokens were charged in.
+     */
+    public record QuotaPeriodStamp(String monthId, String dayId) {}
 
     /**
      * Quota check result with detailed status.

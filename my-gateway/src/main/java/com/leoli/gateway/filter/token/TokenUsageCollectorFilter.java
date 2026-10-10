@@ -449,9 +449,17 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                         preDeductedTokens, config);
             }
 
-            // Settlement: refund or consume based on pre-deducted vs actual
+            // Settlement: refund or consume based on pre-deducted vs actual.
+            // Reuse the period stamp frozen at pre-deduct time so a request that settled
+            // after a day/month boundary refunds into the bucket it was charged in.
+            TokenQuotaManager.QuotaPeriodStamp stamp =
+                    exchange.getAttribute(TokenQuotaPreCheckFilter.ATTR_PERIOD_STAMP);
             if (preDeductedTokens > 0) {
-                tokenQuotaManager.settleTokenUsage(tenantId, preDeductedTokens, actualTokens, config);
+                if (stamp != null) {
+                    tokenQuotaManager.settleTokenUsage(tenantId, preDeductedTokens, actualTokens, config, stamp);
+                } else {
+                    tokenQuotaManager.settleTokenUsage(tenantId, preDeductedTokens, actualTokens, config);
+                }
             } else if (actualTokens > 0) {
                 // No pre-deduct, just consume actual
                 tokenQuotaManager.consumeTokens(tenantId, actualTokens, config);
@@ -477,9 +485,15 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
         } catch (Exception e) {
             log.error("Error processing token usage for tenant {}: {}", tenantId, e.getMessage());
 
-            // On error, refund pre-deducted tokens if configured
+            // On error, refund pre-deducted tokens if configured (into the charged period)
             if (preDeductedTokens > 0 && config.isAutoRefundEnabled()) {
-                tokenQuotaManager.refundTokens(tenantId, preDeductedTokens, config, "PROCESSING_ERROR");
+                TokenQuotaManager.QuotaPeriodStamp stamp =
+                        exchange.getAttribute(TokenQuotaPreCheckFilter.ATTR_PERIOD_STAMP);
+                if (stamp != null) {
+                    tokenQuotaManager.refundTokens(tenantId, preDeductedTokens, config, "PROCESSING_ERROR", stamp);
+                } else {
+                    tokenQuotaManager.refundTokens(tenantId, preDeductedTokens, config, "PROCESSING_ERROR");
+                }
             }
         }
     }
