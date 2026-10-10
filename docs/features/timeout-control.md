@@ -14,9 +14,9 @@ Gateway supports two timeout configurations:
 
 ## Configuration
 
-### Default Timeout (No Strategy)
+### No Strategy Configured
 
-When no timeout strategy is configured, Gateway applies default values from `application.yml`:
+When no timeout strategy is configured the gateway writes **no** route timeout metadata, so the global `spring.cloud.gateway.httpclient.connect-timeout` / `response-timeout` apply (5s / 300s by default; the response timeout is deliberately long because reasoning models can take minutes before the first byte). Route metadata takes priority over those globals inside Spring Cloud Gateway, so the `gateway.timeout` defaults below are only used to fill in fields a configured strategy omits:
 
 ```yaml
 gateway:
@@ -49,9 +49,9 @@ Configure via Strategy API:
 
 | Scenario | Connect Timeout |
 |----------|-----------------|
-| No timeout strategy configured | Default: 1s |
+| No timeout strategy configured | Global `httpclient.connect-timeout` (5s) |
 | Timeout strategy with user-defined value | User's value |
-| Timeout strategy without explicit value | Default: 1s |
+| Timeout strategy without explicit value | `gateway.timeout.default-connect-timeout` (1s) |
 
 ---
 

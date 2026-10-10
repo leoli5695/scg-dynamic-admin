@@ -192,7 +192,7 @@ gateway:
       enabled: ${GATEWAY_JWT_REVOCATION_ENABLED:true}
 
   # Timeout Configuration
-  # Default timeout values applied when no timeout strategy is configured
+  # Fallbacks for fields a configured timeout strategy omits. Routes with NO strategy get no route metadata, so spring.cloud.gateway.httpclient.* above applies.
   timeout:
     default-connect-timeout: ${GATEWAY_TIMEOUT_CONNECT:1000}
     default-response-timeout: ${GATEWAY_TIMEOUT_RESPONSE:30000}

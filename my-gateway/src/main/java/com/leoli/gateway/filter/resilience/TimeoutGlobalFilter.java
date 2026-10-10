@@ -26,8 +26,10 @@ import static org.springframework.cloud.gateway.support.ServerWebExchangeUtils.G
  * underlying NettyRoutingFilter can apply per-route timeouts.
  * <p>
  * Priority logic:
- * - No timeout strategy configured → use default (from application.yml)
- * - Timeout strategy configured → use user-defined values
+ * - No timeout strategy configured: route metadata is left untouched, so the global
+ *   spring.cloud.gateway.httpclient timeouts apply
+ * - Timeout strategy configured: user-defined values, with the gateway.timeout defaults
+ *   filling in any field the strategy omits
  *
  * @author leoli
  */
@@ -44,25 +46,18 @@ public class TimeoutGlobalFilter implements GlobalFilter, Ordered {
         String routeId = RouteUtils.getRouteId(exchange);
         Map<String, Object> config = strategyManager.getTimeoutConfig(routeId);
 
-        // Determine connect timeout:
-        // - No timeout strategy: use default from properties
-        // - Timeout strategy configured: use user-defined value or fallback to default
-        int connectTimeout;
-        int responseTimeout;
-
+        // No strategy for this route: do NOT write timeout metadata. Route metadata wins
+        // over spring.cloud.gateway.httpclient.* inside SCG, so stamping the gateway.timeout
+        // defaults here silently cut every routed request - including the LLM/SSE streams the
+        // global 300s response-timeout exists for - off at 30s.
         if (config == null) {
-            // No timeout strategy configured → use defaults
-            connectTimeout = timeoutProperties.getDefaultConnectTimeout();
-            responseTimeout = timeoutProperties.getDefaultResponseTimeout();
-        } else {
-            // Timeout strategy configured → use user-defined or fallback to default
-            connectTimeout = config.get("connectTimeout") != null
-                    ? ((Number) config.get("connectTimeout")).intValue()
-                    : timeoutProperties.getDefaultConnectTimeout();
-            responseTimeout = config.get("responseTimeout") != null
-                    ? ((Number) config.get("responseTimeout")).intValue()
-                    : timeoutProperties.getDefaultResponseTimeout();
+            return chain.filter(exchange);
         }
+
+        int connectTimeout = intOrDefault(config.get("connectTimeout"),
+                timeoutProperties.getDefaultConnectTimeout());
+        int responseTimeout = intOrDefault(config.get("responseTimeout"),
+                timeoutProperties.getDefaultResponseTimeout());
 
         log.debug("Applying timeout for route {}: connect={}ms, response={}ms",
                 routeId, connectTimeout, responseTimeout);
@@ -87,6 +82,24 @@ public class TimeoutGlobalFilter implements GlobalFilter, Ordered {
         }
 
         return chain.filter(exchange);
+    }
+
+    /**
+     * Strategy config reaches the gateway as raw JSON, so a numeric field can arrive as a
+     * String; the previous unchecked (Number) cast turned that into a 500 on the hot path.
+     */
+    private static int intOrDefault(Object value, int fallback) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            try {
+                return Integer.parseInt(text.trim());
+            } catch (NumberFormatException e) {
+                log.warn("Ignoring non-numeric timeout value: {}", text);
+            }
+        }
+        return fallback;
     }
 
     @Override
