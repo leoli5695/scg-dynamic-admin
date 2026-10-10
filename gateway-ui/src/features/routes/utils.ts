@@ -332,6 +332,32 @@ export const toFormBinding = (
 // Payload building (form values -> RouteDefinition body)
 // ============================================================================
 
+/** A single model-mapping row in the AI route form (requested -> upstream model). */
+export interface AiModelMappingPair { key?: string; value?: string; }
+
+/** AI upstream row as edited in the form (modelMapping held as ordered pairs). */
+export interface AiUpstreamFormRow {
+  provider?: string;
+  weight?: number;
+  modelMappingPairs?: AiModelMappingPair[];
+}
+
+/** Record<string,string> -> ordered [{key,value}] pairs, for editing in a Form.List. */
+export const modelMappingToPairs = (mm?: Record<string, string>): AiModelMappingPair[] => (
+  mm ? Object.entries(mm).map(([key, value]) => ({ key, value })) : []
+);
+
+/** Ordered pairs -> Record<string,string>, dropping blank keys; undefined when empty. */
+export const pairsToModelMapping = (
+  pairs?: AiModelMappingPair[],
+): Record<string, string> | undefined => {
+  const out: Record<string, string> = {};
+  (pairs ?? []).forEach((p) => {
+    if (p && p.key && p.key.trim()) out[p.key.trim()] = p.value ?? '';
+  });
+  return Object.keys(out).length > 0 ? out : undefined;
+};
+
 export interface RouteFormValues {
   routeName: string;
   order?: number | string;
@@ -349,8 +375,8 @@ export interface RouteFormValues {
   grayRules?: GrayRule[];
   /** Route category: NORMAL (default) or AI. */
   category?: RouteCategory;
-  /** AI mode: bound AI services (upstreams). */
-  aiUpstreams?: Array<Partial<AiUpstream>>;
+  /** AI mode: bound AI services (upstreams), modelMapping edited as pairs. */
+  aiUpstreams?: AiUpstreamFormRow[];
   /** AI mode: model match predicates. */
   modelPredicates?: Array<Partial<AiModelPredicate>>;
 }
@@ -395,8 +421,7 @@ export const buildRoutePayload = (
       .map((u) => ({
         provider: u.provider as string,
         weight: u.weight ?? 100,
-        modelMapping: (u.modelMapping && Object.keys(u.modelMapping).length > 0)
-          ? u.modelMapping : undefined,
+        modelMapping: pairsToModelMapping(u.modelMappingPairs),
       }));
     if (aiUpstreams.length === 0) return null;
 

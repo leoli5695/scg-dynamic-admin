@@ -151,6 +151,13 @@
   "routes.ai_model_value_required": "Please enter a model name or prefix",
   "routes.ai_model_value_placeholder": "e.g. qwen- or gpt-4o",
   "routes.ai_add_model_predicate": "+ Add Model Match",
+  "routes.ai_model_mapping": "Model Mapping (optional)",
+  "routes.ai_model_mapping_hint": "Rewrite the requested model to the upstream model, e.g. gpt-4o -> qwen-max",
+  "routes.ai_model_mapping_key": "Requested model",
+  "routes.ai_model_mapping_value": "Upstream model",
+  "routes.ai_model_mapping_key_required": "Please enter the requested model name",
+  "routes.ai_model_mapping_value_required": "Please enter the upstream model name",
+  "routes.ai_add_model_mapping": "Add mapping",
   "routes.tab_all": "All Routes",
   "routes.tab_normal": "Normal Routes",
   "routes.tab_ai": "AI Routes"

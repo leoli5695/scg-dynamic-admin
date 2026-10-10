@@ -151,6 +151,13 @@
   "routes.ai_model_value_required": "请输入模型名或前缀",
   "routes.ai_model_value_placeholder": "例如 qwen- 或 gpt-4o",
   "routes.ai_add_model_predicate": "+ 添加模型匹配",
+  "routes.ai_model_mapping": "模型映射（可选）",
+  "routes.ai_model_mapping_hint": "把请求里的 model 改写成上游真实 model，例如 gpt-4o → qwen-max",
+  "routes.ai_model_mapping_key": "请求模型名",
+  "routes.ai_model_mapping_value": "上游模型名",
+  "routes.ai_model_mapping_key_required": "请输入请求模型名",
+  "routes.ai_model_mapping_value_required": "请输入上游模型名",
+  "routes.ai_add_model_mapping": "添加映射",
   "routes.tab_all": "全部路由",
   "routes.tab_normal": "普通路由",
   "routes.tab_ai": "AI 路由"

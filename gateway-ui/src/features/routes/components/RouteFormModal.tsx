@@ -19,7 +19,7 @@ import type {
 } from '../../../types/route';
 import type { NacosDiscoveryServiceInfo, ServiceDefinition } from '../../../types/service';
 import {
-  buildRoutePayload, stringifyPredicateArgs, sumWeights, toFormBinding,
+  buildRoutePayload, modelMappingToPairs, stringifyPredicateArgs, sumWeights, toFormBinding,
 } from '../utils';
 import type { RouteFormValues } from '../utils';
 import PredicateItem from './PredicateItem';
@@ -91,7 +91,7 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
     })),
     grayRules: route?.grayRules?.rules ?? [],
     aiUpstreams: (route?.aiUpstreams ?? []).map((u) => ({
-      provider: u.provider, weight: u.weight ?? 100, modelMapping: u.modelMapping,
+      provider: u.provider, weight: u.weight ?? 100, modelMappingPairs: modelMappingToPairs(u.modelMapping),
     })),
     modelPredicates: (route?.modelPredicates ?? []).map((p) => ({
       matchType: p.matchType || 'PREFIX', value: p.value,

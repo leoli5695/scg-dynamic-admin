@@ -36,35 +36,89 @@ const AiUpstreamsForm: React.FC<AiUpstreamsFormProps> = ({ aiServices }) => {
           <>
             {fields.map(({ key, name, ...restField }) => (
               <div key={key} style={{
-                display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, flexWrap: 'nowrap',
+                padding: '10px 12px', marginBottom: 8, borderRadius: 6,
+                border: '1px solid rgba(148, 163, 184, 0.2)',
               }}
               >
-                <Form.Item
-                  {...restField}
-                  name={[name, 'provider']}
-                  noStyle
-                  rules={[{ required: true, message: t('routes.ai_upstream_required') }]}
+                <div style={{
+                  display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'nowrap',
+                }}
                 >
-                  <Select
-                    placeholder={t('routes.ai_select_service')}
-                    style={{ width: 300, flexShrink: 0 }}
-                    size="middle"
-                    showSearch
-                    optionFilterProp="label"
-                    options={serviceOptions}
-                    notFoundContent={t('routes.ai_no_services')}
+                  <Form.Item
+                    {...restField}
+                    name={[name, 'provider']}
+                    noStyle
+                    rules={[{ required: true, message: t('routes.ai_upstream_required') }]}
+                  >
+                    <Select
+                      placeholder={t('routes.ai_select_service')}
+                      style={{ width: 300, flexShrink: 0 }}
+                      size="middle"
+                      showSearch
+                      optionFilterProp="label"
+                      options={serviceOptions}
+                      notFoundContent={t('routes.ai_no_services')}
+                    />
+                  </Form.Item>
+                  <Form.Item {...restField} name={[name, 'weight']} noStyle initialValue={100}>
+                    <InputNumber min={1} max={100} size="middle" style={{ width: 100, flexShrink: 0 }} addonAfter="%" />
+                  </Form.Item>
+                  <Button
+                    type="text"
+                    danger
+                    icon={<DeleteOutlined />}
+                    style={{ flexShrink: 0, padding: '4px' }}
+                    onClick={() => remove(name)}
                   />
-                </Form.Item>
-                <Form.Item {...restField} name={[name, 'weight']} noStyle initialValue={100}>
-                  <InputNumber min={1} max={100} size="middle" style={{ width: 100, flexShrink: 0 }} addonAfter="%" />
-                </Form.Item>
-                <Button
-                  type="text"
-                  danger
-                  icon={<DeleteOutlined />}
-                  style={{ flexShrink: 0, padding: '4px' }}
-                  onClick={() => remove(name)}
-                />
+                </div>
+
+                {/* Per-upstream model mapping: requested model -> upstream model */}
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 4 }} title={t('routes.ai_model_mapping_hint')}>
+                    {t('routes.ai_model_mapping')}
+                  </div>
+                  <Form.List name={[name, 'modelMappingPairs']}>
+                    {(mmFields, { add: addMm, remove: removeMm }) => (
+                      <>
+                        {mmFields.map(({ key: mmKey, name: mmName, ...mmRest }) => (
+                          <div key={mmKey} style={{
+                            display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, flexWrap: 'nowrap',
+                          }}
+                          >
+                            <Form.Item
+                              {...mmRest}
+                              name={[mmName, 'key']}
+                              noStyle
+                              rules={[{ required: true, message: t('routes.ai_model_mapping_key_required') }]}
+                            >
+                              <Input placeholder={t('routes.ai_model_mapping_key')} size="small" style={{ flex: 1 }} />
+                            </Form.Item>
+                            <span style={{ opacity: 0.5, flexShrink: 0 }}>→</span>
+                            <Form.Item
+                              {...mmRest}
+                              name={[mmName, 'value']}
+                              noStyle
+                              rules={[{ required: true, message: t('routes.ai_model_mapping_value_required') }]}
+                            >
+                              <Input placeholder={t('routes.ai_model_mapping_value')} size="small" style={{ flex: 1 }} />
+                            </Form.Item>
+                            <Button
+                              type="text"
+                              danger
+                              size="small"
+                              icon={<DeleteOutlined />}
+                              style={{ flexShrink: 0, padding: '2px' }}
+                              onClick={() => removeMm(mmName)}
+                            />
+                          </div>
+                        ))}
+                        <Button type="link" size="small" icon={<PlusOutlined />} onClick={() => addMm({})} style={{ padding: 0 }}>
+                          {t('routes.ai_add_model_mapping')}
+                        </Button>
+                      </>
+                    )}
+                  </Form.List>
+                </div>
               </div>
             ))}
             <Button type="dashed" onClick={() => add({ weight: 100 })} block icon={<PlusOutlined />}>
