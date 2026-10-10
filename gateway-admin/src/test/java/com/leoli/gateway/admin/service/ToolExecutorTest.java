@@ -1310,4 +1310,37 @@ class ToolExecutorTest {
             assertFalse((Boolean) data.get("matched"));  // Disabled route should not match
         }
     }
+
+    // ===================== 参数脱敏测试（点12） =====================
+
+    @Nested
+    @DisplayName("Arg Masking Tests")
+    class ArgMaskingTests {
+
+        @Test
+        @DisplayName("Sensitive-looking arg values are masked, others preserved")
+        void masksSensitiveArgValues() {
+            Map<String, Object> args = new HashMap<>();
+            args.put("routeId", ROUTE_ID);
+            args.put("apiKey", "sk-supersecret123456");
+            args.put("X-Api-Key", "abcdefgh12345678");
+            args.put("password", "pw");
+            args.put("thresholdMs", 500);
+
+            Map<String, Object> masked = toolExecutor.maskSensitiveArgs(args);
+
+            assertEquals(ROUTE_ID, masked.get("routeId"), "non-sensitive preserved");
+            assertEquals(500, masked.get("thresholdMs"), "non-sensitive preserved");
+            assertEquals("****3456", masked.get("apiKey"));
+            assertEquals("****5678", masked.get("X-Api-Key"), "dash variant normalised and masked");
+            assertEquals("****", masked.get("password"), "short secret fully masked");
+        }
+
+        @Test
+        @DisplayName("Null/empty args pass through without error")
+        void handlesNullAndEmpty() {
+            assertNull(toolExecutor.maskSensitiveArgs(null));
+            assertTrue(toolExecutor.maskSensitiveArgs(new HashMap<>()).isEmpty());
+        }
+    }
 }

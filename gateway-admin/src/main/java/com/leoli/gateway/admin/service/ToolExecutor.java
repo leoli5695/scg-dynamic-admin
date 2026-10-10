@@ -100,7 +100,7 @@ public class ToolExecutor {
 
     private ToolResult doExecute(String toolName, Map<String, Object> arguments,
                                  boolean humanConfirmed, String operator, String clientIp) {
-        log.info("Executing tool: {} with args: {} (humanConfirmed={})", toolName, arguments, humanConfirmed);
+        log.info("Executing tool: {} with args: {} (humanConfirmed={})", toolName, maskSensitiveArgs(arguments), humanConfirmed);
 
         long startTime = System.currentTimeMillis();
 
@@ -226,7 +226,7 @@ public class ToolExecutor {
                 try {
                     String instanceId = arguments.get("instanceId") != null
                             ? String.valueOf(arguments.get("instanceId")) : null;
-                    String argsJson = objectMapper.writeValueAsString(arguments);
+                    String argsJson = objectMapper.writeValueAsString(maskSensitiveArgs(arguments));
                     auditLogService.recordAuditLog(
                             instanceId,
                             operator != null ? operator : "AI_COPILOT",
@@ -250,6 +250,56 @@ public class ToolExecutor {
             log.error("Tool {} execution failed after {} ms: {}", toolName, duration, e.getMessage(), e);
             return ToolResult.error("Tool execution failed: " + e.getMessage());
         }
+    }
+
+    // ===================== 参数脱敏（点12） =====================
+
+    /**
+     * Arg keys whose values may carry credentials/PII. Matched case-insensitively as a
+     * substring after normalising '-' to '_', so apiKey / api_key / api-key / X-Api-Key all hit.
+     */
+    private static final Set<String> SENSITIVE_ARG_SUBSTRINGS = Set.of(
+            "apikey", "api_key", "token", "secret", "password", "passwd", "credential",
+            "authorization", "privatekey", "private_key", "accesskey", "secretkey",
+            "cookie", "session");
+
+    /**
+     * Shallow copy of {@code args} with sensitive-looking values masked, for safe logging and
+     * audit storage. Tool arguments are usually route/instance ids, but a future tool could
+     * carry a credential - masking at the two sinks (execute log + audit argsJson) keeps that
+     * from landing in plaintext logs/tables without touching each tool.
+     * Package-private for testing.
+     */
+    Map<String, Object> maskSensitiveArgs(Map<String, Object> args) {
+        if (args == null || args.isEmpty()) {
+            return args;
+        }
+        Map<String, Object> masked = new LinkedHashMap<>(args.size());
+        for (Map.Entry<String, Object> e : args.entrySet()) {
+            masked.put(e.getKey(), isSensitiveKey(e.getKey()) ? maskValue(e.getValue()) : e.getValue());
+        }
+        return masked;
+    }
+
+    private static boolean isSensitiveKey(String key) {
+        if (key == null) {
+            return false;
+        }
+        String lower = key.toLowerCase(Locale.ROOT).replace('-', '_');
+        for (String s : SENSITIVE_ARG_SUBSTRINGS) {
+            if (lower.contains(s)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Object maskValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String str = String.valueOf(value);
+        return str.length() <= 4 ? "****" : "****" + str.substring(str.length() - 4);
     }
 
     // ===================== 监控诊断类工具执行 =====================
