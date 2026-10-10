@@ -3,6 +3,7 @@ package com.leoli.gateway.ai;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -36,13 +37,24 @@ public class AdminProviderKeyResolver implements ProviderKeyResolver {
     @Value("${gateway.ai.key-cache-ttl-seconds:300}")
     private long keyCacheTtlSeconds;
 
-    private final Cache<String, String> keyCache = Caffeine.newBuilder()
-            .maximumSize(1000)
-            .expireAfterWrite(Duration.ofSeconds(300))
-            .build();
+    /**
+     * Built in {@link #init()} rather than as a field initializer: {@code @Value} fields are
+     * still 0 during field-initialization, so referencing {@code keyCacheTtlSeconds} here would
+     * silently bake in a 0s TTL. Constructing after injection makes the configured TTL real.
+     */
+    private Cache<String, String> keyCache;
 
     public AdminProviderKeyResolver(WebClient webClient) {
         this.webClient = webClient;
+    }
+
+    @PostConstruct
+    void init() {
+        long ttl = keyCacheTtlSeconds > 0 ? keyCacheTtlSeconds : 300L;
+        this.keyCache = Caffeine.newBuilder()
+                .maximumSize(1000)
+                .expireAfterWrite(Duration.ofSeconds(ttl))
+                .build();
     }
 
     @Override
