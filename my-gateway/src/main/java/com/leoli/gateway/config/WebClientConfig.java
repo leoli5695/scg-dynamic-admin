@@ -26,9 +26,6 @@ public class WebClientConfig {
     @Value("${gateway.webclient.max-connections:100}")
     private int maxConnections;
 
-    @Value("${gateway.webclient.max-connections-per-host:20}")
-    private int maxConnectionsPerHost;
-
     @Value("${gateway.webclient.pending-acquire-timeout:30000}")
     private int pendingAcquireTimeoutMs;
 
@@ -48,15 +45,20 @@ public class WebClientConfig {
     private int responseTimeoutMs;
 
     /**
-     * Create a ConnectionProvider with optimized settings.
-     * - maxConnections: total maximum connections in the pool
-     * - maxConnectionsPerHost: maximum connections per host
-     * - pendingAcquireTimeout: timeout for acquiring a connection from pool
-     * - idleTimeout: time before idle connections are evicted
-     * - maxLifeTime: maximum lifetime of a connection in pool
+     * Outbound client for the gateway's OWN calls (admin provider-key fetch,
+     * OAuth2, embedding, trace export).
+     * <p>
+     * Deliberately not a {@code @Bean}. SCG's routing {@code HttpClient} is
+     * conditional-on-missing, so exporting one here made this pool - sized for a
+     * handful of admin calls - the cap on every proxied upstream connection.
+     * Measured on the perf harness: upstream connections stayed pinned at
+     * {@code maxConnections} (100) at 100, 200 and 400 concurrent streams, so
+     * streams queued on pool acquisition and TTFT grew to seconds; raising the
+     * value to 800 moved the observed cap to ~400 connections, confirming the
+     * causal link. Routing pool sizing belongs in
+     * {@code spring.cloud.gateway.httpclient.pool}.
      */
-    @Bean
-    public ConnectionProvider connectionProvider() {
+    private HttpClient outboundHttpClient() {
         ConnectionProvider provider = ConnectionProvider.builder("gateway-webclient-pool")
                 .maxConnections(maxConnections)
                 .pendingAcquireTimeout(Duration.ofMillis(pendingAcquireTimeoutMs))
@@ -65,19 +67,14 @@ public class WebClientConfig {
                 .maxLifeTime(Duration.ofMillis(maxLifeTimeMs))
                 .build();
 
-        log.info("WebClient ConnectionPool configured: maxConnections={}, maxConnectionsPerHost={}, " +
+        // reactor-netty's maxConnections is already per remote host; there is no
+        // separate per-host knob, so the old log line claimed a limit that was
+        // never applied.
+        log.info("WebClient outbound ConnectionPool configured: maxConnections={} (per host), " +
                 "pendingAcquireTimeout={}ms, idleTimeout={}ms, maxLifeTime={}ms",
-                maxConnections, maxConnectionsPerHost, pendingAcquireTimeoutMs, idleTimeoutMs, maxLifeTimeMs);
+                maxConnections, pendingAcquireTimeoutMs, idleTimeoutMs, maxLifeTimeMs);
 
-        return provider;
-    }
-
-    /**
-     * Create HttpClient with connection provider and timeout settings.
-     */
-    @Bean
-    public HttpClient httpClient(ConnectionProvider connectionProvider) {
-        return HttpClient.create(connectionProvider)
+        return HttpClient.create(provider)
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeoutMs)
                 .responseTimeout(Duration.ofMillis(responseTimeoutMs))
                 .compress(true);
@@ -89,9 +86,9 @@ public class WebClientConfig {
      * that share the same connection pool.
      */
     @Bean
-    public WebClient.Builder webClientBuilder(HttpClient httpClient) {
+    public WebClient.Builder webClientBuilder() {
         return WebClient.builder()
-                .clientConnector(new ReactorClientHttpConnector(httpClient));
+                .clientConnector(new ReactorClientHttpConnector(outboundHttpClient()));
     }
 
     /**
