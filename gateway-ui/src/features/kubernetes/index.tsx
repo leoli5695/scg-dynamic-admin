@@ -95,6 +95,13 @@ const KubernetesPage: React.FC = () => {
         </div>
         <div className="k8s-page-actions">
           <Button
+            icon={<ReloadOutlined />}
+            onClick={loadClusters}
+            loading={loading}
+          >
+            {t('common.refresh')}
+          </Button>
+          <Button
             type="primary"
             icon={<PlusOutlined />}
             onClick={() => setImportModalVisible(true)}
@@ -137,17 +144,6 @@ const KubernetesPage: React.FC = () => {
         />
       </div>
 
-      {/* Action Buttons */}
-      <div className="k8s-action-bar">
-        <Button
-          icon={<ReloadOutlined />}
-          onClick={loadClusters}
-          loading={loading}
-        >
-          {t('common.refresh')}
-        </Button>
-      </div>
-
       {/* Cluster Cards */}
       <Spin spinning={loading}>
         {clusters.length === 0 ? (
@@ -164,17 +160,23 @@ const KubernetesPage: React.FC = () => {
             </Button>
           </div>
         ) : (
-          <div className="cluster-grid">
-            {clusters.map(cluster => (
-              <ClusterCard
-                key={cluster.id}
-                cluster={cluster}
-                onDetail={setSelectedCluster}
-                onRefresh={handleRefreshConnection}
-                onDelete={handleDeleteCluster}
-              />
-            ))}
-          </div>
+          <>
+            <div className="k8s-section-header">
+              <Title level={5} style={{ margin: 0 }}>{t('k8s.cluster_list')}</Title>
+              <Text className="k8s-section-count">{t('k8s.cluster_count', { count: clusters.length })}</Text>
+            </div>
+            <div className="cluster-grid">
+              {clusters.map(cluster => (
+                <ClusterCard
+                  key={cluster.id}
+                  cluster={cluster}
+                  onDetail={setSelectedCluster}
+                  onRefresh={handleRefreshConnection}
+                  onDelete={handleDeleteCluster}
+                />
+              ))}
+            </div>
+          </>
         )}
       </Spin>
 

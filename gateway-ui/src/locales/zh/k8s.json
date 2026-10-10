@@ -107,5 +107,11 @@
   "k8s.connection_rate": "连接率",
   "k8s.running_apps": "运行中应用",
   "k8s.no_clusters": "暂无集群",
-  "k8s.import_first_cluster": "导入您的第一个 Kubernetes 集群以开始使用"
+  "k8s.import_first_cluster": "导入您的第一个 Kubernetes 集群以开始使用",
+  "k8s.cluster_list": "集群列表",
+  "k8s.cluster_count": "共 {{count}} 个集群",
+  "k8s.status_connected": "已连接",
+  "k8s.status_failed": "连接失败",
+  "k8s.status_unknown": "未知",
+  "k8s.version_unknown": "版本未知"
 }

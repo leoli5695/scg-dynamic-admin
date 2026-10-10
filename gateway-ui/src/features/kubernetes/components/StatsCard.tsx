@@ -20,8 +20,12 @@ export const StatsCard: React.FC<StatsCardProps> = ({
     <div className={`stat-card-icon ${iconType}`}>
       {icon}
     </div>
-    <div className="stat-card-label">{title}</div>
-    <div className="stat-card-value">{value}</div>
-    {subtitle && <div className="stat-card-subtitle">{subtitle}</div>}
+    <div className="stat-card-body">
+      <div className="stat-card-label">{title}</div>
+      <div className="stat-card-value">
+        {value}
+        {subtitle && <span className="stat-card-subtitle">{subtitle}</span>}
+      </div>
+    </div>
   </div>
 );

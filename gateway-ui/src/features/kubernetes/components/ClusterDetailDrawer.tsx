@@ -34,28 +34,31 @@ const getStatusColor = (status: string) => {
 /** Static cluster metadata shown on the overview tab. */
 const ClusterInfo: React.FC<{ cluster: KubernetesCluster }> = ({ cluster }) => {
   const { t } = useTranslation();
+  const fallback = <Text type="secondary">-</Text>;
   return (
     <div className="k8s-descriptions">
       <div className="k8s-description-item">
         <span className="k8s-description-label">{t('k8s.server_url')}</span>
         <span className="k8s-description-value">
-          <Text copyable style={{ color: '#f1f5f9' }}>{cluster.serverUrl || 'N/A'}</Text>
+          {cluster.serverUrl
+            ? <Text copyable style={{ color: '#f1f5f9' }}>{cluster.serverUrl}</Text>
+            : fallback}
         </span>
       </div>
       <div className="k8s-description-item">
         <span className="k8s-description-label">{t('k8s.context')}</span>
-        <span className="k8s-description-value">{cluster.contextName || 'N/A'}</span>
+        <span className="k8s-description-value">{cluster.contextName || fallback}</span>
       </div>
       <div className="k8s-description-item">
         <span className="k8s-description-label">{t('k8s.cluster_version')}</span>
         <span className="k8s-description-value">
-          <Tag color="blue">{cluster.clusterVersion || 'N/A'}</Tag>
+          {cluster.clusterVersion ? <Tag color="blue">v{cluster.clusterVersion}</Tag> : fallback}
         </span>
       </div>
       <div className="k8s-description-item">
         <span className="k8s-description-label">{t('k8s.last_checked')}</span>
         <span className="k8s-description-value">
-          {cluster.lastCheckedAt ? new Date(cluster.lastCheckedAt).toLocaleString() : 'N/A'}
+          {cluster.lastCheckedAt ? new Date(cluster.lastCheckedAt).toLocaleString() : fallback}
         </span>
       </div>
     </div>

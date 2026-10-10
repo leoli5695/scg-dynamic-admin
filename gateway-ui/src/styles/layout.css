@@ -362,9 +362,6 @@
   font-size: var(--text-base);
   font-weight: var(--weight-semibold);
   color: var(--text-primary);
-  margin-bottom: var(--space-4);
-  padding-bottom: var(--space-3);
-  border-bottom: 1px solid var(--border-subtle);
 }
 
 .form-row {

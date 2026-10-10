@@ -180,7 +180,6 @@
 /* Remove all default outlines and borders */
 .ant-modal,
 .ant-modal *,
-.ant-modal-container,
 .ant-modal-container *,
 .ant-modal-root,
 .ant-modal-root * {
@@ -194,8 +193,12 @@
   border: none !important;
 }
 
+/* antd v6 panel is .ant-modal-container (v5's .ant-modal-content no longer exists) */
 .ant-modal-container {
-  background: transparent !important;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: var(--radius-xl) !important;
+  box-shadow: var(--shadow-xl) !important;
   padding: 0 !important;
 }
 
@@ -219,23 +222,23 @@
   border: 1px solid transparent !important;
 }
 
-/* Primary button - white with dark text */
+/* Primary button - brand blue, consistent with page-level primaries */
 .ant-modal-footer .ant-btn-primary {
-  background: var(--text-primary) !important;
-  border-color: var(--text-primary) !important;
-  color: var(--bg-base) !important;
-  box-shadow: none !important;
+  background: #3b82f6 !important;
+  border-color: #3b82f6 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 10px rgba(59, 130, 246, 0.35) !important;
 }
 
 .ant-modal-footer .ant-btn-primary:hover {
-  background: var(--text-primary) !important;
-  border-color: var(--text-primary) !important;
-  color: var(--bg-base) !important;
+  background: #2563eb !important;
+  border-color: #2563eb !important;
+  color: #ffffff !important;
 }
 
 .ant-modal-footer .ant-btn-primary:active {
-  background: var(--text-secondary) !important;
-  border-color: var(--text-secondary) !important;
+  background: #1d4ed8 !important;
+  border-color: #1d4ed8 !important;
 }
 
 /* Default button - subtle border */
@@ -2426,16 +2429,16 @@
 }
 
 .modal-footer-modern .ant-btn-primary {
-  background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+  background: #3b82f6;
   border: none;
   color: white;
-  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
+  box-shadow: 0 2px 10px rgba(59, 130, 246, 0.35);
 }
 
 .modal-footer-modern .ant-btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(79, 70, 229, 0.4);
-  background: linear-gradient(135deg, #4338CA 0%, #6D28D9 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.45);
+  background: #2563eb;
 }
 
 /* Select with Icon */
@@ -3180,7 +3183,7 @@
 }
 
 .ant-input::placeholder {
-  color: #f1f5f9 !important;
+  color: var(--text-muted) !important;
   opacity: 1 !important;
 }
 
@@ -3192,13 +3195,13 @@
 .ant-select-content .ant-select-placeholder,
 .form-item-row .ant-select-placeholder,
 .form-item-row .ant-select .ant-select-placeholder {
-  color: #f1f5f9 !important;
+  color: var(--text-muted) !important;
   opacity: 1 !important;
 }
 
 /* InputNumber placeholder */
 .ant-input-number-input::placeholder {
-  color: #f1f5f9 !important;
+  color: var(--text-muted) !important;
   opacity: 1 !important;
 }
 
@@ -3206,7 +3209,7 @@
 .ant-modal .ant-select-placeholder,
 .ant-modal .ant-select-selection-placeholder,
 .ant-modal .ant-input::placeholder {
-  color: #f1f5f9 !important;
+  color: var(--text-muted) !important;
 }
 
 .ant-form-item-explain {
@@ -3660,10 +3663,9 @@ html {
   background: var(--gradient-primary) !important;
   border-color: var(--color-primary) !important;
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2) !important;
-}/* Premium tabs styling */
-.ant-tabs-tab-active {
-  background: linear-gradient(180deg, rgba(102, 126, 234, 0.1) 0%, transparent 100%) !important;
 }
+
+/* Premium tabs styling: active state is conveyed by ink-bar + text color, no background patch */
 
 /* Premium card meta description */
 .ant-card-meta-description {
@@ -3697,7 +3699,7 @@ html {
 .ant-descriptions-item-label {
   color: #cbd5e1 !important;
   font-weight: 500 !important;
-  background: rgba(102, 126, 234, 0.05) !important;
+  background: transparent !important;
 }
 
 .ant-descriptions-item-content {
@@ -4752,15 +4754,15 @@ kbd {
   background-color: var(--bg-elevated) !important;
 }
 
-/* 空状态 - 最高优先级强制深色 */
+/* 空状态 - 透明底、适度留白（原 120px padding + 色块在大表格里像一块石板） */
 .ant-table-placeholder,
 .ant-empty,
 .tracing-empty-state,
 .tracing-table .ant-empty {
-  background-color: var(--bg-elevated) !important;
-  border-radius: 12px !important;
-  padding: 120px 40px !important;
-  margin: 16px !important;
+  background-color: transparent !important;
+  border-radius: 0 !important;
+  padding: 40px 16px !important;
+  margin: 0 !important;
 }
 
 .ant-empty-description,
@@ -5242,15 +5244,10 @@ kbd {
   background-color: var(--bg-card) !important;
 }
 
-/* 表单区块强制深色 */
+/* 表单区块强制深色 — 仅限自定义类；宽泛元素选择器曾给每个 Form.Item 和 modal body 子块刷出色带 */
 .form-section-modern,
 .section-content,
-.section-header,
-.ant-form > div,
-.ant-card,
-.ant-card-body,
-.ant-modal-body > div,
-.ant-modal-body > div > div {
+.section-header {
   background-color: var(--bg-elevated) !important;
   border: 1px solid rgba(148, 163, 184, 0.2) !important;
   border-radius: 12px !important;
@@ -5282,14 +5279,14 @@ kbd {
   background-color: var(--bg-card) !important;
 }
 
-/* 路由弹窗内placeholder白色 */
+/* 路由弹窗内placeholder */
 .route-modal .ant-select-placeholder,
 .route-modal .ant-select-selection-placeholder,
 .route-modal .ant-input::placeholder,
 .ant-modal .ant-select-placeholder,
 .ant-modal .ant-select-selection-placeholder,
 .ant-modal .ant-input::placeholder {
-  color: #ffffff !important;
+  color: var(--text-muted) !important;
   opacity: 1 !important;
 }
 
@@ -5318,22 +5315,20 @@ kbd {
 .service-binding-item,
 .gray-rule-section,
 .plugin-section,
-.ant-card,
-.ant-card-body,
 .form-section-modern,
-.section-content,
-.ant-modal-body > div,
-.ant-modal-body > div > div {
+.section-content {
   background-color: var(--bg-elevated) !important;
   border: 1px solid rgba(148, 163, 184, 0.25) !important;
   border-radius: 12px !important;
-}/* 输入框和选择器 */
+}
+
+/* 输入框和选择器 - refined dark surface (was too heavy: bg-secondary + 0.4 border) */
 .ant-input,
 .ant-input-number,
 .ant-select-selector {
-  background-color: var(--bg-secondary) !important;
-  border: 1px solid rgba(148, 163, 184, 0.4) !important;
-  color: #f1f5f9 !important;
+  background-color: rgba(9, 15, 26, 0.55) !important;
+  border: 1px solid rgba(148, 163, 184, 0.16) !important;
+  color: var(--text-primary) !important;
 }
 
 /* Gray rule select dropdown arrow - make it more visible */

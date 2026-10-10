@@ -5,10 +5,11 @@
  */
 import React, { useState } from 'react';
 import {
-  Alert, Badge, Divider, Form, InputNumber, Modal, Radio, Select, Typography
+  Alert, Badge, Divider, Form, InputNumber, Radio, Select, Typography
 } from 'antd';
 import { ApiOutlined, EditOutlined, GlobalOutlined, SettingOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { FormModal } from '../../../components/ui/FormModal';
 import type { Plugin, PluginBinding, PluginConfigSchema } from '../../../types/plugin';
 import type { RouteResponse } from '../../../types/route';
 import { GLOBAL_BINDING_ROUTE_ID } from '../../../types/plugin';
@@ -130,14 +131,13 @@ const BindingFormModal: React.FC<BindingFormModalProps> = ({
   );
 
   return (
-    <Modal
+    <FormModal
       title={title}
       open
+      onClose={onClose}
       onOk={handleOk}
       confirmLoading={submitting}
-      onCancel={onClose}
       width={600}
-      destroyOnHidden
     >
       {!isEdit && (
         <Alert
@@ -204,7 +204,7 @@ const BindingFormModal: React.FC<BindingFormModalProps> = ({
 
         {renderConfigForm()}
       </Form>
-    </Modal>
+    </FormModal>
   );
 };
 

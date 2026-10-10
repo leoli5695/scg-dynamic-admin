@@ -119,5 +119,12 @@
   "instance.jaeger_server_addr_placeholder": "例如：jaeger.other-namespace.svc.cluster.local:4317",
   "instance.prometheus_server_addr": "Prometheus 地址（可选）",
   "instance.prometheus_server_addr_tooltip": "Prometheus 地址用于指标采集。同一集群内可留空。",
-  "instance.prometheus_server_addr_placeholder": "例如：prometheus.other-namespace.svc.cluster.local:9090"
+  "instance.prometheus_server_addr_placeholder": "例如：prometheus.other-namespace.svc.cluster.local:9090",
+  "instance.config_section": "服务地址配置",
+  "instance.config_section_hint": "同集群内可留空，跨集群需填写",
+  "instance.resource_section": "资源与副本",
+  "instance.image_section": "镜像配置",
+  "instance.page_subtitle": "管理网关实例的创建、启停与扩缩容",
+  "instance.no_clusters_available": "暂无可用集群，先导入一个 Kubernetes 集群",
+  "instance.go_import_cluster": "去导入集群"
 }

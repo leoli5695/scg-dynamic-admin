@@ -1,8 +1,6 @@
 /* Global Styles - Western Aesthetic */
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
-  background-color: #f8fafc;
-  color: #1e293b;
 }
 
 /* Sidebar Styles */
@@ -57,105 +55,10 @@ body {
   }
 }
 
-/* Header Styles */
-.ant-layout-header {
-  background-color: white !important;
-  border-bottom: 1px solid #e2e8f0 !important;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05) !important;
-}
-
-/* Content Area */
-.ant-layout-content {
-  background-color: #f8fafc !important;
-}
-
-/* Card Styles */
-.ant-card {
-  border-radius: 8px !important;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06) !important;
-  border: 1px solid #e2e8f0 !important;
-  transition: box-shadow 0.2s ease !important;
-  
-  &:hover {
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
-  }
-}
-
-/* Button Styles */
-.ant-btn-primary {
-  background-color: #165DFF !important;
-  border-color: #165DFF !important;
-  border-radius: 6px !important;
-  font-weight: 500;
-  transition: all 0.2s ease !important;
-  
-  &:hover {
-    background-color: #1d4ed8 !important;
-    border-color: #1d4ed8 !important;
-  }
-}
-
-.ant-btn {
-  border-radius: 6px !important;
-  transition: all 0.2s ease !important;
-}
-
-/* Table Styles */
-.ant-table {
-  background-color: white !important;
-  border-radius: 8px !important;
-  
-  thead > tr > th {
-    background-color: #f8fafc !important;
-    color: #64748b !important;
-    font-weight: 600 !important;
-    font-size: 13px !important;
-    border-bottom: 1px solid #e2e8f0 !important;
-    padding: 12px 16px !important;
-  }
-  
-  tbody > tr {
-    transition: background-color 0.2s ease !important;
-    
-    &:hover {
-      background-color: #f1f5f9 !important;
-    }
-    
-    td {
-      padding: 12px 16px !important;
-      border-bottom: 1px solid #e2e8f0 !important;
-      color: #1e293b !important;
-      font-size: 14px !important;
-    }
-  }
-}
-
-/* Tag Styles */
-.ant-tag {
-  border-radius: 4px !important;
-  font-size: 12px !important;
-  padding: 2px 8px !important;
-}
-
-/* Drawer Styles */
-.ant-drawer {
-  .ant-drawer-header {
-    border-bottom: 1px solid #e2e8f0 !important;
-    padding: 16px 24px !important;
-  }
-  
-  .ant-drawer-title {
-    font-size: 18px !important;
-    font-weight: 600 !important;
-    color: #1e293b !important;
-  }
-}
-
-/* Form Styles */
-.ant-form-item-label > label {
-  font-weight: 500 !important;
-  color: #1e293b !important;
-}
+/* Header / content / card / button / table / tag / drawer / form visuals live in
+   styles/variables.css + styles/antd-overrides.css + theme.ts (dark design system).
+   The legacy light-theme !important blocks that used to sit here fought the dark
+   theme (white table header, invisible drawer titles and form labels) and were removed. */
 
 /* Page Layout Styles */
 .page-container {
@@ -180,14 +83,14 @@ body {
 .title {
   font-size: 20px !important;
   font-weight: 600 !important;
-  color: #1e293b !important;
+  color: var(--text-primary) !important;
   margin: 0 !important;
   line-height: 1.5;
 }
 
 .subtitle {
   font-size: 13px !important;
-  color: #64748b !important;
+  color: var(--text-muted) !important;
   font-weight: 400 !important;
 }
 

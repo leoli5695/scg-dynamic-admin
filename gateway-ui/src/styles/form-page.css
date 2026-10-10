@@ -90,11 +90,11 @@
 
 /* ==================== Form Sections ==================== */
 .form-section {
-  margin-bottom: 28px;
-  padding: 20px;
-  background: rgba(26,39,64, 0.4);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 24px;
+  padding: 4px 4px 0;
+  background: transparent;
+  border-radius: 0;
+  border: none;
 }
 
 .form-section-header {

@@ -104,6 +104,25 @@
   border-radius: var(--radius-lg);
 }
 
+/* Equal-height columns: status card and quota card stretch to the same row height */
+.license-tab-content .ant-row > .ant-col {
+  display: flex;
+}
+
+.license-tab-content .ant-row > .ant-col > .ant-card {
+  width: 100%;
+}
+
+.license-status-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.quota-divider {
+  margin: var(--space-4) 0;
+}
+
 .quota-card .ant-card-head-title {
   color: var(--text-primary);
 }

@@ -60,6 +60,18 @@
   font-weight: var(--weight-medium);
 }
 
+/* antd v6: select surface lives on .ant-select; inner .ant-select-content must stay transparent (no box-in-box) */
+.ant-select .ant-select-content {
+  background: transparent !important;
+  border: none !important;
+}
+
+.ant-select:not(.ant-select-borderless):not(.ant-select-underlined) {
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+}
+
 /* Dark Select Dropdown for Modal */
 .dark-select .ant-select-selector {
   background: var(--bg-elevated) !important;
@@ -185,8 +197,18 @@
 /* Table scrollbar */
 .ant-table-body::-webkit-scrollbar { width: 6px; height: 6px; }
 .ant-table-body::-webkit-scrollbar-track { background: transparent; }
-.ant-table-body::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: var(--radius-full); }
-.ant-table-body::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+.ant-table-body::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.25); border-radius: var(--radius-full); }
+.ant-table-body::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.4); }
+.ant-table-content::-webkit-scrollbar { height: 6px; }
+.ant-table-content::-webkit-scrollbar-track { background: transparent; }
+.ant-table-content::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.25); border-radius: var(--radius-full); }
+
+/* modern browsers: keep the horizontal scrollport scrollbar subtle on dark UI */
+.ant-table-content,
+.ant-table-body {
+  scrollbar-color: rgba(148, 163, 184, 0.25) transparent;
+  scrollbar-width: thin;
+}
 
 /* ==================== Card ==================== */
 .ant-card {
@@ -212,15 +234,16 @@
 }
 
 /* ==================== Modal ==================== */
-.ant-modal-content {
+.ant-modal-container {
   background: var(--bg-card);
   border-radius: var(--radius-xl);
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-xl);
 }
 
-.ant-modal-header {
-  background: transparent;
+/* Specificity beats antd v6 cssinjs (.ant-modal .ant-modal-header), which ships zero padding */
+.ant-modal .ant-modal-container .ant-modal-header {
+  background: var(--bg-card);
   border-bottom: 1px solid var(--border-subtle);
   padding: var(--space-5) var(--space-6);
 }
@@ -231,12 +254,13 @@
   font-size: var(--text-lg);
 }
 
-.ant-modal-body {
+.ant-modal .ant-modal-container .ant-modal-body {
   color: var(--text-primary);
   padding: var(--space-6);
 }
 
-.ant-modal-footer {
+.ant-modal .ant-modal-container .ant-modal-footer {
+  background: transparent;
   border-top: 1px solid var(--border-subtle);
   padding: var(--space-4) var(--space-6);
 }

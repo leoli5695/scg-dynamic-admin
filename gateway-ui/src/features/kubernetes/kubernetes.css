@@ -900,8 +900,8 @@ body .ant-modal {
 }
 
 .namespace-select .ant-select-selector {
-  background: var(--bg-base) !important;
-  border: 1px solid var(--border-strong) !important;
+  background: transparent !important;
+  border: none !important;
   border-radius: 8px !important;
   height: 40px !important;
 }
@@ -1603,4 +1603,52 @@ body .ant-modal {
 
 .pod-detail-card .ant-table-tbody > tr:hover > td {
   background: var(--bg-card) !important;
+}
+
+/* ==================== Detail Drawer Polish ==================== */
+/* drawer content must never scroll horizontally (transient overflow flashed a native scrollbar) */
+.ant-drawer-body {
+  overflow-x: hidden;
+}
+
+/* drawer tables: no horizontal scrollbar (trackpad/shift+wheel still scroll); kills the loading flash */
+.ant-drawer .ant-table-content,
+.ant-drawer .ant-table-body {
+  scrollbar-width: none;
+}
+
+.ant-drawer .ant-table-content::-webkit-scrollbar,
+.ant-drawer .ant-table-body::-webkit-scrollbar {
+  display: none;
+}
+
+/* Namespace select: single container (v6 paints an inner black box via .ant-select-content) */
+.ant-drawer .ant-select-content {
+  background: transparent !important;
+  border: none !important;
+}
+
+.ant-drawer .ant-select {
+  background: rgba(9, 15, 26, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 10px;
+  padding: 0 12px;
+}
+
+/* Cards inside the drawer: one surface, no box-in-box */
+.ant-drawer .ant-card-body {
+  border: none;
+  background: transparent;
+}
+
+.ant-drawer .k8s-table-container {
+  border: none;
+  background: transparent;
+}
+
+.ant-drawer .ant-table-placeholder,
+.ant-drawer .ant-empty {
+  background: transparent !important;
+  margin: 0 !important;
+  padding: 40px 16px !important;
 }

@@ -75,7 +75,7 @@ const InstancesListPage: React.FC = () => {
             <span className="instances-page-title-text">{t('menu.instances')}</span>
           </div>
           <Text className="instances-page-subtitle">
-            {t('instance.description') || t('common.manage_instances')}
+            {t('instance.page_subtitle')}
           </Text>
         </div>
         <div className="instances-page-actions">
@@ -94,7 +94,7 @@ const InstancesListPage: React.FC = () => {
       <Spin spinning={loading}>
         <Row gutter={[16, 16]} className="instances-grid">
           {list.map((instance) => (
-            <Col xs={24} sm={12} lg={8} xl={6} key={instance.id}>
+            <Col xs={24} sm={12} lg={8} xl={8} key={instance.id}>
               <Card
                 className={`instance-card ${statusBarClass(instance.statusCode)}`}
                 hoverable
@@ -234,6 +234,19 @@ const InstancesListPage: React.FC = () => {
               image={Empty.PRESENTED_IMAGE_SIMPLE}
               description={<Text type="secondary">{t('instance.no_instances')}</Text>}
             />
+          </div>
+        )}
+
+        {list.length === 0 && !loading && clusterCount === 0 && (
+          <div className="instances-empty">
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={<Text type="secondary">{t('instance.no_clusters_available')}</Text>}
+            >
+              <Button type="primary" onClick={() => navigate('/kubernetes')}>
+                {t('instance.go_import_cluster')}
+              </Button>
+            </Empty>
           </div>
         )}
       </Spin>

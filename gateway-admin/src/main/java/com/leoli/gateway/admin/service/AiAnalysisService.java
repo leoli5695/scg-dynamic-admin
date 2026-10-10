@@ -116,16 +116,18 @@ public class AiAnalysisService {
             "OPENAI", List.of("gpt-4o", "gpt-4-turbo", "gpt-4"),
             "GEMINI", List.of("gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"),
             "CLAUDE", List.of("claude-3.5-sonnet", "claude-3-opus", "claude-3-haiku"),
-            // 百炼平台 - 只保留最新版本模型
+            // 百炼平台 - 只保留最新版本模型（2026-10-10 按 DashScope /compatible-mode/v1/models
+            // 活目录核对：旧名单 qwen-max/deepseek-v3/kimi-k2/moonshot-v1-128k/glm-4.x 均已落后一代以上，
+            // moonshot-v1-128k 甚至已下架）
             "BAILIAN", List.of(
                     // Qwen 系列 (最新)
-                    "qwen-max", "qwen-plus", "qwen-turbo",
+                    "qwen3.8-max", "qwen3.7-plus", "qwen3.8-flash", "qwen3-coder-next",
                     // DeepSeek 系列 (最新)
-                    "deepseek-v3", "deepseek-r1",
+                    "deepseek-v4-pro", "deepseek-v4.1-flash",
                     // Kimi 系列 (最新)
-                    "kimi-k2", "moonshot-v1-128k",
+                    "kimi-k3", "kimi-k2.7-code",
                     // GLM 系列 (最新)
-                    "glm-5", "glm-4.7", "glm-4.5"
+                    "glm-5.3", "glm-5.2"
             )
     );
 

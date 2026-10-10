@@ -52,8 +52,8 @@ public class ChatSessionManager {
 
     private final Map<String, SessionState> sessions = new ConcurrentHashMap<>();
 
+    /** 上下文滑动窗口：内存与 DB 都只保留每会话最近 20 条（最简单的"上下文压缩"）。 */
     public static final int MAX_HISTORY_SIZE = 20;
-    public static final int DEFAULT_HISTORY_SIZE = 10;
     public static final long SESSION_TTL_MS = 30 * 60 * 1000L;
     public static final long EVICTION_INTERVAL_MS = 10 * 60 * 1000L;
 
@@ -137,8 +137,9 @@ public class ChatSessionManager {
         synchronized (state) {
             ensureLoadedLocked(state, sessionId);
             state.history.add(new ChatMessage(role, content, toolDigest));
+            // 滑动窗口：超出上限只删最旧的，稳定保持最近 MAX_HISTORY_SIZE 条
             if (state.history.size() > MAX_HISTORY_SIZE) {
-                int removeCount = state.history.size() - DEFAULT_HISTORY_SIZE;
+                int removeCount = state.history.size() - MAX_HISTORY_SIZE;
                 for (int i = 0; i < removeCount; i++) {
                     state.history.remove(0);
                 }
@@ -157,6 +158,7 @@ public class ChatSessionManager {
         } catch (Exception ex) {
             log.warn("Failed to persist chat message for session {}: {}", sessionId, ex.getMessage());
         }
+        pruneOldMessages(sessionId);
         log.debug("Added message to history: session={}, role={}, size={}", sessionId, role, size);
     }
 
@@ -175,6 +177,21 @@ public class ChatSessionManager {
             for (int i = 0; i < removeCount; i++) {
                 state.history.remove(0);
             }
+        }
+    }
+
+    /**
+     * 最简单"上下文压缩"：DB（真相源）也只保留每会话最近 {@link #MAX_HISTORY_SIZE} 条，
+     * 物理删除更旧的行——30 条落库后只留最近 20 条。失败仅告警，不影响对话。
+     */
+    private void pruneOldMessages(String sessionId) {
+        try {
+            List<CopilotChatMessageEntity> rows = messageRepository.findBySessionIdOrderByIdAsc(sessionId);
+            if (rows != null && rows.size() > MAX_HISTORY_SIZE) {
+                messageRepository.deleteAll(rows.subList(0, rows.size() - MAX_HISTORY_SIZE));
+            }
+        } catch (Exception ex) {
+            log.warn("Failed to prune old chat messages for session {}: {}", sessionId, ex.getMessage());
         }
     }
 

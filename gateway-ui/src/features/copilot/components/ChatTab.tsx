@@ -46,6 +46,8 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
   const [executing, setExecuting] = useState(false);
   const [streamNote, setStreamNote] = useState('');
   const [streamingContent, setStreamingContent] = useState('');
+  // 终态事件（message/error）已到达：进度提示必须立刻退场，绝不与正式回答同框
+  const [streamDone, setStreamDone] = useState(false);
   const [feedback, setFeedback] = useState<Record<number, 'UP' | 'DOWN'>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -99,6 +101,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
     setLoading(true);
     setStreamNote(t('copilot.ai_thinking'));
     setStreamingContent('');
+    setStreamDone(false);
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -133,6 +136,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
           onMessage: (response) => {
             // 终态：用完整回答（含证据说明）替换打字机临时内容
             setStreamingContent('');
+            setStreamDone(true);
             if (response.success) {
               setMessages(prev => [...prev, {
                 role: 'assistant',
@@ -147,7 +151,10 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
               message.error(response.error || t('copilot.chat_failed'));
             }
           },
-          onError: (msg) => message.error(msg || t('copilot.chat_failed')),
+          onError: (msg) => {
+            setStreamDone(true);
+            message.error(msg || t('copilot.chat_failed'));
+          },
         },
       );
     } catch (e) {
@@ -352,8 +359,8 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
             </div>
           </div>
         )}
-        {/* 思考/调用工具阶段（尚无 token 流出）显示进度提示 */}
-        {loading && !streamingContent && (
+        {/* 思考/调用工具阶段（尚无 token 流出）显示进度提示；终态到达后立即退场 */}
+        {loading && !streamingContent && !streamDone && (
           <div style={{ textAlign: 'center', padding: '16px' }}>
             <Spin />
             <div style={{ marginTop: 8, fontSize: 12, color: 'rgba(255,255,255,0.65)' }}>

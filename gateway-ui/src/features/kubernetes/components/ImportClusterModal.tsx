@@ -1,11 +1,13 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, Button, Form, Input, Modal, Space } from 'antd';
+import { Alert, Button, Form, Input } from 'antd';
 import { message } from '../../../utils/antdStatic';
-import { ApiOutlined } from '@ant-design/icons';
+import { ApiOutlined, ClusterOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { importCluster, testKubeconfigConnection } from '../../../api/kubernetes';
 import { ApiError } from '../../../api/http';
 import type { ConnectionTestResult } from '../../../types/kubernetes';
+import { FormModal } from '../../../components/ui/FormModal';
+import { FormSection } from '../../../components/ui/FormSection';
 
 const { TextArea } = Input;
 
@@ -87,16 +89,16 @@ export const ImportClusterModal: React.FC<ImportClusterModalProps> = ({
   }, [onClose]);
 
   return (
-    <Modal
+    <FormModal
+      icon={<ClusterOutlined />}
       title={t('k8s.import_title')}
       open={open}
-      onCancel={handleCancel}
+      onClose={handleCancel}
       onOk={handleImport}
       confirmLoading={importing}
-      width={700}
       okText={t('common.confirm')}
       cancelText={t('common.cancel')}
-      destroyOnHidden
+      width={700}
     >
       <Alert
         type="info"
@@ -105,39 +107,50 @@ export const ImportClusterModal: React.FC<ImportClusterModalProps> = ({
         style={{ marginBottom: 16 }}
       />
       <Form form={form} layout="vertical">
-        <Form.Item
-          name="clusterName"
-          label={t('k8s.cluster_name')}
-          rules={[{ required: true, message: t('k8s.cluster_name_required') }]}
-        >
-          <Input placeholder={t('k8s.cluster_name_placeholder')} />
-        </Form.Item>
+        <FormSection title={t('k8s.basic_info')}>
+          <Form.Item
+            name="clusterName"
+            label={t('k8s.cluster_name')}
+            rules={[{ required: true, message: t('k8s.cluster_name_required') }]}
+          >
+            <Input placeholder={t('k8s.cluster_name_placeholder')} />
+          </Form.Item>
 
-        <Form.Item
-          name="kubeconfig"
-          label={
-            <Space>
-              {t('k8s.kubeconfig')}
-              <Button
-                type="link"
-                size="small"
-                icon={<ApiOutlined />}
-                onClick={handleTestConnection}
-                loading={testingConnection}
-              >
-                {t('k8s.test_connection')}
-              </Button>
-            </Space>
-          }
-          rules={[{ required: true, message: t('k8s.kubeconfig_required') }]}
+          <Form.Item
+            name="description"
+            label={t('common.description')}
+          >
+            <Input placeholder={t('k8s.description_placeholder')} />
+          </Form.Item>
+        </FormSection>
+
+        <FormSection
+          icon={<ApiOutlined />}
+          title={t('k8s.kubeconfig')}
+          description={(
+            <Button
+              type="link"
+              size="small"
+              icon={<ApiOutlined />}
+              onClick={handleTestConnection}
+              loading={testingConnection}
+            >
+              {t('k8s.test_connection')}
+            </Button>
+          )}
         >
-          <TextArea
-            rows={10}
-            placeholder={t('k8s.kubeconfig_placeholder')}
-            style={{ fontFamily: 'monospace' }}
-            onChange={() => setTestResult(null)}
-          />
-        </Form.Item>
+          <Form.Item
+            name="kubeconfig"
+            rules={[{ required: true, message: t('k8s.kubeconfig_required') }]}
+          >
+            <TextArea
+              rows={8}
+              placeholder={t('k8s.kubeconfig_placeholder')}
+              style={{ fontFamily: 'monospace' }}
+              onChange={() => setTestResult(null)}
+            />
+          </Form.Item>
+        </FormSection>
 
         {testResult && (
           <Alert
@@ -169,14 +182,7 @@ export const ImportClusterModal: React.FC<ImportClusterModalProps> = ({
             }
           />
         )}
-
-        <Form.Item
-          name="description"
-          label={t('common.description')}
-        >
-          <Input placeholder={t('k8s.description_placeholder')} />
-        </Form.Item>
       </Form>
-    </Modal>
+    </FormModal>
   );
 };

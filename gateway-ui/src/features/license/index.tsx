@@ -257,27 +257,6 @@ const LicensePage: React.FC = () => {
                             />
                           </div>
                         )}
-                        <Divider />
-                        <Descriptions column={2} size="small">
-                          {licenseInfo && (
-                            <>
-                              <Descriptions.Item label="License ID">
-                                <Text copyable style={{ fontSize: 12 }}>
-                                  {licenseInfo.licenseId?.substring(0, 16)}...
-                                </Text>
-                              </Descriptions.Item>
-                              <Descriptions.Item label="客户">
-                                {licenseInfo.customerName || '-'}
-                              </Descriptions.Item>
-                              <Descriptions.Item label="组织">
-                                {licenseInfo.organization || '-'}
-                              </Descriptions.Item>
-                              <Descriptions.Item label="有效期至">
-                                {licenseInfo.expiresAt ? new Date(licenseInfo.expiresAt).toLocaleDateString() : '永久'}
-                              </Descriptions.Item>
-                            </>
-                          )}
-                        </Descriptions>
                       </Card>
                     </Col>
 
@@ -318,6 +297,27 @@ const LicensePage: React.FC = () => {
                             />
                           </Col>
                         </Row>
+                        <Divider className="quota-divider" />
+                        <Descriptions column={{ xs: 2, md: 4 }} size="small" className="quota-descriptions">
+                          {licenseInfo && (
+                            <>
+                              <Descriptions.Item label="License ID">
+                                <Text copyable style={{ fontSize: 12 }}>
+                                  {licenseInfo.licenseId?.substring(0, 16)}...
+                                </Text>
+                              </Descriptions.Item>
+                              <Descriptions.Item label="客户">
+                                {licenseInfo.customerName || '-'}
+                              </Descriptions.Item>
+                              <Descriptions.Item label="组织">
+                                {licenseInfo.organization || '-'}
+                              </Descriptions.Item>
+                              <Descriptions.Item label="有效期至">
+                                {licenseInfo.expiresAt ? new Date(licenseInfo.expiresAt).toLocaleDateString() : '永久'}
+                              </Descriptions.Item>
+                            </>
+                          )}
+                        </Descriptions>
                       </Card>
                     </Col>
                   </Row>

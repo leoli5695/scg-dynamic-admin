@@ -4,6 +4,7 @@ import com.leoli.gateway.admin.filter.InternalApiTokenFilter;
 import com.leoli.gateway.admin.filter.JwtAuthenticationFilter;
 import com.leoli.gateway.admin.properties.GatewayAdminProperties;
 import com.leoli.gateway.admin.service.TokenRevocationService;
+import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -66,6 +67,17 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // FIX (SSE stream never closes): ASYNC/ERROR dispatches are continuations of an
+                        // already-authorized REQUEST dispatch (SseEmitter completion, error page). Spring
+                        // Boot registers the security chain for them too, and re-running authorization on
+                        // an ASYNC dispatch makes MvcRequestMatcher look up the HandlerMappingIntrospector
+                        // match cache fail-closed - the cache attribute is gone by then, so it throws
+                        // AccessDeniedException. With the SSE response already committed that exception is
+                        // unhandleable, the async context never completes and the client's stream hangs
+                        // forever after the final event ("AI thinking" spinner stuck next to a finished
+                        // answer). Permitting these dispatcher types is the documented remedy and widens
+                        // nothing: no NEW request ever arrives as an ASYNC/ERROR dispatch.
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         // Allow CORS preflight requests (OPTIONS) without authentication - MUST be first!
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         // Public endpoints - login and health check.

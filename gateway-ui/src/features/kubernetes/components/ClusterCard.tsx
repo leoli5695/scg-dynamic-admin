@@ -29,6 +29,17 @@ const getStatusClass = (status: string) => {
   }
 };
 
+const getStatusKey = (statusClass: string) => {
+  switch (statusClass) {
+    case 'connected':
+      return 'k8s.status_connected';
+    case 'error':
+      return 'k8s.status_failed';
+    default:
+      return 'k8s.status_unknown';
+  }
+};
+
 export const ClusterCard: React.FC<ClusterCardProps> = ({
   cluster,
   onDetail,
@@ -69,9 +80,14 @@ export const ClusterCard: React.FC<ClusterCardProps> = ({
           <div className="cluster-card-name">
             {cluster.clusterName}
             <div className={`cluster-card-status-dot-inline ${statusClass}`} />
+            <span className={`cluster-card-status-text ${statusClass}`}>
+              {t(getStatusKey(statusClass))}
+            </span>
           </div>
           <div className="cluster-card-meta">
-            <span className="cluster-card-version">v{cluster.clusterVersion || 'N/A'}</span>
+            <span className="cluster-card-version">
+              {cluster.clusterVersion ? `v${cluster.clusterVersion}` : t('k8s.version_unknown')}
+            </span>
             <span className="cluster-card-divider">·</span>
             <span className="cluster-card-stats">
               <CloudServerOutlined style={{ marginRight: 4 }} />

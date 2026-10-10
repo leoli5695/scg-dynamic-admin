@@ -107,5 +107,11 @@
   "k8s.log_stop": "Stop",
   "k8s.log_clear": "Clear",
   "k8s.log_lines": "Lines",
-  "k8s.log_time_range": "Time Range"
+  "k8s.log_time_range": "Time Range",
+  "k8s.cluster_list": "Clusters",
+  "k8s.cluster_count": "{{count}} clusters",
+  "k8s.status_connected": "Connected",
+  "k8s.status_failed": "Connection Failed",
+  "k8s.status_unknown": "Unknown",
+  "k8s.version_unknown": "Unknown version"
 }

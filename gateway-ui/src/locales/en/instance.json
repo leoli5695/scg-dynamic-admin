@@ -119,5 +119,12 @@
   "instance.jaeger_server_addr_placeholder": "e.g., jaeger.other-namespace.svc.cluster.local:4317",
   "instance.prometheus_server_addr": "Prometheus Address (Optional)",
   "instance.prometheus_server_addr_tooltip": "Prometheus address for metrics collection. Leave empty if Prometheus is in the same cluster.",
-  "instance.prometheus_server_addr_placeholder": "e.g., prometheus.other-namespace.svc.cluster.local:9090"
+  "instance.prometheus_server_addr_placeholder": "e.g., prometheus.other-namespace.svc.cluster.local:9090",
+  "instance.config_section": "Service Addresses",
+  "instance.config_section_hint": "Leave empty inside the same cluster",
+  "instance.resource_section": "Resources & Replicas",
+  "instance.image_section": "Image",
+  "instance.page_subtitle": "Create, start/stop and scale gateway instances",
+  "instance.no_clusters_available": "No clusters available — import a Kubernetes cluster first",
+  "instance.go_import_cluster": "Import a cluster"
 }

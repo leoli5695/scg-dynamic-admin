@@ -150,6 +150,20 @@
   font-weight: var(--weight-bold);
 }
 
+/* equal-height stat row; spec value kept on one line */
+.instance-overview-stats .ant-row > .ant-col {
+  display: flex;
+}
+
+.instance-overview-stats .instance-stat-card {
+  width: 100%;
+}
+
+.instance-stat-card .ant-statistic-content,
+.instance-stat-card .ant-statistic-content-value {
+  font-size: 18px;
+}
+
 /* Status colors */
 .instance-stat-status-running { color: var(--success-color); }
 .instance-stat-status-stopped { color: var(--warning-color); }
