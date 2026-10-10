@@ -61,6 +61,10 @@ const snapshot = {
   // A restart mid-ladder silently invalidates the tier; comparing this across
   // the before/after snapshots catches it instead of publishing mixed numbers.
   gatewayProcessStartSec: sum('process_start_time_seconds'),
+  // Machine-wide, not just the gateway: the admission gate rejects a level when
+  // the box itself is saturated, because then the numbers measure co-tenant load
+  // rather than the thing under test.
+  systemCpuUsage: sum('system_cpu_usage'),
   jvm: {
     heapUsedBytes: sum('jvm_memory_used_bytes', label('area', 'heap')),
     nonHeapUsedBytes: sum('jvm_memory_used_bytes', label('area', 'nonheap')),
