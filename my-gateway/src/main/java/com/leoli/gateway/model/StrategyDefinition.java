@@ -53,6 +53,9 @@ public class StrategyDefinition {
     // AI gateway: content security guard (sensitive words / regex / PII moderation)
     public static final String TYPE_AI_SECURITY = "AI_SECURITY";
 
+    // AI gateway: semantic cache (embed prompt, reuse similar cached response)
+    public static final String TYPE_AI_SEMANTIC_CACHE = "AI_SEMANTIC_CACHE";
+
     public static final String SCOPE_GLOBAL = "GLOBAL";
     public static final String SCOPE_ROUTE = "ROUTE";
 

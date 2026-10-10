@@ -165,6 +165,17 @@ public interface FilterOrderConstants {
      */
     int TOKEN_QUOTA_PRE_CHECK = -243;
 
+    /**
+     * AI semantic cache filter.
+     * <p>
+     * After token pre-check (-243) and &lt; NettyWriteResponseFilter (-1): on a cache
+     * HIT it short-circuits by writing the stored response (like MockResponseFilter) so
+     * routing and the token collector never run - a hit consumes no LLM tokens. On a
+     * MISS it decorates the response (order &lt; -1 keeps the decorator in the write
+     * path) to capture and store the upstream answer.
+     */
+    int AI_SEMANTIC_CACHE = -242;
+
     // ============================================================
     // Post-Processing Filters
     // ============================================================

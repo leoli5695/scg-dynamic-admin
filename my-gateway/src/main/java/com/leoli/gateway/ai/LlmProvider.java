@@ -75,6 +75,17 @@ public enum LlmProvider {
         return joinUrl(base, defaultPath);
     }
 
+    /**
+     * Build the absolute OpenAI-compatible embeddings URL, honouring an optional
+     * base-url override. Used by the semantic cache to vectorize prompts.
+     */
+    public String resolveEmbeddingsUrl(String baseUrlOverride) {
+        String base = (baseUrlOverride != null && !baseUrlOverride.isBlank())
+                ? baseUrlOverride.trim()
+                : defaultBaseUrl;
+        return joinUrl(base, "/embeddings");
+    }
+
     /** Header name used to carry the upstream credential. */
     public String authHeaderName() {
         return authScheme == AuthScheme.X_API_KEY ? "x-api-key" : "Authorization";
