@@ -1,7 +1,11 @@
 /**
  * Strategy type picker shown before the create form.
- * Groups enabled strategy types by category (ACCESS_LOG excluded —
- * access log moved to instance-level configuration).
+ * Groups enabled strategy types by category.
+ * Excluded from manual creation:
+ * - ACCESS_LOG: moved to instance-level configuration.
+ * - AI_PROXY: owned by the AI route form, which auto-generates a companion AI_PROXY
+ *   strategy from the route's bound AI services (see AiRouteProjector). Creating one
+ *   manually here would fight that projection, so it is not offered.
  */
 import React, { useMemo } from 'react';
 import { Card, Col, Divider, Modal, Row, Spin, Tag, Typography } from 'antd';
@@ -12,6 +16,9 @@ import { CATEGORY_LABELS } from '../utils';
 import { getStrategyTypeIcon } from './icons';
 
 const { Text } = Typography;
+
+/** Strategy types not offered for manual creation (managed elsewhere). */
+const NON_CREATABLE_TYPES = new Set(['ACCESS_LOG', 'AI_PROXY']);
 
 interface StrategyTypeSelectModalProps {
   strategyTypes: StrategyTypeInfo[];
@@ -28,7 +35,7 @@ const StrategyTypeSelectModal: React.FC<StrategyTypeSelectModalProps> = ({
   const typesByCategory = useMemo(() => {
     const grouped: Record<string, StrategyTypeInfo[]> = {};
     strategyTypes
-      .filter((st) => st.typeCode !== 'ACCESS_LOG')
+      .filter((st) => !NON_CREATABLE_TYPES.has(st.typeCode))
       .forEach((st) => {
         if (!grouped[st.category]) grouped[st.category] = [];
         grouped[st.category].push(st);
