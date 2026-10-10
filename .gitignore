@@ -100,3 +100,6 @@ gateway-admin/src/main/resources/static/assets/
 
 # Submodules (use git submodule, not directory)
 nacos/
+
+# AI perf bench raw runs (regenerable, multi-MB jsonl)
+tools/ai-perf/results/
