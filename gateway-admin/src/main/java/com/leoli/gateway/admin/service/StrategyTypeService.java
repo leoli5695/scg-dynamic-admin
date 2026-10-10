@@ -383,7 +383,8 @@ public class StrategyTypeService {
                 createNumberField("hybridThreshold", "混合模式阈值", 1000, 100, 10000, "tokens"),
                 createSwitchField("autoRefundEnabled", "自动退款", true),
                 createNumberField("refundThresholdPercent", "退款阈值", 10, 1, 50, "%"),
-                createNumberField("maxRefundPerRequest", "单次最大退款", 10000, 100, 100000, "tokens")
+                createNumberField("maxRefundPerRequest", "单次最大退款", 10000, 100, 100000, "tokens"),
+                createNumberField("estimateMaxBodySize", "估算Body上限", 1048576, 1024, 10485760, "bytes")
         ));
         TOKEN_RATE_LIMITER_SUB_SCHEMAS.put("preDeduct", preDeductSchema);
 

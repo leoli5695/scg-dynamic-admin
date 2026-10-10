@@ -2,6 +2,7 @@ package com.leoli.gateway.filter.token;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.constants.FilterOrderConstants;
+import com.leoli.gateway.filter.ai.AiContextLimitFilter;
 import com.leoli.gateway.limiter.TokenQuotaManager;
 import com.leoli.gateway.limiter.TokenQuotaManager.QuotaCheckResult;
 import com.leoli.gateway.limiter.TokenQuotaManager.QuotaStatus;
@@ -18,17 +19,19 @@ import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.core.io.buffer.DataBufferLimitException;
+import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.http.server.reactive.ServerHttpRequestDecorator;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-
-import java.nio.charset.StandardCharsets;
 
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -128,10 +131,87 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        // Estimate input tokens for pre-deduct strategy
-        long estimatedInputTokens = estimateInputTokens(exchange, config.tokenQuotaConfig);
-        exchange.getAttributes().put("token_quota_estimated_input", estimatedInputTokens);
+        // The pre-deduct strategy needs an input-token estimate. The cachedRequestBody
+        // attribute (published by AiContextLimitFilter, or by an earlier join here) is
+        // reused when present; otherwise the body is joined ON DEMAND - only
+        // ESTIMATE/HYBRID pay for it, NONE never touches the body. Previously the
+        // attribute was never populated on this path, so every pre-deduction silently
+        // degraded to the constant hybridThreshold fallback.
+        final String strategy = config.tokenQuotaConfig.getPreDeductStrategy();
+        boolean needsEstimate = "ESTIMATE".equalsIgnoreCase(strategy) || "HYBRID".equalsIgnoreCase(strategy);
+        if (!needsEstimate) {
+            exchange.getAttributes().put("token_quota_estimated_input", 0L);
+            return applyQuotaCheck(exchange, chain, tenantId, config, 0);
+        }
+        return resolveRequestBody(exchange, config.tokenQuotaConfig)
+                .flatMap(ex2 -> {
+                    String body = ex2.getAttribute(AiContextLimitFilter.CACHED_REQUEST_BODY_ATTR);
+                    long estimatedInputTokens = AiTokenEstimator.estimate(body, objectMapper)
+                            .orElse((long) body.length() / 4);
+                    ex2.getAttributes().put("token_quota_estimated_input", estimatedInputTokens);
+                    return applyQuotaCheck(ex2, chain, tenantId, config, estimatedInputTokens);
+                })
+                .onErrorResume(DataBufferLimitException.class, e -> {
+                    log.warn("Token quota estimate: request body exceeds estimateMaxBodySize {} on route tenant {}",
+                            config.tokenQuotaConfig.getEstimateMaxBodySize(), tenantId);
+                    return rejectBodyTooLarge(exchange);
+                });
+    }
 
+    /**
+     * Body for estimation: reuse the cachedRequestBody attribute when an upstream
+     * filter published it; otherwise bounded-join and replay through a decorator so
+     * downstream filters still receive the full original body.
+     */
+    private Mono<ServerWebExchange> resolveRequestBody(ServerWebExchange exchange, TokenQuotaConfig config) {
+        if (exchange.getAttribute(AiContextLimitFilter.CACHED_REQUEST_BODY_ATTR) != null) {
+            return Mono.just(exchange);
+        }
+        long maxBodySize = Math.max(1024, config.getEstimateMaxBodySize());
+        return DataBufferUtils.join(exchange.getRequest().getBody(), (int) Math.min(maxBodySize, Integer.MAX_VALUE))
+                .defaultIfEmpty(exchange.getResponse().bufferFactory().wrap(new byte[0]))
+                .map(dataBuffer -> {
+                    byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                    try {
+                        dataBuffer.read(bytes);
+                    } finally {
+                        DataBufferUtils.release(dataBuffer);
+                    }
+                    String body = new String(bytes, StandardCharsets.UTF_8);
+                    exchange.getAttributes().put(AiContextLimitFilter.CACHED_REQUEST_BODY_ATTR, body);
+                    ServerHttpRequestDecorator replay = new ServerHttpRequestDecorator(exchange.getRequest()) {
+                        @Override
+                        public Flux<DataBuffer> getBody() {
+                            return Flux.just(exchange.getResponse().bufferFactory().wrap(bytes));
+                        }
+                    };
+                    return exchange.mutate().request(replay).build();
+                });
+    }
+
+    private Mono<Void> rejectBodyTooLarge(ServerWebExchange exchange) {
+        ServerHttpResponse response = exchange.getResponse();
+        response.setStatusCode(HttpStatus.PAYLOAD_TOO_LARGE);
+        response.getHeaders().add("Content-Type", "application/json;charset=UTF-8");
+        Map<String, Object> body = new HashMap<>();
+        body.put("httpStatus", HttpStatus.PAYLOAD_TOO_LARGE.value());
+        body.put("code", 41301);
+        body.put("error", "Payload Too Large");
+        body.put("message", "请求体超过 Token 配额估算上限");
+        body.put("data", null);
+        String jsonBody;
+        try {
+            jsonBody = objectMapper.writeValueAsString(body);
+        } catch (Exception e) {
+            jsonBody = "{\"httpStatus\":413,\"code\":41301,\"error\":\"Payload Too Large\"}";
+        }
+        return response.writeWith(
+                Mono.just(response.bufferFactory().wrap(jsonBody.getBytes(StandardCharsets.UTF_8)))
+        );
+    }
+
+    private Mono<Void> applyQuotaCheck(ServerWebExchange exchange, GatewayFilterChain chain,
+                                       String tenantId, ConfigWrapper config, long estimatedInputTokens) {
         // Apply pre-deduct strategy.
         // FIX (blocking Redis on EventLoop): all quota Redis operations are blocking;
         // execute them on boundedElastic so the Netty EventLoop is never stalled by a
@@ -186,19 +266,6 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
      * 2. Calculate approximate token count (characters / 4 for English)
      * 3. Use configured estimate as fallback
      */
-    private long estimateInputTokens(ServerWebExchange exchange, TokenQuotaConfig config) {
-        // Try to get cached request body
-        String cachedBody = exchange.getAttribute("cachedRequestBody");
-
-        if (cachedBody == null || cachedBody.isEmpty()) {
-            // No cached body, use conservative estimate
-            log.debug("No cached request body, using default estimate");
-            return config.getHybridThreshold();  // Use hybrid threshold as fallback
-        }
-
-        return AiTokenEstimator.estimate(cachedBody, objectMapper).orElse((long) (cachedBody.length() / 4));
-    }
-
     /**
      * Apply pre-deduct strategy based on configuration.
      *

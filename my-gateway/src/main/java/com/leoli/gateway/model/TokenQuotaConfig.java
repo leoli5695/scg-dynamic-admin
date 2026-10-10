@@ -237,6 +237,13 @@ public class TokenQuotaConfig {
     /** Message returned when a window limit rejects (Higress rejected_msg). */
     private String rejectedMsg = "Too many requests";
 
+    /**
+     * Upper bound for the on-demand request-body join used by the ESTIMATE/HYBRID
+     * pre-deduct estimation. Bodies above it are rejected with 413 (the stream is
+     * partially consumed and cannot be forwarded safely).
+     */
+    private long estimateMaxBodySize = 1048576;
+
     // ============== Inner Classes ==============
 
     /**
