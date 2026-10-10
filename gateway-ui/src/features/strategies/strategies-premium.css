@@ -716,10 +716,15 @@
   .config-key { min-width: 60px; }
 }
 /* ===== 策略类型选择弹窗：头部居中（作用域覆盖，不动共享 .modal-header-modern） ===== */
+/* .modal-title-text 全局 flex:1 会吃满剩余宽度把图标孤悬在左，这里压回内容宽度，
+   让图标+标题作为整体水平居中 */
 .strategy-type-select-modal .modal-title-wrapper {
   justify-content: center;
+  width: fit-content;
+  margin: 0 auto;
 }
 .strategy-type-select-modal .modal-title-text {
+  flex: none;
   align-items: center;
   text-align: center;
 }
