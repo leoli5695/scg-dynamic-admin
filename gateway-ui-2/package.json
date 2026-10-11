@@ -1,0 +1,32 @@
+{
+  "name": "gateway-ui-2",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Vue 3 rewrite of gateway-ui (API Gateway admin console)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview",
+    "type-check": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@ant-design/icons-vue": "^7.0.1",
+    "ant-design-vue": "^4.2.6",
+    "axios": "^1.8.4",
+    "dayjs": "^1.11.13",
+    "echarts": "^5.6.0",
+    "pinia": "^2.3.1",
+    "vue": "^3.5.13",
+    "vue-echarts": "^7.0.3",
+    "vue-i18n": "^11.1.2",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@vitejs/plugin-vue": "^5.2.3",
+    "typescript": "~5.8.3",
+    "vite": "^6.3.5",
+    "vue-tsc": "^2.2.8"
+  }
+}

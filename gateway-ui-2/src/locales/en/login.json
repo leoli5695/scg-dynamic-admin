@@ -1,0 +1,18 @@
+{
+  "login.title": "API Gateway",
+  "login.subtitle": "Enterprise Management Console",
+  "login.username_placeholder": "Username",
+  "login.password_placeholder": "Password",
+  "login.button": "Sign In",
+  "login.username_required": "Please enter username",
+  "login.username_min_length": "Username must be at least 3 characters",
+  "login.password_required": "Please enter password",
+  "login.password_min_length": "Password must be at least 6 characters",
+  "login.success": "Welcome back, {{nickname}}!",
+  "login.failed": "Invalid username or password",
+  "login.default_credentials": "Default account: admin / Admin123456",
+  "login.chip.ha": "High Availability",
+  "login.chip.observability": "Full-Link Observability",
+  "login.chip.security": "Defense in Depth",
+  "login.chip.elastic": "Elastic Scaling"
+}

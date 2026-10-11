@@ -1,0 +1,79 @@
+/* Global stylesheet — Vue port of the legacy index.css base.
+   Component-level dark styling is driven by theme.ts (ConfigProvider tokens),
+   NOT by the legacy antd-overrides.css, which targeted antd v6 class names that
+   ant-design-vue v4 (antd v5 based) does not use. */
+@import './styles/variables.css';
+@import './styles/layout.css';
+@import './styles/animations.css';
+@import './styles/premium-ui.css';
+@import './styles/form-page.css';
+
+/* ==================== Root Styles ==================== */
+:root {
+  font-family: var(--font-sans);
+  line-height: var(--leading-normal);
+  font-weight: var(--weight-normal);
+  color-scheme: dark;
+  color: var(--text-primary);
+  background-color: var(--bg-base);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: flex-start;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--bg-base);
+  font-family: var(--font-sans);
+}
+
+#app {
+  width: 100%;
+  margin: 0;
+  min-height: 100vh;
+}
+
+/* Monospace font */
+code, pre, .monospace {
+  font-family: var(--font-mono);
+}
+
+/* Global scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: var(--radius-full); }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+
+/* Selection */
+::selection { background: rgba(59, 130, 246, 0.24); color: var(--text-primary); }
+
+/* Page layout primitives shared across features (from legacy App.css). */
+.page-container {
+  min-height: calc(100vh - 64px);
+  padding: 24px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding: 0 8px;
+}
+
+.page-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}

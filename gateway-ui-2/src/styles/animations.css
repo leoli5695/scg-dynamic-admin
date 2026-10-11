@@ -1,0 +1,87 @@
+/**
+ * Gateway-UI Animations
+ * Unified animation definitions to reduce duplication
+ */
+
+/* ==================== Core Animations ==================== */
+
+/**
+ * fadeIn - Basic opacity transition
+ * Used by: premium-ui.css, ai-report.css, multiple components
+ */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/**
+ * slideUp - Fade in with upward movement
+ * Used by: premium-ui.css, modal/card entrances
+ */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/**
+ * fadeInUp - Fade in with upward movement (variant)
+ * Used by: KubernetesPage, card animations
+ */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/**
+ * pulse - Gentle pulsing effect
+ * Used by: status indicators, badges
+ */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/**
+ * shimmer - Loading shimmer effect
+ * Used by: skeleton loaders, progress bars
+ */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ==================== Animation Classes ==================== */
+
+.fade-in {
+  animation: fadeIn var(--duration-normal) var(--ease-out);
+}
+
+.slide-up {
+  animation: slideUp var(--duration-normal) var(--ease-out);
+}
+
+.fade-in-up {
+  animation: fadeInUp var(--duration-normal) var(--ease-out);
+}
+
+.animate-pulse {
+  animation: pulse var(--duration-slow) var(--ease-default) infinite;
+}
+
+.animate-shimmer {
+  animation: shimmer 1.5s linear infinite;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.1) 50%, transparent 100%);
+  background-size: 200% 100%;
+}
