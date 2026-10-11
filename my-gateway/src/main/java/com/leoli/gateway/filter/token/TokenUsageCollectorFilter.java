@@ -169,7 +169,7 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                                         TokenUsage usage = processJsonUsage(config.tokenQuotaConfig, responseBody, aiResponseFormat(exchange));
                                         addTokenUsageHeaders(exchange.getResponse(), usage, 0L, preDeductedTokens, false);
                                     } catch (Exception e) {
-                                        log.debug("Failed to pre-parse token usage for headers: {}", e.getMessage());
+                                        log.debug("Failed to pre-parse token usage for headers", e);
                                     }
 
                                     return super.writeWith(Flux.just(
@@ -504,7 +504,7 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
             reportUsageToAdmin(exchange, tenantId, usage, actualTokens);
 
         } catch (Exception e) {
-            log.error("Error processing token usage for tenant {}: {}", tenantId, e.getMessage());
+            log.error("Error processing token usage for tenant {}", tenantId, e);
 
             // On error, refund pre-deducted tokens if configured (into the charged period)
             if (preDeductedTokens > 0 && config.isAutoRefundEnabled()) {
@@ -546,7 +546,7 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
             payload.put("requestTime", LocalDateTime.now().toString());
             tokenUsageReporter.report(payload);
         } catch (Exception e) {
-            log.debug("Failed to build token usage report (ignored): {}", e.getMessage());
+            log.warn("Failed to build token usage report for tenant {} (ignored)", tenantId, e);
         }
     }
 
