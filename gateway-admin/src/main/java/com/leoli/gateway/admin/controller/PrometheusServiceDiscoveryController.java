@@ -21,6 +21,10 @@ import java.util.stream.Collectors;
  *
  * 按服务实例（IP:port）隔离，每个实例只能看到自己依赖的中间件
  *
+ * <p>安全：这些端点 permitAll（无 JWT）但受 {@code X-Internal-Token} 保护，因为返回的是内网
+ * exporter/中间件 host:port 与服务实例拓扑。Prometheus 必须在 http_sd_config 里带上该头，
+ * 否则抓取返回 401（{@code http_headers} 需 Prometheus v2.45+；旧版可改用带令牌的反向代理）。
+ *
  * Prometheus 配置示例:
  * <pre>
  * scrape_configs:
@@ -28,6 +32,8 @@ import java.util.stream.Collectors;
  *     http_sd_configs:
  *       - url: 'http://gateway-admin:9090/api/prometheus/sd/exporters'
  *         refresh_interval: 30s
+ *         http_headers:
+ *           X-Internal-Token: '${GATEWAY_INTERNAL_TOKEN}'
  * </pre>
  *
  * API 响应格式:

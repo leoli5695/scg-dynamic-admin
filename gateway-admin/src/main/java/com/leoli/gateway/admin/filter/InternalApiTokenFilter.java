@@ -37,32 +37,10 @@ public class InternalApiTokenFilter extends OncePerRequestFilter {
 
     public static final String TOKEN_HEADER = "X-Internal-Token";
 
-    private static final List<String> PROTECTED_PATTERNS = List.of(
-            "/api/instances/heartbeat",
-            "/api/instances/started",
-            "/api/gateway/health/**",
-            "/api/traces/internal",
-            "/api/traces/internal/batch",
-            "/api/filter-executions/internal",
-            // NOTE: "/api/traces/config" is intentionally NOT listed here - it is
-            // read by the browser UI (features/trace) with a normal JWT. Protecting
-            // it with the internal token made every visit to the trace page return
-            // 401, which the frontend http interceptor treated as an expired
-            // session and force-logged the user out.
-            "/api/services/traces",
-            "/api/services/traces/batch",
-            "/api/services/middleware-metadata",
-            // Gateway pods fetch decrypted provider API keys here (AI proxy). permitAll
-            // in SecurityConfig (no JWT) and guarded by the shared internal token, so a
-            // leaked pod token is the only way to reach plaintext keys.
-            "/api/provider-credentials/internal/**",
-            // Gateway pods report settled token usage here (metering/observability page).
-            // Same posture: permitAll (no JWT) + shared internal token guard.
-            "/api/token-quota/internal/**"
-            // NOTE: "/api/service-middleware/debug/**" is intentionally NOT here. Those diagnostic
-            // endpoints have no gateway-pod callers, so they are gated behind an ADMIN JWT in
-            // SecurityConfig instead of the shared report token (#7 secret tiering).
-    );
+    // Single source of truth shared with SecurityConfig - see InternalApiEndpoints. Keeping
+    // the list here (as it used to be) let the two sides drift, which is how /api/prometheus/sd/**
+    // ended up permitAll with no token guard.
+    private static final List<String> PROTECTED_PATTERNS = InternalApiEndpoints.TOKEN_PROTECTED;
 
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
     private final String expectedToken;
