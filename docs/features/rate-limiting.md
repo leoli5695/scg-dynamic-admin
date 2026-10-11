@@ -94,32 +94,28 @@ Supports hierarchical rate limiting: Global → Tenant → User → IP
 {
   "routeId": "tenant-api",
   "enabled": true,
-  "dimensions": [
-    {
-      "type": "GLOBAL",
-      "qps": 10000,
-      "burstCapacity": 20000
-    },
-    {
-      "type": "TENANT",
-      "keySource": "header:X-Tenant-Id",
-      "qps": 1000,
-      "burstCapacity": 2000
-    },
-    {
-      "type": "USER",
-      "keySource": "header:X-User-Id",
-      "qps": 100,
-      "burstCapacity": 200
-    },
-    {
-      "type": "IP",
-      "qps": 10,
-      "burstCapacity": 20
-    }
-  ]
+  "keySource": "COMBINED",
+  "rejectStrategy": "FIRST_HIT",
+  "globalQuota": { "enabled": true, "qps": 10000, "burstCapacity": 20000, "windowSizeMs": 1000 },
+  "tenantQuota": {
+    "enabled": true,
+    "qps": 1000,
+    "burstCapacity": 2000,
+    "tenantLimits": { "acme": { "qps": 2000, "burstCapacity": 4000 } }
+  },
+  "userQuota": { "enabled": true, "qps": 100, "burstCapacity": 200 },
+  "ipQuota": { "enabled": true, "qps": 10, "burstCapacity": 20 },
+  "headerNames": { "tenantIdHeader": "X-Tenant-Id", "userIdHeader": "X-User-Id" }
 }
 ```
+
+> **Where tenant/user identities come from.** `keySource` selects the extraction strategy:
+> `API_KEY_METADATA` and `JWT_CLAIM` are server-verified; `HEADER` reads
+> `headerNames.tenantIdHeader` / `userIdHeader` straight off the request, which any client can
+> set - use it only behind a proxy that strips those headers. `COMBINED` (the default) tries
+> API key metadata and then the JWT claim, and deliberately does **not** fall back to headers:
+> otherwise a caller could mint a fresh tenant per request and walk past the tenant dimension.
+> A dimension whose identifier cannot be resolved is skipped, not applied to a shared bucket.
 
 ### Dimension Check Order
 
