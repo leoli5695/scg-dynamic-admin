@@ -128,7 +128,8 @@ public class LicenseCheckInterceptor implements HandlerInterceptor {
                uri.startsWith("/health") ||
                uri.startsWith("/swagger-ui") ||
                uri.startsWith("/v3/api-docs") ||
-               uri.startsWith("/favicon.ico");
+               // single file, no sub-paths - exact match so /favicon.ico-data can't bypass
+               uri.equals("/favicon.ico");
     }
 
     /**

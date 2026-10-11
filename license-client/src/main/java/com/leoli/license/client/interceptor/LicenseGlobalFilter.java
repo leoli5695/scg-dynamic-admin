@@ -143,9 +143,11 @@ public class LicenseGlobalFilter implements GlobalFilter, Ordered {
     private boolean isInternalEndpoint(String path) {
         // /health and /actuator must match exactly (or be a real sub-path): a bare prefix
         // also exempted look-alike business routes such as /health-data from licensing.
+        // /favicon.ico is a single file with no sub-paths - a bare startsWith let crafted
+        // look-alikes (e.g. /favicon.ico-data) skip the license check, so match it exactly.
         return path.equals("/actuator") || path.startsWith("/actuator/") ||
                path.equals("/health") || path.startsWith("/health/") ||
-               path.startsWith("/favicon.ico");
+               path.equals("/favicon.ico");
     }
 
     /**

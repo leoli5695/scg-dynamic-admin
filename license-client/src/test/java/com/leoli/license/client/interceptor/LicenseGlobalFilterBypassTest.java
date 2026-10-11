@@ -54,8 +54,9 @@ class LicenseGlobalFilterBypassTest {
         filter.filter(exchangeFor("/health/liveness"), chain).block();
         filter.filter(exchangeFor("/actuator"), chain).block();
         filter.filter(exchangeFor("/actuator/info"), chain).block();
+        filter.filter(exchangeFor("/favicon.ico"), chain).block();
 
-        verify(chain, times(4)).filter(any());
+        verify(chain, times(5)).filter(any());
     }
 
     @Test
@@ -64,6 +65,21 @@ class LicenseGlobalFilterBypassTest {
         givenUnlicensed();
 
         for (String path : new String[]{"/health-data", "/actuator-data"}) {
+            MockServerWebExchange exchange = exchangeFor(path);
+            filter.filter(exchange, chain).block();
+            assertEquals(HttpStatus.FORBIDDEN, exchange.getResponse().getStatusCode(),
+                    path + " must not bypass the license check");
+        }
+
+        verify(chain, never()).filter(any());
+    }
+
+    @Test
+    @DisplayName("/favicon.ico look-alikes are NOT exempt (single file, exact match only)")
+    void faviconLookAlikeIsNotExempt() {
+        givenUnlicensed();
+
+        for (String path : new String[]{"/favicon.ico-data", "/favicon.icon", "/favicon.ico/secret"}) {
             MockServerWebExchange exchange = exchangeFor(path);
             filter.filter(exchange, chain).block();
             assertEquals(HttpStatus.FORBIDDEN, exchange.getResponse().getStatusCode(),
