@@ -10,6 +10,7 @@ const InstanceDetailLayout = () => import('@/features/instance-detail/InstanceDe
 const OverviewTab = () => import('@/features/instance-detail/tabs/OverviewTab.vue')
 const EventsTab = () => import('@/features/instance-detail/tabs/EventsTab.vue')
 const ResourcesTab = () => import('@/features/instance-detail/tabs/ResourcesTab.vue')
+const ServicesPage = () => import('@/features/services/index.vue')
 // Temporary stand-in for feature modules not yet ported (replaced in later stages).
 const Placeholder = () => import('@/components/PlaceholderPage.vue')
 
@@ -37,7 +38,7 @@ const routes: RouteRecordRaw[] = [
           { path: 'events', component: EventsTab },
           { path: 'resources', component: ResourcesTab },
           // Remaining console tabs land in Stage 1 (services/routes) and later stages.
-          { path: 'services', component: Placeholder, meta: { title: 'Services (Stage 1)' } },
+          { path: 'services', component: ServicesPage },
           { path: 'routes', component: Placeholder, meta: { title: 'Routes (Stage 1)' } },
           { path: 'plugins', component: Placeholder, meta: { title: 'Plugins (Stage 2)' } },
           { path: 'plugin_bindings', component: Placeholder, meta: { title: 'Plugin Bindings (Stage 2)' } },
