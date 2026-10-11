@@ -58,10 +58,12 @@ class TokenQuotaPreCheckWindowTest {
 
     private MockServerWebExchange postWithTenant(String tenant) {
         MockServerHttpRequest request = MockServerHttpRequest.post("/v1/chat/completions")
-                .header("X-Tenant-Id", tenant)
                 .body("{\"model\":\"qwen-plus\",\"messages\":[]}");
         MockServerWebExchange exchange = MockServerWebExchange.from(request);
         exchange.getAttributes().put(ROUTE_ATTR, "ai-route");
+        // Tenant identity comes from a verified auth result: a bare X-Tenant-Id header no
+        // longer selects a quota bucket.
+        exchange.getAttributes().put("api_key_metadata", java.util.Map.of("tenantId", tenant));
         return exchange;
     }
 

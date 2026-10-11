@@ -323,6 +323,34 @@ class MultiDimRateLimiterFilterTest {
 
             verify(distributedRateLimiter).tryAcquireReactive(contains("user-123"), eq(10), anyInt(), anyLong());
         }
+
+        @Test
+        @DisplayName("A client-supplied X-Tenant-Id alone must not create a tenant dimension")
+        void testTenantHeaderAloneIsNotTrusted() {
+            MockServerHttpRequest request = MockServerHttpRequest.get("/api/test")
+                    .header("X-Tenant-Id", "forged-tenant")
+                    .build();
+            MockServerWebExchange exchange = MockServerWebExchange.from(request);
+            exchange.getAttributes().put(
+                    "org.springframework.cloud.gateway.support.ServerWebExchangeUtils.gatewayRouteId",
+                    "test-route");
+
+            MultiDimRateLimiterConfig config = createMultiDimConfig(false, 0, true, 50, false, 0, false, 0);
+            stubConfig(config);
+            lenient().when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(true);
+            lenient().when(distributedRateLimiter.tryAcquireReactive(anyString(), anyInt(), anyInt(), anyLong()))
+                    .thenReturn(Mono.just(RateLimitResult.allowed(49)));
+            when(chain.filter(any())).thenReturn(Mono.empty());
+
+            StepVerifier.create(filter.filter(exchange, chain))
+                    .expectComplete()
+                    .verify();
+
+            // No verified tenant -> the tenant dimension is skipped rather than keyed on a
+            // value the caller chose, which would let it mint unlimited fresh buckets.
+            verify(distributedRateLimiter, never())
+                    .tryAcquireReactive(anyString(), anyInt(), anyInt(), anyLong());
+        }
     }
 
     @Nested

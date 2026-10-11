@@ -41,8 +41,10 @@ public class MultiDimRateLimiterConfig {
      * Key source: How to extract tenant/user identifiers.
      * API_KEY_METADATA: Extract from api_key metadata (tenantId).
      * JWT_CLAIM: Extract from jwt claims (tenant_id, user_id).
-     * HEADER: Extract from custom headers.
-     * COMBINED: Try all sources in priority order.
+     * HEADER: Extract from custom headers. Client-supplied, so only safe on a trusted
+     *         network - the caller can mint a fresh limit key per request.
+     * COMBINED: Server-verified sources only (api_key metadata, then jwt claim); the header
+     *           is deliberately excluded.
      */
     private String keySource = "COMBINED";
 

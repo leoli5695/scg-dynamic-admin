@@ -77,8 +77,10 @@ public class TokenQuotaConfig {
      * Tenant ID source: api_key_metadata, jwt_claim, header, combined.
      * api_key_metadata: Extract from API Key's metadata.tenantId
      * jwt_claim: Extract from JWT claims.tenant_id
-     * header: Extract from X-Tenant-Id header
-     * combined: Try all sources in priority order
+     * header: Extract from X-Tenant-Id header. Client-supplied, so only safe on a trusted
+     *         network - the caller picks whose quota it spends.
+     * combined: Server-verified sources in priority order (api_key_metadata, then jwt_claim).
+     *           The header is deliberately not part of combined.
      */
     private String tenantIdSource = "combined";
 

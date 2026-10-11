@@ -360,7 +360,7 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
 
         if ("combined".equalsIgnoreCase(source)) {
             // Try all sources in order: api_key_metadata -> jwt_claim -> header
-            return extractTenantIdCombined(exchange, config);
+            return extractTenantIdCombined(attrs);
         }
 
         switch (source.toLowerCase()) {
@@ -374,16 +374,20 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
                 return extractTenantIdFromHeader(exchange, config);
 
             default:
-                return extractTenantIdCombined(exchange, config);
+                return extractTenantIdCombined(attrs);
         }
     }
 
     /**
-     * Extract tenant ID using combined strategy (try all sources).
+     * Extract tenant ID using the combined strategy: server-verified sources only
+     * (API key metadata, then JWT claim).
+     * <p>
+     * The X-Tenant-Id header is deliberately NOT consulted here. It is client-supplied, so
+     * honoring it let a caller charge its consumption to another tenant's quota, or mint a
+     * fresh tenant per request and walk past the quota altogether. Set tenantIdSource=header
+     * explicitly for a trusted network that genuinely wants header-based tenancy.
      */
-    private String extractTenantIdCombined(ServerWebExchange exchange, TokenQuotaConfig config) {
-        Map<String, Object> attrs = exchange.getAttributes();
-
+    private String extractTenantIdCombined(Map<String, Object> attrs) {
         // 1. Try API Key metadata
         String tenantId = extractTenantIdFromApiKey(attrs);
         if (tenantId != null) {
@@ -391,13 +395,7 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
         }
 
         // 2. Try JWT claims
-        tenantId = extractTenantIdFromJwt(attrs);
-        if (tenantId != null) {
-            return tenantId;
-        }
-
-        // 3. Try header
-        return extractTenantIdFromHeader(exchange, config);
+        return extractTenantIdFromJwt(attrs);
     }
 
     private String extractTenantIdFromApiKey(Map<String, Object> attrs) {

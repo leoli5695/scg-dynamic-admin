@@ -342,7 +342,11 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
 
             case "combined":
             default:
-                // Try all sources in order: api_key_metadata -> jwt_claim -> header
+                // Verified sources only: api_key_metadata -> jwt_claim. The tenant header is
+                // client-supplied, so honoring it lets a caller mint a fresh limit key per
+                // request and walk past the tenant dimension - the same reasoning as the P0
+                // fix above that stopped trusting the raw X-Forwarded-For hop. Set keySource
+                // (or tenantIdSource) to "header" explicitly to opt back in.
                 metadata = (Map<String, Object>) attrs.get("api_key_metadata");
                 if (metadata != null && metadata.get("tenantId") != null) {
                     return String.valueOf(metadata.get("tenantId"));
@@ -351,11 +355,6 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
                 claims = (Map<String, Object>) attrs.get("jwt_claims");
                 if (claims != null && claims.get("tenant_id") != null) {
                     return String.valueOf(claims.get("tenant_id"));
-                }
-
-                String tenantHeader = exchange.getRequest().getHeaders().getFirst(config.getHeaderNames().getTenantIdHeader());
-                if (tenantHeader != null && !tenantHeader.isEmpty()) {
-                    return tenantHeader;
                 }
                 break;
         }
