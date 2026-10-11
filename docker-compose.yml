@@ -72,9 +72,15 @@ services:
       
       # Nacos Configuration
       NACOS_SERVER_ADDR: nacos:8848
-      
+
       # Spring Profiles
       SPRING_PROFILES_ACTIVE: prod
+
+      # FIX (compose port mismatch): application.yml defaults to 9090, but the
+      # Dockerfile EXPOSE/healthcheck and the port mapping below all use 8080.
+      # Without this the app listens on 9090 and the container is permanently
+      # unhealthy. Pin the listen port to the mapped/checked 8080.
+      SERVER_PORT: 8080
     ports:
       - "8080:8080"
     depends_on:
