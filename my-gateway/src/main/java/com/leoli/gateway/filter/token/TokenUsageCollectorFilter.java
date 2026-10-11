@@ -193,18 +193,23 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                 }
 
                 return super.writeWith(flux.doOnNext(dataBuffer -> {
-                    // Read and buffer response chunk
-                    byte[] bytes = new byte[dataBuffer.readableByteCount()];
-                    dataBuffer.read(bytes);
-                    String chunk = new String(bytes, StandardCharsets.UTF_8);
+                    try {
+                        // Read and buffer response chunk
+                        byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                        dataBuffer.read(bytes);
+                        String chunk = new String(bytes, StandardCharsets.UTF_8);
 
-                    // SSE mode: smart buffering based on usage info
-                    for (String event : frames.accept(chunk)) {
-                        handleSseChunk(event, buffer, totalTokens, bufferedChars, config.tokenQuotaConfig);
+                        // SSE mode: smart buffering based on usage info
+                        for (String event : frames.accept(chunk)) {
+                            handleSseChunk(event, buffer, totalTokens, bufferedChars, config.tokenQuotaConfig);
+                        }
+                    } finally {
+                        // FIX (observability must not corrupt the data path): the side-copy
+                        // parse above advances the read position. If handleSseChunk/frames
+                        // threw, readPosition(0) was previously skipped and the client got
+                        // misaligned bytes. Always restore the position before the write.
+                        dataBuffer.readPosition(0);
                     }
-
-                    // Reset buffer position for actual write
-                    dataBuffer.readPosition(0);
                 }));
             }
 
@@ -217,13 +222,18 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                 // while preserving flush boundaries (keeps time-to-first-token intact).
                 Flux<? extends org.reactivestreams.Publisher<? extends DataBuffer>> groups =
                         Flux.from(body).map(group -> Flux.from(group).doOnNext(dataBuffer -> {
-                            byte[] bytes = new byte[dataBuffer.readableByteCount()];
-                            dataBuffer.read(bytes);
-                            String chunk = new String(bytes, StandardCharsets.UTF_8);
-                            for (String event : frames.accept(chunk)) {
-                                handleSseChunk(event, buffer, totalTokens, bufferedChars, config.tokenQuotaConfig);
+                            try {
+                                byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                                dataBuffer.read(bytes);
+                                String chunk = new String(bytes, StandardCharsets.UTF_8);
+                                for (String event : frames.accept(chunk)) {
+                                    handleSseChunk(event, buffer, totalTokens, bufferedChars, config.tokenQuotaConfig);
+                                }
+                            } finally {
+                                // FIX (see writeWith): always restore the read position so a
+                                // throwing side-copy parse can never misalign the client stream.
+                                dataBuffer.readPosition(0);
                             }
-                            dataBuffer.readPosition(0);
                         }));
                 return super.writeAndFlushWith(groups);
             }
@@ -255,7 +265,17 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                                     config.tokenQuotaConfig, buffer, totalTokens.get(),
                                     preDeductedTokens, interrupted, isSse))
                             .subscribeOn(Schedulers.boundedElastic())
-                            .subscribe();
+                            // processTokenUsageWithSettlement swallows its own errors, but its
+                            // catch block still calls refundTokens - if THAT throws (e.g. Redis
+                            // down) the exception escapes the runnable. Without an error consumer
+                            // it lands in Reactor's onErrorDropped and is lost without tenant
+                            // context, leaving pre-deducted tokens unreconciled and invisible.
+                            .subscribe(
+                                    ignored -> { },
+                                    error -> log.error(
+                                            "Token settlement task failed for tenant {} after internal "
+                                                    + "handling; pre-deducted tokens ({}) may be unreconciled: {}",
+                                            tenantId, preDeductedTokens, error.getMessage(), error));
                 });
     }
 
