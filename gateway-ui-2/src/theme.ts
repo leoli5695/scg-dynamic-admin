@@ -6,7 +6,7 @@ import type { ThemeConfig } from 'ant-design-vue/es/config-provider/context'
  * Ported 1:1 from the legacy React theme.ts (manual dark tokens, no darkAlgorithm)
  * so the visual baseline matches before any cleanup.
  */
-const theme: ThemeConfig = {
+const theme = {
   token: {
     colorBgBase: '#0a0f1e',
     colorBgContainer: '#101b30',
@@ -83,6 +83,6 @@ const theme: ThemeConfig = {
       rowHoverBg: 'rgba(96, 165, 250, 0.08)',
     },
   },
-}
+} as ThemeConfig
 
 export default theme

@@ -6,7 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { MinusCircleOutlined } from '@ant-design/icons-vue'
 import type { ServiceInstanceItem } from '@/types/service'
 
-const props = defineProps<{
+defineProps<{
   instance: ServiceInstanceItem
   index: number
   canRemove: boolean

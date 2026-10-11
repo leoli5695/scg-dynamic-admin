@@ -13,11 +13,12 @@ const languages = [
 
 const currentLang = computed(() => (locale.value || 'en').substring(0, 2))
 
-function handleChange(value: string) {
-  locale.value = value
+function handleChange(value: unknown) {
+  const lang = String(value)
+  locale.value = lang
   // Persist under the same key the legacy app used, so the choice survives reloads.
-  localStorage.setItem('i18nextLng', value)
-  document.documentElement.lang = value
+  localStorage.setItem('i18nextLng', lang)
+  document.documentElement.lang = lang
 }
 </script>
 

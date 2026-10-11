@@ -6,12 +6,16 @@
  */
 import { App } from 'ant-design-vue'
 import { onMounted } from 'vue'
-import { registerFeedbackInstances } from '@/utils/feedback'
+import { registerFeedbackInstances, type FeedbackApi } from '@/utils/feedback'
 
 const { message, notification, modal } = App.useApp()
 
 onMounted(() => {
-  registerFeedbackInstances({ message, notification, modal })
+  registerFeedbackInstances({
+    message: message as unknown as FeedbackApi,
+    notification: notification as unknown as FeedbackApi,
+    modal: modal as unknown as FeedbackApi,
+  })
 })
 </script>
 

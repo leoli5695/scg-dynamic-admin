@@ -13,7 +13,7 @@ import { ApiError } from '@/api/http'
 import {
   checkServiceUsage, createService, deleteService, listServices, updateService,
 } from '@/api/services'
-import type { ServiceCategory, ServiceDefinition, ServiceInstanceItem } from '@/types/service'
+import type { ServiceDefinition, ServiceInstanceItem } from '@/types/service'
 import { message, modal } from '@/utils/feedback'
 import InlineStatChips from '@/components/InlineStatChips.vue'
 import ServiceCard from './components/ServiceCard.vue'

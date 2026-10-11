@@ -22,6 +22,7 @@ import {
   getInstanceByInstanceId, getInstanceConfig, startInstance, stopInstance,
 } from '@/api/instances'
 import { ApiError } from '@/api/http'
+import type { GatewayInstance } from '@/types/instance'
 import { getStatusColorByName, getStatusTextByName } from '@/utils/instance'
 import { message } from '@/utils/feedback'
 import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
@@ -81,6 +82,9 @@ watch(configRequest.data, (v) => { ctx.globalNacosAddr = v?.nacosServerAddr || '
 
 const instance = instanceRequest.data
 
+// Non-null view for the rendered branch (the template guards on `instance` first).
+const inst = computed<GatewayInstance>(() => instanceRequest.data.value as GatewayInstance)
+
 const activeTab = computed<TabKey>(() => {
   const parts = route.path.split('/')
   const candidate = parts[3]
@@ -139,23 +143,23 @@ const statusColor = computed(() => getStatusColorByName(instance.value?.status ?
           <template #icon><ArrowLeftOutlined /></template>
         </a-button>
         <CloudServerOutlined class="instance-detail-icon" />
-        <h4 class="instance-detail-title ant-typography">{{ instance.instanceName }}</h4>
+        <h4 class="instance-detail-title ant-typography">{{ inst.instanceName }}</h4>
         <a-tag class="instance-detail-status-tag" :color="statusColor">{{ statusText }}</a-tag>
       </div>
 
       <div class="instance-detail-header-right">
-        <template v-if="instance.status === 'Running'">
+        <template v-if="inst.status === 'Running'">
           <a-button @click="scaleModalOpen = true">
             <template #icon><PlusSquareOutlined /></template>{{ t('instance.scale') }}
           </a-button>
-          <a-button @click="runLifecycle(() => stopInstance(instance.id), 'instance.stop_success', 'instance.stop_failed')">
+          <a-button @click="runLifecycle(() => stopInstance(inst.id), 'instance.stop_success', 'instance.stop_failed')">
             <template #icon><PauseCircleOutlined /></template>{{ t('instance.stop') }}
           </a-button>
         </template>
         <a-button
-          v-if="instance.status === 'Stopped'"
+          v-if="inst.status === 'Stopped'"
           type="primary"
-          @click="runLifecycle(() => startInstance(instance.id), 'instance.start_success', 'instance.start_failed')"
+          @click="runLifecycle(() => startInstance(inst.id), 'instance.start_success', 'instance.start_failed')"
         >
           <template #icon><PlayCircleOutlined /></template>{{ t('instance.start') }}
         </a-button>
@@ -188,7 +192,7 @@ const statusColor = computed(() => getStatusColorByName(instance.value?.status ?
 
     <ScaleModal
       v-if="scaleModalOpen"
-      :instance="instance"
+      :instance="inst"
       @close="scaleModalOpen = false"
       @scaled="instanceRequest.run()"
     />

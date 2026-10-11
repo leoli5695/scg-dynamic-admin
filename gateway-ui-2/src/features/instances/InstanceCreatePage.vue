@@ -46,18 +46,32 @@ const router = useRouter()
 const { t } = useI18n()
 const submitting = ref(false)
 
-const formState = reactive<InstanceCreateRequest>({
-  specType: 'medium',
-  replicas: 1,
+const formState = reactive({
+  instanceName: '',
+  namespace: '',
+  clusterId: undefined as number | undefined,
   createNamespace: true,
-  image: 'my-gateway:latest',
+  nacosServerAddr: '',
+  redisServerAddr: '',
+  jaegerServerAddr: '',
+  prometheusServerAddr: '',
+  specType: 'medium',
+  cpuCores: undefined as number | undefined,
+  memoryMB: undefined as number | undefined,
+  replicas: 1,
   imagePullPolicy: 'Never',
+  image: 'my-gateway:latest',
+  description: '',
   serverPort: 80,
   managementPort: 9091,
 })
 
 const clusters = useRequest((signal) => getClusters({ signal }))
 const specs = useRequest((signal) => listInstanceSpecs({ signal }))
+
+// Exposed as computeds: nested refs (clusters.data) are NOT auto-unwrapped in templates.
+const connectedClusters = computed(() => (clusters.data.value ?? []).filter((c) => c.connectionStatus === 'CONNECTED'))
+const specOptions = computed(() => specs.data.value ?? [])
 
 const selectedSpecType = computed(() => formState.specType)
 const selectedClusterId = computed(() => formState.clusterId)
@@ -107,7 +121,7 @@ const loading = computed(() => clusters.loading.value || specs.loading.value)
 async function handleSubmit() {
   submitting.value = true
   try {
-    await createInstance({ ...formState })
+    await createInstance({ ...formState } as InstanceCreateRequest)
     message.success(t('instance.create_success'))
     router.push('/instances')
   } catch (error) {
@@ -155,7 +169,7 @@ function handleCancel() {
                   <a-form-item name="clusterId" :label="t('instance.cluster')" :rules="[{ required: true, message: t('common.required') }]">
                     <a-select v-model:value="formState.clusterId" size="large" :placeholder="t('instance.select_cluster')">
                       <a-select-option
-                        v-for="cluster in (clusters.data ?? []).filter((c) => c.connectionStatus === 'CONNECTED')"
+                        v-for="cluster in connectedClusters"
                         :key="cluster.id"
                         :value="cluster.id"
                       >
@@ -232,7 +246,7 @@ function handleCancel() {
                 <a-col :span="8">
                   <a-form-item name="specType" :label="t('instance.spec_type')" :rules="[{ required: true }]">
                     <a-select v-model:value="formState.specType" size="large">
-                      <a-select-option v-for="spec in (specs.data ?? [])" :key="spec.type" :value="spec.type">
+                      <a-select-option v-for="spec in specOptions" :key="spec.type" :value="spec.type">
                         {{ spec.type === 'custom' ? t('instance.spec_custom') : t(`instance.spec_${spec.type}`) }}
                       </a-select-option>
                     </a-select>

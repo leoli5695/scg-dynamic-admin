@@ -75,7 +75,7 @@ const i18n = createI18n({
   // null so vue-i18n applies its missing-key / fallback-locale handling.
   messageResolver: (obj, path) => {
     if (obj != null && typeof obj === 'object' && Object.prototype.hasOwnProperty.call(obj, path)) {
-      return (obj as Record<string, unknown>)[path]
+      return (obj as Record<string, string>)[path]
     }
     return null
   },

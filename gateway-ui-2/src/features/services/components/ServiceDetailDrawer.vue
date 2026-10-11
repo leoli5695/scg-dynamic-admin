@@ -75,7 +75,7 @@ function handleDeleteClick() {
 
       <!-- Status bar -->
       <div class="drawer-status-bar">
-        <a-badge :status="status.color" :text="t(status.textKey, status.params)" />
+        <a-badge :status="status.color" :text="t(status.textKey, status.params ?? {})" />
         <a-tag color="blue">{{ t(getLoadBalancerLabelKey(service.loadBalancer || 'weighted')) }}</a-tag>
       </div>
 

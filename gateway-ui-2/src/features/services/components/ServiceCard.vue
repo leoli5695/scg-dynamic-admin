@@ -96,7 +96,7 @@ function handleCopyId(e: MouseEvent) {
     </div>
 
     <div class="service-meta">
-      <a-badge :status="status.color" :text="t(status.textKey, status.params)" />
+      <a-badge :status="status.color" :text="t(status.textKey, status.params ?? {})" />
       <a-tag class="lb-tag">{{ t(getLoadBalancerLabelKey(service.loadBalancer || 'weighted')) }}</a-tag>
     </div>
 
@@ -107,13 +107,16 @@ function handleCopyId(e: MouseEvent) {
         </span>
       </div>
       <div v-if="instanceCount > 0" class="instances-list">
-        <template v-for="(inst, idx) in instances.slice(0, 5)" :key="idx">
-          <a-tag :class="['instance-tag', inst.healthy !== false && inst.enabled !== false ? 'instance-tag-healthy' : 'instance-tag-unhealthy']" :bordered="false">
+        <a-tag
+          v-for="(inst, idx) in instances.slice(0, 5)"
+          :key="idx"
+          :class="['instance-tag', inst.healthy !== false && inst.enabled !== false ? 'instance-tag-healthy' : 'instance-tag-unhealthy']"
+          :bordered="false"
+        >
             <span class="instance-dot" :style="{ background: inst.healthy !== false && inst.enabled !== false ? '#10b981' : '#ef4444' }" />
             <span class="instance-addr">{{ inst.ip }}:{{ inst.port }}</span>
             <a-tag v-if="inst.enabled === false" color="red" :style="{ marginLeft: '4px', fontSize: '12px' }">{{ t('common.disabled') }}</a-tag>
           </a-tag>
-        </template>
         <a-tag v-if="instanceCount > 5" class="instance-tag instance-tag-more">+{{ instanceCount - 5 }} more</a-tag>
       </div>
       <span v-else class="no-instances ant-typography" style="color: var(--text-secondary)">
