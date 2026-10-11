@@ -348,14 +348,14 @@ public class StrategyTypeService {
         // Tenant ID Extraction Section
         Map<String, Object> tenantIdExtractionSchema = new HashMap<>();
         tenantIdExtractionSchema.put("sectionLabel", "租户识别配置");
-        tenantIdExtractionSchema.put("sectionDescription", "如何从请求中提取租户ID用于配额检查");
+        tenantIdExtractionSchema.put("sectionDescription", "如何从请求中提取租户ID用于配额检查。组合模式只认服务端已验证的来源（API Key元数据、JWT Claims）；Header 由客户端自带、可伪造，仅在来源显式选择 HTTP Header 时生效");
         tenantIdExtractionSchema.put("fields", List.of(
                 createSelectFieldWithLabels("tenantIdSource", "租户ID来源", "combined",
                         List.of(Map.of("value", "api_key_metadata", "label", "API Key元数据"),
                                 Map.of("value", "jwt_claim", "label", "JWT Claims"),
                                 Map.of("value", "header", "label", "HTTP Header"),
-                                Map.of("value", "combined", "label", "组合模式(优先级递减)"))),
-                createField("headerNames.tenantIdHeader", "text", "租户Header名", "X-Tenant-Id")
+                                Map.of("value", "combined", "label", "组合模式(API Key→JWT，不含Header)"))),
+                createField("headerNames.tenantIdHeader", "text", "租户Header名(仅来源=HTTP Header时生效)", "X-Tenant-Id")
         ));
         TOKEN_RATE_LIMITER_SUB_SCHEMAS.put("tenantIdExtraction", tenantIdExtractionSchema);
 
