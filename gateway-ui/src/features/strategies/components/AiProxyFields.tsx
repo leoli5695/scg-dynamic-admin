@@ -62,7 +62,12 @@ export function AiProxyFields({ schema, form, t }: AiProxyFieldsProps) {
   }, []);
 
   useEffect(() => {
+    // loadCredentials only calls setCredentials after `await listProviderCredentials()`, on both the
+    // success and the catch path, so no state is set synchronously and there is no cascade to avoid.
+    // The rule flags the call site because it cannot see through the async boundary.
+    /* eslint-disable react-hooks/set-state-in-effect */
     loadCredentials();
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [loadCredentials]);
 
   const getFieldColSpan = (field: StrategyTypeField): number =>

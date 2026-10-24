@@ -47,7 +47,7 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
 
   const scoreTrendOption = {
     title: {
-      text: t('diagnostic.score_trend') || '健康评分趋势',
+      text: t('diagnostic.score_trend'),
       left: 'center',
       textStyle: { fontSize: 14 },
     },
@@ -111,12 +111,12 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
           <Alert
             type="info"
             showIcon
-            message={t('diagnostic.no_gateway_metrics_title') || '暂无网关指标数据'}
+            message={t('diagnostic.no_gateway_metrics_title')}
             description={
               <div>
-                <p>{t('diagnostic.no_gateway_metrics_desc') || '请点击"完整诊断"按钮以获取网关实时指标（QPS、错误率、延迟等）'}</p>
+                <p>{t('diagnostic.no_gateway_metrics_desc')}</p>
                 <p style={{ marginTop: 8, color: '#8c8c8c' }}>
-                  {t('diagnostic.prometheus_hint') || '提示：网关指标需要 Prometheus 或直接从网关实例获取'}
+                  {t('diagnostic.prometheus_hint')}
                 </p>
               </div>
             }
@@ -177,7 +177,7 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
       title={
         <Space>
           <LineChartOutlined />
-          <Text strong>{t('diagnostic.history_trend') || '历史趋势'}</Text>
+          <Text strong>{t('diagnostic.history_trend')}</Text>
           <Select
             value={hours}
             onChange={setHours}
@@ -197,7 +197,7 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
         items={[
           {
             key: 'score',
-            label: t('diagnostic.score_trend') || '健康评分',
+            label: t('diagnostic.score_trend'),
             children: (
               <ReactECharts
                 option={scoreTrendOption}
@@ -208,7 +208,7 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
           },
           {
             key: 'metrics',
-            label: t('diagnostic.gateway_metrics') || '网关指标',
+            label: t('diagnostic.gateway_metrics'),
             children: gatewayMetricsTab(),
           },
         ]}
@@ -221,7 +221,7 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
           <Row gutter={16}>
             <Col span={6}>
               <Statistic
-                title={t('diagnostic.previous_score') || '上次评分'}
+                title={t('diagnostic.previous_score')}
                 value={comparison.previousScore}
                 suffix={comparison.previousScore >= 80 ? '(健康)' : comparison.previousScore >= 50 ? '(警告)' : '(危险)'}
                 valueStyle={{ color: getScoreColor(comparison.previousScore) }}
@@ -229,7 +229,7 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
             </Col>
             <Col span={6}>
               <Statistic
-                title={t('diagnostic.score_change') || '评分变化'}
+                title={t('diagnostic.score_change')}
                 value={comparison.scoreChange || 0}
                 prefix={(comparison.scoreChange ?? 0) > 0 ? '+' : ''}
                 valueStyle={{ color: (comparison.scoreChange ?? 0) > 0 ? '#52c41a' : (comparison.scoreChange ?? 0) < 0 ? '#ff4d4f' : '#8c8c8c' }}

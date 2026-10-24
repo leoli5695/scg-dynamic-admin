@@ -16,7 +16,7 @@ import {
   getTokenUsageBreakdown, getTokenUsageEvents, getTokenUsageOverview, getTokenUsageTimeseries,
   getTokenQuotaTenants,
 } from '../../api/tokenUsage';
-import type { TokenUsageFilters } from '../../api/tokenUsage';
+import type { TokenUsageBucket, TokenUsageFilters } from '../../api/tokenUsage';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -24,6 +24,10 @@ const { RangePicker } = DatePicker;
 const PALETTE = ['#165DFF', '#52c41a', '#faad14', '#722ed1', '#13c2c2', '#eb2f96', '#fa8c16', '#a0d911'];
 const AXIS_TEXT = 'rgba(255,255,255,0.65)';
 const SPLIT_LINE = 'rgba(255,255,255,0.12)';
+
+// Stable identity for "no data yet". An inline `?? []` below produced a fresh array on every render,
+// which made the timeseries useMemo dependency change every time and defeated the memo entirely.
+const EMPTY_SERIES: TokenUsageBucket[] = [];
 
 const baseOption = () => ({
   backgroundColor: 'transparent',
@@ -61,7 +65,7 @@ const TokenUsagePage: React.FC = () => {
   const eventsReq = useRequest((signal) => getTokenUsageEvents(filters, page, 20, { signal }), { deps });
 
   const overview = overviewReq.data;
-  const series = seriesReq.data?.series ?? [];
+  const series = seriesReq.data?.series ?? EMPTY_SERIES;
   const hasData = (overview?.requests ?? 0) > 0;
 
   const timeseriesOption = useMemo(() => ({

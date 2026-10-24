@@ -44,8 +44,8 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
   };
 
   const chainStatusLabel = (status: string): string => {
-    if (status === 'COMPLETE') return t('trace.chain_complete') || '链路完整';
-    if (status === 'GATEWAY_ONLY') return t('trace.gateway_only') || '仅网关';
+    if (status === 'COMPLETE') return t('trace.chain_complete');
+    if (status === 'GATEWAY_ONLY') return t('trace.gateway_only');
     return status;
   };
 
@@ -54,7 +54,7 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
       title={(
         <Space>
           <ApartmentOutlined />
-          <Text>{t('trace.full_chain_detail') || '全链路详情'}</Text>
+          <Text>{t('trace.full_chain_detail')}</Text>
           {chain && <Tag color={chainStatusColor(chain.chainStatus)}>{chainStatusLabel(chain.chainStatus)}</Tag>}
         </Space>
       )}
@@ -83,11 +83,11 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
 
           {/* Duration Breakdown */}
           {chain.durationBreakdown && (
-            <Card size="small" title={t('trace.duration_breakdown') || '耗时分布'} className="mb-4">
+            <Card size="small" title={t('trace.duration_breakdown')} className="mb-4">
               <Row gutter={12}>
                 <Col span={5}>
                   <Statistic
-                    title={t('trace.total_latency') || '总耗时'}
+                    title={t('trace.total_latency')}
                     value={chain.durationBreakdown.gatewayTotalMs}
                     suffix="ms"
                   />
@@ -95,7 +95,7 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
                 </Col>
                 <Col span={5}>
                   <Statistic
-                    title={t('trace.gateway_overhead') || '网关开销'}
+                    title={t('trace.gateway_overhead')}
                     value={chain.durationBreakdown.gatewayOverheadMs || '-'}
                     suffix={chain.durationBreakdown.gatewayOverheadMs > 0
                       ? `ms (${chain.durationBreakdown.gatewayOverheadPercent}%)` : ''}
@@ -108,7 +108,7 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
                 </Col>
                 <Col span={5}>
                   <Statistic
-                    title={t('trace.service_duration') || '服务耗时'}
+                    title={t('trace.service_duration')}
                     value={chain.durationBreakdown.serviceDurationMs || chain.durationBreakdown.serviceMaxDurationMs || '-'}
                     suffix={(chain.durationBreakdown.serviceDurationMs ?? 0) > 0
                       ? `ms (${chain.durationBreakdown.servicePercent}%)` : ''}
@@ -118,7 +118,7 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
                 </Col>
                 <Col span={5}>
                   <Statistic
-                    title={t('trace.network_transfer') || '网络传输'}
+                    title={t('trace.network_transfer')}
                     value={chain.durationBreakdown.networkTransferMs || '-'}
                     suffix={(chain.durationBreakdown.networkTransferMs ?? 0) > 0
                       ? `ms (${chain.durationBreakdown.networkTransferPercent || 0}%)` : ''}
@@ -128,7 +128,7 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
                 </Col>
                 <Col span={4}>
                   <Statistic
-                    title={t('trace.other_time') || '其他'}
+                    title={t('trace.other_time')}
                     value={chain.durationBreakdown.otherMs || 0}
                     suffix={`ms (${chain.durationBreakdown.otherPercent || 0}%)`}
                     valueStyle={{ color: '#8c8c8c' }}
@@ -146,7 +146,7 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
               title={(
                 <Space>
                   <ApiOutlined style={{ color: '#1890ff' }} />
-                  <Text strong>{t('trace.gateway_node') || '网关层'}</Text>
+                  <Text strong>{t('trace.gateway_node')}</Text>
                   <Tag color={chain.gateway.statusCode >= 400 ? 'error' : 'success'}>
                     {chain.gateway.statusCode}
                   </Tag>
@@ -161,10 +161,10 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
               className="mb-4"
             >
               <Descriptions size="small" column={2} bordered>
-                <Descriptions.Item label={t('trace.method') || '方法'}>
+                <Descriptions.Item label={t('trace.method')}>
                   <Tag color="blue">{chain.gateway.method}</Tag>
                 </Descriptions.Item>
-                <Descriptions.Item label={t('trace.gateway_overhead') || '网关开销'}>
+                <Descriptions.Item label={t('trace.gateway_overhead')}>
                   {chain.durationBreakdown ? (
                     <Text style={{ color: chain.durationBreakdown.gatewayOverheadMs > 200 ? '#cf1322' : undefined }}>
                       {chain.durationBreakdown.gatewayOverheadMs}ms ({chain.durationBreakdown.gatewayOverheadPercent}%)
@@ -173,24 +173,24 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
                     <Text>{chain.gateway.latencyMs}ms</Text>
                   )}
                 </Descriptions.Item>
-                <Descriptions.Item label={t('trace.path') || '路径'} span={2}>
+                <Descriptions.Item label={t('trace.path')} span={2}>
                   <Text copyable className="text-xs-sm">{chain.gateway.uri}</Text>
                 </Descriptions.Item>
                 {chain.gateway.queryString && (
-                  <Descriptions.Item label={t('trace.query_string') || '查询参数'} span={2}>
+                  <Descriptions.Item label={t('trace.query_string')} span={2}>
                     <Text copyable className="text-xs-sm">{chain.gateway.queryString}</Text>
                   </Descriptions.Item>
                 )}
-                <Descriptions.Item label={t('trace.route_id') || '路由ID'}>
+                <Descriptions.Item label={t('trace.route_id')}>
                   <Text className="text-xs-sm">{chain.gateway.routeId || '-'}</Text>
                 </Descriptions.Item>
-                <Descriptions.Item label={t('trace.target_instance') || '目标实例'}>
+                <Descriptions.Item label={t('trace.target_instance')}>
                   <Text className="text-xs-sm">{chain.gateway.targetInstance || '-'}</Text>
                 </Descriptions.Item>
-                <Descriptions.Item label={t('trace.client_ip') || '客户端IP'}>
+                <Descriptions.Item label={t('trace.client_ip')}>
                   {chain.gateway.clientIp || '-'}
                 </Descriptions.Item>
-                <Descriptions.Item label={t('trace.time') || '时间'}>
+                <Descriptions.Item label={t('trace.time')}>
                   {chain.gateway.traceTime ? dayjs(chain.gateway.traceTime).format('YYYY-MM-DD HH:mm:ss') : '-'}
                 </Descriptions.Item>
                 {chain.gateway.userAgent && (
@@ -201,7 +201,7 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
                   </Descriptions.Item>
                 )}
                 {chain.gateway.errorMessage && (
-                  <Descriptions.Item label={t('trace.error') || '错误'} span={2}>
+                  <Descriptions.Item label={t('trace.error')} span={2}>
                     <Text type="danger">{chain.gateway.errorMessage}</Text>
                   </Descriptions.Item>
                 )}
@@ -277,26 +277,26 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
                     {service.statusCode || (service.success ? 'OK' : 'ERROR')}
                   </Tag>
                   <Text type="secondary">{service.totalDurationMs}ms</Text>
-                  {service.isSlow && <Tag color="warning">{t('trace.slow') || 'SLOW'}</Tag>}
+                  {service.isSlow && <Tag color="warning">{t('trace.slow')}</Tag>}
                 </Space>
               )}
               className="mb-4"
             >
               <Descriptions size="small" column={2} bordered style={{ marginBottom: 12 }}>
-                <Descriptions.Item label={t('trace.path') || '路径'}>
+                <Descriptions.Item label={t('trace.path')}>
                   <Text className="text-xs-sm">{service.path}</Text>
                 </Descriptions.Item>
-                <Descriptions.Item label={t('trace.method') || '方法'}>
+                <Descriptions.Item label={t('trace.method')}>
                   <Tag>{service.method}</Tag>
                 </Descriptions.Item>
-                <Descriptions.Item label={t('trace.duration') || '耗时'}>
+                <Descriptions.Item label={t('trace.duration')}>
                   {service.totalDurationMs}ms
                 </Descriptions.Item>
-                <Descriptions.Item label={t('trace.spans') || 'Spans'}>
+                <Descriptions.Item label={t('trace.spans')}>
                   {service.spanCount || 0}
                 </Descriptions.Item>
                 {service.errorMessage && (
-                  <Descriptions.Item label={t('trace.error') || '错误'} span={2}>
+                  <Descriptions.Item label={t('trace.error')} span={2}>
                     <Text type="danger">{service.errorMessage}</Text>
                   </Descriptions.Item>
                 )}
@@ -315,7 +315,7 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
                         <Space>
                           <ThunderboltOutlined />
                           <Text strong className="text-xs-sm">
-                            {t('trace.span_details') || 'Span 详情'} ({service.spans.length})
+                            {t('trace.span_details')} ({service.spans.length})
                           </Text>
                           {service.spans.some((s) => !s.success) && (
                             <Tag color="error" style={{ fontSize: 10 }}>有错误</Tag>
@@ -343,8 +343,8 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
             <Alert
               type="info"
               showIcon
-              message={t('trace.no_service_trace') || '未找到下游服务追踪数据'}
-              description={t('trace.no_service_trace_desc') || '下游服务可能未集成 gateway-trace-starter，或该请求未被采样记录。'}
+              message={t('trace.no_service_trace')}
+              description={t('trace.no_service_trace_desc')}
               style={{ marginTop: 16 }}
             />
           )}

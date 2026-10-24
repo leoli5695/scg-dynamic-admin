@@ -98,7 +98,7 @@ export const PodDetailModal: React.FC<PodDetailModalProps> = ({ clusterId, pod, 
 
   const copyYamlToClipboard = useCallback(() => {
     navigator.clipboard.writeText(yaml);
-    message.success(t('common.copied') || 'Copied to clipboard');
+    message.success(t('common.copied'));
   }, [yaml, t]);
 
   const handleLogModeChange = useCallback((mode: 'history' | 'realtime') => {

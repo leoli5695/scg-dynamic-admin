@@ -149,7 +149,7 @@ const InstanceDetailLayout: React.FC = () => {
       >
         <Result
           status="warning"
-          title={t('instance.not_found') || '实例不存在'}
+          title={t('instance.not_found')}
           subTitle="该实例可能已被删除或您没有访问权限"
           extra={[
             <Button

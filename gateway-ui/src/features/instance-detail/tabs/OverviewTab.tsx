@@ -56,7 +56,7 @@ const HealthScorePopover: React.FC = () => {
   return (
     <div className="text-center">
       <div style={{ marginBottom: 8, color: 'var(--text-muted)', fontSize: 12 }}>
-        {t('instance.health_score') || '集群健康评分'}
+        {t('instance.health_score')}
       </div>
       {healthRequest.loading && !health ? (
         <Spin size="small" />
@@ -76,7 +76,7 @@ const HealthScorePopover: React.FC = () => {
               >
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: '#262626' }}>
-                    {t('instance.health_score') || '集群健康评分'}
+                    {t('instance.health_score')}
                   </div>
                   <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 4 }}>
                     {health?.clusterName}
@@ -107,7 +107,7 @@ const HealthScorePopover: React.FC = () => {
                     <div className="flex-items-center mb-2">
                       <Badge status={health?.nodeHealth?.score === 100 ? 'success' : 'warning'} />
                       <span style={{ fontSize: 12, fontWeight: 500, marginLeft: 6 }}>
-                        {t('instance.node_health') || '节点'}
+                        {t('instance.node_health')}
                       </span>
                     </div>
                     <div style={{ fontSize: 16, fontWeight: 'bold', color: '#52c41a' }}>
@@ -136,7 +136,7 @@ const HealthScorePopover: React.FC = () => {
                     <div className="flex-items-center mb-2">
                       <Badge status={podScore >= 80 ? 'success' : 'warning'} />
                       <span style={{ fontSize: 12, fontWeight: 500, marginLeft: 6 }}>
-                        {t('instance.pod_health') || 'Pod'}
+                        {t('instance.pod_health')}
                       </span>
                     </div>
                     <div style={{ fontSize: 16, fontWeight: 'bold', color: podScore >= 80 ? '#52c41a' : '#faad14' }}>
@@ -145,7 +145,7 @@ const HealthScorePopover: React.FC = () => {
                       {health?.podHealth?.totalPods || 0}
                     </div>
                     <div style={{ fontSize: 11, color: '#8c8c8c', marginTop: 4 }}>
-                      {t('instance.restarts') || '重启'}
+                      {t('instance.restarts')}
                       :
                       {' '}
                       {health?.podHealth?.totalRestarts || 0}
@@ -174,7 +174,7 @@ const HealthScorePopover: React.FC = () => {
                   <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
                     <AlertOutlined style={{ color: '#ff4d4f', fontSize: 14 }} />
                     <span style={{ fontWeight: 500, marginLeft: 8, color: '#ff4d4f' }}>
-                      {t('instance.issues') || '问题'}
+                      {t('instance.issues')}
                       {' ('}
                       {health!.issues!.length}
                       )
@@ -218,7 +218,7 @@ const HealthScorePopover: React.FC = () => {
                     >
                       {expanded ? (
                         <>
-                          {t('instance.collapse') || '收起'}
+                          {t('instance.collapse')}
                           {' '}
                           <DownOutlined style={{ marginLeft: 4 }} />
                         </>
@@ -227,7 +227,7 @@ const HealthScorePopover: React.FC = () => {
                           +
                           {health!.issues!.length - 3}
                           {' '}
-                          {t('instance.more_issues') || '更多'}
+                          {t('instance.more_issues')}
                           {' '}
                           <RightOutlined style={{ marginLeft: 4 }} />
                         </>
@@ -249,7 +249,7 @@ const HealthScorePopover: React.FC = () => {
                   <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
                     <BugOutlined style={{ color: '#fa8c16', fontSize: 14 }} />
                     <span style={{ fontWeight: 500, marginLeft: 8, color: '#595959' }}>
-                      {t('instance.problematic_pods') || '问题Pod'}
+                      {t('instance.problematic_pods')}
                       {' ('}
                       {health!.podHealth!.problematicPods!.length}
                       )
@@ -261,7 +261,7 @@ const HealthScorePopover: React.FC = () => {
                         {pod.name?.substring(0, 20)}
                         ... (
                         {pod.restartCount}
-                        {t('instance.times') || '次'}
+                        {t('instance.times')}
                         )
                       </Tag>
                     ))}
@@ -280,7 +280,7 @@ const HealthScorePopover: React.FC = () => {
                     >
                       {expanded ? (
                         <>
-                          {t('instance.collapse') || '收起'}
+                          {t('instance.collapse')}
                           {' '}
                           <DownOutlined style={{ marginLeft: 4 }} />
                         </>
@@ -289,7 +289,7 @@ const HealthScorePopover: React.FC = () => {
                           +
                           {health!.podHealth!.problematicPods!.length - 4}
                           {' '}
-                          {t('instance.more_pods') || '还有'}
+                          {t('instance.more_pods')}
                           {' '}
                           <RightOutlined style={{ marginLeft: 4 }} />
                         </>
@@ -311,7 +311,7 @@ const HealthScorePopover: React.FC = () => {
                   <div className="flex-items-center mb-2">
                     <SafetyOutlined style={{ color: '#1890ff', fontSize: 14 }} />
                     <span style={{ fontWeight: 500, marginLeft: 8, color: '#1890ff' }}>
-                      {t('instance.recommendations') || '建议'}
+                      {t('instance.recommendations')}
                     </span>
                   </div>
                   <ul style={{ margin: 0, paddingLeft: 18, fontSize: 11, color: '#595959' }}>
@@ -344,7 +344,7 @@ const HealthScorePopover: React.FC = () => {
           </div>
         </Popover>
       ) : (
-        <Text type="secondary">{t('instance.health_unavailable') || '暂无数据'}</Text>
+        <Text type="secondary">{t('instance.health_unavailable')}</Text>
       )}
       <Button
         size="small"
@@ -368,13 +368,13 @@ const OverviewTab: React.FC = () => {
     ? getEffectiveNacosServerAddr(instance)
     : globalNacosAddr;
 
-  let accessUrlSource = t('instance.access_url_default') || '默认';
+  let accessUrlSource = t('instance.access_url_default');
   if (instance.manualAccessUrl) {
-    accessUrlSource = t('instance.access_url_manual') || '手动配置';
+    accessUrlSource = t('instance.access_url_manual');
   } else if (instance.discoveredAccessUrl) {
-    accessUrlSource = t('instance.access_url_discovered') || 'K8s发现';
+    accessUrlSource = t('instance.access_url_discovered');
   } else if (instance.reportedAccessUrl) {
-    accessUrlSource = t('instance.access_url_reported') || '心跳上报';
+    accessUrlSource = t('instance.access_url_reported');
   }
 
   return (

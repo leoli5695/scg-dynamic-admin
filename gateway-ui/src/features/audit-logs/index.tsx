@@ -34,11 +34,11 @@ const AuditLogsPage: React.FC = () => {
   const handleRollback = async (logId: number) => {
     try {
       await rollbackAuditLog(logId, { operator: 'admin' });
-      message.success(t('audit.rollback_success') || '回滚成功');
+      message.success(t('audit.rollback_success'));
       reload();
     } catch (e) {
       const detail = e instanceof ApiError ? `: ${e.message}` : '';
-      message.error(`${t('audit.rollback_failed') || '回滚失败'}${detail}`);
+      message.error(`${t('audit.rollback_failed')}${detail}`);
     }
   };
 
@@ -53,8 +53,8 @@ const AuditLogsPage: React.FC = () => {
           buttonStyle="solid"
           size="small"
         >
-          <Radio.Button value="table"><TableOutlined /> {t('audit.view_table') || '表格'}</Radio.Button>
-          <Radio.Button value="timeline"><UnorderedListOutlined /> {t('audit.view_timeline') || '时间线'}</Radio.Button>
+          <Radio.Button value="table"><TableOutlined /> {t('audit.view_table')}</Radio.Button>
+          <Radio.Button value="timeline"><UnorderedListOutlined /> {t('audit.view_timeline')}</Radio.Button>
         </Radio.Group>
       </div>
 

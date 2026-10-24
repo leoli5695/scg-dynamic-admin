@@ -43,21 +43,21 @@ const TimelineView: React.FC<TimelineViewProps> = ({ instanceId }) => {
       dataSource={diff || []}
       columns={[
         {
-          title: t('audit.field') || '字段',
+          title: t('audit.field'),
           dataIndex: 'field',
           key: 'field',
           width: '30%',
           render: (text: string) => <Text code>{text}</Text>,
         },
         {
-          title: t('audit.old_value') || '旧值',
+          title: t('audit.old_value'),
           dataIndex: 'oldValue',
           key: 'oldValue',
           width: '35%',
           render: (value: string | null) => (value ? <Text delete type="danger">{value}</Text> : <Text type="secondary">-</Text>),
         },
         {
-          title: t('audit.new_value') || '新值',
+          title: t('audit.new_value'),
           dataIndex: 'newValue',
           key: 'newValue',
           width: '35%',
@@ -93,7 +93,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ instanceId }) => {
           <div style={{ marginTop: 12 }}>
             <Collapse ghost size="small" items={[{
               key: '1',
-              label: t('audit.view_changes') || '查看变更',
+              label: t('audit.view_changes'),
               children: renderDiffTable(event.diff),
             }]} />
           </div>
@@ -112,28 +112,28 @@ const TimelineView: React.FC<TimelineViewProps> = ({ instanceId }) => {
             onChange={setDays}
             style={{ width: 120 }}
             options={[
-              { value: 1, label: t('audit.last_1d') || '最近 1 天' },
-              { value: 3, label: t('audit.last_3d') || '最近 3 天' },
-              { value: 7, label: t('audit.last_7d') || '最近 7 天' },
-              { value: 14, label: t('audit.last_14d') || '最近 14 天' },
-              { value: 30, label: t('audit.last_30d') || '最近 30 天' },
+              { value: 1, label: t('audit.last_1d') },
+              { value: 3, label: t('audit.last_3d') },
+              { value: 7, label: t('audit.last_7d') },
+              { value: 14, label: t('audit.last_14d') },
+              { value: 30, label: t('audit.last_30d') },
             ]}
           />
           <Select
             value={targetType}
             onChange={setTargetType}
             allowClear
-            placeholder={t('audit.all_types') || '全部类型'}
+            placeholder={t('audit.all_types')}
             style={{ width: 150 }}
             options={[
-              { value: 'ROUTE', label: t('audit.target_route') || '路由' },
-              { value: 'SERVICE', label: t('audit.target_service') || '服务' },
-              { value: 'STRATEGY', label: t('audit.target_strategy') || '策略' },
-              { value: 'AUTH_POLICY', label: t('audit.target_auth_policy') || '认证策略' },
+              { value: 'ROUTE', label: t('audit.target_route') },
+              { value: 'SERVICE', label: t('audit.target_service') },
+              { value: 'STRATEGY', label: t('audit.target_strategy') },
+              { value: 'AUTH_POLICY', label: t('audit.target_auth_policy') },
             ]}
           />
           <Button icon={<ReloadOutlined />} onClick={() => timelineRequest.run()} loading={timelineRequest.loading}>
-            {t('common.refresh') || '刷新'}
+            {t('common.refresh')}
           </Button>
         </Space>
       </Card>
@@ -143,7 +143,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ instanceId }) => {
           type="error"
           showIcon
           style={{ marginBottom: 16 }}
-          message={t('audit.load_failed') || '加载审计日志失败'}
+          message={t('audit.load_failed')}
           description={timelineRequest.error instanceof ApiError ? timelineRequest.error.message : undefined}
         />
       )}
@@ -154,7 +154,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ instanceId }) => {
           <Col xs={12} sm={6}>
             <Card size="small">
               <Statistic
-                title={t('audit.total_changes') || '总变更数'}
+                title={t('audit.total_changes')}
                 value={timeline.totalChanges}
                 valueStyle={{ fontSize: 20 }}
                 prefix={<HistoryOutlined />}
@@ -164,7 +164,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ instanceId }) => {
           <Col xs={12} sm={6}>
             <Card size="small">
               <Statistic
-                title={t('audit.days_shown') || '日期数'}
+                title={t('audit.days_shown')}
                 value={timeline.days?.length || 0}
                 valueStyle={{ fontSize: 20 }}
               />
@@ -173,7 +173,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ instanceId }) => {
           <Col xs={12} sm={6}>
             <Card size="small">
               <Statistic
-                title={t('audit.contributors') || '操作人数'}
+                title={t('audit.contributors')}
                 value={Object.keys(timeline.changesByOperator || {}).length}
                 valueStyle={{ fontSize: 20 }}
                 prefix={<UserOutlined />}
@@ -183,7 +183,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ instanceId }) => {
           <Col xs={12} sm={6}>
             <Card size="small">
               <Statistic
-                title={t('audit.change_types') || '变更类型'}
+                title={t('audit.change_types')}
                 value={Object.keys(timeline.changesByType || {}).length}
                 valueStyle={{ fontSize: 20 }}
               />
@@ -212,7 +212,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ instanceId }) => {
             ))}
           </div>
         ) : (
-          <Empty description={t('audit.no_changes') || '所选时间段内无配置变更'} />
+          <Empty description={t('audit.no_changes')} />
         )}
       </Card>
     </>

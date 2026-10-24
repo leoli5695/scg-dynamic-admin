@@ -71,8 +71,15 @@ const KnowledgeTab: React.FC = () => {
   }, [page, pageSize, listType, t]);
 
   useEffect(() => {
+    // loadChunks sets setListLoading(true) synchronously, and that is the intent: the spinner must
+    // be on for the very first fetch. This is a mount-only effect (empty deps), so it cannot cascade
+    // across re-renders. The clean fix is to move both fetches onto the useRequest hook the rest of
+    // the app already uses, but this component carries 18 useState and there are no front-end tests,
+    // so that refactor should not happen blind inside a lint cleanup.
+    /* eslint-disable react-hooks/set-state-in-effect */
     loadStats();
     loadChunks(0, pageSize, undefined);
+    /* eslint-enable react-hooks/set-state-in-effect */
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

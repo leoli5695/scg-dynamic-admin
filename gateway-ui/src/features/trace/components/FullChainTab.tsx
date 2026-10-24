@@ -36,7 +36,7 @@ const FullChainTab: React.FC<FullChainTabProps> = ({ traceConfig }) => {
     () => getRecentFullChains({ page, size: PAGE_SIZE }),
     {
       deps: [page],
-      onError: () => message.error(t('trace.load_fullchain_failed') || '加载全链路追踪失败'),
+      onError: () => message.error(t('trace.load_fullchain_failed')),
     },
   );
 
@@ -47,7 +47,7 @@ const FullChainTab: React.FC<FullChainTabProps> = ({ traceConfig }) => {
       deps: [selectedTraceId],
       immediate: !!selectedTraceId,
       onSuccess: () => setDetailVisible(true),
-      onError: () => message.error(t('trace.load_fullchain_detail_failed') || '加载链路详情失败'),
+      onError: () => message.error(t('trace.load_fullchain_detail_failed')),
     },
   );
 
@@ -101,7 +101,7 @@ const FullChainTab: React.FC<FullChainTabProps> = ({ traceConfig }) => {
       },
     },
     {
-      title: t('trace.chain_status') || '链路状态',
+      title: t('trace.chain_status'),
       dataIndex: 'chainStatus',
       key: 'chainStatus',
       width: 130,
@@ -111,7 +111,7 @@ const FullChainTab: React.FC<FullChainTabProps> = ({ traceConfig }) => {
             <Space size={4}>
               <CheckCircleOutlined style={{ color: status === 'COMPLETE' ? '#52c41a' : '#faad14' }} />
               <Text className="text-xs-sm">
-                {record.serviceCount || 0} {t('trace.service_count_label') || '个服务'}
+                {record.serviceCount || 0} {t('trace.service_count_label')}
               </Text>
             </Space>
           );
@@ -120,14 +120,14 @@ const FullChainTab: React.FC<FullChainTabProps> = ({ traceConfig }) => {
           <Space size={4}>
             <ExclamationCircleOutlined style={{ color: '#d9d9d9' }} />
             <Text type="secondary" className="text-xs-sm">
-              {t('trace.gateway_only') || '仅网关'}
+              {t('trace.gateway_only')}
             </Text>
           </Space>
         );
       },
     },
     {
-      title: t('trace.downstream_services') || '下游服务',
+      title: t('trace.downstream_services'),
       key: 'services',
       width: 180,
       render: (_, record) => {

@@ -63,7 +63,7 @@ const DiffDrawer: React.FC<DiffDrawerProps> = ({ instanceId, logId, open, onClos
 
   const changeColumns: ColumnsType<AuditDiffChange> = [
     {
-      title: t('audit.type') || '类型',
+      title: t('audit.type'),
       dataIndex: 'type',
       width: 80,
       render: (type: string) => {
@@ -72,19 +72,19 @@ const DiffDrawer: React.FC<DiffDrawerProps> = ({ instanceId, logId, open, onClos
       },
     },
     {
-      title: t('audit.field') || '字段',
+      title: t('audit.field'),
       key: 'field',
       width: 150,
       // Backend emits `path`; `field` kept as a fallback for compatibility.
       render: (_, c) => c.field ?? c.path ?? '-',
     },
     {
-      title: t('audit.old_value') || '旧值',
+      title: t('audit.old_value'),
       dataIndex: 'oldValue',
       render: (v: unknown) => (v ? <Text type="danger" style={{ fontSize: 11 }}>{JSON.stringify(v)}</Text> : <Text type="secondary">-</Text>),
     },
     {
-      title: t('audit.new_value') || '新值',
+      title: t('audit.new_value'),
       dataIndex: 'newValue',
       render: (v: unknown) => (v ? <Text type="success" style={{ fontSize: 11 }}>{JSON.stringify(v)}</Text> : <Text type="secondary">-</Text>),
     },
@@ -97,7 +97,7 @@ const DiffDrawer: React.FC<DiffDrawerProps> = ({ instanceId, logId, open, onClos
       title={
         <Space>
           <DiffOutlined />
-          {t('audit.diff_title') || '差异对比'}
+          {t('audit.diff_title')}
         </Space>
       }
       placement="right"
@@ -107,19 +107,19 @@ const DiffDrawer: React.FC<DiffDrawerProps> = ({ instanceId, logId, open, onClos
       closeIcon={<CloseOutlined />}
       extra={
         diff && diff.oldValue !== null && (
-          <Tooltip title={t('audit.rollback') || '回滚'}>
+          <Tooltip title={t('audit.rollback')}>
             <Popconfirm
-              title={t('audit.rollback_confirm') || '确定回滚到此版本？'}
+              title={t('audit.rollback_confirm')}
               onConfirm={() => {
                 onRollback(diff.id);
                 onClose();
               }}
-              okText={t('common.confirm') || '确定'}
-              cancelText={t('common.cancel') || '取消'}
+              okText={t('common.confirm')}
+              cancelText={t('common.cancel')}
               getPopupContainer={() => document.body}
             >
               <Button size="small" icon={<RollbackOutlined />} danger>
-                {t('audit.rollback') || '回滚'}
+                {t('audit.rollback')}
               </Button>
             </Popconfirm>
           </Tooltip>
@@ -133,13 +133,13 @@ const DiffDrawer: React.FC<DiffDrawerProps> = ({ instanceId, logId, open, onClos
         <div>
           {/* Basic info */}
           <Descriptions size="small" column={2} bordered style={{ marginBottom: 16 }}>
-            <Descriptions.Item label={t('audit.operation_type') || '操作类型'}>
+            <Descriptions.Item label={t('audit.operation_type')}>
               {getOperationTag(t, diff.operationType)}
             </Descriptions.Item>
-            <Descriptions.Item label={t('audit.target_type') || '目标类型'}>
+            <Descriptions.Item label={t('audit.target_type')}>
               {getTargetTypeTag(t, diff.targetType)}
             </Descriptions.Item>
-            <Descriptions.Item label={t('audit.target') || '目标'}>
+            <Descriptions.Item label={t('audit.target')}>
               <Space>
                 <Tooltip title={`ID: ${diff.targetId}`} placement="top">
                   <Text copyable style={{ fontSize: 11 }}>
@@ -147,7 +147,7 @@ const DiffDrawer: React.FC<DiffDrawerProps> = ({ instanceId, logId, open, onClos
                   </Text>
                 </Tooltip>
                 {targetLink && (
-                  <Tooltip title={t('audit.view_target_detail') || '查看目标详情'} placement="top">
+                  <Tooltip title={t('audit.view_target_detail')} placement="top">
                     <Button
                       type="link"
                       size="small"
@@ -159,10 +159,10 @@ const DiffDrawer: React.FC<DiffDrawerProps> = ({ instanceId, logId, open, onClos
                 )}
               </Space>
             </Descriptions.Item>
-            <Descriptions.Item label={t('audit.operator') || '操作人'}>
+            <Descriptions.Item label={t('audit.operator')}>
               <Space><UserOutlined /><Text>{diff.operator}</Text></Space>
             </Descriptions.Item>
-            <Descriptions.Item label={t('audit.created_at') || '操作时间'} span={2}>
+            <Descriptions.Item label={t('audit.created_at')} span={2}>
               <Space><ClockCircleOutlined /><Text>{dayjs(diff.createdAt).format('YYYY-MM-DD HH:mm:ss')}</Text></Space>
             </Descriptions.Item>
           </Descriptions>
@@ -178,7 +178,7 @@ const DiffDrawer: React.FC<DiffDrawerProps> = ({ instanceId, logId, open, onClos
 
           {/* Changes table */}
           {diff.changes && diff.changes.length > 0 && (
-            <Card size="small" title={t('audit.change_details') || '变更详情'} style={{ marginBottom: 16 }}>
+            <Card size="small" title={t('audit.change_details')} style={{ marginBottom: 16 }}>
               <Table
                 dataSource={diff.changes}
                 columns={changeColumns}
@@ -190,18 +190,18 @@ const DiffDrawer: React.FC<DiffDrawerProps> = ({ instanceId, logId, open, onClos
           )}
 
           {/* Old/new value comparison */}
-          <Card size="small" title={t('audit.value_comparison') || '值对比'}>
+          <Card size="small" title={t('audit.value_comparison')}>
             <Row gutter={16}>
               <Col span={12}>
-                <Alert type="error" message={t('audit.old_value') || '旧值'} style={{ marginBottom: 8 }} />
+                <Alert type="error" message={t('audit.old_value')} style={{ marginBottom: 8 }} />
                 <div style={{ background: 'rgba(255, 77, 79, 0.08)', padding: 8, borderRadius: 4, maxHeight: 300, overflow: 'auto' }}>
-                  <JsonValue value={diff.oldValue} maxHeight={280} noneLabel={t('common.none') || '无'} />
+                  <JsonValue value={diff.oldValue} maxHeight={280} noneLabel={t('common.none')} />
                 </div>
               </Col>
               <Col span={12}>
-                <Alert type="success" message={t('audit.new_value') || '新值'} style={{ marginBottom: 8 }} />
+                <Alert type="success" message={t('audit.new_value')} style={{ marginBottom: 8 }} />
                 <div style={{ background: 'rgba(82, 196, 26, 0.08)', padding: 8, borderRadius: 4, maxHeight: 300, overflow: 'auto' }}>
-                  <JsonValue value={diff.newValue} maxHeight={280} noneLabel={t('common.none') || '无'} />
+                  <JsonValue value={diff.newValue} maxHeight={280} noneLabel={t('common.none')} />
                 </div>
               </Col>
             </Row>

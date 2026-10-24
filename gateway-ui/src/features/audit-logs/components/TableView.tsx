@@ -92,7 +92,7 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
       } catch (e) {
         if (controller.signal.aborted) return;
         if (e instanceof ApiError) message.error(e.message);
-        else message.error(t('audit.load_failed') || '加载审计日志失败');
+        else message.error(t('audit.load_failed'));
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
@@ -123,10 +123,10 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
   const handleDelete = useCallback(async (id: number) => {
     try {
       await deleteAuditLog(id);
-      message.success(t('audit.delete_done') || '删除成功');
+      message.success(t('audit.delete_done'));
       setAppliedFilters((prev) => ({ ...prev })); // re-query current page
     } catch (e) {
-      message.error(`${t('audit.delete_failed') || '删除失败'}: ${e instanceof ApiError ? e.message : ''}`);
+      message.error(`${t('audit.delete_failed')}: ${e instanceof ApiError ? e.message : ''}`);
     }
   }, [t]);
 
@@ -149,9 +149,9 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-      message.success(t('audit.export_success') || '导出成功');
+      message.success(t('audit.export_success'));
     } catch (e) {
-      message.error(`${t('audit.export_failed') || '导出失败'}${e instanceof ApiError ? `: ${e.message}` : ''}`);
+      message.error(`${t('audit.export_failed')}${e instanceof ApiError ? `: ${e.message}` : ''}`);
     } finally {
       setExportLoading(false);
     }
@@ -162,12 +162,12 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
     try {
       const result = await triggerCleanup();
       message.success(
-        `${t('audit.cleanup_done') || '清理完成'}，${t('audit.deleted_count') || '删除了'} ${result.deletedCount || 0} ${t('audit.records') || '条'}`,
+        `${t('audit.cleanup_done')}，${t('audit.deleted_count')} ${result.deletedCount || 0} ${t('audit.records')}`,
         5,
       );
       setAppliedFilters((prev) => ({ ...prev }));
     } catch (e) {
-      message.error(`${t('audit.cleanup_failed') || '清理失败'}: ${e instanceof ApiError ? e.message : ''}`, 5);
+      message.error(`${t('audit.cleanup_failed')}: ${e instanceof ApiError ? e.message : ''}`, 5);
     } finally {
       setCleanupLoading(false);
     }
@@ -178,12 +178,12 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
     try {
       const result = await clearAllAuditLogs();
       message.success(
-        `${t('audit.clear_done') || '清空完成'}，${t('audit.deleted_count') || '删除了'} ${result.deletedCount || 0} ${t('audit.records') || '条'}`,
+        `${t('audit.clear_done')}，${t('audit.deleted_count')} ${result.deletedCount || 0} ${t('audit.records')}`,
         5,
       );
       setAppliedFilters((prev) => ({ ...prev }));
     } catch (e) {
-      message.error(`${t('audit.clear_failed') || '清空失败'}: ${e instanceof ApiError ? e.message : ''}`, 5);
+      message.error(`${t('audit.clear_failed')}: ${e instanceof ApiError ? e.message : ''}`, 5);
     } finally {
       setCleanupLoading(false);
     }
@@ -192,17 +192,17 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
   const columns: ColumnsType<AuditLog> = useMemo(() => [
     { title: 'ID', dataIndex: 'id', key: 'id', width: 80 },
     {
-      title: t('audit.operation_type') || '操作类型',
+      title: t('audit.operation_type'),
       dataIndex: 'operationType', key: 'operationType', width: 120,
       render: (type: string) => getOperationTag(t, type),
     },
     {
-      title: t('audit.target_type') || '目标类型',
+      title: t('audit.target_type'),
       dataIndex: 'targetType', key: 'targetType', width: 120,
       render: (type: string) => getTargetTypeTag(t, type),
     },
     {
-      title: t('audit.target') || '目标',
+      title: t('audit.target'),
       key: 'target', width: 180, ellipsis: true,
       render: (_, record) => (
         <Tooltip title={<span>ID: {record.targetId}</span>}>
@@ -211,17 +211,17 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
       ),
     },
     {
-      title: t('audit.operator') || '操作人',
+      title: t('audit.operator'),
       dataIndex: 'operator', key: 'operator', width: 100,
       render: (op: string) => <><UserOutlined /> {op || '-'}</>,
     },
     {
-      title: t('audit.ip_address') || 'IP地址',
+      title: t('audit.ip_address'),
       dataIndex: 'ipAddress', key: 'ipAddress', width: 150,
       render: (ip: string) => <Tooltip title={ip}>{formatIpAddress(ip)}</Tooltip>,
     },
     {
-      title: t('audit.created_at') || '操作时间',
+      title: t('audit.created_at'),
       dataIndex: 'createdAt', key: 'createdAt', width: 180,
       render: (time: string) => (
         <Text style={{ fontSize: 12 }}>
@@ -231,32 +231,32 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
       ),
     },
     {
-      title: t('common.actions') || '操作',
+      title: t('common.actions'),
       key: 'actions', width: 150, fixed: 'right',
       render: (_, record) => (
         <Space size="small">
-          <Tooltip title={t('audit.view_diff') || '查看差异'} placement="top">
+          <Tooltip title={t('audit.view_diff')} placement="top">
             <Button type="link" size="small" icon={<DiffOutlined />} onClick={() => onShowDiff(record.id)} />
           </Tooltip>
           {record.oldValue && (
-            <Tooltip title={t('audit.rollback') || '回滚'} placement="top">
+            <Tooltip title={t('audit.rollback')} placement="top">
               <Popconfirm
-                title={t('audit.rollback_confirm') || '确定回滚到此版本？'}
+                title={t('audit.rollback_confirm')}
                 onConfirm={() => onRollback(record.id)}
-                okText={t('common.confirm') || '确定'}
-                cancelText={t('common.cancel') || '取消'}
+                okText={t('common.confirm')}
+                cancelText={t('common.cancel')}
               >
                 <Button type="link" size="small" icon={<RollbackOutlined />} danger />
               </Popconfirm>
             </Tooltip>
           )}
-          <Tooltip title={t('audit.delete') || '删除'} placement="top">
+          <Tooltip title={t('audit.delete')} placement="top">
             <Popconfirm
-              title={t('audit.delete_confirm') || '确定删除此日志？'}
-              description={t('audit.delete_warning') || '删除后无法恢复'}
+              title={t('audit.delete_confirm')}
+              description={t('audit.delete_warning')}
               onConfirm={() => handleDelete(record.id)}
-              okText={t('common.confirm') || '确定'}
-              cancelText={t('common.cancel') || '取消'}
+              okText={t('common.confirm')}
+              cancelText={t('common.cancel')}
               okButtonProps={{ danger: true }}
             >
               <Button type="link" size="small" icon={<DeleteOutlined />} />
@@ -273,50 +273,50 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
       <Row gutter={16} style={{ marginBottom: 24 }}>
         <Col span={4}>
           <Card size="small">
-            <Statistic title={t('audit.total_records') || '总记录数'} value={stats?.total ?? 0} prefix={<HistoryOutlined />} />
+            <Statistic title={t('audit.total_records')} value={stats?.total ?? 0} prefix={<HistoryOutlined />} />
           </Card>
         </Col>
         <Col span={4}>
           <Card size="small">
-            <Statistic title={t('audit.today_ops') || '今日操作'} value={stats?.today ?? 0} prefix={<ClockCircleOutlined />} valueStyle={{ color: '#1890ff' }} />
+            <Statistic title={t('audit.today_ops')} value={stats?.today ?? 0} prefix={<ClockCircleOutlined />} valueStyle={{ color: '#1890ff' }} />
           </Card>
         </Col>
         <Col span={4}>
           <Card size="small">
-            <Statistic title={t('audit.create_ops') || '创建操作'} value={stats?.creates ?? 0} prefix={<PlusOutlined />} valueStyle={{ color: '#52c41a' }} />
+            <Statistic title={t('audit.create_ops')} value={stats?.creates ?? 0} prefix={<PlusOutlined />} valueStyle={{ color: '#52c41a' }} />
           </Card>
         </Col>
         <Col span={12}>
           <Card size="small">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <Text type="secondary">{t('audit.expired_logs') || '过期日志'}: </Text>
+                <Text type="secondary">{t('audit.expired_logs')}: </Text>
                 <Text strong>{cleanupStats?.cleanableCount || 0}</Text>
-                <Text type="secondary"> {t('audit.records') || '条'} ({t('audit.retention') || '保留'} {cleanupStats?.retentionDays || 30} {t('audit.days') || '天'})</Text>
+                <Text type="secondary"> {t('audit.records')} ({t('audit.retention')} {cleanupStats?.retentionDays || 30} {t('audit.days')})</Text>
               </div>
               <Popconfirm
-                title={t('audit.cleanup_confirm') || '确定清理过期日志？'}
-                description={`${t('audit.will_delete') || '将删除超过'} ${cleanupStats?.retentionDays || 30} ${t('audit.days') || '天的'} ${cleanupStats?.cleanableCount || 0} ${t('audit.records') || '条'}`}
+                title={t('audit.cleanup_confirm')}
+                description={`${t('audit.will_delete')} ${cleanupStats?.retentionDays || 30} ${t('audit.days')} ${cleanupStats?.cleanableCount || 0} ${t('audit.records')}`}
                 onConfirm={handleCleanup}
-                okText={t('common.confirm') || '确定'}
-                cancelText={t('common.cancel') || '取消'}
+                okText={t('common.confirm')}
+                cancelText={t('common.cancel')}
                 getPopupContainer={() => document.body}
               >
                 <Button type="primary" danger size="small" loading={cleanupLoading} icon={<DeleteOutlined />}>
-                  {t('audit.cleanup') || '清理日志'}
+                  {t('audit.cleanup')}
                 </Button>
               </Popconfirm>
               <Popconfirm
-                title={t('audit.clear_all_confirm') || '确定清空所有日志？'}
-                description={t('audit.clear_all_warning') || '此操作将删除所有审计日志，无法恢复！'}
+                title={t('audit.clear_all_confirm')}
+                description={t('audit.clear_all_warning')}
                 onConfirm={handleClearAll}
-                okText={t('common.confirm') || '确定'}
-                cancelText={t('common.cancel') || '取消'}
+                okText={t('common.confirm')}
+                cancelText={t('common.cancel')}
                 okButtonProps={{ danger: true }}
                 getPopupContainer={() => document.body}
               >
                 <Button danger size="small" loading={cleanupLoading} icon={<DeleteOutlined />} style={{ marginLeft: 8 }}>
-                  {t('audit.clear_all') || '清空所有'}
+                  {t('audit.clear_all')}
                 </Button>
               </Popconfirm>
             </div>
@@ -328,33 +328,33 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
       <Card size="small" style={{ marginBottom: 16 }}>
         <Space wrap>
           <Select
-            placeholder={t('audit.target_type') || '目标类型'}
+            placeholder={t('audit.target_type')}
             style={{ width: 140 }}
             allowClear
             value={targetType}
             onChange={setTargetType}
           >
-            <Select.Option value="ROUTE">{t('audit.target_route') || '路由'}</Select.Option>
-            <Select.Option value="SERVICE">{t('audit.target_service') || '服务'}</Select.Option>
-            <Select.Option value="STRATEGY">{t('audit.target_strategy') || '策略'}</Select.Option>
-            <Select.Option value="AUTH_POLICY">{t('audit.target_auth_policy') || '认证策略'}</Select.Option>
+            <Select.Option value="ROUTE">{t('audit.target_route')}</Select.Option>
+            <Select.Option value="SERVICE">{t('audit.target_service')}</Select.Option>
+            <Select.Option value="STRATEGY">{t('audit.target_strategy')}</Select.Option>
+            <Select.Option value="AUTH_POLICY">{t('audit.target_auth_policy')}</Select.Option>
           </Select>
           <Select
-            placeholder={t('audit.operation_type') || '操作类型'}
+            placeholder={t('audit.operation_type')}
             style={{ width: 120 }}
             allowClear
             value={operationType}
             onChange={setOperationType}
           >
-            <Select.Option value="CREATE">{t('audit.op_create') || '创建'}</Select.Option>
-            <Select.Option value="UPDATE">{t('audit.op_update') || '更新'}</Select.Option>
-            <Select.Option value="DELETE">{t('audit.op_delete') || '删除'}</Select.Option>
-            <Select.Option value="ENABLE">{t('audit.op_enable') || '启用'}</Select.Option>
-            <Select.Option value="DISABLE">{t('audit.op_disable') || '禁用'}</Select.Option>
-            <Select.Option value="ROLLBACK">{t('audit.op_rollback') || '回滚'}</Select.Option>
+            <Select.Option value="CREATE">{t('audit.op_create')}</Select.Option>
+            <Select.Option value="UPDATE">{t('audit.op_update')}</Select.Option>
+            <Select.Option value="DELETE">{t('audit.op_delete')}</Select.Option>
+            <Select.Option value="ENABLE">{t('audit.op_enable')}</Select.Option>
+            <Select.Option value="DISABLE">{t('audit.op_disable')}</Select.Option>
+            <Select.Option value="ROLLBACK">{t('audit.op_rollback')}</Select.Option>
           </Select>
           <Input
-            placeholder={t('audit.target_id') || '目标ID'}
+            placeholder={t('audit.target_id')}
             style={{ width: 200 }}
             prefix={<SearchOutlined />}
             value={targetId}
@@ -368,19 +368,19 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
               size="small"
               onClick={() => setDateRange([dayjs().startOf('day'), dayjs().endOf('day')])}
             >
-              {t('audit.today') || '今天'}
+              {t('audit.today')}
             </Button>
             <Button
               size="small"
               onClick={() => setDateRange([dayjs().subtract(7, 'day').startOf('day'), dayjs().endOf('day')])}
             >
-              {t('audit.last_7d') || '近7天'}
+              {t('audit.last_7d')}
             </Button>
             <Button
               size="small"
               onClick={() => setDateRange([dayjs().subtract(30, 'day').startOf('day'), dayjs().endOf('day')])}
             >
-              {t('audit.last_30d') || '近30天'}
+              {t('audit.last_30d')}
             </Button>
           </Space.Compact>
           <RangePicker
@@ -390,17 +390,17 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
             style={{ width: 280 }}
           />
           <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
-            {t('common.search') || '搜索'}
+            {t('common.search')}
           </Button>
           <Button onClick={handleReset}>
-            {t('common.reset') || '重置'}
+            {t('common.reset')}
           </Button>
           <Button
             icon={<ReloadOutlined />}
             onClick={() => setAppliedFilters((prev) => ({ ...prev }))}
             loading={loading}
           >
-            {t('common.refresh') || '刷新'}
+            {t('common.refresh')}
           </Button>
           <Dropdown
             menu={{
@@ -410,7 +410,7 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
                   label: (
                     <Space>
                       <FileTextOutlined />
-                      {t('audit.export_csv') || '导出 CSV'}
+                      {t('audit.export_csv')}
                     </Space>
                   ),
                   onClick: () => handleExport('csv'),
@@ -420,7 +420,7 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
                   label: (
                     <Space>
                       <FileTextOutlined />
-                      {t('audit.export_json') || '导出 JSON'}
+                      {t('audit.export_json')}
                     </Space>
                   ),
                   onClick: () => handleExport('json'),
@@ -431,7 +431,7 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
             getPopupContainer={() => document.body}
           >
             <Button icon={<DownloadOutlined />} loading={exportLoading}>
-              {t('audit.export') || '导出'}
+              {t('audit.export')}
             </Button>
           </Dropdown>
         </Space>
@@ -454,10 +454,10 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
                 description={
                   <span>
-                    {t('audit.no_logs') || '暂无审计日志'}
+                    {t('audit.no_logs')}
                     <br />
                     <Text type="secondary" style={{ fontSize: 12 }}>
-                      {t('audit.no_logs_hint') || '当发生路由、服务、策略等配置变更时，将自动记录审计日志'}
+                      {t('audit.no_logs_hint')}
                     </Text>
                   </span>
                 }
@@ -472,7 +472,7 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
             pageSizeOptions: ['10', '20', '50', '100'],
             defaultPageSize: 20,
             showQuickJumper: true,
-            showTotal: (totalCount) => `${t('common.total') || '共'} ${totalCount} ${t('audit.records') || '条'}`,
+            showTotal: (totalCount) => `${t('common.total')} ${totalCount} ${t('audit.records')}`,
             onChange: (p, ps) => {
               setPage(p - 1);
               setPageSize(ps);

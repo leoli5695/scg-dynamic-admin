@@ -49,7 +49,7 @@ const DiagnosticPage: React.FC = () => {
       setReloadKey((k) => k + 1);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Failed to run diagnostic');
-      message.error(t('diagnostic.run_failed') || '诊断运行失败');
+      message.error(t('diagnostic.run_failed'));
     } finally {
       setLoading(false);
     }
@@ -76,7 +76,7 @@ const DiagnosticPage: React.FC = () => {
       <div style={{ textAlign: 'center', padding: 100 }}>
         <Spin size="large" />
         <div style={{ marginTop: 16 }}>
-          <Text type="secondary">{t('diagnostic.running') || '正在运行诊断...'}</Text>
+          <Text type="secondary">{t('diagnostic.running')}</Text>
         </div>
       </div>
     );
@@ -92,12 +92,12 @@ const DiagnosticPage: React.FC = () => {
       }}>
         <Title level={4} style={{ margin: 0 }}>
           <MedicineBoxOutlined style={{ marginRight: 8 }} />
-          {t('diagnostic.title') || '系统诊断'}
+          {t('diagnostic.title')}
         </Title>
         <Space>
           {/* Auto refresh controls */}
           <Space>
-            <Text type="secondary">{t('diagnostic.auto_refresh') || '自动刷新'}</Text>
+            <Text type="secondary">{t('diagnostic.auto_refresh')}</Text>
             <Switch
               checked={autoRefresh}
               onChange={setAutoRefresh}
@@ -124,21 +124,21 @@ const DiagnosticPage: React.FC = () => {
             onClick={() => runDiagnostic('full')}
             loading={loading}
           >
-            {t('diagnostic.full_check') || '完整诊断'}
+            {t('diagnostic.full_check')}
           </Button>
           <Button
             icon={<ThunderboltOutlined />}
             onClick={() => runDiagnostic('quick')}
             loading={loading}
           >
-            {t('diagnostic.quick_check') || '快速诊断'}
+            {t('diagnostic.quick_check')}
           </Button>
         </Space>
       </div>
 
       {error && (
         <Alert
-          message={t('common.error') || '错误'}
+          message={t('common.error')}
           description={error}
           type="error"
           showIcon
@@ -162,7 +162,7 @@ const DiagnosticPage: React.FC = () => {
                   format={(percent) => (
                     <div>
                       <div style={{ fontSize: 24, fontWeight: 'bold' }}>{percent}</div>
-                      <div style={{ fontSize: 12 }}>{t('diagnostic.score') || '健康评分'}</div>
+                      <div style={{ fontSize: 12 }}>{t('diagnostic.score')}</div>
                     </div>
                   )}
                 />
@@ -172,7 +172,7 @@ const DiagnosticPage: React.FC = () => {
               <Row gutter={16}>
                 <Col span={8}>
                   <Statistic
-                    title={t('diagnostic.status') || '状态'}
+                    title={t('diagnostic.status')}
                     value={report.status}
                     valueStyle={{
                       color: getScoreColor(report.overallScore),
@@ -183,13 +183,13 @@ const DiagnosticPage: React.FC = () => {
                 </Col>
                 <Col span={8}>
                   <Statistic
-                    title={t('diagnostic.duration') || '耗时'}
+                    title={t('diagnostic.duration')}
                     value={report.duration}
                   />
                 </Col>
                 <Col span={8}>
                   <Statistic
-                    title={t('diagnostic.timestamp') || '时间'}
+                    title={t('diagnostic.timestamp')}
                     value={new Date(report.endTime).toLocaleTimeString()}
                   />
                 </Col>
@@ -198,7 +198,7 @@ const DiagnosticPage: React.FC = () => {
               {/* Recommendations */}
               {report.recommendations && report.recommendations.length > 0 && (
                 <div style={{ marginTop: 16 }}>
-                  <Text strong>{t('diagnostic.recommendations') || '建议措施'}:</Text>
+                  <Text strong>{t('diagnostic.recommendations')}:</Text>
                   <ul style={{ margin: '8px 0 0 20px' }}>
                     {report.recommendations.map((rec, i) => (
                       <li key={i}>
@@ -218,49 +218,49 @@ const DiagnosticPage: React.FC = () => {
         <Row gutter={[16, 16]}>
           <Col xs={24} lg={12}>
             <ComponentCard
-              title={t('diagnostic.database') || '数据库'}
+              title={t('diagnostic.database')}
               icon={<DatabaseOutlined />}
               diagnostic={report.database}
             />
           </Col>
           <Col xs={24} lg={12}>
             <ComponentCard
-              title={t('diagnostic.redis') || 'Redis'}
+              title={t('diagnostic.redis')}
               icon={<CloudServerOutlined />}
               diagnostic={report.redis}
             />
           </Col>
           <Col xs={24} lg={12}>
             <ComponentCard
-              title={t('diagnostic.config_center') || '配置中心'}
+              title={t('diagnostic.config_center')}
               icon={<ApiOutlined />}
               diagnostic={report.configCenter}
             />
           </Col>
           <Col xs={24} lg={12}>
             <ComponentCard
-              title={t('diagnostic.routes') || '路由配置'}
+              title={t('diagnostic.routes')}
               icon={<DashboardOutlined />}
               diagnostic={report.routes}
             />
           </Col>
           <Col xs={24} lg={12}>
             <ComponentCard
-              title={t('diagnostic.auth') || '认证配置'}
+              title={t('diagnostic.auth')}
               icon={<LockOutlined />}
               diagnostic={report.auth}
             />
           </Col>
           <Col xs={24} lg={12}>
             <ComponentCard
-              title={t('diagnostic.gateway_instances') || '网关实例'}
+              title={t('diagnostic.gateway_instances')}
               icon={<CloudServerOutlined />}
               diagnostic={report.gatewayInstances}
             />
           </Col>
           <Col xs={24}>
             <ComponentCard
-              title={t('diagnostic.performance') || '性能指标'}
+              title={t('diagnostic.performance')}
               icon={<DashboardOutlined />}
               diagnostic={report.performance}
             />
@@ -276,7 +276,7 @@ const DiagnosticPage: React.FC = () => {
           <div style={{ textAlign: 'center', padding: 40 }}>
             <MedicineBoxOutlined style={{ fontSize: 48, color: '#8c8c8c' }} />
             <Paragraph style={{ marginTop: 16, color: '#8c8c8c' }}>
-              {t('diagnostic.click_to_run') || '点击上方按钮运行诊断'}
+              {t('diagnostic.click_to_run')}
             </Paragraph>
           </div>
         </Card>

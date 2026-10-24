@@ -22,7 +22,7 @@ const ComponentCard: React.FC<ComponentCardProps> = ({ title, icon, diagnostic }
     return (
       <Card className="diagnostic-card">
         <div style={{ textAlign: 'center', padding: 20 }}>
-          <Text type="secondary">{t('diagnostic.no_data') || '无数据'}</Text>
+          <Text type="secondary">{t('diagnostic.no_data')}</Text>
         </div>
       </Card>
     );
@@ -73,7 +73,7 @@ const ComponentCard: React.FC<ComponentCardProps> = ({ title, icon, diagnostic }
           <Alert
             type="warning"
             showIcon
-            message={t('diagnostic.warnings') || '警告'}
+            message={t('diagnostic.warnings')}
             description={
               <ul style={{ margin: 0, paddingLeft: 20 }}>
                 {diagnostic.warnings.map((w, i) => (
@@ -90,7 +90,7 @@ const ComponentCard: React.FC<ComponentCardProps> = ({ title, icon, diagnostic }
           <Alert
             type="error"
             showIcon
-            message={t('diagnostic.errors') || '错误'}
+            message={t('diagnostic.errors')}
             description={
               <ul style={{ margin: 0, paddingLeft: 20 }}>
                 {diagnostic.errors.map((e, i) => (

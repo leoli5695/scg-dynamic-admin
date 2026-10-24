@@ -139,7 +139,7 @@ const InstancesListPage: React.FC = () => {
                         <DashboardOutlined />
                       </div>
                       <div className="instance-metric-content">
-                        <span className="instance-metric-label">{t('instance.spec') || '规格'}</span>
+                        <span className="instance-metric-label">{t('instance.spec')}</span>
                         <span className="instance-metric-value">{getSpecText(instance, t)}</span>
                       </div>
                     </div>
@@ -148,7 +148,7 @@ const InstancesListPage: React.FC = () => {
                         <SettingOutlined />
                       </div>
                       <div className="instance-metric-content">
-                        <span className="instance-metric-label">{t('instance.replicas') || '副本'}</span>
+                        <span className="instance-metric-label">{t('instance.replicas')}</span>
                         <span className="instance-metric-value">{instance.replicas}</span>
                       </div>
                     </div>

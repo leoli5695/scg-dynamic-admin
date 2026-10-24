@@ -162,7 +162,7 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
     return (
       <div style={{ textAlign: 'center', padding: 24, color: '#999' }}>
         <BranchesOutlined style={{ fontSize: 24, marginBottom: 8 }} />
-        <Text type="secondary">{t('trace.no_spans') || '无追踪数据'}</Text>
+        <Text type="secondary">{t('trace.no_spans')}</Text>
       </div>
     );
   }

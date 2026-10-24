@@ -48,7 +48,7 @@ const EventsTab: React.FC = () => {
           onClick={() => eventsRequest.run()}
           loading={eventsRequest.loading}
         >
-          {t('common.refresh') || '刷新'}
+          {t('common.refresh')}
         </Button>
       </div>
       {eventsRequest.loading && events.length === 0 ? (
@@ -57,7 +57,7 @@ const EventsTab: React.FC = () => {
         </div>
       ) : events.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 40 }}>
-          <Text type="secondary">{t('events.no_events') || '暂无事件数据'}</Text>
+          <Text type="secondary">{t('events.no_events')}</Text>
         </div>
       ) : (
         <div style={{ maxHeight: 500, overflowY: 'auto' }}>
