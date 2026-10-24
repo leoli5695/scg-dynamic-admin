@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * - GET /e2e/hello      -> always 200 with JSON body
  * - GET /e2e/flaky      -> 500 for the first two calls, then 200 (retry scenario)
  * - GET /e2e/always-500 -> always 500 (circuit breaker scenario)
+ * - GET /e2e/cacheable  -> always 200 with JSON body (response cache scenario)
  */
 public final class DownstreamStubServer implements AutoCloseable {
 
@@ -24,6 +25,7 @@ public final class DownstreamStubServer implements AutoCloseable {
     private final AtomicInteger helloCount = new AtomicInteger();
     private final AtomicInteger flakyCount = new AtomicInteger();
     private final AtomicInteger always500Count = new AtomicInteger();
+    private final AtomicInteger cacheableCount = new AtomicInteger();
 
     public DownstreamStubServer() throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -51,6 +53,13 @@ public final class DownstreamStubServer implements AutoCloseable {
             respond(exchange, 500, "{\"error\":\"permanent failure\"}");
         });
 
+        // Body carries the call number so a cache HIT is distinguishable from a
+        // fresh upstream call even though both return HTTP 200.
+        server.createContext("/e2e/cacheable", exchange -> {
+            int call = cacheableCount.incrementAndGet();
+            respond(exchange, 200, "{\"message\":\"cacheable-body\",\"call\":" + call + "}");
+        });
+
         server.start();
     }
 
@@ -68,6 +77,10 @@ public final class DownstreamStubServer implements AutoCloseable {
 
     public int always500Count() {
         return always500Count.get();
+    }
+
+    public int cacheableCount() {
+        return cacheableCount.get();
     }
 
     private static void respond(com.sun.net.httpserver.HttpExchange exchange, int status, String body) throws IOException {

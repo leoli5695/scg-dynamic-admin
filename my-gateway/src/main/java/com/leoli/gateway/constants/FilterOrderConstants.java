@@ -212,14 +212,40 @@ public interface FilterOrderConstants {
 
     /**
      * Cache filter - Response caching.
-     * Execute after response is ready.
+     * <p>
+     * FIX (P0 cache never populated): was 50, i.e. AFTER NettyWriteResponseFilter (-1). SCG only
+     * routes the client-bound response body through decorators installed by filters ordered
+     * BEFORE -1 (same reason ResponseTransformFilter is -45 and TokenUsageCollectorFilter is -44).
+     * At order 50 this filter's ServerHttpResponseDecorator.writeWith was never invoked on the real
+     * Netty proxy path, so cache.put never ran and every request went back to origin - the caching
+     * feature silently did nothing (verified: two identical GETs -> upstreamCalls=2, entries=0).
+     * <p>
+     * -46 places it just INSIDE ResponseTransformFilter (-45): lower order == installed first ==
+     * innermost decorator, so its writeWith observes the FINAL, post-transform body that the client
+     * actually receives (correct semantics for a shared response cache), while still being < -1 so
+     * it is in the write path at all.
      */
-    int CACHE = 50;
+    int CACHE = -46;
 
     /**
      * Trace capture filter - Capture trace info after request.
+     * <p>
+     * FIX (P0, response body never captured): was 100, i.e. AFTER NettyWriteResponseFilter (-1) -
+     * the exact bug {@link #CACHE} had at 50. This filter wraps the response in a
+     * {@code ServerHttpResponseDecorator} to record the response body of error/slow requests, but a
+     * filter ordered after -1 decorates an exchange that Netty's write phase never reads back: its
+     * pre-phase runs INSIDE NettyWriteResponseFilter's {@code chain.filter(...)}, so Netty has
+     * already captured the undecorated response and the decorator's writeWith is never invoked.
+     * Every captured trace therefore had {@code responseBody == null}, and the post-phase also ran
+     * BEFORE the body was written, so status/duration were sampled early.
+     * <p>
+     * -47 is the innermost decorator (lowest order == wraps first == innermost), so it sees the
+     * final post-transform, post-cache body - exactly what the client received - and its
+     * {@code doFinally} now runs last, after the response is on the wire. On a cache HIT
+     * (CacheGlobalFilter short-circuits at -46 without calling the chain) this filter has already
+     * wrapped the response, so the cached body is captured too.
      */
-    int TRACE_CAPTURE = 100;
+    int TRACE_CAPTURE = -47;
 
     /**
      * Token usage collector filter.
@@ -321,7 +347,7 @@ public interface FilterOrderConstants {
     //
     // Order    Filter                          Purpose
     // ------   ------------------------------  ----------------------------------
-    // -500     SecurityGlobalFilter            XSS/SQL injection protection
+    // -480     SecurityGlobalFilter            XSS/SQL injection protection
     // -490     IPFilterGlobalFilter            IP whitelist/blacklist
     // -400     AccessLogGlobalFilter           Request/response logging
     // -301     CorsGlobalFilter                CORS handling (preflight)
@@ -330,6 +356,7 @@ public interface FilterOrderConstants {
     // -254     RequestValidationFilter         Request validation
     // -250     AuthenticationGlobalFilter      Authentication
     // -249     MockResponseFilter              Mock response
+    // -246     AiSecurityGuardFilter           AI content moderation (inbound + outbound)
     // -245     HybridRateLimiterFilter         Rate limiting (after auth -> identity keys ready)
     // -244     MultiDimRateLimiterFilter       Multi-dimensional rate limiting
     // -243     AiContextLimitFilter            AI context-window limit (rejects oversized inputs)
@@ -337,18 +364,25 @@ public interface FilterOrderConstants {
     // -241     TokenQuotaPreCheckFilter        AI token quota pre-check
     // -200     TimeoutGlobalFilter             Timeout handling
     // -150     ApiVersionGlobalFilter          API version routing
-    //   -3     CircuitBreakerGlobalFilter      Circuit breaker (records final status after retry)
     //  -50     HeaderOpGlobalFilter            Header operations
+    //  -47     TraceCaptureGlobalFilter        Trace capture (must be < -1 to capture the response body)
+    //  -46     CacheGlobalFilter               Response caching (must be < -1 to be in write path)
     //  -45     ResponseTransformFilter         Response transformation
     //  -44     TokenUsageCollectorFilter       AI token usage capture (must be < -1 to be in write path)
+    //  -43     AiStatisticsFilter              AI TTFT/usage statistics (must be < -1 to be in write path)
+    //   -3     CircuitBreakerGlobalFilter      Circuit breaker (records final status after retry)
     //   -2     RetryGlobalFilter               Retry logic (intercepts response after NettyWrite)
     //   -1     NettyWriteResponseFilter        Write response (SCG built-in)
-    //  50      CacheGlobalFilter               Response caching
-    //  100     TraceCaptureGlobalFilter        Trace capture
     // 10001    MultiServiceLoadBalancerFilter  Multi-service load balancing (static://)
-    // 10150    DiscoveryLoadBalancerFilter     Discovery load balancing (lb://)
+    // 10004    AiPromptTemplateFilter          AI prompt decoration (before provider routing)
+    // 10005    AiProviderRoutingFilter         AI provider routing (rewrites the target URL)
+    // 10100    NacosDiscoveryLoadBalancerFilter Nacos namespace/group aware lb:// resolution
+    // 10140    DiscoveryLoadBalancerFilter     Discovery load balancing (lb://, must be < 10150)
+    // 10150    ReactiveLoadBalancerClientFilter SCG built-in lb:// resolution
     //
     // Note: Filters with order < -1 have post-phase AFTER NettyWriteResponseFilter,
     // allowing them to intercept response status/body before it's written to client.
+    // ResponseDecoratorOrderTest enforces this for every filter that installs a
+    // ServerHttpResponseDecorator - see its javadoc for why the failure is silent.
     //
 }

@@ -75,6 +75,7 @@ class GatewayE2ETest {
         registerRoute("e2e-limited", "/e2e/limited", "/e2e/hello");
         registerRoute("e2e-retry", "/e2e/flaky", null);
         registerRoute("e2e-breaker", "/e2e/always-500", null);
+        registerRoute("e2e-cache", "/e2e/cacheable", null);
 
         // --- Rate limit strategy: window quota 2 per minute (qps=1, burst=0) ---
         // Note: the explicit windowSizeMs key takes precedence over timeUnit; the local
@@ -107,6 +108,14 @@ class GatewayE2ETest {
         cbConfig.put("permittedNumberOfCallsInHalfOpenState", 1);
         cbConfig.put("automaticTransitionFromOpenToHalfOpenEnabled", false);
         registerStrategy("e2e-strategy-breaker", StrategyDefinition.TYPE_CIRCUIT_BREAKER, "e2e-breaker", cbConfig);
+
+        // --- Response cache: 60s TTL, GET only ---
+        Map<String, Object> cacheConfig = new HashMap<>();
+        cacheConfig.put("enabled", true);
+        cacheConfig.put("ttlSeconds", 60);
+        cacheConfig.put("maxSize", 100);
+        cacheConfig.put("cacheMethods", List.of("GET"));
+        registerStrategy("e2e-strategy-cache", StrategyDefinition.TYPE_CACHE, "e2e-cache", cacheConfig);
 
         routeLocator.refresh();
         waitForRoute("/e2e/hello");
@@ -189,6 +198,59 @@ class GatewayE2ETest {
                 .expectStatus().isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
         assertEquals(before + 2, DOWNSTREAM.always500Count(),
                 "open circuit breaker must not forward the request to downstream");
+    }
+
+    // ============================================================
+    // Response cache
+    // ============================================================
+
+    /**
+     * Regression guard for the cache-ordering bug: at order 50 (AFTER SCG's
+     * NettyWriteResponseFilter, -1) the filter's response decorator was never on the
+     * client-write path, so cache.put never ran and every request went back to origin.
+     * Driven over the wire through the real Netty stack, which a unit test cannot cover.
+     */
+    @Test
+    @DisplayName("Response cache: repeated GET is served from cache and replays the captured body")
+    void responseCache_servesRepeatedRequestFromCache() throws Exception {
+        // Nonce keeps the entry unique to this run; the downstream echoes its call number
+        // in the body, so a HIT is distinguishable from a fresh origin call.
+        String uri = "/e2e/cacheable?nonce=" + System.nanoTime();
+        int before = DOWNSTREAM.cacheableCount();
+
+        String firstBody = webTestClient.get().uri(uri)
+                .exchange()
+                .expectStatus().isOk()
+                .expectHeader().doesNotExist("X-Cache")
+                .expectBody(String.class)
+                .returnResult()
+                .getResponseBody();
+
+        // The entry is stored from writeWith's doFinally, which Reactor runs only AFTER
+        // completing the downstream write - poll briefly rather than assume ordering.
+        String lastBody = null;
+        boolean hit = false;
+        int attempts = 0;
+        long deadline = System.currentTimeMillis() + 5000;
+        while (System.currentTimeMillis() < deadline) {
+            attempts++;
+            var result = webTestClient.get().uri(uri)
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectHeader().contentTypeCompatibleWith("application/json")
+                    .returnResult(String.class);
+            hit = "HIT".equals(result.getResponseHeaders().getFirst("X-Cache"));
+            lastBody = result.getResponseBody().blockFirst();
+            if (hit) {
+                break;
+            }
+            Thread.sleep(50);
+        }
+
+        assertTrue(hit, "the repeated GET must eventually be served from cache (X-Cache: HIT)");
+        assertEquals(firstBody, lastBody, "a cache hit must replay the body captured on the miss");
+        assertEquals(before + attempts, DOWNSTREAM.cacheableCount(),
+                "only the non-cached attempts should reach downstream");
     }
 
     // ============================================================
