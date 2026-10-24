@@ -40,8 +40,18 @@ public class ClusterConnectionService {
         this.kubeConfigService = kubeConfigService;
     }
 
+    /**
+     * Refresh every enabled cluster's connectivity, node/pod counts and capacity.
+     *
+     * <p>Deliberately NOT {@code @Transactional}. Each cluster costs at least three Kubernetes API
+     * round trips ({@code listNode}, {@code countRunningPods}, {@code listNamespace}), and this runs
+     * every 30 seconds; wrapping the whole sweep in one transaction pinned a connection from a
+     * 20-connection pool for as long as the K8s API took, which is exactly how a slow or unreachable
+     * cluster starves unrelated requests. The reads run in their own short transactions and every
+     * write is an explicit {@code save} ({@link #markClusterError} and the trailing save in
+     * {@link #verifyClusterConnection}), so nothing depends on dirty checking here.
+     */
     @Scheduled(fixedRate = 30000)
-    @Transactional
     public void checkClusterConnectivity() {
         if (!kubernetesEnabled) {
             log.debug("Kubernetes is disabled, skipping cluster connectivity check");
@@ -156,9 +166,20 @@ public class ClusterConnectionService {
         return result;
     }
 
+    /**
+     * Mark a cluster unreachable and persist it.
+     *
+     * <p>The save is explicit on purpose. This method used to only mutate the entity and rely on
+     * dirty checking inside the caller's transaction - which works while
+     * {@code checkClusterConnectivity} and {@code KubernetesService.refreshConnection} are
+     * {@code @Transactional}, and silently loses the write the moment they are not. The
+     * {@code client == null} early return in {@link #verifyClusterConnection} never reaches that
+     * method's own trailing {@code save}, so it was the one path with no explicit persistence at all.
+     */
     private void markClusterError(KubernetesCluster cluster) {
         cluster.setConnectionStatus("ERROR");
         cluster.setLastCheckedAt(LocalDateTime.now());
+        clusterRepository.save(cluster);
     }
 
     private double[] calculateClusterResources(V1NodeList nodes) {

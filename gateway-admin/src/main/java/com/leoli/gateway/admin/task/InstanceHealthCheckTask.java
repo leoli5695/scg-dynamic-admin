@@ -9,7 +9,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -54,9 +53,15 @@ public class InstanceHealthCheckTask {
 
     /**
      * Health check task runs every 10 seconds.
+     *
+     * <p>Deliberately NOT {@code @Transactional}. {@code checkStopCompletion} calls
+     * {@code GatewayInstanceService.getRunningPodCount}, which is a Kubernetes API call, so the
+     * annotation held a connection from a 20-connection pool open across the network for every
+     * STOPPING instance, ten times a minute. Each phase reads with its own short transaction and
+     * every status change is an explicit {@code instanceRepository.save(...)}, so nothing here
+     * depends on dirty checking.
      */
     @Scheduled(fixedRateString = "${gateway.health.check-interval:10000}")
-    @Transactional
     public void checkInstanceHealth() {
         log.debug("Running instance health check...");
         

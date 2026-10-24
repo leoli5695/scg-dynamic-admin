@@ -97,7 +97,11 @@ public class KubernetesService {
         clusterRepository.deleteById(id);
     }
 
-    @Transactional
+    /**
+     * Not {@code @Transactional}: {@code verifyClusterConnection} makes several Kubernetes API calls
+     * (listNode, pod count, listNamespace) and now persists its own result explicitly, so holding a
+     * transaction open across them only consumed a pooled connection.
+     */
     public KubernetesCluster refreshConnection(Long id) {
         KubernetesCluster cluster = getClusterById(id);
         if (cluster.getKubeconfig() == null || cluster.getKubeconfig().isBlank()) {

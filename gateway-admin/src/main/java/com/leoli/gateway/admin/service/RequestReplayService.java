@@ -135,7 +135,17 @@ public class RequestReplayService {
      * Execute a replay with optional modifications.
      * For WebSocket/SSE traces, returns a special result indicating not replayable.
      */
-    @Transactional
+    /**
+     * Not {@code @Transactional} on purpose. The HTTP replay can take up to 35s (5s connect + 30s
+     * read, see {@code RestTemplateConfig}) and batch replay multiplies that per trace, so wrapping
+     * it in a transaction pinned a connection from a 20-connection pool for the entire call.
+     *
+     * <p>The only write on this path is the replay counter, which now happens in
+     * {@link #recordReplayOutcome} <b>after</b> the HTTP call returns. That write is a
+     * {@code @Modifying} query and genuinely needs a transaction - removing the annotation without
+     * moving the write out would have thrown {@code TransactionRequiredException} at runtime, which
+     * is why the {@code self} proxy reference below is still required.
+     */
     public ReplayResult executeReplay(Long traceId, String instanceId, ReplayOptions options) {
         ReplayableRequest prepared = prepareReplay(traceId);
         if (prepared == null) {
@@ -208,19 +218,52 @@ public class RequestReplayService {
             }
         }
 
-        return doReplay(prepared, gatewayUrl, options != null && options.isCompareWithOriginal());
+        ReplayOutcome outcome = doReplay(prepared, gatewayUrl,
+                options != null && options.isCompareWithOriginal());
+        // Through the self proxy so @Transactional applies; a plain this. call bypasses the proxy.
+        self.recordReplayOutcome(traceId, outcome.outcomeMessage());
+        return outcome.result();
+    }
+
+    /**
+     * Persist the replay counter and its outcome message in a short transaction, after the network
+     * call has finished. A failure is logged rather than propagated: the replay already happened,
+     * and throwing away a completed result because a counter update failed is the worse outcome.
+     */
+    @Transactional
+    public void recordReplayOutcome(Long traceId, String outcome) {
+        if (traceId == null || outcome == null) {
+            return;
+        }
+        try {
+            traceRepository.incrementReplayCount(traceId, outcome);
+        } catch (RuntimeException e) {
+            log.error("Failed to record replay outcome for trace {}: {}", traceId, e.getMessage());
+        }
+    }
+
+    /**
+     * The client-visible result paired with the replay-counter message. A separate carrier rather
+     * than a field on {@link ReplayResult} because that class is serialised straight into the API
+     * response - adding to it would change the public contract.
+     */
+    private record ReplayOutcome(ReplayResult result, String outcomeMessage) {
     }
 
     /**
      * Internal replay execution.
      */
-    private ReplayResult doReplay(ReplayableRequest request, String gatewayUrl, boolean compare) {
+    private ReplayOutcome doReplay(ReplayableRequest request, String gatewayUrl, boolean compare) {
         long startTime = System.currentTimeMillis();
         ReplayResult result = new ReplayResult();
         result.setTraceId(request.getTraceId());
         result.setTraceUuid(request.getTraceUuid());
         result.setRequestUrl(gatewayUrl + request.getPath());
         result.setMethod(request.getMethod());
+
+        // Computed here, written by the caller after this method returns - see recordReplayOutcome.
+        // Keeping the write out of this method is what gets the 35s HTTP call out of the transaction.
+        String outcome = null;
 
         try {
             // Build request URL
@@ -280,9 +323,7 @@ public class RequestReplayService {
                 result.setComparison(compareResponses(request, result));
             }
 
-            // Update replay count
-            traceRepository.incrementReplayCount(request.getTraceId(), 
-                    String.format("Status: %d, Latency: %dms", response.getStatusCodeValue(), latency));
+            outcome = String.format("Status: %d, Latency: %dms", response.getStatusCodeValue(), latency);
 
         } catch (org.springframework.web.client.ResourceAccessException e) {
             String errorMsg = buildConnectionErrorMessage(e, gatewayUrl);
@@ -290,7 +331,7 @@ public class RequestReplayService {
             result.setSuccess(false);
             result.setError(errorMsg);
             result.setErrorType("CONNECTION_ERROR");
-            traceRepository.incrementReplayCount(request.getTraceId(), "Error: " + errorMsg);
+            outcome = "Error: " + errorMsg;
 
         } catch (org.springframework.web.client.HttpClientErrorException e) {
             String responseBody = truncateBody(e.getResponseBodyAsString());
@@ -300,8 +341,7 @@ public class RequestReplayService {
             result.setResponseBody(responseBody);
             result.setLatencyMs(System.currentTimeMillis() - startTime);
             result.setErrorType("CLIENT_ERROR");
-            traceRepository.incrementReplayCount(request.getTraceId(), 
-                    String.format("HTTP %d", e.getStatusCode().value()));
+            outcome = String.format("HTTP %d", e.getStatusCode().value());
 
         } catch (org.springframework.web.client.HttpServerErrorException e) {
             String responseBody = truncateBody(e.getResponseBodyAsString());
@@ -311,17 +351,16 @@ public class RequestReplayService {
             result.setResponseBody(responseBody);
             result.setLatencyMs(System.currentTimeMillis() - startTime);
             result.setErrorType("SERVER_ERROR");
-            traceRepository.incrementReplayCount(request.getTraceId(), 
-                    String.format("HTTP %d", e.getStatusCode().value()));
+            outcome = String.format("HTTP %d", e.getStatusCode().value());
 
         } catch (Exception e) {
             log.error("Failed to replay request", e);
             result.setSuccess(false);
             result.setError(e.getMessage());
-            traceRepository.incrementReplayCount(request.getTraceId(), "Error: " + e.getMessage());
+            outcome = "Error: " + e.getMessage();
         }
 
-        return result;
+        return new ReplayOutcome(result, outcome);
     }
 
     /**
