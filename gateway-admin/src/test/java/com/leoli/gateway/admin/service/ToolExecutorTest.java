@@ -2,7 +2,6 @@ package com.leoli.gateway.admin.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.center.NacosConfigCenterService;
-import com.leoli.gateway.admin.model.AuditLogEntity;
 import com.leoli.gateway.admin.model.RouteDefinition;
 import com.leoli.gateway.admin.model.RouteEntity;
 import com.leoli.gateway.admin.model.RouteResponse;
@@ -16,8 +15,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -79,6 +76,13 @@ class ToolExecutorTest {
 
     @Mock
     private org.springframework.web.client.RestTemplate restTemplate;
+
+    /**
+     * The audit tools moved to this handler. Without a mock here {@code @InjectMocks} would pass null
+     * and the three audit tool names would NPE inside the dispatch switch.
+     */
+    @Mock
+    private com.leoli.gateway.admin.tool.handler.AuditToolHandler auditToolHandler;
 
     @InjectMocks
     private ToolExecutor toolExecutor;
@@ -520,111 +524,46 @@ class ToolExecutorTest {
         return response;
     }
 
-    private AuditLogEntity createAuditLogEntity(Long id, String operationType, String targetType) {
-        AuditLogEntity entity = new AuditLogEntity();
-        entity.setId(id);
-        entity.setOperator("admin");
-        entity.setOperationType(operationType);
-        entity.setTargetType(targetType);
-        entity.setTargetId(ROUTE_ID);
-        entity.setTargetName(ROUTE_NAME);
-        entity.setCreatedAt(LocalDateTime.now());
-        entity.setInstanceId(INSTANCE_ID);
-        return entity;
-    }
-
     @Nested
-    @DisplayName("Audit Tools Tests")
-    class AuditToolsTests {
+    @DisplayName("Audit Tool Dispatch Tests")
+    class AuditToolDispatchTests {
 
+        /**
+         * The audit tools' behaviour is tested in AuditToolHandlerTest, against the handler directly.
+         * What belongs here is only the dispatcher's half of the contract: the three tool names still
+         * reach the handler, and the handler's return value is wrapped in a successful ToolResult.
+         * Testing the same behaviour at both layers would just duplicate the stubs.
+         */
         @Test
-        @DisplayName("Should query audit logs successfully")
-        void shouldQueryAuditLogsSuccessfully() {
-            // Given
-            Map<String, Object> args = new HashMap<>();
-            args.put("hours", 24);
-            args.put("page", 0);
-            args.put("size", 10);
+        @DisplayName("the three audit tool names delegate to AuditToolHandler")
+        void auditToolNamesDelegateToTheHandler() {
+            when(auditToolHandler.auditQuery(any())).thenReturn(Map.of("totalElements", 2L));
+            when(auditToolHandler.auditDiff(any())).thenReturn(Map.of("id", 1L));
+            when(auditToolHandler.diagnoseStateInconsistency(any())).thenReturn(Map.of("targetType", "ROUTE"));
 
-            AuditLogEntity log1 = createAuditLogEntity(1L, "CREATE", "ROUTE");
-            AuditLogEntity log2 = createAuditLogEntity(2L, "UPDATE", "ROUTE");
-            Page<AuditLogEntity> page = new PageImpl<>(List.of(log1, log2));
-
-            when(auditLogService.getAuditLogs(any(), any(), any(), any(),
-                any(LocalDateTime.class), any(LocalDateTime.class), anyInt(), anyInt()))
-                .thenReturn(page);
-
-            // When
-            ToolExecutor.ToolResult result = toolExecutor.execute("audit_query", args);
-
-            // Then
-            assertTrue(result.isSuccess());
-            Map<String, Object> data = (Map<String, Object>) result.getData();
-            assertEquals(2L, data.get("totalElements"));
-            assertNotNull(data.get("logs"));
-        }
-
-        @Test
-        @DisplayName("Should query audit logs by target type")
-        void shouldQueryAuditLogsByTargetType() {
-            // Given
-            Map<String, Object> args = new HashMap<>();
-            args.put("targetType", "ROUTE");
-            args.put("hours", 24);
-
-            AuditLogEntity log1 = createAuditLogEntity(1L, "CREATE", "ROUTE");
-            Page<AuditLogEntity> page = new PageImpl<>(List.of(log1));
-
-            when(auditLogService.getAuditLogs(any(), eq("ROUTE"), any(), any(),
-                any(LocalDateTime.class), any(LocalDateTime.class), anyInt(), anyInt()))
-                .thenReturn(page);
-
-            // When
-            ToolExecutor.ToolResult result = toolExecutor.execute("audit_query", args);
-
-            // Then
-            assertTrue(result.isSuccess());
-            verify(auditLogService).getAuditLogs(any(), eq("ROUTE"), any(), any(),
-                any(LocalDateTime.class), any(LocalDateTime.class), anyInt(), anyInt());
-        }
-
-        @Test
-        @DisplayName("Should get audit diff successfully")
-        void shouldGetAuditDiffSuccessfully() {
-            // Given
             Map<String, Object> args = new HashMap<>();
             args.put("logId", 1L);
 
-            Map<String, Object> diff = new LinkedHashMap<>();
-            diff.put("id", 1L);
-            diff.put("targetType", "ROUTE");
-            diff.put("changes", Map.of("enabled", Map.of("old", "true", "new", "false")));
+            assertTrue(toolExecutor.execute("audit_query", args).isSuccess());
+            assertTrue(toolExecutor.execute("audit_diff", args).isSuccess());
+            assertTrue(toolExecutor.execute("diagnose_state_inconsistency", args).isSuccess());
 
-            when(auditLogService.getDiff(1L)).thenReturn(diff);
-
-            // When
-            ToolExecutor.ToolResult result = toolExecutor.execute("audit_diff", args);
-
-            // Then
-            assertTrue(result.isSuccess());
-            Map<String, Object> data = (Map<String, Object>) result.getData();
-            assertEquals(1L, data.get("id"));
-            assertEquals("ROUTE", data.get("targetType"));
-            assertNotNull(data.get("changes"));
+            verify(auditToolHandler).auditQuery(any());
+            verify(auditToolHandler).auditDiff(any());
+            verify(auditToolHandler).diagnoseStateInconsistency(any());
         }
 
         @Test
-        @DisplayName("Should fail when logId is missing for audit_diff")
-        void shouldFailWhenLogIdMissingForAuditDiff() {
-            // Given
-            Map<String, Object> args = new HashMap<>();
+        @DisplayName("an argument error thrown by the handler still becomes an error ToolResult")
+        void handlerArgumentErrorBecomesErrorResult() {
+            when(auditToolHandler.auditDiff(any()))
+                    .thenThrow(new IllegalArgumentException("Required argument missing: logId"));
 
-            // When
-            ToolExecutor.ToolResult result = toolExecutor.execute("audit_diff", args);
+            ToolExecutor.ToolResult result = toolExecutor.execute("audit_diff", new HashMap<>());
 
-            // Then - execute() catches the exception and returns error
             assertFalse(result.isSuccess());
-            assertTrue(result.getError().contains("Required argument missing"));
+            assertTrue(result.getError().contains("Required argument missing"),
+                    "the dispatcher must surface the handler's argument error so the model can correct it");
         }
     }
 
