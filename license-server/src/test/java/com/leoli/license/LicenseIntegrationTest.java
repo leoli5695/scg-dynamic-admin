@@ -88,7 +88,7 @@ class LicenseIntegrationTest {
         assertEquals("integration@test.com", decoded.getCustomer().getEmail());
 
         // Validate
-        LicenseValidationResult result = LicenseCodeDecoder.validate(licenseCode, rsaSignatureService);
+        LicenseValidationResult result = LicenseCodeDecoder.validate(licenseCode, rsaSignatureService, publicKeyBase64);
         assertTrue(result.isValid());
         assertEquals("ENTERPRISE", result.getEdition());
         assertEquals("Integration Test Customer", result.getCustomerName());
@@ -117,7 +117,7 @@ class LicenseIntegrationTest {
 
         String licenseCode = encodeAndSign(definition);
 
-        LicenseValidationResult result = LicenseCodeDecoder.validate(licenseCode, rsaSignatureService);
+        LicenseValidationResult result = LicenseCodeDecoder.validate(licenseCode, rsaSignatureService, publicKeyBase64);
         assertTrue(result.isValid());
         assertEquals("BASIC", result.getEdition());
         assertTrue(result.getPermanent());
@@ -146,7 +146,7 @@ class LicenseIntegrationTest {
 
         String licenseCode = encodeAndSign(definition);
 
-        LicenseValidationResult result = LicenseCodeDecoder.validate(licenseCode, rsaSignatureService);
+        LicenseValidationResult result = LicenseCodeDecoder.validate(licenseCode, rsaSignatureService, publicKeyBase64);
         assertTrue(result.isValid());
         assertEquals("ADVANCED", result.getEdition());
         assertEquals(3, result.getFeatures().size());
@@ -181,7 +181,7 @@ class LicenseIntegrationTest {
         chars[mid] = chars[mid] == 'A' ? 'B' : 'A';
         String tamperedCode = new String(chars);
 
-        LicenseValidationResult result = LicenseCodeDecoder.validate(tamperedCode, rsaSignatureService);
+        LicenseValidationResult result = LicenseCodeDecoder.validate(tamperedCode, rsaSignatureService, publicKeyBase64);
         assertFalse(result.isValid());
     }
 
@@ -207,7 +207,7 @@ class LicenseIntegrationTest {
         String forgedSignature = rsaSignatureService.sign(payloadBytes, differentKeyPair.getPrivateKey());
         String forgedCode = LicenseCodeEncoder.encode(definition, forgedSignature, publicKeyBase64);
 
-        LicenseValidationResult result = LicenseCodeDecoder.validate(forgedCode, rsaSignatureService);
+        LicenseValidationResult result = LicenseCodeDecoder.validate(forgedCode, rsaSignatureService, publicKeyBase64);
         assertFalse(result.isValid());
     }
 
@@ -345,7 +345,7 @@ class LicenseIntegrationTest {
 
         String licenseCode = encodeAndSign(definition);
 
-        LicenseValidationResult result = LicenseCodeDecoder.validate(licenseCode, rsaSignatureService);
+        LicenseValidationResult result = LicenseCodeDecoder.validate(licenseCode, rsaSignatureService, publicKeyBase64);
         assertTrue(result.isValid());
         assertNotNull(result.getFeatures());
         assertTrue(result.getFeatures().isEmpty());

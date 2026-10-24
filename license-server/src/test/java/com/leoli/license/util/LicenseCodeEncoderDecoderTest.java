@@ -104,7 +104,7 @@ class LicenseCodeEncoderDecoderTest {
 
         String licenseCode = LicenseCodeEncoder.encode(testDefinition, signature, publicKeyBase64);
 
-        LicenseValidationResult result = LicenseCodeDecoder.validate(licenseCode, rsaSignatureService);
+        LicenseValidationResult result = LicenseCodeDecoder.validate(licenseCode, rsaSignatureService, publicKeyBase64);
 
         assertTrue(result.isValid());
         assertEquals("ENTERPRISE", result.getEdition());
@@ -122,7 +122,7 @@ class LicenseCodeEncoderDecoderTest {
         // Encode with original public key (mismatch)
         String licenseCode = LicenseCodeEncoder.encode(testDefinition, signature, publicKeyBase64);
 
-        LicenseValidationResult result = LicenseCodeDecoder.validate(licenseCode, rsaSignatureService);
+        LicenseValidationResult result = LicenseCodeDecoder.validate(licenseCode, rsaSignatureService, publicKeyBase64);
 
         assertFalse(result.isValid());
     }
@@ -141,7 +141,7 @@ class LicenseCodeEncoderDecoderTest {
         chars[mid] = chars[mid] == 'A' ? 'B' : 'A';
         String tamperedCode = new String(chars);
 
-        LicenseValidationResult result = LicenseCodeDecoder.validate(tamperedCode, rsaSignatureService);
+        LicenseValidationResult result = LicenseCodeDecoder.validate(tamperedCode, rsaSignatureService, publicKeyBase64);
 
         assertFalse(result.isValid());
     }
@@ -149,7 +149,7 @@ class LicenseCodeEncoderDecoderTest {
     @Test
     @DisplayName("Validate License Code - Malformed Input")
     void validateLicenseCode_malformedInput() {
-        LicenseValidationResult result = LicenseCodeDecoder.validate("not-a-valid-base64!!!", rsaSignatureService);
+        LicenseValidationResult result = LicenseCodeDecoder.validate("not-a-valid-base64!!!", rsaSignatureService, publicKeyBase64);
         assertFalse(result.isValid());
     }
 
@@ -173,7 +173,7 @@ class LicenseCodeEncoderDecoderTest {
             LicenseCodeEncoder.getPayloadBytes(basicDef), privateKeyBase64);
         String licenseCode = LicenseCodeEncoder.encode(basicDef, signature, publicKeyBase64);
 
-        LicenseValidationResult result = LicenseCodeDecoder.validate(licenseCode, rsaSignatureService);
+        LicenseValidationResult result = LicenseCodeDecoder.validate(licenseCode, rsaSignatureService, publicKeyBase64);
         assertTrue(result.isValid());
         assertEquals("BASIC", result.getEdition());
         assertTrue(result.getPermanent());
@@ -189,5 +189,54 @@ class LicenseCodeEncoderDecoderTest {
         String json = new String(payloadBytes);
         assertTrue(json.contains("TEST-LICENSE-001"));
         assertTrue(json.contains("ENTERPRISE"));
+    }
+
+    /**
+     * Regression for the self-signed validation oracle. {@code validate} used to verify the
+     * signature against the publicKey carried INSIDE the submitted license, so the check proved
+     * only that the caller held the matching private key. Generating a keypair, signing an
+     * ENTERPRISE payload with it and submitting both was enough to get {@code valid:true} out of
+     * {@code POST /api/licenses/validate} - from the supposed authority on licensing.
+     */
+    @Test
+    @DisplayName("Trust anchor: a license signed by an attacker-generated keypair is rejected")
+    void selfSignedLicenseIsRejected() throws Exception {
+        RsaKeyGenerator.RsaKeyPair attackerKeyPair = rsaSignatureService.generateKeyPair();
+        String attackerSignature = rsaSignatureService.sign(
+            LicenseCodeEncoder.getPayloadBytes(testDefinition), attackerKeyPair.getPrivateKey());
+        String selfSignedCode = LicenseCodeEncoder.encode(
+            testDefinition, attackerSignature, attackerKeyPair.getPublicKey());
+
+        LicenseValidationResult result =
+            LicenseCodeDecoder.validate(selfSignedCode, rsaSignatureService, publicKeyBase64);
+
+        assertFalse(result.isValid(),
+            "a self-signed license must not validate against the server's own trust anchor");
+    }
+
+    @Test
+    @DisplayName("Trust anchor: validation fails closed when the server has no trusted key configured")
+    void missingTrustAnchorFailsClosed() throws Exception {
+        String signature = rsaSignatureService.sign(
+            LicenseCodeEncoder.getPayloadBytes(testDefinition), privateKeyBase64);
+        String licenseCode = LicenseCodeEncoder.encode(testDefinition, signature, publicKeyBase64);
+
+        assertFalse(LicenseCodeDecoder.validate(licenseCode, rsaSignatureService, null).isValid(),
+            "no configured trust anchor must not mean 'trust anything'");
+        assertFalse(LicenseCodeDecoder.validate(licenseCode, rsaSignatureService, "").isValid());
+        assertFalse(LicenseCodeDecoder.validate(licenseCode, rsaSignatureService, "   ").isValid());
+        assertFalse(LicenseCodeDecoder.validate(licenseCode, rsaSignatureService, "not-base64!").isValid());
+    }
+
+    @Test
+    @DisplayName("Trust anchor: PEM armour and whitespace differences do not change the verdict")
+    void trustAnchorComparisonIsNormalised() throws Exception {
+        String signature = rsaSignatureService.sign(
+            LicenseCodeEncoder.getPayloadBytes(testDefinition), privateKeyBase64);
+        String licenseCode = LicenseCodeEncoder.encode(testDefinition, signature, publicKeyBase64);
+
+        String pemWrapped = "-----BEGIN PUBLIC KEY-----\n" + publicKeyBase64 + "\n-----END PUBLIC KEY-----";
+        assertTrue(LicenseCodeDecoder.validate(licenseCode, rsaSignatureService, pemWrapped).isValid(),
+            "the same key wrapped in PEM armour must still be recognised as trusted");
     }
 }

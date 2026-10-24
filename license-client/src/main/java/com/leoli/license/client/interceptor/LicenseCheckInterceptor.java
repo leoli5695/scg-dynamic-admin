@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.web.util.UrlPathHelper;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -32,6 +33,9 @@ public class LicenseCheckInterceptor implements HandlerInterceptor {
     private final LicenseStore licenseStore;
     private final FeatureGatekeeper featureGatekeeper;
     private final LicenseProperties properties;
+
+    /** Decoded, semicolon-stripped path - the same view Spring MVC uses to pick a handler. */
+    private static final UrlPathHelper URL_PATH_HELPER = new UrlPathHelper();
 
     /**
      * URL pattern to Feature mapping
@@ -62,8 +66,14 @@ public class LicenseCheckInterceptor implements HandlerInterceptor {
             return true; // Skip if license validation disabled
         }
 
-        String requestURI = request.getRequestURI();
-        
+        // FIX (feature-gate bypass): this used the raw getRequestURI(), which is neither decoded nor
+        // normalised, while Spring MVC maps the request using the decoded path. "GET /api/copilot%2Fchat"
+        // therefore did not start with "/api/copilot/" - getRequiredFeature returned null, no feature was
+        // demanded - yet MVC still routed it to the copilot handler. Matrix parameters (";x=1") and
+        // duplicate slashes bypassed the same way. UrlPathHelper gives the same view Spring MVC and
+        // Spring Security use, so the gate and the routing decision can no longer disagree.
+        String requestURI = URL_PATH_HELPER.getPathWithinApplication(request);
+
         // Skip internal endpoints
         if (isInternalEndpoint(requestURI)) {
             return true;
@@ -97,16 +107,25 @@ public class LicenseCheckInterceptor implements HandlerInterceptor {
     }
 
     /**
-     * Get required feature for URL path
+     * Get required feature for URL path.
+     *
+     * <p>Returns the LONGEST matching pattern, not the first one: {@code URL_FEATURE_MAP} is a
+     * HashMap, so iteration order is unspecified, and "first match wins" would make the required
+     * feature depend on hashing as soon as two patterns overlap (e.g. adding {@code /api/strategies/**}
+     * next to the existing {@code /api/strategies/circuit-breaker/**}). Longest-prefix is what a
+     * reader expects and is stable regardless of map order.
      */
     private LicenseInfo.Feature getRequiredFeature(String uri) {
+        LicenseInfo.Feature best = null;
+        int bestLength = -1;
         for (Map.Entry<String, LicenseInfo.Feature> entry : URL_FEATURE_MAP.entrySet()) {
             String pattern = entry.getKey();
-            if (matchPattern(pattern, uri)) {
-                return entry.getValue();
+            if (matchPattern(pattern, uri) && pattern.length() > bestLength) {
+                best = entry.getValue();
+                bestLength = pattern.length();
             }
         }
-        return null;
+        return best;
     }
 
     /**
@@ -122,14 +141,24 @@ public class LicenseCheckInterceptor implements HandlerInterceptor {
 
     /**
      * Check if internal endpoint (skip license check)
+     *
+     * <p>FIX: the first four used a bare {@code startsWith}, so {@code /actuatorX},
+     * {@code /health-data} and {@code /swagger-uix} were exempted along with the real endpoints -
+     * the same shape of bug as the favicon one that needed an exact match. Each base now matches
+     * only itself or a path segment below it.
      */
     private boolean isInternalEndpoint(String uri) {
-        return uri.startsWith("/actuator") ||
-               uri.startsWith("/health") ||
-               uri.startsWith("/swagger-ui") ||
-               uri.startsWith("/v3/api-docs") ||
+        return isExactOrSubPath(uri, "/actuator") ||
+               isExactOrSubPath(uri, "/health") ||
+               isExactOrSubPath(uri, "/swagger-ui") ||
+               isExactOrSubPath(uri, "/v3/api-docs") ||
                // single file, no sub-paths - exact match so /favicon.ico-data can't bypass
                uri.equals("/favicon.ico");
+    }
+
+    /** True for {@code base} itself or anything one or more path segments below it. */
+    private static boolean isExactOrSubPath(String uri, String base) {
+        return uri.equals(base) || uri.startsWith(base + "/");
     }
 
     /**

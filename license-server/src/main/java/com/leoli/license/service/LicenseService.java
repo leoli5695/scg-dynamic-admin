@@ -301,7 +301,16 @@ public class LicenseService {
      * Validate license code
      */
     public LicenseValidationResult validateLicense(String licenseCode) {
-        return LicenseCodeDecoder.validate(licenseCode, rsaSignatureService);
+        // The trust anchor is the key this server signs with. If it is not configured the decoder
+        // fails closed instead of trusting whatever public key arrived inside the license.
+        String trustedPublicKey;
+        try {
+            trustedPublicKey = getPublicKey();
+        } catch (LicenseException e) {
+            log.error("Cannot validate license codes: {}", e.getMessage());
+            return LicenseValidationResult.invalidSignature();
+        }
+        return LicenseCodeDecoder.validate(licenseCode, rsaSignatureService, trustedPublicKey);
     }
 
     /**

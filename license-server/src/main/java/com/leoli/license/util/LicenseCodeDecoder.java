@@ -8,6 +8,7 @@ import com.leoli.license.service.RsaSignatureService;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
 import java.util.*;
@@ -59,11 +60,14 @@ public class LicenseCodeDecoder {
     /**
      * Validate License Code signature
      *
-     * @param licenseCode       Base64 encoded License Code
-     * @param signatureService  RSA signature service
+     * @param licenseCode            Base64 encoded License Code
+     * @param signatureService       RSA signature service
+     * @param trustedPublicKeyBase64 the public key this server signs with; the key embedded in the
+     *                               license must match it byte-for-byte or the license is rejected
      * @return LicenseValidationResult
      */
-    public static LicenseValidationResult validate(String licenseCode, RsaSignatureService signatureService) {
+    public static LicenseValidationResult validate(String licenseCode, RsaSignatureService signatureService,
+                                                   String trustedPublicKeyBase64) {
         try {
             // Base64 decode
             String json = new String(Base64.getDecoder().decode(licenseCode), StandardCharsets.UTF_8);
@@ -76,6 +80,19 @@ public class LicenseCodeDecoder {
 
             if (payload == null || signature == null || publicKey == null) {
                 return LicenseValidationResult.malformed();
+            }
+
+            // FIX (trust anchor): the license carries its OWN publicKey, and the signature used to be
+            // verified against exactly that key. That proves only that whoever submitted the license
+            // holds the matching private key - not that this server issued it. `openssl genrsa 2048`,
+            // sign an ENTERPRISE/2099 payload, POST it here and the answer was valid:true, written
+            // into the audit log as a legitimate validation. The client side already pins its trust
+            // anchor (LicenseValidator.assertKeyTrusted); the server, which is supposed to be the
+            // authority, did not. Compare against the key this server actually signs with.
+            if (!isTrustedKey(publicKey, trustedPublicKeyBase64)) {
+                log.warn("Rejected license naming an untrusted signing key (presented={}, trusted={})",
+                    abbreviateKey(publicKey), abbreviateKey(trustedPublicKeyBase64));
+                return LicenseValidationResult.invalidSignature();
             }
 
             // Verify signature
@@ -134,6 +151,47 @@ public class LicenseCodeDecoder {
     /**
      * Build LicenseDefinition from payload map
      */
+    /**
+     * True when the key embedded in the license is byte-identical to the key this server signs
+     * with. Both sides are normalised (PEM armour and whitespace stripped, then Base64-decoded to
+     * DER) and compared in constant time.
+     *
+     * <p>Fails closed: a blank or unparsable trusted key means the server has no configured signing
+     * key, and therefore no basis on which to call anybody's license valid.
+     */
+    private static boolean isTrustedKey(String presentedKeyBase64, String trustedKeyBase64) {
+        byte[] presented = decodeKeyMaterial(presentedKeyBase64);
+        byte[] trusted = decodeKeyMaterial(trustedKeyBase64);
+        if (presented == null || trusted == null) {
+            return false;
+        }
+        return MessageDigest.isEqual(presented, trusted);
+    }
+
+    private static byte[] decodeKeyMaterial(String keyBase64) {
+        if (keyBase64 == null || keyBase64.isBlank()) {
+            return null;
+        }
+        try {
+            String content = keyBase64
+                .replace("-----BEGIN PUBLIC KEY-----", "")
+                .replace("-----END PUBLIC KEY-----", "")
+                .replaceAll("\\s+", "");
+            return Base64.getDecoder().decode(content);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    /** Short, non-reversible prefix for log lines - never log whole key material. */
+    private static String abbreviateKey(String keyBase64) {
+        if (keyBase64 == null || keyBase64.isBlank()) {
+            return "<none>";
+        }
+        String content = keyBase64.replaceAll("\\s+", "");
+        return content.length() <= 16 ? content : content.substring(0, 16) + "...";
+    }
+
     private static LicenseDefinition buildDefinition(Map<String, Object> payload) {
         // Parse edition
         String editionCode = (String) payload.get("edition");
