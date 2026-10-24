@@ -189,4 +189,59 @@ class TokenQuotaPreCheckEstimateTest {
         verify(chain, never()).filter(any());
         assertEquals(HttpStatus.PAYLOAD_TOO_LARGE, exchange.getResponse().getStatusCode());
     }
+
+    // ============================================================
+    // HYBRID small-request quota enforcement
+    // ============================================================
+
+    /**
+     * Regression for a quota bypass. Under HYBRID, {@code applyPreDeductStrategy} returns 0 for a
+     * request below {@code hybridThreshold} ("small request, no pre-deduct"), and the caller only ran
+     * {@code checkQuota} when pre-deduction had FAILED, i.e. on {@code < 0}. Zero is not less than
+     * zero, so the filter returned {@code allowed(0, 0)} without ever consulting the quota - a tenant
+     * that had exhausted its daily or monthly token budget could keep sending small requests forever,
+     * and small requests are the cheapest to generate.
+     *
+     * <p>chatBody() estimates to ~105 tokens, well under the 1000 default threshold, so it takes
+     * exactly the branch that used to skip the check.
+     */
+    @Test
+    @DisplayName("HYBRID small request still enforces the quota when it is exhausted")
+    void hybridSmallRequestStillChecksExhaustedQuota() {
+        TokenQuotaConfig config = new TokenQuotaConfig();
+        config.setEnabled(true);
+        config.setPreDeductStrategy("HYBRID");
+        stubConfig(config);
+
+        when(tokenQuotaManager.checkQuota(anyString(), any()))
+                .thenReturn(TokenQuotaManager.QuotaCheckResult.dailyExceeded(1000L, 1000L));
+
+        MockServerWebExchange exchange = post(chatBody());
+        StepVerifier.create(filter.filter(exchange, chain)).expectComplete().verify();
+
+        verify(tokenQuotaManager).checkQuota(eq("acme"), any());
+        verify(chain, never()).filter(any());
+    }
+
+    @Test
+    @DisplayName("HYBRID small request with quota available is allowed and pre-deducts nothing")
+    void hybridSmallRequestAllowedWithoutPreDeduct() {
+        TokenQuotaConfig config = new TokenQuotaConfig();
+        config.setEnabled(true);
+        config.setPreDeductStrategy("HYBRID");
+        stubConfig(config);
+
+        when(tokenQuotaManager.checkQuota(anyString(), any()))
+                .thenReturn(TokenQuotaManager.QuotaCheckResult.allowed(500L, 500L));
+
+        MockServerWebExchange exchange = post(chatBody());
+        StepVerifier.create(filter.filter(exchange, chain)).expectComplete().verify();
+
+        verify(tokenQuotaManager).checkQuota(eq("acme"), any());
+        verify(chain).filter(any());
+        // Nothing was pre-deducted, so nothing may be recorded for settlement to refund - otherwise
+        // the collector would try to settle a deduction that never happened.
+        assertNull(exchange.getAttribute("token_quota_pre_deducted"),
+                "a small HYBRID request pre-deducts nothing and must not publish a pre-deduct attribute");
+    }
 }

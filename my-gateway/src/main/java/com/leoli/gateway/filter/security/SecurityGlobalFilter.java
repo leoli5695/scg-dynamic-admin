@@ -317,6 +317,14 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
         // SECURITY: 在流级别限制累计字节数，避免客户端伪造 Content-Length 后
         // DataBufferUtils.join 把整个 body 载入内存造成 OOM。
         java.util.concurrent.atomic.AtomicLong totalBytes = new java.util.concurrent.atomic.AtomicLong(0);
+        // FIX (P0, size limit did not limit anything): the oversize handler below writes the 413 and
+        // then completes EMPTY, and `defaultIfEmpty` cannot tell that apart from a genuinely empty
+        // body - so the flatMap ran on a zero-byte buffer, found no threats, and called
+        // chain.filter(). The request went downstream anyway with a 413 already committed, and the
+        // upstream then wrote a second response body over it. This flag is what distinguishes
+        // "rejected" from "empty". The Content-Length fast path above needs no flag: it returns the
+        // response directly and never reaches the chain.
+        java.util.concurrent.atomic.AtomicBoolean rejected = new java.util.concurrent.atomic.AtomicBoolean(false);
         return DataBufferUtils.join(
                 request.getBody().handle((dataBuffer, sink) -> {
                     long newTotal = totalBytes.addAndGet(dataBuffer.readableByteCount());
@@ -332,12 +340,17 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
                 .onErrorResume(org.springframework.core.io.buffer.DataBufferLimitException.class, e -> {
                     log.error("Request body exceeded max size for route {}: {}",
                             RouteUtils.getRouteId(exchange), e.getMessage());
+                    rejected.set(true);
                     return writeTooLargeResponse(exchange.getResponse(),
                             "Request body too large. Maximum allowed: " + (maxBodySizeBytes / 1024 / 1024) + "MB")
                             .then(Mono.empty());
                 })
                 .defaultIfEmpty(exchange.getResponse().bufferFactory().wrap(new byte[0]))
                 .flatMap(dataBuffer -> {
+                    if (rejected.get()) {
+                        DataBufferUtils.release(dataBuffer);
+                        return Mono.empty();
+                    }
                     int readableBytes = dataBuffer.readableByteCount();
                     byte[] bytes = new byte[readableBytes];
                     dataBuffer.read(bytes);

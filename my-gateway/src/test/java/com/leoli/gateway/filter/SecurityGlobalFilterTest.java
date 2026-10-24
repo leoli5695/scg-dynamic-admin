@@ -12,11 +12,15 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
+import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.core.io.buffer.DefaultDataBufferFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
 import org.springframework.test.util.ReflectionTestUtils;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -456,6 +460,130 @@ class SecurityGlobalFilterTest {
     // ============================================================
     // Helper Methods
     // ============================================================
+
+    // ============================================================
+    // Body Size Limit Tests
+    // ============================================================
+
+    /**
+     * Regression coverage for the streaming size cap.
+     *
+     * <p>The bug: the oversize handler wrote the 413 and then completed EMPTY, and the following
+     * {@code defaultIfEmpty} could not distinguish "rejected" from "body was genuinely empty". The
+     * flatMap therefore ran on a zero-byte buffer, found no threats, and called
+     * {@code chain.filter(...)} - the request went downstream with a 413 already committed, and the
+     * upstream wrote a second response body over it. The size limit blocked nothing.
+     *
+     * <p>These tests drive the STREAMING accumulator, not the Content-Length fast path (which was
+     * already correct and returns without reaching the chain). A small declared Content-Length with a
+     * large actual body is exactly the forgery the accumulator exists to catch, and it guarantees the
+     * fast path cannot short-circuit the test.
+     */
+    @Nested
+    @DisplayName("Body Size Limit Tests")
+    class BodySizeLimitTests {
+
+        private MockServerWebExchange streamedPost(int totalBytes, String declaredContentLength) {
+            byte[] payload = new byte[totalBytes];
+            Arrays.fill(payload, (byte) 'a');
+            // Two chunks, so it is the streaming accumulator that has to notice the total exceeding
+            // the cap - a single buffer would not prove the incremental path works.
+            int half = totalBytes / 2;
+            DefaultDataBufferFactory factory = new DefaultDataBufferFactory();
+            Flux<DataBuffer> body = Flux.just(
+                    factory.wrap(Arrays.copyOfRange(payload, 0, half)),
+                    factory.wrap(Arrays.copyOfRange(payload, half, totalBytes)));
+            MockServerHttpRequest.BodyBuilder builder = MockServerHttpRequest
+                    .post("/api/upload")
+                    .contentType(MediaType.APPLICATION_JSON);
+            if (declaredContentLength != null) {
+                builder.header(HttpHeaders.CONTENT_LENGTH, declaredContentLength);
+            }
+            return MockServerWebExchange.builder(builder.body(body)).build();
+        }
+
+        private Map<String, Object> bodyScanConfig() {
+            Map<String, Object> config = createConfig(true, "BLOCK");
+            config.put("checkBody", true);
+            config.put("checkParameters", false);
+            config.put("checkHeaders", false);
+            return config;
+        }
+
+        @Test
+        @DisplayName("an oversized streamed body is rejected with 413 and never reaches the chain")
+        void oversizedStreamedBodyIsRejectedAndNotForwarded() {
+            filter.setMaxBodySizeMb(1);
+            // 1.2MB actual body, but declares 10 bytes so the Content-Length fast path cannot fire.
+            MockServerWebExchange exchange = streamedPost(1200 * 1024, "10");
+            when(strategyManager.getSecurityConfig(anyString())).thenReturn(bodyScanConfig());
+
+            StepVerifier.create(filter.filter(exchange, chain))
+                    .verifyComplete();
+
+            assertEquals(HttpStatus.PAYLOAD_TOO_LARGE, exchange.getResponse().getStatusCode());
+            verify(chain, never()).filter(any());
+        }
+
+        @Test
+        @DisplayName("an oversized body with no Content-Length at all is also rejected and not forwarded")
+        void oversizedBodyWithoutContentLengthIsRejected() {
+            filter.setMaxBodySizeMb(1);
+            MockServerWebExchange exchange = streamedPost(1200 * 1024, null);
+            when(strategyManager.getSecurityConfig(anyString())).thenReturn(bodyScanConfig());
+
+            StepVerifier.create(filter.filter(exchange, chain))
+                    .verifyComplete();
+
+            assertEquals(HttpStatus.PAYLOAD_TOO_LARGE, exchange.getResponse().getStatusCode());
+            verify(chain, never()).filter(any());
+        }
+
+        @Test
+        @DisplayName("an oversized declared Content-Length is rejected without reading the body")
+        void oversizedContentLengthIsRejected() {
+            filter.setMaxBodySizeMb(1);
+            MockServerWebExchange exchange = streamedPost(64, String.valueOf(2 * 1024 * 1024));
+            when(strategyManager.getSecurityConfig(anyString())).thenReturn(bodyScanConfig());
+
+            StepVerifier.create(filter.filter(exchange, chain))
+                    .verifyComplete();
+
+            assertEquals(HttpStatus.PAYLOAD_TOO_LARGE, exchange.getResponse().getStatusCode());
+            verify(chain, never()).filter(any());
+        }
+
+        @Test
+        @DisplayName("a body under the cap is still scanned and forwarded")
+        void undersizedBodyStillFlows() {
+            filter.setMaxBodySizeMb(1);
+            MockServerWebExchange exchange = streamedPost(10 * 1024, null);
+            when(strategyManager.getSecurityConfig(anyString())).thenReturn(bodyScanConfig());
+
+            StepVerifier.create(filter.filter(exchange, chain))
+                    .verifyComplete();
+
+            assertNull(exchange.getResponse().getStatusCode(), "a small clean body must not be rejected");
+            verify(chain).filter(any());
+        }
+
+        @Test
+        @DisplayName("an under-cap body carrying an injection is still blocked - the cap did not disable scanning")
+        void undersizedMaliciousBodyIsStillBlocked() {
+            filter.setMaxBodySizeMb(1);
+            MockServerHttpRequest request = MockServerHttpRequest.post("/api/upload")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body("{\"q\":\"1 UNION SELECT password FROM users\"}");
+            MockServerWebExchange exchange = MockServerWebExchange.builder(request).build();
+            when(strategyManager.getSecurityConfig(anyString())).thenReturn(bodyScanConfig());
+
+            StepVerifier.create(filter.filter(exchange, chain))
+                    .verifyComplete();
+
+            assertEquals(HttpStatus.BAD_REQUEST, exchange.getResponse().getStatusCode());
+            verify(chain, never()).filter(any());
+        }
+    }
 
     private MockServerWebExchange createGetExchange(String uri) {
         MockServerHttpRequest request = MockServerHttpRequest.get(uri).build();

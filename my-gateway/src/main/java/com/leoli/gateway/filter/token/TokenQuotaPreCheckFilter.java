@@ -224,8 +224,15 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
                         TokenQuotaManager.QuotaPeriodStamp stamp = tokenQuotaManager.currentPeriodStamp();
                         long preDeducted = applyPreDeductStrategy(tenantId, estimatedInputTokens,
                                 config.tokenQuotaConfig, stamp);
-                        if (preDeducted < 0) {
-                            // Pre-deduct failed (quota exceeded)
+                        // FIX (P0, quota bypass): this was `< 0`, so it only ran the quota check when
+                        // pre-deduction had FAILED. Under HYBRID, applyPreDeductStrategy returns 0 for
+                        // a request below hybridThreshold ("small request, no pre-deduct") - and 0 is
+                        // not < 0, so the code fell through to allowed(0,0) without ever consulting the
+                        // quota. A tenant that had exhausted its daily/monthly token budget could keep
+                        // sending small requests indefinitely, which is exactly the traffic that is
+                        // cheapest to generate. 0 now means "nothing was pre-deducted, so check the
+                        // quota read-only" and < 0 still means "pre-deduct was refused".
+                        if (preDeducted <= 0) {
                             return tokenQuotaManager.checkQuota(tenantId, config.tokenQuotaConfig);
                         }
                         // Store pre-deducted amount for settlement in collector filter
