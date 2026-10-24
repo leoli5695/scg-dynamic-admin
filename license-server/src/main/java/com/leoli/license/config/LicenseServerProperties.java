@@ -64,6 +64,16 @@ public class LicenseServerProperties {
          * Enable audit logging
          */
         private boolean enabled = true;
+
+        /**
+         * Whether audit entries record the IP from {@code X-Forwarded-For} /
+         * {@code X-Real-IP} instead of the socket peer.
+         * <p>
+         * Defaults to false: those headers are sent by the caller, so trusting them
+         * lets anyone attribute a license operation to an arbitrary IP. Enable only
+         * when this server sits behind a reverse proxy that overwrites them.
+         */
+        private boolean trustProxyHeaders = false;
     }
 
     @Data

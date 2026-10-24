@@ -52,6 +52,18 @@ public class GatewayAdminProperties {
          * missing key can never silently store plaintext.
          */
         private String credentialKey = "";
+
+        /**
+         * Whether to resolve the operator's IP from {@code X-Forwarded-For} /
+         * {@code X-Real-IP} instead of the socket peer.
+         * <p>
+         * Defaults to false. Those headers are sent by the caller, so trusting them
+         * unconditionally lets anyone write an arbitrary IP into the audit log -
+         * including someone else's. Turn this on only when the admin console really
+         * sits behind a reverse proxy that overwrites them; without it every audited
+         * action records the proxy's address instead of the operator's.
+         */
+        private boolean trustProxyHeaders = false;
     }
 
     @Data

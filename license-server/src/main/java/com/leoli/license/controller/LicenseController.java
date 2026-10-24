@@ -1,5 +1,6 @@
 package com.leoli.license.controller;
 
+import com.leoli.license.config.LicenseServerProperties;
 import com.leoli.license.dto.*;
 import com.leoli.license.model.*;
 import com.leoli.license.service.*;
@@ -31,6 +32,7 @@ public class LicenseController {
     private final LicenseService licenseService;
     private final AuditLogService auditLogService;
     private final RsaSignatureService rsaSignatureService;
+    private final LicenseServerProperties properties;
 
     /**
      * Create a new License
@@ -273,19 +275,28 @@ public class LicenseController {
         return "admin";
     }
 
+    /**
+     * IP recorded against an audit entry.
+     * <p>
+     * FIX (spoofable audit IP): {@code X-Forwarded-For} and {@code X-Real-IP} are set by
+     * the caller, so reading them unconditionally let anyone attribute a license
+     * operation - issuing, revoking, reassigning - to an arbitrary address. The socket
+     * peer is authoritative unless {@code license.server.audit-log.trust-proxy-headers}
+     * is on, which is for a deployment behind a reverse proxy that overwrites them.
+     */
     private String getIpAddress(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("X-Real-IP");
+        if (properties.getAuditLog().isTrustProxyHeaders()) {
+            String ip = request.getHeader("X-Forwarded-For");
+            if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+                ip = request.getHeader("X-Real-IP");
+            }
+            if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
+                // First hop of the chain: the original client.
+                int comma = ip.indexOf(',');
+                return comma != -1 ? ip.substring(0, comma).trim() : ip.trim();
+            }
         }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getRemoteAddr();
-        }
-        // Handle multiple proxies
-        if (ip != null && ip.contains(",")) {
-            ip = ip.split(",")[0].trim();
-        }
-        return ip;
+        return request.getRemoteAddr();
     }
 
     /**

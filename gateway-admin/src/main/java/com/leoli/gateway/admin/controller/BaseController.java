@@ -1,7 +1,9 @@
 package com.leoli.gateway.admin.controller;
 
 import com.leoli.gateway.admin.dto.ApiResponse;
+import com.leoli.gateway.admin.properties.GatewayAdminProperties;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -37,6 +39,14 @@ import java.util.Map;
 public abstract class BaseController {
 
     /**
+     * Injected into every subclass by Spring. Read defensively because a subclass that is
+     * instantiated outside the container would leave it null, and the fallback below is the
+     * safe default rather than a wrong IP in the audit log.
+     */
+    @Autowired
+    protected GatewayAdminProperties adminProperties;
+
+    /**
      * Get the current authenticated operator username.
      */
     protected String getOperator() {
@@ -45,21 +55,33 @@ public abstract class BaseController {
     }
 
     /**
-     * Get client IP address from request, handling proxy headers.
+     * Get the operator's IP address for audit purposes.
+     * <p>
+     * FIX (spoofable audit IP): this used to read {@code X-Forwarded-For} and
+     * {@code X-Real-IP} unconditionally. Both are set by the caller, so any operator -
+     * or any unauthenticated request that reaches an audited endpoint - could record
+     * an arbitrary IP against an action, either to hide their own or to implicate
+     * someone else. The audit log is the record an incident is reconstructed from, so
+     * an IP in it that the subject controls is not evidence.
+     * <p>
+     * The socket peer is now authoritative unless
+     * {@code gateway.admin.security.trust-proxy-headers=true}, which is for a console
+     * genuinely behind a reverse proxy that overwrites those headers. Same posture as
+     * {@code seckill.internal-api.trust-proxy-headers}.
      */
     protected String getIpAddress(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("X-Real-IP");
+        if (adminProperties != null && adminProperties.getSecurity().isTrustProxyHeaders()) {
+            String ip = request.getHeader("X-Forwarded-For");
+            if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+                ip = request.getHeader("X-Real-IP");
+            }
+            if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
+                // Take the first hop of the chain: the original client.
+                int comma = ip.indexOf(',');
+                return comma != -1 ? ip.substring(0, comma).trim() : ip.trim();
+            }
         }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getRemoteAddr();
-        }
-        // Handle multiple IPs in X-Forwarded-For (take first one)
-        if (ip != null && ip.contains(",")) {
-            ip = ip.split(",")[0].trim();
-        }
-        return ip;
+        return request.getRemoteAddr();
     }
 
     // ===================== 新方法：ApiResponse 返回 =====================
