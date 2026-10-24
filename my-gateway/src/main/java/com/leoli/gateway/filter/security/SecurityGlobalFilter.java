@@ -6,6 +6,7 @@ import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.util.RouteUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
@@ -47,11 +48,28 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
     private final ObjectMapper objectMapper;
 
     /**
-     * Maximum body size for security scanning (default: 10MB).
-     * Bodies larger than this are rejected to prevent OOM attacks.
-     * Configure via gateway.security.max-body-size-mb in application.yml
+     * Maximum body size for security scanning. Bodies larger than this are rejected to prevent OOM
+     * attacks. Bound from {@code gateway.security.max-body-size-mb}; defaults to 10MB.
+     *
+     * <p>FIX: this was a hardcoded {@code static final} 10MB while its own javadoc claimed it was
+     * configurable via {@code gateway.security.max-body-size-mb} - a property that existed nowhere
+     * (the only {@code max-body-size} in application.yml belongs to tracing and is 64KB). It is bound
+     * for real now, because this cap is the ceiling on how much an <b>unauthenticated</b> request can
+     * make the gateway buffer before scanning, i.e. the knob to turn when the WAF is being used to
+     * amplify memory pressure.
+     *
+     * <p>Setter injection with an initialised field rather than {@code @Value} on the field: the
+     * filter is constructed directly in {@code SecurityGlobalFilterTest}, where no injection happens,
+     * and an uninitialised cap of 0 would reject every body.
      */
-    private static final int MAX_BODY_SIZE_BYTES = 10 * 1024 * 1024;  // 10MB
+    private int maxBodySizeBytes = 10 * 1024 * 1024;
+
+    @Value("${gateway.security.max-body-size-mb:10}")
+    public void setMaxBodySizeMb(int maxBodySizeMb) {
+        // A zero or negative cap would reject every request with a body, which is a config typo
+        // rather than an intent - clamp to 1MB so a mistake degrades loudly instead of blackholing.
+        this.maxBodySizeBytes = Math.max(1, maxBodySizeMb) * 1024 * 1024;
+    }
 
     /** Ant-style matcher for excludePaths (* = single segment, ** = multiple). */
     private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
@@ -273,7 +291,7 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
      * Check request body for threats.
      * 
      * SECURITY: Enforces maximum body size to prevent OOM attacks.
-     * Bodies larger than MAX_BODY_SIZE_BYTES are rejected.
+     * Bodies larger than maxBodySizeBytes are rejected.
      */
     private Mono<Void> checkRequestBody(ServerWebExchange exchange, GatewayFilterChain chain,
                                         Map<String, Object> config, List<String> existingThreats,
@@ -285,11 +303,11 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
         if (contentLength != null) {
             try {
                 long length = Long.parseLong(contentLength);
-                if (length > MAX_BODY_SIZE_BYTES) {
+                if (length > maxBodySizeBytes) {
                     log.error("Request body too large for route {}: Content-Length={} bytes (max {} bytes)",
-                            RouteUtils.getRouteId(exchange), length, MAX_BODY_SIZE_BYTES);
+                            RouteUtils.getRouteId(exchange), length, maxBodySizeBytes);
                     return writeTooLargeResponse(exchange.getResponse(), 
-                            "Request body too large. Maximum allowed: " + (MAX_BODY_SIZE_BYTES / 1024 / 1024) + "MB");
+                            "Request body too large. Maximum allowed: " + (maxBodySizeBytes / 1024 / 1024) + "MB");
                 }
             } catch (NumberFormatException e) {
                 log.debug("Invalid Content-Length header: {}", contentLength);
@@ -302,10 +320,10 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
         return DataBufferUtils.join(
                 request.getBody().handle((dataBuffer, sink) -> {
                     long newTotal = totalBytes.addAndGet(dataBuffer.readableByteCount());
-                    if (newTotal > MAX_BODY_SIZE_BYTES) {
+                    if (newTotal > maxBodySizeBytes) {
                         DataBufferUtils.release(dataBuffer);
                         sink.error(new org.springframework.core.io.buffer.DataBufferLimitException(
-                                "Body exceeded max size " + MAX_BODY_SIZE_BYTES + " bytes"));
+                                "Body exceeded max size " + maxBodySizeBytes + " bytes"));
                         return;
                     }
                     sink.next(dataBuffer);
@@ -315,7 +333,7 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
                     log.error("Request body exceeded max size for route {}: {}",
                             RouteUtils.getRouteId(exchange), e.getMessage());
                     return writeTooLargeResponse(exchange.getResponse(),
-                            "Request body too large. Maximum allowed: " + (MAX_BODY_SIZE_BYTES / 1024 / 1024) + "MB")
+                            "Request body too large. Maximum allowed: " + (maxBodySizeBytes / 1024 / 1024) + "MB")
                             .then(Mono.empty());
                 })
                 .defaultIfEmpty(exchange.getResponse().bufferFactory().wrap(new byte[0]))
@@ -329,7 +347,7 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
                     // optimization truncated the scan to the leading 512KB for large
                     // bodies, which let attackers bypass WAF detection deterministically
                     // by padding a body past the scan limit (payload placed after the
-                    // boundary was never inspected). The 10MB cap in MAX_BODY_SIZE_BYTES
+                    // boundary was never inspected). The 10MB cap in maxBodySizeBytes
                     // already bounds the worst-case decode/regex cost, so correctness
                     // wins over the marginal hot-path saving.
                     //

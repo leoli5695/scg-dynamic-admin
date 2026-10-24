@@ -263,6 +263,24 @@ gateway:
     redis:
       enabled: ${REDIS_LIMITER_ENABLED:true}
 
+  # WAF / SecurityGlobalFilter
+  security:
+    # Ceiling on how much of a request body the WAF will buffer and regex-scan. Requests declaring a
+    # larger Content-Length are rejected outright, and streaming bodies are cut off at this many bytes.
+    # This is the knob for WAF-driven memory pressure: the scan runs on boundedElastic, which the
+    # token-quota, semantic-cache and SSL-refresh paths share. The WAF's own rule set (SQL/XSS
+    # patterns, BLOCK vs DETECT, excludePaths) comes from the strategy config, not from here.
+    # Was hardcoded at 10MB while the code comment claimed this key already existed.
+    max-body-size-mb: ${GATEWAY_SECURITY_MAX_BODY_SIZE_MB:10}
+
+  # Shadow quota (local fallback used while Redis is unavailable)
+  shadow-quota:
+    # How often per-route global-QPS snapshots are refreshed from Redis. Each route costs one SCAN
+    # plus one ZCARD per matching key, so this is deliberately NOT on the 1s health tick - see
+    # ScheduleConstants.QUOTA_SNAPSHOT_INTERVAL_MS. The Redis liveness probe and the recovery ramp
+    # stay at 1s; only this snapshot work is throttled.
+    snapshot-interval-ms: ${GATEWAY_SHADOW_QUOTA_SNAPSHOT_INTERVAL_MS:10000}
+
   # SSL/HTTPS Configuration
   ssl:
     # Enable HTTPS on port 443

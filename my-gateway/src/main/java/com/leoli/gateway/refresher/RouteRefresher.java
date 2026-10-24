@@ -2,6 +2,7 @@ package com.leoli.gateway.refresher;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.center.spi.ConfigCenterService;
+import com.leoli.gateway.limiter.ShadowQuotaManager;
 import com.leoli.gateway.manager.RouteManager;
 import com.leoli.gateway.model.MultiServiceConfig;
 import com.leoli.gateway.route.DynamicRouteDefinitionLocator;
@@ -35,6 +36,10 @@ public class RouteRefresher {
     private final RouteManager routeManager;
     private final ConfigCenterService configService;
     private final DynamicRouteDefinitionLocator routeLocator;
+    // Route lifecycle is orchestrated here, so this is where per-route state held by other
+    // components has to be released. RouteManager is a dependency-free in-memory cache and must
+    // stay that way; ShadowQuotaManager only autowires Redis/discovery, so there is no cycle.
+    private final ShadowQuotaManager shadowQuotaManager;
 
     // Currently listening route IDs
     private final Set<String> listeningRouteIds = ConcurrentHashMap.newKeySet();
@@ -59,11 +64,13 @@ public class RouteRefresher {
     public RouteRefresher(RouteManager routeManager,
                           ConfigCenterService configService,
                           DynamicRouteDefinitionLocator routeLocator,
-                          ObjectMapper objectMapper) {
+                          ObjectMapper objectMapper,
+                          ShadowQuotaManager shadowQuotaManager) {
         this.routeManager = routeManager;
         this.configService = configService;
         this.routeLocator = routeLocator;
         this.objectMapper = objectMapper;
+        this.shadowQuotaManager = shadowQuotaManager;
         log.info("RouteRefresher initialized with per-route incremental refresh");
     }
 
@@ -155,6 +162,7 @@ public class RouteRefresher {
             if (content == null || content.isBlank()) {
                 // Route deleted
                 routeManager.removeRoute(routeId);
+                shadowQuotaManager.unregisterRoute(routeId);
                 log.info("🗑️  Route deleted: {}", routeId);
             } else {
                 // Route created or updated
@@ -294,6 +302,7 @@ public class RouteRefresher {
         }
         // Always remove from routeManager (route may exist even without listener)
         routeManager.removeRoute(routeId);
+        shadowQuotaManager.unregisterRoute(routeId);
         log.info("🗑️  Removed route from manager: {}", routeId);
     }
 

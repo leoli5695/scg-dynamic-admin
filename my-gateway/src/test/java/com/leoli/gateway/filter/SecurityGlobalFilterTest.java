@@ -1,6 +1,7 @@
 package com.leoli.gateway.filter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.filter.security.SecurityGlobalFilter;
 import com.leoli.gateway.manager.StrategyManager;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
+import org.springframework.test.util.ReflectionTestUtils;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -420,9 +422,35 @@ class SecurityGlobalFilterTest {
     // ============================================================
 
     @Test
-    @DisplayName("Filter order should be -500")
+    @DisplayName("Filter order should be -480: after IP_FILTER, before AUTHENTICATION")
     void testGetOrder() {
-        assertEquals(-500, filter.getOrder());
+        assertEquals(FilterOrderConstants.SECURITY_GLOBAL, filter.getOrder());
+        assertEquals(-480, filter.getOrder());
+        // The invariants that actually matter, asserted rather than left to the literal above:
+        // a blacklisted address must be rejected BEFORE the WAF buffers and regex-scans up to
+        // gateway.security.max-body-size-mb of its body (scanning runs on boundedElastic, which the
+        // token-quota / semantic-cache / SSL-refresh paths share), while unauthenticated traffic
+        // must still be scanned, which is the entire point of a WAF.
+        assertTrue(filter.getOrder() > FilterOrderConstants.IP_FILTER,
+                "WAF must run after IP filtering so a blacklisted address cannot force body buffering");
+        assertTrue(filter.getOrder() < FilterOrderConstants.AUTHENTICATION,
+                "WAF must run before authentication so unauthenticated traffic is scanned too");
+    }
+
+    @Test
+    @DisplayName("the body cap defaults to 10MB without Spring, is configurable, and clamps nonsense")
+    void bodyCapIsConfigurable() {
+        SecurityGlobalFilter direct = new SecurityGlobalFilter(strategyManager, new ObjectMapper());
+        assertEquals(10 * 1024 * 1024, ReflectionTestUtils.getField(direct, "maxBodySizeBytes"),
+                "this test class builds the filter with `new`, so no @Value injection happens - "
+                        + "an uninitialised cap of 0 would reject every request body");
+
+        direct.setMaxBodySizeMb(2);
+        assertEquals(2 * 1024 * 1024, ReflectionTestUtils.getField(direct, "maxBodySizeBytes"));
+
+        direct.setMaxBodySizeMb(0);
+        assertEquals(1024 * 1024, ReflectionTestUtils.getField(direct, "maxBodySizeBytes"),
+                "a zero or negative cap is a config typo, not an intent to blackhole every body");
     }
 
     // ============================================================

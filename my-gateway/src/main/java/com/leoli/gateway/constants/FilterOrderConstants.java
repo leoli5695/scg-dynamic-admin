@@ -27,7 +27,23 @@ public interface FilterOrderConstants {
      * Security filter - XSS/SQL injection protection.
      * Execute first to block malicious requests early.
      */
-    int SECURITY_GLOBAL = -500;
+    /**
+     * Security (WAF) global filter.
+     *
+     * <p>FIX: was -500, i.e. BEFORE IP_FILTER (-490). The WAF buffers and regex-scans up to
+     * {@code gateway.security.max-body-size-mb} of request body, so an address that was already
+     * blacklisted could still make the gateway buffer a full body before being rejected - and the
+     * scanning runs on boundedElastic, which the token-quota, semantic-cache and SSL-refresh paths
+     * share, so that is a way to starve unrelated features. -480 keeps the WAF ahead of
+     * AUTHENTICATION (-250), which is the point of a WAF (unauthenticated traffic must be scanned
+     * too), while letting the cheap IP rejection happen first.
+     *
+     * <p>Deliberately NOT changed: body scanning still covers multipart and every other declared
+     * content type. Skipping multipart would let SQLi/XSS ride through in ordinary form fields and
+     * would revert the explicit P0 fix recorded in SecurityGlobalFilter.hasBody(). The memory-pressure
+     * concern is addressed by the now-configurable size cap instead.
+     */
+    int SECURITY_GLOBAL = -480;
 
     /**
      * IP filter - IP whitelist/blacklist.

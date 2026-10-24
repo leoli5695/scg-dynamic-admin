@@ -218,11 +218,16 @@ public class ShadowQuotaManager implements ApplicationListener<HeartbeatEvent> {
     }
 
     /**
-     * Update shadow quota snapshots every second.
-     * This records the global QPS from Redis for each route.
-     * Note: Node count is updated separately via listener/fallback, not every second.
+     * Shadow-quota health tick, every second: probe Redis and advance the recovery ramp.
+     *
+     * <p>FIX: this used to also call {@code updateGlobalQpsSnapshots()}, which does one SCAN per
+     * known route plus one ZCARD per matching key. At 1s that was the largest self-inflicted Redis
+     * load in the gateway, and because nothing ever removed a route from {@code routeStrategyIds} the
+     * cost grew monotonically with route churn. The snapshot work moved to
+     * {@link #refreshGlobalQpsSnapshots()} on its own, slower cadence; the health tick stays at 1s
+     * because noticing that Redis died is what it is for.
      */
-    @Scheduled(fixedRate = 1000)
+    @Scheduled(fixedRate = ScheduleConstants.QUOTA_UPDATE_INTERVAL_MS)
     public void updateShadowQuotas() {
         if (!shadowQuotaEnabled) {
             return;
@@ -240,9 +245,6 @@ public class ShadowQuotaManager implements ApplicationListener<HeartbeatEvent> {
 
             // Update recovery progress
             updateRecoveryProgress();
-
-            // Fetch global QPS from Redis for each known route
-            updateGlobalQpsSnapshots();
         } else {
             if (redisHealthy) {
                 // Redis just failed
@@ -251,6 +253,37 @@ public class ShadowQuotaManager implements ApplicationListener<HeartbeatEvent> {
             redisHealthy = false;
             recoveryProgress.set(0);
         }
+    }
+
+    /**
+     * Refresh per-route global-QPS snapshots from Redis, on a slower cadence than the health tick.
+     * Skips entirely while Redis is unhealthy - the tick above already detected that, and every SCAN
+     * would just fail.
+     */
+    @Scheduled(fixedRateString = "${gateway.shadow-quota.snapshot-interval-ms:10000}")
+    public void refreshGlobalQpsSnapshots() {
+        if (!shadowQuotaEnabled || !redisHealthy) {
+            return;
+        }
+        updateGlobalQpsSnapshots();
+    }
+
+    /**
+     * Drop a route from shadow-quota tracking. The mirror of {@link #registerRoute}, and the only
+     * thing that ever removes an entry: without it the three maps below grew for the lifetime of the
+     * process, and since the snapshot job iterates them, every route that was ever seen kept costing
+     * a SCAN per cycle forever.
+     *
+     * <p>Called from {@code RouteRefresher} when a route is deleted or its listener is removed.
+     */
+    public void unregisterRoute(String routeId) {
+        if (routeId == null || routeId.isEmpty()) {
+            return;
+        }
+        shadowQuotas.remove(routeId);
+        globalQpsSnapshots.remove(routeId);
+        routeStrategyIds.remove(routeId);
+        log.debug("Unregistered route {} from shadow quota tracking", routeId);
     }
 
     /**

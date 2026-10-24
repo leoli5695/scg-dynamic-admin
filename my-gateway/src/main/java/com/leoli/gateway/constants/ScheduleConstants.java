@@ -116,10 +116,23 @@ public interface ScheduleConstants {
     // ============================================================
 
     /**
-     * Interval for shadow quota update.
-     * Updates global QPS snapshot every 1 second.
+     * Interval for the shadow-quota health tick: Redis liveness probe plus recovery-progress
+     * advancement. Kept at 1s because fast failure detection is the point - one Redis GET per second
+     * is cheap. The expensive per-route SCAN work is NOT on this cadence, see
+     * {@link #QUOTA_SNAPSHOT_INTERVAL_MS}.
      */
     long QUOTA_UPDATE_INTERVAL_MS = 1000;
+
+    /**
+     * Interval for refreshing per-route global-QPS snapshots from Redis.
+     *
+     * <p>This used to run on the 1s health tick, but each route costs one SCAN plus one ZCARD per
+     * matching key, and the route set only ever grew (nothing removed entries), so the self-inflicted
+     * Redis load rose monotonically with route churn. Shadow quotas are a degradation fallback, so a
+     * few seconds of staleness costs nothing - unlike slowing the health tick, which would delay
+     * noticing that Redis died.
+     */
+    long QUOTA_SNAPSHOT_INTERVAL_MS = 10000;
 
     /**
      * Threshold for triggering fallback node count query.

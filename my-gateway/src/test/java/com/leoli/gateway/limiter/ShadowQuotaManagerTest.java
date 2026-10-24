@@ -410,4 +410,88 @@ class ShadowQuotaManagerTest {
             assertTrue(shadowQuotaManager.getStatus().getCachedNodeCount() >= 1);
         }
     }
+
+    /**
+     * Route unregistration.
+     *
+     * <p>Before {@code unregisterRoute} existed, nothing ever removed an entry from
+     * {@code shadowQuotas} / {@code globalQpsSnapshots} / {@code routeStrategyIds}, and the snapshot
+     * job iterates them doing one Redis SCAN per route - so the cost rose monotonically with route
+     * churn for the lifetime of the process. These tests read the maps directly because that growth
+     * is the actual defect; a behavioural assertion alone would not have caught it.
+     */
+    @Nested
+    @DisplayName("Route Unregistration Tests")
+    class RouteUnregistrationTests {
+
+        @SuppressWarnings("unchecked")
+        private int sizeOf(String fieldName) {
+            return ((java.util.Map<String, ?>) ReflectionTestUtils.getField(shadowQuotaManager, fieldName)).size();
+        }
+
+        @Test
+        @DisplayName("Unregistering releases the route from all three tracking maps")
+        void testUnregisterClearsAllMaps() {
+            shadowQuotaManager.registerRoute("route-a", "strategy-a", 100);
+            shadowQuotaManager.registerRoute("route-b", "strategy-b", 100);
+            assertEquals(2, sizeOf("shadowQuotas"));
+            assertEquals(2, sizeOf("globalQpsSnapshots"));
+            assertEquals(2, sizeOf("routeStrategyIds"));
+
+            shadowQuotaManager.unregisterRoute("route-a");
+
+            assertEquals(1, sizeOf("shadowQuotas"));
+            assertEquals(1, sizeOf("globalQpsSnapshots"));
+            assertEquals(1, sizeOf("routeStrategyIds"),
+                    "routeStrategyIds is what the snapshot job iterates to build SCAN patterns");
+        }
+
+        @Test
+        @DisplayName("Register-then-unregister churn does not accumulate state")
+        void testChurnDoesNotLeak() {
+            for (int i = 0; i < 500; i++) {
+                String routeId = "churn-" + i;
+                shadowQuotaManager.registerRoute(routeId, "strategy-" + i, 100);
+                shadowQuotaManager.unregisterRoute(routeId);
+            }
+
+            assertEquals(0, sizeOf("shadowQuotas"));
+            assertEquals(0, sizeOf("globalQpsSnapshots"));
+            assertEquals(0, sizeOf("routeStrategyIds"));
+        }
+
+        @Test
+        @DisplayName("An unregistered route falls back to the caller-supplied QPS")
+        void testUnregisteredRouteFallsBack() {
+            shadowQuotaManager.registerRoute("route-c", "strategy-c", 100);
+            shadowQuotaManager.unregisterRoute("route-c");
+
+            // No tracked quota left, so the caller's configured value is used rather than a stale one.
+            assertEquals(100, shadowQuotaManager.getShadowQuota("route-c", 100));
+        }
+
+        @Test
+        @DisplayName("Unregistering null, blank or unknown routes is a safe no-op")
+        void testUnregisterIsSafeOnUnknownRoutes() {
+            shadowQuotaManager.registerRoute("kept", "strategy-kept", 100);
+
+            assertDoesNotThrow(() -> shadowQuotaManager.unregisterRoute(null));
+            assertDoesNotThrow(() -> shadowQuotaManager.unregisterRoute(""));
+            assertDoesNotThrow(() -> shadowQuotaManager.unregisterRoute("never-registered"));
+
+            assertEquals(1, sizeOf("shadowQuotas"), "a no-op call must not disturb other routes");
+        }
+
+        @Test
+        @DisplayName("The snapshot job is skipped while Redis is unhealthy")
+        void testSnapshotSkippedWhenRedisUnhealthy() {
+            ReflectionTestUtils.setField(shadowQuotaManager, "redisHealthy", false);
+            ReflectionTestUtils.setField(shadowQuotaManager, "redisTemplate", null);
+            shadowQuotaManager.registerRoute("route-d", "strategy-d", 100);
+
+            // Must return without touching Redis - the health tick already knows it is down, and every
+            // SCAN would only fail.
+            assertDoesNotThrow(() -> shadowQuotaManager.refreshGlobalQpsSnapshots());
+        }
+    }
 }
