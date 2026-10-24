@@ -19,7 +19,8 @@ import type {
 } from '../../../types/route';
 import type { NacosDiscoveryServiceInfo, ServiceDefinition } from '../../../types/service';
 import {
-  buildRoutePayload, modelMappingToPairs, stringifyPredicateArgs, sumWeights, toFormBinding,
+  buildRoutePayload, modelMappingToPairs, splitServiceUri, stringifyPredicateArgs, sumWeights,
+  toFormBinding, toFormServiceId,
 } from '../utils';
 import type { RouteFormValues } from '../utils';
 import PredicateItem from './PredicateItem';
@@ -80,9 +81,11 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
     description: route?.description,
     category: route?.category || 'NORMAL',
     routingMode: route?.mode || 'SINGLE',
-    serviceId: route?.uri || undefined,
-    serviceNamespace: route?.serviceNamespace || '',
-    serviceGroup: route?.serviceGroup || 'DEFAULT_GROUP',
+    // Re-qualify the stored uri so it matches the option the operator originally
+    // picked - the same serviceName can exist in several namespaces/groups.
+    serviceId: route?.uri
+      ? toFormServiceId(...splitServiceUri(route.uri), route.serviceNamespace, route.serviceGroup)
+      : undefined,
     uri: route?.uri,
     services: initialBindings,
     predicates: (route?.predicates ?? []).map((p) => ({
@@ -134,7 +137,6 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
 
     const body = buildRoutePayload(values, routingMode, grayRulesEnabled, {
       services,
-      nacosServices,
       existing: route,
     });
     if (!body) {

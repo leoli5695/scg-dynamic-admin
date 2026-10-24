@@ -238,15 +238,75 @@ export const stringifyFilterArgs = (
 // Service binding helpers
 // ============================================================================
 
+/** Drop the "?ns=&grp=" qualifier an "lb://" Select option value may carry. */
+export const stripServiceQualifier = (serviceId?: string): string => {
+  if (!serviceId) return '';
+  // Only lb:// option values are qualified. An http(s) target may legitimately
+  // carry a query string, so leave anything else byte-for-byte alone.
+  if (!serviceId.startsWith('lb://')) return serviceId;
+  const qIndex = serviceId.indexOf('?');
+  return qIndex >= 0 ? serviceId.slice(0, qIndex) : serviceId;
+};
+
 /** Strip "static://" / "lb://" prefixes and return [protocol, pureId]. */
 export const splitServiceUri = (serviceId: string): [string, string] => {
   if (!serviceId) return ['static', ''];
-  if (serviceId.includes('://')) {
-    const [protocol, id] = serviceId.split('://');
-    return [protocol || 'static', id || serviceId];
+  const bare = stripServiceQualifier(serviceId);
+  if (bare.includes('://')) {
+    const [protocol, id] = bare.split('://');
+    return [protocol || 'static', id || bare];
   }
-  return ['static', serviceId];
+  return ['static', bare];
 };
+
+/**
+ * Option value for a Nacos ("lb://") service in the target Select.
+ *
+ * A serviceName is only unique together with its namespace and group, and the
+ * gateway routes on all three. Encoding the qualifier in the value is what lets
+ * the form keep the operator's choice: re-deriving namespace/group later from
+ * the name alone resolves to whichever registry entry the list happened to hold
+ * first, so picking prod/svc published dev/svc.
+ *
+ * The qualifier is UI-only - stripServiceQualifier removes it before anything
+ * is published to Nacos.
+ */
+export const lbOptionValue = (
+  serviceName: string,
+  namespace?: string,
+  group?: string,
+): string => {
+  const params = new URLSearchParams();
+  if (namespace) params.set('ns', namespace);
+  if (group && group !== 'DEFAULT_GROUP') params.set('grp', group);
+  const query = params.toString();
+  return query ? `lb://${serviceName}?${query}` : `lb://${serviceName}`;
+};
+
+/** Inverse of lbOptionValue; defaults to the public namespace / DEFAULT_GROUP. */
+export const parseServiceQualifier = (
+  serviceId?: string,
+): { namespace: string; group: string } => {
+  const raw = serviceId ?? '';
+  const qIndex = raw.indexOf('?');
+  const params = new URLSearchParams(qIndex >= 0 ? raw.slice(qIndex + 1) : '');
+  return {
+    namespace: params.get('ns') || '',
+    group: params.get('grp') || 'DEFAULT_GROUP',
+  };
+};
+
+/** Stored uri (+ namespace/group) -> the Select option value that matches it. */
+export const toFormServiceId = (
+  protocol: string,
+  pureServiceId: string,
+  namespace?: string,
+  group?: string,
+): string => (
+  protocol === 'lb'
+    ? lbOptionValue(pureServiceId, namespace, group)
+    : `${protocol}://${pureServiceId}`
+);
 
 /** Resolve a display name for a static service (UUID -> human name). */
 export const resolveServiceDisplayName = (
@@ -263,7 +323,6 @@ export const resolveServiceDisplayName = (
 export const toBackendBinding = (
   formBinding: Partial<RouteServiceBinding>,
   services: ServiceDefinition[],
-  nacosServices: NacosDiscoveryServiceInfo[],
 ): RouteServiceBinding => {
   const [protocol, serviceId] = splitServiceUri(formBinding.serviceId || '');
   const bindingType: ServiceBindingType = protocol === 'lb' ? 'DISCOVERY' : 'STATIC';
@@ -274,11 +333,9 @@ export const toBackendBinding = (
 
   if (protocol === 'lb') {
     serviceName = serviceId;
-    const nacosService = nacosServices.find((ns) => ns.serviceName === serviceId);
-    if (nacosService) {
-      serviceNamespace = nacosService.namespace || '';
-      serviceGroup = nacosService.group || 'DEFAULT_GROUP';
-    }
+    const qualifier = parseServiceQualifier(formBinding.serviceId);
+    serviceNamespace = qualifier.namespace;
+    serviceGroup = qualifier.group;
   } else if (!serviceName || UUID_PATTERN.test(serviceName)) {
     const found = services.find((svc) => svc.serviceId === serviceId);
     serviceName = found?.name || serviceName || serviceId;
@@ -323,7 +380,9 @@ export const toFormBinding = (
 
   return {
     ...binding,
-    serviceId: `${protocol}://${pureServiceId}`,
+    serviceId: toFormServiceId(
+      protocol, pureServiceId, binding.serviceNamespace, binding.serviceGroup,
+    ),
     serviceName,
   };
 };
@@ -363,10 +422,11 @@ export interface RouteFormValues {
   order?: number | string;
   description?: string;
   routingMode?: RoutingMode;
-  /** SINGLE mode: full URI ("static://uuid" or "lb://name"). */
+  /**
+   * SINGLE mode: the target Select's option value - "static://uuid", or
+   * "lb://name" with an optional "?ns=&grp=" qualifier (see lbOptionValue).
+   */
   serviceId?: string;
-  serviceNamespace?: string;
-  serviceGroup?: string;
   uri?: string;
   /** MULTI mode form rows. */
   services?: Array<Partial<RouteServiceBinding>>;
@@ -383,7 +443,6 @@ export interface RouteFormValues {
 
 export interface PayloadBuildContext {
   services: ServiceDefinition[];
-  nacosServices: NacosDiscoveryServiceInfo[];
   /** Carried over from the existing route on edit (filters/metadata). */
   existing?: RouteResponse;
 }
@@ -441,6 +500,11 @@ export const buildRoutePayload = (
       uri: 'https://ai-gateway.invalid',
       aiUpstreams,
       modelPredicates,
+      // The form does not edit the fallback chain, so carry it over like filters/metadata.
+      // Omitting it made every edit of an AI route PUT a body without aiFallback, and the
+      // backend persists the submitted definition verbatim - the configured failover was
+      // silently deleted on the first save.
+      aiFallback: ctx.existing?.aiFallback,
     };
   }
 
@@ -458,12 +522,15 @@ export const buildRoutePayload = (
   if (mode === 'SINGLE') {
     const finalUri = values.serviceId || values.uri;
     if (!finalUri) return null;
-    body.uri = finalUri;
+    // The qualifier is a UI-only disambiguator: SCG resolves "lb://name" plus
+    // the namespace/group fields, so publishing it verbatim would break routing.
+    body.uri = stripServiceQualifier(finalUri);
     const [protocol, pureId] = splitServiceUri(finalUri);
     body.serviceId = pureId;
     if (protocol === 'lb') {
-      body.serviceNamespace = values.serviceNamespace || '';
-      body.serviceGroup = values.serviceGroup || 'DEFAULT_GROUP';
+      const qualifier = parseServiceQualifier(finalUri);
+      body.serviceNamespace = qualifier.namespace;
+      body.serviceGroup = qualifier.group;
     }
     return body;
   }
@@ -475,7 +542,7 @@ export const buildRoutePayload = (
   const totalWeight = formBindings.reduce((sum, s) => sum + (s.weight || 0), 0);
   if (totalWeight !== 100) return null;
 
-  const bindings = formBindings.map((s) => toBackendBinding(s, ctx.services, ctx.nacosServices));
+  const bindings = formBindings.map((s) => toBackendBinding(s, ctx.services));
   body.services = bindings;
 
   if (grayRulesEnabled && values.grayRules && values.grayRules.length > 0) {
@@ -492,7 +559,7 @@ export const buildRoutePayload = (
   }
 
   // Backward compatibility: uri mirrors the first binding.
-  body.uri = formBindings[0]?.serviceId || 'static://multi-service';
+  body.uri = stripServiceQualifier(formBindings[0]?.serviceId) || 'static://multi-service';
   return body;
 };
 

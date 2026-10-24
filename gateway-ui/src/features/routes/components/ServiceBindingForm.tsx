@@ -13,7 +13,9 @@ import {
 import { useTranslation } from 'react-i18next';
 import type { RoutingMode } from '../../../types/route';
 import type { NacosDiscoveryServiceInfo, ServiceDefinition } from '../../../types/service';
-import { sumWeights } from '../utils';
+import {
+  lbOptionValue, splitServiceUri, stripServiceQualifier, sumWeights,
+} from '../utils';
 
 interface ServiceBindingFormProps {
   form: FormInstance;
@@ -33,43 +35,20 @@ const ServiceBindingForm: React.FC<ServiceBindingFormProps> = ({
   const { t } = useTranslation();
 
   const handleServiceIdChange = (value: string) => {
-    form.setFieldValue('uri', value || '');
-    if (value && value.startsWith('lb://')) {
-      const serviceName = value.replace('lb://', '');
-      const nacosService = nacosServices.find((s) => s.serviceName === serviceName);
-      if (nacosService) {
-        form.setFieldValue('serviceNamespace', nacosService.namespace || '');
-        form.setFieldValue('serviceGroup', nacosService.group || 'DEFAULT_GROUP');
-      }
-    } else {
-      form.setFieldValue('serviceNamespace', undefined);
-      form.setFieldValue('serviceGroup', undefined);
-    }
+    form.setFieldValue('uri', stripServiceQualifier(value));
   };
 
   const handleMultiServiceIdChange = (value: string, name: number) => {
     let serviceName = '';
-    let serviceNamespace;
-    let serviceGroup;
     if (value?.startsWith('static://')) {
       const id = value.replace('static://', '');
       const found = services.find((s) => s.serviceId === id);
       serviceName = found?.name || id;
-    } else if (value?.startsWith('lb://')) {
-      serviceName = value.replace('lb://', '');
-      const nacosService = nacosServices.find((s) => s.serviceName === serviceName);
-      if (nacosService) {
-        serviceNamespace = nacosService.namespace || '';
-        serviceGroup = nacosService.group || 'DEFAULT_GROUP';
-      }
+    } else if (value) {
+      serviceName = splitServiceUri(value)[1];
     }
     const currentServices = form.getFieldValue('services') || [];
-    currentServices[name] = {
-      ...currentServices[name],
-      serviceName,
-      serviceNamespace,
-      serviceGroup,
-    };
+    currentServices[name] = { ...currentServices[name], serviceName };
     form.setFieldsValue({ services: currentServices });
   };
 
@@ -101,7 +80,7 @@ const ServiceBindingForm: React.FC<ServiceBindingFormProps> = ({
         {nacosServices.map((s) => (
           <Select.Option
             key={`lb-${s.serviceName}-${s.namespace || 'public'}-${s.group || 'DEFAULT_GROUP'}`}
-            value={`lb://${s.serviceName}`}
+            value={lbOptionValue(s.serviceName, s.namespace, s.group)}
           >
             <span>{s.displayName || `${s.serviceName} (${s.namespace || 'public'}/${s.group || 'DEFAULT_GROUP'})`}</span>
             <span className="service-option-tag nacos">Nacos</span>
@@ -141,12 +120,6 @@ const ServiceBindingForm: React.FC<ServiceBindingFormProps> = ({
             <Select placeholder={t('routes.select_service')} size="large" onChange={handleServiceIdChange} showSearch>
               {renderServiceOptions()}
             </Select>
-          </Form.Item>
-          <Form.Item name="serviceNamespace" hidden>
-            <Input type="hidden" />
-          </Form.Item>
-          <Form.Item name="serviceGroup" hidden>
-            <Input type="hidden" />
           </Form.Item>
         </>
       )}

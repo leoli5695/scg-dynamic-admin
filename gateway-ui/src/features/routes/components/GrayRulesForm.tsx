@@ -12,7 +12,7 @@ import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { RouteServiceBinding } from '../../../types/route';
 import type { ServiceDefinition } from '../../../types/service';
-import { resolveServiceDisplayName } from '../utils';
+import { resolveServiceDisplayName, splitServiceUri } from '../utils';
 
 interface GrayRulesFormProps {
   form: FormInstance;
@@ -118,7 +118,7 @@ const GrayRulesForm: React.FC<GrayRulesFormProps> = ({
                             }}
                           >
                             {configuredServices.map((s, idx) => {
-                              const serviceId = s?.serviceId?.replace('static://', '').replace('lb://', '') || s?.serviceId || '';
+                              const serviceId = s?.serviceId ? splitServiceUri(s.serviceId)[1] : '';
                               const displayName = resolveServiceDisplayName(s?.serviceName, serviceId, services);
                               return (
                                 <Select.Option key={idx} value={serviceId} label={displayName}>
