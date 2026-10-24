@@ -25,6 +25,18 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
+// Argument coercions for LLM tool calls - see com.leoli.gateway.admin.tool.ToolArgs. Imported
+// statically so the 133 call sites in this class read exactly as they did when these were private
+// methods here.
+import static com.leoli.gateway.admin.tool.ToolArgs.getBoolArg;
+import static com.leoli.gateway.admin.tool.ToolArgs.getIntArg;
+import static com.leoli.gateway.admin.tool.ToolArgs.getListArg;
+import static com.leoli.gateway.admin.tool.ToolArgs.getLongArg;
+import static com.leoli.gateway.admin.tool.ToolArgs.getRequiredBoolArg;
+import static com.leoli.gateway.admin.tool.ToolArgs.getRequiredLongArg;
+import static com.leoli.gateway.admin.tool.ToolArgs.getRequiredStringArg;
+import static com.leoli.gateway.admin.tool.ToolArgs.getStringArg;
+
 /**
  * AI 工具执行服务.
  * 执行工具调用并格式化结果.
@@ -1330,95 +1342,9 @@ public class ToolExecutor {
     }
 
     // ===================== 参数提取辅助方法 =====================
-
-    private String getStringArg(Map<String, Object> args, String key) {
-        Object value = args.get(key);
-        return value != null ? value.toString() : null;
-    }
-
-    private String getStringArg(Map<String, Object> args, String key, String defaultValue) {
-        Object value = args.get(key);
-        return value != null ? value.toString() : defaultValue;
-    }
-
-    private String getRequiredStringArg(Map<String, Object> args, String key) {
-        Object value = args.get(key);
-        if (value == null) {
-            throw new IllegalArgumentException("Required argument missing: " + key);
-        }
-        return value.toString();
-    }
-
-    private int getIntArg(Map<String, Object> args, String key, int defaultValue) {
-        Object value = args.get(key);
-        if (value instanceof Number) {
-            return ((Number) value).intValue();
-        }
-        if (value instanceof String) {
-            return Integer.parseInt((String) value);
-        }
-        return defaultValue;
-    }
-
-    private long getLongArg(Map<String, Object> args, String key, long defaultValue) {
-        Object value = args.get(key);
-        if (value instanceof Number) {
-            return ((Number) value).longValue();
-        }
-        if (value instanceof String) {
-            return Long.parseLong((String) value);
-        }
-        return defaultValue;
-    }
-
-    private boolean getBoolArg(Map<String, Object> args, String key, boolean defaultValue) {
-        Object value = args.get(key);
-        if (value instanceof Boolean) {
-            return (Boolean) value;
-        }
-        if (value instanceof String) {
-            return Boolean.parseBoolean((String) value);
-        }
-        return defaultValue;
-    }
-
-    private boolean getRequiredBoolArg(Map<String, Object> args, String key) {
-        Object value = args.get(key);
-        if (value == null) {
-            throw new IllegalArgumentException("Required argument missing: " + key);
-        }
-        if (value instanceof Boolean) {
-            return (Boolean) value;
-        }
-        return Boolean.parseBoolean(value.toString());
-    }
-
-    private Long getRequiredLongArg(Map<String, Object> args, String key) {
-        Object value = args.get(key);
-        if (value == null) {
-            throw new IllegalArgumentException("Required argument missing: " + key);
-        }
-        if (value instanceof Number) {
-            return ((Number) value).longValue();
-        }
-        return Long.parseLong(value.toString());
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<String> getListArg(Map<String, Object> args, String key) {
-        Object value = args.get(key);
-        if (value == null) {
-            return null;
-        }
-        if (value instanceof List) {
-            return (List<String>) value;
-        }
-        if (value instanceof String) {
-            // 支持逗号分隔的字符串
-            return Arrays.asList(((String) value).split(","));
-        }
-        return null;
-    }
+    // Moved to com.leoli.gateway.admin.tool.ToolArgs (static-imported below the package imports).
+    // They were nine private methods touching none of this class's injected services, and 142 call
+    // sites keep compiling unchanged because of the static import.
 
     // ===================== 审计日志类工具执行 =====================
 
