@@ -1,5 +1,7 @@
 package com.leoli.gateway.filter.loadbalancer;
 
+import com.leoli.gateway.util.ClientIpResolver;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.stereotype.Component;
@@ -21,12 +23,15 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class InstanceSelector {
 
     // Per-service WRR selector; each group owns its own lock inside SmoothWeightedRoundRobin.
     private final Map<String, SmoothWeightedRoundRobin<ServiceInstance>> wrrSelectors = new ConcurrentHashMap<>();
     private final Map<String, CachedRing> hashRingCache = new ConcurrentHashMap<>();
     private final Map<String, java.util.concurrent.atomic.AtomicInteger> roundRobinCounters = new ConcurrentHashMap<>();
+
+    private final ClientIpResolver clientIpResolver;
 
     public ServiceInstance select(List<ServiceInstance> instances, String strategy,
                                   ServerWebExchange exchange) {
@@ -85,19 +90,27 @@ public class InstanceSelector {
     }
 
     private String getHashKey(ServerWebExchange exchange) {
-        var headers = exchange.getRequest().getHeaders();
-        String hashKey = headers.getFirst("X-Hash-Key");
+        // X-Hash-Key stays caller-controlled on purpose: it is the explicit affinity knob, and a
+        // caller choosing its own bucket is the feature. What is NOT acceptable is the implicit
+        // fallback doing the same thing behind that feature's back.
+        String hashKey = exchange.getRequest().getHeaders().getFirst("X-Hash-Key");
         if (hashKey != null && !hashKey.isEmpty()) return hashKey;
 
-        String forwardedFor = headers.getFirst("X-Forwarded-For");
-        if (forwardedFor != null && !forwardedFor.isEmpty()) {
-            return forwardedFor.split(",")[0].trim();
-        }
-
-        if (exchange.getRequest().getRemoteAddress() != null) {
-            return exchange.getRequest().getRemoteAddress().getAddress().getHostAddress();
-        }
-        return String.valueOf(System.nanoTime());
+        // FIX (caller-chosen backend): this used to take the first hop of a raw X-Forwarded-For, so
+        // any client could name the hash key and therefore pick which instance served it - enough to
+        // concentrate an attack on one instance while the others looked healthy, or to defeat
+        // affinity for everyone else by colliding keys. ClientIpResolver honours the header only
+        // when the TCP peer is a configured trusted proxy, which is what IPFilterGlobalFilter and
+        // both rate limiters already rely on. It also null-checks getAddress(), which the inline
+        // version here did not.
+        //
+        // Consequence worth knowing before enabling consistent-hash: gateway.trusted-proxy.proxy-ips
+        // must list the reverse proxy, or every request hashes on the proxy's own address and the
+        // strategy silently pins the whole service to one instance.
+        String ip = clientIpResolver.resolve(exchange);
+        return (ip == null || ip.isEmpty() || "unknown".equals(ip))
+                ? String.valueOf(System.nanoTime())
+                : ip;
     }
 
     private ConsistentHashRing buildHashRing(List<ServiceInstance> instances) {
