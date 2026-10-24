@@ -2,6 +2,7 @@ package com.leoli.gateway.exception;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.constants.InternalApiConstants;
+import com.leoli.gateway.util.ClientIpResolver;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.web.reactive.error.ErrorWebExceptionHandler;
@@ -58,9 +59,12 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
     @org.springframework.beans.factory.annotation.Value("${gateway.instance-id:gateway-unknown}")
     private String instanceId;
 
+    private final ClientIpResolver clientIpResolver;
+
     @Autowired
-    public ScgGlobalExceptionHandler(ObjectMapper objectMapper) {
+    public ScgGlobalExceptionHandler(ObjectMapper objectMapper, ClientIpResolver clientIpResolver) {
         this.objectMapper = objectMapper;
+        this.clientIpResolver = clientIpResolver;
     }
 
     @jakarta.annotation.PostConstruct
@@ -368,7 +372,7 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
             trace.put("queryString", request.getURI().getQuery());
             trace.put("statusCode", status.value());
             trace.put("latencyMs", duration);
-            trace.put("clientIp", getClientIp(request));
+            trace.put("clientIp", getClientIp(exchange));
             trace.put("userAgent", request.getHeaders().getFirst(org.springframework.http.HttpHeaders.USER_AGENT));
             trace.put("traceType", "ERROR");
             trace.put("replayType", "HTTP");
@@ -480,24 +484,15 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
     }
 
     /**
-     * Get client IP from request.
+     * Client IP for the error trace.
+     * <p>
+     * FIX (spoofable error-trace IP): previously read X-Forwarded-For / X-Real-IP straight off the
+     * request, so the caller decided what the trace recorded. The error trace is what an operator
+     * reads to work out who hit a failing route, and it is replayable, so a forged IP there sends
+     * the investigation to whoever the caller named. ClientIpResolver only honours the forwarded
+     * header when the TCP peer is a configured trusted proxy.
      */
-    private String getClientIp(org.springframework.http.server.reactive.ServerHttpRequest request) {
-        String ip = request.getHeaders().getFirst("X-Forwarded-For");
-        if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
-            int index = ip.indexOf(",");
-            if (index != -1) {
-                return ip.substring(0, index).trim();
-            }
-            return ip.trim();
-        }
-
-        ip = request.getHeaders().getFirst("X-Real-IP");
-        if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
-            return ip.trim();
-        }
-
-        return request.getRemoteAddress() != null ?
-                request.getRemoteAddress().getAddress().getHostAddress() : "unknown";
+    private String getClientIp(ServerWebExchange exchange) {
+        return clientIpResolver.resolve(exchange);
     }
 }

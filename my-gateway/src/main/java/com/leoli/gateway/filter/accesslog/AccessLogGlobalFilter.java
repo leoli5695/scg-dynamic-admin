@@ -14,6 +14,7 @@ import com.leoli.gateway.manager.AuthBindingManager;
 import com.leoli.gateway.manager.RouteManager;
 import com.leoli.gateway.model.AuthConfig;
 import com.leoli.gateway.model.MultiServiceConfig;
+import com.leoli.gateway.util.ClientIpResolver;
 import com.leoli.gateway.util.RouteUtils;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -94,6 +95,7 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
     private final BinaryContentDetector binaryContentDetector;
     private final SensitiveDataSanitizer sensitiveDataSanitizer;
     private final ObjectMapper objectMapper;
+    private final ClientIpResolver clientIpResolver;
 
     // Current config - uses external AccessLogConfig class
     private volatile AccessLogConfig config = new AccessLogConfig();
@@ -268,7 +270,7 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
         final String method = request.getMethod().name();
         final String path = request.getURI().getPath();
         final String query = request.getURI().getQuery();
-        final String clientIp = getClientIp(request);
+        final String clientIp = getClientIp(exchange);
         final String userAgent = request.getHeaders().getFirst(HttpHeaders.USER_AGENT);
         final String contentType = request.getHeaders().getFirst(HttpHeaders.CONTENT_TYPE);
         final String traceId = request.getHeaders().getFirst("X-Trace-Id");
@@ -595,18 +597,15 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
         return info;
     }
 
-    private String getClientIp(ServerHttpRequest request) {
-        String ip = request.getHeaders().getFirst("X-Forwarded-For");
-        if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
-            int index = ip.indexOf(",");
-            return index != -1 ? ip.substring(0, index).trim() : ip.trim();
-        }
-        ip = request.getHeaders().getFirst("X-Real-IP");
-        if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
-            return ip.trim();
-        }
-        return request.getRemoteAddress() != null ?
-                request.getRemoteAddress().getAddress().getHostAddress() : "unknown";
+    private String getClientIp(ServerWebExchange exchange) {
+        // FIX (spoofable access-log IP): this used to read X-Forwarded-For / X-Real-IP straight off
+        // the request, both of which the caller sets. Anyone could write any client IP into the
+        // access log - including someone else's, which is how an attacker covers their tracks, and
+        // including a colleague's, which is how an innocent operator gets blamed. ClientIpResolver
+        // is what IPFilterGlobalFilter and both rate limiters already use: it honours the forwarded
+        // header only when the TCP peer is a configured trusted proxy, and falls back to the peer
+        // address, which the caller cannot forge.
+        return clientIpResolver.resolve(exchange);
     }
 
     @Override
