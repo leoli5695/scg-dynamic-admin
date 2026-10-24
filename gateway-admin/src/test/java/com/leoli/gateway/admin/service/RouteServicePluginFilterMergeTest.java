@@ -23,6 +23,10 @@ import static org.mockito.Mockito.when;
  * carries each plugin filter exactly once, in global-plugin -> operator-authored -> route-plugin
  * order, no matter how many GET/PUT round trips the stored definition has been through.
  * <p>
+ * The two collaborators see different binding sets on purpose: merge publishes only the ENABLED
+ * bindings, while strip recognizes an echo against ALL bindings so a definition dirtied by a
+ * pre-fix save is still cleaned up after its binding was disabled.
+ * <p>
  * Pure Mockito - no Spring context, no DB, so unlike the {@code @SpringBootTest} suites in this
  * module it runs without a reachable MySQL. Both collaborators are private, hence
  * {@link ReflectionTestUtils}.
@@ -49,8 +53,7 @@ class RouteServicePluginFilterMergeTest {
     @Test
     @DisplayName("Publishing is idempotent: repeated GET/PUT round trips do not grow the filter list")
     void publishIsIdempotentAcrossRepeatedRoundTrips() {
-        stubGlobalBindings(List.of(authBinding));
-        stubRouteBindings(List.of(rateLimitBinding));
+        stubBothBindingsEnabled();
 
         // convertToResponse hands the client the merged list; updateRouteByRouteId persists what
         // comes back. One full round trip therefore used to bake a second copy of every plugin
@@ -69,8 +72,8 @@ class RouteServicePluginFilterMergeTest {
     void mergeAloneIsIdempotent() {
         // No strip involved: this is the republish/enable path, which publishes the stored
         // definition as-is. Merging an already-merged list must be a no-op.
-        stubRouteBindings(List.of(rateLimitBinding));
-        stubConfig(authBinding);
+        stubEnabledRouteBindings(List.of(rateLimitBinding));
+        stubConfigs(authBinding, rateLimitBinding);
 
         List<FilterDefinition> published = authored();
         for (int round = 1; round <= 3; round++) {
@@ -82,8 +85,7 @@ class RouteServicePluginFilterMergeTest {
     @Test
     @DisplayName("Strip removes the echoed plugin filters and keeps every operator-authored filter")
     void stripRemovesEchoesAndKeepsAuthoredFilters() {
-        stubGlobalBindings(List.of(authBinding));
-        stubRouteBindings(List.of(rateLimitBinding));
+        stubBothBindingsEnabled();
 
         List<FilterDefinition> echoed = merge(authored(), List.of(authBinding));
         assertEquals(authored(), strip(echoed));
@@ -92,8 +94,7 @@ class RouteServicePluginFilterMergeTest {
     @Test
     @DisplayName("Definitions already dirtied by pre-fix saves heal back to one copy per plugin")
     void healsDefinitionDirtiedByEarlierSaves() {
-        stubGlobalBindings(List.of(authBinding));
-        stubRouteBindings(List.of(rateLimitBinding));
+        stubBothBindingsEnabled();
 
         // What three pre-fix saves would have left behind: a copy of each plugin filter per save.
         List<FilterDefinition> dirtied = new ArrayList<>();
@@ -110,10 +111,30 @@ class RouteServicePluginFilterMergeTest {
     }
 
     @Test
+    @DisplayName("A dirtied echo is cleaned up even after its binding was disabled")
+    void disabledBindingStillHasItsEchoStripped() {
+        // strip compares against ALL bindings, so the echo is still recognized; merge compares
+        // against the ENABLED ones, so the plugin is not published. One save therefore both drops
+        // the stale filter and stops it running.
+        stubAllBindings(List.of(authBinding), List.of());
+        stubEnabledRouteBindings(List.of());
+        stubConfigs(authBinding);
+
+        List<FilterDefinition> stored = new ArrayList<>();
+        stored.add(filter(AUTH_PLUGIN, AUTH_CONFIG));
+        stored.add(filter("StripPrefix", Map.of("parts", "1")));
+
+        List<FilterDefinition> saved = strip(stored);
+        assertEquals(List.of(filter("StripPrefix", Map.of("parts", "1"))), saved);
+        assertEquals(saved, merge(saved, List.of()), "a disabled plugin must not be republished");
+    }
+
+    @Test
     @DisplayName("Matching is by name AND args, so operator config is never silently discarded")
     void dedupesByContentNotByName() {
-        stubGlobalBindings(List.of(authBinding));
-        stubRouteBindings(List.of());
+        stubAllBindings(List.of(authBinding), List.of());
+        stubEnabledRouteBindings(List.of());
+        stubConfigs(authBinding);
 
         // A hand-authored filter that shares the plugin's name but carries different args is not an
         // echo of the binding. Stripping by name would delete operator configuration; keeping it
@@ -126,14 +147,15 @@ class RouteServicePluginFilterMergeTest {
     }
 
     @Test
-    @DisplayName("Boundary: a stored copy survives once its binding is disabled or deleted")
-    void storedCopySurvivesBindingDisable() {
-        // Characterization, not an endorsement. Both helpers recognize echoes by comparing against
-        // the *enabled* bindings, so a copy already baked into a stored definition by a pre-fix save
-        // is only cleaned up while its binding is still enabled. Disable or delete the binding and
-        // the stale filter keeps being published until the row is cleaned up out of band.
-        stubGlobalBindings(List.of());
-        stubRouteBindings(List.of());
+    @DisplayName("Boundary: a stored copy survives once its binding is deleted outright")
+    void storedCopySurvivesBindingDeletion() {
+        // Characterization, not an endorsement. Recognition is by comparing against bindings that
+        // still exist, so once a binding is DELETED there is nothing left to compare against and a
+        // copy baked in by a pre-fix save keeps being published until the row is cleaned up out of
+        // band. The alternative - matching on the filter name alone - would silently discard
+        // operator-authored configuration, which is worse.
+        stubAllBindings(List.of(), List.of());
+        stubEnabledRouteBindings(List.of());
 
         List<FilterDefinition> stale = new ArrayList<>();
         stale.add(filter(AUTH_PLUGIN, AUTH_CONFIG));
@@ -153,19 +175,29 @@ class RouteServicePluginFilterMergeTest {
                 routeService, "stripPluginBindingFilters", ROUTE_ID, filters);
     }
 
-    private void stubGlobalBindings(List<PluginBindingEntity> globals) {
-        when(routePluginBindingService.getEnabledGlobalBindings()).thenReturn(globals);
-        globals.forEach(this::stubConfig);
+    /** The ordinary case: both bindings enabled, so merge and strip see the same set. */
+    private void stubBothBindingsEnabled() {
+        stubAllBindings(List.of(authBinding), List.of(rateLimitBinding));
+        stubEnabledRouteBindings(List.of(rateLimitBinding));
+        stubConfigs(authBinding, rateLimitBinding);
     }
 
-    private void stubRouteBindings(List<PluginBindingEntity> routeBindings) {
+    /** What strip sees: every binding, enabled or not. */
+    private void stubAllBindings(List<PluginBindingEntity> globals, List<PluginBindingEntity> routeBindings) {
+        when(routePluginBindingService.getGlobalBindings()).thenReturn(globals);
+        when(routePluginBindingService.getBindingsByRouteId(ROUTE_ID)).thenReturn(routeBindings);
+    }
+
+    /** What merge sees: only enabled route bindings get published. Globals arrive as a parameter. */
+    private void stubEnabledRouteBindings(List<PluginBindingEntity> routeBindings) {
         when(routePluginBindingService.getEnabledBindingsByRouteId(ROUTE_ID)).thenReturn(routeBindings);
-        routeBindings.forEach(this::stubConfig);
     }
 
-    private void stubConfig(PluginBindingEntity binding) {
-        when(routePluginBindingService.parseBindingConfig(binding))
-                .thenReturn(AUTH_PLUGIN.equals(binding.getPluginName()) ? AUTH_CONFIG : RATE_LIMIT_CONFIG);
+    private void stubConfigs(PluginBindingEntity... bindings) {
+        for (PluginBindingEntity binding : bindings) {
+            when(routePluginBindingService.parseBindingConfig(binding))
+                    .thenReturn(AUTH_PLUGIN.equals(binding.getPluginName()) ? AUTH_CONFIG : RATE_LIMIT_CONFIG);
+        }
     }
 
     /** The operator-authored filters, i.e. what a clean stored definition holds. */

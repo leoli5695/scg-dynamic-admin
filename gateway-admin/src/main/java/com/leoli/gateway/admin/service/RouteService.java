@@ -671,11 +671,17 @@ public class RouteService {
         if (filters == null || filters.isEmpty()) {
             return filters;
         }
+        // Compared against ALL bindings, not just the enabled ones: a definition dirtied by a
+        // pre-fix save still carries the echo, and if the binding was disabled in between, the
+        // enabled-only set no longer recognizes it - so the stale filter would be persisted again
+        // and keep being published. Same query count as the enabled variants.
+        // Still content-equality (name AND args), never name-only: an operator-authored filter that
+        // shares a plugin's name but carries different arguments is not an echo and must survive.
         List<FilterDefinition> pluginFilters = new ArrayList<>();
         pluginFilters.addAll(toPluginFilters(routeId,
-                routePluginBindingService.getEnabledGlobalBindings(), "global"));
+                routePluginBindingService.getGlobalBindings(), "global"));
         pluginFilters.addAll(toPluginFilters(routeId,
-                routePluginBindingService.getEnabledBindingsByRouteId(routeId), "route"));
+                routePluginBindingService.getBindingsByRouteId(routeId), "route"));
         if (pluginFilters.isEmpty()) {
             return filters;
         }
