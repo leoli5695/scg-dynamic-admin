@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpHeaders;
 import org.springframework.util.AntPathMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.UrlPathHelper;
@@ -37,6 +38,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class InternalApiTokenFilter extends OncePerRequestFilter {
 
     public static final String TOKEN_HEADER = "X-Internal-Token";
+
+    private static final String BEARER_PREFIX = "Bearer ";
 
     // Single source of truth shared with SecurityConfig - see InternalApiEndpoints. Keeping
     // the list here (as it used to be) let the two sides drift, which is how /api/prometheus/sd/**
@@ -79,7 +82,7 @@ public class InternalApiTokenFilter extends OncePerRequestFilter {
             return;
         }
 
-        String provided = request.getHeader(TOKEN_HEADER);
+        String provided = resolveToken(request);
         if (provided != null && MessageDigest.isEqual(
                 expectedToken.getBytes(StandardCharsets.UTF_8), provided.getBytes(StandardCharsets.UTF_8))) {
             filterChain.doFilter(request, response);
@@ -87,12 +90,36 @@ public class InternalApiTokenFilter extends OncePerRequestFilter {
         }
 
         if (warned.compareAndSet(false, true)) {
-            log.warn("Rejected internal report request without valid {} header: {} {}",
+            log.warn("Rejected internal report request without a valid {} (or Bearer) credential: {} {}",
                     TOKEN_HEADER, request.getMethod(), uri);
         }
         response.setStatus(HttpStatus.UNAUTHORIZED.value());
         response.setContentType("application/json");
         response.getWriter().write("{\"success\":false,\"message\":\"Missing or invalid internal token\"}");
+    }
+
+    /**
+     * The shared token from either {@code X-Internal-Token} or {@code Authorization: Bearer ...}.
+     *
+     * <p>The Bearer form exists for Prometheus. {@code /api/prometheus/sd/**} is token-protected,
+     * but stock {@code http_sd_configs} cannot send an arbitrary header - it supports only
+     * basic_auth and authorization. Without this the service-discovery job gets 401 and stays
+     * permanently DOWN, and the only alternative would have been to drop the endpoint out of
+     * TOKEN_PROTECTED and re-leak the exporter/middleware host:port topology that the guard was
+     * added to protect.
+     */
+    private String resolveToken(HttpServletRequest request) {
+        String direct = request.getHeader(TOKEN_HEADER);
+        if (direct != null && !direct.isEmpty()) {
+            return direct;
+        }
+        String authorization = request.getHeader(HttpHeaders.AUTHORIZATION);
+        if (authorization != null
+                && authorization.regionMatches(true, 0, BEARER_PREFIX, 0, BEARER_PREFIX.length())) {
+            String credential = authorization.substring(BEARER_PREFIX.length()).trim();
+            return credential.isEmpty() ? null : credential;
+        }
+        return null;
     }
 
     private boolean isProtected(String uri) {

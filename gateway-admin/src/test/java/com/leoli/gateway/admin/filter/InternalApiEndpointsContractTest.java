@@ -171,4 +171,60 @@ class InternalApiEndpointsContractTest {
         assertEquals(200, resp.getStatus(), "a valid token must not be rejected because the path was normalised");
         assertNotNull(chain.getRequest());
     }
+
+    /**
+     * Prometheus cannot send X-Internal-Token: stock http_sd_configs supports only basic_auth and
+     * authorization. Without the Bearer form, /api/prometheus/sd/** would either stay permanently
+     * 401 or have to be dropped from TOKEN_PROTECTED, re-leaking the topology it guards.
+     */
+    @Test
+    @DisplayName("the token is also accepted as Authorization: Bearer, case-insensitively")
+    void bearerTokenAccepted() throws Exception {
+        InternalApiTokenFilter filter = newFilter();
+        for (String scheme : new String[]{"Bearer ", "bearer ", "BEARER "}) {
+            MockHttpServletRequest req = new MockHttpServletRequest("GET", "/api/prometheus/sd/exporters");
+            req.addHeader("Authorization", scheme + TOKEN);
+            MockHttpServletResponse resp = new MockHttpServletResponse();
+            MockFilterChain chain = new MockFilterChain();
+
+            filter.doFilter(req, resp, chain);
+
+            assertEquals(200, resp.getStatus(), "scheme prefix \"" + scheme.trim() + "\" must be accepted");
+            assertNotNull(chain.getRequest());
+        }
+    }
+
+    @Test
+    @DisplayName("a Bearer credential that is not the internal token is rejected, not treated as a JWT")
+    void wrongBearerTokenRejected() throws Exception {
+        InternalApiTokenFilter filter = newFilter();
+        String[] bad = {"Bearer not-the-token", "Bearer ", "Bearer", "Basic " + TOKEN, TOKEN};
+        for (String header : bad) {
+            MockHttpServletRequest req = new MockHttpServletRequest("GET", "/api/prometheus/sd/exporters");
+            req.addHeader("Authorization", header);
+            MockHttpServletResponse resp = new MockHttpServletResponse();
+            MockFilterChain chain = new MockFilterChain();
+
+            filter.doFilter(req, resp, chain);
+
+            assertEquals(401, resp.getStatus(), "Authorization: " + header + " must not pass the internal guard");
+            assertNull(chain.getRequest());
+        }
+    }
+
+    @Test
+    @DisplayName("X-Internal-Token still wins when both headers are present")
+    void directHeaderTakesPrecedence() throws Exception {
+        InternalApiTokenFilter filter = newFilter();
+        MockHttpServletRequest req = new MockHttpServletRequest("GET", "/api/prometheus/sd/exporters");
+        req.addHeader(InternalApiTokenFilter.TOKEN_HEADER, TOKEN);
+        req.addHeader("Authorization", "Bearer something-else");
+        MockHttpServletResponse resp = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(req, resp, chain);
+
+        assertEquals(200, resp.getStatus());
+        assertNotNull(chain.getRequest());
+    }
 }
