@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.model.GatewayInstanceEntity;
 import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
+import com.leoli.gateway.admin.util.PromqlUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -131,8 +132,11 @@ public class PrometheusService {
      */
     private String buildInstanceFilter(String instanceId) {
         if (instanceId != null && !instanceId.isEmpty()) {
-            // Use gateway_instance_id label which contains the actual instance ID
-            return ",gateway_instance_id=\"" + instanceId + "\"";
+            // Use gateway_instance_id label which contains the actual instance ID.
+            // labelMatcher escapes the value: instanceId arrives as a bare @RequestParam on
+            // MonitorController and as an AI tool argument, and an unescaped quote would close the
+            // matcher and let the caller append a selector of their own.
+            return "," + PromqlUtil.labelMatcher("gateway_instance_id", instanceId);
         }
         return "";
     }
@@ -145,7 +149,7 @@ public class PrometheusService {
     private String buildPodInstanceFilter(String podInstance) {
         if (podInstance != null && !podInstance.isEmpty()) {
             // Use Prometheus's instance label which is the Pod IP:port
-            return ",instance=\"" + podInstance + "\"";
+            return "," + PromqlUtil.labelMatcher("instance", podInstance);
         }
         return "";
     }
@@ -157,10 +161,10 @@ public class PrometheusService {
     private String buildCombinedFilter(String instanceId, String podInstance) {
         StringBuilder filter = new StringBuilder();
         if (instanceId != null && !instanceId.isEmpty()) {
-            filter.append(",gateway_instance_id=\"").append(instanceId).append("\"");
+            filter.append(",").append(PromqlUtil.labelMatcher("gateway_instance_id", instanceId));
         }
         if (podInstance != null && !podInstance.isEmpty()) {
-            filter.append(",instance=\"").append(podInstance).append("\"");
+            filter.append(",").append(PromqlUtil.labelMatcher("instance", podInstance));
         }
         return filter.toString();
     }
@@ -443,9 +447,11 @@ public class PrometheusService {
         try {
             // Check if we can get JVM memory data - this proves we're getting real metrics
             String instanceFilter = buildInstanceFilter(instanceId);
-            // Use gateway_instance_id label if filtering by specific instance
+            // Use gateway_instance_id label if filtering by specific instance. This used to
+            // re-interpolate the raw instanceId here even though instanceFilter on the line above
+            // already held the same, escaped matcher.
             String query = instanceId != null && !instanceId.isEmpty()
-                    ? "sum(jvm_memory_used_bytes{application=\"my-gateway\",gateway_instance_id=\"" + instanceId + "\"})"
+                    ? "sum(jvm_memory_used_bytes{application=\"my-gateway\"" + instanceFilter + "})"
                     : "sum(jvm_memory_used_bytes{application=\"my-gateway\"})";
             String result = queryPrometheus(query);
             double value = extractValue(result, -1);

@@ -1,5 +1,6 @@
 package com.leoli.gateway.admin.client;
 
+import com.leoli.gateway.admin.util.PromqlUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -137,7 +138,7 @@ public class PrometheusClient {
      */
     public Map<String, Object> queryRedisMetrics(String exporterUrl) {
         // 重映射 exporterUrl 到 Prometheus 实际的 instance 标签
-        String instance = remapExporterUrl(exporterUrl, "redis");
+        String instance = PromqlUtil.labelValue(remapExporterUrl(exporterUrl, "redis"));
         Map<String, Object> metrics = new HashMap<>();
 
         // 内存使用
@@ -187,14 +188,14 @@ public class PrometheusClient {
      */
     public Map<String, Object> queryRocketMQMetrics(String exporterUrl, String topic) {
         // 重映射 exporterUrl 到 Prometheus 实际的 instance 标签
-        String instance = remapExporterUrl(exporterUrl, "rocketmq");
+        String instance = PromqlUtil.labelValue(remapExporterUrl(exporterUrl, "rocketmq"));
         Map<String, Object> metrics = new HashMap<>();
 
         // 消息堆积（使用正确的指标名称 rocketmq_group_diff）
         // rocketmq_group_diff 是消费组级别的消息堆积数
         if (topic != null) {
-            metrics.putAll(query("rocketmq_group_diff{instance=\"" + instance + "\",topic=\"" + topic + "\"}"));
-            metrics.putAll(query("rocketmq_message_accumulation{instance=\"" + instance + "\",topic=\"" + topic + "\"}"));
+            metrics.putAll(query("rocketmq_group_diff{instance=\"" + instance + "\",topic=\"" + PromqlUtil.labelValue(topic) + "\"}"));
+            metrics.putAll(query("rocketmq_message_accumulation{instance=\"" + instance + "\",topic=\"" + PromqlUtil.labelValue(topic) + "\"}"));
         } else {
             // 不指定 topic 时，查询所有 topic 的堆积汇总
             metrics.putAll(query("rocketmq_group_diff{instance=\"" + instance + "\"}"));
@@ -223,7 +224,7 @@ public class PrometheusClient {
      */
     public Map<String, Object> queryMySQLMetrics(String exporterUrl) {
         // 重映射 exporterUrl 到 Prometheus 实际的 instance 标签
-        String instance = remapExporterUrl(exporterUrl, "mysql");
+        String instance = PromqlUtil.labelValue(remapExporterUrl(exporterUrl, "mysql"));
         Map<String, Object> metrics = new HashMap<>();
 
         // 连接数
@@ -259,7 +260,7 @@ public class PrometheusClient {
      */
     public Map<String, Object> queryESMetrics(String exporterUrl) {
         // 重映射 exporterUrl 到 Prometheus 实际的 instance 标签
-        String instance = remapExporterUrl(exporterUrl, "elasticsearch");
+        String instance = PromqlUtil.labelValue(remapExporterUrl(exporterUrl, "elasticsearch"));
         Map<String, Object> metrics = new HashMap<>();
 
         // 集群健康状态
@@ -529,7 +530,7 @@ public class PrometheusClient {
         String rateWindow = computeRateWindow(step);
 
         // 重映射 exporterUrl 到 Prometheus 实际的 instance 标签
-        String instance = remapExporterUrl(exporterUrl, "redis");
+        String instance = PromqlUtil.labelValue(remapExporterUrl(exporterUrl, "redis"));
 
         Map<String, Object> result = new HashMap<>();
         Map<String, Object> timeSeries = new HashMap<>();
@@ -597,7 +598,7 @@ public class PrometheusClient {
         String rateWindow = computeRateWindow(step);
 
         // 重映射 exporterUrl 到 Prometheus 实际的 instance 标签
-        String instance = remapExporterUrl(exporterUrl, "mysql");
+        String instance = PromqlUtil.labelValue(remapExporterUrl(exporterUrl, "mysql"));
 
         Map<String, Object> result = new HashMap<>();
         Map<String, Object> timeSeries = new HashMap<>();
@@ -667,13 +668,13 @@ public class PrometheusClient {
         if (step == null) step = computeAutoStep(start, end);
 
         // 重映射 exporterUrl 到 Prometheus 实际的 instance 标签
-        String instance = remapExporterUrl(exporterUrl, "rocketmq");
+        String instance = PromqlUtil.labelValue(remapExporterUrl(exporterUrl, "rocketmq"));
 
         Map<String, Object> result = new HashMap<>();
         Map<String, Object> timeSeries = new HashMap<>();
         Map<String, Object> summary = new HashMap<>();
 
-        String topicFilter = (topic != null) ? ",topic=\"" + topic + "\"" : "";
+        String topicFilter = (topic != null) ? ",topic=\"" + PromqlUtil.labelValue(topic) + "\"" : "";
 
         // Producer TPS (Gauge from exporter)
         List<Map<String, Object>> producerTps = queryRange(
@@ -730,7 +731,7 @@ public class PrometheusClient {
         String rateWindow = computeRateWindow(step);
 
         // 重映射 exporterUrl 到 Prometheus 实际的 instance 标签
-        String instance = remapExporterUrl(exporterUrl, "postgresql");
+        String instance = PromqlUtil.labelValue(remapExporterUrl(exporterUrl, "postgresql"));
 
         Map<String, Object> result = new HashMap<>();
         Map<String, Object> timeSeries = new HashMap<>();
@@ -798,7 +799,7 @@ public class PrometheusClient {
         String rateWindow = computeRateWindow(step);
 
         // 重映射 exporterUrl 到 Prometheus 实际的 instance 标签
-        String instance = remapExporterUrl(exporterUrl, "mongodb");
+        String instance = PromqlUtil.labelValue(remapExporterUrl(exporterUrl, "mongodb"));
 
         Map<String, Object> result = new HashMap<>();
         Map<String, Object> timeSeries = new HashMap<>();
@@ -865,13 +866,13 @@ public class PrometheusClient {
         String rateWindow = computeRateWindow(step);
 
         // 重映射 exporterUrl 到 Prometheus 实际的 instance 标签
-        String instance = remapExporterUrl(exporterUrl, "rabbitmq");
+        String instance = PromqlUtil.labelValue(remapExporterUrl(exporterUrl, "rabbitmq"));
 
         Map<String, Object> result = new HashMap<>();
         Map<String, Object> timeSeries = new HashMap<>();
         Map<String, Object> summary = new HashMap<>();
 
-        String queueFilter = (queue != null) ? ",queue=\"" + queue + "\"" : "";
+        String queueFilter = (queue != null) ? ",queue=\"" + PromqlUtil.labelValue(queue) + "\"" : "";
 
         // 队列中消息数 (Gauge)
         List<Map<String, Object>> messagesTotal = queryRange(
@@ -935,12 +936,12 @@ public class PrometheusClient {
      */
     public Integer queryExporterUpStatus(String exporterUrl) {
         try {
-            Map<String, Object> result = query("up{instance=\"" + exporterUrl + "\"}");
+            Map<String, Object> result = query("up{instance=\"" + PromqlUtil.labelValue(exporterUrl) + "\"}");
             if (result.containsKey("up")) {
                 return ((Double) result.get("up")).intValue();
             }
             // 尝试带 middleware_type 标签的查询
-            Map<String, Object> resultWithType = query("up{instance=\"" + exporterUrl + "\"}");
+            Map<String, Object> resultWithType = query("up{instance=\"" + PromqlUtil.labelValue(exporterUrl) + "\"}");
             for (String key : resultWithType.keySet()) {
                 if (key.startsWith("up")) {
                     return ((Double) resultWithType.get(key)).intValue();
