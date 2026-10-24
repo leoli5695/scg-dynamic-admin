@@ -23,7 +23,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.2.5</version>
+        <version>3.5.16</version>
         <relativePath/>
     </parent>
 
@@ -51,6 +51,10 @@
         <!-- Internal module versions: single source of truth for dependents -->
         <license-client.version>1.0.0</license-client.version>
         <gateway-trace-starter.version>1.0.0</gateway-trace-starter.version>
+        <!-- Shared third-party versions that more than one module depends on. jjwt drifted to
+             0.12.3 in license-server while gateway-admin and my-gateway were on 0.12.7; managing
+             it here is the only thing that stops that recurring. -->
+        <jjwt.version>0.12.7</jjwt.version>
     </properties>
 
     <dependencyManagement>
@@ -64,6 +68,21 @@
                 <groupId>com.leoli.gateway</groupId>
                 <artifactId>gateway-trace-starter</artifactId>
                 <version>${gateway-trace-starter.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-api</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-impl</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-jackson</artifactId>
+                <version>${jjwt.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

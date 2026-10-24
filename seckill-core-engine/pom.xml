@@ -150,7 +150,7 @@
         <dependency>
             <groupId>com.alibaba.cloud</groupId>
             <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
-            <version>2023.0.1.0</version>
+            <version>2025.0.0.0</version>
         </dependency>
 
         <!-- RocketMQ -->

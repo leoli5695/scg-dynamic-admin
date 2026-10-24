@@ -2,6 +2,7 @@ package com.leoli.gateway.config;
 
 import com.leoli.gateway.constants.RedisConstants;
 import io.lettuce.core.ClientOptions;
+import io.lettuce.core.api.StatefulConnection;
 import io.lettuce.core.cluster.ClusterClientOptions;
 import io.lettuce.core.cluster.ClusterTopologyRefreshOptions;
 import lombok.extern.slf4j.Slf4j;
@@ -150,7 +151,11 @@ public class RedisConfig {
      * @param clientOptions optional client options (cluster topology refresh)
      */
     private LettuceClientConfiguration buildPooledClientConfiguration(ClientOptions clientOptions) {
-        GenericObjectPoolConfig<?> poolConfig = new GenericObjectPoolConfig<>();
+        // Typed to StatefulConnection rather than <?>: LettucePoolingClientConfigurationBuilder
+        // .poolConfig() takes GenericObjectPoolConfig<StatefulConnection<?, ?>>, and a wildcard-typed
+        // variable is not assignable to it. Compiling against Spring Boot 3.2 / Lettuce 6.3 accepted
+        // the wildcard; the upgraded stack does not.
+        GenericObjectPoolConfig<StatefulConnection<?, ?>> poolConfig = new GenericObjectPoolConfig<>();
         poolConfig.setMaxTotal(maxActive);
         poolConfig.setMaxIdle(maxIdle);
         poolConfig.setMinIdle(minIdle);

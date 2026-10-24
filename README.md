@@ -7,8 +7,8 @@
 **📸 [View Feature Screenshots](docs/images/SCREENSHOTS.md)** - If you prefer screenshots over video demo, browse 66 annotated screenshots covering all features.
 
 [![Java](https://img.shields.io/badge/Java-21-orange)](https://openjdk.org/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2-brightgreen)](https://spring.io/projects/spring-boot)
-[![Spring Cloud Gateway](https://img.shields.io/badge/Spring%20Cloud%20Gateway-4.1-blue)](https://spring.io/projects/spring-cloud-gateway)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.16-brightgreen)](https://spring.io/projects/spring-boot)
+[![Spring Cloud Gateway](https://img.shields.io/badge/Spring%20Cloud%20Gateway-4.3.5-blue)](https://spring.io/projects/spring-cloud-gateway)
 [![React](https://img.shields.io/badge/React-19-blue)](https://react.dev/)
 [![Tests](https://img.shields.io/badge/Tests-see%20Test%20Status-yellow)]()
 [![License](https://img.shields.io/badge/License-All__Rights__Reserved-lightgrey)](LICENSE)
@@ -475,8 +475,8 @@ self-service registration - so if they are missing the console has no user at al
 
 | Layer | Technology |
 |-------|------------|
-| **Gateway Core** | Spring Cloud Gateway 4.1, Project Reactor |
-| **Framework** | Spring Boot 3.2, Spring Security |
+| **Gateway Core** | Spring Cloud Gateway 4.3.5, Project Reactor |
+| **Framework** | Spring Boot 3.5.16, Spring Security 6.5 |
 | **Config Center** | Nacos 2.3.0 / Consul (SPI switchable) |
 | **Circuit Breaker** | Resilience4j 2.1 |
 | **Rate Limiting** | Redis + Caffeine (hybrid) |
