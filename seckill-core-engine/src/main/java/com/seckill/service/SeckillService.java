@@ -193,6 +193,14 @@ public class SeckillService {
                     seckillStockInsufficientCounter.increment();
                     log.warn("本地库存不足: userId={}, seckillId={}", userId, seckillId);
                     return SeckillResponse.fail(SeckillResult.STOCK_INSUFFICIENT);
+                } else if (localResult < 0) {
+                    // -3 是 LocalFallbackService 的多实例超卖防护（本地库存已降到 minStockThreshold）。
+                    // 漏掉它时 -3 会落到下面的 luaResult = 1000 -> SUCCESS，即没扣到任何库存却下单成功，
+                    // 而且库存越低越容易触发，正好是防护本该生效的时候。这里用 < 0 兜住全部失败码，
+                    // 以后 deductStockLocal 新增负数返回码也不会再被当成成功。
+                    log.warn("本地降级拒绝扣减: seckillId={}, userId={}, code={}",
+                            seckillId, userId, localResult);
+                    return SeckillResponse.fail(SeckillResult.DEGRADE_STOCK_INSUFFICIENT);
                 }
 
                 luaResult = 1000;  // 本地扣减成功，模拟 shard 0

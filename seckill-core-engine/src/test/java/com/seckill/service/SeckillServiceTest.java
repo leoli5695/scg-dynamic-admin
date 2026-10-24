@@ -275,4 +275,72 @@ class SeckillServiceTest {
         assertEquals("test-trace-id-001", request.getTraceId());
         assertEquals(SeckillResult.SUCCESS.getCode(), response.getCode());
     }
+
+    // ============================================================================
+    // 降级模式：deductStockLocal 的返回值必须全部被分派
+    // ============================================================================
+    // 不变量：deductStockLocal 返回负数 == 一件库存都没扣到，绝不允许变成下单成功。
+    // 以前只分派了 -1/-2，-3（LocalFallbackService 的多实例超卖防护）会一路落到
+    // luaResult = 1000 -> SUCCESS，用户拿到订单号而库存没动，且库存越低越容易触发。
+
+    @Test
+    @DisplayName("降级模式 - 本地库存触及阈值(-3)必须拒绝，不能下单成功")
+    void testDoSeckill_DegradeMode_StockBelowThreshold_Rejected() {
+        when(redisDegradeService.isDegraded()).thenReturn(true);
+        when(activityMapper.selectById(1L)).thenReturn(activity);
+        when(localFallbackService.deductStockLocal(1L, 10001L, 1)).thenReturn(-3);
+
+        SeckillResponse response = seckillService.doSeckill(request);
+
+        assertEquals(SeckillResult.DEGRADE_STOCK_INSUFFICIENT.getCode(), response.getCode());
+        assertNull(response.getOrderNo());
+        verify(localTransactionService, never()).processOrderDirectly(any());
+        verify(productMapper, never()).selectById(anyLong());
+    }
+
+    @Test
+    @DisplayName("降级模式 - 任何未显式处理的负数返回码都不能变成成功")
+    void testDoSeckill_DegradeMode_UnknownNegativeCode_Rejected() {
+        when(redisDegradeService.isDegraded()).thenReturn(true);
+        when(activityMapper.selectById(1L)).thenReturn(activity);
+        when(localFallbackService.deductStockLocal(1L, 10001L, 1)).thenReturn(-9);
+
+        SeckillResponse response = seckillService.doSeckill(request);
+
+        assertNotEquals(SeckillResult.SUCCESS.getCode(), response.getCode());
+        verify(localTransactionService, never()).processOrderDirectly(any());
+    }
+
+    @Test
+    @DisplayName("降级模式 - 扣减成功(返回剩余库存)仍走下单，且不碰 Redis Lua")
+    void testDoSeckill_DegradeMode_DeductSucceeds_OrderCreated() {
+        when(redisDegradeService.isDegraded()).thenReturn(true);
+        when(activityMapper.selectById(1L)).thenReturn(activity);
+        when(localFallbackService.deductStockLocal(1L, 10001L, 1)).thenReturn(4);
+        when(productMapper.selectById(1L)).thenReturn(product);
+        when(snowflakeIdGenerator.nextId()).thenReturn(123456789L, 987654321L);
+        when(transactionLogMapper.insert(any(TransactionLog.class))).thenReturn(1);
+
+        SeckillResponse response = seckillService.doSeckill(request);
+
+        assertEquals(SeckillResult.SUCCESS.getCode(), response.getCode());
+        verify(localTransactionService).processOrderDirectly(any());
+        verify(seckillDeductLua, never()).deductStock(anyLong(), anyLong(), anyInt());
+    }
+
+    @Test
+    @DisplayName("降级模式 - 返回0是「扣到刚好归零」而非失败，必须下单成功")
+    void testDoSeckill_DegradeMode_StockReachesZero_OrderCreated() {
+        when(redisDegradeService.isDegraded()).thenReturn(true);
+        when(activityMapper.selectById(1L)).thenReturn(activity);
+        when(localFallbackService.deductStockLocal(1L, 10001L, 1)).thenReturn(0);
+        when(productMapper.selectById(1L)).thenReturn(product);
+        when(snowflakeIdGenerator.nextId()).thenReturn(123456789L, 987654321L);
+        when(transactionLogMapper.insert(any(TransactionLog.class))).thenReturn(1);
+
+        SeckillResponse response = seckillService.doSeckill(request);
+
+        assertEquals(SeckillResult.SUCCESS.getCode(), response.getCode());
+        verify(localTransactionService).processOrderDirectly(any());
+    }
 }
