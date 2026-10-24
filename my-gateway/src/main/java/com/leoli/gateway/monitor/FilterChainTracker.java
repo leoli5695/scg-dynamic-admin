@@ -209,12 +209,27 @@ public class FilterChainTracker {
      * Add execution to record.
      */
     private void addToRecord(FilterExecution execution) {
-        // FIX (O(N) scan): index lookup instead of iterating the deque
-        FilterChainRecord record = recordIndex.computeIfAbsent(execution.getTraceId(), traceId -> {
-            FilterChainRecord newRecord = new FilterChainRecord(traceId);
-            recentRecords.addFirst(newRecord);
+        String traceId = execution.getTraceId();
+
+        // FIX (O(N) scan): index lookup instead of iterating the deque.
+        // FIX (unbounded single record): a full record is replaced instead of appended to. The
+        // retired one stays in recentRecords and is evicted by the rolling window below, so
+        // recordCount still matches the deque. The conditional remove there
+        // (remove(key, value)) keeps eviction from dropping the fresh record that now owns traceId.
+        FilterChainRecord record = recordIndex.compute(traceId, (id, existing) -> {
+            if (existing != null && !existing.isFull()) {
+                return existing;
+            }
+            if (existing != null) {
+                log.warn("Filter chain record for traceId {} is full - starting a fresh record. "
+                                + "traceId is client-supplied (traceparent / X-Trace-Id), so a constant "
+                                + "value would otherwise pin one never-evicted record that grew without bound.",
+                        id);
+            }
+            FilterChainRecord fresh = new FilterChainRecord(id);
+            recentRecords.addFirst(fresh);
             recordCount.incrementAndGet();
-            return newRecord;
+            return fresh;
         });
 
         // Maintain rolling window
@@ -415,6 +430,20 @@ public class FilterChainTracker {
      * Represents a complete filter chain execution for a request.
      */
     public static class FilterChainRecord {
+        /**
+         * Hard cap on executions held by ONE record.
+         * <p>
+         * FIX (P0, remote memory exhaustion): the traceId this record is keyed by is
+         * CLIENT-SUPPLIED - {@code TraceIdGlobalFilter} accepts an inbound {@code traceparent}
+         * trace-id or {@code X-Trace-Id} header - and {@code recordIndex} merges every request that
+         * reuses a value into the SAME record. {@code MAX_RECORDS} bounds the NUMBER of records, not
+         * the size of one, so a caller sending a constant {@code X-Trace-Id} pinned a single record
+         * that was never evicted and grew by ~40 executions per request, forever. A gateway tracks
+         * on the order of 40 filters per request, so 256 is generous headroom that only a pathological
+         * caller can reach.
+         */
+        private static final int MAX_EXECUTIONS = 256;
+
         private final String traceId;
         private final List<FilterExecution> executions = new ArrayList<>();
         private long createdAt = System.currentTimeMillis();
@@ -423,12 +452,51 @@ public class FilterChainTracker {
         private final java.util.concurrent.atomic.AtomicBoolean slowCounted =
                 new java.util.concurrent.atomic.AtomicBoolean(false);
 
+        // FIX (O(N^2) on the hot path): getTotalDurationMs / getSuccessCount / getFailureCount each
+        // copied the WHOLE executions list, and addToRecord calls getTotalDurationMs once per filter
+        // end - so a request cost O(filters^2) element copies, and a record bloated by a reused
+        // traceId made that quadratic in an unbounded N. The aggregates are now maintained
+        // incrementally in addExecution, so all three read in O(1) without copying.
+        private long maxEndTimeNanos;
+        private long chainStartTimeNanos;
+        private long minStartTimeNanos = Long.MAX_VALUE;
+        private int successCount;
+        private int failureCount;
+
         public FilterChainRecord(String traceId) {
             this.traceId = traceId;
         }
 
         public synchronized void addExecution(FilterExecution execution) {
+            // addToRecord already retires a full record before appending, so this only guards
+            // callers that use the public addExecution directly.
+            if (executions.size() >= MAX_EXECUTIONS) {
+                return;
+            }
             executions.add(execution);
+            if (execution.getEndTime() > maxEndTimeNanos) {
+                maxEndTimeNanos = execution.getEndTime();
+            }
+            // First non-zero wins, matching the previous findFirst() over insertion order.
+            if (chainStartTimeNanos == 0 && execution.getChainStartTimeNanos() > 0) {
+                chainStartTimeNanos = execution.getChainStartTimeNanos();
+            }
+            if (execution.getStartTime() > 0 && execution.getStartTime() < minStartTimeNanos) {
+                minStartTimeNanos = execution.getStartTime();
+            }
+            if (execution.isSuccess()) {
+                successCount++;
+            } else {
+                failureCount++;
+            }
+        }
+
+        /**
+         * True once the record stopped accepting executions. {@code addToRecord} retires a full
+         * record so a reused traceId cannot pin it in the index indefinitely.
+         */
+        public synchronized boolean isFull() {
+            return executions.size() >= MAX_EXECUTIONS;
         }
 
         /**
@@ -452,42 +520,26 @@ public class FilterChainTracker {
          * is the TRUE start of the entire filter chain, ensuring consistent measurement
          * with the gateway's total latency calculation.
          */
-        public long getTotalDurationMs() {
-            // FIX (concurrent read): executions is mutated under the instance
-            // lock by addExecution - stream it under the same lock so readers
-            // never hit a ConcurrentModificationException.
-            List<FilterExecution> snapshot;
-            synchronized (this) {
-                if (executions.isEmpty()) return 0;
-                snapshot = new ArrayList<>(executions);
+        public synchronized long getTotalDurationMs() {
+            // O(1): reads the running aggregates maintained by addExecution instead of copying and
+            // scanning the whole list. Synchronized because a non-volatile long read is not
+            // guaranteed atomic (JLS 17.7) and a torn maxEndTimeNanos would yield an absurd latency.
+            if (maxEndTimeNanos == 0) {
+                return 0;
             }
-            long maxEnd = snapshot.stream().mapToLong(e -> e.endTime).max().orElse(0);
-
-            // FIX: Use chainStartTimeNanos for TRUE chain start time
-            // Fall back to min(startTime) only if chainStartTimeNanos not set (legacy data)
-            long chainStart = snapshot.stream()
-                    .filter(e -> e.chainStartTimeNanos > 0)
-                    .mapToLong(e -> e.chainStartTimeNanos)
-                    .findFirst()
-                    .orElse(snapshot.stream().mapToLong(e -> e.startTime).min().orElse(0));
-
-            return (maxEnd - chainStart) / 1_000_000;
+            long chainStart = chainStartTimeNanos != 0 ? chainStartTimeNanos : minStartTimeNanos;
+            if (chainStart == 0 || chainStart == Long.MAX_VALUE) {
+                return 0;
+            }
+            return (maxEndTimeNanos - chainStart) / 1_000_000;
         }
 
-        public int getSuccessCount() {
-            List<FilterExecution> snapshot;
-            synchronized (this) {
-                snapshot = new ArrayList<>(executions);
-            }
-            return (int) snapshot.stream().filter(FilterExecution::isSuccess).count();
+        public synchronized int getSuccessCount() {
+            return successCount;
         }
 
-        public int getFailureCount() {
-            List<FilterExecution> snapshot;
-            synchronized (this) {
-                snapshot = new ArrayList<>(executions);
-            }
-            return (int) snapshot.stream().filter(e -> !e.isSuccess()).count();
+        public synchronized int getFailureCount() {
+            return failureCount;
         }
 
         public Map<String, Object> toMap() {

@@ -133,8 +133,10 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
         AtomicInteger bufferedChars = new AtomicInteger(0);
         // Netty's read boundaries have nothing to do with SSE event boundaries: one
         // buffer can hold several events, and an event can be split across two.
-        // Reassemble before parsing or the usage block is silently lost.
-        SseFrameAccumulator frames = new SseFrameAccumulator();
+        // Reassemble before parsing or the usage block is silently lost. The carry is
+        // capped at maxBodySize - the same bound this filter already applies to a JSON
+        // body - so a stream that never emits a blank line cannot grow it without limit.
+        SseFrameAccumulator frames = new SseFrameAccumulator(maxBodySize);
 
         // Wrap response to intercept body
         ServerHttpResponse decoratedResponse = new ServerHttpResponseDecorator(exchange.getResponse()) {
@@ -815,11 +817,40 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
      * request at 0 tokens. Events are separated by a blank line; CR is dropped so CRLF,
      * LF and a CRLF split across two buffers all normalise to the same boundary.
      */
-    private static final class SseFrameAccumulator {
+    // Package-private so SseFrameAccumulatorTest can drive the framing directly; the carry cap and
+    // the resume-after-overflow behaviour are not observable through the filter's public surface.
+    static final class SseFrameAccumulator {
 
         private static final String BOUNDARY = "\n\n";
 
+        /**
+         * FIX (P0, unbounded carry + O(N^2) rescan): the unterminated tail used to grow without
+         * limit. {@code accept} runs for EVERY chunk of the response, on the Netty EventLoop, and
+         * nothing else in this filter caps it - {@code MemoryAwareBuffer} stops storing chunks but
+         * the accumulator kept appending. An upstream that is detected as SSE and then never emits a
+         * blank line (a single huge {@code data:} line, or a misdetected body) made the carry grow
+         * to the full response size, and because each call rescanned it from index 0 the total work
+         * was quadratic: 64 x 16KB chunks retained 1,048,576 chars and rescanned ~32M of them.
+         * <p>
+         * On overflow the carry is dropped and accumulation resumes, so an oversized frame costs at
+         * most {@code maxCarryChars} of unparsable garbage (handleSseChunk ignores it) and the
+         * events after it - including the final usage block - are still parsed and billed.
+         */
+        private final int maxCarryChars;
+
         private final StringBuilder carry = new StringBuilder();
+        /**
+         * Index in {@code carry} where the next boundary search can start. Everything before it has
+         * already been searched, so only the last {@code BOUNDARY.length() - 1} chars - which may
+         * hold a boundary split across two chunks - are ever revisited. Keeps {@code accept} O(chunk)
+         * instead of O(carry).
+         */
+        private int scanFrom;
+        private boolean overflowWarned;
+
+        SseFrameAccumulator(int maxCarryChars) {
+            this.maxCarryChars = maxCarryChars;
+        }
 
         /** Complete events contained in this chunk, in wire order. */
         List<String> accept(String chunk) {
@@ -829,17 +860,32 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
             carry.append(chunk.indexOf('\r') >= 0 ? chunk.replace("\r", "") : chunk);
 
             List<String> events = new ArrayList<>();
-            int from = 0;
+            int consumed = 0;
+            int from = scanFrom;
             int boundary;
             while ((boundary = carry.indexOf(BOUNDARY, from)) >= 0) {
-                String event = carry.substring(from, boundary);
+                String event = carry.substring(consumed, boundary);
                 if (!event.isEmpty()) {
                     events.add(event);
                 }
-                from = boundary + BOUNDARY.length();
+                consumed = boundary + BOUNDARY.length();
+                from = consumed;
             }
-            if (from > 0) {
-                carry.delete(0, from);
+            if (consumed > 0) {
+                carry.delete(0, consumed);
+            }
+            scanFrom = Math.max(0, carry.length() - (BOUNDARY.length() - 1));
+
+            if (carry.length() > maxCarryChars) {
+                if (!overflowWarned) {
+                    overflowWarned = true;
+                    log.warn("SSE frame accumulator hit {} chars without a blank-line boundary; "
+                                    + "dropping the unterminated frame and resuming. Upstream is not "
+                                    + "framing SSE as expected, so this stream's usage may settle at 0.",
+                            maxCarryChars);
+                }
+                carry.setLength(0);
+                scanFrom = 0;
             }
             return events;
         }
@@ -851,6 +897,7 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
             }
             String rest = carry.toString();
             carry.setLength(0);
+            scanFrom = 0;
             return rest.isBlank() ? List.of() : List.of(rest);
         }
     }
