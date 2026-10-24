@@ -52,13 +52,16 @@ export default defineConfig({
     },
     // Increase chunk size warning limit since we're intentionally splitting
     chunkSizeWarningLimit: 600,
-    // Production optimization: Remove console.log statements
+    // Production optimization: strip noisy console output but KEEP warn/error.
+    // FIX: this used `drop_console: true`, which removes EVERY console.* call - including
+    // logger.error (src/utils/logger.ts, whose own contract says "warn/error always") and
+    // ErrorBoundary.componentDidCatch. The result was a production bundle where DevTools showed
+    // no error at all, which is the worst possible outcome for a single-operator deployment.
     minify: 'terser',
     terserOptions: {
       compress: {
-        drop_console: process.env.NODE_ENV === 'production', // Remove console in production
         drop_debugger: true, // Remove debugger statements
-        pure_funcs: ['console.debug', 'console.trace'], // Also remove debug and trace
+        pure_funcs: ['console.log', 'console.debug', 'console.trace', 'console.info'],
       }
     },
   },

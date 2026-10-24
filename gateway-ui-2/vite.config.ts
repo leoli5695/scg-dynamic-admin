@@ -16,9 +16,15 @@ export default defineConfig(({ mode }) => ({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
-  // Drop console/debugger only in production builds (parity with the legacy terser config).
+  // Strip noisy console output in production but KEEP warn/error.
+  // FIX: `drop: ['console']` removed every console.* call, including main.ts's
+  // app.config.errorHandler, so a production error became completely silent. Same bug the legacy
+  // gateway-ui terser config had with drop_console.
   esbuild: {
-    drop: mode === 'production' ? ['console', 'debugger'] : [],
+    pure: mode === 'production'
+      ? ['console.log', 'console.debug', 'console.trace', 'console.info']
+      : [],
+    drop: mode === 'production' ? ['debugger'] : [],
   },
   server: {
     // 3001 so it can run alongside the legacy gateway-ui on 3000.
