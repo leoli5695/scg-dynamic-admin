@@ -320,6 +320,9 @@ public class RouteService {
             String nacosNamespace = getNacosNamespace(instanceId);
 
             // Save to database
+            // Same rule as updateRouteByRouteId: never persist synthesized plugin filters, so a
+            // route duplicated from a GET payload does not start life with them baked in.
+            route.setFilters(stripPluginBindingFilters(route.getId(), route.getFilters()));
             RouteEntity entity = routeConverter.toEntity(route);
             entity.setEnabled(true);
             entity.setInstanceId(instanceId);
@@ -405,6 +408,10 @@ public class RouteService {
             route.setServiceGroup(originalRoute.getServiceGroup());
             log.warn("Preserving original serviceGroup for route {} (frontend sent null/empty)", routeId);
         }
+
+        // Persist only operator-authored filters; the plugin-binding ones in the payload are echoes
+        // of a previous GET and are re-added from the bindings when publishing below.
+        route.setFilters(stripPluginBindingFilters(routeId, route.getFilters()));
 
         // Update entity
         entity.setRouteName(route.getRouteName());
@@ -596,55 +603,94 @@ public class RouteService {
     }
 
     /**
-     * Merge plugin bindings into route filters.
-     * Plugin filters are appended after existing filters.
+     * Merge plugin bindings into route filters, using pre-loaded global bindings
+     * (pass them in batch operations to avoid N+1 queries).
+     * <p>
+     * FIX (P1, plugin filters multiplied on every edit): {@link #convertToResponse} hands the client
+     * the ALREADY-MERGED filter list and the update path persists whatever comes back, so each save
+     * baked the synthesized plugin filters into the stored definition and the next publish merged
+     * them in again. The list grew by the number of bindings per round trip and the gateway ran each
+     * plugin once per copy. Filters identical to one this method generates are now skipped, which
+     * makes the round trip idempotent and also heals definitions already dirtied by earlier saves -
+     * including the republish/enable paths that publish stored metadata without a new save.
      *
      * @param routeId the route ID
-     * @param existingFilters existing filters from route definition
-     * @return merged filter list
+     * @param existingFilters operator-authored filters from the stored route definition
+     * @param globalBindings enabled global plugin bindings, pre-loaded by the caller
+     * @return merged filter list, each plugin appearing exactly once
      */
-    private List<FilterDefinition> mergePluginBindingsToFilters(String routeId, List<FilterDefinition> existingFilters) {
-        return mergePluginBindingsToFilters(routeId, existingFilters, routePluginBindingService.getEnabledGlobalBindings());
+    private List<FilterDefinition> mergePluginBindingsToFilters(String routeId, List<FilterDefinition> existingFilters, List<PluginBindingEntity> globalBindings) {
+        List<FilterDefinition> globalPluginFilters = toPluginFilters(routeId, globalBindings, "global");
+        List<FilterDefinition> routePluginFilters = toPluginFilters(routeId,
+                routePluginBindingService.getEnabledBindingsByRouteId(routeId), "route");
+
+        // SCG applies route filters in list order, so keep the original
+        // global-plugins -> authored-filters -> route-plugins sequence.
+        List<FilterDefinition> mergedFilters = new ArrayList<>(globalPluginFilters);
+        if (existingFilters != null) {
+            for (FilterDefinition filter : existingFilters) {
+                if (globalPluginFilters.contains(filter) || routePluginFilters.contains(filter)) {
+                    continue;
+                }
+                mergedFilters.add(filter);
+            }
+        }
+        mergedFilters.addAll(routePluginFilters);
+
+        return mergedFilters;
     }
 
     /**
-     * Merge plugin bindings into route filters with pre-loaded global bindings.
-     * Use this overload in batch operations to avoid N+1 queries.
+     * Turn plugin bindings into the filter definitions the gateway expects.
      */
-    private List<FilterDefinition> mergePluginBindingsToFilters(String routeId, List<FilterDefinition> existingFilters, List<PluginBindingEntity> globalBindings) {
-        List<FilterDefinition> mergedFilters = new ArrayList<>();
+    private List<FilterDefinition> toPluginFilters(String routeId, List<PluginBindingEntity> bindings, String scope) {
+        List<FilterDefinition> filters = new ArrayList<>();
+        if (bindings == null) {
+            return filters;
+        }
+        for (PluginBindingEntity binding : bindings) {
+            FilterDefinition pluginFilter = new FilterDefinition();
+            pluginFilter.setName(binding.getPluginName()); // SCG uses plugin name as filter factory name
+            pluginFilter.setArgs(routePluginBindingService.parseBindingConfig(binding));
+            filters.add(pluginFilter);
+            log.debug("Added {} plugin filter to route {}: plugin={}, order={}",
+                scope, routeId, binding.getPluginName(), binding.getOrder());
+        }
+        return filters;
+    }
 
-        // 1. Add global plugin bindings first (apply to all routes)
-        if (globalBindings != null && !globalBindings.isEmpty()) {
-            for (PluginBindingEntity binding : globalBindings) {
-                FilterDefinition globalFilter = new FilterDefinition();
-                globalFilter.setName(binding.getPluginName());
-                globalFilter.setArgs(routePluginBindingService.parseBindingConfig(binding));
-                mergedFilters.add(globalFilter);
-                log.debug("Added global plugin filter to route {}: plugin={}, order={}",
-                    routeId, binding.getPluginName(), binding.getOrder());
+    /**
+     * Drop the plugin-binding filters from a client-submitted definition so only operator-authored
+     * filters are persisted. They are echoes of what a previous GET synthesized, and
+     * {@link #mergePluginBindingsToFilters} re-adds them from the bindings at publish time.
+     * <p>
+     * Without this the stored definition kept a copy of every plugin filter, so disabling a binding
+     * left the filter behind and it stayed published forever.
+     */
+    private List<FilterDefinition> stripPluginBindingFilters(String routeId, List<FilterDefinition> filters) {
+        if (filters == null || filters.isEmpty()) {
+            return filters;
+        }
+        List<FilterDefinition> pluginFilters = new ArrayList<>();
+        pluginFilters.addAll(toPluginFilters(routeId,
+                routePluginBindingService.getEnabledGlobalBindings(), "global"));
+        pluginFilters.addAll(toPluginFilters(routeId,
+                routePluginBindingService.getEnabledBindingsByRouteId(routeId), "route"));
+        if (pluginFilters.isEmpty()) {
+            return filters;
+        }
+
+        List<FilterDefinition> authored = new ArrayList<>();
+        for (FilterDefinition filter : filters) {
+            if (!pluginFilters.contains(filter)) {
+                authored.add(filter);
             }
         }
-
-        // 2. Add existing filters
-        if (existingFilters != null) {
-            mergedFilters.addAll(existingFilters);
+        if (authored.size() != filters.size()) {
+            log.info("Dropped {} plugin-binding filter(s) echoed back by the client for route {}; "
+                    + "they are re-added from the bindings when publishing", filters.size() - authored.size(), routeId);
         }
-
-        // 3. Add route-specific plugin bindings
-        List<PluginBindingEntity> bindings = routePluginBindingService.getEnabledBindingsByRouteId(routeId);
-        if (bindings != null && !bindings.isEmpty()) {
-            for (PluginBindingEntity binding : bindings) {
-                FilterDefinition pluginFilter = new FilterDefinition();
-                pluginFilter.setName(binding.getPluginName()); // SCG uses plugin name as filter factory name
-                pluginFilter.setArgs(routePluginBindingService.parseBindingConfig(binding));
-                mergedFilters.add(pluginFilter);
-                log.debug("Added plugin filter to route {}: plugin={}, order={}",
-                    routeId, binding.getPluginName(), binding.getOrder());
-            }
-        }
-
-        return mergedFilters;
+        return authored;
     }
 
     /**
