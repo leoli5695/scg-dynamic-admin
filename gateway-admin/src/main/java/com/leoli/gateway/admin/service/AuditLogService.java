@@ -15,6 +15,7 @@ import com.leoli.gateway.admin.repository.RouteRepository;
 import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
 import com.leoli.gateway.admin.repository.StrategyRepository;
 import com.leoli.gateway.admin.repository.AuthPolicyRepository;
+import com.leoli.gateway.admin.util.SensitiveDataMasker;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -337,6 +338,12 @@ public class AuditLogService {
             JsonNode oldNode = auditLog.getOldValue() != null ? objectMapper.readTree(auditLog.getOldValue()) : null;
             JsonNode newNode = auditLog.getNewValue() != null ? objectMapper.readTree(auditLog.getNewValue()) : null;
 
+            // Mask before computeDiff: these nodes go into a plain Map, so the entity-level
+            // @JsonSerialize masker does not reach them, and masking both sides identically keeps
+            // a rotated secret from showing up as a change.
+            SensitiveDataMasker.maskTree(oldNode);
+            SensitiveDataMasker.maskTree(newNode);
+
             result.put("oldValue", oldNode);
             result.put("newValue", newNode);
 
@@ -346,8 +353,8 @@ public class AuditLogService {
 
         } catch (Exception e) {
             log.error("Failed to parse JSON values", e);
-            result.put("oldValue", auditLog.getOldValue());
-            result.put("newValue", auditLog.getNewValue());
+            result.put("oldValue", SensitiveDataMasker.mask(auditLog.getOldValue()));
+            result.put("newValue", SensitiveDataMasker.mask(auditLog.getNewValue()));
             result.put("parseError", e.getMessage());
         }
 
@@ -859,6 +866,10 @@ public class AuditLogService {
             for (String key : allKeys) {
                 String oldStr = oldNode.has(key) ? oldNode.get(key).asText() : "";
                 String newStr = newNode.has(key) ? newNode.get(key).asText() : "";
+                if (SensitiveDataMasker.isSensitiveKey(key)) {
+                    oldStr = oldStr.isEmpty() ? "" : SensitiveDataMasker.maskValue(oldStr);
+                    newStr = newStr.isEmpty() ? "" : SensitiveDataMasker.maskValue(newStr);
+                }
                 if (!oldStr.equals(newStr)) {
                     TimelineDiffEntry entry = new TimelineDiffEntry();
                     entry.field = key;
@@ -872,8 +883,8 @@ public class AuditLogService {
             if (!Objects.equals(oldValue, newValue)) {
                 TimelineDiffEntry entry = new TimelineDiffEntry();
                 entry.field = "value";
-                entry.oldValue = oldValue;
-                entry.newValue = newValue;
+                entry.oldValue = SensitiveDataMasker.mask(oldValue);
+                entry.newValue = SensitiveDataMasker.mask(newValue);
                 entry.type = "changed";
                 diffs.add(entry);
             }

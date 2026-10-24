@@ -1,5 +1,7 @@
 package com.leoli.gateway.admin.model;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.leoli.gateway.admin.util.SensitiveValueSerializer;
 import jakarta.persistence.*;
 import lombok.Data;
 import org.hibernate.annotations.CreationTimestamp;
@@ -70,9 +72,17 @@ public class AuditLogEntity {
     @Column(name = "target_name", length = 255)
     private String targetName;
 
+    /**
+     * Whole-object JSON snapshots (controllers write {@code writeValueAsString(entity)} here), so
+     * a STRATEGY row embeds {@code AuthConfig.secretKey/apiKey/clientSecret} in cleartext. Masked
+     * on serialisation rather than on write: {@code AuditLogService.rollback} restores config from
+     * {@code oldValue}, and the DB column keeps whatever it was given.
+     */
+    @JsonSerialize(using = SensitiveValueSerializer.class)
     @Column(columnDefinition = "TEXT")
     private String oldValue;
 
+    @JsonSerialize(using = SensitiveValueSerializer.class)
     @Column(columnDefinition = "TEXT")
     private String newValue;
 

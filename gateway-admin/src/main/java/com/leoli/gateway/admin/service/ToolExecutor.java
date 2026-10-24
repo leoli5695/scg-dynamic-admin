@@ -12,6 +12,7 @@ import com.leoli.gateway.admin.repository.KubernetesClusterRepository;
 import com.leoli.gateway.admin.repository.RequestTraceRepository;
 import com.leoli.gateway.admin.tool.ToolDefinition;
 import com.leoli.gateway.admin.tool.ToolRegistry;
+import com.leoli.gateway.admin.util.SensitiveDataMasker;
 import com.leoli.gateway.admin.validation.RouteValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -255,19 +256,14 @@ public class ToolExecutor {
     // ===================== 参数脱敏（点12） =====================
 
     /**
-     * Arg keys whose values may carry credentials/PII. Matched case-insensitively as a
-     * substring after normalising '-' to '_', so apiKey / api_key / api-key / X-Api-Key all hit.
-     */
-    private static final Set<String> SENSITIVE_ARG_SUBSTRINGS = Set.of(
-            "apikey", "api_key", "token", "secret", "password", "passwd", "credential",
-            "authorization", "privatekey", "private_key", "accesskey", "secretkey",
-            "cookie", "session");
-
-    /**
      * Shallow copy of {@code args} with sensitive-looking values masked, for safe logging and
      * audit storage. Tool arguments are usually route/instance ids, but a future tool could
      * carry a credential - masking at the two sinks (execute log + audit argsJson) keeps that
      * from landing in plaintext logs/tables without touching each tool.
+     *
+     * <p>Key matching and the mask shape are delegated to {@link SensitiveDataMasker} so this
+     * cannot drift from the audit-value masker; two independent copies of the sensitive-key list
+     * is exactly how one sink ends up unmasked.
      * Package-private for testing.
      */
     Map<String, Object> maskSensitiveArgs(Map<String, Object> args) {
@@ -276,30 +272,11 @@ public class ToolExecutor {
         }
         Map<String, Object> masked = new LinkedHashMap<>(args.size());
         for (Map.Entry<String, Object> e : args.entrySet()) {
-            masked.put(e.getKey(), isSensitiveKey(e.getKey()) ? maskValue(e.getValue()) : e.getValue());
+            masked.put(e.getKey(), SensitiveDataMasker.isSensitiveKey(e.getKey())
+                    ? SensitiveDataMasker.maskValue(e.getValue())
+                    : e.getValue());
         }
         return masked;
-    }
-
-    private static boolean isSensitiveKey(String key) {
-        if (key == null) {
-            return false;
-        }
-        String lower = key.toLowerCase(Locale.ROOT).replace('-', '_');
-        for (String s : SENSITIVE_ARG_SUBSTRINGS) {
-            if (lower.contains(s)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static Object maskValue(Object value) {
-        if (value == null) {
-            return null;
-        }
-        String str = String.valueOf(value);
-        return str.length() <= 4 ? "****" : "****" + str.substring(str.length() - 4);
     }
 
     // ===================== 监控诊断类工具执行 =====================

@@ -119,4 +119,56 @@ class InternalApiEndpointsContractTest {
                     "public path " + pattern + " must pass the token filter (it is guarded by JWT or truly public)");
         }
     }
+
+    /**
+     * Regression for the P0 bypass: Spring Security resolves its permitAll matchers through
+     * UrlPathHelper, which strips matrix parameters (";...") and collapses duplicate slashes, while
+     * this filter used to compare only the raw {@code getRequestURI()}. The two sides therefore
+     * disagreed on the same request - "/api/instances/heartbeat;x=1" matched permitAll (JWT skipped)
+     * but not the exact Ant pattern (token skipped), reaching the controller fully unauthenticated.
+     *
+     * <p>Only literal-";" and "//" variants are asserted. A percent-encoded "%3B" is decoded AFTER
+     * semicolon stripping in UrlPathHelper, so it survives normalisation on BOTH sides; such a
+     * request does not match permitAll either and falls through to anyRequest().authenticated().
+     */
+    @Test
+    @DisplayName("regression: matrix-param and duplicate-slash variants are still token-guarded")
+    void obfuscatedVariantsAreStillGuarded() throws Exception {
+        InternalApiTokenFilter filter = newFilter();
+        String[] variants = {
+                "/api/instances/heartbeat;x=1",
+                "/api/instances/started;jsessionid=ABC123",
+                "/api/services/traces;foo=bar",
+                "/api/services/middleware-metadata;a=b",
+                "/api/filter-executions/internal;x=1",
+                "/api/traces/internal/batch;x=1",
+                "//api/instances/heartbeat",
+                "/api/gateway/health/probe;x=1"
+        };
+        for (String uri : variants) {
+            MockHttpServletRequest req = new MockHttpServletRequest("POST", uri);
+            MockHttpServletResponse resp = new MockHttpServletResponse();
+            MockFilterChain chain = new MockFilterChain();
+
+            filter.doFilter(req, resp, chain);
+
+            assertEquals(401, resp.getStatus(), "expected 401 without token for obfuscated variant " + uri);
+            assertNull(chain.getRequest(), "filter chain must NOT proceed for " + uri);
+        }
+    }
+
+    @Test
+    @DisplayName("an obfuscated variant is still accepted when it carries a valid token")
+    void obfuscatedVariantWithValidTokenPasses() throws Exception {
+        InternalApiTokenFilter filter = newFilter();
+        MockHttpServletRequest req = new MockHttpServletRequest("POST", "/api/instances/heartbeat;x=1");
+        req.addHeader(InternalApiTokenFilter.TOKEN_HEADER, TOKEN);
+        MockHttpServletResponse resp = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(req, resp, chain);
+
+        assertEquals(200, resp.getStatus(), "a valid token must not be rejected because the path was normalised");
+        assertNotNull(chain.getRequest());
+    }
 }

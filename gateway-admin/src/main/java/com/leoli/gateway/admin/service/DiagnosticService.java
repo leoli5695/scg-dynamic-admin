@@ -6,6 +6,7 @@ import com.leoli.gateway.admin.repository.DiagnosticHistoryRepository;
 import com.leoli.gateway.admin.repository.RouteAuthBindingRepository;
 import com.leoli.gateway.admin.repository.RouteRepository;
 import com.leoli.gateway.admin.repository.AuthPolicyRepository;
+import com.leoli.gateway.admin.util.UrlSecurityValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -615,6 +616,18 @@ public class DiagnosticService {
                 String instanceId = instance.getInstanceId();
                 String accessUrl = gatewayInstanceService.getAccessUrl(instanceId);
                 if (accessUrl == null) {
+                    continue;
+                }
+                // FIX (SSRF): defence in depth for rows persisted before heartbeat ingest started
+                // validating reportedAccessUrl. This call carries the shared X-Internal-Token and
+                // echoes the response body into the report, so an unsafe target is skipped rather
+                // than dialled. validateReportedInstanceUrl (not validateInternalTargetUrl) because
+                // a single-host deployment legitimately reports localhost here.
+                try {
+                    UrlSecurityValidator.validateReportedInstanceUrl(accessUrl);
+                } catch (IllegalArgumentException e) {
+                    log.warn("Skipping filter-chain diagnostics for instance {}: unsafe access URL {} ({})",
+                            instanceId, accessUrl, e.getMessage());
                     continue;
                 }
 

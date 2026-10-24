@@ -8,6 +8,7 @@ import com.leoli.gateway.admin.model.InstanceSpec;
 import com.leoli.gateway.admin.model.InstanceStatus;
 import com.leoli.gateway.admin.model.KubernetesCluster;
 import com.leoli.gateway.admin.repository.*;
+import com.leoli.gateway.admin.util.UrlSecurityValidator;
 import io.kubernetes.client.custom.Quantity;
 import io.kubernetes.client.openapi.ApiClient;
 import io.kubernetes.client.openapi.ApiException;
@@ -953,10 +954,22 @@ public class GatewayInstanceService {
         instance.setLastHeartbeatTime(LocalDateTime.now());
         instance.setMissedHeartbeats(0);
 
-        // Update reported access URL if provided
+        // Update reported access URL if provided.
+        // FIX (SSRF via forged heartbeat): this value is self-reported by whoever holds a pod
+        // report token, and the admin later dials it while attaching the shared X-Internal-Token
+        // (DiagnosticService filter-chain stats). Unvalidated, a forged heartbeat could point the
+        // admin at 169.254.169.254 and have cloud metadata echoed into a diagnostics report that
+        // any logged-in user can read. Reject at ingest and keep the previous value rather than
+        // dropping the whole heartbeat, so a misconfigured pod still reports as alive.
         if (accessUrl != null && !accessUrl.isEmpty()) {
-            instance.setReportedAccessUrl(accessUrl);
-            log.debug("Instance {} reported access URL: {}", instanceId, accessUrl);
+            try {
+                UrlSecurityValidator.validateReportedInstanceUrl(accessUrl);
+                instance.setReportedAccessUrl(accessUrl);
+                log.debug("Instance {} reported access URL: {}", instanceId, accessUrl);
+            } catch (IllegalArgumentException e) {
+                log.warn("Rejected self-reported access URL for instance {}: {} ({})",
+                        instanceId, accessUrl, e.getMessage());
+            }
         }
 
         // Update ports if provided

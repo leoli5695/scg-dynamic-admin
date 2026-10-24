@@ -104,6 +104,13 @@ public class SecurityConfig {
                         // are moved OFF the shared X-Internal-Token report tier and gated behind an ADMIN
                         // JWT instead - a leaked pod report token no longer grants access to diagnostics.
                         .requestMatchers("/api/service-middleware/debug/**").hasAuthority("ADMIN")
+                        // FIX (P0 secret exfiltration): audit exports dump whole-object snapshots
+                        // that embed AuthConfig.secretKey / apiKey / clientSecret. A GET falls
+                        // through to anyRequest().authenticated() under the verb-based rules below,
+                        // so any logged-in (non-admin) user could export every stored credential.
+                        // Values are also masked at the entity level (SensitiveValueSerializer);
+                        // this ADMIN gate is defence in depth, not the only layer.
+                        .requestMatchers("/api/audit-logs/export/**").hasAuthority("ADMIN")
                         // FIX (P0 RBAC): default-deny for state-changing operations.
                         // Previously anyRequest().authenticated() meant EVERY logged-in
                         // user was effectively a super-admin (delete routes, export

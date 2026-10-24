@@ -35,7 +35,21 @@ public class RestTemplateConfig {
 
     @Bean
     public RestTemplate restTemplate(GatewayAdminProperties properties) {
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        // FIX (credential exfiltration via redirect): the interceptor below attaches the shared
+        // X-Internal-Token based on the request PATH alone, with no check on the target host.
+        // HttpURLConnection re-sends the original request headers when it follows a 30x, so a
+        // target that passed validation on the first hop could bounce the token to any host it
+        // liked. Redirects are disabled here rather than re-validating every hop: none of the
+        // internal endpoints this template talks to (filter-chain stats, circuit-breaker control,
+        // health sync) legitimately redirect, and a redirect response is worth surfacing as-is.
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory() {
+            @Override
+            protected void prepareConnection(java.net.HttpURLConnection connection, String httpMethod)
+                    throws java.io.IOException {
+                super.prepareConnection(connection, httpMethod);
+                connection.setInstanceFollowRedirects(false);
+            }
+        };
         factory.setConnectTimeout(connectTimeoutMs);
         factory.setReadTimeout(readTimeoutMs);
         RestTemplate template = new RestTemplate(factory);

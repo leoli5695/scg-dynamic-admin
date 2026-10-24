@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.util.AntPathMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.util.UrlPathHelper;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -43,6 +44,8 @@ public class InternalApiTokenFilter extends OncePerRequestFilter {
     private static final List<String> PROTECTED_PATTERNS = InternalApiEndpoints.TOKEN_PROTECTED;
 
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
+    /** Same normalisation Spring Security's matchers use, so both sides agree on one request. */
+    private static final UrlPathHelper URL_PATH_HELPER = new UrlPathHelper();
     private final String expectedToken;
     private final AtomicBoolean warned = new AtomicBoolean(false);
 
@@ -61,7 +64,17 @@ public class InternalApiTokenFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
         String uri = request.getRequestURI();
-        if (!isProtected(uri)) {
+        // FIX (P0 auth bypass): guard if EITHER the raw URI or the normalised path matches.
+        // Spring Security resolves its permitAll matchers through UrlPathHelper, which strips
+        // matrix parameters (";x=1"), decodes %XX and collapses duplicate slashes. This filter
+        // used to compare the raw getRequestURI() with AntPathMatcher only, so the two sides
+        // disagreed on the same request: "POST /api/instances/heartbeat;x=1" matched permitAll
+        // (JWT skipped) but did NOT match the exact pattern here, so the shared token was never
+        // checked and forged heartbeats/traces went straight through to the controllers.
+        // Union-matching is fail-closed by construction - normalising can only add protection,
+        // never remove it, so a legitimate caller is unaffected while an obfuscated one is caught.
+        String normalizedUri = URL_PATH_HELPER.getPathWithinApplication(request);
+        if (!isProtected(uri) && !isProtected(normalizedUri)) {
             filterChain.doFilter(request, response);
             return;
         }

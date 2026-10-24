@@ -33,7 +33,7 @@ public final class UrlSecurityValidator {
      * @throws IllegalArgumentException when the URL is unsafe
      */
     public static void validateExternalUrl(String url) {
-        validate(url, false);
+        validate(url, false, false);
     }
 
     /**
@@ -44,10 +44,34 @@ public final class UrlSecurityValidator {
      * @throws IllegalArgumentException when the URL is unsafe
      */
     public static void validateInternalTargetUrl(String url) {
-        validate(url, true);
+        validate(url, true, false);
     }
 
-    private static void validate(String url, boolean allowSiteLocal) {
+    /**
+     * Validate a <b>self-reported</b> instance access URL - the value a gateway pod sends in its
+     * heartbeat, which the admin later dials (diagnostics, filter-chain stats) while attaching the
+     * shared {@code X-Internal-Token}.
+     *
+     * <p>Deliberately narrower than {@link #validateInternalTargetUrl}: loopback and RFC1918 are
+     * ACCEPTED here, because a gateway legitimately reports a pod IP, a compose service name or -
+     * in a single-host deployment - localhost. What must never be accepted is an address that turns
+     * a forged heartbeat into a metadata-read proxy: link-local (169.254.169.254), any-local,
+     * multicast and IPv6 unique-local. Without this, the lowest-privileged credential in the
+     * system (a pod report token) could point an administrator's next diagnostics run at the cloud
+     * metadata service and have the response echoed back into a report any logged-in user can read.
+     *
+     * <p>Residual risk, intentionally NOT closed here: a pod-token holder can still report a public
+     * host they control and receive the shared internal token when an administrator next runs
+     * diagnostics against that instance. Closing that requires per-instance internal tokens instead
+     * of one shared secret - tracked separately, not papered over by a wider address blacklist.
+     *
+     * @throws IllegalArgumentException when the URL is unsafe
+     */
+    public static void validateReportedInstanceUrl(String url) {
+        validate(url, true, true);
+    }
+
+    private static void validate(String url, boolean allowSiteLocal, boolean allowLoopback) {
         if (url == null || url.isBlank()) {
             throw new IllegalArgumentException("URL is required");
         }
@@ -80,10 +104,10 @@ public final class UrlSecurityValidator {
         // Check every resolved address to prevent bypass via multi-A records
         for (InetAddress address : addresses) {
             if (address.isAnyLocalAddress()
-                    || address.isLoopbackAddress()
                     || address.isLinkLocalAddress()
                     || address.isMulticastAddress()
-                    || isIPv6UniqueLocal(address)) {
+                    || isIPv6UniqueLocal(address)
+                    || (!allowLoopback && address.isLoopbackAddress())) {
                 throw new IllegalArgumentException("URL points to a forbidden address range");
             }
             if (!allowSiteLocal && address.isSiteLocalAddress()) {

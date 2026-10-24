@@ -91,7 +91,12 @@ public class StressTestService {
 
         httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
-                .followRedirects(HttpClient.Redirect.NORMAL)
+                // FIX (SSRF): was Redirect.NORMAL. The target URL is validated once, before the
+                // first hop, so a target that answered 302 -> http://169.254.169.254/... was
+                // followed straight past UrlSecurityValidator and its body landed in the stress
+                // report. NEVER is also the correct semantics for a load generator: a redirect is
+                // a response to measure, not something to silently chase.
+                .followRedirects(HttpClient.Redirect.NEVER)
                 .version(HttpClient.Version.HTTP_1_1)
                 .executor(httpExecutor)
                 .build();

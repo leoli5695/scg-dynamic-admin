@@ -393,28 +393,39 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
 
         int hitsBefore = threats.size();
         if (checkSql) {
-            for (Pattern pattern : SQL_INJECTION_PATTERNS) {
+            for (int i = 0; i < SQL_INJECTION_PATTERNS.size(); i++) {
+                Pattern pattern = SQL_INJECTION_PATTERNS.get(i);
                 if (pattern.matcher(value).find()) {
-                    threats.add("SQL_INJECTION: " + pattern.pattern());
-                    log.warn("SQL injection detected: pattern={}", pattern.pattern());
+                    String ruleId = "SQL_INJECTION#" + (i + 1);
+                    // FIX (rule-set disclosure): the response used to carry pattern.pattern(), so a
+                    // single unauthenticated probe returned the whole regex set and an attacker could
+                    // then craft input to dodge each rule. The rule id is still enough to correlate
+                    // with the WARN below, which keeps the pattern text server-side only.
+                    threats.add(ruleId);
+                    log.warn("SQL injection detected: rule={} pattern={}", ruleId, pattern.pattern());
                 }
             }
         }
 
         if (checkXss) {
-            for (Pattern pattern : XSS_PATTERNS) {
+            for (int i = 0; i < XSS_PATTERNS.size(); i++) {
+                Pattern pattern = XSS_PATTERNS.get(i);
                 if (pattern.matcher(value).find()) {
-                    threats.add("XSS: " + pattern.pattern());
-                    log.warn("XSS detected: pattern={}", pattern.pattern());
+                    String ruleId = "XSS#" + (i + 1);
+                    threats.add(ruleId);
+                    log.warn("XSS detected: rule={} pattern={}", ruleId, pattern.pattern());
                 }
             }
         }
 
         if (checkSql && threats.size() > hitsBefore) {
-            for (Pattern pattern : SQL_LOW_CONFIDENCE_PATTERNS) {
+            for (int i = 0; i < SQL_LOW_CONFIDENCE_PATTERNS.size(); i++) {
+                Pattern pattern = SQL_LOW_CONFIDENCE_PATTERNS.get(i);
                 if (pattern.matcher(value).find()) {
-                    threats.add("SQL_INJECTION: " + pattern.pattern());
-                    log.warn("SQL injection detected (low-confidence, correlated): pattern={}", pattern.pattern());
+                    String ruleId = "SQL_INJECTION_LOW#" + (i + 1);
+                    threats.add(ruleId);
+                    log.warn("SQL injection detected (low-confidence, correlated): rule={} pattern={}",
+                            ruleId, pattern.pattern());
                 }
             }
         }
