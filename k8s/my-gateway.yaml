@@ -23,13 +23,23 @@ spec:
         image: my-gateway:1.0.0
         imagePullPolicy: Never
         ports:
-        - containerPort: 80
+        - containerPort: 8080
           name: http
         - containerPort: 8443
           name: https
-        - containerPort: 8081
-          name: management
+        # NOTE: there is deliberately no separate management port. Actuator is served on the main
+        # application port (my-gateway/application.yml: "Do NOT configure management.server.port
+        # separately - this causes the multi-port HttpHandler conflict", see spring-cloud-gateway
+        # issue 3786). A containerPort 8081 named "management" used to be declared here and all
+        # three probes targeted it, so nothing was ever listening: pods never became ready, the
+        # Deployment stalled, the HPA got no metrics and the Service had no endpoints.
+        #
+        # The application port is 8080, not the 80 that application.yml defaults to: this
+        # container runs as a non-root user, which cannot bind a privileged port (<1024) without
+        # CAP_NET_BIND_SERVICE. The Service below still presents 80 externally.
         env:
+        - name: SERVER_PORT
+          value: "8080"
         - name: NACOS_SERVER_ADDR
           value: "nacos:8848"
         - name: NACOS_NAMESPACE
@@ -81,7 +91,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /actuator/health/liveness
-            port: management
+            port: http
           initialDelaySeconds: 60
           periodSeconds: 15
           timeoutSeconds: 10
@@ -89,7 +99,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /actuator/health/readiness
-            port: management
+            port: http
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
@@ -97,7 +107,7 @@ spec:
         startupProbe:
           httpGet:
             path: /actuator/health/liveness
-            port: management
+            port: http
           initialDelaySeconds: 10
           periodSeconds: 5
           timeoutSeconds: 3
@@ -117,13 +127,13 @@ spec:
   ports:
   - name: http
     port: 80
-    targetPort: 80
+    targetPort: http
   - name: https
     port: 443
-    targetPort: 8443
-  - name: management
-    port: 8081
-    targetPort: 8081
+    targetPort: https
+  # No "management" port: actuator is served on the application port, so scrape
+  # http://my-gateway/actuator/prometheus (Service port 80 -> container 8080). The 8081->8081
+  # entry that used to be here forwarded to a port nothing listened on.
 
 ---
 # my-gateway HPA - Horizontal Pod Autoscaler
@@ -188,9 +198,6 @@ metadata:
   name: my-gateway-ingress
   namespace: test
   annotations:
-    # NGINX Ingress Controller 配置
-    kubernetes.io/ingress.class: "nginx"
-    nginx.ingress.kubernetes.io/rewrite-target: /
     # SSL 配置（如果需要）
     # nginx.ingress.kubernetes.io/ssl-redirect: "true"
     # nginx.ingress.kubernetes.io/proxy-ssl-secret: "test/gateway-tls"
@@ -204,7 +211,14 @@ metadata:
     nginx.ingress.kubernetes.io/cors-allow-origin: "*"
     nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
     nginx.ingress.kubernetes.io/cors-allow-headers: "Authorization, Content-Type, X-Request-Id, X-Trace-Id"
+    # FIX: removed `nginx.ingress.kubernetes.io/rewrite-target: /`. Combined with
+    # `path: /` + `pathType: Prefix` it rewrote EVERY request to "/", so /api/foo reached
+    # the gateway as / and no route ever matched. A rewrite-target only makes sense with a
+    # capture group in the path (e.g. path: /foo(/|$)(.*) + rewrite-target: /$2).
+    # FIX: `kubernetes.io/ingress.class` is a deprecated annotation, replaced by
+    # spec.ingressClassName below.
 spec:
+  ingressClassName: nginx
   rules:
   # HTTP 路由
   - host: gateway.example.com
