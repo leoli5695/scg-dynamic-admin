@@ -1,0 +1,192 @@
+# =============================================================================
+# CI - the repository had none, which is why four independent "compose cannot
+# even start" defects shipped: an env var named DB_USERNAME while the code reads
+# MYSQL_USERNAME, bind mounts pointing at files that do not exist, a Dockerfile
+# whose parent POM was outside the build context, and a docker-compose.yml that
+# was not valid YAML. All four are caught by nothing more exotic than
+# `mvn verify` plus a YAML parse.
+#
+# STATUS: this workflow has NOT been executed yet. It cannot be validated
+# locally (no Docker, no MySQL/Redis/Nacos on the maintainer's machine); it needs
+# one push to main or a PR to confirm the service containers come up and the
+# 12 gateway-admin @SpringBootTest classes - which fail locally with
+# "Communications link failure" purely because there is no database - actually
+# pass. Treat the first run as the verification step.
+# =============================================================================
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A force-push or a new commit supersedes the in-flight run for the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (Java 21, Maven)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    # Real MySQL / Redis / Nacos rather than mocks: gateway-admin's integration
+    # tests are @SpringBootTest against the `test` profile, which points at
+    # 127.0.0.1:3306 (root/123456, gateway_admin_test, ddl-auto=create-drop),
+    # 127.0.0.1:${REDIS_PORT:30379} and 127.0.0.1:8848. seckill-core-engine's
+    # concurrency tests need the same Redis on 30379 - that is why its 8 failures
+    # and 17 errors were "pre-existing" rather than real: they only ever passed
+    # against a k3s NodePort.
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: "123456"
+          MYSQL_DATABASE: gateway_admin_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -p123456 --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=20
+
+      redis:
+        image: redis:7
+        ports:
+          # Mapped to 30379 because that is what application-test.yml expects.
+          - 30379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=15
+
+      nacos:
+        image: nacos/nacos-server:v2.3.0
+        env:
+          MODE: standalone
+          JVM_XMS: 512m
+          JVM_XMX: 512m
+        ports:
+          - 8848:8848
+          - 9848:9848
+        options: >-
+          --health-cmd="curl -f http://localhost:8848/nacos/ || exit 1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # Nacos takes 40-90s to become usable after its HTTP port answers, and a
+      # config-publish against a half-started Nacos fails in confusing ways.
+      - name: Wait for Nacos to be writable
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf -X POST 'http://127.0.0.1:8848/nacos/v1/cs/configs' \
+                 --data-urlencode 'dataId=ci-readiness-probe' \
+                 --data-urlencode 'group=DEFAULT_GROUP' \
+                 --data-urlencode 'content=ok' >/dev/null 2>&1; then
+              echo "Nacos is accepting writes after ${i} attempt(s)"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Nacos never became writable" >&2
+          exit 1
+
+      - name: Build and test
+        run: mvn -B -ntp verify
+        env:
+          REDIS_PORT: 30379
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: '**/target/surefire-reports/*.txt'
+          if-no-files-found: ignore
+          retention-days: 14
+
+  frontend:
+    name: Frontend (gateway-ui)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: gateway-ui
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: gateway-ui/package-lock.json
+
+      - run: npm ci
+
+      # `lint` runs with --max-warnings 0, so this is a real gate.
+      - run: npm run lint
+
+      # Separate from `build` so a type error is reported as such rather than
+      # surfacing as an opaque vite failure.
+      - run: npx tsc --noEmit
+
+      - run: npm run build
+
+  # gateway-ui-2 is frozen and not deployed (see gateway-ui-2/STATUS.md), so it is
+  # deliberately NOT built here. Adding it to CI would imply it ships.
+
+  docker:
+    name: Images build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate compose file parses and resolves
+        run: |
+          # Catches the class of defect that shipped before: docker-compose.yml was
+          # not even valid YAML, and the required `:?` variables were unquoted.
+          cp .env.example .env
+          docker compose config --quiet
+          echo "docker-compose.yml parses and all required variables resolve"
+
+      - name: Validate k8s manifests parse
+        run: |
+          for f in k8s/*.yaml; do
+            python3 -c "import yaml,sys; list(yaml.safe_load_all(open(sys.argv[1])))" "$f" \
+              || { echo "invalid YAML: $f" >&2; exit 1; }
+          done
+          echo "all k8s manifests parse"
+
+      - name: Build gateway-admin image
+        run: docker build -f gateway-admin/Dockerfile -t gateway-admin:ci .
+
+      - name: Build gateway-ui image
+        run: docker build -f gateway-ui/Dockerfile -t gateway-ui:ci gateway-ui
+
+      # my-gateway/Dockerfile is runtime-only (it COPYs a pre-built jar), so the
+      # jar has to exist first.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Package my-gateway jar
+        run: mvn -B -ntp -pl my-gateway -am package -DskipTests
+      - name: Build my-gateway image
+        run: docker build -f my-gateway/Dockerfile -t my-gateway:ci my-gateway
