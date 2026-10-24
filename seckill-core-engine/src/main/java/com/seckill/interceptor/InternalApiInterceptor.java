@@ -66,7 +66,7 @@ public class InternalApiInterceptor implements HandlerInterceptor {
         }
 
         // 获取调用方 IP
-        String clientIp = getClientIp(request);
+        String clientIp = getClientIp(request, config);
         log.debug("@InternalApi 接口访问: uri={}, clientIp={}, description={}",
                 request.getRequestURI(), clientIp, annotation.description());
 
@@ -95,30 +95,36 @@ public class InternalApiInterceptor implements HandlerInterceptor {
 
     /**
      * 获取客户端真实 IP
-     * 支持 Nginx/网关代理场景：优先取 X-Forwarded-For 或 X-Real-IP
+     * <p>
+     * 转发头由客户端自己发送，无条件信任会让白名单形同虚设：任何调用方只要带上
+     * {@code X-Forwarded-For: 127.0.0.1} 就能命中 LOCAL_IPS 而通过校验，而这是这些
+     * 接口唯一的访问控制。因此默认只用 TCP 对端地址，仅当
+     * {@code seckill.internal-api.trust-proxy-headers=true}（即确实部署在会覆写这些头的
+     * 可信代理之后）时才解析转发头。
      */
-    private String getClientIp(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
-            // X-Forwarded-For 可能包含多个 IP，取第一个
-            int index = ip.indexOf(',');
-            if (index != -1) {
-                return ip.substring(0, index).trim();
+    private String getClientIp(HttpServletRequest request, SeckillConfig.InternalApiConfig config) {
+        if (config.isTrustProxyHeaders()) {
+            String ip = request.getHeader("X-Forwarded-For");
+            if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
+                // X-Forwarded-For 可能包含多个 IP，取第一个
+                int index = ip.indexOf(',');
+                if (index != -1) {
+                    return ip.substring(0, index).trim();
+                }
+                return ip.trim();
             }
-            return ip.trim();
+
+            ip = request.getHeader("X-Real-IP");
+            if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
+                return ip.trim();
+            }
+
+            ip = request.getHeader("Proxy-Client-IP");
+            if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
+                return ip.trim();
+            }
         }
 
-        ip = request.getHeader("X-Real-IP");
-        if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
-            return ip.trim();
-        }
-
-        ip = request.getHeader("Proxy-Client-IP");
-        if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
-            return ip.trim();
-        }
-
-        // 最后 fallback 到 RemoteAddr
         return request.getRemoteAddr();
     }
 

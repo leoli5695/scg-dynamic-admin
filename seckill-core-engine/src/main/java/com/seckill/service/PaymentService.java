@@ -79,9 +79,9 @@ public class PaymentService {
         log.info("收到支付回调: orderNo={}, transactionId={}, status={}, traceId={}",
                 orderNo, request.getTransactionId(), request.getPaymentStatus(), traceId);
 
-        // Step 1: 验证签名（简化实现，生产环境需对接支付平台SDK）
+        // Step 1: 校验必填字段（不是验签，见 verifySignature 的说明；访问控制靠 @InternalApi）
         if (!verifySignature(request)) {
-            log.warn("签名验证失败: orderNo={}, traceId={}", orderNo, traceId);
+            log.warn("回调必填字段校验失败: orderNo={}, traceId={}", orderNo, traceId);
             return PaymentCallbackResponse.fail("签名验证失败");
         }
 
@@ -267,15 +267,18 @@ public class PaymentService {
 
     /**
      * ============================================================================
-     * 验证签名（简化实现）
+     * 校验回调必填字段（注意：这不是验签，不构成身份认证）
      * ============================================================================
      * <p>
-     * 生产环境需要对接支付平台SDK进行验签
-     * 这里简化为校验必要字段不为空
+     * 只检查必填字段非空，<b>完全没有验证 {@code request.getSign()}</b>：项目内没有任何
+     * 一方生成 sign，也没有对接支付平台 SDK，因此自造一套 HMAC 只会给出虚假的安全感，
+     * 且无法与真实平台互通。
+     * <p>
+     * 在接入真实支付平台 SDK 之前，本接口的访问控制由 {@code PaymentController#handleCallback}
+     * 上的 {@code @InternalApi} IP 白名单承担，生产环境必须开启
+     * {@code seckill.internal-api.enabled=true}，否则任何人都能把任意订单标记为已支付。
      */
     private boolean verifySignature(PaymentCallbackRequest request) {
-        // 简化实现：生产环境需要使用支付平台SDK验签
-        // 例如：支付宝SDK、微信支付SDK
         if (request.getOrderNo() == null || request.getOrderNo().isEmpty()) {
             return false;
         }

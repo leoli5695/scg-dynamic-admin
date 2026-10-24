@@ -82,6 +82,15 @@ public class SeckillConfig {
          * - 多个：127.0.0.1,10.0.0.0/8,192.168.0.0/16
          */
         private String whitelist = "127.0.0.1,10.0.0.0/8,192.168.0.0/16";
+
+        /**
+         * 是否信任 X-Forwarded-For / X-Real-IP 头来解析调用方 IP
+         * <p>
+         * 默认 false：这些头由客户端自行发送，无条件信任等于白名单形同虚设
+         * （任何人带上 {@code X-Forwarded-For: 127.0.0.1} 即可通过校验）。
+         * 只有当本服务确实部署在会覆写这些头的可信反向代理之后时才可开启。
+         */
+        private boolean trustProxyHeaders = false;
     }
 
     /**

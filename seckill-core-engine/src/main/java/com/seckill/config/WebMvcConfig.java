@@ -25,10 +25,11 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        // 注册内部 API 拦截器
-        // 拦截所有路径，由注解决定是否校验
+        // 拦截所有路径：是否校验由方法上的 @InternalApi 注解决定（无注解立即放行）。
+        // 之前这里是显式路径列表，任何新增的 @InternalApi 接口只要忘记加进列表就完全
+        // 不受保护 —— /payment/callback 就是这样漏掉的，与注解本身的语义相悖。
         registry.addInterceptor(new InternalApiInterceptor(seckillConfig, environment))
-                .addPathPatterns("/warmup/**", "/admin/**", "/internal/**")
+                .addPathPatterns("/**")
                 .order(1);  // 优先级最高
 
         WebMvcConfigurer.super.addInterceptors(registry);

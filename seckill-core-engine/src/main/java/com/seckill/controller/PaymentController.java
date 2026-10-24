@@ -1,5 +1,6 @@
 package com.seckill.controller;
 
+import com.seckill.annotation.InternalApi;
 import com.seckill.dto.OrderQueryRequest;
 import com.seckill.dto.OrderQueryResponse;
 import com.seckill.dto.PaymentCallbackRequest;
@@ -24,7 +25,10 @@ import org.springframework.web.bind.annotation.*;
  * 2. GET /payment/query - 查询支付状态
  * <p>
  * 安全注意事项:
- * 1. 支付回调接口需要验签
+ * 1. 支付回调接口需要验签 —— 目前 PaymentService#verifySignature 只做必填字段校验，
+ *    并未验证 sign（项目内没有任何一方生成 sign，也没有对接支付平台 SDK）。在接入真实
+ *    支付平台之前，该接口的访问控制依赖 @InternalApi 的 IP 白名单，生产环境必须开启
+ *    seckill.internal-api.enabled=true。
  * 2. 必须处理幂等性（支付平台可能重复回调）
  * 3. 必须校验金额一致性
  * <p>
@@ -60,6 +64,7 @@ public class PaymentController {
      * @param httpRequest HTTP请求（获取traceId）
      * @return 处理结果
      */
+    @InternalApi(description = "支付回调（验签尚未接入，依赖 IP 白名单）")
     @PostMapping("/callback")
     public PaymentCallbackResponse handleCallback(
             @Valid @RequestBody PaymentCallbackRequest request,
