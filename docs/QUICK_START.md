@@ -8,11 +8,11 @@
 
 | Tool | Version | Required |
 |------|---------|----------|
-| Java | 17+ | Yes |
+| Java | 21+ | Yes |
 | Maven | 3.8+ | Yes |
 | Node.js | 18+ | Yes (for UI) |
-| MySQL | 8.0+ | Optional (H2 embedded available) |
-| Nacos | 2.4.3+ | Yes |
+| MySQL | 8.0+ | **Yes** - gateway-admin has no H2 dependency, there is no embedded fallback |
+| Nacos | 2.3.0+ | Yes |
 | Redis | 6.0+ | Optional (for distributed rate limiting) |
 
 ---
@@ -26,7 +26,7 @@
 docker run -d --name nacos \
   -p 8848:8848 \
   -e MODE=standalone \
-  nacos/nacos-server:v2.4.3
+  nacos/nacos-server:v2.3.0
 
 # Start Redis (optional)
 docker run -d --name redis \
@@ -120,22 +120,37 @@ Open Nacos Console: http://localhost:8848/nacos (nacos/nacos)
 
 ### gateway-admin/src/main/resources/application.yml
 
+The committed file already reads MySQL settings from the environment; you normally only need to
+export the variables rather than edit it. There is **no** H2 profile - an earlier revision of this
+document described one, but `gateway-admin/pom.xml` has never declared an H2 dependency, so
+`driver-class-name: org.h2.Driver` fails at startup with "Cannot load driver class".
+
 ```yaml
 server:
   port: 9090
 
 spring:
   datasource:
-    url: jdbc:h2:file:./data/gateway_db
-    driver-class-name: org.h2.Driver
-    username: sa
-    password: 
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/gateway_admin?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USERNAME}   # no default - startup fails if unset
+    password: ${MYSQL_PASSWORD}   # no default - startup fails if unset
   jpa:
     hibernate:
-      ddl-auto: update
-  h2:
-    console:
-      enabled: true
+      ddl-auto: update            # application-prod.yml overrides this to `validate`
+```
+
+Equivalent environment variables:
+
+```bash
+export MYSQL_HOST=127.0.0.1
+export MYSQL_PORT=3306
+export MYSQL_USERNAME=gateway_user
+export MYSQL_PASSWORD=your_password
+```
+
+> The database name is hardcoded as `gateway_admin` in the JDBC URL - there is no `DB_NAME`
+> variable. Create it first: `CREATE DATABASE gateway_admin CHARACTER SET utf8mb4;`
 
 nacos:
   server-addr: 127.0.0.1:8848
@@ -203,9 +218,14 @@ npm run dev
 
 Open: http://localhost:3000
 
-**Default Login:**
-- Username: `admin`
-- Password: `admin123`
+**Login:**
+
+Use the `ADMIN_USERNAME` / `ADMIN_PASSWORD` environment variables you set before starting the
+backend. There is no built-in `admin` / `admin123` account - `AuthService` creates the initial
+administrator only when both variables are present, requires at least 12 characters for the
+password, and there is no self-service registration. If you started the backend without them,
+check the log for a warning about skipping initial-admin creation; the only recovery is to set
+them and restart (or insert the user directly, with a BCrypt hash).
 
 ---
 
@@ -343,22 +363,30 @@ logging:
     com.leoli.gateway: DEBUG
 ```
 
-### Access H2 Console
+### Inspecting the database
 
-When using embedded H2:
+gateway-admin uses MySQL only. Connect with any client:
 
-- URL: http://localhost:9090/h2-console
-- JDBC URL: `jdbc:h2:file:./data/gateway_db`
-- User: `sa`
-- Password: (empty)
+```bash
+mysql -h 127.0.0.1 -P 3306 -u "$MYSQL_USERNAME" -p gateway_admin
+```
+
+The schema is created by Hibernate (`ddl-auto: update` by default, `validate` under the `prod`
+profile). There is no Flyway or Liquibase in this project yet, so `validate` against an empty
+database will fail - either let Hibernate create the schema first or restore a dump.
+
+> An earlier revision of this document described an H2 console at
+> `http://localhost:9090/h2-console`. That never worked: gateway-admin has no H2 dependency and
+> does not enable an H2 console.
 
 ---
 
 ## Production Checklist
 
-- [ ] Change default admin password
+- [ ] Set `ADMIN_USERNAME` / `ADMIN_PASSWORD` to real values (there is no default account)
 - [ ] Enable HTTPS on gateway
-- [ ] Configure MySQL instead of H2
+- [ ] Switch `ddl-auto` to `validate` (the `prod` profile already does) and back the schema with a
+      dump, since there is no migration tool
 - [ ] Set up Redis for distributed rate limiting
 - [ ] Configure alert thresholds
 - [ ] Enable request tracing

@@ -1,7 +1,6 @@
 package com.leoli.gateway.trace.properties;
 
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -112,39 +111,55 @@ class GatewayTracePropertiesTest {
         assertFalse(properties.shouldSample());
     }
 
-    @RepeatedTest(100)
+    /**
+     * Sampling-rate tests.
+     *
+     * <p>These used to be three {@code @RepeatedTest(100)} methods whose only assertion was
+     * {@code assertNotNull(sampled)} on a primitive {@code boolean} - which autoboxes to a non-null
+     * {@code Boolean} every single time, so the assertion could never fail. That contributed 300
+     * executions (18% of the project's advertised "1674 tests") while verifying nothing at all.
+     *
+     * <p>One run of {@value #SAMPLE_TRIALS} trials with a ±{@value #TOLERANCE} band is both cheaper
+     * and strictly stronger: the standard deviation of the observed rate at n=20000 is about 0.0035,
+     * so the band is roughly 8 sigma and will not flake, while an inverted comparison
+     * ({@code nextDouble() > sampleRate}) or a percent/scale mistake fails immediately.
+     */
+    private static final int SAMPLE_TRIALS = 20_000;
+    private static final double TOLERANCE = 0.03;
+
+    private void assertObservedRate(double configuredRate) {
+        GatewayTraceProperties properties = new GatewayTraceProperties();
+        properties.setSampleRate(configuredRate);
+
+        int sampled = 0;
+        for (int i = 0; i < SAMPLE_TRIALS; i++) {
+            if (properties.shouldSample()) {
+                sampled++;
+            }
+        }
+        double observed = (double) sampled / SAMPLE_TRIALS;
+
+        assertTrue(Math.abs(observed - configuredRate) <= TOLERANCE,
+                "sampleRate=" + configuredRate + " produced observed rate " + observed
+                        + " over " + SAMPLE_TRIALS + " trials, outside ±" + TOLERANCE);
+    }
+
+    @Test
     @DisplayName("采样率 = 0.5 (50%采样)")
     void testShouldSample_WhenRateIs0_5() {
-        GatewayTraceProperties properties = new GatewayTraceProperties();
-        properties.setSampleRate(0.5);
-
-        boolean sampled = properties.shouldSample();
-
-        // 无法确定单次结果，但概率应该在50%左右
-        // 这里只验证不会抛出异常
-        assertNotNull(sampled);
+        assertObservedRate(0.5);
     }
 
-    @RepeatedTest(100)
+    @Test
     @DisplayName("采样率 = 0.1 (10%采样)")
     void testShouldSample_WhenRateIs0_1() {
-        GatewayTraceProperties properties = new GatewayTraceProperties();
-        properties.setSampleRate(0.1);
-
-        boolean sampled = properties.shouldSample();
-
-        assertNotNull(sampled);
+        assertObservedRate(0.1);
     }
 
-    @RepeatedTest(100)
+    @Test
     @DisplayName("采样率 = 0.9 (90%采样)")
     void testShouldSample_WhenRateIs0_9() {
-        GatewayTraceProperties properties = new GatewayTraceProperties();
-        properties.setSampleRate(0.9);
-
-        boolean sampled = properties.shouldSample();
-
-        assertNotNull(sampled);
+        assertObservedRate(0.9);
     }
 
     // ==================== 开关配置测试 ====================

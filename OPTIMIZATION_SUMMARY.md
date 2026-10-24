@@ -77,8 +77,8 @@
 #### 后端Dockerfile
 ```dockerfile
 多阶段构建:
-- Build: Maven 3.9 + JDK 17
-- Runtime: Eclipse Temurin 17 JRE Alpine
+- Build: Maven 3.9 + JDK 21
+- Runtime: Eclipse Temurin 21 JRE Alpine
 - 安全: 非root用户运行
 - 健康检查: /actuator/health
 ```

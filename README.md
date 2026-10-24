@@ -6,12 +6,12 @@
 
 **📸 [View Feature Screenshots](docs/images/SCREENSHOTS.md)** - If you prefer screenshots over video demo, browse 66 annotated screenshots covering all features.
 
-[![Java](https://img.shields.io/badge/Java-17+-orange)](https://openjdk.org/)
+[![Java](https://img.shields.io/badge/Java-21-orange)](https://openjdk.org/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2-brightgreen)](https://spring.io/projects/spring-boot)
 [![Spring Cloud Gateway](https://img.shields.io/badge/Spring%20Cloud%20Gateway-4.1-blue)](https://spring.io/projects/spring-cloud-gateway)
 [![React](https://img.shields.io/badge/React-19-blue)](https://react.dev/)
-[![Tests](https://img.shields.io/badge/Tests-1674%20Tests-yellow)]()
-[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+[![Tests](https://img.shields.io/badge/Tests-see%20Test%20Status-yellow)]()
+[![License](https://img.shields.io/badge/License-All__Rights__Reserved-lightgrey)](LICENSE)
 
 ---
 
@@ -416,10 +416,10 @@ alerts:
 
 ### Prerequisites
 
-- Java 17+
+- Java 21+ (`pom.xml` sets `java.version=21` for every module; the images are `eclipse-temurin:21`)
 - Node.js 18+
-- MySQL 8.0+ (or use embedded H2)
-- Nacos 2.4.3+ (or Consul)
+- MySQL 8.0+
+- Nacos 2.3.0 (the version `docker-compose.yml` and `k8s/nacos.yaml` pin) or Consul
 - Redis (optional, for distributed rate limiting)
 - Kubernetes (optional, for instance deployment)
 
@@ -427,12 +427,12 @@ alerts:
 
 ```bash
 # Start Nacos (standalone mode)
-docker run -d --name nacos -p 8848:8848 -e MODE=standalone nacos/nacos-server:v2.4.3
+docker run -d --name nacos -p 8848:8848 -e MODE=standalone nacos/nacos-server:v2.3.0
 
 # Start Redis (optional)
 docker run -d --name redis -p 6379:6379 redis:7
 
-# Start MySQL (or use embedded H2 for dev)
+# Start MySQL
 docker run -d --name mysql -p 3306:3306 -e MYSQL_ROOT_PASSWORD=root mysql:8
 ```
 
@@ -464,7 +464,10 @@ npm run dev
 
 Open http://localhost:3000 in your browser.
 
-Default credentials: `admin` / `admin123`
+Login with the `ADMIN_USERNAME` / `ADMIN_PASSWORD` you set in `.env`. There is **no** built-in
+`admin` / `admin123` account: `AuthService` creates the initial administrator only when both
+environment variables are present, the password must be at least 12 characters, and there is no
+self-service registration - so if they are missing the console has no user at all.
 
 ---
 
@@ -474,11 +477,11 @@ Default credentials: `admin` / `admin123`
 |-------|------------|
 | **Gateway Core** | Spring Cloud Gateway 4.1, Project Reactor |
 | **Framework** | Spring Boot 3.2, Spring Security |
-| **Config Center** | Nacos 2.4.3 / Consul (SPI switchable) |
+| **Config Center** | Nacos 2.3.0 / Consul (SPI switchable) |
 | **Circuit Breaker** | Resilience4j 2.1 |
 | **Rate Limiting** | Redis + Caffeine (hybrid) |
 | **Authentication** | JJWT 0.12 |
-| **Database** | MySQL / H2, Spring Data JPA |
+| **Database** | MySQL 8, Spring Data JPA |
 | **Monitoring** | Prometheus, Micrometer |
 | **Frontend** | React 19, TypeScript, Ant Design 6, Vite |
 | **Container** | Docker, Kubernetes |
@@ -491,14 +494,20 @@ Counts below come from `mvn test` on 2026-10-11 (JDK 21). The seckill-core-engin
 
 | Module | Tests | Status |
 |--------|-------|--------|
-| **my-gateway** | 550 | ✅ All passing |
-| **gateway-admin** | 440 (+8 skipped) | ✅ All passing |
+| **my-gateway** | 556 | ✅ All passing |
+| **gateway-admin** | 440 (+8 skipped) | ⚠️ 58 of 70 classes green locally; the other 12 are `@SpringBootTest` integration tests that need a reachable MySQL - without one they all fail at context load with `Communications link failure` |
 | **gateway-trace-starter** | 444 | ✅ All passing |
-| **license-client** | 82 | ✅ All passing |
-| **license-server** | 37 | ✅ All passing |
-| **seckill-core-engine** | 121 | ⚠️ 8 failures + 17 errors (pre-existing) |
+| **license-client** | 83 | ✅ All passing |
+| **license-server** | 40 | ✅ All passing |
+| **seckill-core-engine** | 121 | ⚠️ 8 failures + 17 errors (pre-existing: `SeckillStockConcurrencyTest` expects a bare Redis on `localhost:30379`, so it only passes against the k3s NodePort) |
 | **gateway-ui** | 0 | ❌ No frontend tests yet |
-| **Total (JVM)** | **1674** | ⚠️ **5 of 6 tested modules green** |
+| **Total (JVM)** | **~1700** | ⚠️ **Not reproducible on a clean machine** - there is no CI, and two modules need external MySQL/Redis |
+
+Counts for my-gateway, license-client and license-server were measured on JDK 21 on 2026-10-24.
+The old badge claimed an exact "1674 Tests"; that figure was padded by three `@RepeatedTest(100)`
+methods in `GatewayTracePropertiesTest` whose only assertion was `assertNotNull` on a primitive
+`boolean` - 300 executions, i.e. 18% of the total, that could never fail. They now assert the
+observed sampling rate instead of running the same tautology a hundred times.
 
 Run tests:
 ```bash
@@ -745,11 +754,21 @@ A **high-concurrency seckill (flash sale) service** showcasing:
 │       ├── reconcile/          # Config reconciliation tasks
 │       └── cache/              # Instance namespace cache
 │
-├── gateway-ui/                 # Web dashboard frontend
+├── gateway-ui/                 # Web dashboard frontend (React 19 + Vite)
 │   └── src/
-│       ├── pages/              # React page components
-│       ├── components/         # Reusable UI components
-│       └── i18n.ts             # Internationalization (EN/CN)
+│       ├── features/           # Feature-sliced pages and components (auth, instances,
+│       │                       #   routes, services, strategies, trace, copilot, ...)
+│       ├── api/                # HTTP client and per-domain API modules
+│       ├── components/         # Cross-feature reusable components
+│       ├── hooks/              # useRequest / usePolling (abort + monotonic seq race guard)
+│       ├── types/              # Hand-written mirrors of the backend DTOs
+│       ├── locales/            # EN / CN translation namespaces
+│       ├── styles/             # Global styles
+│       ├── utils/              # logger, formatters, access-log escaping
+│       ├── i18n.ts             # Internationalization (EN/CN)
+│       └── theme.ts            # Ant Design theme tokens
+│
+├── gateway-ui-2/               # Vue 3 exploration branch - NOT deployed, see its STATUS.md
 │
 ├── docs/                       # Documentation
 │   ├── features/               # Feature-specific documentation
@@ -780,7 +799,19 @@ A **high-concurrency seckill (flash sale) service** showcasing:
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+**Proprietary - All Rights Reserved.** See [LICENSE](LICENSE) for the full terms.
+
+You may use, copy and modify this software for personal learning, non-commercial research and
+development, and evaluation/testing. You may **not** redistribute, sublicense or sell it, and you
+may **not** deploy it in production without a valid license agreement.
+
+The `license-server` / `license-client` modules enforce the edition and quota tiers. Note that a
+gateway started without a reachable license server runs on the BASIC fallback edition (1 instance,
+10 routes, 5 services, 100 QPS), and `LICENSE_ENABLED=false` does **not** unlock features - the
+admin console consults the gatekeeper unconditionally, so ENTERPRISE-only surfaces such as audit
+export stay blocked either way.
+
+For licensing inquiries: https://github.com/leoli5695
 
 ---
 
