@@ -89,11 +89,17 @@ public class PaymentController {
      * ============================================================================
      * <p>
      * 【P2-18修复】实现支付状态查询功能
-     * 用户或前端查询订单支付状态
+     * <p>
+     * 只按 orderNo 查询，<b>没有归属校验</b>：拿到任意订单号就能读到它的支付状态。
+     * 本服务里也不存在可信的调用方身份可用 —— 网关注入的 {@code X-User-Id} 恰恰是
+     * 客户端可控的（{@code HybridRateLimiterFilter} 已因此不再信任它），所以无法在这里
+     * 比对订单所属用户。因此本接口按内部/运维接口对待，交给 @InternalApi 的 IP 白名单
+     * 保护，不要直接暴露给终端用户。仓库内目前没有任何调用方。
      *
      * @param orderNo 订单号
      * @return 支付状态响应
      */
+    @InternalApi(description = "查询支付状态（无归属校验，仅限内部调用）")
     @GetMapping("/query")
     public PaymentQueryResponse queryPaymentStatus(@RequestParam String orderNo) {
         log.info("查询支付状态: orderNo={}", orderNo);
