@@ -76,16 +76,15 @@ export const PodDetailModal: React.FC<PodDetailModalProps> = ({ clusterId, pod, 
         pod.name,
         logSinceSeconds > 0 ? { sinceSeconds: logSinceSeconds } : { tailLines: logTailLines },
       );
-      const newLogs = data || 'No logs available';
-      if (logMode === 'realtime' && logAutoRefresh) {
-        setLogs(prev => `${prev}\n${newLogs}`);
-      } else {
-        setLogs(newLogs);
-      }
+      // The endpoint returns a snapshot of the last tailLines/sinceSeconds, not a
+      // continuation, so each poll re-delivers most of the previous window.
+      // Appending accumulated those duplicates without bound - and with no
+      // auto-scroll the genuinely new lines stayed below the fold anyway.
+      setLogs(data || 'No logs available');
     } catch {
       // Keep the previous logs on transient failures.
     }
-  }, [clusterId, pod, logTailLines, logSinceSeconds, logMode, logAutoRefresh]);
+  }, [clusterId, pod, logTailLines, logSinceSeconds]);
 
   // Auto refresh timer (realtime mode only), with guaranteed cleanup.
   useEffect(() => {
