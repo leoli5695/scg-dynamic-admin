@@ -1,26 +1,62 @@
-version: '3.8'
+# =============================================================================
+# API Gateway Management Platform - local / single-host deployment
+#
+# REQUIRED: copy .env.example to .env and fill in every value before `up`.
+#   cp .env.example .env
+# Compose aborts on any variable marked `:?` rather than silently starting with
+# a weak default, so a missing secret fails loudly at parse time.
+#
+# NOTE on quoting: values below are single-quoted on purpose. The `:?` error
+# messages contain "Generate with: openssl ..." and an unquoted YAML plain
+# scalar cannot contain ": " - the file previously failed to parse at all.
+#
+# Services here are the CONTROL PLANE plus its two datastores. The data plane
+# (my-gateway), Redis, license-server and Prometheus are not wired up yet - see
+# DEPLOYMENT.md. Memory limits are set explicitly: the JVM images size their heap
+# from the container limit, and without one they size it from the HOST, which is
+# how a single compose stack used to be able to OOM the machine.
+# =============================================================================
 
 services:
   # MySQL Database
   mysql:
     image: mysql:8.0
     container_name: gateway-mysql
+    restart: unless-stopped
+    mem_limit: 768m
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-rootpassword}
+      MYSQL_ROOT_PASSWORD: '${MYSQL_ROOT_PASSWORD:?MySQL root password is required. Generate with `openssl rand -base64 32`}'
       MYSQL_DATABASE: gateway_admin
-      MYSQL_USER: gateway_user
-      MYSQL_PASSWORD: ${DB_PASSWORD:-gateway_password}
+      MYSQL_USER: '${MYSQL_USERNAME:?MySQL application user is required}'
+      MYSQL_PASSWORD: '${MYSQL_PASSWORD:?MySQL application password is required. Generate with `openssl rand -base64 32`}'
+    # FIX: the two bind mounts that used to sit here pointed at
+    # gateway-admin/src/main/resources/{schema,data}.sql - neither file exists in
+    # the repo. Docker creates an empty DIRECTORY for a missing bind source, so
+    # the MySQL entrypoint choked on /docker-entrypoint-initdb.d/1-schema.sql and
+    # the database was never usable.
+    #
+    # The schema is created by Hibernate instead (see SPRING_JPA_HIBERNATE_DDL_AUTO
+    # on the backend). application-prod.yml pins ddl-auto=validate, which assumes a
+    # pre-existing schema, and this project has no migration tool yet - so the
+    # override below is what makes a first boot work. Remove it once Flyway lands.
+    command:
+      - --innodb-buffer-pool-size=128M
+      - --performance-schema=OFF
     ports:
-      - "3306:3306"
+      # Bound to loopback: publishing 3306 on all interfaces handed the database
+      # to anyone who could route to this host.
+      - "127.0.0.1:3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./gateway-admin/src/main/resources/schema.sql:/docker-entrypoint-initdb.d/1-schema.sql:ro
-      - ./gateway-admin/src/main/resources/data.sql:/docker-entrypoint-initdb.d/2-data.sql:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      # FIX: the old check ran `mysqladmin ping` with no credentials, which also
+      # succeeds while the server is still initialising, so the backend was
+      # started against a database that was not ready.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 30s
     networks:
       - gateway-network
 
@@ -28,59 +64,111 @@ services:
   nacos:
     image: nacos/nacos-server:v2.3.0
     container_name: gateway-nacos
+    restart: unless-stopped
+    mem_limit: 1024m
     environment:
       MODE: standalone
       SPRING_DATASOURCE_PLATFORM: embedded
       JVM_XMS: 512m
       JVM_XMX: 512m
+      # Nacos ships with auth DISABLED, and every route/service/plugin config for
+      # the gateway lives here - an open 8848 lets anyone who can reach this host
+      # rewrite the gateway's routing table. The mitigation used here is the
+      # loopback port binding below, NOT Nacos auth: NacosConfigCenterService
+      # builds its ConfigService without setUsername/setPassword and
+      # GatewayAdminProperties has no nacos credential fields, so turning on
+      # NACOS_AUTH_ENABLE would lock the admin out of its own config centre.
+      # Enabling Nacos auth requires client credential support in the code first.
     ports:
-      - "8848:8848"
-      - "9848:9848"
+      # Loopback only - the admin backend reaches Nacos over the compose network.
+      - "127.0.0.1:8848:8848"
+      - "127.0.0.1:9848:9848"
     volumes:
       - nacos_data:/home/nacos/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 40s
     networks:
       - gateway-network
 
-  # Backend Service
+  # Backend Service (gateway-admin control plane)
   backend:
     build:
-      context: ./gateway-admin
-      dockerfile: Dockerfile
+      # FIX: the context used to be ./gateway-admin, but gateway-admin inherits
+      # gateway-parent (../pom.xml) and depends on the internal, unpublished
+      # com.leoli:license-client module. With the parent outside the context,
+      # `mvn dependency:go-offline` died with "Non-resolvable parent POM" and the
+      # image could never be built. Context is now the repo root.
+      context: .
+      dockerfile: gateway-admin/Dockerfile
     container_name: gateway-backend
+    restart: unless-stopped
+    mem_limit: 1536m
     environment:
-      # Database Configuration
-      DB_HOST: mysql
-      DB_PORT: 3306
-      DB_NAME: gateway_admin
-      DB_USERNAME: gateway_user
-      DB_PASSWORD: ${DB_PASSWORD:-gateway_password}
-      
+      # FIX (deploy blocker): these were named DB_HOST/DB_PORT/DB_NAME/DB_USERNAME/
+      # DB_PASSWORD, but application.yml reads MYSQL_HOST/MYSQL_PORT and - with no
+      # default - MYSQL_USERNAME/MYSQL_PASSWORD. The container exited immediately
+      # with "Could not resolve placeholder 'MYSQL_USERNAME'". DB_NAME was dead:
+      # the database name is hardcoded in the JDBC URL.
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USERNAME: '${MYSQL_USERNAME:?MySQL application user is required}'
+      MYSQL_PASSWORD: '${MYSQL_PASSWORD:?MySQL application password is required}'
+
       # JWT Configuration (REQUIRED - generate a strong secret)
-      GATEWAY_ADMIN_JWT_SECRET: ${GATEWAY_ADMIN_JWT_SECRET:?JWT secret is required. Generate with: openssl rand -base64 64}
+      GATEWAY_ADMIN_JWT_SECRET: '${GATEWAY_ADMIN_JWT_SECRET:?JWT secret is required. Generate with `openssl rand -base64 64`}'
 
       # Encryption key for AI API keys / SSL keystore passwords (REQUIRED, min 16 chars)
-      GATEWAY_ENCRYPTION_KEY: ${GATEWAY_ENCRYPTION_KEY:?Encryption key is required. Generate with: openssl rand -base64 32}
+      GATEWAY_ENCRYPTION_KEY: '${GATEWAY_ENCRYPTION_KEY:?Encryption key is required. Generate with `openssl rand -base64 32`}'
 
       # Shared secret for gateway instance internal report endpoints (heartbeat/traces/health sync).
       # REQUIRED - startup fails when empty. Must match gateway.admin.internal-token on gateway instances.
-      GATEWAY_INTERNAL_TOKEN: ${GATEWAY_INTERNAL_TOKEN:?Internal token is required. Generate with: openssl rand -base64 32}
-      
+      GATEWAY_INTERNAL_TOKEN: '${GATEWAY_INTERNAL_TOKEN:?Internal token is required. Generate with `openssl rand -base64 32`}'
+
+      # FIX (deploy blocker): AuthService only creates the initial administrator
+      # when BOTH of these are present; otherwise it logs a warning and returns.
+      # There is no self-service registration, so without them the console has no
+      # user at all and nothing can log in. DEPLOYMENT.md used to promise a
+      # default admin/admin123 that does not exist anywhere in the code (and 8
+      # characters would not pass the 12-character minimum anyway).
+      ADMIN_USERNAME: '${ADMIN_USERNAME:?Initial admin username is required}'
+      ADMIN_PASSWORD: '${ADMIN_PASSWORD:?Initial admin password is required (minimum 12 characters)}'
+
       # Nacos Configuration
       NACOS_SERVER_ADDR: nacos:8848
 
       # Spring Profiles
       SPRING_PROFILES_ACTIVE: prod
 
+      # See the mysql service comment: prod pins ddl-auto=validate and there is no
+      # migration tool, so a first boot needs Hibernate to create the schema.
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+
+      # license-server is not part of this stack. Its absence is worth being
+      # explicit about, because the outcome is the same either way and it is easy
+      # to misread:
+      #   enabled=true  -> admin dials http://localhost:8090 (itself), fails,
+      #                    then loads the fallback edition
+      #   enabled=false -> LicenseStore.initialize() loads the fallback edition
+      #                    directly, without dialling anything
+      # The fallback edition is BASIC (1 instance / 10 routes / 5 services /
+      # 100 QPS) unless LICENSE_FALLBACK_EDITION says otherwise, and the admin's
+      # LicenseFeatureHelper consults the gatekeeper unconditionally - it has no
+      # `enabled` short-circuit - so ENTERPRISE-only console features such as
+      # audit export stay blocked. Setting this to false only avoids pointless
+      # connection attempts and log noise; it does NOT unlock features.
+      # To actually run licensed, add license-server to this stack and set
+      # LICENSE_ENABLED=true plus LICENSE_SERVER_URL / LICENSE_CODE.
+      LICENSE_ENABLED: "false"
+
       # FIX (compose port mismatch): application.yml defaults to 9090, but the
       # Dockerfile EXPOSE/healthcheck and the port mapping below all use 8080.
       # Without this the app listens on 9090 and the container is permanently
       # unhealthy. Pin the listen port to the mapped/checked 8080.
-      SERVER_PORT: 8080
+      SERVER_PORT: "8080"
     ports:
       - "8080:8080"
     depends_on:
@@ -93,7 +181,7 @@ services:
       interval: 30s
       timeout: 3s
       retries: 3
-      start_period: 60s
+      start_period: 90s
     networks:
       - gateway-network
 
@@ -103,10 +191,16 @@ services:
       context: ./gateway-ui
       dockerfile: Dockerfile
     container_name: gateway-frontend
+    restart: unless-stopped
+    mem_limit: 64m
     ports:
       - "80:80"
     depends_on:
-      - backend
+      # FIX: gateway-ui/nginx.conf resolves `proxy_pass http://backend:8080` at
+      # startup, so nginx exits with "host not found in upstream" if the backend
+      # is not up yet. A bare depends_on list does not wait.
+      backend:
+        condition: service_healthy
     networks:
       - gateway-network
 

@@ -44,11 +44,17 @@ RUN chown -R gateway:gateway /app
 # Switch to non-root user
 USER gateway
 
-# Expose port
+# Expose port. application.yml defaults SERVER_PORT to 80, but this image runs as the
+# non-root `gateway` user and cannot bind a privileged port without CAP_NET_BIND_SERVICE,
+# so pin an unprivileged default here. Override SERVER_PORT to change it.
+ENV SERVER_PORT=8080
 EXPOSE 8080
 
-# JVM options for container environment
-ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+# JVM options for container environment.
+# FIX: this used to set both -Xmx512m and -XX:MaxRAMPercentage=75.0. An explicit -Xmx wins
+# outright, so the percentage was dead text and the heap ignored the container limit - the
+# worst of both. Keep only the container-aware setting.
+ENV JAVA_OPTS="-Xms256m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD curl -f http://localhost:8080/actuator/health || exit 1

@@ -1,0 +1,38 @@
+# Build context is the repository root (see gateway-admin/Dockerfile), so this
+# file - not the per-module .dockerignore - is what applies.
+#
+# Everything here is excluded to keep the context small and to make sure no
+# local build output or secret can be baked into an image. Module POMs and
+# src/ trees are deliberately NOT excluded: the reactor needs all seven module
+# POMs present to parse the aggregator, even when building a single module.
+
+# Build outputs
+**/target/
+**/node_modules/
+**/dist/
+**/build/
+**/.vite/
+
+# VCS / IDE
+.git/
+.gitignore
+.gitmodules
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# Local env files must never reach an image
+.env
+.env.local
+**/.env
+**/.env.local
+
+# Docs and screenshots (not needed to compile)
+docs/
+*.md
+*.png
+
+# Frontend that is not part of this image
+gateway-ui/
+gateway-ui-2/
