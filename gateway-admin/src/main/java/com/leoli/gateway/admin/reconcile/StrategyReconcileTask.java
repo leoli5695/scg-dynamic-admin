@@ -13,10 +13,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -27,6 +25,11 @@ import java.util.stream.Collectors;
  * Special handling:
  * - GLOBAL scope strategies are broadcast to all gateway namespaces
  * - ROUTE scope strategies are synced to their instance namespace
+ *
+ * <p>Because of that broadcast scope the generic {@link ReconcileTask#reconcile()} template cannot
+ * be used: a single flat index cannot express "present in gateway A's namespace but missing from
+ * gateway B's". See {@link NamespacedReconcile} for the namespace-complete algorithm this task
+ * delegates to.
  */
 @Slf4j
 @Component
@@ -52,116 +55,49 @@ public class StrategyReconcileTask implements ReconcileTask<StrategyEntity> {
     /**
      * Namespace-complete reconciliation.
      * <p>
-     * The generic {@link ReconcileTask#reconcile()} template compares the DB against a single
-     * flat index read from the default namespace, which cannot express "present in gateway A's
-     * namespace but missing from gateway B's". Strategies are broadcast per-namespace, so this
-     * override verifies every gateway namespace directly with {@code configExistsBatch} and
-     * republishes only what is actually missing (no blind full republish each cycle).
-     * <p>
-     * Orphan removal uses each namespace's own strategies-index, with the same empty-DB
-     * protection as the framework: if the DB has no strategies at all, removals are skipped so a
-     * DB outage cannot wipe live gateway config.
+     * Strategies are the one entity type with a broadcast scope: a GLOBAL strategy (and a strategy
+     * with no scope at all, which the entity treats as GLOBAL) must exist in EVERY gateway namespace,
+     * while a ROUTE-scope strategy belongs only to its own instance's namespace. That is exactly what
+     * the {@code namespacesFor} function below expresses, and {@link NamespacedReconcile} then does
+     * what this task used to do in a 90-line inline override: probe each namespace with
+     * {@code configExistsBatch} and republish only what is genuinely missing (no blind full republish
+     * every cycle), remove orphans against each namespace's OWN strategies-index, and skip removal
+     * entirely when the DB has no strategies at all so a DB outage cannot wipe live gateway config.
      */
     @Override
     public ReconcileResult reconcile() {
-        int repaired = 0;
-        int orphansRemoved = 0;
-        boolean protectionTriggered = false;
-        int protectedOrphanCount = 0;
-        try {
-            List<StrategyEntity> allDb = strategyRepository.findAll();
-            boolean dbEmpty = allDb == null || allDb.isEmpty();
-            List<StrategyEntity> enabled = dbEmpty ? List.of()
-                    : allDb.stream().filter(StrategyEntity::getEnabled).collect(Collectors.toList());
-            List<String> namespaces = getAllGatewayNamespaces();
-
-            Map<String, StrategyEntity> enabledById = enabled.stream()
-                    .collect(Collectors.toMap(StrategyEntity::getStrategyId, e -> e, (a, b) -> a));
-
-            // Desired strategy IDs per namespace: GLOBAL -> every namespace; ROUTE -> its instance namespace.
-            Map<String, Set<String>> desiredByNs = new HashMap<>();
-            for (String ns : namespaces) {
-                desiredByNs.put(ns, new HashSet<>());
-            }
-            for (StrategyEntity e : enabled) {
-                boolean isGlobal = StrategyDefinition.SCOPE_GLOBAL.equals(e.getScope()) || e.getScope() == null;
-                if (isGlobal) {
-                    for (String ns : namespaces) {
-                        desiredByNs.get(ns).add(e.getStrategyId());
+        // Resolved once: GLOBAL strategies broadcast to this very list, and the reconciler needs it
+        // as the set of namespaces to scan for orphans.
+        List<String> namespaces = getAllGatewayNamespaces();
+        return NamespacedReconcile.reconcile(new NamespacedReconcile.Spec<>(
+                getType(),
+                configCenterService,
+                log,
+                strategyRepository.findAll(),
+                strategy -> Boolean.TRUE.equals(strategy.getEnabled()),
+                StrategyEntity::getStrategyId,
+                // GLOBAL -> every gateway namespace; ROUTE -> its instance's namespace only. An empty
+                // result makes the reconciler skip the strategy and warn instead of writing to public.
+                strategy -> {
+                    if (isGlobalScope(strategy.getScope())) {
+                        return namespaces;
                     }
-                } else {
-                    String ns = getNacosNamespace(e.getInstanceId());
-                    Set<String> desired = ns != null ? desiredByNs.get(ns) : null;
-                    if (desired != null) {
-                        desired.add(e.getStrategyId());
-                    }
-                }
-            }
-
-            for (String ns : namespaces) {
-                Set<String> desiredIds = desiredByNs.get(ns);
-
-                // 1) Ensure every desired strategy is physically present in this namespace.
-                if (!desiredIds.isEmpty()) {
-                    List<String> desiredDataIds = desiredIds.stream()
-                            .map(id -> STRATEGY_PREFIX + id)
-                            .collect(Collectors.toList());
-                    Map<String, Boolean> exists = configCenterService.configExistsBatch(desiredDataIds, ns);
-                    for (String id : desiredIds) {
-                        String dataId = STRATEGY_PREFIX + id;
-                        if (!Boolean.TRUE.equals(exists.get(dataId))) {
-                            StrategyEntity entity = enabledById.get(id);
-                            if (entity != null && configCenterService.publishConfig(dataId, ns, toDefinition(entity))) {
-                                repaired++;
-                                log.info("Reconcile repaired missing strategy {} in namespace {}", id, ns);
-                            }
-                        }
-                    }
-                }
-
-                // 2) Orphan removal based on this namespace's own index.
-                Set<String> indexedIds = readIndex(ns);
-                if (!indexedIds.isEmpty() && dbEmpty) {
-                    protectionTriggered = true;
-                    protectedOrphanCount += indexedIds.size();
-                    log.warn("[STRATEGY] PROTECTION: DB empty but namespace {} index has {} strategies - skipping removal",
-                            ns, indexedIds.size());
-                    continue;
-                }
-                for (String id : indexedIds) {
-                    if (!desiredIds.contains(id)) {
-                        if (configCenterService.removeConfig(STRATEGY_PREFIX + id, ns)) {
-                            orphansRemoved++;
-                            log.info("Reconcile removed orphan strategy {} from namespace {}", id, ns);
-                        }
-                    }
-                }
-
-                // 3) Rewrite the index only when it drifted from the desired set.
-                if (!indexedIds.equals(desiredIds)) {
-                    configCenterService.publishConfig(STRATEGIES_INDEX, ns, new ArrayList<>(desiredIds));
-                }
-            }
-
-            return new ReconcileResult(getType(), repaired, orphansRemoved, true, protectionTriggered, protectedOrphanCount);
-        } catch (Exception e) {
-            log.error("[STRATEGY] Reconciliation failed", e);
-            return new ReconcileResult(getType(), repaired, orphansRemoved, false, e.getMessage(), false, 0);
-        }
+                    String ns = getNacosNamespace(strategy.getInstanceId());
+                    return ns != null ? List.of(ns) : List.of();
+                },
+                STRATEGY_PREFIX,
+                STRATEGIES_INDEX,
+                this::toDefinition,
+                namespaces,
+                alertService));
     }
 
     /**
-     * Read a namespace's strategies-index as a mutable set (empty on absence or error).
+     * GLOBAL scope - or no scope at all, which {@link StrategyEntity} defaults to GLOBAL - means the
+     * strategy is broadcast to every gateway namespace.
      */
-    private Set<String> readIndex(String namespace) {
-        try {
-            List<String> ids = configCenterService.getConfig(STRATEGIES_INDEX, namespace,
-                    new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
-            return ids == null ? new HashSet<>() : new HashSet<>(ids);
-        } catch (Exception e) {
-            log.warn("Failed to read strategies index from namespace {}: {}", namespace, e.getMessage());
-            return new HashSet<>();
-        }
+    private boolean isGlobalScope(String scope) {
+        return StrategyDefinition.SCOPE_GLOBAL.equals(scope) || scope == null;
     }
 
     @Override
@@ -172,8 +108,9 @@ public class StrategyReconcileTask implements ReconcileTask<StrategyEntity> {
 
     @Override
     public Set<String> loadFromNacos() {
-        // Note: This loads from default namespace (public), which is legacy behavior
-        // The actual reconciliation now uses per-instance namespace
+        // Retained for the ReconcileTask contract and for ad-hoc inspection. It reads the PUBLIC
+        // namespace index, which per-namespace strategy config is never written to - that mismatch is
+        // exactly what reconcile() above works around, so do not use this to decide what is missing.
         try {
             // Read as List<String> since index is stored as JSON array
             List<String> strategyIds = configCenterService.getConfig(STRATEGIES_INDEX,
@@ -207,13 +144,18 @@ public class StrategyReconcileTask implements ReconcileTask<StrategyEntity> {
         StrategyDefinition strategy = toDefinition(entity);
 
         String strategyDataId = STRATEGY_PREFIX + entity.getStrategyId();
-        boolean isGlobal = StrategyDefinition.SCOPE_GLOBAL.equals(entity.getScope()) || entity.getScope() == null;
+        boolean isGlobal = isGlobalScope(entity.getScope());
 
         if (isGlobal) {
-            // Global strategies: broadcast to all gateway namespaces
+            // Global strategies: broadcast to all gateway namespaces. A false return used to be
+            // discarded here, so the caller counted the strategy as repaired and reported success
+            // while one or more namespaces had actually received nothing.
             List<String> namespaces = getAllGatewayNamespaces();
             for (String namespace : namespaces) {
-                configCenterService.publishConfig(strategyDataId, namespace, strategy);
+                if (!configCenterService.publishConfig(strategyDataId, namespace, strategy)) {
+                    throw new IllegalStateException("Failed to publish global strategy " + entity.getStrategyId()
+                            + " to namespace " + namespace);
+                }
                 log.debug("Global strategy {} published to namespace: {}", entity.getStrategyId(), namespace);
             }
             log.info("Global strategy repaired: {} in {} namespaces", entity.getStrategyId(), namespaces.size());
@@ -225,7 +167,10 @@ public class StrategyReconcileTask implements ReconcileTask<StrategyEntity> {
                          entity.getStrategyId());
                 return;
             }
-            configCenterService.publishConfig(strategyDataId, nacosNamespace, strategy);
+            if (!configCenterService.publishConfig(strategyDataId, nacosNamespace, strategy)) {
+                throw new IllegalStateException("Failed to publish strategy " + entity.getStrategyId()
+                        + " to namespace " + nacosNamespace);
+            }
             log.info("Route strategy repaired: {} in namespace: {}", entity.getStrategyId(), nacosNamespace);
         }
 
@@ -237,26 +182,37 @@ public class StrategyReconcileTask implements ReconcileTask<StrategyEntity> {
     public void removeOrphanFromNacos(String strategyId) throws Exception {
         log.info("Removing orphaned strategy from Nacos: {}", strategyId);
 
-        // Find the strategy to get scope and instanceId
+        // Find the strategy to get scope and instanceId. NOTE: a true orphan has no DB row, so this
+        // lookup comes back null and there is no scope/namespace to reason with - the broadcast
+        // fallback below is a best-effort sweep, and authoritative orphan removal is done per
+        // namespace by reconcile(), which works from each namespace's own index instead of the DB.
+        // Kept for the contract and for the row-still-exists case (a strategy that was disabled and
+        // should stop being published).
         StrategyEntity strategy = strategyRepository.findByStrategyId(strategyId);
         if (strategy == null) {
             // Strategy not in DB, try to remove from all namespaces (safe cleanup)
             List<String> namespaces = getAllGatewayNamespaces();
             String strategyDataId = STRATEGY_PREFIX + strategyId;
             for (String namespace : namespaces) {
-                configCenterService.removeConfig(strategyDataId, namespace);
+                if (!configCenterService.removeConfig(strategyDataId, namespace)) {
+                    throw new IllegalStateException("Failed to remove orphan strategy " + strategyId
+                            + " from namespace " + namespace);
+                }
                 log.debug("Orphan strategy {} removed from namespace: {}", strategyId, namespace);
             }
             log.info("Orphan strategy removed from {} namespaces (no DB record)", namespaces.size());
         } else {
-            boolean isGlobal = StrategyDefinition.SCOPE_GLOBAL.equals(strategy.getScope()) || strategy.getScope() == null;
+            boolean isGlobal = isGlobalScope(strategy.getScope());
             String strategyDataId = STRATEGY_PREFIX + strategyId;
 
             if (isGlobal) {
                 // Remove from all namespaces
                 List<String> namespaces = getAllGatewayNamespaces();
                 for (String namespace : namespaces) {
-                    configCenterService.removeConfig(strategyDataId, namespace);
+                    if (!configCenterService.removeConfig(strategyDataId, namespace)) {
+                        throw new IllegalStateException("Failed to remove global strategy " + strategyId
+                                + " from namespace " + namespace);
+                    }
                     log.debug("Global strategy {} removed from namespace: {}", strategyId, namespace);
                 }
                 log.info("Global orphan strategy removed from {} namespaces", namespaces.size());
@@ -264,7 +220,10 @@ public class StrategyReconcileTask implements ReconcileTask<StrategyEntity> {
                 // Remove from instance namespace only
                 String nacosNamespace = getNacosNamespace(strategy.getInstanceId());
                 if (nacosNamespace != null) {
-                    configCenterService.removeConfig(strategyDataId, nacosNamespace);
+                    if (!configCenterService.removeConfig(strategyDataId, nacosNamespace)) {
+                        throw new IllegalStateException("Failed to remove strategy " + strategyId
+                                + " from namespace " + nacosNamespace);
+                    }
                     log.info("Route orphan strategy removed: {} from namespace: {}", strategyId, nacosNamespace);
                 }
             }
@@ -328,8 +287,11 @@ public class StrategyReconcileTask implements ReconcileTask<StrategyEntity> {
             allStrategyIds.addAll(globalStrategyIds);
 
             // Publish as JSON array to instance namespace
-            configCenterService.publishConfig(STRATEGIES_INDEX, namespace, new ArrayList<>(allStrategyIds));
-            log.debug("Strategies index rebuilt with {} strategies in namespace {}", allStrategyIds.size(), namespace);
+            if (!configCenterService.publishConfig(STRATEGIES_INDEX, namespace, new ArrayList<>(allStrategyIds))) {
+                log.error("Failed to rebuild strategies index in namespace {}", namespace);
+            } else {
+                log.debug("Strategies index rebuilt with {} strategies in namespace {}", allStrategyIds.size(), namespace);
+            }
         }
     }
 

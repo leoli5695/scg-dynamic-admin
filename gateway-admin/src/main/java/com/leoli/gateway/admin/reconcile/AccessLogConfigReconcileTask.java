@@ -104,8 +104,12 @@ public class AccessLogConfigReconcileTask implements ReconcileTask<AccessLogConf
         // Convert entity to config map
         Map<String, Object> config = toConfigMap(entity);
 
-        // Push to Nacos
-        configCenterService.publishConfig(ACCESS_LOG_CONFIG_DATA_ID, nacosNamespace, config);
+        // Push to Nacos. The boolean return used to be discarded, so a rejected write was still
+        // reported as a successful repair.
+        if (!configCenterService.publishConfig(ACCESS_LOG_CONFIG_DATA_ID, nacosNamespace, config)) {
+            log.error("Failed to publish access log config for instance={} to namespace={}", instanceId, nacosNamespace);
+            return;
+        }
 
         log.info("Repaired access log config: instance={} in namespace={}", instanceId, nacosNamespace);
     }
@@ -121,8 +125,12 @@ public class AccessLogConfigReconcileTask implements ReconcileTask<AccessLogConf
             return;
         }
 
-        // Delete from Nacos
-        configCenterService.removeConfig(ACCESS_LOG_CONFIG_DATA_ID, nacosNamespace);
+        // Delete from Nacos. The boolean return used to be discarded, so a failed deletion was still
+        // reported as a removed orphan and would be retried forever.
+        if (!configCenterService.removeConfig(ACCESS_LOG_CONFIG_DATA_ID, nacosNamespace)) {
+            log.error("Failed to remove orphan access log config for instance={} from namespace={}", instanceId, nacosNamespace);
+            return;
+        }
 
         log.info("Removed orphan access log config: instance={} from namespace={}", instanceId, nacosNamespace);
     }

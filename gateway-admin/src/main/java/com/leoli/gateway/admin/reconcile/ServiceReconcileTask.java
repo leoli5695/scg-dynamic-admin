@@ -1,6 +1,7 @@
 package com.leoli.gateway.admin.reconcile;
 
 import com.leoli.gateway.admin.model.ServiceEntity;
+import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
 import com.leoli.gateway.admin.repository.ServiceRepository;
 import com.leoli.gateway.admin.cache.InstanceNamespaceCache;
 import com.leoli.gateway.admin.center.ConfigCenterService;
@@ -17,6 +18,11 @@ import java.util.stream.Collectors;
 
 /**
  * Reconciliation task for service configurations.
+ *
+ * <p>Services live in their own instance's Nacos namespace, so reconciliation has to be
+ * namespace-complete. See {@link NamespacedReconcile} for the algorithm and for the bug this task
+ * used to have (public-namespace index compared against per-namespace writes, which republished
+ * every service every cycle and made orphan removal a structural no-op).
  */
 @Slf4j
 @Component
@@ -28,6 +34,7 @@ public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
     private static final String GROUP = "DEFAULT_GROUP";
 
     private final ServiceRepository serviceRepository;
+    private final GatewayInstanceRepository gatewayInstanceRepository;
     private final InstanceNamespaceCache namespaceCache;
     private final ConfigCenterService configCenterService;
     private final ObjectMapper objectMapper;
@@ -39,6 +46,28 @@ public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
     }
 
     @Override
+    public ReconcileResult reconcile() {
+        return NamespacedReconcile.reconcile(new NamespacedReconcile.Spec<>(
+                getType(),
+                configCenterService,
+                log,
+                serviceRepository.findAll(),
+                service -> Boolean.TRUE.equals(service.getEnabled()),
+                ServiceEntity::getServiceId,
+                // A service belongs to exactly one namespace - unlike strategies there is no GLOBAL
+                // broadcast scope. An empty result makes the reconciler skip the service and warn.
+                service -> {
+                    String ns = getNacosNamespace(service.getInstanceId());
+                    return ns != null ? List.of(ns) : List.of();
+                },
+                SERVICE_PREFIX,
+                SERVICES_INDEX,
+                this::toDefinition,
+                getAllGatewayNamespaces(),
+                alertService));
+    }
+
+    @Override
     public List<ServiceEntity> loadFromDB() {
         // Only load ENABLED services - disabled services should not be synced to Nacos
         return serviceRepository.findByEnabledTrue();
@@ -46,8 +75,9 @@ public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
 
     @Override
     public Set<String> loadFromNacos() {
-        // Note: This loads from default namespace (public), which is legacy behavior
-        // The actual reconciliation now uses per-instance namespace
+        // Retained for the ReconcileTask contract and for ad-hoc inspection. It reads the PUBLIC
+        // namespace index, which per-instance service config is never written to - that mismatch is
+        // exactly what reconcile() above works around, so do not use this to decide what is missing.
         try {
             // Read as List<String> since index is stored as JSON array
             List<String> serviceNames = configCenterService.getConfig(SERVICES_INDEX,
@@ -101,15 +131,16 @@ public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
 
         // Parse full ServiceDefinition from entity's metadata JSON
         // This preserves instances, loadBalancer, and other configuration
-        ServiceDefinition service = parseServiceFromEntity(entity);
-        if (service == null) {
-            log.error("Failed to parse service definition from entity metadata, skipping repair for: {}", entity.getServiceId());
-            return;
-        }
+        ServiceDefinition service = toDefinition(entity);
 
-        // Push to Nacos using service_id and instance namespace
+        // Push to Nacos using service_id and instance namespace. A false return used to be discarded
+        // here, so the caller counted the service as repaired and reported success while nothing had
+        // actually landed in Nacos.
         String serviceDataId = SERVICE_PREFIX + entity.getServiceId();
-        configCenterService.publishConfig(serviceDataId, nacosNamespace, service);
+        if (!configCenterService.publishConfig(serviceDataId, nacosNamespace, service)) {
+            throw new IllegalStateException("Failed to publish service " + entity.getServiceId()
+                    + " to namespace " + nacosNamespace);
+        }
 
         log.info("Repaired service: {} with {} instances in namespace: {}",
                  entity.getServiceId(),
@@ -121,10 +152,10 @@ public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
     }
 
     /**
-     * Parse ServiceDefinition from ServiceEntity's metadata JSON.
-     * Falls back to minimal definition if parsing fails.
+     * The published shape of a service: its metadata JSON when that parses (preserving instances,
+     * loadBalancer and the rest), otherwise a minimal definition that at least carries the id and name.
      */
-    private ServiceDefinition parseServiceFromEntity(ServiceEntity entity) {
+    private ServiceDefinition toDefinition(ServiceEntity entity) {
         // Try to restore from JSON backup in metadata field
         if (entity.getMetadata() != null && !entity.getMetadata().isEmpty()) {
             try {
@@ -150,7 +181,10 @@ public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
     public void removeOrphanFromNacos(String serviceId) throws Exception {
         log.info("Removing orphaned service from Nacos: {}", serviceId);
 
-        // Find the service to get instanceId
+        // Find the service to get instanceId. NOTE: for a true orphan this lookup comes back empty, so
+        // the namespace resolves to null and nothing is removed - which is why reconcile() does
+        // orphan removal per namespace instead of through this method. Kept for the contract and for
+        // the row-still-exists case (a service that was disabled and should stop being published).
         ServiceEntity service = serviceRepository.findByServiceId(serviceId).orElse(null);
         String nacosNamespace = service != null ? getNacosNamespace(service.getInstanceId()) : null;
 
@@ -162,7 +196,10 @@ public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
 
         // Delete from Nacos using service_id
         String serviceDataId = SERVICE_PREFIX + serviceId;
-        configCenterService.removeConfig(serviceDataId, nacosNamespace);
+        if (!configCenterService.removeConfig(serviceDataId, nacosNamespace)) {
+            throw new IllegalStateException("Failed to remove service " + serviceId
+                    + " from namespace " + nacosNamespace);
+        }
 
         log.info("Removed orphan service: {} from namespace: {}", serviceId, nacosNamespace);
 
@@ -177,6 +214,14 @@ public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
      */
     private String getNacosNamespace(String instanceId) {
         return namespaceCache.getNamespace(instanceId);
+    }
+
+    private List<String> getAllGatewayNamespaces() {
+        return gatewayInstanceRepository.findAll().stream()
+                .map(i -> i.getNacosNamespace())
+                .filter(ns -> ns != null && !ns.isEmpty())
+                .distinct()
+                .collect(Collectors.toList());
     }
 
     /**
@@ -199,8 +244,11 @@ public class ServiceReconcileTask implements ReconcileTask<ServiceEntity> {
             .collect(Collectors.toList());
 
         // Publish as JSON array to instance namespace
-        configCenterService.publishConfig(SERVICES_INDEX, nacosNamespace, serviceIds);
-        log.debug("Services index rebuilt with {} enabled services in namespace {}", serviceIds.size(), nacosNamespace);
+        if (!configCenterService.publishConfig(SERVICES_INDEX, nacosNamespace, serviceIds)) {
+            log.error("Failed to rebuild services index in namespace {}", nacosNamespace);
+        } else {
+            log.debug("Services index rebuilt with {} enabled services in namespace {}", serviceIds.size(), nacosNamespace);
+        }
     }
 
     @Override

@@ -19,6 +19,11 @@ import java.util.stream.Collectors;
 /**
  * Reconciliation task for SSL certificate configurations.
  * Ensures consistency between DB and Nacos for SSL certificates.
+ *
+ * <p>Certificates live in their own instance's Nacos namespace, so reconciliation has to be
+ * namespace-complete. See {@link NamespacedReconcile} for the algorithm and for the bug this task
+ * used to have (public-namespace index compared against per-namespace writes, which republished
+ * every certificate every cycle and made orphan removal a structural no-op).
  */
 @Slf4j
 @Component
@@ -49,6 +54,28 @@ public class CertificateReconcileTask implements ReconcileTask<SslCertificate> {
     }
 
     @Override
+    public ReconcileResult reconcile() {
+        return NamespacedReconcile.reconcile(new NamespacedReconcile.Spec<>(
+                getType(),
+                configCenterService,
+                log,
+                sslCertificateRepository.findAll(),
+                cert -> Boolean.TRUE.equals(cert.getEnabled()),
+                SslCertificate::getDomain,
+                // A certificate belongs to exactly one namespace - unlike strategies there is no
+                // GLOBAL broadcast scope. An empty result makes the reconciler skip it and warn.
+                cert -> {
+                    String ns = getNacosNamespace(cert.getInstanceId());
+                    return ns != null ? List.of(ns) : List.of();
+                },
+                CERTIFICATE_PREFIX,
+                CERTIFICATES_INDEX,
+                this::toDefinition,
+                getAllGatewayNamespaces(),
+                alertService));
+    }
+
+    @Override
     public List<SslCertificate> loadFromDB() {
         // Only load ENABLED certificates - disabled certificates should not be in Nacos
         return sslCertificateRepository.findByEnabled(true);
@@ -56,8 +83,9 @@ public class CertificateReconcileTask implements ReconcileTask<SslCertificate> {
 
     @Override
     public Set<String> loadFromNacos() {
-        // Note: This loads from default namespace (public), which is legacy behavior
-        // The actual reconciliation now uses per-instance namespace
+        // Retained for the ReconcileTask contract and for ad-hoc inspection. It reads the PUBLIC
+        // namespace index, which per-instance certificate config is never written to - that mismatch
+        // is exactly what reconcile() above works around, so do not use this to decide what is missing.
         try {
             // Read as List<String> since index is stored as JSON array (domains)
             List<String> domains = configCenterService.getConfig(CERTIFICATES_INDEX,
@@ -96,11 +124,16 @@ public class CertificateReconcileTask implements ReconcileTask<SslCertificate> {
         log.info("Repairing missing certificate in Nacos: {}", entity.getDomain());
 
         // Convert certificate to config map
-        Map<String, Object> config = toConfigMap(entity);
+        Map<String, Object> config = toDefinition(entity);
 
-        // Push to Nacos using domain as dataId
+        // Push to Nacos using domain as dataId. A false return used to be discarded here, so the
+        // caller counted the certificate as repaired and reported success while nothing had actually
+        // landed in Nacos.
         String certDataId = CERTIFICATE_PREFIX + entity.getDomain();
-        configCenterService.publishConfig(certDataId, nacosNamespace, config);
+        if (!configCenterService.publishConfig(certDataId, nacosNamespace, config)) {
+            throw new IllegalStateException("Failed to publish certificate " + entity.getDomain()
+                    + " to namespace " + nacosNamespace);
+        }
 
         log.info("Repaired certificate: {} in namespace: {}", entity.getDomain(), nacosNamespace);
 
@@ -112,7 +145,10 @@ public class CertificateReconcileTask implements ReconcileTask<SslCertificate> {
     public void removeOrphanFromNacos(String domain) throws Exception {
         log.info("Removing orphaned certificate from Nacos: {}", domain);
 
-        // Find the certificate to get instanceId
+        // Find the certificate to get instanceId. NOTE: for a true orphan this lookup comes back
+        // empty, so the namespace resolves to null and nothing is removed - which is why reconcile()
+        // does orphan removal per namespace instead of through this method. Kept for the contract and
+        // for the row-still-exists case (a certificate that was disabled and should stop being published).
         SslCertificate cert = sslCertificateRepository.findByDomain(domain).orElse(null);
         String nacosNamespace = cert != null ? getNacosNamespace(cert.getInstanceId()) : null;
 
@@ -124,7 +160,10 @@ public class CertificateReconcileTask implements ReconcileTask<SslCertificate> {
 
         // Delete from Nacos using domain as dataId
         String certDataId = CERTIFICATE_PREFIX + domain;
-        configCenterService.removeConfig(certDataId, nacosNamespace);
+        if (!configCenterService.removeConfig(certDataId, nacosNamespace)) {
+            throw new IllegalStateException("Failed to remove certificate " + domain
+                    + " from namespace " + nacosNamespace);
+        }
 
         log.info("Removed orphan certificate: {} from namespace: {}", domain, nacosNamespace);
 
@@ -139,6 +178,14 @@ public class CertificateReconcileTask implements ReconcileTask<SslCertificate> {
      */
     private String getNacosNamespace(String instanceId) {
         return namespaceCache.getNamespace(instanceId);
+    }
+
+    private List<String> getAllGatewayNamespaces() {
+        return gatewayInstanceRepository.findAll().stream()
+                .map(i -> i.getNacosNamespace())
+                .filter(ns -> ns != null && !ns.isEmpty())
+                .distinct()
+                .collect(Collectors.toList());
     }
 
     /**
@@ -161,14 +208,18 @@ public class CertificateReconcileTask implements ReconcileTask<SslCertificate> {
             .collect(Collectors.toList());
 
         // Publish as JSON array to instance namespace
-        configCenterService.publishConfig(CERTIFICATES_INDEX, nacosNamespace, domains);
-        log.debug("Certificates index rebuilt with {} enabled certificates in namespace {}", domains.size(), nacosNamespace);
+        if (!configCenterService.publishConfig(CERTIFICATES_INDEX, nacosNamespace, domains)) {
+            log.error("Failed to rebuild certificates index in namespace {}", nacosNamespace);
+        } else {
+            log.debug("Certificates index rebuilt with {} enabled certificates in namespace {}", domains.size(), nacosNamespace);
+        }
     }
 
     /**
-     * Convert certificate entity to config map for Nacos.
+     * The published shape of a certificate: a flat config map for Nacos (this task has no metadata
+     * JSON to deserialize, every field comes straight off the entity).
      */
-    private Map<String, Object> toConfigMap(SslCertificate cert) {
+    private Map<String, Object> toDefinition(SslCertificate cert) {
         Map<String, Object> config = new HashMap<>();
         config.put("id", cert.getId());
         config.put("domain", cert.getDomain());
