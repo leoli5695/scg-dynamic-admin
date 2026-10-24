@@ -107,9 +107,10 @@ public class OrderCreateConsumer implements RocketMQListener<String> {
             throw new RuntimeException("Consumer rate limited");
         }
 
+        String orderNo = null;
         try {
             OrderMessage orderMessage = objectMapper.readValue(message, OrderMessage.class);
-            String orderNo = orderMessage.getOrderNo();
+            orderNo = orderMessage.getOrderNo();
             log.info("消费订单创建消息: orderNo={}, userId={}, transactionId={}",
                     orderNo, orderMessage.getUserId(), orderMessage.getTransactionId());
 
@@ -127,20 +128,21 @@ public class OrderCreateConsumer implements RocketMQListener<String> {
                 return;
             }
 
-            // Step 3: 创建订单（Layer 3 - 唯一索引兜底）
+            // Step 3: 创建订单（攒批入队，真正落库是异步的）
             createOrder(orderMessage);
 
-            // Step 4: 标记订单处理完成
-            markOrderCompleted(orderNo);
+            // 【关键】这里不能标记 completed：订单此刻只是进了内存队列，还没落库。
+            // 提前标记会让之后的任何重投/补发在 Layer 1 就被当成重复消息跳过，而
+            // BatchInsertService.flushBatch 落库失败时只告警不重建，ReconciliationService
+            // 又只校对库存 —— 订单就此静默丢失。
+            // 在途窗口由 Layer 1 的 SETNX（5 分钟，远大于 100ms 刷批间隔）覆盖；
+            // 落库之后的 24h completed 标记由 Step 2 的"订单已存在"分支建立。
 
-            // Step 5: 【异步】发送ES同步消息（主链路不阻塞）
+            // Step 4: 【异步】发送ES同步消息（主链路不阻塞）
             sendAsyncEsSyncMessage(orderMessage);
 
-            // Step 6: 发送延迟消息（20分钟未支付回补）
+            // Step 5: 发送延迟消息（20分钟未支付回补）
             sendDelayMessage(orderMessage);
-
-            // 【关键】事务状态更新移至 BatchInsertService.flushBatch()
-            // 只有订单真正落库后才标记 SUCCESS，防止宕机吞单
 
             log.info("订单已入队等待落库: orderNo={}", orderNo);
 
@@ -149,6 +151,11 @@ public class OrderCreateConsumer implements RocketMQListener<String> {
             log.warn("订单唯一索引冲突，幂等跳过: {}", e.getMessage());
 
         } catch (Exception e) {
+            // 释放 Layer 1 幂等锁：不删的话 RocketMQ 重投时 acquireIdempotentLock 会把这条
+            // 消息当成重复直接跳过，失败订单就永久丢了（与支付回调 catch 里 delete(processedKey) 同理）。
+            if (orderNo != null) {
+                redisTemplate.delete(ORDER_PROCESSING_KEY + orderNo);
+            }
             log.error("订单创建失败: message={}, error={}", message, e.getMessage(), e);
             throw new RuntimeException("订单创建失败", e); // 触发重试
         }
@@ -209,8 +216,9 @@ public class OrderCreateConsumer implements RocketMQListener<String> {
      * <p>
      * 幂等保障：
      * - 幂等检查在攒批前完成（Redis + DB 查询）
-     * - 批量写入失败时逐条重试
-     * - 最终兜底：transaction_log 定时任务补偿
+     * - 入队失败抛异常让 MQ 重投，重投前先释放 Layer 1 幂等锁
+     * - 注意：flushBatch 的 DB 写入失败只告警，ReconciliationService 只校对库存、
+     *   不会重建订单，所以"落库失败"目前没有自动兜底，需要人工按告警补单
      */
     private void createOrder(OrderMessage orderMessage) {
         SeckillOrder order = new SeckillOrder();
@@ -229,7 +237,11 @@ public class OrderCreateConsumer implements RocketMQListener<String> {
         order.setTransactionId(orderMessage.getTransactionId());
 
         // 【攒批落库】加入批量写入队列，达到阈值后自动触发批量写入
-        batchInsertService.addToBatch(order);
+        if (!batchInsertService.addToBatch(order)) {
+            // 队列满且强制刷批后仍入队失败：必须抛异常让 MQ 重投。忽略这个返回值等于
+            // 订单既没落库、又（在旧代码里）被标记为 completed，直接静默丢失。
+            throw new IllegalStateException("攒批队列已满，订单入队失败: orderNo=" + order.getOrderNo());
+        }
 
         log.info("订单已加入攒批队列: orderNo={}, userId={}, shardIndex={}, transactionId={}, queueSize={}",
                 order.getOrderNo(), order.getUserId(), order.getShardIndex(),
