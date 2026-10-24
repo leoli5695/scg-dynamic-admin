@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -32,7 +33,16 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class FilterCircuitBreakerManager {
 
     private final ConcurrentHashMap<String, FilterCircuitBreakerState> states = new ConcurrentHashMap<>();
-    private final List<FilterCircuitBreakerEvent> eventHistory = new ArrayList<>();
+    /**
+     * Circuit state transitions, oldest first.
+     *
+     * <p>FIX: was a plain {@code ArrayList} mutated by {@link #recordEvent} from filter threads
+     * while {@link #getEventHistory} read it via {@code size()} + {@code subList()}. That is a
+     * ConcurrentModificationException waiting to happen, and worse - concurrent {@code add} and
+     * {@code remove(0)} on an ArrayList can corrupt the backing array. Transitions are rare (this is
+     * not a per-request path), so a lock-free deque costs nothing here.
+     */
+    private final Deque<FilterCircuitBreakerEvent> eventHistory = new ConcurrentLinkedDeque<>();
     private final int maxHistorySize = 1000;
 
     // Default configuration - DISABLED by default, enable via gateway-admin API
@@ -266,8 +276,11 @@ public class FilterCircuitBreakerManager {
      * Get event history.
      */
     public List<FilterCircuitBreakerEvent> getEventHistory(int limit) {
-        int fromIndex = Math.max(0, eventHistory.size() - limit);
-        return new ArrayList<>(eventHistory.subList(fromIndex, eventHistory.size()));
+        // Snapshot once: size() and subList() on a live concurrent collection can disagree with each
+        // other, and ConcurrentLinkedDeque has no subList at all.
+        List<FilterCircuitBreakerEvent> snapshot = new ArrayList<>(eventHistory);
+        int fromIndex = Math.max(0, snapshot.size() - limit);
+        return new ArrayList<>(snapshot.subList(fromIndex, snapshot.size()));
     }
 
     /**
@@ -318,11 +331,13 @@ public class FilterCircuitBreakerManager {
                 filterName, newState, previousState, reason, healthScore, failureRate,
                 System.currentTimeMillis(), "automatic");
 
-        eventHistory.add(event);
+        eventHistory.addLast(event);
 
-        // Trim history if too large
-        if (eventHistory.size() > maxHistorySize) {
-            eventHistory.remove(0);
+        // Trim from the head. ConcurrentLinkedDeque has no atomic add-and-trim, so this can briefly
+        // exceed maxHistorySize under contention - bounded and harmless, unlike the ArrayList it
+        // replaces. size() is O(n) here but recordEvent only runs on state transitions, not per request.
+        while (eventHistory.size() > maxHistorySize) {
+            eventHistory.pollFirst();
         }
     }
 

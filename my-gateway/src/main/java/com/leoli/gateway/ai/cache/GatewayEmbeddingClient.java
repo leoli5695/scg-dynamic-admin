@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +26,9 @@ import java.util.Map;
 @Slf4j
 @Component
 public class GatewayEmbeddingClient {
+
+    /** See the timeout call site for why this is well below the 30s WebClient default. */
+    private static final long EMBEDDING_TIMEOUT_MS = 800L;
 
     private final WebClient webClient;
     private final ProviderKeyResolver keyResolver;
@@ -61,6 +65,14 @@ public class GatewayEmbeddingClient {
                             .bodyValue(body)
                             .retrieve()
                             .bodyToMono(String.class)
+                            // FIX: no timeout here meant the call inherited WebClientConfig's 30s
+                            // client-wide default. This sits on the request path of every AI call
+                            // that consults the semantic cache, so a hung embedding endpoint turned
+                            // into a 30s stall per request with no retry and no circuit breaker.
+                            // The semantic cache is an optimisation - missing it must cost less than
+                            // waiting for it, hence a sub-second budget and the degrade-to-empty
+                            // (cache miss) that onErrorResume below already provides.
+                            .timeout(Duration.ofMillis(EMBEDDING_TIMEOUT_MS))
                             .map(this::parseFirstEmbedding)
                             .filter(v -> v.length > 0)
                             .onErrorResume(e -> {

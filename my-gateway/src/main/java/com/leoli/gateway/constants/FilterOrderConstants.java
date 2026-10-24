@@ -267,8 +267,17 @@ public interface FilterOrderConstants {
      * <p>
      * Use case: Standard Spring Cloud load balancing for services
      * registered in Nacos/Consul/Eureka (lb:// scheme).
+     * <p>
+     * FIX (order collision): this was 10150 - exactly SCG's
+     * {@code ReactiveLoadBalancerClientFilter.LOAD_BALANCER_CLIENT_FILTER_ORDER}, verified against
+     * the 4.3.5 jar. Two GlobalFilters with the same order have no defined relative sequence, so it
+     * came down to bean registration order. When SCG's filter won, it had already rewritten
+     * {@code lb://service} to {@code http://host:port} before this one ran, so the
+     * {@code "lb".equals(url.getScheme())} half of {@code DiscoveryLoadBalancerFilter}'s guard was
+     * false and the marked-static-instance selection silently never happened. Strictly less than
+     * 10150 makes this deterministic, and still after NACOS_DISCOVERY_LOAD_BALANCER (10100).
      */
-    int DISCOVERY_LOAD_BALANCER = 10150;
+    int DISCOVERY_LOAD_BALANCER = 10140;
 
     /**
      * AI prompt template/decorator filter.
