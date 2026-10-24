@@ -18,7 +18,7 @@ import { getMiddlewareTypeInfo, getServiceHealth, getStatusColor } from '../util
 
 const { Text, Title } = Typography;
 
-const LEARN_MORE_URL = 'https://github.com/your-org/gateway-trace-starter';
+const LEARN_MORE_URL = 'https://github.com/leoli5695/scg-dynamic-admin/tree/main/gateway-trace-starter';
 
 interface ServiceDetailDrawerProps {
   service: ServiceMiddlewareView;

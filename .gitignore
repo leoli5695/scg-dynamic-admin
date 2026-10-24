@@ -67,13 +67,21 @@ logs/
 .DS_Store
 Thumbs.db
 
-# Debug screenshots (smoke test artifacts)
-*.png
+# Debug screenshots (smoke test artifacts).
+# Scoped to the repo root on purpose: the blanket `*.png` this replaces also matched the 66
+# tracked docs/images/*.png screenshots, which only got into the repository via `git add -f`.
+# A new documentation image added the normal way would have been silently ignored.
+/*.png
 
 # Environment files with real credentials - never commit
 # (.env.example templates are tracked; actual .env files are not)
 .env
 **/.env
+
+# Prometheus reads the shared internal token from a file because stock http_sd_configs cannot send
+# an X-Internal-Token header. Created locally from $GATEWAY_INTERNAL_TOKEN; see
+# prometheus/prometheus.yml.
+prometheus/internal-token
 !**/.env.example
 
 # Application specific
@@ -98,7 +106,8 @@ demo-*.tar
 # Frontend build artifacts - generated at build time, not version controlled
 gateway-admin/src/main/resources/static/assets/
 
-# Submodules (use git submodule, not directory)
+# A local nacos/ working directory (this repo has no git submodules - .gitmodules was an empty
+# file and has been removed).
 nacos/
 
 # AI perf bench raw runs (regenerable, multi-MB jsonl)

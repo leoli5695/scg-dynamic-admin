@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: redis-exporter
-        image: docker.1ms.run/oliver006/redis_exporter:v1.55.0
+        image: oliver006/redis_exporter:v1.55.0
         imagePullPolicy: Always
         ports:
         - containerPort: 9121
@@ -125,7 +125,7 @@ spec:
     spec:
       containers:
       - name: mongodb-exporter
-        image: docker.1ms.run/bitnami/mongodb-exporter:latest
+        image: bitnami/mongodb-exporter:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 9216
@@ -203,7 +203,7 @@ spec:
         effect: NoSchedule
       containers:
       - name: rocketmq-exporter
-        image: docker.1ms.run/apache/rocketmq-exporter:0.0.2
+        image: apache/rocketmq-exporter:0.0.2
         imagePullPolicy: Always
         ports:
         - containerPort: 5557

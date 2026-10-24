@@ -204,10 +204,44 @@ services:
     networks:
       - gateway-network
 
+  # Prometheus (OPT-IN). Not part of the default stack: `docker compose up` ignores it, and
+  # `docker compose --profile monitoring up -d` starts it. It exists so prometheus/prometheus.yml
+  # stops being an orphan file that nothing loaded.
+  #
+  # Before starting it, create the internal-token file the service-discovery job authenticates
+  # with (see the comment in prometheus/prometheus.yml):
+  #   printf '%s' "$GATEWAY_INTERNAL_TOKEN" > prometheus/internal-token
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: gateway-prometheus
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    mem_limit: 768m
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      # k8s/prometheus.yaml asks for 2Gi; 768m is enough for this stack's handful of targets.
+      - --storage.tsdb.retention.time=7d
+    ports:
+      - "127.0.0.1:9091:9090"
+    volumes:
+      # Mounted, not copied: seckill-alerts.yml stays a single source of truth in its own module.
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./seckill-core-engine/src/main/resources/prometheus/seckill-alerts.yml:/etc/prometheus/seckill-alerts.yml:ro
+      - ./prometheus/internal-token:/etc/prometheus/internal-token:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - gateway-network
+
 volumes:
   mysql_data:
     driver: local
   nacos_data:
+    driver: local
+  prometheus_data:
     driver: local
 
 networks:

@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
       - name: mysql-exporter
-        image: 05feb4b8a268e111bb3c4356701bf0c4.d.1ms.run/prom/mysqld-exporter:latest
+        image: prom/mysqld-exporter:v0.15.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 9104

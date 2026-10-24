@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
       - name: redis-exporter
-        image: 05feb4b8a268e111bb3c4356701bf0c4.d.1ms.run/oliver006/redis_exporter:latest
+        image: oliver006/redis_exporter:v1.55.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 9121
@@ -74,7 +74,7 @@ spec:
     spec:
       containers:
       - name: elasticsearch-exporter
-        image: 05feb4b8a268e111bb3c4356701bf0c4.d.1ms.run/prometheuscommunity/elasticsearch-exporter:latest
+        image: prometheuscommunity/elasticsearch-exporter:latest
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 9114
@@ -128,7 +128,7 @@ spec:
     spec:
       containers:
       - name: mysql-exporter
-        image: 05feb4b8a268e111bb3c4356701bf0c4.d.1ms.run/prom/mysqld-exporter:v0.15.0
+        image: prom/mysqld-exporter:v0.15.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 9104
