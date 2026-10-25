@@ -141,9 +141,8 @@ class SeckillResultTest {
     @Test
     @DisplayName("P3: 错误码范围验证 - 系统级错误应使用特定范围")
     void testErrorCodeRanges() {
-        // Redis故障范围: -100 ~ -199
-        assertTrue(SeckillResult.REDIS_FAILURE.getCode() >= -100 && SeckillResult.REDIS_FAILURE.getCode() <= -199);
-        // 因为 -100 >= -199 是错的，让我用正确的范围检查
+        // Redis故障范围: -100 ~ -199（下界 -199、上界 -100，写反即恒假）
+        assertTrue(SeckillResult.REDIS_FAILURE.getCode() >= -199 && SeckillResult.REDIS_FAILURE.getCode() <= -100);
         assertEquals(-100, SeckillResult.REDIS_FAILURE.getCode());
 
         // MQ故障范围: -300 ~ -399
@@ -152,9 +151,10 @@ class SeckillResultTest {
         // DB故障范围: -200 ~ -299
         assertEquals(-200, SeckillResult.DB_FAILURE.getCode());
 
-        // 业务错误范围: -1 ~ -10
+        // 业务错误范围: -1 ~ -10。STOCK_INSUFFICIENT 不属于这个区间：它的 code 是 0，
+        // 由 Lua 返回值契约决定（fromLuaResult 把 0 映射成 STOCK_INSUFFICIENT）。
         assertTrue(SeckillResult.ALREADY_BOUGHT.getCode() >= -10 && SeckillResult.ALREADY_BOUGHT.getCode() <= -1);
-        assertTrue(SeckillResult.STOCK_INSUFFICIENT.getCode() >= -10 && SeckillResult.STOCK_INSUFFICIENT.getCode() <= -1);
+        assertEquals(0, SeckillResult.STOCK_INSUFFICIENT.getCode());
         assertTrue(SeckillResult.RATE_LIMITED.getCode() >= -10 && SeckillResult.RATE_LIMITED.getCode() <= -1);
         assertTrue(SeckillResult.IP_BLOCKED.getCode() >= -10 && SeckillResult.IP_BLOCKED.getCode() <= -1);
     }

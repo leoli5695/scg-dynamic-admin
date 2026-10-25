@@ -103,7 +103,7 @@ class LuaScriptServicePipelineTest {
                 .thenThrow(new RuntimeException("Pipeline failed"));
         
         // Mock 单个执行成功
-        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), any()))
+        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), any(Object[].class)))
                 .thenReturn(1001L)
                 .thenReturn(1002L);
 
@@ -116,7 +116,7 @@ class LuaScriptServicePipelineTest {
         assertEquals(2, results.get(1).getShardIndex());
         
         // 验证降级到单个执行
-        verify(redisTemplate, times(2)).execute(any(DefaultRedisScript.class), anyList(), any());
+        verify(redisTemplate, times(2)).execute(any(DefaultRedisScript.class), anyList(), any(Object[].class));
     }
 
     @Test
@@ -129,7 +129,7 @@ class LuaScriptServicePipelineTest {
         when(redisTemplate.executePipelined(any(SessionCallback.class)))
                 .thenThrow(new RuntimeException("Pipeline failed"));
         
-        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), any()))
+        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), any(Object[].class)))
                 .thenReturn(1001L)
                 .thenThrow(new RuntimeException("Redis connection lost"));
 
@@ -150,7 +150,7 @@ class LuaScriptServicePipelineTest {
         when(redisTemplate.executePipelined(any(SessionCallback.class)))
                 .thenThrow(new RuntimeException("Pipeline failed"));
         
-        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), any()))
+        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), any(Object[].class)))
                 .thenReturn(null);
 
         List<BatchDeductResult> results = luaScriptService.executeBatchDeduct(requests, 8);
@@ -158,6 +158,9 @@ class LuaScriptServicePipelineTest {
         assertEquals(1, results.size());
         assertFalse(results.get(0).isSuccess());
         assertEquals(-99L, results.get(0).getLuaResult());
+        // 必须验证 execute 真被调到：mock 的默认返回就是 null，-99 也正是 null 的映射结果，
+        // 少了这行，stub 匹配不上时本测试照样绿。
+        verify(redisTemplate, times(1)).execute(any(DefaultRedisScript.class), anyList(), any(Object[].class));
     }
 
     @Test
@@ -169,7 +172,7 @@ class LuaScriptServicePipelineTest {
         when(redisTemplate.executePipelined(any(SessionCallback.class)))
                 .thenThrow(new RuntimeException("Pipeline failed"));
         
-        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), any()))
+        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), any(Object[].class)))
                 .thenReturn(0L); // 库存不足
 
         List<BatchDeductResult> results = luaScriptService.executeBatchDeduct(requests, 8);

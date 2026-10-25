@@ -7,6 +7,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -81,16 +82,19 @@ class AntiScrapingServiceTest {
         boolean result = antiScrapingService.isIpAllowed("192.168.1.1");
 
         assertTrue(result);
-        verify(redisTemplate, never()).execute(any(), any(), any());
+        // varargs 槽必须写 any(Object[].class)：单个 any() 只匹配 1 个可变参数，
+        // 而 isIpAllowed 实际传 4 个，于是 never() 恒成立、限流被绕过也照样绿。
+        verify(redisTemplate, never()).execute(any(DefaultRedisScript.class), anyList(), any(Object[].class));
     }
 
     @Test
     @DisplayName("IP检查：黑名单中的IP被拒绝")
     void isIpAllowed_blacklisted_denied() {
-        when(redisTemplate.opsForSet())
-                .thenReturn(mock(org.springframework.data.redis.core.SetOperations.class));
-        when(redisTemplate.opsForSet().isMember(anyString(), anyString()))
-                .thenReturn(true);
+        var hashOps = mock(org.springframework.data.redis.core.HashOperations.class);
+        when(redisTemplate.opsForHash()).thenReturn(hashOps);
+        // 黑名单是 Hash 存储（field=IP, value=过期时间戳），未过期才算命中
+        when(hashOps.get(anyString(), eq("192.168.1.100")))
+                .thenReturn(String.valueOf(System.currentTimeMillis() + 60_000L));
 
         boolean result = antiScrapingService.isIpAllowed("192.168.1.100");
 
@@ -98,17 +102,18 @@ class AntiScrapingServiceTest {
         // 验证黑名单计数器增加
         Counter blockedCounter = meterRegistry.find("seckill.anti_scraping.ip_blocked").counter();
         assertNotNull(blockedCounter);
-        assertTrue(blockedCounter.count() >= 1);
+        assertEquals(1.0, blockedCounter.count());
+        // 命中黑名单就应短路，不再走限流脚本
+        verify(redisTemplate, never()).execute(any(DefaultRedisScript.class), anyList(), any(Object[].class));
     }
 
     @Test
     @DisplayName("IP检查：正常IP在限流范围内允许")
     void isIpAllowed_normalIp_allowed() {
-        when(redisTemplate.opsForSet())
-                .thenReturn(mock(org.springframework.data.redis.core.SetOperations.class));
-        when(redisTemplate.opsForSet().isMember(anyString(), anyString()))
-                .thenReturn(false);
-        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), any()))
+        var hashOps = mock(org.springframework.data.redis.core.HashOperations.class);
+        when(redisTemplate.opsForHash()).thenReturn(hashOps);
+        when(hashOps.get(anyString(), eq("192.168.1.1"))).thenReturn(null);  // 不在黑名单
+        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), any(Object[].class)))
                 .thenReturn(5L); // 当前计数为5，未超限
 
         boolean result = antiScrapingService.isIpAllowed("192.168.1.1");
@@ -119,18 +124,16 @@ class AntiScrapingServiceTest {
     @Test
     @DisplayName("IP检查：超出限流返回拒绝")
     void isIpAllowed_exceedsRateLimit_denied() {
-        when(redisTemplate.opsForSet())
-                .thenReturn(mock(org.springframework.data.redis.core.SetOperations.class));
-        when(redisTemplate.opsForSet().isMember(anyString(), anyString()))
-                .thenReturn(false);
-        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), any()))
+        var hashOps = mock(org.springframework.data.redis.core.HashOperations.class);
+        when(redisTemplate.opsForHash()).thenReturn(hashOps);
+        when(hashOps.get(anyString(), eq("192.168.1.1"))).thenReturn(null);
+        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), any(Object[].class)))
                 .thenReturn(-1L); // 限流返回码
 
         // Mock ZSET操作用于计数检查
-        when(redisTemplate.opsForZSet())
-                .thenReturn(mock(org.springframework.data.redis.core.ZSetOperations.class));
-        when(redisTemplate.opsForZSet().zCard(anyString()))
-                .thenReturn(50L);
+        var zSetOps = mock(org.springframework.data.redis.core.ZSetOperations.class);
+        when(redisTemplate.opsForZSet()).thenReturn(zSetOps);
+        when(zSetOps.zCard(anyString())).thenReturn(50L);
 
         boolean result = antiScrapingService.isIpAllowed("192.168.1.1");
 
@@ -138,7 +141,32 @@ class AntiScrapingServiceTest {
         // 验证限流计数器增加
         Counter rateLimitCounter = meterRegistry.find("seckill.anti_scraping.ip_rate_limit").counter();
         assertNotNull(rateLimitCounter);
-        assertTrue(rateLimitCounter.count() >= 1);
+        assertEquals(1.0, rateLimitCounter.count());
+        // 50 < autoBlacklistThreshold(100)，不应顺手把 IP 拉黑
+        verify(hashOps, never()).put(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("IP检查：窗口内请求数超过阈值时自动拉黑并告警")
+    void isIpAllowed_exceedsAutoBlacklistThreshold_blacklistedAndAlerted() {
+        var hashOps = mock(org.springframework.data.redis.core.HashOperations.class);
+        when(redisTemplate.opsForHash()).thenReturn(hashOps);
+        when(hashOps.get(anyString(), eq("192.168.1.1"))).thenReturn(null);
+        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), any(Object[].class)))
+                .thenReturn(-1L);
+
+        var zSetOps = mock(org.springframework.data.redis.core.ZSetOperations.class);
+        when(redisTemplate.opsForZSet()).thenReturn(zSetOps);
+        when(zSetOps.zCard(anyString())).thenReturn(150L);  // >= autoBlacklistThreshold(100)
+
+        boolean result = antiScrapingService.isIpAllowed("192.168.1.1");
+
+        assertFalse(result);
+        verify(hashOps).put(eq("seckill:anti:ip_blacklist"), eq("192.168.1.1"), anyString());
+        verify(alertService).sendCriticalAlert(eq("IP自动封禁"), contains("192.168.1.1"));
+        Counter blockedCounter = meterRegistry.find("seckill.anti_scraping.ip_blocked").counter();
+        assertNotNull(blockedCounter);
+        assertEquals(1.0, blockedCounter.count());
     }
 
     // ==================== isUserAllowed Tests ====================
@@ -151,24 +179,25 @@ class AntiScrapingServiceTest {
         boolean result = antiScrapingService.isUserAllowed(12345L);
 
         assertTrue(result);
-        verify(redisTemplate, never()).execute(any(), any(), any());
+        verify(redisTemplate, never()).execute(any(DefaultRedisScript.class), anyList(), any(Object[].class));
     }
 
     @Test
     @DisplayName("用户检查：正常用户在限流范围内允许")
     void isUserAllowed_normalUser_allowed() {
-        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), any()))
+        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), any(Object[].class)))
                 .thenReturn(3L); // 当前计数为3，未超限
 
         boolean result = antiScrapingService.isUserAllowed(12345L);
 
         assertTrue(result);
+        verify(redisTemplate).execute(any(DefaultRedisScript.class), anyList(), any(Object[].class));
     }
 
     @Test
     @DisplayName("用户检查：超出限流返回拒绝")
     void isUserAllowed_exceedsRateLimit_denied() {
-        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), any()))
+        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), any(Object[].class)))
                 .thenReturn(-1L); // 限流返回码
 
         boolean result = antiScrapingService.isUserAllowed(12345L);
@@ -176,7 +205,21 @@ class AntiScrapingServiceTest {
         assertFalse(result);
         Counter rateLimitCounter = meterRegistry.find("seckill.anti_scraping.user_rate_limit").counter();
         assertNotNull(rateLimitCounter);
-        assertTrue(rateLimitCounter.count() >= 1);
+        assertEquals(1.0, rateLimitCounter.count());
+    }
+
+    @Test
+    @DisplayName("用户检查：Lua 返回 null（Redis 异常）时放行，不误伤正常用户")
+    void isUserAllowed_nullResult_allowed() {
+        // isUserAllowed 的判定是 result != null && result == -1，null 必须落到放行分支。
+        // 这条钉住「限流自身故障时 fail-open」的语义，改成 fail-close 会在这里红。
+        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), any(Object[].class)))
+                .thenReturn(null);
+
+        assertTrue(antiScrapingService.isUserAllowed(12345L));
+        Counter rateLimitCounter = meterRegistry.find("seckill.anti_scraping.user_rate_limit").counter();
+        assertNotNull(rateLimitCounter);
+        assertEquals(0.0, rateLimitCounter.count());
     }
 
     // ==================== Blacklist Management Tests ====================
@@ -184,47 +227,59 @@ class AntiScrapingServiceTest {
     @Test
     @DisplayName("黑名单：添加IP")
     void addToBlacklist_success() {
-        var setOps = mock(org.springframework.data.redis.core.SetOperations.class);
-        when(redisTemplate.opsForSet()).thenReturn(setOps);
+        var hashOps = mock(org.springframework.data.redis.core.HashOperations.class);
+        when(redisTemplate.opsForHash()).thenReturn(hashOps);
 
+        long before = System.currentTimeMillis();
         antiScrapingService.addToBlacklist("10.0.0.1");
 
-        verify(setOps).add(anyString(), eq("10.0.0.1"));
+        // 黑名单是 Hash（field=IP, value=过期时间戳），value 必须是 now + blacklistTtlHours
+        ArgumentCaptor<Object> valueCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(hashOps).put(eq("seckill:anti:ip_blacklist"), eq("10.0.0.1"), valueCaptor.capture());
+        long expireAt = Long.parseLong(valueCaptor.getValue().toString());
+        long ttlMillis = 24 * 3600_000L;  // blacklistTtlHours=24
+        assertTrue(expireAt >= before + ttlMillis, "过期时间戳应为写入时刻 + 24h");
+        assertTrue(expireAt <= System.currentTimeMillis() + ttlMillis, "过期时间戳不应晚于当前时刻 + 24h");
     }
 
     @Test
     @DisplayName("黑名单：移除IP")
     void removeFromBlacklist_success() {
-        var setOps = mock(org.springframework.data.redis.core.SetOperations.class);
-        when(redisTemplate.opsForSet()).thenReturn(setOps);
+        var hashOps = mock(org.springframework.data.redis.core.HashOperations.class);
+        when(redisTemplate.opsForHash()).thenReturn(hashOps);
 
         antiScrapingService.removeFromBlacklist("10.0.0.1");
 
-        verify(setOps).remove(anyString(), eq("10.0.0.1"));
+        verify(hashOps).delete(eq("seckill:anti:ip_blacklist"), eq("10.0.0.1"));
     }
 
     @Test
     @DisplayName("黑名单：检查IP是否在黑名单中")
     void isIpBlacklisted_true() {
-        var setOps = mock(org.springframework.data.redis.core.SetOperations.class);
-        when(redisTemplate.opsForSet()).thenReturn(setOps);
-        when(setOps.isMember(anyString(), anyString())).thenReturn(true);
+        var hashOps = mock(org.springframework.data.redis.core.HashOperations.class);
+        when(redisTemplate.opsForHash()).thenReturn(hashOps);
+        when(hashOps.get(anyString(), eq("10.0.0.1")))
+                .thenReturn(String.valueOf(System.currentTimeMillis() + 60_000L));
 
         boolean result = antiScrapingService.isIpBlacklisted("10.0.0.1");
 
         assertTrue(result);
+        verify(hashOps, never()).delete(anyString(), anyString());
     }
 
     @Test
     @DisplayName("黑名单：获取所有黑名单IP")
     void getBlacklistedIps_success() {
-        Set<String> blacklist = new HashSet<>();
-        blacklist.add("10.0.0.1");
-        blacklist.add("10.0.0.2");
+        Set<Object> keys = new HashSet<>();
+        keys.add("10.0.0.1");
+        keys.add("10.0.0.2");
 
-        var setOps = mock(org.springframework.data.redis.core.SetOperations.class);
-        when(redisTemplate.opsForSet()).thenReturn(setOps);
-        when(setOps.members(anyString())).thenReturn(blacklist);
+        var hashOps = mock(org.springframework.data.redis.core.HashOperations.class);
+        when(redisTemplate.opsForHash()).thenReturn(hashOps);
+        when(hashOps.keys(anyString())).thenReturn(keys);
+        String notExpired = String.valueOf(System.currentTimeMillis() + 60_000L);
+        when(hashOps.get(anyString(), eq("10.0.0.1"))).thenReturn(notExpired);
+        when(hashOps.get(anyString(), eq("10.0.0.2"))).thenReturn(notExpired);
 
         Set<String> result = antiScrapingService.getBlacklistedIps();
 
@@ -236,9 +291,9 @@ class AntiScrapingServiceTest {
     @Test
     @DisplayName("黑名单：获取黑名单大小")
     void getBlacklistSize_success() {
-        var setOps = mock(org.springframework.data.redis.core.SetOperations.class);
-        when(redisTemplate.opsForSet()).thenReturn(setOps);
-        when(setOps.size(anyString())).thenReturn(5L);
+        var hashOps = mock(org.springframework.data.redis.core.HashOperations.class);
+        when(redisTemplate.opsForHash()).thenReturn(hashOps);
+        when(hashOps.size(anyString())).thenReturn(5L);
 
         long size = antiScrapingService.getBlacklistSize();
 
@@ -250,24 +305,24 @@ class AntiScrapingServiceTest {
     @Test
     @DisplayName("手动封禁：添加IP并发送告警")
     void manualAddToBlacklist_withAlert() {
-        var setOps = mock(org.springframework.data.redis.core.SetOperations.class);
-        when(redisTemplate.opsForSet()).thenReturn(setOps);
+        var hashOps = mock(org.springframework.data.redis.core.HashOperations.class);
+        when(redisTemplate.opsForHash()).thenReturn(hashOps);
 
         antiScrapingService.manualAddToBlacklist("10.0.0.5", "恶意请求");
 
-        verify(setOps).add(anyString(), eq("10.0.0.5"));
+        verify(hashOps).put(anyString(), eq("10.0.0.5"), anyString());
         verify(alertService).sendAlert(anyString(), contains("恶意请求"));
     }
 
     @Test
     @DisplayName("手动解封：移除IP并发送告警")
     void manualRemoveFromBlacklist_withAlert() {
-        var setOps = mock(org.springframework.data.redis.core.SetOperations.class);
-        when(redisTemplate.opsForSet()).thenReturn(setOps);
+        var hashOps = mock(org.springframework.data.redis.core.HashOperations.class);
+        when(redisTemplate.opsForHash()).thenReturn(hashOps);
 
         antiScrapingService.manualRemoveFromBlacklist("10.0.0.5", "误封");
 
-        verify(setOps).remove(anyString(), eq("10.0.0.5"));
+        verify(hashOps).delete(anyString(), eq("10.0.0.5"));
         verify(alertService).sendAlert(anyString(), contains("误封"));
     }
 
@@ -277,7 +332,7 @@ class AntiScrapingServiceTest {
     @DisplayName("并发限流：多用户并发请求不互相影响")
     void concurrentRateLimit_differentUsers_independent() throws InterruptedException {
         // 模拟每个请求都允许通过
-        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), any()))
+        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), any(Object[].class)))
                 .thenReturn(1L);
 
         int userCount = 50;
@@ -411,7 +466,7 @@ class AntiScrapingServiceTest {
 
         // 验证降级到HGETALL
         verify(hashOps).entries(anyString());
-        verify(hashOps).delete(anyString(), "10.0.0.1");
+        verify(hashOps).delete(anyString(), eq("10.0.0.1"));
     }
 
     @Test
