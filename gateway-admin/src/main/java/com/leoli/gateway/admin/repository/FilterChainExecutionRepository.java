@@ -201,22 +201,6 @@ public interface FilterChainExecutionRepository extends JpaRepository<FilterChai
     List<Object[]> findFilterOrderConfig(String instanceId, LocalDateTime startTime);
 
     /**
-     * 按traceId聚合的Filter执行统计（用于trace详情）
-     * 返回: traceId, filterCount, totalDurationMs, failCount, maxDuration, slowestFilter
-     * 注意：使用原生SQL查询，因为JPQL不支持子查询中的LIMIT
-     */
-    @Query(value = "SELECT e.trace_id, COUNT(*) as filter_count, SUM(e.duration_ms) as total_duration_ms, " +
-           "SUM(CASE WHEN e.success = 0 THEN 1 ELSE 0 END) as fail_count, " +
-           "MAX(e.duration_ms) as max_duration, " +
-           "(SELECT e2.filter_name FROM filter_chain_execution e2 " +
-           "WHERE e2.trace_id = e.trace_id AND e2.duration_ms = MAX(e.duration_ms) LIMIT 1) as slowest_filter " +
-           "FROM filter_chain_execution e " +
-           "WHERE e.instance_id = :instanceId AND e.created_at >= :startTime " +
-           "GROUP BY e.trace_id " +
-           "ORDER BY total_duration_ms DESC", nativeQuery = true)
-    List<Object[]> findTraceFilterSummary(String instanceId, LocalDateTime startTime);
-
-    /**
      * Filter错误统计（用于AI异常分析）
      * 返回: filterName, totalCount, errorCount
      */

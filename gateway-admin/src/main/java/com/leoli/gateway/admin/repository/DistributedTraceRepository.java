@@ -115,12 +115,6 @@ public interface DistributedTraceRepository extends JpaRepository<DistributedTra
     Double findAverageDuration(String serviceName);
 
     /**
-     * 查询P99耗时（简化版本）
-     */
-    @Query(value = "SELECT total_duration_ms FROM distributed_trace WHERE service_name = ?1 ORDER BY total_duration_ms DESC LIMIT 1 OFFSET CAST((SELECT COUNT(*) FROM distributed_trace WHERE service_name = ?1) * 0.01 AS INT)", nativeQuery = true)
-    Optional<Long> findP99Duration(String serviceName);
-
-    /**
      * 删除指定时间之前的Trace
      */
     int deleteByTraceTimeBefore(LocalDateTime before);

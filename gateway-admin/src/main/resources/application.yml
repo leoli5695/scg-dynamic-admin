@@ -50,6 +50,25 @@ spring:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.MySQLDialect
+        # Without this, saveAll() issues one INSERT per row. AccessLogConfigController ingests parsed
+        # access-log entries with saveAll, and audit cleanup/trace ingestion do the same, so the
+        # difference is N round trips versus N/50.
+        jdbc:
+          batch_size: 50
+        # Batching only helps when statements of the same entity are adjacent, which these two make
+        # Hibernate guarantee.
+        order_inserts: true
+        order_updates: true
+
+  # Upload limits. Spring Boot's default is 1MB, which the plugin-JAR upload (a shaded JAR with its
+  # dependencies) exceeds by an order of magnitude - it failed with MaxUploadSizeExceededException,
+  # which GlobalExceptionHandler does not map, so the client got an uninformative 500. SSL
+  # certificate/keystore uploads are the other consumer. gateway-ui/nginx.conf carries a matching
+  # client_max_body_size, otherwise nginx 413s the request before Spring ever sees it.
+  servlet:
+    multipart:
+      max-file-size: ${MAX_UPLOAD_SIZE:50MB}
+      max-request-size: ${MAX_UPLOAD_SIZE:50MB}
   # ============================================================================
   # Redis 配置（K8s test 命名空间，NodePort 映射）
   # ============================================================================

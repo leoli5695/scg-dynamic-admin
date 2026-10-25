@@ -16,7 +16,13 @@ import java.time.LocalDateTime;
 @Table(name = "filter_chain_execution", indexes = {
     @Index(name = "idx_fce_trace_id", columnList = "trace_id"),
     @Index(name = "idx_fce_filter_name", columnList = "filter_name"),
-    @Index(name = "idx_fce_created_at", columnList = "created_at")
+    @Index(name = "idx_fce_created_at", columnList = "created_at"),
+    // Nine queries in FilterChainExecutionRepository filter on instance_id + created_at, and this is
+    // the highest-write table in the system (one row per filter per request). instance_id had no
+    // index at all, so every one of them scanned by created_at alone or worse. RequestTrace,
+    // AuditLogEntity and AccessLogEntryEntity all carry the equivalent composite index - this one
+    // was simply missed.
+    @Index(name = "idx_fce_instance_created", columnList = "instance_id,created_at")
 })
 public class FilterChainExecution {
 

@@ -55,6 +55,36 @@ public class PluginService {
     @Autowired
     private ConfigCenterService configCenterService;
 
+    @Autowired
+    private com.leoli.gateway.admin.cache.InstanceNamespaceCache namespaceCache;
+
+    /**
+     * Resolve the Nacos namespace a plugin's config belongs to, or null when it cannot be resolved.
+     *
+     * <p>FIX (cross-instance config pollution): all three plugin writes below used to pass a null
+     * namespace, which {@code NacosConfigCenterService} maps to the configured default - public. Every
+     * other config type in this codebase (routes, services, strategies, auth policies, certificates)
+     * is published into the owning instance's namespace, and each gateway binds to its own namespace
+     * via {@code NACOS_NAMESPACE}. So a plugin uploaded for one instance was broadcast to all of
+     * them, carrying its JAR path and SHA-256 - and a gateway that tried to load it would look for a
+     * JAR that only exists on the other instance's volume.
+     *
+     * <p>Callers must skip the write when this returns null rather than fall back to public; that is
+     * the same rule {@code RouteReconcileTask} and {@code RouteService} already follow.
+     */
+    private String resolveNamespace(String instanceId) {
+        if (instanceId == null || instanceId.isEmpty()) {
+            log.warn("Plugin has no instanceId - skipping Nacos publish instead of writing to the public namespace");
+            return null;
+        }
+        String namespace = namespaceCache.getNamespace(instanceId);
+        if (namespace == null) {
+            log.warn("No Nacos namespace resolved for instance {} - skipping plugin publish instead of "
+                    + "writing to the public namespace", instanceId);
+        }
+        return namespace;
+    }
+
     // Default JAR storage directory
     private static final String DEFAULT_JAR_DIR = "./plugins";
     private String jarStorageDir = DEFAULT_JAR_DIR;
@@ -543,6 +573,10 @@ public class PluginService {
      * Publish plugin configuration to Nacos.
      */
     private void publishPluginConfig(PluginEntity plugin) {
+        String namespace = resolveNamespace(plugin.getInstanceId());
+        if (namespace == null) {
+            return;
+        }
         try {
             String pluginDataId = PLUGIN_PREFIX + plugin.getPluginId();
 
@@ -563,8 +597,11 @@ public class PluginService {
             config.put("registered", plugin.getRegistered());
             config.put("instanceId", plugin.getInstanceId());
 
-            configCenterService.publishConfig(pluginDataId, null, config);
-            log.info("Plugin config published to Nacos: {}", pluginDataId);
+            if (!configCenterService.publishConfig(pluginDataId, namespace, config)) {
+                log.error("Failed to publish plugin config to Nacos: {} (namespace {})", pluginDataId, namespace);
+                return;
+            }
+            log.info("Plugin config published to Nacos: {} (namespace {})", pluginDataId, namespace);
         } catch (Exception e) {
             log.error("Failed to publish plugin config to Nacos: {}", plugin.getPluginId(), e);
         }
@@ -574,10 +611,17 @@ public class PluginService {
      * Remove plugin configuration from Nacos.
      */
     private void removePluginConfig(PluginEntity plugin) {
+        String namespace = resolveNamespace(plugin.getInstanceId());
+        if (namespace == null) {
+            return;
+        }
         try {
             String pluginDataId = PLUGIN_PREFIX + plugin.getPluginId();
-            configCenterService.removeConfig(pluginDataId, null);
-            log.info("Plugin config removed from Nacos: {}", pluginDataId);
+            if (!configCenterService.removeConfig(pluginDataId, namespace)) {
+                log.error("Failed to remove plugin config from Nacos: {} (namespace {})", pluginDataId, namespace);
+                return;
+            }
+            log.info("Plugin config removed from Nacos: {} (namespace {})", pluginDataId, namespace);
         } catch (Exception e) {
             log.error("Failed to remove plugin config from Nacos: {}", plugin.getPluginId(), e);
         }
@@ -587,18 +631,24 @@ public class PluginService {
      * Rebuild plugins index for gateway.
      */
     private void rebuildPluginsIndex(String instanceId) {
+        String namespace = resolveNamespace(instanceId);
+        if (namespace == null) {
+            return;
+        }
         try {
-            // Get all enabled plugins for this instance
-            List<PluginEntity> enabledPlugins = instanceId != null
-                    ? pluginRepository.findByInstanceIdAndEnabledTrue(instanceId)
-                    : pluginRepository.findByEnabledTrue();
+            // Namespace resolution above guarantees a non-empty instanceId, so the index is always
+            // that instance's own enabled plugins - never a cross-instance aggregate.
+            List<PluginEntity> enabledPlugins = pluginRepository.findByInstanceIdAndEnabledTrue(instanceId);
 
             List<String> pluginIds = enabledPlugins.stream()
                     .map(PluginEntity::getPluginId)
                     .collect(Collectors.toList());
 
-            configCenterService.publishConfig(PLUGINS_INDEX, null, pluginIds);
-            log.info("Plugins index rebuilt: {} plugins", pluginIds.size());
+            if (!configCenterService.publishConfig(PLUGINS_INDEX, namespace, pluginIds)) {
+                log.error("Failed to rebuild plugins index in namespace {}", namespace);
+                return;
+            }
+            log.info("Plugins index rebuilt: {} plugins (namespace {})", pluginIds.size(), namespace);
         } catch (Exception e) {
             log.error("Failed to rebuild plugins index", e);
         }

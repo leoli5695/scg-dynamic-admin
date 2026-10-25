@@ -110,8 +110,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                requestURI.equals("/api/filter-executions/internal") || // Filter execution data from gateway
                requestURI.equals("/api/services/traces") || // Distributed trace from trace-starter
                requestURI.equals("/api/services/traces/batch") || // Batch distributed trace upload
-               requestURI.equals("/api/services/middleware-metadata") || // Middleware metadata from trace-starter
-               requestURI.startsWith("/api/nacos/");       // Nacos discovery queries
+               requestURI.equals("/api/services/middleware-metadata"); // Middleware metadata from trace-starter
+        // NOTE: this is a fourth copy of the no-JWT endpoint list, alongside
+        // InternalApiEndpoints.TOKEN_PROTECTED / PERMIT_ALL_NO_TOKEN and the SecurityConfig matchers.
+        // It has already drifted once - it carried a "/api/nacos/" prefix with no controller behind
+        // it, which would have silently exempted any future handler mounted there. InternalApiEndpoints
+        // is the single source of truth; new entries belong there, not here.
     }
 
     /**
