@@ -25,7 +25,7 @@ import java.util.Map;
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
 @Slf4j
-public class AuthController {
+public class AuthController extends BaseController {
 
     private final AuthService authService;
     private final JwtTokenProvider jwtTokenProvider;
@@ -39,7 +39,8 @@ public class AuthController {
      * @return JWT token and user info including license edition
      */
     @PostMapping("/login")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> login(@RequestBody Map<String, String> loginRequest) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> login(@RequestBody Map<String, String> loginRequest,
+                                                                 HttpServletRequest request) {
         String username = loginRequest.get("username");
         log.info("Login attempt for user: {}", sanitizeUsername(username));
 
@@ -54,8 +55,11 @@ public class AuthController {
                 return ResponseEntity.status(401).body(ApiResponse.unauthorized("Password is required"));
             }
 
-            // Authenticate and get token
-            String token = authService.authenticate(username, password);
+            // Authenticate and get token. The client IP scopes the failed-attempt lockout, so an
+            // unauthenticated caller cannot lock the operator out of their own account - see
+            // AuthService.authenticate. getIpAddress is the TCP peer unless proxy headers are
+            // explicitly trusted, so it is not caller-controlled by default.
+            String token = authService.authenticate(username, password, getIpAddress(request));
 
             // Get user info
             var userOpt = authService.getUserByUsername(username);

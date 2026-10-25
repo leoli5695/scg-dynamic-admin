@@ -34,9 +34,10 @@ public class AuthService {
 
     /**
      * FIX (P1 brute force): login previously had no throttling, allowing unlimited
-     * password guessing. Track consecutive failures per username; after
-     * MAX_FAILED_ATTEMPTS the account is locked for the cache TTL (15 min). The
-     * counter auto-expires and is cleared on successful login.
+     * password guessing. Track consecutive failures per username <b>and client IP</b>; after
+     * MAX_FAILED_ATTEMPTS that pair is locked for the cache TTL (15 min). The counter auto-expires
+     * and is cleared on successful login. Keying on the IP as well is what stops an unauthenticated
+     * caller from locking the operator out of their own console - see authenticate().
      */
     private static final int MAX_FAILED_ATTEMPTS = 5;
     private final Cache<String, Integer> failedLoginAttempts = Caffeine.newBuilder()
@@ -61,23 +62,41 @@ public class AuthService {
      * @return JWT token if authentication successful
      * @throws IllegalArgumentException if credentials are invalid
      */
-    public String authenticate(String username, String password) {
+    public String authenticate(String username, String password, String clientIp) {
         log.info("Authenticating user: {}", username);
 
         if (username == null || username.trim().isEmpty()) {
             throw new IllegalArgumentException("Invalid username or password");
         }
 
-        Integer priorFailures = failedLoginAttempts.getIfPresent(username);
+        // FIX (lockout DoS): the counter used to be keyed on the username alone, and /api/auth/login
+        // is permitAll. Five wrong passwords from anywhere therefore locked the account for 15
+        // minutes - renewable indefinitely by repeating every 15 minutes - on a deployment whose only
+        // operator IS the account being locked. Keying on username + client IP means an attacker
+        // locks out their own source address, not the operator.
+        //
+        // Trade-off, stated plainly rather than hidden: this is weaker against an attacker who can
+        // source many IPs. The old scheme was not real protection against that either - it is
+        // per-instance and in-memory, so it neither survives a restart nor coordinates across
+        // replicas. For a single-operator console, keeping the operator able to log in outweighs
+        // slowing a distributed guesser; that defence belongs in front of the app (reverse-proxy rate
+        // limiting, fail2ban), not in an in-process cache.
+        //
+        // clientIp comes from BaseController.getIpAddress, which is request.getRemoteAddr() unless
+        // gateway.admin.security.trust-proxy-headers is explicitly enabled - so by default it is the
+        // TCP peer and cannot be forged by the caller.
+        String lockKey = username + "|" + (clientIp != null && !clientIp.isBlank() ? clientIp : "unknown");
+
+        Integer priorFailures = failedLoginAttempts.getIfPresent(lockKey);
         if (priorFailures != null && priorFailures >= MAX_FAILED_ATTEMPTS) {
-            log.warn("Login temporarily locked due to too many failed attempts: {}", username);
+            log.warn("Login temporarily locked for user {} from {}: too many failed attempts", username, clientIp);
             throw new IllegalArgumentException("Too many failed login attempts. Please try again later.");
         }
 
         Optional<User> userOpt = userRepository.findByUsername(username);
         
         if (userOpt.isEmpty()) {
-            recordFailedLogin(username);
+            recordFailedLogin(lockKey, username, clientIp);
             log.warn("User not found: {}", username);
             throw new IllegalArgumentException("Invalid username or password");
         }
@@ -86,13 +105,13 @@ public class AuthService {
         
         // Verify password
         if (!passwordEncoder.matches(password, user.getPassword())) {
-            recordFailedLogin(username);
+            recordFailedLogin(lockKey, username, clientIp);
             log.warn("Invalid password for user: {}", username);
             throw new IllegalArgumentException("Invalid username or password");
         }
 
-        // Successful login clears any failure counter.
-        failedLoginAttempts.invalidate(username);
+        // Successful login clears any failure counter for this username+IP pair.
+        failedLoginAttempts.invalidate(lockKey);
 
         // Generate JWT token (roles + licenseEdition claims)
         List<String> roles = user.getRole() != null ? List.of(user.getRole()) : List.of();
@@ -105,11 +124,11 @@ public class AuthService {
     /**
      * Atomically increment the failed-attempt counter for a username.
      */
-    private void recordFailedLogin(String username) {
-        int attempts = failedLoginAttempts.asMap().merge(username, 1, Integer::sum);
+    private void recordFailedLogin(String lockKey, String username, String clientIp) {
+        int attempts = failedLoginAttempts.asMap().merge(lockKey, 1, Integer::sum);
         if (attempts >= MAX_FAILED_ATTEMPTS) {
-            log.warn("User {} reached {} failed login attempts - locking for 15 minutes",
-                    username, attempts);
+            log.warn("User {} from {} reached {} failed login attempts - locking that pair for 15 minutes",
+                    username, clientIp, attempts);
         }
     }
 

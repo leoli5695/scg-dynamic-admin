@@ -46,6 +46,53 @@ public class AccessLogConfigController extends BaseController {
     private final ObjectMapper objectMapper;
 
     /**
+     * Upper bound on how many lines one tail request may pull into memory. Both k8s log endpoints
+     * split the whole response on newlines and JSON-parse every line into a List before paging in
+     * memory, so an unbounded tailLines let any authenticated caller size that list by asking for it.
+     */
+    private static final int MAX_TAIL_LINES = 10_000;
+
+    private static final java.util.regex.Pattern LOG_DATE =
+            java.util.regex.Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
+
+    /**
+     * Resolve the access-log file for a date, refusing to leave the configured log directory.
+     *
+     * <p>FIX (path traversal): the name used to be built as {@code "access-" + date + ".log"} from a
+     * raw request parameter and resolved without normalisation. The {@code access-} prefix does not
+     * constrain anything - {@code date=x/../../../etc/passwd} produces
+     * {@code access-x/../../../etc/passwd.log}, whose first segment is an ordinary directory name and
+     * whose later {@code ..} segments escape the log directory, giving an authenticated read of any
+     * {@code *.log} file on the filesystem. The format check rejects that outright; the containment
+     * check keeps the guarantee even if the name is ever built differently.
+     *
+     * @throws IllegalArgumentException when the date is malformed or resolves outside the log directory
+     */
+    private Path resolveLogFile(Path logDirPath, String date) {
+        String effectiveDate = (date != null && !date.isEmpty())
+                ? date
+                : LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
+        if (!LOG_DATE.matcher(effectiveDate).matches()) {
+            // Deliberately does not echo the value back: it is caller-controlled and this message
+            // reaches both the HTTP response and the logs.
+            throw new IllegalArgumentException("Invalid date parameter, expected yyyy-MM-dd");
+        }
+        Path base = logDirPath.toAbsolutePath().normalize();
+        Path filePath = base.resolve("access-" + effectiveDate + ".log").normalize();
+        if (!filePath.startsWith(base)) {
+            throw new IllegalArgumentException("Resolved log path escapes the configured log directory");
+        }
+        return filePath;
+    }
+
+    /**
+     * Clamp a requested tail size into [1, MAX_TAIL_LINES].
+     */
+    private static int clampTailLines(int tailLines) {
+        return Math.min(Math.max(tailLines, 1), MAX_TAIL_LINES);
+    }
+
+    /**
      * Resolve log directory - try multiple possible locations.
      */
     private Path resolveLogDirectory(String logDir) {
@@ -517,15 +564,14 @@ services:
             AccessLogGlobalConfig config = accessLogConfigService.getConfig();
             Path logDirPath = resolveLogDirectory(config.getLogDirectory());
 
-            // Determine file name
-            String fileName;
-            if (date != null && !date.isEmpty()) {
-                fileName = "access-" + date + ".log";
-            } else {
-                fileName = "access-" + LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE) + ".log";
+            // Determine file name - validated and confined to the log directory
+            Path filePath;
+            try {
+                filePath = resolveLogFile(logDirPath, date);
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
             }
-
-            Path filePath = logDirPath.resolve(fileName);
+            String fileName = filePath.getFileName().toString();
             if (!Files.exists(filePath)) {
                 Map<String, Object> data = new LinkedHashMap<>();
                 data.put("entries", Collections.emptyList());
@@ -613,14 +659,14 @@ services:
             AccessLogGlobalConfig config = accessLogConfigService.getConfig();
             Path logDirPath = resolveLogDirectory(config.getLogDirectory());
 
-            String fileName;
-            if (date != null && !date.isEmpty()) {
-                fileName = "access-" + date + ".log";
-            } else {
-                fileName = "access-" + LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE) + ".log";
+            // Validated and confined to the log directory - see resolveLogFile.
+            Path filePath;
+            try {
+                filePath = resolveLogFile(logDirPath, date);
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
             }
-
-            Path filePath = logDirPath.resolve(fileName);
+            String fileName = filePath.getFileName().toString();
             if (!Files.exists(filePath)) {
                 Map<String, Object> data = new LinkedHashMap<>();
                 data.put("totalRequests", 0);
@@ -772,7 +818,7 @@ services:
             @RequestParam(required = false) Integer sinceSeconds) {
         try {
             String rawLogs = kubernetesResourceService.getPodLogs(clusterId, namespace, podName, null,
-                sinceSeconds != null ? null : tailLines, sinceSeconds);
+                sinceSeconds != null ? null : clampTailLines(tailLines), sinceSeconds);
 
             List<Map<String, Object>> allEntries = new ArrayList<>();
             if (rawLogs != null && !rawLogs.isEmpty()) {
@@ -856,7 +902,7 @@ services:
             @RequestParam(required = false) Integer sinceSeconds) {
         try {
             String rawLogs = kubernetesResourceService.getPodLogs(clusterId, namespace, podName, null,
-                sinceSeconds != null ? null : tailLines, sinceSeconds);
+                sinceSeconds != null ? null : clampTailLines(tailLines), sinceSeconds);
 
             long totalRequests = 0;
             long totalDuration = 0;
