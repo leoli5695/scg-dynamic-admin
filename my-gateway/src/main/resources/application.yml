@@ -330,8 +330,6 @@ management:
   endpoint:
     health:
       show-details: never  # 安全加固：不暴露健康详情，防止泄露内部组件状态
-    prometheus:
-      enabled: true
   metrics:
     tags:
       application: ${spring.application.name}
