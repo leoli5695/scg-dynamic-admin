@@ -1,24 +1,19 @@
 package com.seckill.service;
 
 import com.seckill.config.SeckillConfig;
-import com.seckill.dto.SeckillRequest;
-import com.seckill.dto.SeckillResponse;
-import com.seckill.entity.SeckillActivity;
-import com.seckill.entity.SeckillProduct;
-import com.seckill.enums.SeckillResult;
-import com.seckill.mapper.ActivityMapper;
-import com.seckill.mapper.ProductMapper;
-import com.seckill.redis.lua.SeckillDeductLua;
+import com.seckill.dto.OrderMessage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -80,21 +75,6 @@ import static org.mockito.Mockito.*;
 class DegradationE2ETest {
 
     @Mock
-    private SeckillDeductLua seckillDeductLua;
-
-    @Mock
-    private ActivityMapper activityMapper;
-
-    @Mock
-    private ProductMapper productMapper;
-
-    @Mock
-    private RedisDegradeService redisDegradeService;
-
-    @Mock
-    private MQDegradeService mqDegradeService;
-
-    @Mock
     private AlertService alertService;
 
     private LocalFallbackService localFallbackService;
@@ -127,25 +107,15 @@ class DegradationE2ETest {
     @Test
     @DisplayName("E2E: Redis降级 + MQ降级同时触发 - 订单仍能正确创建")
     void doubleDegradation_orderStillCreated() throws InterruptedException {
-        // ====================================================================
-        // 场景设置：双降级模式
-        // ====================================================================
-        when(redisDegradeService.isDegraded()).thenReturn(true);
-        when(mqDegradeService.isDegraded()).thenReturn(true);
-
-        // 模拟活动信息
-        SeckillActivity activity = new SeckillActivity();
-        activity.setId(SECKILL_ID);
-        activity.setStatus(1); // 进行中
-        activity.setStartTime(LocalDateTime.now().minusMinutes(5));
-        activity.setEndTime(LocalDateTime.now().plusMinutes(5));
-        when(activityMapper.selectById(SECKILL_ID)).thenReturn(activity);
-
-        // 模拟商品信息
-        SeckillProduct product = new SeckillProduct();
-        product.setId(PRODUCT_ID);
-        product.setSeckillPrice(BigDecimal.valueOf(100));
-        when(productMapper.selectById(PRODUCT_ID)).thenReturn(product);
+        // 这里原先 stub 了 redisDegradeService / mqDegradeService / activityMapper /
+        // productMapper，结尾再 verify(redisDegradeService, atLeast(userCount)).isDegraded()。
+        // 但本类的 localFallbackService 是 setUp() 里手工 new 的真对象，构造参数里没有这些
+        // mock，全程无人调用，verify 必然得到 0 次。降级开关的分派属 SeckillService，已由
+        // SeckillServiceTest 的降级模式用例覆盖。
+        // stub 也必须在这里单线程做完：原来它在 10 个线程的 lambda 内部执行，等于一边 stub
+        // 一边被别的线程调用。
+        when(localTransactionService.processOrderDirectly(any())).thenReturn(true);
+        OrderMessage orderMessage = new OrderMessage();
 
         // ====================================================================
         // 并发测试：20用户抢10个本地库存
@@ -172,9 +142,7 @@ class DegradationE2ETest {
 
                         // 模拟双降级模式下的订单处理
                         // LocalFallbackService返回成功后，LocalTransactionService应处理订单
-                        when(localTransactionService.processOrderDirectly(any())).thenReturn(true);
-                        boolean orderCreated = localTransactionService.processOrderDirectly(
-                            mock(com.seckill.dto.OrderMessage.class));
+                        boolean orderCreated = localTransactionService.processOrderDirectly(orderMessage);
 
                         if (!orderCreated) {
                             // 订单创建失败，需要回补库存
@@ -216,9 +184,7 @@ class DegradationE2ETest {
                 "每个请求必须有结果")
         );
 
-        // 验证降级服务调用
-        verify(redisDegradeService, atLeast(userCount)).isDegraded();
-        verify(mqDegradeService, atLeast(successCount.get())).isDegraded();
+        verify(localTransactionService, times(successCount.get())).processOrderDirectly(orderMessage);
     }
 
     @Test
@@ -229,9 +195,13 @@ class DegradationE2ETest {
         // ====================================================================
 
         // 1. 本地扣减10次
+        // deductStockLocal 成功时返回「剩余库存」而不是状态码（见其返回值文档：>0 剩余库存 /
+        // 0 刚好扣到归零 / -1 -2 -3 各类失败）。不要和 SeckillService 降级分支里那个 1000
+        // 哨兵值搞混，那是另一个类的另一个变量。
         for (long userId = 1; userId <= 10; userId++) {
             int result = localFallbackService.deductStockLocal(SECKILL_ID, userId, 1);
-            assertEquals(1000, result, "本地扣减应返回成功码 1000");
+            assertEquals(FALLBACK_STOCK - userId, result,
+                "第 " + userId + " 次扣减后应返回剩余库存");
         }
 
         // 2. 检查本地库存状态
@@ -250,16 +220,13 @@ class DegradationE2ETest {
     }
 
     @Test
-    @DisplayName("E2E: MQ降级 - 订单直接写库成功")
-    void mqDegrade_directWriteToDB() {
-        // ====================================================================
-        // 场景：MQ不可用，订单直接写入数据库
-        // ====================================================================
+    @DisplayName("E2E: MQ降级 - 订单进本地缓冲队列并落盘")
+    void mqDegrade_orderBuffered(@TempDir Path tempDir) {
+        // MQ 降级时 SeckillService 的兜底动作是调 bufferOrder，这里直接测它。
+        ReflectionTestUtils.setField(localFallbackService, "bufferFilePath",
+                tempDir.resolve("fallback-orders.log").toString());
 
-        when(mqDegradeService.isDegraded()).thenReturn(true);
-
-        // 模拟订单消息
-        com.seckill.dto.OrderMessage orderMessage = new com.seckill.dto.OrderMessage();
+        OrderMessage orderMessage = new OrderMessage();
         orderMessage.setTransactionId("tx-001");
         orderMessage.setOrderNo("order-001");
         orderMessage.setUserId(1L);
@@ -269,13 +236,47 @@ class DegradationE2ETest {
         orderMessage.setTotalAmount(BigDecimal.valueOf(100));
         orderMessage.setShardIndex(0);
 
-        // 模拟 LocalTransactionService 处理成功
-        when(localTransactionService.processOrderDirectly(orderMessage)).thenReturn(true);
+        localFallbackService.bufferOrder("order-001", orderMessage);
 
-        boolean result = localTransactionService.processOrderDirectly(orderMessage);
+        assertEquals(1, localFallbackService.getBufferSize());
+        assertTrue(localFallbackService.getBufferedOrders().containsKey("order-001"));
+        assertTrue(Files.exists(tempDir.resolve("fallback-orders.log")),
+                "缓冲订单必须落盘，否则进程崩溃即丢单");
 
-        assertTrue(result, "MQ降级模式下订单应直接写库成功");
-        verify(localTransactionService).processOrderDirectly(orderMessage);
+        localFallbackService.clearBufferedOrder("order-001");
+        assertEquals(0, localFallbackService.getBufferSize());
+    }
+
+    @Test
+    @DisplayName("回补后继续扣减 - 回补的库存不能被下一次扣减擦除")
+    void rollbackSurvivesSubsequentDeduct() {
+        // 单线程、确定性，这条才是丢回补的真正探针。并发版
+        // doubleDegradation_withRollback_stockConserved 依赖竞态窗口，窗口一窄就假绿，
+        // 只能当回归护栏 —— 别把这条当重复删掉。
+        assertEquals(FALLBACK_STOCK - 1, localFallbackService.deductStockLocal(SECKILL_ID, 101L, 1));
+
+        localFallbackService.rollbackStockLocal(SECKILL_ID, 101L, 1);
+        assertEquals(FALLBACK_STOCK, localFallbackService.getLocalStock(SECKILL_ID),
+                "回补后库存应回到初始值");
+
+        assertEquals(FALLBACK_STOCK - 1, localFallbackService.deductStockLocal(SECKILL_ID, 102L, 1),
+                "回补的那一件必须还能被下一个用户扣走");
+        assertEquals(FALLBACK_STOCK - 1, localFallbackService.getLocalStock(SECKILL_ID),
+                "净扣减一件，剩余应为 9");
+    }
+
+    @Test
+    @DisplayName("回补必须同时撤销防重记录 - 否则该用户被永久锁死")
+    void rollbackClearsBoughtRecord() {
+        assertEquals(FALLBACK_STOCK - 1, localFallbackService.deductStockLocal(SECKILL_ID, 201L, 1));
+        assertEquals(1, localFallbackService.getLocalBoughtCount(SECKILL_ID, 201L));
+
+        localFallbackService.rollbackStockLocal(SECKILL_ID, 201L, 1);
+        assertEquals(0, localFallbackService.getLocalBoughtCount(SECKILL_ID, 201L),
+                "订单失败后该用户不应再被记为已购买");
+
+        assertEquals(FALLBACK_STOCK - 1, localFallbackService.deductStockLocal(SECKILL_ID, 201L, 1),
+                "回补过的用户应能重新下单，而不是拿到 -2");
     }
 
     @Test
@@ -285,14 +286,17 @@ class DegradationE2ETest {
         // 场景：双降级模式下，部分订单失败需要回补库存
         // ====================================================================
 
-        when(redisDegradeService.isDegraded()).thenReturn(true);
-        when(mqDegradeService.isDegraded()).thenReturn(true);
+        // 同 doubleDegradation_orderStillCreated：stub 必须在单线程里做完，且不要 stub
+        // localFallbackService 根本不持有的 mock。
+        when(localTransactionService.processOrderDirectly(any())).thenReturn(true);
+        OrderMessage orderMessage = new OrderMessage();
 
         int userCount = 15;
         ExecutorService pool = Executors.newFixedThreadPool(5);
         CountDownLatch start = new CountDownLatch(1);
         CountDownLatch done = new CountDownLatch(userCount);
 
+        AtomicInteger deductCount = new AtomicInteger();
         AtomicInteger successCount = new AtomicInteger();
         AtomicInteger rollbackCount = new AtomicInteger();
 
@@ -306,16 +310,11 @@ class DegradationE2ETest {
                     int result = localFallbackService.deductStockLocal(SECKILL_ID, u, 1);
 
                     if (result >= 0) {
-                        // 模拟订单处理
-                        boolean orderCreated;
-                        if (u <= 5) {
-                            // 前5个用户订单成功
-                            when(localTransactionService.processOrderDirectly(any())).thenReturn(true);
-                            orderCreated = localTransactionService.processOrderDirectly(mock(com.seckill.dto.OrderMessage.class));
-                        } else {
-                            // 后面用户订单失败（模拟数据库写入失败）
-                            orderCreated = false;
-                        }
+                        deductCount.incrementAndGet();
+
+                        // 模拟订单处理：前5个用户成功，其余写库失败
+                        boolean orderCreated = u <= 5
+                                && localTransactionService.processOrderDirectly(orderMessage);
 
                         if (orderCreated) {
                             successCount.incrementAndGet();
@@ -344,16 +343,24 @@ class DegradationE2ETest {
 
         System.out.println("\n=== 双降级+回补测试结果 ===");
         System.out.println("  用户数      = " + userCount);
-        System.out.println("  成功        = " + successCount.get());
+        System.out.println("  扣减成功    = " + deductCount.get());
+        System.out.println("  下单成功    = " + successCount.get());
         System.out.println("  回补        = " + rollbackCount.get());
         System.out.println("  剩余库存    = " + finalStock);
 
         // 库存守恒：成功数 + 剩余库存 = 降级库存
         assertEquals(FALLBACK_STOCK, successCount.get() + finalStock,
             "库存守恒：成功数 + 剩余库存 = 降级库存");
-        assertEquals(userCount - successCount.get() - rollbackCount.get() + FALLBACK_STOCK - successCount.get(),
-            finalStock + rollbackCount.get(),
-            "回补逻辑正确");
+
+        // 扣掉的每一件要么下单成功、要么被回补，没有第三种去向
+        assertEquals(deductCount.get(), successCount.get() + rollbackCount.get(),
+            "每个扣到库存的请求必须归类为成功或回补");
+
+        // 这条是能抓住「回补丢失」的那条：原先 rollbackStockLocal 只加 AtomicInteger 镜像、
+        // 不走 stockStateMap 的 CAS，而 deductStockLocal 事后 blind set 覆盖镜像，并发下回补
+        // 被擦除，实测 finalStock 少了 3。
+        assertEquals(FALLBACK_STOCK - deductCount.get() + rollbackCount.get(), finalStock,
+            "库存守恒：剩余 = 初始 - 扣减 + 回补");
     }
 
     @Test
@@ -362,9 +369,6 @@ class DegradationE2ETest {
         // ====================================================================
         // 场景：同一用户多次请求，双降级模式下仍应防重
         // ====================================================================
-
-        when(redisDegradeService.isDegraded()).thenReturn(true);
-        when(mqDegradeService.isDegraded()).thenReturn(true);
 
         long singleUser = 42L;
         int attempts = 10;
