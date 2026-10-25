@@ -5,7 +5,6 @@ import com.seckill.mapper.ActivityMapper;
 import com.seckill.redis.lua.SeckillDeductLua;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -23,26 +22,26 @@ import java.util.List;
  * <p>
  * 功能:
  * 1. 扫描所有进行中的秒杀活动
- * 2. 计算每个活动的已购买数量(从DB订单表统计)
+ * 2. 计算每个活动的已购买数量(从Redis防重Set统计)
  * 3. 对比Redis剩余库存 + 已购买数量 vs 初始库存
- * 4. 发现不一致时自动告警并尝试修复
+ * 4. 发现不一致时告警，但不自动改库存(原因见 reportDiscrepancy)
  * <p>
  * 执行频率: 每10分钟执行一次
  * <p>
  * 监控指标:
  * - seckill.stock_reconciliation.checked: 核对次数
  * - seckill.stock_reconciliation.inconsistency_found: 发现不一致次数
- * - seckill.stock_reconciliation.fixed: 自动修复次数
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class StockReconciliationService {
 
     private final ActivityMapper activityMapper;
     private final SeckillDeductLua seckillDeductLua;
     private final StringRedisTemplate redisTemplate;
     private final MeterRegistry meterRegistry;
+    private final AlertService alertService;
+    private final RedisDegradeService redisDegradeService;
 
     // Redis Key前缀(与SeckillDeductLua保持一致)
     private static final String STOCK_SHARD_PREFIX = "seckill:stock:";
@@ -51,26 +50,26 @@ public class StockReconciliationService {
     // 监控计数器
     private final Counter reconciliationCheckedCounter;
     private final Counter inconsistencyFoundCounter;
-    private final Counter autoFixedCounter;
 
     public StockReconciliationService(
             ActivityMapper activityMapper,
             SeckillDeductLua seckillDeductLua,
             StringRedisTemplate redisTemplate,
-            MeterRegistry meterRegistry) {
+            MeterRegistry meterRegistry,
+            AlertService alertService,
+            RedisDegradeService redisDegradeService) {
         this.activityMapper = activityMapper;
         this.seckillDeductLua = seckillDeductLua;
         this.redisTemplate = redisTemplate;
         this.meterRegistry = meterRegistry;
+        this.alertService = alertService;
+        this.redisDegradeService = redisDegradeService;
 
         this.reconciliationCheckedCounter = Counter.builder("seckill.stock_reconciliation.checked")
                 .description("Stock reconciliation check count")
                 .register(meterRegistry);
         this.inconsistencyFoundCounter = Counter.builder("seckill.stock_reconciliation.inconsistency_found")
                 .description("Stock inconsistency found count")
-                .register(meterRegistry);
-        this.autoFixedCounter = Counter.builder("seckill.stock_reconciliation.fixed")
-                .description("Stock auto-fixed count")
                 .register(meterRegistry);
     }
 
@@ -88,6 +87,13 @@ public class StockReconciliationService {
             lockAtLeastFor = "5m"
     )
     public void reconcileStock() {
+        // 降级窗口里 Redis 的库存和防重 Set 都还没算上本机卖出的量，这时候量出来的差异
+        // 不是"不一致"，只是"还没回写"。等恢复回写完再核对，否则全是假告警。
+        if (redisDegradeService.isDegraded()) {
+            log.info("Redis降级中，跳过库存一致性核对（降级窗口销量尚未回写）");
+            return;
+        }
+
         log.info("开始执行库存一致性核对...");
         reconciliationCheckedCounter.increment();
 
@@ -152,12 +158,11 @@ public class StockReconciliationService {
         if (discrepancy != 0) {
             inconsistencyFoundCounter.increment();
             log.error("发现库存不一致! seckillId={}, initialStock={}, redisRemaining={}, " +
-                            "boughtCount={}, expectedRemaining={}, actualRedisRemaining={}, discrepancy={}",
+                            "boughtCount={}, expectedRemaining={}, discrepancy={}",
                     seckillId, initialStock, redisRemainingStock, actualBoughtCount,
-                    expectedRemainingStock, redisRemainingStock, discrepancy);
+                    expectedRemainingStock, discrepancy);
 
-            // 尝试自动修复
-            attemptAutoFix(seckillId, initialStock, actualBoughtCount, discrepancy);
+            reportDiscrepancy(seckillId, initialStock, redisRemainingStock, actualBoughtCount, discrepancy);
         } else {
             log.debug("库存一致: seckillId={}, remainingStock={}, boughtCount={}",
                     seckillId, redisRemainingStock, actualBoughtCount);
@@ -166,49 +171,35 @@ public class StockReconciliationService {
 
     /**
      * ============================================================================
-     * 尝试自动修复库存不一致
+     * 上报库存不一致（不自动改库存）
      * ============================================================================
      * <p>
-     * 修复策略:
-     * 1. discrepancy > 0: Redis库存多了,说明有订单未扣减成功,需要减少Redis库存
-     * 2. discrepancy < 0: Redis库存少了,说明有回补失败或超卖,需要增加Redis库存
+     * 这里以前是 attemptAutoFix，会 warmupStockOnly(seckillId, initialStock - boughtCount)
+     * 把库存绝对 SET 成"正确值"。那是个会自动放货的超卖漏洞：
+     * <ul>
+     *   <li>bought set 存的是 userId，一个人只占一个位置，但一次能买多件
+     *       （SeckillRequest.quantity 只有 @Min(1) 没有 @Max；降级时本地兜底还允许同一
+     *       用户买满 maxBuyCount 次）</li>
+     *   <li>所以已售件数 &gt;= boughtCount，{@code initialStock - boughtCount} 只是剩余库存的
+     *       <b>上界</b>，不是真值</li>
+     *   <li>把库存 SET 到这个上界，等于把别人已经买走的货重新上架；往上调是放货，
+     *       往下调也一样可能偏高，两个方向都不安全</li>
+     * </ul>
+     * <p>
+     * 降级窗口的回写最容易被它抹掉：本地一人买 2 件，回写后 Redis 少 2 件、bought set 只多
+     * 1 个，这里就会算出 discrepancy = -1，再把那 1 件放回去卖第二遍。
+     * <p>
+     * 要恢复自动修复，得先有一个按"件"计的已售量（例如在同一段 Lua 里与库存一起原子增减的
+     * seckill:sold:{id} 计数器）。在那之前只告警：宁可等人来看，也不要让机器放货。
      */
-    private void attemptAutoFix(Long seckillId, int initialStock, int boughtCount, int discrepancy) {
-        log.warn("尝试自动修复库存不一致: seckillId={}, discrepancy={}", seckillId, discrepancy);
-
-        try {
-            if (discrepancy > 0) {
-                // Redis库存多了,需要扣除多余的库存
-                // 注意: 这里不直接操作Redis,而是通过warmupStockOnly重新设置正确的库存
-                int correctStock = initialStock - boughtCount;
-                log.warn("修复方案: 重置Redis库存为正确值: seckillId={}, from={} to={}",
-                        seckillId, seckillDeductLua.getTotalStock(seckillId), correctStock);
-
-                // 【关键】仅更新库存,不清空购买记录
-                seckillDeductLua.warmupStockOnly(seckillId, correctStock);
-                autoFixedCounter.increment();
-
-                log.info("库存自动修复完成: seckillId={}, newStock={}", seckillId, correctStock);
-
-            } else if (discrepancy < 0) {
-                // Redis库存少了,需要补充缺少的库存
-                int correctStock = initialStock - boughtCount;
-                log.warn("修复方案: 重置Redis库存为正确值: seckillId={}, from={} to={}",
-                        seckillId, seckillDeductLua.getTotalStock(seckillId), correctStock);
-
-                // 【关键】仅更新库存,不清空购买记录
-                seckillDeductLua.warmupStockOnly(seckillId, correctStock);
-                autoFixedCounter.increment();
-
-                log.info("库存自动修复完成: seckillId={}, newStock={}", seckillId, correctStock);
-            }
-
-        } catch (Exception e) {
-            log.error("自动修复库存失败: seckillId={}, error={}", seckillId, e.getMessage(), e);
-            // 修复失败时发送告警,需要人工介入
-            log.error("【严重】库存自动修复失败,请人工检查! seckillId={}, discrepancy={}",
-                    seckillId, discrepancy);
-        }
+    private void reportDiscrepancy(Long seckillId, int initialStock, int redisRemainingStock,
+                                   int boughtCount, int discrepancy) {
+        alertService.sendCriticalAlert("库存不一致",
+                "seckillId=" + seckillId + " 初始库存=" + initialStock
+                        + " Redis剩余=" + redisRemainingStock
+                        + " 防重Set人数=" + boughtCount
+                        + " 差异=" + discrepancy
+                        + "；防重Set按人计数、不等于已售件数，已停止自动改库存，需人工核对");
     }
 
     /**

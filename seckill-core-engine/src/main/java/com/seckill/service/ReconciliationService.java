@@ -21,15 +21,12 @@ import java.util.List;
  * ============================================================================
  * <p>
  * 功能:
- * 1. 定时对比Redis库存与MySQL订单
- * 2. 发现差异触发告警
- * 3. 【自动修正】小偏差自动修复，大偏差告警人工介入
+ * 1. 定时对比Redis库存与MySQL事务日志
+ * 2. 发现差异触发告警，由人工决定怎么改
  * <p>
- * 【自动修复策略】:
- * - diff <= AUTO_FIX_THRESHOLD: 自动修正 Redis 库存
- * - diff > AUTO_FIX_THRESHOLD: 告警人工介入
- * <p>
- * 目的: 减少人工干预，提高系统自愈能力
+ * 【为什么不自动修正】:
+ * 这里能算出来的"理论库存"只是剩余库存的上界，把它 SET 回 Redis 等于凭空放货，
+ * 详见 {@link #reconcileActivity} 的说明。
  */
 @Slf4j
 @Service
@@ -42,16 +39,8 @@ public class ReconciliationService {
     private final TransactionLogMapper transactionLogMapper;
 
     /**
-     * 【自动修正阈值】
-     * 当 |diff| <= 此值时，自动修正 Redis 库存
-     * 默认 10，即差异在 10 以内自动修复
-     */
-    @Value("${seckill.reconciliation.auto-fix-threshold:10}")
-    private int autoFixThreshold;
-
-    /**
      * 【告警阈值】
-     * 当 |diff| > 此值时，告警人工介入
+     * 当 |diff| > 此值时，升级为严重告警人工介入
      * 默认 50
      */
     @Value("${seckill.reconciliation.alert-threshold:50}")
@@ -94,17 +83,25 @@ public class ReconciliationService {
      * <p>
      * 对账公式:
      * Redis剩余库存 = 各分片库存之和
-     * MySQL理论库存 = 初始库存 - 成功事务数
+     * MySQL理论库存 = 初始库存 - 成功事务数 - 处理中事务数
      * 差异 = Redis库存 - MySQL理论库存
      * <p>
      * 差异分析:
      * diff > 0: Redis库存多于理论值，可能有回补但事务未更新
      * diff < 0: Redis库存少于理论值，可能有超卖或数据丢失
      * <p>
-     * 【自动修复策略】:
-     * |diff| <= autoFixThreshold: 自动修正
-     * |diff| > autoFixThreshold && <= alertThreshold: 记录日志，观察
-     * |diff| > alertThreshold: 告警人工介入
+     * 【只告警，不自动改库存】:
+     * 理论库存是按"事务条数"算的，而一条 TransactionLog 可以对应多件（它有 quantity 字段，
+     * SeckillRequest.quantity 只有 @Min(1) 没有 @Max），所以已售件数 &gt;= 事务条数，
+     * 理论库存只是剩余库存的<b>上界</b>。把它 warmupStockOnly 回 Redis 就是凭空放货 → 超卖。
+     * <p>
+     * 而且 diff &lt; 0 在正常运行时本来就会出现：Redis 是同步扣的，事务日志要等 RocketMQ
+     * 回调 executeLocalTransaction 才落库。这中间 Redis 已经少了、日志还没有，diff 就是负的，
+     * 恰好落在原来 "|diff| &lt;= 10 自动修正" 的区间里 —— 每 5 分钟把刚扣掉的库存又加回去。
+     * <p>
+     * 分档:
+     * |diff| &lt;= alertThreshold: 普通告警，人工核对
+     * |diff| &gt; alertThreshold: 严重告警，人工介入
      */
     public ReconciliationResult reconcileActivity(SeckillActivity activity) {
         Long seckillId = activity.getId();
@@ -132,70 +129,32 @@ public class ReconciliationService {
         result.setFailedCount(failedCount);
         result.setCheckTime(LocalDateTime.now());
 
-        // 5. 【自动修复策略】根据差异大小采取不同措施
-        if (Math.abs(diff) <= autoFixThreshold && diff != 0) {
-            // 小偏差：自动修正
-            log.warn("库存差异小，自动修正: seckillId={}, diff={}", seckillId, diff);
-            autoFixStock(seckillId, mysqlStock);
-            result.setAutoFixed(true);
+        // 5. 只分级告警，不改 Redis 库存（原因见方法注释）
+        if (diff == 0) {
             result.setNeedAlert(false);
 
-        } else if (Math.abs(diff) > autoFixThreshold && Math.abs(diff) <= alertThreshold) {
-            // 中等偏差：记录日志，观察
-            log.warn("库存差异中等，观察中: seckillId={}, diff={}", seckillId, diff);
-            result.setAutoFixed(false);
-            result.setNeedAlert(false);
-
-        } else if (Math.abs(diff) > alertThreshold) {
-            // 大偏差：告警人工介入
-            log.error("库存差异大，需人工介入: seckillId={}, redis={}, mysql={}, diff={}",
+        } else if (Math.abs(diff) <= alertThreshold) {
+            log.warn("库存差异待人工核对: seckillId={}, redis={}, mysql={}, diff={}",
                     seckillId, redisStock, mysqlStock, diff);
-            alertService.sendAlert("库存差异告警",
-                    "seckillId=" + seckillId + " Redis=" + redisStock + " MySQL=" + mysqlStock + " diff=" + diff + " 需人工处理");
-            result.setAutoFixed(false);
-            result.setNeedAlert(true);
+            alertService.sendAlert("库存差异待人工核对",
+                    "seckillId=" + seckillId + " Redis=" + redisStock + " 事务日志推算=" + mysqlStock
+                            + " diff=" + diff + "；理论值只是剩余库存的上界，不自动改库存");
+            result.setNeedAlert(false);
 
         } else {
-            // 无差异
-            result.setAutoFixed(false);
-            result.setNeedAlert(false);
+            log.error("库存差异大，需人工介入: seckillId={}, redis={}, mysql={}, diff={}",
+                    seckillId, redisStock, mysqlStock, diff);
+            alertService.sendCriticalAlert("库存差异告警",
+                    "seckillId=" + seckillId + " Redis=" + redisStock + " 事务日志推算=" + mysqlStock
+                            + " diff=" + diff + " 需人工处理");
+            result.setNeedAlert(true);
         }
 
         // 6. 记录对账结果
-        log.info("对账结果: seckillId={}, redis={}, mysql={}, diff={}, processing={}, failed={}, autoFixed={}",
-                seckillId, redisStock, mysqlStock, diff, processingCount, failedCount, result.isAutoFixed());
+        log.info("对账结果: seckillId={}, redis={}, mysql={}, diff={}, processing={}, failed={}",
+                seckillId, redisStock, mysqlStock, diff, processingCount, failedCount);
 
         return result;
-    }
-
-    /**
-     * ============================================================================
-     * 【自动修正】修正 Redis 库存
-     * ============================================================================
-     * <p>
-     * 【P2-22修复】将 Redis 库存修正为 MySQL 理论库存值
-     * 使用 warmupStockOnly() 而非 warmupStock()，避免清空 bought set 和 user_shard hash
-     * 防止正在秒杀中的用户被误判为未购买
-     * <p>
-     * 将 Redis 库存修正为 MySQL 理论库存值
-     */
-    private void autoFixStock(Long seckillId, int correctStock) {
-        try {
-            // 【P2-22修复】使用 warmupStockOnly() 仅更新库存，不清空购买记录
-            // 避免正在秒杀中的用户被误判为未购买
-            seckillDeductLua.warmupStockOnly(seckillId, correctStock);
-
-            log.info("库存自动修正完成: seckillId={}, correctStock={}", seckillId, correctStock);
-
-            // 发送修正通知（非告警）
-            alertService.sendAlert("库存自动修正",
-                    "seckillId=" + seckillId + " Redis库存已自动修正为 " + correctStock + "（保留购买记录）");
-
-        } catch (Exception e) {
-            log.error("库存自动修正失败: seckillId={}, error={}", seckillId, e.getMessage());
-            alertService.sendAlert("库存自动修正失败",
-                    "seckillId=" + seckillId + " 自动修正失败，需人工处理: " + e.getMessage());
-        }
     }
 
     /**
@@ -254,7 +213,6 @@ public class ReconciliationService {
         private int failedCount;      // 失败事务数
         private LocalDateTime checkTime;
         private boolean needAlert;
-        private boolean autoFixed;    // 【新增】是否自动修正
 
         // getters and setters
         public Long getSeckillId() {
@@ -319,14 +277,6 @@ public class ReconciliationService {
 
         public void setNeedAlert(boolean needAlert) {
             this.needAlert = needAlert;
-        }
-
-        public boolean isAutoFixed() {
-            return autoFixed;
-        }
-
-        public void setAutoFixed(boolean autoFixed) {
-            this.autoFixed = autoFixed;
         }
     }
 }
