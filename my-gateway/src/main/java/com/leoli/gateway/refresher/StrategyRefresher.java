@@ -5,10 +5,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.center.spi.ConfigCenterService;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.StrategyDefinition;
+import com.leoli.gateway.util.ConfigContentTracker;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.HashSet;
@@ -35,6 +37,13 @@ public class StrategyRefresher {
 
     // Track active listeners: strategyId -> listener
     private final Map<String, ConfigCenterService.ConfigListener> activeListeners = new ConcurrentHashMap<>();
+
+    /**
+     * Content each strategy data ID was last applied with, so the periodic reconcile can
+     * detect edits and not just index changes. See {@link ConfigContentTracker} for why
+     * a listener-only design is not enough here.
+     */
+    private final ConfigContentTracker appliedContent = new ConfigContentTracker();
 
     // FIX: keep index listener as a field so it can be removed on destroy
     // (method references create a new instance per call and never match)
@@ -118,6 +127,7 @@ public class StrategyRefresher {
             // STEP 2: Get strategy content
             String content = configService.getConfig(dataId, GROUP);
             if (content != null && !content.isBlank()) {
+                appliedContent.recordIfChanged(dataId, content);
                 StrategyDefinition strategy = objectMapper.readValue(content, StrategyDefinition.class);
                 if (strategy != null && strategy.isEnabled()) {
                     strategyManager.putStrategy(strategyId, strategy);
@@ -152,13 +162,18 @@ public class StrategyRefresher {
      * Handle strategy config change.
      */
     private void onStrategyChange(String strategyId, String content) {
+        String dataId = STRATEGY_PREFIX + strategyId;
         try {
             if (content == null || content.isBlank()) {
                 // Strategy was deleted
                 strategyManager.removeStrategy(strategyId);
                 activeListeners.remove(strategyId);
+                appliedContent.forget(dataId);
                 log.info("Strategy removed: {}", strategyId);
             } else {
+                // Recorded before parsing: a payload we cannot parse must not be retried
+                // on every reconcile cycle, and the next publish changes the content anyway.
+                appliedContent.recordIfChanged(dataId, content);
                 StrategyDefinition strategy = objectMapper.readValue(content, StrategyDefinition.class);
                 if (strategy != null && strategy.isEnabled()) {
                     strategyManager.putStrategy(strategyId, strategy);
@@ -186,6 +201,7 @@ public class StrategyRefresher {
             configService.removeListener(STRATEGY_PREFIX + entry.getKey(), GROUP, entry.getValue());
         }
         activeListeners.clear();
+        appliedContent.clear();
         loadInitialStrategies();
     }
 
@@ -213,6 +229,7 @@ public class StrategyRefresher {
                     configService.removeListener(STRATEGY_PREFIX + entry.getKey(), GROUP, entry.getValue());
                 }
                 activeListeners.clear();
+                appliedContent.clear();
                 log.info("All strategies cleared");
                 return;
             }
@@ -233,6 +250,7 @@ public class StrategyRefresher {
                 if (listener != null) {
                     configService.removeListener(STRATEGY_PREFIX + strategyId, GROUP, listener);
                 }
+                appliedContent.forget(STRATEGY_PREFIX + strategyId);
                 log.info("Removed strategy: {}", strategyId);
             }
 
@@ -246,6 +264,77 @@ public class StrategyRefresher {
             log.info("StrategyRefresher: Now have {} strategies", strategyManager.getStrategyCount());
         } catch (Exception e) {
             log.error("Failed to process index change: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Periodic reconcile: the only path that reliably carries strategy changes.
+     * <p>
+     * nacos-client 3.0.3 never receives pushes from nacos-server 2.5.4 (measured live:
+     * the server logs the publish and dump but its remote-push log stays empty and no
+     * listener callback fires), so without this the strategies this class listens for
+     * would only ever change at startup. Unlike the index-only safety nets elsewhere,
+     * this also compares content, because editing an existing strategy leaves the index
+     * untouched - an ID-set comparison would never notice it.
+     * <p>
+     * Costs one {@code getConfig} per indexed strategy per cycle; quiet when nothing changed.
+     */
+    @Scheduled(fixedRateString = "${gateway.config-sync.interval-ms:60000}")
+    public void periodicSyncStrategies() {
+        try {
+            String indexContent = configService.getConfig(STRATEGIES_INDEX, GROUP);
+            if (indexContent == null || indexContent.isBlank()) {
+                // A blank index is ambiguous - it means either "all strategies deleted" or
+                // "the config center could not answer". Wiping live strategies on a transient
+                // failure would open every route, so leave the current set alone and retry.
+                return;
+            }
+
+            // Strict parse before touching anything: a corrupt index must abort the cycle
+            // rather than be read as "no strategies exist".
+            List<String> strategyIds = objectMapper.readValue(indexContent, new TypeReference<List<String>>() {
+            });
+            Set<String> indexed = new HashSet<>(strategyIds);
+
+            int removed = 0;
+            for (String strategyId : new HashSet<>(activeListeners.keySet())) {
+                if (!indexed.contains(strategyId)) {
+                    // Grab the listener first: onStrategyChange(null) drops it from the map.
+                    ConfigCenterService.ConfigListener listener = activeListeners.get(strategyId);
+                    onStrategyChange(strategyId, null);
+                    if (listener != null) {
+                        configService.removeListener(STRATEGY_PREFIX + strategyId, GROUP, listener);
+                    }
+                    removed++;
+                }
+            }
+
+            int applied = 0;
+            for (String strategyId : strategyIds) {
+                String dataId = STRATEGY_PREFIX + strategyId;
+                String content = configService.getConfig(dataId, GROUP);
+                if (content == null || content.isBlank()) {
+                    continue;
+                }
+                if (!activeListeners.containsKey(strategyId)) {
+                    registerListener(strategyId);
+                }
+                if (appliedContent.recordIfChanged(dataId, content)) {
+                    log.warn("🔍 Periodic sync found a strategy change: {}", strategyId);
+                    onStrategyChange(strategyId, content);
+                    applied++;
+                }
+            }
+
+            if (applied > 0 || removed > 0) {
+                log.info("📊 Periodic strategy sync: {} applied, {} removed, now holding {}",
+                        applied, removed, strategyManager.getStrategyCount());
+            }
+
+        } catch (Exception e) {
+            // This cycle is the only thing that carries strategy edits; at debug level
+            // (root is INFO) a persistent failure would be invisible.
+            log.warn("Periodic strategy sync failed - strategy changes stay unapplied until it succeeds", e);
         }
     }
 }

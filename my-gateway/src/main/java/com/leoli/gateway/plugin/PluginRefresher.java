@@ -3,6 +3,7 @@ package com.leoli.gateway.plugin;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.center.spi.ConfigCenterService;
 import com.leoli.gateway.model.PluginConfig;
+import com.leoli.gateway.util.ConfigContentTracker;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
@@ -10,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.event.RefreshRoutesEvent;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
@@ -83,6 +85,13 @@ public class PluginRefresher {
      */
     private final ConcurrentHashMap<String, ConfigCenterService.ConfigListener> pluginListeners = new ConcurrentHashMap<>();
 
+    /**
+     * Content each plugin data ID was last applied with, so the periodic reconcile can
+     * detect edits and not just index changes. See {@link ConfigContentTracker} for why
+     * a listener-only design is not enough here.
+     */
+    private final ConfigContentTracker appliedContent = new ConfigContentTracker();
+
     @PostConstruct
     public void init() {
         log.info("PluginRefresher initializing...");
@@ -153,12 +162,17 @@ public class PluginRefresher {
      * Handle single plugin change event.
      */
     private void onSinglePluginChange(String pluginId, String content) {
+        String dataId = PLUGIN_PREFIX + pluginId;
         try {
             if (content == null || content.isBlank()) {
                 // Plugin deleted
                 unloadPlugin(pluginId);
+                appliedContent.forget(dataId);
                 log.info("Plugin unloaded: {}", pluginId);
             } else {
+                // Recorded before parsing: a payload we cannot parse or a JAR the security
+                // gate rejects must not be retried on every reconcile cycle.
+                appliedContent.recordIfChanged(dataId, content);
                 // Plugin created or updated
                 PluginConfig config = parsePluginConfig(content);
                 loadPlugin(pluginId, config);
@@ -208,6 +222,7 @@ public class PluginRefresher {
         // STEP 2: Load plugin config
         String pluginConfig = configService.getConfig(pluginDataId, GROUP);
         if (pluginConfig != null && !pluginConfig.isBlank()) {
+            appliedContent.recordIfChanged(pluginDataId, pluginConfig);
             try {
                 PluginConfig config = parsePluginConfig(pluginConfig);
                 loadPlugin(pluginId, config);
@@ -232,6 +247,7 @@ public class PluginRefresher {
         }
 
         loadedPluginIds.remove(pluginId);
+        appliedContent.forget(pluginDataId);
         log.info("Removed listener for plugin: {}", pluginId);
     }
 
@@ -414,5 +430,75 @@ public class PluginRefresher {
         Set<String> result = new HashSet<>(set1);
         result.removeAll(set2);
         return result;
+    }
+
+    /**
+     * Periodic reconcile: the only path that reliably carries plugin changes.
+     * <p>
+     * nacos-client 3.0.3 never receives pushes from nacos-server 2.5.4 (measured live:
+     * the server logs the publish and dump but its remote-push log stays empty and no
+     * listener callback fires), so without this a plugin registered or updated from the
+     * console would not take effect until the gateway restarts. This also compares
+     * content, because re-publishing a plugin leaves the index untouched - an ID-set
+     * comparison would never notice the new JAR path or hash.
+     * <p>
+     * Costs one {@code getConfig} per already-loaded plugin per cycle; quiet when nothing changed.
+     */
+    @Scheduled(fixedRateString = "${gateway.config-sync.interval-ms:60000}")
+    public void periodicSyncPlugins() {
+        try {
+            String indexContent = configService.getConfig(PLUGINS_INDEX, GROUP);
+            if (indexContent == null || indexContent.isBlank()) {
+                // Ambiguous between "no plugins" and "config center unreachable". Unloading
+                // every plugin on a transient failure would break live routes, so retry instead.
+                return;
+            }
+
+            // Strict parse on purpose: parsePluginIds() swallows errors and returns an empty
+            // list, which here would read a corrupt index as "all plugins were removed" and
+            // unload everything.
+            List<String> pluginIds = objectMapper.readValue(
+                    indexContent, new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
+            Set<String> indexed = new HashSet<>(pluginIds);
+
+            int removed = 0;
+            for (String pluginId : new HashSet<>(loadedPluginIds)) {
+                if (!indexed.contains(pluginId)) {
+                    log.warn("🔍 Periodic sync found a removed plugin: {}", pluginId);
+                    removePluginListener(pluginId);
+                    unloadPlugin(pluginId);
+                    removed++;
+                }
+            }
+
+            int applied = 0;
+            for (String pluginId : pluginIds) {
+                if (!loadedPluginIds.contains(pluginId)) {
+                    log.warn("🔍 Periodic sync found a missing plugin: {}", pluginId);
+                    // Registers the listener, loads the config and records its content.
+                    addPluginListener(pluginId);
+                    applied++;
+                    continue;
+                }
+                String dataId = PLUGIN_PREFIX + pluginId;
+                String content = configService.getConfig(dataId, GROUP);
+                if (content == null || content.isBlank()) {
+                    continue;
+                }
+                if (appliedContent.recordIfChanged(dataId, content)) {
+                    log.warn("🔍 Periodic sync found a plugin change: {}", pluginId);
+                    onSinglePluginChange(pluginId, content);
+                    applied++;
+                }
+            }
+
+            if (applied > 0 || removed > 0) {
+                log.info("📊 Periodic plugin sync: {} applied, {} removed, now holding {}",
+                        applied, removed, loadedPluginIds.size());
+            }
+
+        } catch (Exception e) {
+            log.warn("Periodic plugin sync failed - plugin changes stay unapplied until it succeeds", e);
+        }
     }
 }

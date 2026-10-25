@@ -9,10 +9,12 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static com.leoli.gateway.constants.GatewayConfigConstants.*;
 
@@ -54,6 +56,17 @@ public class RateLimitResetRefresher {
 
     private ConfigCenterService.ConfigListener commandListener;
 
+    /**
+     * Timestamp of the last reset command actually applied, used to de-duplicate.
+     * <p>
+     * This channel carries one-shot commands, not state, so it cannot be reconciled the
+     * way the index-driven refreshers do: the published command stays in the config center
+     * until a strategy is deleted, and re-applying it would clear the local rate-limit
+     * windows on every cycle - which resets the counters that are supposed to be counting,
+     * i.e. silently disables the limiter. Anything at or below this stamp is already done.
+     */
+    private final AtomicLong appliedCommandTimestamp = new AtomicLong(Long.MIN_VALUE);
+
     @Autowired
     public RateLimitResetRefresher(ConfigCenterService configService, ObjectMapper objectMapper) {
         this.configService = configService;
@@ -64,6 +77,7 @@ public class RateLimitResetRefresher {
     @PostConstruct
     public void init() {
         registerCommandListener();
+        adoptExistingCommandAsBaseline();
         log.info("RateLimitResetRefresher: Listening for reset commands on {}", RATE_LIMIT_RESET_COMMAND);
     }
 
@@ -81,11 +95,95 @@ public class RateLimitResetRefresher {
     private void registerCommandListener() {
         commandListener = (dataId, group, content) -> {
             log.info("Received rate limit reset command: {}", content);
-            onResetCommand(content);
+            applyIfNewer(content);
         };
 
         configService.addListener(RATE_LIMIT_RESET_COMMAND, GROUP, commandListener);
         log.debug("Registered listener for rate limit reset commands");
+    }
+
+    /**
+     * Mark the command already sitting in the config center as applied, without applying it.
+     * <p>
+     * A restart is itself a clean start - the local caches this command clears are empty at
+     * boot - so replaying a command published before the restart would only wipe counters
+     * that legitimately accumulated since.
+     */
+    private void adoptExistingCommandAsBaseline() {
+        try {
+            String content = configService.getConfig(RATE_LIMIT_RESET_COMMAND, GROUP);
+            long timestamp = extractTimestamp(content);
+            if (timestamp > appliedCommandTimestamp.get()) {
+                appliedCommandTimestamp.set(timestamp);
+                log.info("Adopted existing rate limit reset command as baseline (timestamp={}), not replaying it",
+                        timestamp);
+            }
+        } catch (Exception e) {
+            log.warn("Could not read the existing reset command baseline - the first periodic sync will adopt it", e);
+        }
+    }
+
+    /**
+     * Periodic fallback for the reset command channel.
+     * <p>
+     * nacos-client 3.0.3 never receives pushes from nacos-server 2.5.4 (measured live), so
+     * without this a re-enabled strategy would keep its stale counters until restart.
+     * De-duplicated by the command timestamp the admin stamps on every publish - see
+     * {@link #appliedCommandTimestamp}.
+     */
+    @Scheduled(fixedRateString = "${gateway.config-sync.interval-ms:60000}")
+    public void periodicSyncResetCommand() {
+        try {
+            String content = configService.getConfig(RATE_LIMIT_RESET_COMMAND, GROUP);
+            if (content == null || content.isBlank()) {
+                return; // no pending command (cleared when the strategy was deleted)
+            }
+            applyIfNewer(content);
+        } catch (Exception e) {
+            log.warn("Periodic rate limit reset sync failed - a pending reset stays unapplied until it succeeds", e);
+        }
+    }
+
+    /**
+     * Apply a reset command only if it is newer than the last one applied.
+     */
+    private void applyIfNewer(String content) {
+        long timestamp = extractTimestamp(content);
+        if (timestamp < 0) {
+            // No usable stamp means no way to tell a new command from one already applied.
+            // Skipping is the safe direction: a missed reset leaves counters as they are,
+            // while a replayed one clears windows that are still supposed to be counting.
+            log.warn("Reset command carries no usable timestamp, ignoring to avoid replaying it every cycle: {}",
+                    content);
+            return;
+        }
+
+        long last = appliedCommandTimestamp.get();
+        if (timestamp <= last) {
+            return; // already applied
+        }
+        if (!appliedCommandTimestamp.compareAndSet(last, timestamp)) {
+            return; // another thread (listener callback) got there first
+        }
+
+        onResetCommand(content);
+    }
+
+    /**
+     * Read the command timestamp, or -1 when the content is absent or carries no usable stamp.
+     */
+    private long extractTimestamp(String content) {
+        if (content == null || content.isBlank()) {
+            return -1L;
+        }
+        try {
+            Map<String, Object> command = objectMapper.readValue(content, new TypeReference<Map<String, Object>>() {});
+            Object raw = command.get("timestamp");
+            return raw instanceof Number ? ((Number) raw).longValue() : -1L;
+        } catch (Exception e) {
+            log.warn("Failed to read timestamp from reset command: {}", e.getMessage());
+            return -1L;
+        }
     }
 
     /**
