@@ -50,6 +50,14 @@ public class RedisConfig {
         return script;
     }
 
+    @Bean
+    public RedisScript<Long> stockSyncScript() {
+        DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+        script.setScriptText(loadLuaScript("stock_sync.lua"));
+        script.setResultType(Long.class);
+        return script;
+    }
+
     private String loadLuaScript(String fileName) {
         try {
             var resource = getClass().getClassLoader().getResource("lua/" + fileName);

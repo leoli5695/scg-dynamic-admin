@@ -46,6 +46,7 @@ public class LuaScriptService {
     private final StringRedisTemplate redisTemplate;
     private final RedisScript<Long> seckillDeductScript;
     private final RedisScript<Long> stockRollbackScript;
+    private final RedisScript<Long> stockSyncScript;
 
     private final Counter luaSuccessCounter;
     private final Counter luaFailureCounter;
@@ -59,10 +60,12 @@ public class LuaScriptService {
             StringRedisTemplate redisTemplate,
             RedisScript<Long> seckillDeductScript,
             RedisScript<Long> stockRollbackScript,
+            RedisScript<Long> stockSyncScript,
             MeterRegistry meterRegistry) {
         this.redisTemplate = redisTemplate;
         this.seckillDeductScript = seckillDeductScript;
         this.stockRollbackScript = stockRollbackScript;
+        this.stockSyncScript = stockSyncScript;
 
         this.luaSuccessCounter = Counter.builder("seckill.lua.exec")
                 .tag("outcome", "success")
@@ -85,8 +88,8 @@ public class LuaScriptService {
                 .description("Lua Pipeline批量执行耗时")
                 .register(meterRegistry);
 
-        log.info("LuaScriptService 初始化完成: deductSha={}, rollbackSha={}",
-                seckillDeductScript.getSha1(), stockRollbackScript.getSha1());
+        log.info("LuaScriptService 初始化完成: deductSha={}, rollbackSha={}, syncSha={}",
+                seckillDeductScript.getSha1(), stockRollbackScript.getSha1(), stockSyncScript.getSha1());
     }
 
     /**
@@ -126,6 +129,10 @@ public class LuaScriptService {
 
     public Long executeRollbackScript(List<String> keys, String... args) {
         return execute(stockRollbackScript, keys, args);
+    }
+
+    public Long executeStockSyncScript(List<String> keys, String... args) {
+        return execute(stockSyncScript, keys, args);
     }
 
     private Long execute(RedisScript<Long> script, List<String> keys, String... args) {

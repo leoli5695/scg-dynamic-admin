@@ -90,10 +90,10 @@ public class RedisDegradeService {
      * 检查 Redis 是否可用
      * ============================================================================
      * <p>
-     * 【P1-12修复】健康检查应使用连接池：
-     * - 原问题：直接使用 getConnection().ping() 会创建新连接，不归还连接池
-     * - 频繁调用可能耗尽连接
-     * - 修复：使用 RedisTemplate.execute() 执行 PING 命令，使用连接池
+     * 业务侧的闸门：降级中直接返回 false，不去 ping，避免所有请求都锤一遍已经倒了的 Redis。
+     * <p>
+     * <b>不要用它判断"Redis 是否已经复活"</b> —— 它降级中恒为 false，拿它做恢复判定会死锁。
+     * 恢复判定走 {@link #probeRedis()}。
      *
      * @return true: 可用, false: 不可用
      */
@@ -101,7 +101,25 @@ public class RedisDegradeService {
         if (degraded.get()) {
             return false;
         }
+        return probeRedis();
+    }
 
+    /**
+     * ============================================================================
+     * 真去 ping 一次 Redis
+     * ============================================================================
+     * <p>
+     * 和 {@link #isRedisAvailable()} 的区别：不看降级开关，也不改任何计数器。
+     * <p>
+     * 恢复判定必须走这里。降级期间业务流量全部走本地兜底，没人再碰 Redis，唯一还会去
+     * 探活的就是 healthCheck()；如果探活也走 isRedisAvailable() 的短路，degraded 就再没有
+     * 第二条路能翻回 false —— attemptRecover() 恰恰是用 isRedisAvailable() 判断"是否真的
+     * 恢复了"，于是形成死锁：降级 → 探活恒 false → 永不 recordSuccess → 永不 attemptRecover，
+     * 只能靠人工 manualRecover() 出来。
+     *
+     * @return true: PING 通, false: 不通
+     */
+    private boolean probeRedis() {
         try {
             // 【P1-12修复】使用 RedisTemplate.execute() 执行 PING，使用连接池
             // 而非直接调用 getConnection().ping() 创建新连接
@@ -111,7 +129,6 @@ public class RedisDegradeService {
             return "PONG".equals(result);
         } catch (Exception e) {
             log.warn("Redis健康检查失败: {}", e.getMessage());
-            recordFailure();
             return false;
         }
     }
@@ -177,6 +194,8 @@ public class RedisDegradeService {
         }
 
         log.info("Redis手动恢复，取消降级模式");
+
+        syncLocalSalesBack("Redis手动恢复");
     }
 
     /**
@@ -230,39 +249,20 @@ public class RedisDegradeService {
      * 尝试自动恢复
      * ============================================================================
      * <p>
-     * OPTIMIZATION (P2): Redis恢复后触发本地库存同步
+     * OPTIMIZATION (P2): Redis恢复后触发降级窗口销量回写
      * - 检测到Redis恢复后，调用LocalFallbackService.syncAllToRedis()
-     * - 将降级期间本地扣减的剩余库存同步回Redis
-     * - 避免库存丢失，保证数据一致性
+     * - 把降级期间本地卖掉的量相对扣减回Redis，并补登这批买家的防重记录
+     * - 避免少卖/超卖，保证数据一致性
      */
     private void attemptRecover() {
-        // 先检查是否真的恢复了
-        if (isRedisAvailable()) {
+        // 先检查是否真的恢复了（必须绕过 isRedisAvailable() 的降级短路，见 probeRedis 注释）
+        if (probeRedis()) {
             degraded.set(false);
             redisStatus = 0;
 
             log.info("Redis自动恢复成功: 连续成功次数={}", RECOVERY_THRESHOLD);
 
-            // OPTIMIZATION (P2): 触发本地库存同步回Redis
-            try {
-                Map<Long, Integer> syncResults = localFallbackService.syncAllToRedis(seckillDeductLua);
-                int totalSynced = syncResults.values().stream()
-                        .filter(v -> v > 0)
-                        .mapToInt(Integer::intValue)
-                        .sum();
-
-                log.info("Redis恢复后库存同步完成: 活动数={}, 总同步库存={}",
-                        syncResults.size(), totalSynced);
-
-                if (totalSynced > 0) {
-                    alertService.sendAlert("Redis恢复库存同步",
-                            "Redis恢复后同步本地库存: 活动" + syncResults.size() + "个, 库存" + totalSynced);
-                }
-            } catch (Exception e) {
-                log.error("Redis恢复后库存同步失败: error={}", e.getMessage());
-                alertService.sendAlert("Redis恢复库存同步失败",
-                        "Redis恢复后本地库存同步异常: " + e.getMessage());
-            }
+            syncLocalSalesBack("Redis自动恢复");
 
             // 发送恢复通知
             alertService.sendAlert("Redis自动恢复",
@@ -271,6 +271,42 @@ public class RedisDegradeService {
             // 恢复失败，重置成功计数
             consecutiveSuccesses.set(0);
             log.warn("Redis自动恢复失败，继续保持降级模式");
+        }
+    }
+
+    /**
+     * ============================================================================
+     * 把降级窗口的本地销量回写 Redis
+     * ============================================================================
+     * <p>
+     * 自动恢复与手动恢复两条出口都必须走这里。漏掉任何一条，那批本地买家就不会补登进
+     * bought set（同一个人能再买一次），Redis 也不会被扣减（少卖 → 后续对账把它当成
+     * 剩余库存再放出去 → 超卖）。
+     * <p>
+     * 回写失败时 {@code syncToRedis} 会把本地状态原样还回去，所以这里可以无脑调用：
+     * 即使 Redis 其实还没活过来，也只是多一条告警，销量不会丢，下次恢复会重试。
+     *
+     * @param trigger 触发来源，仅用于日志与告警文案
+     */
+    private void syncLocalSalesBack(String trigger) {
+        try {
+            Map<Long, Integer> syncResults = localFallbackService.syncAllToRedis(seckillDeductLua);
+            int totalSynced = syncResults.values().stream()
+                    .filter(v -> v > 0)
+                    .mapToInt(Integer::intValue)
+                    .sum();
+
+            log.info("{}后销量回写完成: 活动数={}, 总回写销量={}",
+                    trigger, syncResults.size(), totalSynced);
+
+            if (totalSynced > 0) {
+                alertService.sendAlert("Redis恢复库存同步",
+                        trigger + "后回写降级窗口销量: 活动" + syncResults.size() + "个, 共" + totalSynced + "件");
+            }
+        } catch (Exception e) {
+            log.error("{}后库存同步失败: error={}", trigger, e.getMessage());
+            alertService.sendAlert("Redis恢复库存同步失败",
+                    trigger + "后本地库存同步异常: " + e.getMessage());
         }
     }
 
@@ -297,15 +333,16 @@ public class RedisDegradeService {
             // Redis不可用，忽略
         }
 
-        // 执行健康检查
-        boolean available = isRedisAvailable();
+        // 执行健康检查（用 probeRedis：降级中也要能探到 Redis 复活，否则永远恢复不了）
+        boolean available = probeRedis();
 
         if (available) {
-            if (degraded.get()) {
-                recordSuccess();
-            }
+            // 非降级时只是清零失败计数；降级时才会累计到 RECOVERY_THRESHOLD 触发 attemptRecover
+            recordSuccess();
             log.debug("Redis健康检查成功");
         } else {
+            // 非降级时累计到 DEGRADE_THRESHOLD 触发 autoDegrade；降级时只是清零成功计数
+            recordFailure();
             log.warn("Redis健康检查失败");
         }
     }

@@ -49,6 +49,9 @@ class LuaScriptServicePipelineTest {
     @Mock
     private DefaultRedisScript<Long> stockRollbackScript;
 
+    @Mock
+    private DefaultRedisScript<Long> stockSyncScript;
+
     private MeterRegistry meterRegistry;
     private LuaScriptService luaScriptService;
 
@@ -58,11 +61,13 @@ class LuaScriptServicePipelineTest {
         
         lenient().when(seckillDeductScript.getSha1()).thenReturn("mock-sha1-deduct");
         lenient().when(stockRollbackScript.getSha1()).thenReturn("mock-sha1-rollback");
+        lenient().when(stockSyncScript.getSha1()).thenReturn("mock-sha1-sync");
 
         luaScriptService = new LuaScriptService(
                 redisTemplate,
                 seckillDeductScript,
                 stockRollbackScript,
+                stockSyncScript,
                 meterRegistry
         );
     }

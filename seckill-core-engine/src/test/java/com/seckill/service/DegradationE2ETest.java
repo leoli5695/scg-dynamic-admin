@@ -77,6 +77,9 @@ class DegradationE2ETest {
     @Mock
     private AlertService alertService;
 
+    @Mock
+    private com.seckill.redis.lua.SeckillDeductLua seckillDeductLua;
+
     private LocalFallbackService localFallbackService;
     private LocalTransactionService localTransactionService;
     private SeckillConfig seckillConfig;
@@ -209,14 +212,16 @@ class DegradationE2ETest {
         assertEquals(FALLBACK_STOCK - 10, remainingStock,
             "本地库存应扣减10个");
 
-        // 3. Redis恢复后，需要调用同步方法（假设存在）
-        // LocalFallbackService应该提供 syncToRedis() 方法
-        // 这里仅验证本地库存状态正确，实际同步逻辑需要调用 SeckillDeductLua.warmupStockOnly()
+        // 3. Redis恢复后回写：走 applyLocalSales 的相对扣减。
+        // 不能是 warmupStockOnly 那种按分片绝对 SET —— 多实例恢复时最后写入的实例会把
+        // 自己那份余量当成全局真相，抹掉别人的销量（少卖）并把已卖出的货重新上架（超卖）。
+        when(seckillDeductLua.applyLocalSales(eq(SECKILL_ID), anyMap())).thenReturn(10L);
 
-        System.out.println("\n=== Redis恢复同步测试 ===");
-        System.out.println("  本地剩余库存 = " + remainingStock);
-        System.out.println("  已扣减数量   = 10");
-        System.out.println("  需同步Redis  = warmupStockOnly(seckillId, remainingStock)");
+        assertEquals(10, localFallbackService.syncToRedis(seckillDeductLua, SECKILL_ID),
+            "回写的是卖掉的 10 件，不是本地剩下的 0 件");
+        verify(seckillDeductLua, never()).warmupStockOnly(anyLong(), anyInt());
+        assertEquals(-1, localFallbackService.getLocalStock(SECKILL_ID),
+            "回写成功后本地状态应被摘走，那批货已经回到 Redis");
     }
 
     @Test

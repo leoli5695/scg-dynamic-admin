@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -285,6 +286,76 @@ public class SeckillDeductLua {
         // 【关键】不清空购买记录和分片记录，保护正在秒杀中的用户
 
         log.info("仅更新库存完成（保留购买记录）: seckillId={}", seckillId);
+    }
+
+    /**
+     * ============================================================================
+     * 降级窗口销量回写（相对扣减，多实例可叠加）
+     * ============================================================================
+     * <p>
+     * Redis 恢复后，把降级期间在本机内存里卖掉的那部分回写进 Redis，同时把这批买家
+     * 补登进防重 Set。
+     * <p>
+     * 这里必须是 DECRBY 语义，不能用 warmupStockOnly 那种按分片绝对 SET：恢复时每个
+     * 实例只知道自己卖了多少，既不知道别的实例卖了多少，也不知道 Redis 现在还剩多少。
+     * 绝对 SET 会让最后写入的实例把自己那份余量当成全局真相 —— 抹掉其它实例的销量
+     * （少卖），或者把已经卖出去的库存重新上架（超卖）。相对扣减天然可叠加，与多实例
+     * 的同步顺序无关。
+     *
+     * @param seckillId  秒杀活动ID
+     * @param localSales 降级期间每个用户的净销量（userId -&gt; 件数，本地回补已抵消）
+     * @return 实际从 Redis 扣掉的件数；-2 表示活动未预热（未做任何修改），-99 表示脚本
+     *         执行失败。返回值小于 localSales 的总件数说明 Redis 剩余库存吸收不下降级
+     *         窗口的销量，即降级期间已经超卖，调用方必须告警。
+     */
+    public long applyLocalSales(Long seckillId, Map<Long, Integer> localSales) {
+        if (localSales == null || localSales.isEmpty()) {
+            return 0L;
+        }
+
+        Timer.Sample sample = Timer.start();
+
+        try {
+            int shardCount = seckillConfig.getShardCount();
+
+            List<String> keys = Arrays.asList(
+                    BOUGHT_KEY_PREFIX + seckillId,
+                    USER_SHARD_PREFIX + seckillId,
+                    STOCK_SHARD_PREFIX + seckillId + ":shard:"
+            );
+
+            // ARGV 布局: shardCount 后接若干 (userId, quantity, preferredShard) 三元组
+            List<String> args = new ArrayList<>();
+            args.add(String.valueOf(shardCount));
+
+            int requested = 0;
+            for (Map.Entry<Long, Integer> entry : localSales.entrySet()) {
+                Integer quantity = entry.getValue();
+                if (quantity == null || quantity <= 0) {
+                    continue;   // 这笔已被本地回补抵消，Redis 侧无需变动
+                }
+                long userId = entry.getKey();
+                args.add(String.valueOf(userId));
+                args.add(String.valueOf(quantity));
+                args.add(String.valueOf((int) (userId % shardCount)));
+                requested += quantity;
+            }
+
+            if (requested == 0) {
+                return 0L;
+            }
+
+            Long result = luaScriptService.executeStockSyncScript(keys, args.toArray(new String[0]));
+            long applied = result != null ? result : LUA_ERROR;
+
+            log.info("降级窗口销量回写Redis: seckillId={}, users={}, requested={}, applied={}",
+                    seckillId, localSales.size(), requested, applied);
+
+            return applied;
+
+        } finally {
+            sample.stop(luaScriptTimer);
+        }
     }
 
     /**

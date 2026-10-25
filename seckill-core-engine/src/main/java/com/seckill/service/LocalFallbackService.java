@@ -29,12 +29,12 @@ import java.util.stream.Collectors;
  * 2. 本地购买记录（简易防重）
  * 3. 本地订单缓冲队列（MQ 故障时的异步处理）
  * 4. 缓冲队列持久化（应用重启后恢复）
- * 5. 【OPTIMIZATION P2】Redis恢复后同步本地库存回Redis
+ * 5. 【OPTIMIZATION P2】Redis恢复后回写降级窗口的销量
  * <p>
  * 使用场景:
  * - Redis 故障时，启用本地库存计数器
  * - MQ 故障时，先写入本地缓冲队列，后续补偿
- * - Redis 恢复后，调用 syncToRedis() 将本地剩余库存同步回Redis
+ * - Redis 恢复后，调用 syncToRedis() 把降级窗口的销量回写 Redis
  * <p>
  * 【多实例超卖防护】:
  * - 降级模式下，本地库存只分配 10% 的总库存
@@ -47,10 +47,9 @@ import java.util.stream.Collectors;
  * - 避免应用崩溃时订单丢失
  * <p>
  * 【OPTIMIZATION P2 - Redis恢复同步】:
- * - syncToRedis(seckillId): 将本地剩余库存同步到Redis分片
- * - 使用 warmupStockOnly() 仅更新库存，不清空购买记录
- * - 清理本地库存状态，释放内存
- * - 记录同步日志，便于审计
+ * - syncToRedis(seckillId): 相对扣减回写降级窗口的销量，并把本地买家补登进 Redis 防重 Set
+ * - 多实例可叠加、与同步顺序无关；不是按分片绝对 SET（详见方法注释）
+ * - 回写后清空本地库存状态，释放内存
  * <p>
  * 注意:
  * - 本地兜底仅用于极端情况，存在少卖风险（刻意设计）
@@ -78,6 +77,13 @@ public class LocalFallbackService {
      * 覆盖掉，而 getLocalStock / syncToRedis 读的正是那份被覆盖的镜像。
      */
     private final Map<Long, AtomicReference<StockState>> stockStateMap = new ConcurrentHashMap<>();
+
+    /**
+     * syncToRedis 摘走状态后留在 AtomicReference 里的空壳：库存 0、无购买记录。
+     * 并发中的 deductStockLocal 撞到它会立刻走"库存过低"分支返回 -3，而不是继续卖
+     * 那批已经回写给 Redis 的货。
+     */
+    private static final StockState DRAINED = new StockState(0, new ConcurrentHashMap<>());
 
     /**
      * 本地订单缓冲队列（MQ 故障时暂存）
@@ -417,14 +423,21 @@ public class LocalFallbackService {
 
     /**
      * ============================================================================
-     * 【OPTIMIZATION P2】Redis恢复后同步本地库存回Redis
+     * 【OPTIMIZATION P2】Redis恢复后把降级窗口的销量回写Redis
      * ============================================================================
      * <p>
-     * 功能：
-     * - 将本地剩余库存同步到Redis分片库存
-     * - 使用 warmupStockOnly() 仅更新库存，不清空购买记录
-     * - 清理本地库存状态，释放内存
-     * - 记录同步日志，便于审计
+     * 回写的是"卖掉了多少"，不是"还剩多少"：
+     * <ul>
+     *   <li>降级期间没人能动 Redis，Redis 里的剩余库存原封不动</li>
+     *   <li>本机上架的那份兜底库存从未真正从 Redis 扣走，没卖掉的部分直接丢弃即可 ——
+     *       它们本来就在 Redis 里，恢复后自动重新可售</li>
+     *   <li>真正欠 Redis 的只有卖出去的那几件，以及那批买家的防重记录</li>
+     * </ul>
+     * <p>
+     * 因此这里走 {@link SeckillDeductLua#applyLocalSales} 的相对扣减：多实例各写各的，
+     * 与同步顺序无关，且买家会被补登进 bought set，恢复后不会二次购买。
+     * <b>绝不能改成 warmupStockOnly 那种按分片绝对 SET</b> —— 最后写入的实例会把自己
+     * 那份余量当成全局真相，抹掉其它实例的销量（少卖）并把已卖出的库存重新上架（超卖）。
      * <p>
      * 使用场景：
      * - RedisDegradeService检测到Redis恢复后调用
@@ -433,21 +446,17 @@ public class LocalFallbackService {
      * 注意：
      * - 调用前必须确保Redis已恢复正常
      * - 同步后本地库存会被清空，无法再次扣减
-     * - 本地购买记录会被保留用于审计（直到活动结束）
-     * <p>
-     * 设计原则：
-     * - 不清空Redis中的购买记录（可能已有新用户在Redis购买）
-     * - 只同步剩余库存，避免库存丢失
-     * - 本地购买记录保留用于对账
      *
      * @param seckillDeductLua Lua脚本执行服务（由调用方传入，避免循环依赖）
      * @param seckillId        秒杀活动ID
-     * @return 同步的库存数量，-1表示本地库存未初始化
+     * @return 回写到Redis的销量件数；0 表示降级期间一件也没卖出；
+     *         -1 表示本地库存未初始化；-2 表示回写失败（状态已还原，等下次重试）
      */
     public int syncToRedis(SeckillDeductLua seckillDeductLua, Long seckillId) {
-        // 先原子摘走状态，再从摘下来的引用读库存：不摘走的话，同步之后本实例还能继续扣减
-        // 那批已经推给 Redis 的库存（双份上架）。摘走也让 deductStockLocal 拿不到 stateRef
-        // 而返回 -1，即方法文档承诺的「同步后本地库存会被清空，无法再次扣减」。
+        // 先从 map 原子摘走，再 getAndSet 取走最后一刻的状态：摘走保证同步之后本实例
+        // 不能再卖那批已经回写给 Redis 的库存（双份上架），也兑现方法文档里「同步后
+        // 本地库存会被清空，无法再次扣减」的承诺；getAndSet 则保证在摘走之前就已读到
+        // stateRef 的并发线程，它那次 CAS 的结果一并被带走，不会漏记一笔销量。
         AtomicReference<StockState> stateRef = stockStateMap.remove(seckillId);
 
         if (stateRef == null) {
@@ -455,54 +464,78 @@ public class LocalFallbackService {
             return -1;
         }
 
-        int remainingStock = stateRef.get().stock;
+        StockState state = stateRef.getAndSet(DRAINED);
+        Map<Long, Integer> localSales = state.userBoughtMap;
+        int locallySold = localSales.values().stream().mapToInt(Integer::intValue).sum();
 
-        if (remainingStock <= 0) {
-            log.info("syncToRedis: 本地库存已耗尽, seckillId={}, 无需同步", seckillId);
+        if (locallySold <= 0) {
+            log.info("syncToRedis: 降级期间无销量, seckillId={}, 上架未售的 {} 件随 Redis 库存自动恢复",
+                    seckillId, state.stock);
             return 0;
         }
 
-        // 同步剩余库存到Redis（仅更新库存，不清空购买记录）
+        long applied;
         try {
-            seckillDeductLua.warmupStockOnly(seckillId, remainingStock);
-
-            log.info("syncToRedis成功: seckillId={}, remainingStock={}, 已同步到Redis分片",
-                    seckillId, remainingStock);
-
-            // 发送告警
-            alertService.sendAlert("Redis恢复库存同步",
-                    "seckillId=" + seckillId + " 本地剩余库存 " + remainingStock + " 已同步回Redis");
-
-            return remainingStock;
-
+            applied = seckillDeductLua.applyLocalSales(seckillId, localSales);
         } catch (Exception e) {
-            log.error("syncToRedis失败: seckillId={}, remainingStock={}, error={}",
-                    seckillId, remainingStock, e.getMessage());
-
-            alertService.sendAlert("Redis恢复库存同步失败",
-                    "seckillId=" + seckillId + " 本地剩余库存 " + remainingStock + " 同步失败: " + e.getMessage());
-
-            // 同步失败，把状态放回去下次重试；putIfAbsent 以免覆盖这期间 initLocalStock 的新状态
-            stockStateMap.putIfAbsent(seckillId, stateRef);
-            return -2;
+            return restoreAndFail(seckillId, stateRef, state, locallySold, e.getMessage());
         }
+
+        if (applied < 0) {
+            return restoreAndFail(seckillId, stateRef, state, locallySold, "Redis 脚本返回 " + applied);
+        }
+
+        if (applied < locallySold) {
+            // Redis 剩余库存吸收不下本机卖出的量：降级窗口里已经超卖，必须人工核对订单，
+            // 不能静默当成同步成功。
+            log.error("syncToRedis 存在缺口: seckillId={}, locallySold={}, applied={}, 缺口={}",
+                    seckillId, locallySold, applied, locallySold - applied);
+            alertService.sendCriticalAlert("降级窗口超卖",
+                    "seckillId=" + seckillId + " 降级期间本地售出 " + locallySold + " 件，Redis 仅能吸收 "
+                            + applied + " 件，缺口 " + (locallySold - applied) + " 件，需人工核对订单");
+        }
+
+        log.info("syncToRedis成功: seckillId={}, locallySold={}, applied={}, 补登买家={}",
+                seckillId, locallySold, applied, localSales.size());
+
+        alertService.sendAlert("Redis恢复库存同步",
+                "seckillId=" + seckillId + " 降级期间售出 " + locallySold + " 件已回写Redis，补登买家 "
+                        + localSales.size() + " 人");
+
+        return locallySold;
+    }
+
+    /**
+     * 回写失败：把摘下来的状态原样放回，等下次重试。putIfAbsent 以免覆盖这期间
+     * initLocalStock 建立的新状态。
+     */
+    private int restoreAndFail(Long seckillId, AtomicReference<StockState> stateRef,
+                               StockState state, int locallySold, String reason) {
+        log.error("syncToRedis失败: seckillId={}, locallySold={}, reason={}", seckillId, locallySold, reason);
+
+        alertService.sendAlert("Redis恢复库存同步失败",
+                "seckillId=" + seckillId + " 降级期间售出 " + locallySold + " 件回写失败: " + reason);
+
+        stateRef.compareAndSet(DRAINED, state);
+        stockStateMap.putIfAbsent(seckillId, stateRef);
+        return -2;
     }
 
     /**
      * ============================================================================
-     * 【OPTIMIZATION P2】批量同步所有本地库存回Redis
+     * 【OPTIMIZATION P2】批量回写所有活动的降级窗口销量
      * ============================================================================
      * <p>
      * 功能：
-     * - 遍历所有本地库存，逐个同步到Redis
-     * - 返回同步结果汇总
+     * - 遍历所有本地库存，逐个回写到Redis
+     * - 返回回写结果汇总
      * <p>
      * 使用场景：
      * - Redis全面恢复后批量同步
      * - 应用关闭前优雅停机
      *
      * @param seckillDeductLua Lua脚本执行服务
-     * @return 同步结果Map: seckillId -> syncCount
+     * @return 回写结果Map: seckillId -&gt; 回写的销量件数（0 无销量，负数见 syncToRedis）
      */
     public Map<Long, Integer> syncAllToRedis(SeckillDeductLua seckillDeductLua) {
         Map<Long, Integer> syncResults = new ConcurrentHashMap<>();
@@ -517,11 +550,11 @@ public class LocalFallbackService {
                 .mapToInt(Integer::intValue)
                 .sum();
 
-        log.info("syncAllToRedis完成: 活动数={}, 总同步库存={}", syncResults.size(), totalSynced);
+        log.info("syncAllToRedis完成: 活动数={}, 总回写销量={}", syncResults.size(), totalSynced);
 
         if (totalSynced > 0) {
             alertService.sendAlert("Redis恢复批量库存同步",
-                    "已同步 " + syncResults.size() + " 个活动，总库存 " + totalSynced);
+                    "已回写 " + syncResults.size() + " 个活动的降级窗口销量，共 " + totalSynced + " 件");
         }
 
         return syncResults;
