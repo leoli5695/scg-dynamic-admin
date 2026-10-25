@@ -6,6 +6,7 @@ import com.leoli.gateway.admin.model.RouteDefinition;
 import com.leoli.gateway.admin.model.RouteEntity;
 import com.leoli.gateway.admin.model.RouteResponse;
 import com.leoli.gateway.admin.tool.ToolRegistry;
+import com.leoli.gateway.admin.tool.handler.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -125,26 +126,24 @@ class ToolExecutorTest {
         // logic through the dispatcher instead of a stub that returns whatever we told it to.
         toolExecutor = new ToolExecutor(
                 toolRegistry,
-                prometheusService,
                 routeService,
-                gatewayInstanceService,
-                kubernetesClusterRepository,
-                stressTestService,
-                aiAnalysisService,
                 auditLogService,
-                requestTraceRepository,
-                filterChainExecutionRepository,
-                restTemplate,
                 auditToolHandler,
-                new com.leoli.gateway.admin.tool.handler.DiagnosticToolHandler(diagnosticService, prometheusService),
-                new com.leoli.gateway.admin.tool.handler.ServiceToolHandler(serviceService, nacosConfigCenterService),
-                new com.leoli.gateway.admin.tool.handler.InstanceToolHandler(gatewayInstanceService),
-                new com.leoli.gateway.admin.tool.handler.StressTestToolHandler(stressTestService),
-                new com.leoli.gateway.admin.tool.handler.MiddlewareTraceToolHandler(
-                        serviceMiddlewareService, distributedTraceService, prometheusClient),
-                new com.leoli.gateway.admin.tool.handler.PeriodQueryToolHandler(
-                        distributedTraceService, prometheusClient),
-                new com.leoli.gateway.admin.tool.handler.KnowledgeToolHandler(knowledgeSearchService));
+                new DiagnosticToolHandler(diagnosticService, prometheusService),
+                new ServiceToolHandler(serviceService, nacosConfigCenterService),
+                new InstanceToolHandler(gatewayInstanceService),
+                new StressTestToolHandler(stressTestService),
+                new MiddlewareTraceToolHandler(serviceMiddlewareService, distributedTraceService, prometheusClient),
+                new PeriodQueryToolHandler(distributedTraceService, prometheusClient),
+                new KnowledgeToolHandler(knowledgeSearchService),
+                new RouteToolHandler(routeService, objectMapper),
+                new RouteOpsToolHandler(routeService, auditLogService, objectMapper),
+                new ClusterToolHandler(gatewayInstanceService, kubernetesClusterRepository, restTemplate),
+                new FilterChainToolHandler(gatewayInstanceService, restTemplate),
+                new PerformanceToolHandler(prometheusService, requestTraceRepository, filterChainExecutionRepository),
+                new AiFilterAnalysisToolHandler(filterChainExecutionRepository),
+                new PodAnalysisToolHandler(prometheusService, gatewayInstanceService, stressTestService,
+                        aiAnalysisService));
 
         // Setup tool registry mock
         lenient().when(toolRegistry.hasTool(anyString())).thenReturn(true);
