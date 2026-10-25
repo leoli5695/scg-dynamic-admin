@@ -15,6 +15,7 @@ import com.leoli.gateway.manager.RouteManager;
 import com.leoli.gateway.model.AuthConfig;
 import com.leoli.gateway.model.MultiServiceConfig;
 import com.leoli.gateway.util.ClientIpResolver;
+import com.leoli.gateway.util.ConfigContentTracker;
 import com.leoli.gateway.util.RouteUtils;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -37,6 +38,7 @@ import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpRequestDecorator;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.http.server.reactive.ServerHttpResponseDecorator;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
@@ -100,6 +102,10 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
     // Current config - uses external AccessLogConfig class
     private volatile AccessLogConfig config = new AccessLogConfig();
 
+    // Content the config was last applied with, so the periodic reconcile can tell
+    // "unchanged" from "edited" instead of rebuilding the Logback appenders every cycle.
+    private final ConfigContentTracker appliedContent = new ConfigContentTracker();
+
     // Config listener
     private ConfigCenterService.ConfigListener configListener;
 
@@ -108,7 +114,7 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
         loadConfig();
         configListener = (dataId, group, content) -> {
             log.info("Access log config changed");
-            loadConfig();
+            applyConfig(content);
             updateLogbackAppenders();
         };
         configCenterService.addListener(ACCESS_LOG_CONFIG, GROUP, configListener);
@@ -124,21 +130,59 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
     }
 
     private void loadConfig() {
+        log.info("Loading access log config from Nacos: dataId={}, group={}", ACCESS_LOG_CONFIG, GROUP);
+        applyConfig(configCenterService.getConfig(ACCESS_LOG_CONFIG, GROUP));
+    }
+
+    /**
+     * Parse and install an access-log config payload.
+     * <p>
+     * A blank payload keeps the current config rather than reverting to defaults:
+     * {@code getConfig} returns null both when the key was deleted and when the config
+     * center is unreachable, and silently changing what a running gateway logs on a
+     * transient blip is worse than holding the last known good value.
+     */
+    private void applyConfig(String content) {
+        if (content == null || content.isBlank()) {
+            log.warn("Access log config not found in Nacos (dataId={}, group={}), keeping current: enabled={}",
+                    ACCESS_LOG_CONFIG, GROUP, config.isEnabled());
+            return;
+        }
+        appliedContent.recordIfChanged(ACCESS_LOG_CONFIG, content);
         try {
-            log.info("Loading access log config from Nacos: dataId={}, group={}", ACCESS_LOG_CONFIG, GROUP);
+            config = objectMapper.readValue(content, AccessLogConfig.class);
+            log.info("Loaded access log config successfully: enabled={}, mode={}, format={}, logToConsole={}, logDirectory={}",
+                    config.isEnabled(), config.getDeployMode(), config.getLogFormat(),
+                    config.isLogToConsole(), config.getLogDirectory());
+        } catch (Exception e) {
+            log.warn("Failed to load access log config, keeping current: enabled={}, error={}",
+                    config.isEnabled(), e.getMessage());
+        }
+    }
+
+    /**
+     * Periodic reconcile against the config center.
+     * <p>
+     * Stands in for change pushes, which this deployment never receives (nacos-client
+     * 3.0.3 against nacos-server 2.5.4 - measured live: the server's remote-push.log stays
+     * empty while the publish succeeds). Without it, flipping {@code enabled} or changing
+     * the log directory in the console had no effect until the gateway restarted, because
+     * the config lives in a field that only the listener used to write.
+     */
+    @Scheduled(fixedRateString = "${gateway.config-sync.interval-ms:60000}")
+    public void periodicSyncAccessLogConfig() {
+        try {
             String content = configCenterService.getConfig(ACCESS_LOG_CONFIG, GROUP);
-            if (content != null && !content.isEmpty()) {
-                config = objectMapper.readValue(content, AccessLogConfig.class);
-                log.info("Loaded access log config successfully: enabled={}, mode={}, format={}, logToConsole={}, logDirectory={}",
-                        config.isEnabled(), config.getDeployMode(), config.getLogFormat(), 
-                        config.isLogToConsole(), config.getLogDirectory());
-            } else {
-                log.warn("Access log config not found in Nacos (dataId={}, group={}), using defaults: enabled={}",
-                        ACCESS_LOG_CONFIG, GROUP, config.isEnabled());
+            if (content == null || content.isBlank()) {
+                return;
+            }
+            if (appliedContent.recordIfChanged(ACCESS_LOG_CONFIG, content)) {
+                log.info("🔍 Periodic sync found an access log config change");
+                applyConfig(content);
+                updateLogbackAppenders();
             }
         } catch (Exception e) {
-            log.warn("Failed to load access log config, using defaults: enabled={}, error={}", 
-                    config.isEnabled(), e.getMessage());
+            log.warn("Periodic access log config sync failed - changes stay unapplied until it succeeds", e);
         }
     }
 
