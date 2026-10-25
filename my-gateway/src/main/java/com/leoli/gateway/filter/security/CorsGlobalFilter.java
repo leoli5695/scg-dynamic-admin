@@ -40,6 +40,10 @@ public class CorsGlobalFilter implements GlobalFilter, Ordered {
     private static final String ACCESS_CONTROL_REQUEST_METHOD = "Access-Control-Request-Method";
     private static final String ACCESS_CONTROL_REQUEST_HEADERS = "Access-Control-Request-Headers";
 
+    /** Thread-safe and reused; only needed to serialise the rejection body. */
+    private static final com.fasterxml.jackson.databind.ObjectMapper OBJECT_MAPPER =
+            new com.fasterxml.jackson.databind.ObjectMapper();
+
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
@@ -171,7 +175,14 @@ public class CorsGlobalFilter implements GlobalFilter, Ordered {
                     .collect(java.util.stream.Collectors.toList());
         }
         if (value instanceof String) {
-            return Arrays.asList(((String) value).split(","));
+            // FIX: split without trimming turned a comma-separated config value like
+            // "https://a.com, https://b.com" into ["https://a.com", " https://b.com"], and the
+            // leading space made the second origin never match - a configuration that looks right
+            // and silently rejects. Blank entries are dropped so a trailing comma adds nothing.
+            return Arrays.stream(((String) value).split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .collect(java.util.stream.Collectors.toList());
         }
         return List.of();
     }
@@ -189,11 +200,27 @@ public class CorsGlobalFilter implements GlobalFilter, Ordered {
         response.setStatusCode(HttpStatus.FORBIDDEN);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
 
-        String body = String.format(
-                "{\"httpStatus\":403,\"code\":403,\"error\":\"Forbidden\",\"message\":\"CORS preflight request rejected: origin '%s' is not allowed\",\"data\":null}",
-                origin != null ? origin : "unknown"
-        );
+        // FIX (response injection): the Origin header is caller-controlled and this body used to be
+        // built with String.format, so an Origin containing a double quote broke out of the JSON
+        // string and let the caller write arbitrary response content. Same defect class, same fix as
+        // SecurityGlobalFilter's threat response: serialise with Jackson rather than concatenating.
+        String body;
+        try {
+            Map<String, Object> payload = new java.util.LinkedHashMap<>();
+            payload.put("httpStatus", 403);
+            payload.put("code", 403);
+            payload.put("error", "Forbidden");
+            payload.put("message", "CORS preflight request rejected: origin '"
+                    + (origin != null ? origin : "unknown") + "' is not allowed");
+            payload.put("data", null);
+            body = OBJECT_MAPPER.writeValueAsString(payload);
+        } catch (Exception e) {
+            log.warn("Failed to serialize CORS rejection response", e);
+            body = "{\"httpStatus\":403,\"code\":403,\"error\":\"Forbidden\","
+                    + "\"message\":\"CORS preflight request rejected\",\"data\":null}";
+        }
 
-        return response.writeWith(Mono.just(response.bufferFactory().wrap(body.getBytes())));
+        return response.writeWith(Mono.just(response.bufferFactory()
+                .wrap(body.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
     }
 }
