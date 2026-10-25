@@ -39,7 +39,11 @@ public class InternalApiAuthWebFilter implements WebFilter, Ordered, Initializin
 
     public static final String TOKEN_HEADER = InternalApiConstants.TOKEN_HEADER;
 
-    private static final String PROTECTED_PREFIX = "/internal/";
+    /**
+     * The guarded prefix, without its leading slash: {@link #isInternal} matches it at an offset so
+     * that leading duplicate slashes cannot slip past.
+     */
+    private static final String PROTECTED_PREFIX = "internal/";
 
     @Value("${gateway.admin.internal-token:${GATEWAY_INTERNAL_TOKEN:}}")
     private String internalToken;
@@ -64,7 +68,7 @@ public class InternalApiAuthWebFilter implements WebFilter, Ordered, Initializin
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
         String path = exchange.getRequest().getURI().getPath();
-        if (path == null || !path.startsWith(PROTECTED_PREFIX)) {
+        if (path == null || !isInternal(path)) {
             return chain.filter(exchange);
         }
 
@@ -82,6 +86,26 @@ public class InternalApiAuthWebFilter implements WebFilter, Ordered, Initializin
         response.getHeaders().add("Content-Type", "application/json");
         String body = "{\"success\":false,\"message\":\"Missing or invalid internal token\"}";
         return response.writeWith(Mono.just(response.bufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8))));
+    }
+
+    /**
+     * True when the decoded path targets {@code /internal/**}.
+     *
+     * <p>{@code URI.getPath()} is already percent-decoded, so an encoded separator cannot hide the
+     * prefix. Leading duplicate slashes are collapsed before matching so {@code //internal/x} is
+     * gated too. That form is not a known exploit - Spring's PathPattern would not route it to an
+     * {@code /internal/**} handler either, because the empty leading segment does not match - but the
+     * sibling guard on the admin side ({@code InternalApiTokenFilter}) really was bypassed by exactly
+     * this class of disagreement between "what the guard matches" and "what the framework routes".
+     * Collapsing the slashes removes the ambiguity instead of leaving it resting on an argument about
+     * PathPattern semantics.
+     */
+    private static boolean isInternal(String path) {
+        int start = 0;
+        while (start < path.length() && path.charAt(start) == '/') {
+            start++;
+        }
+        return path.startsWith(PROTECTED_PREFIX, start);
     }
 
     @Override
