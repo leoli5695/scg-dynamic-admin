@@ -11,7 +11,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -77,14 +76,43 @@ class ToolExecutorTest {
     @Mock
     private org.springframework.web.client.RestTemplate restTemplate;
 
+    @Mock
+    private com.leoli.gateway.admin.repository.RequestTraceRepository requestTraceRepository;
+
+    @Mock
+    private com.leoli.gateway.admin.repository.FilterChainExecutionRepository filterChainExecutionRepository;
+
+    @Mock
+    private ServiceMiddlewareService serviceMiddlewareService;
+
+    @Mock
+    private DistributedTraceService distributedTraceService;
+
+    @Mock
+    private com.leoli.gateway.admin.client.PrometheusClient prometheusClient;
+
+    @Mock
+    private com.leoli.gateway.admin.service.knowledge.KnowledgeSearchService knowledgeSearchService;
+
     /**
-     * The audit tools moved to this handler. Without a mock here {@code @InjectMocks} would pass null
-     * and the three audit tool names would NPE inside the dispatch switch.
+     * The audit tools moved to this handler and are mocked, because what this class still needs to
+     * prove about them is the dispatcher's half of the contract - see AuditToolDispatchTests below,
+     * with the behaviour itself covered by AuditToolHandlerTest.
      */
     @Mock
     private com.leoli.gateway.admin.tool.handler.AuditToolHandler auditToolHandler;
 
-    @InjectMocks
+    /**
+     * Built by hand in {@link #setUp()} rather than via {@code @InjectMocks}.
+     *
+     * <p>The point is that every OTHER extracted handler is a REAL instance wired to the same mocks
+     * this class already had. {@code @InjectMocks} would inject null for a constructor parameter with
+     * no matching mock, so as handlers were extracted the existing behavioural tests (list_routes,
+     * get_cluster_detail, stress-test status, ...) would have started NPE-ing inside the dispatch
+     * switch, and the only way to keep them green would have been to rewrite each one as a
+     * "did it delegate" test - losing the actual coverage. Constructing the real handlers keeps all
+     * of it asserting real behaviour through the dispatcher.
+     */
     private ToolExecutor toolExecutor;
 
     private static final String ROUTE_ID = "route-uuid-123";
@@ -93,6 +121,31 @@ class ToolExecutorTest {
 
     @BeforeEach
     void setUp() {
+        // Real handlers over the same mocks, so the behavioural tests below still exercise real tool
+        // logic through the dispatcher instead of a stub that returns whatever we told it to.
+        toolExecutor = new ToolExecutor(
+                toolRegistry,
+                prometheusService,
+                routeService,
+                gatewayInstanceService,
+                kubernetesClusterRepository,
+                stressTestService,
+                aiAnalysisService,
+                auditLogService,
+                requestTraceRepository,
+                filterChainExecutionRepository,
+                restTemplate,
+                auditToolHandler,
+                new com.leoli.gateway.admin.tool.handler.DiagnosticToolHandler(diagnosticService, prometheusService),
+                new com.leoli.gateway.admin.tool.handler.ServiceToolHandler(serviceService, nacosConfigCenterService),
+                new com.leoli.gateway.admin.tool.handler.InstanceToolHandler(gatewayInstanceService),
+                new com.leoli.gateway.admin.tool.handler.StressTestToolHandler(stressTestService),
+                new com.leoli.gateway.admin.tool.handler.MiddlewareTraceToolHandler(
+                        serviceMiddlewareService, distributedTraceService, prometheusClient),
+                new com.leoli.gateway.admin.tool.handler.PeriodQueryToolHandler(
+                        distributedTraceService, prometheusClient),
+                new com.leoli.gateway.admin.tool.handler.KnowledgeToolHandler(knowledgeSearchService));
+
         // Setup tool registry mock
         lenient().when(toolRegistry.hasTool(anyString())).thenReturn(true);
 

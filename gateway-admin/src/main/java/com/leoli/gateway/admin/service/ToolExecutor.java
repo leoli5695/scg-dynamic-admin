@@ -3,8 +3,6 @@ package com.leoli.gateway.admin.service;
 import com.alibaba.nacos.api.naming.pojo.Instance;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.leoli.gateway.admin.center.NacosConfigCenterService;
-import com.leoli.gateway.admin.client.PrometheusClient;
 import com.leoli.gateway.admin.model.*;
 import com.leoli.gateway.admin.repository.FilterChainExecutionRepository;
 import com.leoli.gateway.admin.repository.KubernetesClusterRepository;
@@ -48,31 +46,29 @@ import static com.leoli.gateway.admin.tool.ToolArgs.getStringArg;
 public class ToolExecutor {
 
     private final ToolRegistry toolRegistry;
-    private final DiagnosticService diagnosticService;
     private final PrometheusService prometheusService;
     private final RouteService routeService;
-    private final ServiceService serviceService;
     private final GatewayInstanceService gatewayInstanceService;
     private final KubernetesClusterRepository kubernetesClusterRepository;
     private final StressTestService stressTestService;
     private final AiAnalysisService aiAnalysisService;
-    private final NacosConfigCenterService nacosConfigCenterService;
     private final AuditLogService auditLogService;
     private final RequestTraceRepository requestTraceRepository;
     private final FilterChainExecutionRepository filterChainExecutionRepository;
     private final RestTemplate restTemplate;
 
-    // 服务中间件和链路追踪服务（新增）
-    private final ServiceMiddlewareService serviceMiddlewareService;
-    private final DistributedTraceService distributedTraceService;
-    private final PrometheusClient prometheusClient;
-
-    // 知识库检索（RAG）
-    private final com.leoli.gateway.admin.service.knowledge.KnowledgeSearchService knowledgeSearchService;
-
-    // 领域工具处理器：从本类拆出的内聚工具组。每拆出一组，本类就少若干方法和若干注入依赖
-    // （AuditToolHandler 带走了 auditLogRepository 和 strategyService，两者在别处均无引用）。
+    // 领域工具处理器：从本类拆出的内聚工具组。每拆出一组，本类就少若干方法和若干注入依赖——
+    // 到目前为止已带走 auditLogRepository、strategyService、diagnosticService、serviceService、
+    // nacosConfigCenterService、serviceMiddlewareService、distributedTraceService、prometheusClient
+    // 和 knowledgeSearchService，这些在本类中都已无引用。
     private final com.leoli.gateway.admin.tool.handler.AuditToolHandler auditToolHandler;
+    private final com.leoli.gateway.admin.tool.handler.DiagnosticToolHandler diagnosticToolHandler;
+    private final com.leoli.gateway.admin.tool.handler.ServiceToolHandler serviceToolHandler;
+    private final com.leoli.gateway.admin.tool.handler.InstanceToolHandler instanceToolHandler;
+    private final com.leoli.gateway.admin.tool.handler.StressTestToolHandler stressTestToolHandler;
+    private final com.leoli.gateway.admin.tool.handler.MiddlewareTraceToolHandler middlewareTraceToolHandler;
+    private final com.leoli.gateway.admin.tool.handler.PeriodQueryToolHandler periodQueryToolHandler;
+    private final com.leoli.gateway.admin.tool.handler.KnowledgeToolHandler knowledgeToolHandler;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -139,10 +135,10 @@ public class ToolExecutor {
             // 执行对应工具
             Object result = switch (toolName) {
                 // 监控诊断类
-                case "run_quick_diagnostic" -> executeQuickDiagnostic(arguments);
-                case "run_full_diagnostic" -> executeFullDiagnostic(arguments);
-                case "get_gateway_metrics" -> executeGetGatewayMetrics(arguments);
-                case "get_history_metrics" -> executeGetHistoryMetrics(arguments);
+                case "run_quick_diagnostic" -> diagnosticToolHandler.quickDiagnostic(arguments);
+                case "run_full_diagnostic" -> diagnosticToolHandler.fullDiagnostic(arguments);
+                case "get_gateway_metrics" -> diagnosticToolHandler.getGatewayMetrics(arguments);
+                case "get_history_metrics" -> diagnosticToolHandler.getHistoryMetrics(arguments);
 
                 // 路由管理类
                 case "list_routes" -> executeListRoutes(arguments);
@@ -156,14 +152,14 @@ public class ToolExecutor {
                 case "simulate_route_match" -> executeSimulateRouteMatch(arguments);
 
                 // 服务管理类
-                case "list_services" -> executeListServices(arguments);
-                case "get_service_detail" -> executeGetServiceDetail(arguments);
-                case "nacos_service_discovery" -> executeNacosServiceDiscovery(arguments);
+                case "list_services" -> serviceToolHandler.listServices(arguments);
+                case "get_service_detail" -> serviceToolHandler.getServiceDetail(arguments);
+                case "nacos_service_discovery" -> serviceToolHandler.nacosServiceDiscovery(arguments);
 
                 // 实例管理类
-                case "list_instances" -> executeListInstances(arguments);
-                case "get_instance_detail" -> executeGetInstanceDetail(arguments);
-                case "get_instance_pods" -> executeGetInstancePods(arguments);
+                case "list_instances" -> instanceToolHandler.listInstances(arguments);
+                case "get_instance_detail" -> instanceToolHandler.getInstanceDetail(arguments);
+                case "get_instance_pods" -> instanceToolHandler.getInstancePods(arguments);
 
                 // 集群管理类
                 case "list_clusters" -> executeListClusters(arguments);
@@ -171,10 +167,10 @@ public class ToolExecutor {
                 case "compare_instances" -> executeCompareInstances(arguments);
 
                 // 压测类
-                case "get_stress_test_status" -> executeGetStressTestStatus(arguments);
-                case "analyze_test_results" -> executeAnalyzeTestResults(arguments);
-                case "list_stress_test_history" -> executeListStressTestHistory(arguments);
-                case "get_stress_test_detail" -> executeGetStressTestDetail(arguments);
+                case "get_stress_test_status" -> stressTestToolHandler.getStressTestStatus(arguments);
+                case "analyze_test_results" -> stressTestToolHandler.analyzeTestResults(arguments);
+                case "list_stress_test_history" -> stressTestToolHandler.listStressTestHistory(arguments);
+                case "get_stress_test_detail" -> stressTestToolHandler.getStressTestDetail(arguments);
 
                 // Filter Chain 分析类
                 case "get_filter_chain_stats" -> executeGetFilterChainStats(arguments);
@@ -204,30 +200,30 @@ public class ToolExecutor {
                 case "check_pod_count_for_analysis" -> executeCheckPodCountForAnalysis(arguments);
 
                 // 服务中间件和链路追踪类（新增）
-                case "get_service_middlewares" -> executeGetServiceMiddlewares(arguments);
-                case "get_all_services_with_middlewares" -> executeGetAllServicesWithMiddlewares(arguments);
-                case "get_middleware_statistics" -> executeGetMiddlewareStatistics(arguments);
-                case "get_exporter_mapping" -> executeGetExporterMapping(arguments);
-                case "get_distributed_trace" -> executeGetDistributedTrace(arguments);
-                case "get_service_traces" -> executeGetServiceTraces(arguments);
-                case "get_slow_traces" -> executeGetSlowTraces(arguments);
-                case "get_failed_traces" -> executeGetFailedTraces(arguments);
-                case "get_trace_statistics" -> executeGetTraceStatistics(arguments);
-                case "analyze_request_bottleneck" -> executeAnalyzeRequestBottleneck(arguments);
-                case "query_redis_metrics" -> executeQueryRedisMetrics(arguments);
-                case "query_rocketmq_metrics" -> executeQueryRocketmqMetrics(arguments);
-                case "query_mysql_metrics" -> executeQueryMysqlMetrics(arguments);
-                case "query_es_metrics" -> executeQueryEsMetrics(arguments);
-                case "query_redis_during_period" -> executeQueryRedisDuringPeriod(arguments);
-                case "query_mysql_during_period" -> executeQueryMysqlDuringPeriod(arguments);
-                case "query_rocketmq_during_period" -> executeQueryRocketmqDuringPeriod(arguments);
-                case "query_postgresql_during_period" -> executeQueryPostgresqlDuringPeriod(arguments);
-                case "query_mongodb_during_period" -> executeQueryMongodbDuringPeriod(arguments);
-                case "query_rabbitmq_during_period" -> executeQueryRabbitmqDuringPeriod(arguments);
-                case "analyze_stress_test_with_middleware" -> executeAnalyzeStressTestWithMiddleware(arguments);
+                case "get_service_middlewares" -> middlewareTraceToolHandler.getServiceMiddlewares(arguments);
+                case "get_all_services_with_middlewares" -> middlewareTraceToolHandler.getAllServicesWithMiddlewares(arguments);
+                case "get_middleware_statistics" -> middlewareTraceToolHandler.getMiddlewareStatistics(arguments);
+                case "get_exporter_mapping" -> middlewareTraceToolHandler.getExporterMapping(arguments);
+                case "get_distributed_trace" -> middlewareTraceToolHandler.getDistributedTrace(arguments);
+                case "get_service_traces" -> middlewareTraceToolHandler.getServiceTraces(arguments);
+                case "get_slow_traces" -> middlewareTraceToolHandler.getSlowTraces(arguments);
+                case "get_failed_traces" -> middlewareTraceToolHandler.getFailedTraces(arguments);
+                case "get_trace_statistics" -> middlewareTraceToolHandler.getTraceStatistics(arguments);
+                case "analyze_request_bottleneck" -> middlewareTraceToolHandler.analyzeRequestBottleneck(arguments);
+                case "query_redis_metrics" -> middlewareTraceToolHandler.queryRedisMetrics(arguments);
+                case "query_rocketmq_metrics" -> middlewareTraceToolHandler.queryRocketmqMetrics(arguments);
+                case "query_mysql_metrics" -> middlewareTraceToolHandler.queryMysqlMetrics(arguments);
+                case "query_es_metrics" -> middlewareTraceToolHandler.queryEsMetrics(arguments);
+                case "query_redis_during_period" -> periodQueryToolHandler.queryRedisDuringPeriod(arguments);
+                case "query_mysql_during_period" -> periodQueryToolHandler.queryMysqlDuringPeriod(arguments);
+                case "query_rocketmq_during_period" -> periodQueryToolHandler.queryRocketmqDuringPeriod(arguments);
+                case "query_postgresql_during_period" -> periodQueryToolHandler.queryPostgresqlDuringPeriod(arguments);
+                case "query_mongodb_during_period" -> periodQueryToolHandler.queryMongodbDuringPeriod(arguments);
+                case "query_rabbitmq_during_period" -> periodQueryToolHandler.queryRabbitmqDuringPeriod(arguments);
+                case "analyze_stress_test_with_middleware" -> periodQueryToolHandler.analyzeStressTestWithMiddleware(arguments);
 
                 // 知识库检索（RAG）
-                case "search_knowledge" -> executeSearchKnowledge(arguments);
+                case "search_knowledge" -> knowledgeToolHandler.searchKnowledge(arguments);
 
                 default -> Map.of("error", "Tool not implemented: " + toolName);
             };
@@ -293,90 +289,7 @@ public class ToolExecutor {
     }
 
     // ===================== 监控诊断类工具执行 =====================
-
-    private Object executeQuickDiagnostic(Map<String, Object> args) {
-        DiagnosticService.DiagnosticReport report = diagnosticService.runQuickDiagnostic();
-        return formatDiagnosticReport(report);
-    }
-
-    private Object executeFullDiagnostic(Map<String, Object> args) {
-        DiagnosticService.DiagnosticReport report = diagnosticService.runFullDiagnostic();
-        return formatDiagnosticReport(report);
-    }
-
-    private Map<String, Object> formatDiagnosticReport(DiagnosticService.DiagnosticReport report) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("overallScore", report.getOverallScore());
-        // 动态计算 status（与 DiagnosticReport.toMap() 一致）
-        String status = report.getOverallScore() >= 80 ? "HEALTHY" :
-                report.getOverallScore() >= 50 ? "WARNING" : "CRITICAL";
-        result.put("status", status);
-        result.put("duration", report.getDuration() + " ms");
-
-        // 各组件状态
-        Map<String, Object> components = new LinkedHashMap<>();
-        if (report.getDatabase() != null) {
-            components.put("database", formatComponent(report.getDatabase()));
-        }
-        if (report.getRedis() != null) {
-            components.put("redis", formatComponent(report.getRedis()));
-        }
-        if (report.getConfigCenter() != null) {
-            components.put("configCenter", formatComponent(report.getConfigCenter()));
-        }
-        if (report.getRoutes() != null) {
-            components.put("routes", formatComponent(report.getRoutes()));
-        }
-        if (report.getAuth() != null) {
-            components.put("auth", formatComponent(report.getAuth()));
-        }
-        if (report.getGatewayInstances() != null) {
-            components.put("gatewayInstances", formatComponent(report.getGatewayInstances()));
-        }
-        if (report.getPerformance() != null) {
-            components.put("performance", formatComponent(report.getPerformance()));
-        }
-        result.put("components", components);
-
-        // 建议
-        result.put("recommendations", report.getRecommendations());
-
-        return result;
-    }
-
-    private Map<String, Object> formatComponent(DiagnosticService.ComponentDiagnostic component) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("name", component.getName());
-        result.put("status", component.getStatus());
-        result.put("metrics", component.getMetrics());
-        if (component.getWarnings() != null && !component.getWarnings().isEmpty()) {
-            result.put("warnings", component.getWarnings());
-        }
-        if (component.getErrors() != null && !component.getErrors().isEmpty()) {
-            result.put("errors", component.getErrors());
-        }
-        return result;
-    }
-
-    private Object executeGetGatewayMetrics(Map<String, Object> args) {
-        String instanceId = getStringArg(args, "instanceId");
-        String podInstance = getStringArg(args, "podInstance");
-        if (instanceId != null && podInstance != null) {
-            return prometheusService.getGatewayMetrics(instanceId, podInstance);
-        } else if (instanceId != null) {
-            return prometheusService.getGatewayMetrics(instanceId);
-        }
-        return prometheusService.getGatewayMetrics();
-    }
-
-    private Object executeGetHistoryMetrics(Map<String, Object> args) {
-        int hours = getIntArg(args, "hours", 1);
-        String instanceId = getStringArg(args, "instanceId");
-        String podInstance = getStringArg(args, "podInstance");
-        // 默认最多24小时
-        hours = Math.min(hours, 24);
-        return prometheusService.getHistoryMetrics(hours, instanceId, podInstance);
-    }
+    // Moved to com.leoli.gateway.admin.tool.handler.DiagnosticToolHandler; the dispatch switch delegates to diagnosticToolHandler.
 
     // ===================== 路由管理类工具执行 =====================
 
@@ -579,180 +492,10 @@ public class ToolExecutor {
     }
 
     // ===================== 服务管理类工具执行 =====================
-
-    private Object executeListServices(Map<String, Object> args) {
-        String instanceId = getStringArg(args, "instanceId");
-
-        List<?> services;
-        if (instanceId != null) {
-            services = serviceService.getAllServicesByInstanceId(instanceId);
-        } else {
-            services = serviceService.getAllServices();
-        }
-
-        // 简化输出
-        return services.stream()
-                .map(s -> {
-                    if (s instanceof Map) {
-                        Map<?, ?> service = (Map<?, ?>) s;
-                        Map<String, Object> simplified = new LinkedHashMap<>();
-                        simplified.put("serviceId", service.get("serviceId"));
-                        simplified.put("name", service.get("name"));
-                        simplified.put("loadBalancer", service.get("loadBalancer"));
-                        simplified.put("instanceCount", service.get("instances") != null ?
-                                ((List<?>) service.get("instances")).size() : 0);
-                        return simplified;
-                    }
-                    return s;
-                })
-                .toList();
-    }
-
-    private Object executeGetServiceDetail(Map<String, Object> args) {
-        String serviceName = getRequiredStringArg(args, "serviceName");
-        return serviceService.getServiceByName(serviceName);
-    }
-
-    /**
-     * Nacos 服务发现查询（最高优先级工具）.
-     * 当路由 URI 以 lb:// 开头时，AI 应优先调用此工具查询真实实例信息。
-     */
-    private Object executeNacosServiceDiscovery(Map<String, Object> args) {
-        String serviceName = getRequiredStringArg(args, "serviceName");
-        String namespace = getStringArg(args, "namespace");
-        String group = getStringArg(args, "group", "DEFAULT_GROUP");
-
-        try {
-            // 获取指定 namespace 的 NamingService
-            var namingService = nacosConfigCenterService.getNamingServiceForNamespace(namespace);
-
-            // 查询所有实例（包含健康和不健康的）
-            List<Instance> allInstances = namingService.getAllInstances(serviceName, group);
-
-            if (allInstances == null || allInstances.isEmpty()) {
-                return Map.of(
-                        "serviceName", serviceName,
-                        "namespace", namespace != null ? namespace : "public",
-                        "group", group,
-                        "found", false,
-                        "totalInstances", 0,
-                        "healthyInstances", 0,
-                        "message", "在 Nacos 中未找到该服务的注册实例。可能原因：1) 服务未启动或未注册到 Nacos；2) namespace/group 配置错误；3) 服务名拼写错误。"
-                );
-            }
-
-            // 分离健康和不健康实例
-            List<Map<String, Object>> healthyList = new ArrayList<>();
-            List<Map<String, Object>> unhealthyList = new ArrayList<>();
-
-            for (Instance instance : allInstances) {
-                Map<String, Object> instanceInfo = new LinkedHashMap<>();
-                instanceInfo.put("ip", instance.getIp());
-                instanceInfo.put("port", instance.getPort());
-                instanceInfo.put("weight", instance.getWeight());
-                instanceInfo.put("healthy", instance.isHealthy());
-                instanceInfo.put("enabled", instance.isEnabled());
-                instanceInfo.put("serviceName", instance.getServiceName());
-                instanceInfo.put("metadata", instance.getMetadata());
-                instanceInfo.put("ephemeral", instance.isEphemeral());
-
-                if (instance.isHealthy() && instance.isEnabled()) {
-                    healthyList.add(instanceInfo);
-                } else {
-                    unhealthyList.add(instanceInfo);
-                }
-            }
-
-            // 构建返回结果
-            Map<String, Object> result = new LinkedHashMap<>();
-            result.put("serviceName", serviceName);
-            result.put("namespace", namespace != null && !namespace.isEmpty() ? namespace : "public");
-            result.put("group", group);
-            result.put("found", true);
-            result.put("totalInstances", allInstances.size());
-            result.put("healthyInstances", healthyList.size());
-            result.put("unhealthyInstances", unhealthyList.size());
-
-            // 构建实例地址列表（IP:端口格式）
-            List<String> healthyAddresses = healthyList.stream()
-                    .map(i -> i.get("ip") + ":" + i.get("port"))
-                    .toList();
-            result.put("healthyAddresses", healthyAddresses);
-
-            // 详细实例列表
-            result.put("healthyInstancesDetail", healthyList);
-            if (!unhealthyList.isEmpty()) {
-                result.put("unhealthyInstancesDetail", unhealthyList);
-                result.put("warning", "存在不健康实例，请检查后端服务状态");
-            }
-
-            // 服务发现来源说明（用于 AI 报告）
-            result.put("discoverySource", "Nacos 服务发现（LoadBalancer 动态发现模式）");
-            result.put("discoveryMode", "lb://" + serviceName);
-
-            return result;
-
-        } catch (Exception e) {
-            log.error("Failed to query Nacos service discovery for: {}", serviceName, e);
-            return Map.of(
-                    "serviceName", serviceName,
-                    "namespace", namespace != null ? namespace : "public",
-                    "group", group,
-                    "found", false,
-                    "error", "Nacos 服务发现查询失败: " + e.getMessage(),
-                    "message", "无法连接到 Nacos 或查询失败。请检查 Nacos 服务状态和网络连接。"
-            );
-        }
-    }
+    // Moved to com.leoli.gateway.admin.tool.handler.ServiceToolHandler; the dispatch switch delegates to serviceToolHandler.
 
     // ===================== 实例管理类工具执行 =====================
-
-    private Object executeListInstances(Map<String, Object> args) {
-        boolean enabledOnly = getBoolArg(args, "enabledOnly", false);
-
-        // getAllInstances() 返回的是实体列表（不是 Map）。此前用 `instanceof Map` 判断恒为 false，
-        // 导致精简逻辑从未生效、直接序列化裸实体：既因 LocalDateTime 让裸 ObjectMapper 序列化失败
-        // ("JSON serialization failed")，又可能把 kubeConfig 等敏感字段泄进模型上下文。这里显式按
-        // 实体字段映射成精简 Map。
-        List<GatewayInstanceEntity> instances = gatewayInstanceService.getAllInstances();
-
-        return instances.stream()
-                .filter(i -> !enabledOnly || (i.getStatusCode() != null && i.getStatusCode() == 1))  // 1=RUNNING
-                .map(i -> {
-                    Map<String, Object> simplified = new LinkedHashMap<>();
-                    simplified.put("instanceId", i.getInstanceId());
-                    simplified.put("instanceName", i.getInstanceName());
-                    simplified.put("status", i.getStatus());
-                    simplified.put("statusCode", i.getStatusCode());
-                    simplified.put("statusMessage", i.getStatusMessage());
-                    simplified.put("specType", i.getSpecType());
-                    simplified.put("replicas", i.getReplicas());
-                    simplified.put("effectiveAccessUrl", i.getEffectiveAccessUrl());
-                    return simplified;
-                })
-                .toList();
-    }
-
-    private Object executeGetInstanceDetail(Map<String, Object> args) {
-        String instanceId = getRequiredStringArg(args, "instanceId");
-        return gatewayInstanceService.getInstanceByInstanceId(instanceId);
-    }
-
-    private Object executeGetInstancePods(Map<String, Object> args) {
-        String instanceIdStr = getRequiredStringArg(args, "instanceId");
-        // instanceId 可能是数据库ID（Long）或实例ID（String）
-        try {
-            Long id = Long.parseLong(instanceIdStr);
-            return gatewayInstanceService.getInstancePods(id);
-        } catch (NumberFormatException e) {
-            // 尝试作为实例ID查询
-            var instance = gatewayInstanceService.getInstanceByInstanceId(instanceIdStr);
-            if (instance != null) {
-                return gatewayInstanceService.getInstancePods(instance.getId());
-            }
-            return Map.of("error", "Instance not found: " + instanceIdStr);
-        }
-    }
+    // Moved to com.leoli.gateway.admin.tool.handler.InstanceToolHandler; the dispatch switch delegates to instanceToolHandler.
 
     // ===================== 集群管理类工具执行 =====================
 
@@ -993,202 +736,7 @@ public class ToolExecutor {
     }
 
     // ===================== 压测类工具执行 =====================
-
-    private Object executeGetStressTestStatus(Map<String, Object> args) {
-        Long testId = getRequiredLongArg(args, "testId");
-        return stressTestService.getTestStatus(testId);
-    }
-
-    private Object executeAnalyzeTestResults(Map<String, Object> args) {
-        Long testId = getRequiredLongArg(args, "testId");
-        String language = getStringArg(args, "language", "zh");
-
-        // 获取测试结果并分析
-        var test = stressTestService.getTest(testId);
-        if (test == null) {
-            return Map.of("error", "Test not found: " + testId);
-        }
-
-        // 调用 AI 分析
-        String analysis = stressTestService.analyzeTestResults(testId, null, language);
-        return Map.of(
-                "testId", testId,
-                "testName", test.getTestName(),
-                "status", test.getStatus(),
-                "analysis", analysis
-        );
-    }
-
-    private Object executeListStressTestHistory(Map<String, Object> args) {
-        String instanceId = getStringArg(args, "instanceId");
-        String status = getStringArg(args, "status");
-        int limit = getIntArg(args, "limit", 10);
-        Integer minRequests = getOptionalIntArg(args, "minRequests");
-
-        // 限制返回数量
-        limit = Math.min(limit, 50);
-
-        List<?> tests;
-        if (instanceId != null) {
-            tests = stressTestService.getTestsForInstance(instanceId);
-        } else {
-            tests = stressTestService.getAllTests();
-        }
-
-        // 过滤并简化输出
-        List<Map<String, Object>> history = tests.stream()
-                .filter(t -> {
-                    if (t instanceof com.leoli.gateway.admin.model.StressTest) {
-                        com.leoli.gateway.admin.model.StressTest test = (com.leoli.gateway.admin.model.StressTest) t;
-                        // 状态过滤
-                        if (status != null && !test.getStatus().equals(status)) {
-                            return false;
-                        }
-                        // 最小请求数过滤
-                        if (minRequests != null && test.getActualRequests() < minRequests) {
-                            return false;
-                        }
-                        return true;
-                    }
-                    return false;
-                })
-                .limit(limit)
-                .map(t -> {
-                    com.leoli.gateway.admin.model.StressTest test = (com.leoli.gateway.admin.model.StressTest) t;
-                    Map<String, Object> simplified = new LinkedHashMap<>();
-                    simplified.put("testId", test.getId());
-                    simplified.put("testName", test.getTestName());
-                    simplified.put("status", test.getStatus());
-                    simplified.put("targetUrl", test.getTargetUrl());
-                    simplified.put("method", test.getMethod());
-                    simplified.put("concurrentUsers", test.getConcurrentUsers());
-                    simplified.put("totalRequests", test.getTotalRequests());
-                    simplified.put("actualRequests", test.getActualRequests());
-                    simplified.put("successfulRequests", test.getSuccessfulRequests());
-                    simplified.put("failedRequests", test.getFailedRequests());
-                    simplified.put("errorRate", test.getErrorRate() != null ?
-                            String.format("%.2f%%", test.getErrorRate()) : "0.00%");
-                    simplified.put("requestsPerSecond", test.getRequestsPerSecond() != null ?
-                            String.format("%.2f", test.getRequestsPerSecond()) : "0.00");
-                    simplified.put("avgResponseTimeMs", test.getAvgResponseTimeMs() != null ?
-                            String.format("%.2f", test.getAvgResponseTimeMs()) : "0.00");
-                    simplified.put("p50ResponseTimeMs", test.getP50ResponseTimeMs() != null ?
-                            test.getP50ResponseTimeMs() : 0);
-                    simplified.put("p90ResponseTimeMs", test.getP90ResponseTimeMs() != null ?
-                            test.getP90ResponseTimeMs() : 0);
-                    simplified.put("p99ResponseTimeMs", test.getP99ResponseTimeMs() != null ?
-                            test.getP99ResponseTimeMs() : 0);
-                    simplified.put("startTime", test.getStartTime() != null ?
-                            test.getStartTime().toString() : null);
-                    simplified.put("endTime", test.getEndTime() != null ?
-                            test.getEndTime().toString() : null);
-                    simplified.put("duration", calculateDuration(test.getStartTime(), test.getEndTime()));
-                    return simplified;
-                })
-                .toList();
-
-        // 添加汇总信息
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("totalTests", history.size());
-        response.put("tests", history);
-
-        // 计算汇总统计（仅对已完成的测试）
-        List<com.leoli.gateway.admin.model.StressTest> completedTests = tests.stream()
-                .filter(t -> t instanceof com.leoli.gateway.admin.model.StressTest)
-                .map(t -> (com.leoli.gateway.admin.model.StressTest) t)
-                .filter(t -> "COMPLETED".equals(t.getStatus()))
-                .toList();
-
-        if (!completedTests.isEmpty()) {
-            double avgQps = completedTests.stream()
-                    .filter(t -> t.getRequestsPerSecond() != null)
-                    .mapToDouble(t -> t.getRequestsPerSecond())
-                    .average()
-                    .orElse(0);
-            double avgErrorRate = completedTests.stream()
-                    .filter(t -> t.getErrorRate() != null)
-                    .mapToDouble(t -> t.getErrorRate())
-                    .average()
-                    .orElse(0);
-            double avgResponseTime = completedTests.stream()
-                    .filter(t -> t.getAvgResponseTimeMs() != null)
-                    .mapToDouble(t -> t.getAvgResponseTimeMs())
-                    .average()
-                    .orElse(0);
-
-            Map<String, Object> summary = new LinkedHashMap<>();
-            summary.put("completedTests", completedTests.size());
-            summary.put("avgQps", String.format("%.2f req/s", avgQps));
-            summary.put("avgErrorRate", String.format("%.2f%%", avgErrorRate));
-            summary.put("avgResponseTime", String.format("%.2f ms", avgResponseTime));
-            response.put("summary", summary);
-        }
-
-        return response;
-    }
-
-    private Object executeGetStressTestDetail(Map<String, Object> args) {
-        Long testId = getRequiredLongArg(args, "testId");
-
-        com.leoli.gateway.admin.model.StressTest test = stressTestService.getTest(testId);
-        if (test == null) {
-            return Map.of("error", "Test not found: " + testId);
-        }
-
-        // 获取详细指标（如果有）
-        var metrics = stressTestService.getTestMetrics(testId);
-
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("testId", test.getId());
-        result.put("testName", test.getTestName());
-        result.put("status", test.getStatus());
-        result.put("targetUrl", test.getTargetUrl());
-        result.put("method", test.getMethod());
-        result.put("concurrentUsers", test.getConcurrentUsers());
-        result.put("totalRequests", test.getTotalRequests());
-        result.put("actualRequests", test.getActualRequests());
-        result.put("successfulRequests", test.getSuccessfulRequests());
-        result.put("failedRequests", test.getFailedRequests());
-        result.put("errorRate", test.getErrorRate());
-        result.put("requestsPerSecond", test.getRequestsPerSecond());
-        result.put("avgResponseTimeMs", test.getAvgResponseTimeMs());
-        result.put("minResponseTimeMs", test.getMinResponseTimeMs());
-        result.put("maxResponseTimeMs", test.getMaxResponseTimeMs());
-        result.put("p50ResponseTimeMs", test.getP50ResponseTimeMs());
-        result.put("p90ResponseTimeMs", test.getP90ResponseTimeMs());
-        result.put("p95ResponseTimeMs", test.getP95ResponseTimeMs());
-        result.put("p99ResponseTimeMs", test.getP99ResponseTimeMs());
-        result.put("startTime", test.getStartTime());
-        result.put("endTime", test.getEndTime());
-        result.put("responseTimeDistribution", test.getResponseTimeDistribution());
-        result.put("errorDistribution", test.getErrorDistribution());
-
-        // 添加时间线数据（如果有）
-        if (metrics != null && metrics.getTimeline() != null) {
-            result.put("timeline", metrics.getTimeline());
-            result.put("summary", metrics.getSummary());
-        }
-
-        return result;
-    }
-
-    private String calculateDuration(LocalDateTime start, LocalDateTime end) {
-        if (start == null || end == null) return null;
-        long seconds = java.time.Duration.between(start, end).getSeconds();
-        return (int) seconds + "s";
-    }
-
-    private Integer getOptionalIntArg(Map<String, Object> args, String key) {
-        Object value = args.get(key);
-        if (value == null) return null;
-        if (value instanceof Integer) return (Integer) value;
-        if (value instanceof Number) return ((Number) value).intValue();
-        try {
-            return Integer.parseInt(value.toString());
-        } catch (NumberFormatException e) {
-            return null;
-        }
-    }
+    // Moved to com.leoli.gateway.admin.tool.handler.StressTestToolHandler; the dispatch switch delegates to stressTestToolHandler.
 
     // ===================== Filter Chain 分析类工具执行 =====================
 
@@ -3425,264 +2973,13 @@ public class ToolExecutor {
     }
 
     // ===================== 服务中间件和链路追踪类工具执行 =====================
-
-    /**
-     * 获取指定服务的中间件信息
-     */
-    private Object executeGetServiceMiddlewares(Map<String, Object> args) {
-        String serviceName = getStringArg(args, "serviceName");
-        if (serviceName == null) {
-            return Map.of("error", "serviceName is required");
-        }
-        return serviceMiddlewareService.getServiceMiddleware(serviceName);
-    }
-
-    /**
-     * 获取所有已上报中间件的服务列表
-     */
-    private Object executeGetAllServicesWithMiddlewares(Map<String, Object> args) {
-        return serviceMiddlewareService.getAllServices();
-    }
-
-    /**
-     * 获取中间件统计信息
-     */
-    private Object executeGetMiddlewareStatistics(Map<String, Object> args) {
-        return serviceMiddlewareService.getMiddlewareStatistics();
-    }
-
-    /**
-     * 获取Exporter地址映射
-     */
-    private Object executeGetExporterMapping(Map<String, Object> args) {
-        String serviceName = getStringArg(args, "serviceName");
-        if (serviceName == null) {
-            return Map.of("error", "serviceName is required");
-        }
-        return serviceMiddlewareService.getExporterMapping(serviceName);
-    }
-
-    /**
-     * 获取完整链路数据
-     */
-    private Object executeGetDistributedTrace(Map<String, Object> args) {
-        String traceId = getStringArg(args, "traceId");
-        if (traceId == null) {
-            return Map.of("error", "traceId is required");
-        }
-        return distributedTraceService.getTraceByTraceId(traceId);
-    }
-
-    /**
-     * 获取服务的链路追踪数据
-     */
-    private Object executeGetServiceTraces(Map<String, Object> args) {
-        String serviceName = getStringArg(args, "serviceName");
-        if (serviceName == null) {
-            return Map.of("error", "serviceName is required");
-        }
-        int page = getIntArg(args, "page", 0);
-        int size = getIntArg(args, "size", 20);
-        return distributedTraceService.getTracesByService(serviceName, page, size);
-    }
-
-    /**
-     * 获取慢请求链路
-     */
-    private Object executeGetSlowTraces(Map<String, Object> args) {
-        String serviceName = getStringArg(args, "serviceName");
-        int limit = getIntArg(args, "limit", 50);
-        if (serviceName != null) {
-            return distributedTraceService.getSlowTracesByService(serviceName, limit);
-        }
-        return distributedTraceService.getSlowTraces(limit);
-    }
-
-    /**
-     * 获取失败请求链路
-     */
-    private Object executeGetFailedTraces(Map<String, Object> args) {
-        String serviceName = getStringArg(args, "serviceName");
-        int limit = getIntArg(args, "limit", 50);
-        if (serviceName != null) {
-            return distributedTraceService.getFailedTracesByService(serviceName, limit);
-        }
-        return distributedTraceService.getFailedTraces(limit);
-    }
-
-    /**
-     * 获取链路统计信息
-     */
-    private Object executeGetTraceStatistics(Map<String, Object> args) {
-        String serviceName = getStringArg(args, "serviceName");
-        if (serviceName == null) {
-            return Map.of("error", "serviceName is required");
-        }
-        return distributedTraceService.getTraceStatistics(serviceName);
-    }
-
-    /**
-     * 分析请求瓶颈（综合分析）
-     */
-    private Object executeAnalyzeRequestBottleneck(Map<String, Object> args) {
-        String traceId = getStringArg(args, "traceId");
-        if (traceId == null) {
-            return Map.of("error", "traceId is required");
-        }
-        return distributedTraceService.analyzeRequestBottleneck(traceId);
-    }
-
-    /**
-     * 查询Redis指标
-     */
-    private Object executeQueryRedisMetrics(Map<String, Object> args) {
-        String exporterUrl = getStringArg(args, "exporterUrl");
-        if (exporterUrl == null) {
-            return Map.of("error", "exporterUrl is required");
-        }
-        String serviceName = getStringArg(args, "serviceName");
-        return prometheusClient.queryRedisMetrics(exporterUrl, serviceName);
-    }
-
-    /**
-     * 查询RocketMQ指标
-     */
-    private Object executeQueryRocketmqMetrics(Map<String, Object> args) {
-        String exporterUrl = getStringArg(args, "exporterUrl");
-        if (exporterUrl == null) {
-            return Map.of("error", "exporterUrl is required");
-        }
-        String topic = getStringArg(args, "topic");
-        return prometheusClient.queryRocketmqMetrics(exporterUrl, topic);
-    }
-
-    /**
-     * 查询MySQL指标
-     */
-    private Object executeQueryMysqlMetrics(Map<String, Object> args) {
-        String exporterUrl = getStringArg(args, "exporterUrl");
-        if (exporterUrl == null) {
-            return Map.of("error", "exporterUrl is required");
-        }
-        return prometheusClient.queryMysqlMetrics(exporterUrl);
-    }
-
-    /**
-     * 查询Elasticsearch指标
-     */
-    private Object executeQueryEsMetrics(Map<String, Object> args) {
-        String exporterUrl = getStringArg(args, "exporterUrl");
-        if (exporterUrl == null) {
-            return Map.of("error", "exporterUrl is required");
-        }
-        return prometheusClient.queryEsMetrics(exporterUrl);
-    }
+    // Moved to com.leoli.gateway.admin.tool.handler.MiddlewareTraceToolHandler; the dispatch switch delegates to middlewareTraceToolHandler.
 
     // ===================== 时间段查询工具 =====================
-
-    private Object executeQueryRedisDuringPeriod(Map<String, Object> args) {
-        String exporterUrl = getStringArg(args, "exporterUrl");
-        if (exporterUrl == null) {
-            return Map.of("error", "exporterUrl is required");
-        }
-        long startTime = getLongArg(args, "startTime", 0);
-        long endTime = getLongArg(args, "endTime", 0);
-        if (startTime == 0 || endTime == 0) {
-            return Map.of("error", "startTime and endTime are required (Unix seconds)");
-        }
-        String step = getStringArg(args, "step"); // nullable, auto-calc
-        return prometheusClient.queryRedisDuringPeriod(exporterUrl, startTime, endTime, step);
-    }
-
-    private Object executeQueryMysqlDuringPeriod(Map<String, Object> args) {
-        String exporterUrl = getStringArg(args, "exporterUrl");
-        if (exporterUrl == null) {
-            return Map.of("error", "exporterUrl is required");
-        }
-        long startTime = getLongArg(args, "startTime", 0);
-        long endTime = getLongArg(args, "endTime", 0);
-        if (startTime == 0 || endTime == 0) {
-            return Map.of("error", "startTime and endTime are required (Unix seconds)");
-        }
-        String step = getStringArg(args, "step");
-        return prometheusClient.queryMysqlDuringPeriod(exporterUrl, startTime, endTime, step);
-    }
-
-    private Object executeQueryRocketmqDuringPeriod(Map<String, Object> args) {
-        String exporterUrl = getStringArg(args, "exporterUrl");
-        if (exporterUrl == null) {
-            return Map.of("error", "exporterUrl is required");
-        }
-        long startTime = getLongArg(args, "startTime", 0);
-        long endTime = getLongArg(args, "endTime", 0);
-        if (startTime == 0 || endTime == 0) {
-            return Map.of("error", "startTime and endTime are required (Unix seconds)");
-        }
-        String step = getStringArg(args, "step");
-        String topic = getStringArg(args, "topic");
-        return prometheusClient.queryRocketmqDuringPeriod(exporterUrl, startTime, endTime, step, topic);
-    }
-
-    private Object executeAnalyzeStressTestWithMiddleware(Map<String, Object> args) {
-        long testId = getLongArg(args, "testId", 0);
-        if (testId == 0) {
-            return Map.of("error", "testId is required");
-        }
-        String serviceName = getStringArg(args, "serviceName");
-        return distributedTraceService.analyzeStressTestWithMiddleware(testId, serviceName);
-    }
-
-    private Object executeQueryPostgresqlDuringPeriod(Map<String, Object> args) {
-        String exporterUrl = getStringArg(args, "exporterUrl");
-        if (exporterUrl == null) {
-            return Map.of("error", "exporterUrl is required");
-        }
-        long startTime = getLongArg(args, "startTime", 0);
-        long endTime = getLongArg(args, "endTime", 0);
-        if (startTime == 0 || endTime == 0) {
-            return Map.of("error", "startTime and endTime are required (Unix seconds)");
-        }
-        String step = getStringArg(args, "step");
-        return prometheusClient.queryPostgresqlDuringPeriod(exporterUrl, startTime, endTime, step);
-    }
-
-    private Object executeQueryMongodbDuringPeriod(Map<String, Object> args) {
-        String exporterUrl = getStringArg(args, "exporterUrl");
-        if (exporterUrl == null) {
-            return Map.of("error", "exporterUrl is required");
-        }
-        long startTime = getLongArg(args, "startTime", 0);
-        long endTime = getLongArg(args, "endTime", 0);
-        if (startTime == 0 || endTime == 0) {
-            return Map.of("error", "startTime and endTime are required (Unix seconds)");
-        }
-        String step = getStringArg(args, "step");
-        return prometheusClient.queryMongodbDuringPeriod(exporterUrl, startTime, endTime, step);
-    }
-
-    private Object executeQueryRabbitmqDuringPeriod(Map<String, Object> args) {
-        String exporterUrl = getStringArg(args, "exporterUrl");
-        if (exporterUrl == null) {
-            return Map.of("error", "exporterUrl is required");
-        }
-        long startTime = getLongArg(args, "startTime", 0);
-        long endTime = getLongArg(args, "endTime", 0);
-        if (startTime == 0 || endTime == 0) {
-            return Map.of("error", "startTime and endTime are required (Unix seconds)");
-        }
-        String step = getStringArg(args, "step");
-        String queue = getStringArg(args, "queue");
-        return prometheusClient.queryRabbitmqDuringPeriod(exporterUrl, startTime, endTime, step, queue);
-    }
+    // Moved to com.leoli.gateway.admin.tool.handler.PeriodQueryToolHandler; the dispatch switch delegates to periodQueryToolHandler.
 
     // ===================== 知识库检索（RAG） =====================
-
-    private Object executeSearchKnowledge(Map<String, Object> args) {
-        String query = getStringArg(args, "query");
-        int topK = getIntArg(args, "topK", 4);
-        String sourceType = getStringArg(args, "sourceType");
-        return knowledgeSearchService.search(query, topK, sourceType);
-    }
+    // Moved to com.leoli.gateway.admin.tool.handler.KnowledgeToolHandler; the dispatch switch delegates to knowledgeToolHandler.
 
     // ===================== 工具结果类 =====================
 
