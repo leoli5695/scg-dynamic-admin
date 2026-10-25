@@ -43,7 +43,7 @@ spring:
         server-addr: ${NACOS_SERVER_ADDR:localhost:30848}
         # Namespace - defaults to empty (public namespace) if not set
         namespace: ${NACOS_NAMESPACE:}
-        ip: 127.0.0.1  # Force registration with localhost IP
+        ip: ${NACOS_DISCOVERY_IP:127.0.0.1}  # Same override as gateway-admin; k8s/my-gateway.yaml injects status.podIP, bare-metal must set a routable IP
 
     # ============================================================================
     # Consul Configuration (alternative to Nacos)
