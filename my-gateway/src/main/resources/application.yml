@@ -169,6 +169,17 @@ gateway:
     include-filter-chain: ${GATEWAY_TRACE_INCLUDE_FILTER_CHAIN:true}
   # Gateway instance identifier (used for trace data and health status reporting)
   instance-id: ${GATEWAY_INSTANCE_ID:gateway-1}
+
+  # How often every refresher reconciles its configs against the config center.
+  # This poll, not the change listener, is what carries console edits and deletions:
+  # nacos-client 3.0.3 receives no pushes from nacos-server 2.5.4 (measured live - the
+  # server logs the publish, its remote-push log stays empty, no callback fires).
+  # The value is therefore the worst-case delay before a route/strategy/service/auth
+  # policy/certificate/plugin change takes effect, and each cycle costs one read per
+  # indexed config, so lowering it trades config-center load for faster propagation.
+  config-sync:
+    interval-ms: ${GATEWAY_CONFIG_SYNC_INTERVAL_MS:60000}
+
   # Admin service URL for health status sync and API calls
   admin:
     url: ${GATEWAY_ADMIN_URL:http://127.0.0.1:9090}

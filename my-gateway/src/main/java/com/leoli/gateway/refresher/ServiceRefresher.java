@@ -6,6 +6,7 @@ import com.leoli.gateway.center.spi.ConfigCenterService;
 import com.leoli.gateway.health.ActiveHealthChecker;
 import com.leoli.gateway.health.HybridHealthChecker;
 import com.leoli.gateway.manager.ServiceManager;
+import com.leoli.gateway.util.ConfigContentTracker;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
@@ -43,6 +44,9 @@ public class ServiceRefresher {
 
     // Service listeners cache: <serviceId, listener>
     private final ConcurrentHashMap<String, ConfigCenterService.ConfigListener> serviceListeners = new ConcurrentHashMap<>();
+
+    // Last applied content per service data ID, so the periodic reconcile can spot edits.
+    private final ConfigContentTracker appliedContent = new ConfigContentTracker();
 
     // FIX: keep index listener as a field so it can be removed on destroy
     // (method references create a new instance per call and never match)
@@ -135,15 +139,18 @@ public class ServiceRefresher {
      * Handle single service change event (create/update/delete).
      */
     private void onSingleServiceChange(String serviceId, String content) {
+        String serviceDataId = SERVICE_PREFIX + serviceId;
         try {
             if (content == null || content.isBlank()) {
                 // Service deleted - clear all caches including health records
+                appliedContent.forget(serviceDataId);
                 serviceManager.clearServiceCache(serviceId);
                 hybridHealthChecker.clearServiceInstances(serviceId);
                 log.info("🗑️  Service deleted: {}", serviceId);
             } else {
                 // Service created or updated - reload config but keep health status
                 // Health status reflects actual instance state, should not be cleared on config update
+                appliedContent.recordIfChanged(serviceDataId, content);
                 JsonNode serviceNode = objectMapper.readTree(content);
                 validateServiceConfig(serviceNode, serviceId);
                 serviceManager.parseAndCacheService(serviceId, serviceNode);
@@ -246,6 +253,7 @@ public class ServiceRefresher {
 
         // Load the service into ServiceManager immediately
         try {
+            appliedContent.recordIfChanged(serviceDataId, serviceConfig);
             JsonNode serviceNode = objectMapper.readTree(serviceConfig);
             validateServiceConfig(serviceNode, serviceId);
             serviceManager.parseAndCacheService(serviceId, serviceNode);
@@ -278,9 +286,13 @@ public class ServiceRefresher {
 
         if (listener != null) {
             configService.removeListener(serviceDataId, GROUP, listener);
-            listeningServiceIds.remove(serviceId);
             log.info("🗑️  Removed listener for service: {}", serviceId);
         }
+
+        // Outside the null check: the periodic sweep keys off this set, so a stale ID
+        // here would make it clear this service's cache on every cycle.
+        listeningServiceIds.remove(serviceId);
+        appliedContent.forget(serviceDataId);
 
         // Clear service cache and health records
         serviceManager.clearServiceCache(serviceId);
@@ -333,54 +345,73 @@ public class ServiceRefresher {
     }
 
     /**
-     * Periodic fallback sync: check for missing services every 1 minute.
-     * This is a safety net in case index listener missed updates.
+     * Periodic reconcile against the config center.
+     *
+     * <p>Stands in for change pushes, which this deployment never receives (nacos-client
+     * 3.0.3 against nacos-server 2.5.4 - measured live: the server's remote-push.log stays
+     * empty while the publish succeeds). Comparing only the index ID set, as this method
+     * used to, recovers additions but leaves console edits and deletions invisible:
+     * a deleted service would keep being load-balanced to forever.
+     *
+     * <p>Two rules that must not be broken here:
+     * <ul>
+     *   <li>An unreachable/empty index returns early - a config-center blip must not
+     *       tear down the live service table.</li>
+     *   <li>The index is parsed strictly, not via {@link #parseServiceIds}, which swallows
+     *       parse errors into an empty list; that would read a corrupt index as
+     *       "every service was deleted".</li>
+     * </ul>
      */
-    @Scheduled(fixedRate = 60000) // 1 minute
-    public void periodicSyncMissingServices() {
+    @Scheduled(fixedRateString = "${gateway.config-sync.interval-ms:60000}")
+    public void periodicSyncServices() {
         try {
-            // Load current services index from Nacos
             String indexContent = configService.getConfig(SERVICES_INDEX, GROUP);
             if (indexContent == null || indexContent.isBlank()) {
-                return; // Nothing to sync
-            }
-
-            List<String> nacosServiceIds = parseServiceIds(indexContent);
-            if (nacosServiceIds.isEmpty()) {
                 return;
             }
 
-            // Get currently listening service IDs
-            Set<String> localServiceIds = new HashSet<>(listeningServiceIds);
+            List<String> serviceIds = objectMapper.readValue(indexContent,
+                    new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
+            Set<String> indexed = new HashSet<>(serviceIds);
 
-            // Find missing services (in Nacos but not in local cache)
-            int syncedCount = 0;
-            for (String serviceId : nacosServiceIds) {
-                if (!localServiceIds.contains(serviceId)) {
-                    log.warn("🔍 Found missing service during periodic sync: {}", serviceId);
-
-                    // Try to load the missing service
-                    String serviceDataId = SERVICE_PREFIX + serviceId;
-                    String serviceConfig = configService.getConfig(serviceDataId, GROUP);
-
-                    if (serviceConfig != null && !serviceConfig.isBlank()) {
-                        JsonNode serviceNode = objectMapper.readTree(serviceConfig);
-                        validateServiceConfig(serviceNode, serviceId);
-                        serviceManager.parseAndCacheService(serviceId, serviceNode);
-                        syncedCount++;
-                        log.info("✅ Periodic sync recovered missing service: {}", serviceId);
-                    } else {
-                        log.warn("⚠️  Service config not found in Nacos: {}", serviceId);
-                    }
+            int removed = 0;
+            for (String serviceId : new HashSet<>(listeningServiceIds)) {
+                if (!indexed.contains(serviceId)) {
+                    log.warn("🔍 Periodic sync found a deleted service: {}", serviceId);
+                    removeServiceListener(serviceId);
+                    removed++;
                 }
             }
 
-            if (syncedCount > 0) {
-                log.info("📊 Periodic sync completed: recovered {} missing services", syncedCount);
+            int applied = 0;
+            for (String serviceId : serviceIds) {
+                String serviceDataId = SERVICE_PREFIX + serviceId;
+
+                if (!listeningServiceIds.contains(serviceId)) {
+                    log.warn("🔍 Found missing service during periodic sync: {}", serviceId);
+                    // Registers the listener too - the old version only warmed the cache,
+                    // so the same service was "recovered" again on every cycle.
+                    addServiceListener(serviceId);
+                    continue;
+                }
+
+                String serviceConfig = configService.getConfig(serviceDataId, GROUP);
+                if (serviceConfig == null || serviceConfig.isBlank()) {
+                    continue;
+                }
+                if (appliedContent.recordIfChanged(serviceDataId, serviceConfig)) {
+                    log.warn("🔍 Periodic sync found a service change: {}", serviceId);
+                    onSingleServiceChange(serviceId, serviceConfig);
+                    applied++;
+                }
+            }
+
+            if (applied > 0 || removed > 0) {
+                log.info("📊 Periodic service sync: {} applied, {} removed", applied, removed);
             }
 
         } catch (Exception e) {
-            log.debug("Periodic sync check completed (no action needed)");
+            log.warn("Periodic service sync failed - service changes stay unapplied until it succeeds", e);
         }
     }
 }

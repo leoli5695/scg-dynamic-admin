@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.center.spi.ConfigCenterService;
 import com.leoli.gateway.ssl.DynamicSslContextManager;
 import com.leoli.gateway.ssl.SslServerConfig;
+import com.leoli.gateway.util.ConfigContentTracker;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
@@ -37,6 +38,9 @@ public class SslCertificateRefresher {
     private final Set<String> listeningDomains = ConcurrentHashMap.newKeySet();
     // Certificate listeners cache: <domain, listener>
     private final ConcurrentHashMap<String, ConfigCenterService.ConfigListener> certListeners = new ConcurrentHashMap<>();
+    // Last applied content per certificate data ID, so the periodic reconcile can spot
+    // a renewed certificate instead of only noticing additions and deletions.
+    private final ConfigContentTracker appliedContent = new ConfigContentTracker();
 
     // FIX: keep index listener as a field so it can be removed on destroy
     // (method references create a new instance per call and never match)
@@ -140,13 +144,16 @@ public class SslCertificateRefresher {
      * Handle single certificate change event (create/update/delete).
      */
     private void onSingleCertificateChange(String domain, String content) {
+        String certDataId = SSL_CERTIFICATE_PREFIX + domain;
         try {
             if (content == null || content.isBlank()) {
                 // Certificate deleted - remove from SSL context manager
+                appliedContent.forget(certDataId);
                 sslContextManager.handleCertificateUpdate(Map.of("domain", domain, "enabled", false));
                 log.info("🗑️  Certificate deleted: {}", domain);
             } else {
                 // Certificate created or updated
+                appliedContent.recordIfChanged(certDataId, content);
                 @SuppressWarnings("unchecked")
                 Map<String, Object> certData = objectMapper.readValue(content, Map.class);
                 sslContextManager.handleCertificateUpdate(certData);
@@ -182,6 +189,7 @@ public class SslCertificateRefresher {
                 String certConfig = configService.getConfig(certDataId, GROUP);
 
                 if (certConfig != null && !certConfig.isBlank()) {
+                    appliedContent.recordIfChanged(certDataId, certConfig);
                     @SuppressWarnings("unchecked")
                     Map<String, Object> certData = objectMapper.readValue(certConfig, Map.class);
                     sslContextManager.handleCertificateUpdate(certData);
@@ -216,6 +224,7 @@ public class SslCertificateRefresher {
                 certConfig -> {
                     if (certConfig != null && !certConfig.isBlank()) {
                         try {
+                            appliedContent.recordIfChanged(certDataId, certConfig);
                             @SuppressWarnings("unchecked")
                             Map<String, Object> certData = objectMapper.readValue(certConfig, Map.class);
                             sslContextManager.handleCertificateUpdate(certData);
@@ -282,9 +291,13 @@ public class SslCertificateRefresher {
 
         if (listener != null) {
             configService.removeListener(certDataId, GROUP, listener);
-            listeningDomains.remove(domain);
             log.info("🗑️  Removed listener for certificate: {}", domain);
         }
+
+        // Outside the null check: the periodic sweep keys off this set, so a stale domain
+        // here would make it re-remove the same certificate on every cycle.
+        listeningDomains.remove(domain);
+        appliedContent.forget(certDataId);
 
         // Remove from SSL context manager
         sslContextManager.handleCertificateUpdate(Map.of("domain", domain, "enabled", false));
@@ -317,57 +330,83 @@ public class SslCertificateRefresher {
     }
 
     /**
-     * Periodic fallback sync: check for missing certificates every 1 minute.
-     * This is a safety net in case index listener missed updates.
+     * Periodic reconcile against the config center.
+     *
+     * <p>Stands in for change pushes, which this deployment never receives (nacos-client
+     * 3.0.3 against nacos-server 2.5.4 - measured live: the server's remote-push.log stays
+     * empty while the publish succeeds). Comparing only the index domain set, as this
+     * method used to, recovers additions but leaves the two operations that matter most
+     * for certificates invisible: a renewal (same domain, new cert) and a revocation.
+     *
+     * <p>A null/blank index returns early rather than removing every certificate -
+     * {@code getConfig} cannot distinguish "deleted" from "config center unreachable", and
+     * an HTTPS outage on a transient blip is worse than serving a certificate a little
+     * longer. The index is also parsed strictly, not via {@link #parseDomains}, which
+     * swallows parse errors into an empty list and would read a corrupt index as
+     * "every certificate was revoked".
      */
-    @Scheduled(fixedRate = 60000) // 1 minute
-    public void periodicSyncMissingCertificates() {
+    @Scheduled(fixedRateString = "${gateway.config-sync.interval-ms:60000}")
+    public void periodicSyncCertificates() {
         try {
-            // Load current certificates index from Nacos
             String indexContent = configService.getConfig(SSL_CERTIFICATES_INDEX, GROUP);
             if (indexContent == null || indexContent.isBlank()) {
-                return; // Nothing to sync
-            }
-
-            List<String> nacosDomains = parseDomains(indexContent);
-            if (nacosDomains.isEmpty()) {
                 return;
             }
 
-            // Get currently listening domains
-            Set<String> localDomains = new HashSet<>(listeningDomains);
+            List<String> domains = objectMapper.readValue(indexContent,
+                    new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
+            Set<String> indexed = new HashSet<>(domains);
 
-            // Find missing certificates (in Nacos but not in local cache)
-            int syncedCount = 0;
-            for (String domain : nacosDomains) {
-                if (!localDomains.contains(domain)) {
-                    log.warn("🔍 Found missing certificate during periodic sync: {}", domain);
-
-                    // Try to load the missing certificate
-                    String certDataId = SSL_CERTIFICATE_PREFIX + domain;
-                    String certConfig = configService.getConfig(certDataId, GROUP);
-
-                    if (certConfig != null && !certConfig.isBlank()) {
-                        @SuppressWarnings("unchecked")
-                        Map<String, Object> certData = objectMapper.readValue(certConfig, Map.class);
-                        sslContextManager.handleCertificateUpdate(certData);
-                        syncedCount++;
-                        log.info("✅ Periodic sync recovered missing certificate: {}", domain);
-                    } else {
-                        log.warn("⚠️  Certificate config not found in Nacos: {}", domain);
-                    }
+            int removed = 0;
+            for (String domain : new HashSet<>(listeningDomains)) {
+                if (!indexed.contains(domain)) {
+                    log.warn("🔍 Periodic sync found a deleted certificate: {}", domain);
+                    removeCertificateListener(domain);
+                    removed++;
                 }
             }
 
-            if (syncedCount > 0) {
-                log.info("📊 Periodic sync completed: recovered {} missing certificates", syncedCount);
+            int applied = 0;
+            for (String domain : domains) {
+                String certDataId = SSL_CERTIFICATE_PREFIX + domain;
+
+                if (!listeningDomains.contains(domain)) {
+                    log.warn("🔍 Found missing certificate during periodic sync: {}", domain);
+                    // Registers the listener too (asynchronously) - the old version only
+                    // pushed the cert into the SSL context, so the same domain was
+                    // "recovered" again on every cycle and never got a listener.
+                    addCertificateListener(domain);
+                    continue;
+                }
+
+                String certConfig = configService.getConfig(certDataId, GROUP);
+                if (certConfig == null || certConfig.isBlank()) {
+                    continue;
+                }
+                if (appliedContent.recordIfChanged(certDataId, certConfig)) {
+                    log.warn("🔍 Periodic sync found a certificate change: {}", domain);
+                    onSingleCertificateChange(domain, certConfig);
+                    applied++;
+                }
+            }
+
+            if (applied > 0 || removed > 0) {
+                log.info("📊 Periodic certificate sync: {} applied, {} removed", applied, removed);
+            }
+
+            // onSingleCertificateChange already restarts HTTPS for the applied ones; a
+            // removal does not, and removing the last certificate must stop the server
+            // rather than leave it running on a stale context.
+            if (removed > 0 && applied == 0) {
                 if (!sslContextManager.getConfiguredDomains().isEmpty()) {
                     sslServerConfig.startHttpsServer();
+                } else {
+                    sslServerConfig.stopHttpsServer();
                 }
             }
 
         } catch (Exception e) {
-            log.debug("Periodic sync check completed (no action needed)");
+            log.warn("Periodic certificate sync failed - certificate changes stay unapplied until it succeeds", e);
         }
     }
 }

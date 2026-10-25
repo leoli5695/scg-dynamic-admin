@@ -6,6 +6,7 @@ import com.leoli.gateway.limiter.ShadowQuotaManager;
 import com.leoli.gateway.manager.RouteManager;
 import com.leoli.gateway.model.MultiServiceConfig;
 import com.leoli.gateway.route.DynamicRouteDefinitionLocator;
+import com.leoli.gateway.util.ConfigContentTracker;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
@@ -45,6 +46,13 @@ public class RouteRefresher {
     private final Set<String> listeningRouteIds = ConcurrentHashMap.newKeySet();
     // Route listeners cache: <routeId, listener>
     private final ConcurrentHashMap<String, ConfigCenterService.ConfigListener> routeListeners = new ConcurrentHashMap<>();
+
+    /**
+     * Content each route data ID was last applied with, so the periodic reconcile can
+     * detect edits and not just index changes. See {@link ConfigContentTracker} for why
+     * a listener-only design is not enough here.
+     */
+    private final ConfigContentTracker appliedContent = new ConfigContentTracker();
 
     // FIX: keep the index listener as a field instance so destroy() can actually remove it.
     // Previously destroy() passed a fresh this::onRoutesIndexChanged method reference which
@@ -158,14 +166,19 @@ public class RouteRefresher {
      * Handle single route change event (create/update/delete).
      */
     private void onSingleRouteChange(String routeId, String content) {
+        String routeDataId = ROUTE_PREFIX + routeId;
         try {
             if (content == null || content.isBlank()) {
                 // Route deleted
                 routeManager.removeRoute(routeId);
                 shadowQuotaManager.unregisterRoute(routeId);
+                appliedContent.forget(routeDataId);
                 log.info("🗑️  Route deleted: {}", routeId);
             } else {
-                // Route created or updated
+                // Route created or updated.
+                // Recorded before parsing: a payload we cannot parse must not be retried on
+                // every reconcile cycle, and the next publish changes the content anyway.
+                appliedContent.recordIfChanged(routeDataId, content);
                 RouteDefinition route = parseRoute(content);
                 routeManager.putRoute(routeId, route);
                 log.info("✏️  Route updated: {} -> {}", routeId, route.getUri());
@@ -259,6 +272,10 @@ public class RouteRefresher {
         // STEP 3: Load route into manager if config found
         if (routeConfig != null && !routeConfig.isBlank()) {
             try {
+                // Recorded before parsing, as in onSingleRouteChange: a payload we cannot
+                // parse must not be retried on every reconcile cycle. Re-publishing it
+                // changes the content, which is what makes the next attempt happen.
+                appliedContent.recordIfChanged(routeDataId, routeConfig);
                 RouteDefinition route = parseRoute(routeConfig);
                 routeManager.putRoute(routeId, route);
                 log.info("✅ Loaded route: {} -> {} (route.id={}, predicates={})",
@@ -297,12 +314,15 @@ public class RouteRefresher {
 
         if (listener != null) {
             configService.removeListener(routeDataId, GROUP, listener);
-            listeningRouteIds.remove(routeId);
             log.info("🗑️  Removed listener for route: {}", routeId);
         }
+        // Outside the null check: the periodic reconcile keys off this set, so a stale ID
+        // here would make it re-remove the same route on every cycle.
+        listeningRouteIds.remove(routeId);
         // Always remove from routeManager (route may exist even without listener)
         routeManager.removeRoute(routeId);
         shadowQuotaManager.unregisterRoute(routeId);
+        appliedContent.forget(routeDataId);
         log.info("🗑️  Removed route from manager: {}", routeId);
     }
 
@@ -487,49 +507,79 @@ public class RouteRefresher {
     }
 
     /**
-     * Periodic fallback sync: check for missing routes every 1 minute.
-     * This is a safety net in case index listener missed updates.
+     * Periodic reconcile: the only path that reliably carries route changes.
+     * <p>
+     * nacos-client 3.0.3 never receives pushes from nacos-server 2.5.4 (measured live: the
+     * server logs the publish and the dump, its remote-push log stays empty, and no listener
+     * callback fires), so this safety net is what actually applies console changes. It used
+     * to recover only IDs missing from the local set, which left two things broken: editing
+     * a route re-publishes its content without touching the index, so an ID-set comparison
+     * cannot see it; and a route dropped from the index was never removed here, so it kept
+     * serving traffic until the gateway restarted.
+     * <p>
+     * Costs one {@code getConfig} per indexed route per cycle; silent when nothing changed.
      */
-    @Scheduled(fixedRate = 60000) // 1 minute
-    public void periodicSyncMissingRoutes() {
+    @Scheduled(fixedRateString = "${gateway.config-sync.interval-ms:60000}")
+    public void periodicSyncRoutes() {
         try {
-            // Load current routes index from Nacos
             String indexContent = configService.getConfig(ROUTES_INDEX, GROUP);
             if (indexContent == null || indexContent.isBlank()) {
-                return; // Nothing to sync
-            }
-
-            List<String> nacosRouteIds = parseRouteIds(indexContent);
-            if (nacosRouteIds.isEmpty()) {
+                // Ambiguous between "no routes left" and "the config center could not answer".
+                // Tearing down the live routing table on a transient failure would not be
+                // undone by a later cycle, so leave it alone and retry.
                 return;
             }
 
-            // Get currently listening route IDs
-            Set<String> localRouteIds = new HashSet<>(listeningRouteIds);
+            // Throws on a corrupt index, which aborts the cycle and keeps the routes we have:
+            // an unparseable index must not read as "every route was deleted".
+            List<String> nacosRouteIds = parseRouteIds(indexContent);
+            Set<String> indexed = new HashSet<>(nacosRouteIds);
 
-            // Find missing routes (in Nacos but not in local cache)
-            int syncedCount = 0;
-            for (String routeId : nacosRouteIds) {
-                if (!localRouteIds.contains(routeId)) {
-                    log.warn("🔍 Found missing route during periodic sync: {}", routeId);
-
-                    // FIX: recover via addRouteListener so the recovered route also gets
-                    // a per-route listener (previously it was loaded without any listener,
-                    // so subsequent updates could only be noticed via index changes).
-                    addRouteListener(routeId);
-                    syncedCount++;
-                    log.info("✅ Periodic sync recovered missing route: {}", routeId);
+            int removed = 0;
+            for (String routeId : new HashSet<>(listeningRouteIds)) {
+                if (!indexed.contains(routeId)) {
+                    log.warn("🔍 Found route dropped from the index during periodic sync: {}", routeId);
+                    removeRouteListener(routeId);
+                    removed++;
                 }
             }
 
-            if (syncedCount > 0) {
-                log.info("📊 Periodic sync completed: recovered {} missing routes", syncedCount);
+            int added = 0;
+            int edited = 0;
+            for (String routeId : nacosRouteIds) {
+                if (!listeningRouteIds.contains(routeId)) {
+                    log.warn("🔍 Found missing route during periodic sync: {}", routeId);
+                    // Registers the listener, then loads and records the config asynchronously.
+                    addRouteListener(routeId);
+                    added++;
+                    continue;
+                }
+
+                String routeDataId = ROUTE_PREFIX + routeId;
+                String content = configService.getConfig(routeDataId, GROUP);
+                if (content == null || content.isBlank()) {
+                    continue;
+                }
+                if (appliedContent.recordIfChanged(routeDataId, content)) {
+                    log.warn("🔍 Found edited route during periodic sync: {}", routeId);
+                    onSingleRouteChange(routeId, content);
+                    edited++;
+                }
+            }
+
+            if (removed > 0) {
+                // Additions and edits refresh SCG on their own path; removals went straight
+                // to the manager, so the compiled definitions are still the old ones.
+                refreshSCGRoutes();
+            }
+            if (added > 0 || edited > 0 || removed > 0) {
+                log.info("📊 Periodic route sync: {} added, {} edited, {} removed", added, edited, removed);
             }
 
         } catch (Exception e) {
-            // This scheduled sync is the only safety net for routes whose per-route
-            // listener was missed; at debug (root level is INFO) it failed invisibly.
-            log.warn("Periodic route sync failed - missing routes stay unrecovered until it succeeds", e);
+            // This cycle is the only thing that carries route changes; at debug level
+            // (root level is INFO) a persistent failure would be invisible.
+            log.warn("Periodic route sync failed - route changes stay unapplied until it succeeds", e);
         }
     }
 }
