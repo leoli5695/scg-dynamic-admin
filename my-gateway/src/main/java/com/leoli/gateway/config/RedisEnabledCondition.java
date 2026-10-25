@@ -19,8 +19,8 @@ public class RedisEnabledCondition implements Condition {
             return true;
         }
 
-        // Check spring.redis.enabled
-        String springEnabled = context.getEnvironment().getProperty("spring.redis.enabled");
+        // Check spring.data.redis.enabled
+        String springEnabled = context.getEnvironment().getProperty("spring.data.redis.enabled");
         if ("true".equalsIgnoreCase(springEnabled)) {
             return true;
         }
@@ -31,8 +31,8 @@ public class RedisEnabledCondition implements Condition {
             return true;
         }
 
-        // Check spring.redis.host (non-empty means Redis should be enabled)
-        String springHost = context.getEnvironment().getProperty("spring.redis.host");
+        // Check spring.data.redis.host (non-empty means Redis should be enabled)
+        String springHost = context.getEnvironment().getProperty("spring.data.redis.host");
         if (springHost != null && !springHost.isEmpty()) {
             return true;
         }

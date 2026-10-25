@@ -51,59 +51,59 @@ public class RedisConfig {
     // Common Configuration
     // ============================================================
 
-    @Value("${spring.redis.mode:" + RedisConstants.MODE_SINGLE + "}")
+    @Value("${spring.data.redis.mode:" + RedisConstants.MODE_SINGLE + "}")
     private String mode;
 
-    @Value("${spring.redis.password:}")
+    @Value("${spring.data.redis.password:}")
     private String password;
 
-    @Value("${spring.redis.database:" + RedisConstants.DEFAULT_DATABASE + "}")
+    @Value("${spring.data.redis.database:" + RedisConstants.DEFAULT_DATABASE + "}")
     private int database;
 
-    @Value("${spring.redis.timeout:" + RedisConstants.DEFAULT_TIMEOUT_MS + "}")
+    @Value("${spring.data.redis.timeout:" + RedisConstants.DEFAULT_TIMEOUT_MS + "}")
     private long timeout;
 
     // Pool configuration
-    @Value("${spring.redis.lettuce.pool.max-active:" + RedisConstants.DEFAULT_MAX_ACTIVE + "}")
+    @Value("${spring.data.redis.lettuce.pool.max-active:" + RedisConstants.DEFAULT_MAX_ACTIVE + "}")
     private int maxActive;
 
-    @Value("${spring.redis.lettuce.pool.max-idle:" + RedisConstants.DEFAULT_MAX_IDLE + "}")
+    @Value("${spring.data.redis.lettuce.pool.max-idle:" + RedisConstants.DEFAULT_MAX_IDLE + "}")
     private int maxIdle;
 
-    @Value("${spring.redis.lettuce.pool.min-idle:" + RedisConstants.DEFAULT_MIN_IDLE + "}")
+    @Value("${spring.data.redis.lettuce.pool.min-idle:" + RedisConstants.DEFAULT_MIN_IDLE + "}")
     private int minIdle;
 
     // ============================================================
     // Single Node Configuration
     // ============================================================
 
-    @Value("${spring.redis.host:" + RedisConstants.DEFAULT_HOST + "}")
+    @Value("${spring.data.redis.host:" + RedisConstants.DEFAULT_HOST + "}")
     private String host;
 
-    @Value("${spring.redis.port:" + RedisConstants.DEFAULT_PORT + "}")
+    @Value("${spring.data.redis.port:" + RedisConstants.DEFAULT_PORT + "}")
     private int port;
 
     // ============================================================
     // Sentinel Configuration
     // ============================================================
 
-    @Value("${spring.redis.sentinel.master:" + RedisConstants.DEFAULT_SENTINEL_MASTER + "}")
+    @Value("${spring.data.redis.sentinel.master:" + RedisConstants.DEFAULT_SENTINEL_MASTER + "}")
     private String sentinelMaster;
 
-    @Value("${spring.redis.sentinel.nodes:}")
+    @Value("${spring.data.redis.sentinel.nodes:}")
     private String sentinelNodes;
 
-    @Value("${spring.redis.sentinel.password:}")
+    @Value("${spring.data.redis.sentinel.password:}")
     private String sentinelPassword;
 
     // ============================================================
     // Cluster Configuration
     // ============================================================
 
-    @Value("${spring.redis.cluster.nodes:}")
+    @Value("${spring.data.redis.cluster.nodes:}")
     private String clusterNodes;
 
-    @Value("${spring.redis.cluster.max-redirects:" + RedisConstants.DEFAULT_MAX_REDIRECTS + "}")
+    @Value("${spring.data.redis.cluster.max-redirects:" + RedisConstants.DEFAULT_MAX_REDIRECTS + "}")
     private int maxRedirects;
 
     /**
@@ -144,7 +144,7 @@ public class RedisConfig {
      * Build a Lettuce client configuration with the connection pool applied.
      * <p>
      * FIX (dead config): maxActive/maxIdle/minIdle were read from
-     * spring.redis.lettuce.pool.* but never wired into any
+     * spring.data.redis.lettuce.pool.* but never wired into any
      * LettuceClientConfiguration, so pool tuning had no effect and all
      * blocking commands shared a single multiplexed connection.
      *
@@ -178,7 +178,7 @@ public class RedisConfig {
 
         if (sentinelNodes == null || sentinelNodes.isBlank()) {
             throw new IllegalArgumentException("Sentinel nodes must be configured for sentinel mode. " +
-                "Set spring.redis.sentinel.nodes property (comma-separated host:port list)");
+                "Set spring.data.redis.sentinel.nodes property (comma-separated host:port list)");
         }
 
         RedisSentinelConfiguration sentinelConfig = new RedisSentinelConfiguration();
@@ -218,7 +218,7 @@ public class RedisConfig {
 
         if (clusterNodes == null || clusterNodes.isBlank()) {
             throw new IllegalArgumentException("Cluster nodes must be configured for cluster mode. " +
-                "Set spring.redis.cluster.nodes property (comma-separated host:port list)");
+                "Set spring.data.redis.cluster.nodes property (comma-separated host:port list)");
         }
 
         RedisClusterConfiguration clusterConfig = new RedisClusterConfiguration();
