@@ -77,6 +77,12 @@ public class SeckillService {
     private final TransactionLogMapper transactionLogMapper;
     private final LocalFallbackService localFallbackService;
     private final LocalTransactionService localTransactionService;
+    /**
+     * 回补库存的唯一入口。本类里的每一处回补都必须走它，不能直接调 seckillDeductLua ——
+     * 降级窗口里卖出的那笔在 Redis 防重 Set 里没有记录，直接调 Redis 等于把货弄丢。
+     * 判定逻辑见 {@link StockRollbackDispatcher}。
+     */
+    private final StockRollbackDispatcher stockRollbackDispatcher;
 
     // OPTIMIZATION (P1-5): 事务状态本地缓存
     // 用于RocketMQ事务回查时快速获取事务状态，避免每次都查询数据库
@@ -176,14 +182,12 @@ public class SeckillService {
             // Step 2: 库存扣减（支持 Redis 降级）
             // ========================================================================
             long luaResult;
-            boolean isDegradeMode = false;
 
             if (redisDegradeService.isDegraded()) {
                 // Redis 降级模式：使用本地库存计数器
                 seckillDegradeCounter.increment();
                 log.warn("Redis降级模式，使用本地库存扣减: seckillId={}, userId={}", seckillId, userId);
                 int localResult = localFallbackService.deductStockLocal(seckillId, userId, quantity);
-                isDegradeMode = true;
 
                 if (localResult == -2) {
                     seckillAlreadyBoughtCounter.increment();
@@ -278,7 +282,7 @@ public class SeckillService {
                 if (!success) {
                     log.error("MQ降级模式本地事务处理失败: orderNo={}", orderNo);
                     // 回补库存
-                    seckillDeductLua.rollbackStock(seckillId, userId, quantity);
+                    stockRollbackDispatcher.rollback(seckillId, userId, quantity);
                     return SeckillResponse.systemError("系统繁忙，请稍后再试");
                 }
 
@@ -302,7 +306,7 @@ public class SeckillService {
 
             // 异常情况下，需要回补库存
             try {
-                seckillDeductLua.rollbackStock(seckillId, userId, quantity);
+                stockRollbackDispatcher.rollback(seckillId, userId, quantity);
             } catch (Exception rollbackEx) {
                 log.error("库存回补失败: userId={}, seckillId={}", userId, seckillId, rollbackEx);
             }
@@ -332,7 +336,7 @@ public class SeckillService {
             boolean success = localTransactionService.processOrderDirectly(orderMessage);
             if (!success) {
                 log.error("本地事务处理失败: transactionId={}", orderMessage.getTransactionId());
-                seckillDeductLua.rollbackStock(orderMessage.getSeckillId(), orderMessage.getUserId(), orderMessage.getQuantity());
+                stockRollbackDispatcher.rollback(orderMessage.getSeckillId(), orderMessage.getUserId(), orderMessage.getQuantity());
                 throw new RuntimeException("系统繁忙，请稍后再试");
             }
             return;
@@ -371,7 +375,7 @@ public class SeckillService {
             if (!success) {
                 log.error("MQ降级模式本地事务处理失败: orderNo={}", orderMessage.getOrderNo());
                 // 回补库存
-                seckillDeductLua.rollbackStock(orderMessage.getSeckillId(), orderMessage.getUserId(), orderMessage.getQuantity());
+                stockRollbackDispatcher.rollback(orderMessage.getSeckillId(), orderMessage.getUserId(), orderMessage.getQuantity());
                 throw new RuntimeException("系统繁忙，请稍后再试");
             }
         }
@@ -498,7 +502,7 @@ public class SeckillService {
             transactionStatusCache.put(transactionId, TransactionStatus.FAILED);
 
             // 回补库存
-            seckillDeductLua.rollbackStock(
+            stockRollbackDispatcher.rollback(
                     transactionLog.getSeckillId(),
                     transactionLog.getUserId(),
                     transactionLog.getQuantity()

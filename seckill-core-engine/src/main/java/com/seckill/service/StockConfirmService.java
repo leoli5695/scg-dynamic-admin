@@ -253,7 +253,9 @@ public class StockConfirmService {
      */
     private void rollbackStock(Long seckillId, Long userId, int quantity, int shardIndex) {
         try {
-            // 使用Lua脚本精确回补到原分片
+            // 这里刻意不走 StockRollbackDispatcher：调用方刚从 Redis 读出这笔预扣减的
+            // pending 标记，说明它百分百是 Redis 池里扣的，没有"是哪个池"需要判定。
+            // 走 dispatcher 只会在"同一用户两边都买过"时多一次误判机会。
             long result = seckillDeductLua.rollbackStock(seckillId, userId, quantity);
 
             if (result >= SeckillDeductLua.LUA_SUCCESS_BASE) {

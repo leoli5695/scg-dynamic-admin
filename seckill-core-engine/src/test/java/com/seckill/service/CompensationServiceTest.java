@@ -11,7 +11,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -46,7 +45,9 @@ class CompensationServiceTest {
     @Mock
     private TransactionLogMapper transactionLogMapper;
 
-    @InjectMocks
+    @Mock
+    private LocalFallbackService localFallbackService;
+
     private CompensationService compensationService;
 
     private TransactionLog testTransaction;
@@ -54,6 +55,14 @@ class CompensationServiceTest {
 
     @BeforeEach
     void setUp() {
+        // 用真 dispatcher 包住 seckillDeductLua mock：localFallbackService.rollbackStockLocal
+        // 未打桩时返回 false，回补照旧落到 Redis，所以下面所有
+        // verify(seckillDeductLua).rollbackStock(...) 仍然是在验真的那条路径。
+        compensationService = new CompensationService(
+                orderMapper,
+                new StockRollbackDispatcher(seckillDeductLua, localFallbackService),
+                transactionLogMapper);
+
         testTransaction = new TransactionLog();
         testTransaction.setTransactionId("tx-12345");
         testTransaction.setSeckillId(1L);

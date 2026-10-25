@@ -5,8 +5,8 @@ import com.seckill.config.RocketMQConfig;
 import com.seckill.dto.OrderMessage;
 import com.seckill.enums.OrderStatus;
 import com.seckill.mapper.OrderMapper;
-import com.seckill.redis.lua.SeckillDeductLua;
 import com.seckill.service.ElasticsearchService;
+import com.seckill.service.StockRollbackDispatcher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.spring.annotation.RocketMQMessageListener;
@@ -46,7 +46,10 @@ import java.util.concurrent.TimeUnit;
 public class StockRollbackConsumer implements RocketMQListener<String> {
 
     private final OrderMapper orderMapper;
-    private final SeckillDeductLua seckillDeductLua;
+    /**
+     * 回补一律走它：Redis 可能正处在降级窗口，这笔货也许是本机内存里卖出去的。
+     */
+    private final StockRollbackDispatcher stockRollbackDispatcher;
     private final ElasticsearchService elasticsearchService;
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate redisTemplate;
@@ -97,8 +100,8 @@ public class StockRollbackConsumer implements RocketMQListener<String> {
                 // 未支付，需要回补库存
                 log.info("订单未支付，执行回补: orderNo={}, shardIndex={}", orderNo, order.getShardIndex());
 
-                // Step 3: 精确回补到原分片（关键）
-                long rollbackResult = seckillDeductLua.rollbackStock(seckillId, userId, quantity);
+                // Step 3: 回补库存（Redis 走原分片，降级窗口里本机卖出的走本地兜底池）
+                long rollbackResult = stockRollbackDispatcher.rollback(seckillId, userId, quantity);
 
                 if (rollbackResult >= 1000) {
                     log.info("库存回补成功: seckillId={}, userId={}, shardIndex={}",

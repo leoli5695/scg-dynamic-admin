@@ -48,6 +48,14 @@ public class RedisDegradeService {
     private final SeckillDeductLua seckillDeductLua;
 
     /**
+     * 降级那一刻负责把库存上架到本地兜底池。
+     * <p>
+     * 没有它，降级就等于拒绝一切秒杀请求：{@code deductStockLocal} 找不到本地库存返回 -1，
+     * {@code SeckillService} 把 -1 当成"库存不足"。
+     */
+    private final LocalStockShelvingService localStockShelvingService;
+
+    /**
      * Redis 状态
      * 0: 正常
      * 1: 降级（Redis响应慢，但可用）
@@ -173,6 +181,28 @@ public class RedisDegradeService {
 
         log.warn("Redis手动降级启用");
         alertService.sendAlert("Redis手动降级启用", "运维手动触发Redis降级模式");
+
+        // 先翻开关再上架：这几毫秒里进来的请求会因为本地还没库存被拒（少卖），
+        // 反过来先上架则可能有人既扣了 Redis 又扣了本地（超卖）。
+        shelveLocalStock("Redis手动降级");
+    }
+
+    /**
+     * ============================================================================
+     * 降级那一刻把库存上架到本地兜底池
+     * ============================================================================
+     * <p>
+     * 异常一律吞掉。此时降级开关<b>已经</b>翻过来了，上架失败只意味着"降级期间少卖"
+     * （本地无库存 → 请求被拒），这是安全的一侧；让异常继续往上抛反而会把 healthCheck
+     * 的调度线程、或者运维点手动降级的那个接口一起带崩，得到一个"其实已经降级成功却报 500"
+     * 的结果。告警由 {@link LocalStockShelvingService} 自己发。
+     */
+    private void shelveLocalStock(String trigger) {
+        try {
+            localStockShelvingService.shelveForActiveActivities(trigger);
+        } catch (Exception e) {
+            log.error("降级库存上架异常，降级期间将无法售出库存: trigger={}, error={}", trigger, e.getMessage(), e);
+        }
     }
 
     /**
@@ -242,6 +272,11 @@ public class RedisDegradeService {
         // 发送告警
         alertService.sendAlert("Redis自动降级",
                 "Redis连续健康检查失败" + DEGRADE_THRESHOLD + "次，已自动启用降级模式");
+
+        // 上架本地兜底库存。此时 Redis 已不可读，剩余库存只能按事务日志推算（详见
+        // LocalStockShelvingService）。这一步只在 healthCheck 的调度线程上执行 ——
+        // recordFailure() 没有别的调用方，不会把 Redis 连接超时算到某个秒杀请求头上。
+        shelveLocalStock("Redis自动降级");
     }
 
     /**

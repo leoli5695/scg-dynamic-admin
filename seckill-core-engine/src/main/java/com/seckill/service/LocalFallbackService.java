@@ -37,9 +37,9 @@ import java.util.stream.Collectors;
  * - Redis 恢复后，调用 syncToRedis() 把降级窗口的销量回写 Redis
  * <p>
  * 【多实例超卖防护】:
- * - 降级模式下，本地库存只分配 10% 的总库存
+ * - 降级模式下每实例只上架「当前剩余库存 × stock-ratio」（默认 10%）
  * - 目的：宁愿少卖，绝不超卖
- * - 假设部署 N 个实例，每个实例最多卖 totalStock * 0.1
+ * - 部署 N 个实例时全局最多透支 N × stock-ratio，运维需保证 N × stock-ratio ≤ 1
  * <p>
  * 【缓冲队列持久化】:
  * - 写入本地磁盘文件（追加写入）
@@ -91,8 +91,11 @@ public class LocalFallbackService {
     private final Map<String, OrderBufferItem> orderBuffer = new ConcurrentHashMap<>();
 
     /**
-     * 【多实例超卖防护】降级模式下本地库存比例
-     * 默认 10%，假设 3 个实例，总共分配 30% 库存，避免超卖
+     * 【多实例超卖防护】降级模式下每实例上架的库存比例
+     * <p>
+     * 这是<b>每实例</b>比例：部署 N 个实例时，降级窗口内全局最多透支 N × ratio 的剩余库存。
+     * Redis 已经挂了，实例之间无从协调，所以「N × ratio ≤ 1」只能由运维配置保证 ——
+     * 默认 0.1 意味着 3 个实例合计最多卖出剩余库存的 30%，剩下 70% 在降级期间宁可少卖。
      */
     @Value("${seckill.fallback.stock-ratio:0.1}")
     private double fallbackStockRatio;
@@ -112,22 +115,54 @@ public class LocalFallbackService {
 
     /**
      * ============================================================================
-     * 初始化本地库存（从预热数据或数据库加载）
+     * 上架本机在降级窗口里可以卖的那份库存
      * ============================================================================
      * <p>
-     * 【多实例超卖防护】：
-     * - 只分配 totalStock * fallbackStockRatio 的库存
-     * - 宁愿少卖，绝不超卖
+     * <b>入参必须是"当前剩余"，不是活动的初始总库存。</b> 传初始值的话，一个已经卖到
+     * 只剩 3 件的活动在 Redis 挂掉时会被重新上架 ratio × 初始库存 件，直接超卖。
+     * 剩余量由调用方（{@code LocalStockShelvingService}）负责算准。
+     * <p>
+     * <b>幂等</b>：走 putIfAbsent。降级 → 恢复失败 → 再降级 这种来回切换时，第二次
+     * 必须保留原状态，否则这期间已经卖出去的量会被清零重写，既丢销量又双份上架。
+     *
+     * @param seckillId      秒杀活动ID
+     * @param availableStock 当前剩余库存（不是初始总库存）
+     * @return 本机上架的件数；如果本机此前已经为该活动上架过，返回那份存量的当前剩余
      */
-    public void initLocalStock(Long seckillId, int totalStock) {
-        // 降级模式下只分配部分库存（避免多实例超卖）
-        int fallbackStock = (int) Math.ceil(totalStock * fallbackStockRatio);
+    public int initLocalStock(Long seckillId, int availableStock) {
+        // ratio 是「每实例」比例：部署 N 个实例时全局最多透支 N × ratio。
+        // N × ratio > 1 就会超卖，这只能靠运维配置保证（Redis 已经挂了，无从协调），
+        // 所以这里至少把 ratio 夹进 [0,1]，让 "想配 10% 却写成 10" 这种笔误不会上架 10 倍库存。
+        double ratio = Math.min(1.0, Math.max(0.0, fallbackStockRatio));
+        if (ratio != fallbackStockRatio) {
+            log.error("seckill.fallback.stock-ratio={} 越界，已夹到 {}", fallbackStockRatio, ratio);
+            alertService.sendCriticalAlert("降级库存比例配置越界",
+                    "seckill.fallback.stock-ratio=" + fallbackStockRatio + " 不在 [0,1]，已按 " + ratio + " 处理");
+        }
 
-        StockState initialState = new StockState(fallbackStock, new ConcurrentHashMap<>());
-        stockStateMap.put(seckillId, new AtomicReference<>(initialState));
+        int fallbackStock = (int) Math.ceil(Math.max(0, availableStock) * ratio);
 
-        log.warn("本地库存初始化: seckillId={}, totalStock={}, fallbackStock={}（降级模式，{}比例）",
-                seckillId, totalStock, fallbackStock, (int) (fallbackStockRatio * 100) + "%");
+        AtomicReference<StockState> fresh =
+                new AtomicReference<>(new StockState(fallbackStock, new ConcurrentHashMap<>()));
+        AtomicReference<StockState> existing = stockStateMap.putIfAbsent(seckillId, fresh);
+
+        if (existing != null) {
+            int remaining = existing.get().stock;
+            log.warn("本地库存已上架，保留原状态: seckillId={}, 当前剩余={}（忽略本次 remaining={}）",
+                    seckillId, remaining, availableStock);
+            return remaining;
+        }
+
+        log.warn("本地库存上架: seckillId={}, availableStock={}, fallbackStock={}（降级模式，每实例{}比例）",
+                seckillId, availableStock, fallbackStock, (int) (ratio * 100) + "%");
+        return fallbackStock;
+    }
+
+    /**
+     * 本机是否为该活动上架过降级库存（且尚未回写给 Redis）。
+     */
+    public boolean hasLocalStock(Long seckillId) {
+        return stockStateMap.containsKey(seckillId);
     }
 
     /**
@@ -209,22 +244,36 @@ public class LocalFallbackService {
      * <p>
      * 必须走和 deductStockLocal 同一个 CAS：库存和防重记录一起还原，否则回补的用户
      * 会永久卡在防重检查上。
+     * <p>
+     * <b>只认本机卖出去的货。</b> 用户在本地购买记录里凑不出 quantity 件时一律返回 false、
+     * 一格库存都不加 —— 这是 {@link StockRollbackDispatcher} 能"先试本地、失败再走 Redis"
+     * 的前提：Redis 卖出的那笔在这里必须是彻底的 no-op，否则每回补一笔 Redis 订单都会
+     * 凭空给本地池加库存（超卖），而 Redis 那边一件也没还回去（少卖）。
+     *
+     * @return true 表示本机确实卖过、已就地回补；false 表示这笔货不是本机卖的，调用方应改走 Redis
      */
-    public void rollbackStockLocal(Long seckillId, Long userId, int quantity) {
+    public boolean rollbackStockLocal(Long seckillId, Long userId, int quantity) {
         AtomicReference<StockState> stateRef = stockStateMap.get(seckillId);
         if (stateRef == null) {
-            log.error("本地库存未初始化，无法回补: seckillId={}, userId={}, quantity={}",
-                    seckillId, userId, quantity);
-            return;
+            // 常态：这个活动从没在本机降级卖过，或者销量已经回写给 Redis 了
+            log.debug("本地无降级库存，这笔不是本机卖的: seckillId={}, userId={}", seckillId, userId);
+            return false;
         }
 
         while (true) {
             StockState currentState = stateRef.get();
+
+            if (currentState.getUserBoughtCount(userId) < quantity) {
+                log.warn("本地购买记录不足以回补，交由Redis处理: seckillId={}, userId={}, 本地已购={}, 请求回补={}",
+                        seckillId, userId, currentState.getUserBoughtCount(userId), quantity);
+                return false;
+            }
+
             StockState newState = currentState.withRolledBackStock(userId, quantity);
             if (stateRef.compareAndSet(currentState, newState)) {
                 log.warn("本地库存回补: seckillId={}, userId={}, quantity={}, remaining={}（降级模式）",
                         seckillId, userId, quantity, newState.stock);
-                return;
+                return true;
             }
             // CAS失败，重试
         }

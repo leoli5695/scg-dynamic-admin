@@ -100,6 +100,12 @@ class SeckillServiceTest {
 
     private SeckillService seckillService;
 
+    /**
+     * 用真 dispatcher 包住两个 mock，让 SeckillService 的回补走真实路由判定：
+     * localFallbackService.rollbackStockLocal 未打桩时返回 false，于是落到 Redis 那条路。
+     */
+    private StockRollbackDispatcher stockRollbackDispatcher;
+
     private SeckillRequest request;
     private SeckillActivity activity;
     private SeckillProduct product;
@@ -108,6 +114,7 @@ class SeckillServiceTest {
     void setUp() {
         // 手动创建 SeckillService 实例，直接注入 Mock 对象
         // 参数顺序遵循 @RequiredArgsConstructor 生成的构造函数顺序
+        stockRollbackDispatcher = new StockRollbackDispatcher(seckillDeductLua, localFallbackService);
         seckillService = new SeckillService(
                 objectMapper,
                 productMapper,
@@ -126,7 +133,8 @@ class SeckillServiceTest {
                 snowflakeIdGenerator,
                 transactionLogMapper,
                 localFallbackService,
-                localTransactionService
+                localTransactionService,
+                stockRollbackDispatcher
         );
 
         // 准备测试数据

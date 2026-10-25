@@ -55,6 +55,7 @@ class RedisDegradeServiceRecoveryTest {
     @Mock private LocalFallbackService localFallbackService;
     @Mock private SeckillDeductLua seckillDeductLua;
     @Mock private ValueOperations<String, String> valueOps;
+    @Mock private LocalStockShelvingService localStockShelvingService;
 
     @InjectMocks private RedisDegradeService service;
 
@@ -152,5 +153,39 @@ class RedisDegradeServiceRecoveryTest {
 
         assertFalse(service.isRedisAvailable(),
                 "降级期间业务流量必须走本地兜底；要判断 Redis 是否复活是 probeRedis 的职责");
+    }
+
+    // ==================== 降级入口：本地库存必须上架 ====================
+    //
+    // 没接这根线之前，降级 = 拒绝一切秒杀：deductStockLocal 找不到本地库存返回 -1，
+    // SeckillService 把 -1 翻译成"库存不足"。开关翻了、告警发了、业务一件也卖不出去。
+
+    @Test
+    @DisplayName("自动降级：翻开关的同时必须上架本地兜底库存")
+    void autoDegrade_shelvesLocalStock() {
+        degradeFirst();
+
+        verify(localStockShelvingService).shelveForActiveActivities("Redis自动降级");
+    }
+
+    @Test
+    @DisplayName("手动降级：同样必须上架，否则运维一按降级就等于全站停售")
+    void manualDegrade_shelvesLocalStock() {
+        service.manualDegrade();
+
+        assertTrue(service.isDegraded());
+        verify(localStockShelvingService).shelveForActiveActivities("Redis手动降级");
+    }
+
+    @Test
+    @DisplayName("上架失败不能把降级动作本身带崩")
+    void shelveThrows_degradationStillTakesEffect() {
+        when(localStockShelvingService.shelveForActiveActivities(anyString()))
+                .thenThrow(new RuntimeException("db is down too"));
+
+        assertDoesNotThrow(() -> service.manualDegrade());
+
+        assertTrue(service.isDegraded(),
+                "降级开关必须已经生效：宁可少卖（本地无库存→请求被拒），也不能停在半降级状态继续锤死掉的 Redis");
     }
 }

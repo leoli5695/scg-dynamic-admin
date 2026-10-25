@@ -40,7 +40,11 @@ import java.util.List;
 public class CompensationService {
 
     private final OrderMapper orderMapper;
-    private final SeckillDeductLua seckillDeductLua;
+    /**
+     * 回补一律走它：补偿任务在定时器/MQ 线程上跑，Redis 可能正在降级窗口里，
+     * 直接调 SeckillDeductLua 会把降级期间本机卖出的那笔货弄丢。
+     */
+    private final StockRollbackDispatcher stockRollbackDispatcher;
     private final TransactionLogMapper transactionLogMapper;
 
     // OPTIMIZATION (P1): Tiered timeout thresholds
@@ -236,7 +240,7 @@ public class CompensationService {
                 order.getOrderNo(), order.getUserId(), order.getShardIndex());
 
         // 回补库存（精确恢复到原分片）
-        long result = seckillDeductLua.rollbackStock(
+        long result = stockRollbackDispatcher.rollback(
                 order.getSeckillId(),
                 order.getUserId(),
                 order.getQuantity()
@@ -262,7 +266,7 @@ public class CompensationService {
     public boolean manualRollback(Long seckillId, Long userId, int quantity) {
         log.info("手动回补库存: seckillId={}, userId={}, quantity={}", seckillId, userId, quantity);
 
-        long result = seckillDeductLua.rollbackStock(seckillId, userId, quantity);
+        long result = stockRollbackDispatcher.rollback(seckillId, userId, quantity);
 
         if (result >= SeckillDeductLua.LUA_SUCCESS_BASE) {
             log.info("手动回补成功: shardIndex={}", SeckillDeductLua.extractShardIndex(result));
@@ -279,7 +283,7 @@ public class CompensationService {
      * ============================================================================
      */
     private void rollbackStock(TransactionLog tx) {
-        long result = seckillDeductLua.rollbackStock(
+        long result = stockRollbackDispatcher.rollback(
                 tx.getSeckillId(),
                 tx.getUserId(),
                 tx.getQuantity()
