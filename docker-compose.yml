@@ -147,22 +147,21 @@ services:
       # migration tool, so a first boot needs Hibernate to create the schema.
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
 
-      # license-server is not part of this stack. Its absence is worth being
-      # explicit about, because the outcome is the same either way and it is easy
-      # to misread:
-      #   enabled=true  -> admin dials http://localhost:8090 (itself), fails,
-      #                    then loads the fallback edition
-      #   enabled=false -> LicenseStore.initialize() loads the fallback edition
-      #                    directly, without dialling anything
-      # The fallback edition is BASIC (1 instance / 10 routes / 5 services /
-      # 100 QPS) unless LICENSE_FALLBACK_EDITION says otherwise, and the admin's
-      # LicenseFeatureHelper consults the gatekeeper unconditionally - it has no
-      # `enabled` short-circuit - so ENTERPRISE-only console features such as
-      # audit export stay blocked. Setting this to false only avoids pointless
-      # connection attempts and log noise; it does NOT unlock features.
-      # To actually run licensed, add license-server to this stack and set
-      # LICENSE_ENABLED=true plus LICENSE_SERVER_URL / LICENSE_CODE.
+      # license-server is not part of this stack, and nothing here needs it:
+      # license-client validates offline (RSA over GATEWAY_LICENSE_CODE) and never
+      # dials a server. With no license code, LicenseStore.initialize() builds a
+      # fallback license, so LICENSE_FALLBACK_EDITION alone decides what is enabled.
+      # ENTERPRISE grants all 35 features with unlimited quotas. BASIC would keep
+      # JWT_AUTH, DISTRIBUTED_RATE_LIMIT, CIRCUIT_BREAKER, SSL_MANAGEMENT, AUDIT_LOG
+      # and PLUGIN_SYSTEM off, and the admin's LicenseFeatureHelper consults the
+      # gatekeeper unconditionally - it has no `enabled` short-circuit - so those
+      # console features stay blocked no matter what LICENSE_ENABLED says.
+      # LICENSE_ENABLED=false therefore only skips the per-request check and the
+      # "No license code configured" warning; it does NOT unlock features.
+      # To run a real signed license instead, add license-server to this stack and
+      # set GATEWAY_LICENSE_CODE plus LICENSE_TRUSTED_PUBLIC_KEYS.
       LICENSE_ENABLED: "false"
+      LICENSE_FALLBACK_EDITION: "ENTERPRISE"
 
       # FIX (compose port mismatch): application.yml defaults to 9090, but the
       # Dockerfile EXPOSE/healthcheck and the port mapping below all use 8080.

@@ -390,16 +390,36 @@ redis:
 # ============================================================================
 # License 授权配置
 # ============================================================================
-# 用于商业版功能授权控制
-# license-code: 授权码（JSON Base64格式，类似 JetBrains 激活码）
-# 版本功能对照：
-#   - BASIC: 基础路由、本地限流 (100 QPS)
-#   - ADVANCED: 多服务加权路由、分布式限流、熔断、K8s 集成
-#   - ENTERPRISE: 完整灰度发布、AI Copilot、多租户、无限配额
+# license-client 是纯离线校验（对 Base64 授权码做 RSA 验签），不会连任何
+# license-server；没有 GATEWAY_LICENSE_CODE 时用本地构造的 fallback license，
+# 所以真正决定功能开关的只有 fallback-edition。
+# 这里默认 ENTERPRISE：本部署不提供 license-server，而 BASIC 会静默关掉远超
+# 「商业版功能」范围的东西——35 个受控功能里含 JWT_AUTH / HMAC_AUTH（ADVANCED）、
+# DISTRIBUTED_RATE_LIMIT / CIRCUIT_BREAKER（ADVANCED），以及 SSL_MANAGEMENT /
+# AUDIT_LOG / PLUGIN_SYSTEM（ENTERPRISE）。要恢复受限档设 LICENSE_FALLBACK_EDITION=BASIC。
+#
+# 注意前缀：FeatureGatekeeper 读的是 license.client.*。此前本文件只有 license.*
+# 一层，其中 enabled / code / server-url / cache-ttl / fail-fast 五个键全仓无人读取
+# （只有 license.edition 被 JwtTokenProvider 当作 JWT 展示字段用），所以设
+# LICENSE_ENABLED=false 对控制台的功能门禁毫无影响，docker-compose.yml 里那句
+# LICENSE_ENABLED: "false" 也一直是个空操作。死键已删，改为直接绑定 license.client.*，
+# 环境变量名与 my-gateway 对齐。
 # ============================================================================
 license:
-  enabled: ${LICENSE_ENABLED:true}
-  code: ${LICENSE_CODE:}  # 授权码，通过环境变量或配置中心注入
-  server-url: ${LICENSE_SERVER_URL:http://localhost:8090}  # License Server 地址
-  cache-ttl: ${LICENSE_CACHE_TTL:3600000}  # 授权缓存时间（毫秒），默认1小时
-  fail-fast: ${LICENSE_FAIL_FAST:false}  # 启动时无授权是否快速失败
+  # 仅展示用：JwtTokenProvider 把它写进 JWT 的 licenseEdition 声明，登录响应回给前端。
+  # 与 fallback-edition 同源，免得令牌里显示 BASIC 而门禁实际放行 ENTERPRISE。
+  edition: ${LICENSE_FALLBACK_EDITION:ENTERPRISE}
+  client:
+    enabled: ${LICENSE_ENABLED:true}
+    license-code: ${GATEWAY_LICENSE_CODE:}
+    license-file: ${GATEWAY_LICENSE_FILE:}
+    # 安全：必须钉住签发公钥（即 license-server 的 LICENSE_RSA_PUBLIC_KEY）。授权码自带
+    # publicKey，不钉住则任何人都能自签一张通过验签。留空时验签 fail-closed，
+    # 退回 fallback-edition。
+    trusted-public-keys: ${LICENSE_TRUSTED_PUBLIC_KEYS:}
+    trusted-key-fingerprints: ${LICENSE_TRUSTED_KEY_FINGERPRINTS:}
+    fallback-edition: ${LICENSE_FALLBACK_EDITION:ENTERPRISE}
+    allow-basic-fallback: ${LICENSE_ALLOW_BASIC_FALLBACK:true}
+    log-unlicensed-access: ${LICENSE_LOG_UNLICENSED_ACCESS:true}
+    warn-days-before-expiry: ${LICENSE_WARN_DAYS_BEFORE_EXPIRY:30}
+    validation-interval-seconds: ${LICENSE_VALIDATION_INTERVAL:3600}

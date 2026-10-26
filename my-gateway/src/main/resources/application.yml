@@ -405,14 +405,16 @@ otel:
 # ============================================================================
 # License Configuration (Commercial Features)
 # ============================================================================
-# License Code: Base64 encoded license from license-server
-# Fallback Edition: BASIC (minimal features when license invalid)
-# Features requiring license:
-#   - WEIGHTED_ROUTING (ADVANCED+): Multi-service weighted routing
-#   - DISTRIBUTED_RATE_LIMIT (ADVANCED+): Redis distributed rate limiting
-#   - CIRCUIT_BREAKER (ADVANCED+): Resilience4j circuit breaker
-#   - FULL_GRAY_RELEASE (ENTERPRISE): Header/Cookie/Query gray rules
-#   - AI_COPilot (ENTERPRISE): AI Copilot features
+# license-client validates offline (RSA over a Base64 license code); nothing here
+# ever dials a license-server. Without GATEWAY_LICENSE_CODE the gateway runs on the
+# locally built fallback license, so fallback-edition alone decides what is enabled.
+# It defaults to ENTERPRISE: this deployment ships no license-server, and BASIC
+# silently turns off far more than the paid-tier features one would expect - among
+# the 35 gated features are JWT_AUTH and HMAC_AUTH (ADVANCED), DISTRIBUTED_RATE_LIMIT
+# and CIRCUIT_BREAKER (ADVANCED), and SSL_MANAGEMENT, AUDIT_LOG and PLUGIN_SYSTEM
+# (ENTERPRISE). Set LICENSE_FALLBACK_EDITION=BASIC to restore the restricted tier.
+# Note that fallback-edition is what FeatureGatekeeper enforces; it is NOT derived
+# from `enabled`, and hasFeature() ignores it when no license is loaded at all.
 # ============================================================================
 license:
   client:
@@ -426,7 +428,7 @@ license:
     # drops to fallback-edition.
     trusted-public-keys: ${LICENSE_TRUSTED_PUBLIC_KEYS:}
     trusted-key-fingerprints: ${LICENSE_TRUSTED_KEY_FINGERPRINTS:}
-    fallback-edition: ${LICENSE_FALLBACK_EDITION:BASIC}
+    fallback-edition: ${LICENSE_FALLBACK_EDITION:ENTERPRISE}
     allow-basic-fallback: ${LICENSE_ALLOW_BASIC_FALLBACK:true}
     log-unlicensed-access: ${LICENSE_LOG_UNLICENSED_ACCESS:true}
     warn-days-before-expiry: ${LICENSE_WARN_DAYS_BEFORE_EXPIRY:30}
