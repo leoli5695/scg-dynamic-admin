@@ -18,6 +18,7 @@ import {
   ReloadOutlined, SearchOutlined, SettingOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import { parseServerTime } from '../../utils/serverTime';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useRequest } from '../../hooks/useRequest';
@@ -257,7 +258,7 @@ const TracePage: React.FC = () => {
       dataIndex: 'traceTime',
       key: 'traceTime',
       width: 110,
-      sorter: (a, b) => new Date(a.traceTime).getTime() - new Date(b.traceTime).getTime(),
+      sorter: (a, b) => parseServerTime(a.traceTime).getTime() - parseServerTime(b.traceTime).getTime(),
       render: (time: string) => (
         <Text className="text-xs-sm">{time ? dayjs(time).format('MM-DD HH:mm:ss') : '-'}</Text>
       ),

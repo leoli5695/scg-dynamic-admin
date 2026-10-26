@@ -6,6 +6,7 @@ import { Descriptions, Modal } from 'antd';
 import { useTranslation } from 'react-i18next';
 import type { SslCertificate } from '../../../types/certificate';
 import StatusTag from './StatusTag';
+import { parseServerTime } from '../../../utils/serverTime';
 
 interface CertDetailModalProps {
   certificate: SslCertificate;
@@ -36,10 +37,10 @@ const CertDetailModal: React.FC<CertDetailModalProps> = ({ certificate, onClose 
           {certificate.daysToExpiry} {t('cert.days')}
         </Descriptions.Item>
         <Descriptions.Item label={t('cert.valid_from')}>
-          {certificate.validFrom ? new Date(certificate.validFrom).toLocaleString() : '-'}
+          {certificate.validFrom ? parseServerTime(certificate.validFrom).toLocaleString() : '-'}
         </Descriptions.Item>
         <Descriptions.Item label={t('cert.valid_to')}>
-          {certificate.validTo ? new Date(certificate.validTo).toLocaleString() : '-'}
+          {certificate.validTo ? parseServerTime(certificate.validTo).toLocaleString() : '-'}
         </Descriptions.Item>
         <Descriptions.Item label={t('cert.enabled')}>
           {certificate.enabled ? t('cert.enabled') : t('cert.disabled')}

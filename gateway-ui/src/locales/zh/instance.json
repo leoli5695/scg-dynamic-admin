@@ -134,5 +134,20 @@
   "instance.external_tag": "外部实例",
   "instance.register_external": "注册外部实例",
   "instance.external_env_title": "启动网关所需环境变量",
-  "instance.external_lifecycle_hint": "外部实例的启停与扩缩容由你自己的部署方式管理，控制台不提供这些操作。"
+  "instance.external_lifecycle_hint": "外部实例的启停与扩缩容由你自己的部署方式管理，控制台不提供这些操作。",
+  "instance.stat_total": "实例总数",
+  "instance.stat_running": "运行中",
+  "instance.stat_error": "异常",
+  "instance.stat_stopped": "已停止",
+  "instance.last_heartbeat": "最近心跳",
+  "instance.heartbeat_never": "从未心跳",
+  "instance.missed_heartbeats": "丢失 {{n}} 次",
+  "instance.time_just_now": "刚刚",
+  "instance.time_seconds_ago": "{{n}} 秒前",
+  "instance.time_minutes_ago": "{{n}} 分钟前",
+  "instance.time_hours_ago": "{{n}} 小时前",
+  "instance.no_access_url": "暂无访问地址",
+  "instance.copied": "已复制到剪贴板",
+  "instance.list_updated_at": "更新于 {{time}}",
+  "instance.auto_refresh_hint": "列表每 30 秒自动刷新"
 }

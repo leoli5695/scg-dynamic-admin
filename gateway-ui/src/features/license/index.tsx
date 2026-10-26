@@ -3,6 +3,7 @@ import {
   Alert, Badge, Button, Card, Col, Descriptions, Divider, Empty, Progress, Row, Space, Spin,
   Statistic, Table, Tabs, Tag, Tooltip, Typography  } from 'antd';
 import { message } from '../../utils/antdStatic';
+import { parseServerTime } from '../../utils/serverTime';
 import type { ColumnsType } from 'antd/es/table';
 import {
   ApiOutlined, CloseCircleOutlined, CloudOutlined,
@@ -135,10 +136,10 @@ const LicensePage: React.FC = () => {
       width: 180,
       render: (date: string | null) => {
         if (!date) return <Text>永久</Text>;
-        const expired = new Date(date) < new Date();
+        const expired = parseServerTime(date).getTime() < Date.now();
         return (
           <Text type={expired ? 'danger' : undefined}>
-            {new Date(date).toLocaleDateString()}
+            {parseServerTime(date).toLocaleDateString()}
             {expired && <CloseCircleOutlined style={{ marginLeft: 4 }} />}
           </Text>
         );
@@ -313,7 +314,7 @@ const LicensePage: React.FC = () => {
                                 {licenseInfo.organization || '-'}
                               </Descriptions.Item>
                               <Descriptions.Item label="有效期至">
-                                {licenseInfo.expiresAt ? new Date(licenseInfo.expiresAt).toLocaleDateString() : '永久'}
+                                {licenseInfo.expiresAt ? parseServerTime(licenseInfo.expiresAt).toLocaleDateString() : '永久'}
                               </Descriptions.Item>
                             </>
                           )}

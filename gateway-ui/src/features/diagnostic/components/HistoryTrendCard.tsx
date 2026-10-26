@@ -11,6 +11,7 @@ import { LineChartOutlined } from '@ant-design/icons';
 import ReactECharts from 'echarts-for-react';
 import { useTranslation } from 'react-i18next';
 import { useRequest } from '../../../hooks/useRequest';
+import { parseServerTime } from '../../../utils/serverTime';
 import { compareWithPrevious, getDiagnosticHistory } from '../../../api/diagnostic';
 import type { DiagnosticReport } from '../../../types/diagnostic';
 import { getScoreColor } from '../utils';
@@ -54,7 +55,7 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
     tooltip: {
       trigger: 'axis',
       formatter: (params: Array<{ value: [string, number] }>) => {
-        const date = new Date(params[0].value[0]).toLocaleString();
+        const date = parseServerTime(params[0].value[0] as string | number).toLocaleString();
         const score = params[0].value[1];
         return `${date}<br/>评分: ${score}`;
       },
@@ -135,7 +136,7 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
           },
           xAxis: {
             type: 'time',
-            data: history.map((h) => new Date(h.createdAt).getTime()),
+            data: history.map((h) => parseServerTime(h.createdAt).getTime()),
             axisLabel: {
               formatter: (value: number) => new Date(value).toLocaleTimeString(),
             },

@@ -62,6 +62,35 @@ public class HeartbeatReporter {
     @Value("${gateway.access-url:}")
     private String manualAccessUrl;
 
+    /**
+     * Mirror of the {@code gateway.trace.*} keys that TraceCaptureGlobalFilter binds, reported so
+     * the console's sampling panel can show what this gateway actually runs. The defaults here must
+     * stay identical to that filter's - a drift would make the panel lie in the opposite direction.
+     */
+    @Value("${gateway.trace.capture-all:false}")
+    private boolean traceCaptureAll;
+
+    @Value("${gateway.trace.capture-errors:true}")
+    private boolean traceCaptureErrors;
+
+    @Value("${gateway.trace.capture-slow:true}")
+    private boolean traceCaptureSlow;
+
+    @Value("${gateway.trace.slow-threshold-ms:3000}")
+    private long traceSlowThresholdMs;
+
+    @Value("${gateway.trace.sampling-rate:10}")
+    private int traceSamplingRate;
+
+    @Value("${gateway.trace.sampling-rate-for-errors:100}")
+    private int traceSamplingRateForErrors;
+
+    @Value("${gateway.trace.max-body-size:65536}")
+    private int traceMaxBodySize;
+
+    @Value("${gateway.trace.include-filter-chain:true}")
+    private boolean traceIncludeFilterChain;
+
     @Autowired
     private HeartbeatProperties properties;
 
@@ -133,6 +162,9 @@ public class HeartbeatReporter {
             requestBody.put("managementPort", managementPort);
         }
 
+        // Report the trace capture settings this gateway is running with
+        requestBody.put("traceConfig", collectTraceConfig());
+
         int retries = 0;
         while (retries < properties.getMaxRetries()) {
             try {
@@ -191,6 +223,24 @@ public class HeartbeatReporter {
             log.debug("Failed to auto-detect access URL: {}", e.getMessage());
             return "http://127.0.0.1:" + serverPort;
         }
+    }
+
+    /**
+     * Snapshot of the effective trace capture settings. Every value is fixed after startup, so this
+     * is the same map each cycle; rebuilding it keeps the reported values honest if a future change
+     * makes any of them dynamic.
+     */
+    private Map<String, Object> collectTraceConfig() {
+        Map<String, Object> config = new HashMap<>();
+        config.put("captureAll", traceCaptureAll);
+        config.put("captureErrors", traceCaptureErrors);
+        config.put("captureSlow", traceCaptureSlow);
+        config.put("slowThresholdMs", traceSlowThresholdMs);
+        config.put("samplingRate", traceSamplingRate);
+        config.put("samplingRateForErrors", traceSamplingRateForErrors);
+        config.put("maxBodySize", traceMaxBodySize);
+        config.put("includeFilterChain", traceIncludeFilterChain);
+        return config;
     }
 
     /**

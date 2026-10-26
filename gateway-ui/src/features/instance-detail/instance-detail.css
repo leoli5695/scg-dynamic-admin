@@ -127,47 +127,58 @@
   overflow: visible;
 }
 
-.instance-stat-card {
+/* Compact summary bar: one slim row of label/value pairs instead of four tall cards */
+.instance-summary-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  padding: var(--space-4);
-  transition: border-color var(--duration-fast) var(--ease-default);
-  overflow: visible;
 }
 
-.instance-stat-card:hover {
-  border-color: var(--border-default);
+.instance-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 var(--space-5);
+  border-left: 1px solid var(--border-subtle);
 }
 
-.instance-stat-card .ant-statistic-title {
+.instance-summary-item:first-child {
+  border-left: none;
+  padding-left: 0;
+}
+
+.instance-summary-label {
   color: var(--text-muted);
   font-size: var(--text-xs);
 }
 
-.instance-stat-card .ant-statistic-content-value {
-  color: var(--text-primary);
-  font-weight: var(--weight-bold);
-}
-
-/* equal-height stat row; spec value kept on one line */
-.instance-overview-stats .ant-row > .ant-col {
+.instance-summary-value {
   display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: var(--weight-semibold);
+  line-height: 22px;
 }
 
-.instance-overview-stats .instance-stat-card {
-  width: 100%;
+.instance-summary-unit {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 400;
 }
 
-.instance-stat-card .ant-statistic-content,
-.instance-stat-card .ant-statistic-content-value {
-  font-size: 18px;
+.instance-summary-health {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
 }
-
-/* Status colors */
-.instance-stat-status-running { color: var(--success-color); }
-.instance-stat-status-stopped { color: var(--warning-color); }
-.instance-stat-replicas { color: var(--primary-color); }
 
 /* ==================== Info Section ==================== */
 .instance-info-section {
@@ -236,6 +247,11 @@
 
   .instance-overview-stats {
     padding: var(--space-4);
+  }
+
+  .instance-summary-item {
+    border-left: none;
+    padding: 0;
   }
 }
 

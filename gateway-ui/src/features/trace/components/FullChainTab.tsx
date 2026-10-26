@@ -165,17 +165,37 @@ const FullChainTab: React.FC<FullChainTabProps> = ({ traceConfig }) => {
 
   return (
     <div>
-      {/* Sampling info alert */}
+      {/* Sampling info alert - every number here comes from the gateway's heartbeat report, so it
+          can legitimately be absent. Rendering a default instead is what made this panel claim 50%
+          sampling while production captured none. */}
       {traceConfig && (
         <Alert
-          type="info"
+          type={traceConfig.gateway?.reported ? 'info' : 'warning'}
           showIcon
           style={{ marginBottom: 12 }}
           message={(
             <Space>
               <span>采样配置提示</span>
-              <Tag color="blue">正常请求 {traceConfig.gateway?.samplingRate}% 采样</Tag>
-              <Tag color="green">错误请求 100% 采样</Tag>
+              {traceConfig.gateway?.reported ? (
+                <>
+                  <Tag color="blue">
+                    {traceConfig.gateway.captureAll
+                      ? `正常请求 ${traceConfig.gateway.samplingRate}% 采样`
+                      : '正常请求不捕获'}
+                  </Tag>
+                  <Tag color="green">
+                    {traceConfig.gateway.captureErrors === false
+                      ? '错误捕获已关闭'
+                      : `错误请求 ${traceConfig.gateway.samplingRateForErrors}% 采样`}
+                  </Tag>
+                  {traceConfig.gateway.captureSlow !== false && (
+                    <Tag>慢请求阈值 {traceConfig.gateway.slowThresholdMs}ms</Tag>
+                  )}
+                  {traceConfig.gateway.stale && <Tag color="orange">上报已过期</Tag>}
+                </>
+              ) : (
+                <Tag color="orange">网关尚未上报配置</Tag>
+              )}
             </Space>
           )}
           description={traceConfig.note || '部分请求可能因采样未被记录'}

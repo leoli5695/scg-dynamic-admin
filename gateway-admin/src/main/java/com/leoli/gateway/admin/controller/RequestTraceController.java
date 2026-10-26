@@ -3,6 +3,7 @@ package com.leoli.gateway.admin.controller;
 import com.leoli.gateway.admin.model.RequestTrace;
 import com.leoli.gateway.admin.service.FilterChainExecutionService;
 import com.leoli.gateway.admin.service.GatewayInstanceService;
+import com.leoli.gateway.admin.service.GatewayTraceConfigRegistry;
 import com.leoli.gateway.admin.service.RequestTraceService;
 import com.leoli.gateway.admin.service.TraceBufferService;
 import lombok.RequiredArgsConstructor;
@@ -35,35 +36,82 @@ public class RequestTraceController {
     private final TraceBufferService traceBufferService;
     private final GatewayInstanceService gatewayInstanceService;
     private final RestTemplate restTemplate;
+    private final GatewayTraceConfigRegistry traceConfigRegistry;
 
     /**
-     * Get trace sampling configuration
-     * Returns current sampling rates for gateway and downstream services
+     * Get trace sampling configuration, as reported by the gateways themselves.
+     *
+     * <p>This used to return hardcoded numbers (captureAll=true, samplingRate=50) that described no
+     * gateway anywhere: production runs capture-all=false, so the panel advertised 50% sampling of
+     * normal requests that were in fact never recorded. Admin cannot derive these values - they live
+     * in the gateway's own {@code gateway.trace.*} - so gateways now report them with every heartbeat
+     * and this reads the latest report back out.
+     *
+     * <p>Listed in {@code PERMIT_ALL_NO_TOKEN}, i.e. world-readable: keep instance identifiers out.
      */
     @GetMapping("/config")
     public ResponseEntity<Map<String, Object>> getTraceConfig() {
         Map<String, Object> config = new LinkedHashMap<>();
-        
-        // Gateway trace configuration (from application.yml)
-        config.put("gateway", Map.of(
-            "captureAll", true,           // Whether to capture all requests
-            "captureErrors", true,        // Whether to capture error requests  
-            "captureSlow", true,          // Whether to capture slow requests
-            "samplingRate", 50,           // Sampling rate for normal requests (%)
-            "samplingRateForErrors", 100, // Sampling rate for error requests (%)
-            "slowThresholdMs", 3000,      // Slow request threshold (ms)
-            "description", "网关层追踪采样配置：正常请求50%采样，错误请求100%采样"
-        ));
-        
-        // Downstream service trace configuration
+        Optional<GatewayTraceConfigRegistry.Report> latest = traceConfigRegistry.freshest();
+
+        if (latest.isEmpty()) {
+            // Say so instead of falling back to plausible-looking defaults - a fabricated number
+            // here is precisely the bug this method is being fixed for.
+            config.put("gateway", Map.of("reported", false));
+            config.put("service", Map.of("reporting", false));
+            config.put("note", "尚未收到任何网关上报的追踪配置。网关每 10 秒随心跳上报一次，控制台重启后最多等一个周期。");
+            return ResponseEntity.ok(config);
+        }
+
+        GatewayTraceConfigRegistry.Report report = latest.get();
+        Map<String, Object> gateway = new LinkedHashMap<>(report.config());
+        gateway.put("reported", true);
+        gateway.put("stale", report.isStale());
+
+        boolean captureAll = Boolean.TRUE.equals(gateway.get("captureAll"));
+        boolean captureErrors = !Boolean.FALSE.equals(gateway.get("captureErrors"));
+        boolean captureSlow = !Boolean.FALSE.equals(gateway.get("captureSlow"));
+        Object samplingRate = gateway.get("samplingRate");
+        Object samplingRateForErrors = gateway.get("samplingRateForErrors");
+        Object slowThresholdMs = gateway.get("slowThresholdMs");
+
+        // sampling-rate only means something while capture-all is on: TraceCaptureGlobalFilter gates
+        // the entire sampling branch behind captureAll, so quoting a rate while it is off would
+        // reproduce the original bug in a subtler form.
+        gateway.put("description", captureAll
+                ? "网关层追踪采样配置：正常请求 " + samplingRate + "% 采样，错误请求 " + samplingRateForErrors + "% 采样"
+                : "网关层未开启全量捕获（capture-all=false）：只记录错误请求（" + samplingRateForErrors
+                        + "% 采样）和超过 " + slowThresholdMs + "ms 的慢请求，正常请求不会入库");
+        config.put("gateway", gateway);
+
+        // Nothing in this stack embeds gateway-trace-starter, so there is no downstream segment to
+        // describe. Report that rather than quoting the starter's default sample rate as if it were
+        // observed.
         config.put("service", Map.of(
-            "sampleRate", 1.0,            // 100% sampling for downstream services
-            "description", "下游服务追踪采样配置：100%全量采样（由gateway-trace-starter控制）"
-        ));
-        
-        // Explanation for users
-        config.put("note", "部分请求可能因采样未被记录。错误请求100%采样，正常请求50%采样。");
-        
+                "reporting", false,
+                "description", "下游服务追踪由 gateway-trace-starter 上报到 /api/services/traces；当前没有服务在上报，全链路只有网关这一段"));
+
+        StringBuilder note = new StringBuilder();
+        if (report.isStale()) {
+            note.append("网关已超过 60 秒未上报，下列配置可能已过期。");
+        } else if (captureAll) {
+            note.append("正常请求按 ").append(samplingRate).append("% 采样，错误请求按 ")
+                    .append(samplingRateForErrors).append("% 采样。");
+        } else {
+            note.append("capture-all 关闭：正常请求不记录，只有错误请求和超过 ")
+                    .append(slowThresholdMs).append("ms 的慢请求会入库。");
+        }
+        if (!captureErrors) {
+            note.append(" 错误捕获已关闭。");
+        }
+        if (!captureSlow) {
+            note.append(" 慢请求捕获已关闭。");
+        }
+        if (traceConfigRegistry.isDivergent()) {
+            note.append(" 多个网关实例上报的配置不一致，此处显示最近一次上报的值。");
+        }
+        config.put("note", note.toString());
+
         return ResponseEntity.ok(config);
     }
 

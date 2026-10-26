@@ -15,6 +15,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import type { ServiceMiddlewareView } from '../../../types/middleware';
 import { getMiddlewareTypeInfo, getServiceHealth, getStatusColor } from '../utils';
+import { parseServerTime } from '../../../utils/serverTime';
 
 const { Text, Title } = Typography;
 
@@ -90,7 +91,7 @@ const ServiceDetailDrawer: React.FC<ServiceDetailDrawerProps> = ({ service, onCl
                 <Statistic
                   title={t('middleware.last_report')}
                   value={service.reportTime
-                    ? new Date(service.reportTime).toLocaleTimeString()
+                    ? parseServerTime(service.reportTime).toLocaleTimeString()
                     : '-'}
                 />
               </Col>

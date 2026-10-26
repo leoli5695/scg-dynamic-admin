@@ -8,6 +8,7 @@ import {
   Alert, Button, Card, Empty, Input, Progress, Space, Table, Tag,
   Tooltip, Typography  } from 'antd';
 import { message } from '../../utils/antdStatic';
+import { parseServerTime } from '../../utils/serverTime';
 import InlineStatChips from '../../components/InlineStatChips';
 import {
   CloudServerOutlined, EyeOutlined, ReloadOutlined, SearchOutlined,
@@ -121,7 +122,7 @@ const ServiceMiddlewarePage: React.FC = () => {
       dataIndex: 'reportTime',
       key: 'reportTime',
       width: 180,
-      render: (time: string) => (time ? new Date(time).toLocaleString() : '-'),
+      render: (time: string) => (time ? parseServerTime(time).toLocaleString() : '-'),
     },
     {
       title: t('common.actions'),

@@ -15,6 +15,7 @@ import {
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { ApiError } from '../../api/http';
+import { parseServerTime } from '../../utils/serverTime';
 import { runFullDiagnostic, runQuickDiagnostic } from '../../api/diagnostic';
 import type { DiagnosticReport } from '../../types/diagnostic';
 import { useInstanceDetail } from '../instance-detail/InstanceDetailContext';
@@ -190,7 +191,7 @@ const DiagnosticPage: React.FC = () => {
                 <Col span={8}>
                   <Statistic
                     title={t('diagnostic.timestamp')}
-                    value={new Date(report.endTime).toLocaleTimeString()}
+                    value={parseServerTime(report.endTime).toLocaleTimeString()}
                   />
                 </Col>
               </Row>

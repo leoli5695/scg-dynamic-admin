@@ -1,6 +1,6 @@
 /**
- * Instances Page - Modern Premium Design v2
- * Enhanced visual hierarchy with status bars, metric grids, and refined interactions
+ * Instances Page - Modern Premium Design v3
+ * Card layout: status dot + access URL row + heartbeat/ID cells.
  * Inspired by Vercel Dashboard, Linear, and Kubernetes Dashboard
  */
 
@@ -78,9 +78,57 @@
   transform: none;
 }
 
+/* ==================== Summary Stats Strip ==================== */
+.instances-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.instances-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: rgba(26, 39, 64, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.instances-stat b {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.instances-stat-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.instances-stat-dot.dot-total { background: #60a5fa; }
+.instances-stat-dot.dot-running { background: #22c55e; box-shadow: 0 0 6px rgba(34, 197, 94, 0.5); }
+.instances-stat-dot.dot-error { background: #ef4444; }
+.instances-stat-dot.dot-stopped { background: #fbbf24; }
+
 /* ==================== Instances Grid ==================== */
 .instances-grid {
-  margin-top: 20px;
+  margin-top: 4px;
+}
+
+/* Equal-height cards per row */
+.instances-grid > .ant-col {
+  display: flex;
+}
+
+.instances-grid .instance-card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ==================== Instance Card ==================== */
@@ -100,6 +148,9 @@
   z-index: 1;
   background: transparent !important;
   padding: 20px !important;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
 }
 
 .instance-card:hover {
@@ -108,78 +159,13 @@
   transform: translateY(-2px);
 }
 
-/* ==================== Status Bar (Left indicator) ==================== */
-.instance-card-status-indicator {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.status-bar {
-  width: 4px;
-  height: 32px;
-  border-radius: 2px;
-  transition: all 0.3s ease;
-}
-
-/* Running - Green gradient */
-.status-bar-1 {
-  background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
-  box-shadow: 0 0 8px rgba(34, 197, 94, 0.4);
-}
-
-.instance-card:hover .status-bar-1 {
-  box-shadow: 0 0 12px rgba(34, 197, 94, 0.6);
-  height: 36px;
-}
-
-/* Starting - Blue gradient */
-.status-bar-0 {
-  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
-  box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
-  animation: statusBarPulse 1.5s ease-in-out infinite;
-}
-
-/* Stopped - Amber gradient */
-.status-bar-4 {
-  background: linear-gradient(180deg, var(--accent-color) 0%, var(--accent-hover) 100%);
-  box-shadow: 0 0 8px rgba(251, 191, 36, 0.4);
-}
-
-/* Error - Red gradient */
-.status-bar-2 {
-  background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
-  box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
-}
-
-/* Stopping - Purple gradient */
-.status-bar-3 {
-  background: linear-gradient(180deg, #8b5cf6 0%, #7c3aed 100%);
-  box-shadow: 0 0 8px rgba(139, 92, 246, 0.4);
-  animation: statusBarPulse 1s ease-in-out infinite;
-}
-
-@keyframes statusBarPulse {
-  0%, 100% {
-    opacity: 1;
-    box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
-  }
-  50% {
-    opacity: 0.7;
-    box-shadow: 0 0 12px rgba(59, 130, 246, 0.6);
-  }
-}
-
 /* ==================== Card Header ==================== */
 .instance-card-header {
   display: flex;
   align-items: flex-start;
   gap: 14px;
-  margin-bottom: 16px;
-  padding-bottom: 16px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -214,6 +200,7 @@
   align-items: center;
   gap: 8px;
   margin-bottom: 6px;
+  min-width: 0;
 }
 
 .instance-card-name .ant-typography {
@@ -223,9 +210,79 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 
-/* ==================== Status Tag ==================== */
+/* Deployment type tag next to the name */
+.instance-type-tag {
+  margin-inline-end: 0 !important;
+  border-radius: 6px !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  padding: 1px 8px !important;
+  border: none !important;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.instance-type-tag.type-external {
+  background: rgba(139, 92, 246, 0.15) !important;
+  color: #a78bfa !important;
+}
+
+.instance-type-tag.type-cluster {
+  background: rgba(59, 130, 246, 0.15) !important;
+  color: #60a5fa !important;
+}
+
+/* ==================== Status Dot + Tag ==================== */
+.instance-card-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.instance-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.instance-status-dot.status-dot-0 {
+  background: #3b82f6;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+  animation: statusDotPulse 1.5s ease-in-out infinite;
+}
+
+.instance-status-dot.status-dot-1 {
+  background: #22c55e;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+  animation: statusDotPulse 2s ease-in-out infinite;
+}
+
+.instance-status-dot.status-dot-2 {
+  background: #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+}
+
+.instance-status-dot.status-dot-3 {
+  background: #8b5cf6;
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.6);
+  animation: statusDotPulse 1s ease-in-out infinite;
+}
+
+.instance-status-dot.status-dot-4 {
+  background: #fbbf24;
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
+}
+
+@keyframes statusDotPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
 .instance-status-tag {
   margin: 0;
   border-radius: 6px !important;
@@ -275,92 +332,165 @@
   flex-wrap: wrap;
 }
 
-.instance-cluster {
-  font-size: 13px;
-  color: var(--text-secondary);
-  font-weight: 500;
-  display: inline-flex;
-  align-items: center;
-}
-
-.instance-divider {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.15);
-}
-
 .instance-namespace {
   font-size: 13px;
   color: var(--text-muted);
   display: inline-flex;
   align-items: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* ==================== Card Body - Metrics Grid ==================== */
-.instance-card-body {
-  margin-bottom: 16px;
-}
-
-.instance-metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-}
-
-.instance-metric-item {
+/* ==================== Access URL Row ==================== */
+.instance-access-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  background: rgba(26,39,64, 0.5);
-  border-radius: 8px;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  background: rgba(26, 39, 64, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  transition: all 0.15s ease;
-}
-
-.instance-card:hover .instance-metric-item {
-  background: rgba(26,39,64, 0.7);
-  border-color: rgba(255, 255, 255, 0.08);
-}
-
-.instance-metric-icon {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(59, 130, 246, 0.1);
-  border-radius: 6px;
-  color: #60a5fa;
-  font-size: 14px;
-}
-
-.instance-metric-content {
-  flex: 1;
+  border-radius: 8px;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 
-.instance-metric-label {
+.instance-access-label {
   font-size: 11px;
   color: var(--text-muted);
-  text-transform: uppercase;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.instance-access-url {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+  font-size: 12px;
+  color: #60a5fa;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.instance-access-url .anticon {
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+.instance-access-url:hover {
+  color: #93c5fd;
+  text-decoration: underline;
+}
+
+.instance-access-empty {
+  font-size: 12px;
+}
+
+/* Small icon-only buttons inside rows/cells */
+.instance-mini-btn {
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 6px !important;
+  color: var(--text-muted) !important;
+  font-size: 12px !important;
+  flex-shrink: 0;
+}
+
+.instance-mini-btn:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: var(--text-secondary) !important;
+}
+
+/* ==================== Info Cells ==================== */
+.instance-cells {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.instance-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  background: rgba(26, 39, 64, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.instance-cell-label {
+  font-size: 11px;
+  color: var(--text-muted);
   letter-spacing: 0.03em;
   font-weight: 500;
 }
 
-.instance-metric-value {
+.instance-cell-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
   color: var(--text-secondary);
   font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 0;
 }
 
+.instance-id-text {
+  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Heartbeat freshness tones */
+.heartbeat-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.heartbeat-dot.heartbeat-ok {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+  animation: statusDotPulse 2s ease-in-out infinite;
+}
+
+.heartbeat-dot.heartbeat-warn {
+  background: #fbbf24;
+  box-shadow: 0 0 6px rgba(251, 191, 36, 0.5);
+}
+
+.heartbeat-dot.heartbeat-bad {
+  background: #ef4444;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+  animation: statusDotPulse 1s ease-in-out infinite;
+}
+
+.heartbeat-dot.heartbeat-idle {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.instance-cell-value.hb-ok { color: #4ade80; }
+.instance-cell-value.hb-warn { color: var(--accent-color); }
+.instance-cell-value.hb-bad { color: #f87171; }
+.instance-cell-value.hb-idle { color: var(--text-muted); }
+
+/* ==================== Status Message ==================== */
 .instance-status-message {
-  margin-top: 12px;
+  margin-bottom: 14px;
   padding: 8px 12px;
   background: rgba(239, 68, 68, 0.08);
   border: 1px solid rgba(239, 68, 68, 0.12);
@@ -385,6 +515,7 @@
   padding-top: 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   justify-content: flex-end;
+  margin-top: auto;
 }
 
 .instance-action-btn {
@@ -455,12 +586,6 @@
 }
 
 /* ==================== Responsive ==================== */
-@media (max-width: 1200px) {
-  .instance-metrics-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 @media (max-width: 768px) {
   .instances-page { padding: 16px; }
 
@@ -478,20 +603,15 @@
   .instance-card .ant-card-body { padding: 16px !important; }
   .instance-card-icon { width: 36px; height: 36px; font-size: 16px; }
   .instance-card-name .ant-typography { font-size: 14px; }
-  .instance-metrics-grid { grid-template-columns: 1fr; gap: 8px; }
-  .instance-metric-item { padding: 8px 10px; }
-  .instance-metric-icon { width: 28px; height: 28px; font-size: 12px; }
-
-  .instance-card-status-indicator {
-    top: 16px;
-    right: 16px;
-  }
+  .instance-card-header { gap: 10px; }
 
   .instance-action-btn { width: 32px !important; height: 32px !important; }
 }
 
 @media (max-width: 480px) {
   .instances-page { padding: 12px; }
-  .instance-metric-label { font-size: 10px; }
-  .instance-metric-value { font-size: 12px; }
+  .instance-cells { grid-template-columns: 1fr; }
+  .instance-cell-label { font-size: 10px; }
+  .instance-cell-value { font-size: 12px; }
+  .instance-access-row { flex-wrap: wrap; }
 }

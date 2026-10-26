@@ -252,8 +252,8 @@
 
 /* ==================== Form Sections - Enhanced ==================== */
 .service-modal .form-section-modern {
-  margin-bottom: 24px;
-  padding: 20px;
+  margin-bottom: 16px;
+  padding: 16px;
   background: rgba(26,39,64, 0.5);
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.05);
@@ -263,8 +263,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -296,7 +296,16 @@
 .service-modal .section-content {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 0;
+}
+
+.service-modal .ant-form-item {
+  margin-bottom: 16px;
+}
+
+.service-modal .section-content > .ant-form-item:last-child,
+.service-modal .section-content > .form-row {
+  margin-bottom: 0;
 }
 
 /* ==================== Modal Form Inputs ==================== */
@@ -405,6 +414,10 @@
   margin-bottom: 0;
 }
 
+.service-modal .instance-form-item {
+  margin-bottom: 0;
+}
+
 .instance-form-item .ant-input,
 .instance-form-item .ant-select-selector {
   background: rgba(26,39,64, 0.6) !important;
@@ -487,10 +500,6 @@
 }
 
 /* ==================== LoadBalancer Select Enhancement ==================== */
-.select-with-icon .ant-select-selector {
-  padding: 8px 12px !important;
-}
-
 .option-wrapper {
   display: flex;
   align-items: center;

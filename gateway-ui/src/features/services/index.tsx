@@ -213,14 +213,16 @@ const ServicesPage: React.FC = () => {
           <Text type="secondary">{t('services.description_helper')}</Text>
         </div>
         <div className="page-header-right">
-          <InlineStatChips items={statsItems.map((item) => ({
-            key: item.filter,
-            value: item.value,
-            label: t(item.labelKey),
-            tone: item.filter === 'healthy' ? 'green' : item.filter === 'unhealthy' ? 'red' : undefined,
-            active: healthFilter === item.filter,
-            onClick: () => setHealthFilter(item.filter),
-          }))} />
+          {totalServices > 0 && (
+            <InlineStatChips items={statsItems.map((item) => ({
+              key: item.filter,
+              value: item.value,
+              label: t(item.labelKey),
+              tone: item.filter === 'healthy' ? 'green' : item.filter === 'unhealthy' ? 'red' : undefined,
+              active: healthFilter === item.filter,
+              onClick: () => setHealthFilter(item.filter),
+            }))} />
+          )}
           <Input
             placeholder={t('services.search_placeholder')}
             value={searchTerm}
@@ -236,14 +238,16 @@ const ServicesPage: React.FC = () => {
               />
             )}
           />
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => setCreateOpen(true)}
-            className="create-btn"
-          >
-            {t('services.create')}
-          </Button>
+          {services.length > 0 && (
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => setCreateOpen(true)}
+              className="create-btn"
+            >
+              {t('services.create')}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -273,9 +277,11 @@ const ServicesPage: React.FC = () => {
               image={<ClusterOutlined className="empty-icon" />}
               description={<span className="empty-text">{t('services.empty_description')}</span>}
             >
-              <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-                {t('services.create_first')}
-              </Button>
+              {services.length === 0 && (
+                <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+                  {t('services.create_first')}
+                </Button>
+              )}
             </Empty>
           </Card>
         ) : (

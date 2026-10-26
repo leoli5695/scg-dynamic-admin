@@ -13,6 +13,7 @@ import {
   DeleteOutlined, PlusOutlined, ReloadOutlined, SafetyCertificateOutlined,
 } from '@ant-design/icons';
 import { useParams } from 'react-router-dom';
+import { parseServerTime } from '../../utils/serverTime';
 import { useTranslation } from 'react-i18next';
 import { useRequest } from '../../hooks/useRequest';
 import { ApiError } from '../../api/http';
@@ -135,7 +136,7 @@ const CertificatePage: React.FC = () => {
       title: t('cert.valid_to'),
       dataIndex: 'validTo',
       key: 'validTo',
-      render: (date: string) => (date ? new Date(date).toLocaleDateString() : '-'),
+      render: (date: string) => (date ? parseServerTime(date).toLocaleDateString() : '-'),
     },
     {
       title: t('cert.enabled'),

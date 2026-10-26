@@ -3,13 +3,14 @@
  */
 import React from 'react';
 import { Select } from 'antd';
+import type { SelectProps } from 'antd';
 import {
   AimOutlined, ForkOutlined, LinkOutlined, ReloadOutlined,
   SwapOutlined, ThunderboltOutlined, TrophyOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 
-const LoadBalancerSelect: React.FC = () => {
+const LoadBalancerSelect: React.FC<SelectProps> = (props) => {
   const { t } = useTranslation();
 
   const options = [
@@ -50,6 +51,7 @@ const LoadBalancerSelect: React.FC = () => {
       dropdownClassName="loadBalancer-dropdown"
       optionLabelProp="label"
       listHeight={280}
+      {...props}
     >
       {options.map((opt) => (
         <Select.Option

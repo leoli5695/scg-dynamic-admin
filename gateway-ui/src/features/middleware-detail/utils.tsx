@@ -4,6 +4,7 @@
  * legacy page (it was never i18n-ed).
  */
 import React from 'react';
+import { parseServerTime } from '../../utils/serverTime';
 import {
   AlertOutlined, ApiOutlined, CheckCircleOutlined, ClockCircleOutlined,
   CloseCircleOutlined, ClusterOutlined, DashboardOutlined, DatabaseOutlined,
@@ -258,7 +259,7 @@ export const buildTrendChartOption = (
       trigger: 'axis',
       formatter: (params: Array<{ data: [number, number] }>) => {
         const point = params[0];
-        const time = new Date(point.data[0]).toLocaleString();
+        const time = parseServerTime(point.data[0] as string | number).toLocaleString();
         const value = formatMetricValue(point.data[1], unit);
         return `${time}<br/>${seriesName}: ${value}`;
       },

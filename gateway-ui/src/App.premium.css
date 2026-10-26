@@ -1124,33 +1124,21 @@
 }
 
 .empty-card .ant-card-body {
-  padding: 60px 20px;
+  padding: 36px 20px;
   text-align: center;
 }
 
 .empty-icon {
-  font-size: 72px;
+  font-size: 40px;
   color: var(--text-tertiary);
-  margin-bottom: 20px;
+  margin-bottom: 12px;
   opacity: 0.5;
-  animation: emptyBounce 2s ease-in-out infinite;
-}
-
-@keyframes emptyBounce {
-  0%, 100% {
-    transform: translateY(0);
-    opacity: 0.5;
-  }
-  50% {
-    transform: translateY(-10px);
-    opacity: 0.7;
-  }
 }
 
 .empty-text {
-  font-size: 15px;
+  font-size: 14px;
   color: var(--text-secondary);
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 /* Loading State - Premium */
@@ -5245,9 +5233,7 @@ kbd {
 }
 
 /* 表单区块强制深色 — 仅限自定义类；宽泛元素选择器曾给每个 Form.Item 和 modal body 子块刷出色带 */
-.form-section-modern,
-.section-content,
-.section-header {
+.form-section-modern {
   background-color: var(--bg-elevated) !important;
   border: 1px solid rgba(148, 163, 184, 0.2) !important;
   border-radius: 12px !important;
@@ -5314,9 +5300,7 @@ kbd {
 .service-binding-row,
 .service-binding-item,
 .gray-rule-section,
-.plugin-section,
-.form-section-modern,
-.section-content {
+.plugin-section {
   background-color: var(--bg-elevated) !important;
   border: 1px solid rgba(148, 163, 184, 0.25) !important;
   border-radius: 12px !important;

@@ -134,5 +134,20 @@
   "instance.external_tag": "External",
   "instance.register_external": "Register an external instance",
   "instance.external_env_title": "Environment variables the gateway needs",
-  "instance.external_lifecycle_hint": "Start/stop and scaling of an external instance are handled by your own deployment; the console does not offer these actions."
+  "instance.external_lifecycle_hint": "Start/stop and scaling of an external instance are handled by your own deployment; the console does not offer these actions.",
+  "instance.stat_total": "Total",
+  "instance.stat_running": "Running",
+  "instance.stat_error": "Error",
+  "instance.stat_stopped": "Stopped",
+  "instance.last_heartbeat": "Last heartbeat",
+  "instance.heartbeat_never": "No heartbeat yet",
+  "instance.missed_heartbeats": "missed {{n}}",
+  "instance.time_just_now": "just now",
+  "instance.time_seconds_ago": "{{n}}s ago",
+  "instance.time_minutes_ago": "{{n}}m ago",
+  "instance.time_hours_ago": "{{n}}h ago",
+  "instance.no_access_url": "No access URL",
+  "instance.copied": "Copied to clipboard",
+  "instance.list_updated_at": "Updated {{time}}",
+  "instance.auto_refresh_hint": "List auto-refreshes every 30s"
 }

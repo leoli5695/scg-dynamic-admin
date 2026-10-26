@@ -5,6 +5,7 @@ import {
 import { DeleteOutlined, HistoryOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { AlertHistoryItem } from '../../../types/alert';
+import { parseServerTime } from '../../../utils/serverTime';
 import { getLevelTagClass } from '../utils';
 
 interface HistoryTableProps {
@@ -35,7 +36,7 @@ const HistoryTable: React.FC<HistoryTableProps> = ({
       key: 'createdAt',
       render: (text: string) => (
         <span style={{ color: '#cbd5e1', fontFamily: 'JetBrains Mono, monospace', fontSize: 13.5 }}>
-          {new Date(text).toLocaleString()}
+          {parseServerTime(text).toLocaleString()}
         </span>
       ),
     },

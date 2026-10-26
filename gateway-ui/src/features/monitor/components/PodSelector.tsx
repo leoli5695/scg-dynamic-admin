@@ -5,6 +5,7 @@ import {
 import { CloudServerOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { InstancePod } from '../../../types/instance';
+import { parseServerTime } from '../../../utils/serverTime';
 import { getPodStatusColor } from '../utils';
 
 const { Text } = Typography;
@@ -61,7 +62,7 @@ const PodSelector: React.FC<PodSelectorProps> = ({
               </Text>
               {selectedPod.startTime && (
                 <Text type="secondary">
-                  {t('monitor.pod_start_time')}: {new Date(selectedPod.startTime).toLocaleString()}
+                  {t('monitor.pod_start_time')}: {parseServerTime(selectedPod.startTime).toLocaleString()}
                 </Text>
               )}
               {selectedPod.containers && selectedPod.containers.length > 0 && (

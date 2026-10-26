@@ -2,6 +2,7 @@ package com.leoli.gateway.admin.controller;
 
 import com.leoli.gateway.admin.dto.ApiResponse;
 import com.leoli.gateway.admin.service.GatewayInstanceService;
+import com.leoli.gateway.admin.service.GatewayTraceConfigRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -23,6 +24,7 @@ import java.util.Map;
 public class InstanceHealthController {
 
     private final GatewayInstanceService instanceService;
+    private final GatewayTraceConfigRegistry traceConfigRegistry;
 
     /**
      * Heartbeat endpoint for gateway instances.
@@ -54,6 +56,7 @@ public class InstanceHealthController {
             accessUrl = request.getAccessUrl();
             serverPort = request.getServerPort();
             managementPort = request.getManagementPort();
+            traceConfigRegistry.record(instanceId, request.getTraceConfig());
         }
         
         instanceService.handleHeartbeat(instanceId, metrics, accessUrl, serverPort, managementPort);
@@ -106,5 +109,7 @@ public class InstanceHealthController {
         private String accessUrl;
         private Integer serverPort;
         private Integer managementPort;
+        /** Effective gateway.trace.* capture settings; null on gateways that predate reporting. */
+        private Map<String, Object> traceConfig;
     }
 }

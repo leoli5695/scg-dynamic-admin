@@ -31,6 +31,7 @@ import {
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { StressTest, StressTestLiveStatus, StressTestMetrics } from '../../../types/stressTest';
+import { parseServerTime } from '../../../utils/serverTime';
 import StressTestCharts from './Charts';
 
 const { Title, Text } = Typography;
@@ -266,8 +267,8 @@ const HistoryTab: React.FC<Props> = ({
           <Text type="secondary">{t('stress_test.method')}: {test.method} | {t('stress_test.concurrent')}: {test.concurrentUsers}</Text>
           <br />
           <Text type="secondary">
-            {test.startTime && `${t('stress_test.started')}: ${new Date(test.startTime).toLocaleString()}`}
-            {test.endTime && ` | ${t('stress_test.ended')}: ${new Date(test.endTime).toLocaleString()}`}
+            {test.startTime && `${t('stress_test.started')}: ${parseServerTime(test.startTime).toLocaleString()}`}
+            {test.endTime && ` | ${t('stress_test.ended')}: ${parseServerTime(test.endTime).toLocaleString()}`}
           </Text>
         </Col>
       </Row>

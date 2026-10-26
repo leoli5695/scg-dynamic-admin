@@ -6,6 +6,7 @@ import { Badge, Descriptions, Drawer, Tag, Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
 import type { Plugin } from '../../../types/plugin';
 import { getCategoryColor, getPluginDescription, getPluginStatus } from '../utils';
+import { parseServerTime } from '../../../utils/serverTime';
 
 interface PluginDetailDrawerProps {
   plugin: Plugin;
@@ -72,10 +73,10 @@ const PluginDetailDrawer: React.FC<PluginDetailDrawerProps> = ({ plugin, onClose
           {getPluginDescription(plugin, i18n.language)}
         </Descriptions.Item>
         <Descriptions.Item label={t('plugins.created_at')}>
-          {new Date(plugin.createdAt).toLocaleString()}
+          {parseServerTime(plugin.createdAt).toLocaleString()}
         </Descriptions.Item>
         <Descriptions.Item label={t('plugins.updated_at')}>
-          {new Date(plugin.updatedAt).toLocaleString()}
+          {parseServerTime(plugin.updatedAt).toLocaleString()}
         </Descriptions.Item>
       </Descriptions>
     </Drawer>

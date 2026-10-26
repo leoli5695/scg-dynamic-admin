@@ -7,6 +7,7 @@ import {
 } from '@ant-design/icons';
 import type { ColumnType } from 'antd/es/table';
 import { useTranslation } from 'react-i18next';
+import { parseServerTime } from '../../../utils/serverTime';
 import {
   deleteDeployment, getClusterDeployments, getClusterNamespaces, getClusterNodes, getClusterPods, scaleDeployment,
 } from '../../../api/kubernetes';
@@ -58,7 +59,7 @@ const ClusterInfo: React.FC<{ cluster: KubernetesCluster }> = ({ cluster }) => {
       <div className="k8s-description-item">
         <span className="k8s-description-label">{t('k8s.last_checked')}</span>
         <span className="k8s-description-value">
-          {cluster.lastCheckedAt ? new Date(cluster.lastCheckedAt).toLocaleString() : fallback}
+          {cluster.lastCheckedAt ? parseServerTime(cluster.lastCheckedAt).toLocaleString() : fallback}
         </span>
       </div>
     </div>

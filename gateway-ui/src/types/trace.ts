@@ -69,9 +69,17 @@ export interface TraceConfig {
     samplingRateForErrors?: number;
     slowThresholdMs?: number;
     description?: string;
+    /** False until a gateway reports via heartbeat; the numbers above are then absent, not zero. */
+    reported?: boolean;
+    /** True when the last report is older than the staleness window. */
+    stale?: boolean;
+    maxBodySize?: number;
+    includeFilterChain?: boolean;
   };
   service?: {
     sampleRate?: number;
+    /** True when at least one service embedding gateway-trace-starter is reporting spans. */
+    reporting?: boolean;
     description?: string;
   };
   note?: string;

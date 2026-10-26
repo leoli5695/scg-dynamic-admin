@@ -7,6 +7,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   Badge, Button, Card, Col, Popconfirm, Row, Space, Statistic, Table, Tag, Tooltip  } from 'antd';
 import { message } from '../../utils/antdStatic';
+import { parseServerTime } from '../../utils/serverTime';
 import type { ColumnsType } from 'antd/es/table';
 import {
   AppstoreOutlined, DeleteOutlined, EyeOutlined, FileTextOutlined,
@@ -122,7 +123,7 @@ const PluginsPage: React.FC = () => {
       title: t('plugins.created'),
       dataIndex: 'createdAt',
       key: 'createdAt',
-      render: (date: string) => new Date(date).toLocaleString(),
+      render: (date: string) => parseServerTime(date).toLocaleString(),
     },
     {
       title: t('plugins.actions'),

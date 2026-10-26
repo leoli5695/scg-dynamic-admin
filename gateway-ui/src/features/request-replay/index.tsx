@@ -10,6 +10,7 @@ import {
 import { message } from '../../utils/antdStatic';
 import type { ColumnsType } from 'antd/es/table';
 import { DeleteOutlined, PlayCircleOutlined } from '@ant-design/icons';
+import { parseServerTime } from '../../utils/serverTime';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
 import { deleteAllTraces, getTracesByTimeRange } from '../../api/traces';
@@ -159,7 +160,7 @@ const RequestReplayPage: React.FC = () => {
       dataIndex: 'traceTime',
       key: 'traceTime',
       width: 140,
-      render: (time: string) => new Date(time).toLocaleTimeString(),
+      render: (time: string) => parseServerTime(time).toLocaleTimeString(),
     },
     {
       title: t('replay.method'),
