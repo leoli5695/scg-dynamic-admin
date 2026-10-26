@@ -3,13 +3,28 @@ package com.leoli.gateway.admin.exception;
 import com.leoli.license.client.exception.LicenseFeatureNotAllowedException;
 import com.leoli.license.client.exception.LicenseNotLoadedException;
 import com.leoli.license.client.exception.QuotaExceededException;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
 import java.util.Map;
@@ -17,6 +32,9 @@ import java.util.NoSuchElementException;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Unit tests for GlobalExceptionHandler.
@@ -182,6 +200,125 @@ class GlobalExceptionHandlerTest {
             assertTrue(body.containsKey("code"));
             assertTrue(body.containsKey("data"));
             assertTrue(body.containsKey("message"));
+        }
+    }
+
+    @Test
+    void handleGeneric_frameworkFault_shouldKeepItsStatusInsteadOf500() {
+        NoResourceFoundException ex = new NoResourceFoundException(HttpMethod.GET, "api/instances/instance/abc123");
+
+        ResponseEntity<Map<String, Object>> response = handler.handleGeneric(ex);
+
+        // The point of the ErrorResponse branch: an unmapped path is a 404, not a 500.
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        assertEquals(404, response.getBody().get("code"));
+        String message = (String) response.getBody().get("message");
+        assertTrue(message.contains("api/instances/instance/abc123"), message);
+    }
+
+    /**
+     * Dispatch-level coverage. Declaring the handlers is not enough - Spring has to resolve these
+     * exceptions to them instead of the catch-all, and the pre-existing specific mappings
+     * (field-level validation) have to keep winning over the broader ErrorResponse one.
+     * Standalone MockMvc, so this needs no database.
+     */
+    @Nested
+    class DispatchResolution {
+
+        private final MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new ProbeController())
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+
+        @Test
+        void unmatchedPath_shouldBeNotFoundNotServerError() throws Exception {
+            mockMvc.perform(get("/api/instances/instance/abc123"))
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
+        void nonNumericPathVariable_shouldBeBadRequestWithTheOffendingValue() throws Exception {
+            MvcResult result = mockMvc.perform(get("/probe/tj9j963zq2x1"))
+                    .andExpect(status().isBadRequest())
+                    .andReturn();
+
+            String body = result.getResponse().getContentAsString();
+            assertTrue(body.contains("Invalid value for 'id'"), body);
+            assertTrue(body.contains("tj9j963zq2x1"), body);
+            assertFalse(body.contains("An unexpected error occurred"), body);
+        }
+
+        @Test
+        void malformedJsonBody_shouldBeBadRequestWithoutEchoingThePayload() throws Exception {
+            MvcResult result = mockMvc.perform(post("/probe")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{not json"))
+                    .andExpect(status().isBadRequest())
+                    .andReturn();
+
+            // Jackson would quote the broken payload back; the caller gets a fixed text instead.
+            String body = result.getResponse().getContentAsString();
+            assertEquals("Malformed request body", readMessage(body));
+            assertFalse(body.contains("not json"), body);
+        }
+
+        @Test
+        void missingRequiredParam_shouldBeBadRequest() throws Exception {
+            MvcResult result = mockMvc.perform(get("/probe-required"))
+                    .andExpect(status().isBadRequest())
+                    .andReturn();
+
+            assertTrue(readMessage(result.getResponse().getContentAsString()).contains("instanceId"),
+                    result.getResponse().getContentAsString());
+        }
+
+        @Test
+        void invalidBean_shouldKeepTheFieldLevelValidationMessage() throws Exception {
+            MvcResult result = mockMvc.perform(post("/probe")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"name\":\"\"}"))
+                    .andExpect(status().isBadRequest())
+                    .andReturn();
+
+            // handleValidationErrors must still win over the ErrorResponse branch of
+            // handleGeneric, otherwise the caller loses the field name and only sees the
+            // generic problem detail.
+            String body = result.getResponse().getContentAsString();
+            assertTrue(body.contains("name: must not be blank"), body);
+        }
+
+        private String readMessage(String body) {
+            return body.replaceAll("(?s).*\"message\":\"(.*?)\".*", "$1");
+        }
+    }
+
+    static class ProbeBody {
+        @NotBlank(message = "must not be blank")
+        private String name;
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+    }
+
+    @RestController
+    static class ProbeController {
+        @GetMapping("/probe/{id}")
+        String byId(@PathVariable Long id) {
+            return "ok:" + id;
+        }
+
+        @GetMapping("/probe-required")
+        String required(@RequestParam String instanceId) {
+            return "ok:" + instanceId;
+        }
+
+        @PostMapping("/probe")
+        String create(@Valid @RequestBody ProbeBody body) {
+            return "ok:" + body.getName();
         }
     }
 }

@@ -5,10 +5,15 @@ import com.leoli.license.client.exception.LicenseNotLoadedException;
 import com.leoli.license.client.exception.QuotaExceededException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -117,15 +122,64 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * A path variable that does not parse - e.g. GET /api/instances/{id} with the UUID form that
+     * belongs on /api/instances/by-instance-id/{instanceId}. Not an {@link ErrorResponse}, so
+     * without this a caller mistake lands in the catch-all below as a 500.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<Map<String, Object>> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        String message = "Invalid value for '" + e.getName() + "': " + e.getValue();
+        log.warn("Type mismatch: {}", message);
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, message);
+    }
+
+    /**
+     * A request body that will not parse - truncated JSON, or a field of the wrong type. Also not
+     * an {@link ErrorResponse}. Jackson's message quotes the offending payload back, so the caller
+     * gets a fixed text and the detail stays in the log.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleUnreadableBody(HttpMessageNotReadableException e) {
+        log.warn("Unreadable request body: {}", e.getMessage());
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Malformed request body");
+    }
+
+    /**
+     * A required {@code @RequestParam} or header is absent. The parent type covers
+     * MissingServletRequestParameterException and its siblings, all of which are caller mistakes
+     * rather than server faults.
+     */
+    @ExceptionHandler(ServletRequestBindingException.class)
+    public ResponseEntity<Map<String, Object>> handleRequestBinding(ServletRequestBindingException e) {
+        log.warn("Request binding error: {}", e.getMessage());
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
+    }
+
+    /**
      * Catch-all handler for unexpected exceptions.
+     * <p>
+     * Framework-level request faults already carry the right status: 404 when nothing maps the
+     * path, 405 for a wrong method, 400 for a body that will not parse. Reporting those as 500
+     * "An unexpected error occurred" with a stack trace makes a frontend/backend version skew read
+     * as a server crash instead of a missing endpoint. They all implement {@link ErrorResponse},
+     * which is an interface and therefore cannot be declared with {@code @ExceptionHandler} - hence
+     * the instanceof check here rather than a dedicated mapping. The specific handlers above still
+     * win, so field-level validation messages are unaffected.
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGeneric(Exception e) {
+        if (e instanceof ErrorResponse errorResponse) {
+            HttpStatusCode status = errorResponse.getStatusCode();
+            String detail = errorResponse.getBody().getDetail();
+            String message = detail != null ? detail : e.getMessage();
+            log.warn("Request rejected with {}: {}", status.value(), message);
+            return buildErrorResponse(status, message);
+        }
         log.error("Unexpected error occurred", e);
         return buildErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
     }
 
-    private ResponseEntity<Map<String, Object>> buildErrorResponse(HttpStatus status, String message) {
+    private ResponseEntity<Map<String, Object>> buildErrorResponse(HttpStatusCode status, String message) {
         Map<String, Object> response = new HashMap<>();
         response.put("code", status.value());
         response.put("data", null);
