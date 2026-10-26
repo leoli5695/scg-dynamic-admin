@@ -66,6 +66,9 @@ export type TabKey = keyof typeof TAB_ICONS;
 
 const TAB_ORDER = Object.keys(TAB_ICONS) as TabKey[];
 
+/** Tabs whose content is read straight out of the Kubernetes API - empty for an external instance. */
+const KUBERNETES_ONLY_TABS: TabKey[] = ['events', 'resources'];
+
 const tabI18nKey = (key: TabKey): string => {
   if (key === 'overview') return 'instance.overview';
   return `menu.${key}`;
@@ -116,19 +119,6 @@ const InstanceDetailLayout: React.FC = () => {
     }
   };
 
-  const tabItems = TAB_ORDER.map((key) => {
-    const Icon = TAB_ICONS[key];
-    return {
-      key,
-      label: (
-        <span>
-          <Icon />
-          {t(tabI18nKey(key))}
-        </span>
-      ),
-    };
-  });
-
   if (instanceRequest.loading && !instance) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
@@ -175,6 +165,27 @@ const InstanceDetailLayout: React.FC = () => {
 
   const statusText = getStatusTextByName(instance.status ?? '', t);
   const statusColor = getStatusColorByName(instance.status ?? '');
+  /**
+   * No clusterId means the gateway is externally managed: the console owns its configuration but
+   * not its process, so the Kubernetes-only tabs and lifecycle buttons are hidden rather than
+   * left to fail with a 400.
+   */
+  const isExternal = instance.clusterId == null;
+
+  const tabItems = TAB_ORDER
+    .filter((key) => !isExternal || !KUBERNETES_ONLY_TABS.includes(key))
+    .map((key) => {
+      const Icon = TAB_ICONS[key];
+      return {
+        key,
+        label: (
+          <span>
+            <Icon />
+            {t(tabI18nKey(key))}
+          </span>
+        ),
+      };
+    });
 
   return (
     <InstanceDetailProvider value={{ instance, globalNacosAddr, refresh: instanceRequest.run }}>
@@ -195,10 +206,15 @@ const InstanceDetailLayout: React.FC = () => {
             <Tag className="instance-detail-status-tag" color={statusColor}>
               {statusText}
             </Tag>
+            {isExternal && (
+              <Tooltip title={t('instance.external_lifecycle_hint')}>
+                <Tag color="purple">{t('instance.external_tag')}</Tag>
+              </Tooltip>
+            )}
           </div>
 
           <div className="instance-detail-header-right">
-            {instance.status === 'Running' && (
+            {!isExternal && instance.status === 'Running' && (
               <>
                 <Button icon={<PlusSquareOutlined />} onClick={() => setScaleModalOpen(true)}>
                   {t('instance.scale')}
@@ -215,7 +231,7 @@ const InstanceDetailLayout: React.FC = () => {
                 </Button>
               </>
             )}
-            {instance.status === 'Stopped' && (
+            {!isExternal && instance.status === 'Stopped' && (
               <Button
                 type="primary"
                 icon={<PlayCircleOutlined />}

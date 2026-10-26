@@ -77,8 +77,10 @@ export interface GatewayInstance {
 /** POST /api/instances request body (dto/InstanceCreateRequest.java). */
 export interface InstanceCreateRequest {
   instanceName: string;
+  /** Omit to register an externally managed instance (no Kubernetes deployment). */
   clusterId?: number;
-  namespace: string;
+  /** Required for a Kubernetes instance; derived as external-{instanceId} when omitted. */
+  namespace?: string;
   createNamespace?: boolean;
   /** Defaults to "medium" on the backend. */
   specType?: string;

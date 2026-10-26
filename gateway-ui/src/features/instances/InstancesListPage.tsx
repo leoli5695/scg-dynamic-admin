@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import {
-  Button, Card, Col, Empty, Popconfirm, Row, Spin, Tag, Tooltip, Typography  } from 'antd';
+  Button, Card, Col, Empty, Popconfirm, Row, Space, Spin, Tag, Tooltip, Typography  } from 'antd';
 import { message } from '../../utils/antdStatic';
 import {
   CloudServerOutlined, ClusterOutlined, DashboardOutlined, DeleteOutlined,
@@ -83,7 +83,6 @@ const InstancesListPage: React.FC = () => {
             type="primary"
             icon={<PlusOutlined />}
             onClick={() => navigate('/instances/create')}
-            disabled={clusterCount === 0}
             size="large"
           >
             {t('instance.create_instance')}
@@ -93,7 +92,11 @@ const InstancesListPage: React.FC = () => {
 
       <Spin spinning={loading}>
         <Row gutter={[16, 16]} className="instances-grid">
-          {list.map((instance) => (
+          {list.map((instance) => {
+            // An externally managed instance has no Deployment, so the console cannot start or
+            // stop it - offering the buttons would only produce a 400.
+            const hasCluster = instance.clusterId != null;
+            return (
             <Col xs={24} sm={12} lg={8} xl={8} key={instance.id}>
               <Card
                 className={`instance-card ${statusBarClass(instance.statusCode)}`}
@@ -112,7 +115,7 @@ const InstancesListPage: React.FC = () => {
                     <div className="instance-card-meta">
                       <span className="instance-cluster">
                         <ClusterOutlined style={{ marginRight: 4, fontSize: 12 }} />
-                        {instance.clusterName}
+                        {hasCluster ? instance.clusterName : t('instance.external_tag')}
                       </span>
                       <span className="instance-divider">·</span>
                       <span className="instance-namespace">
@@ -166,7 +169,7 @@ const InstancesListPage: React.FC = () => {
                 </div>
 
                 <div className="instance-card-actions" onClick={(e) => e.stopPropagation()}>
-                  {instance.statusCode === INSTANCE_STATUS.RUNNING && (
+                  {hasCluster && instance.statusCode === INSTANCE_STATUS.RUNNING && (
                     <Tooltip title={t('instance.stop')}>
                       <Button
                         className="instance-action-btn"
@@ -180,7 +183,7 @@ const InstancesListPage: React.FC = () => {
                       />
                     </Tooltip>
                   )}
-                  {(instance.statusCode === INSTANCE_STATUS.STOPPED
+                  {hasCluster && (instance.statusCode === INSTANCE_STATUS.STOPPED
                     || instance.statusCode === INSTANCE_STATUS.ERROR) && (
                     <Tooltip title={t('instance.start')}>
                       <Button
@@ -225,7 +228,8 @@ const InstancesListPage: React.FC = () => {
                 </div>
               </Card>
             </Col>
-          ))}
+            );
+          })}
         </Row>
 
         {list.length === 0 && !loading && clusterCount > 0 && (
@@ -243,9 +247,14 @@ const InstancesListPage: React.FC = () => {
               image={Empty.PRESENTED_IMAGE_SIMPLE}
               description={<Text type="secondary">{t('instance.no_clusters_available')}</Text>}
             >
-              <Button type="primary" onClick={() => navigate('/kubernetes')}>
-                {t('instance.go_import_cluster')}
-              </Button>
+              <Space>
+                <Button onClick={() => navigate('/kubernetes')}>
+                  {t('instance.go_import_cluster')}
+                </Button>
+                <Button type="primary" onClick={() => navigate('/instances/create')}>
+                  {t('instance.register_external')}
+                </Button>
+              </Space>
             </Empty>
           </div>
         )}

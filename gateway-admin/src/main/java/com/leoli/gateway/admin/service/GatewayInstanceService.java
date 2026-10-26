@@ -268,31 +268,30 @@ public class GatewayInstanceService {
 
     /**
      * Create a new gateway instance.
-     * This will deploy the gateway to the specified Kubernetes cluster.
+     * <p>
+     * With a {@code clusterId} this deploys the gateway to that Kubernetes cluster. Without one the
+     * instance is EXTERNALLY managed: a gateway the operator started themselves (docker run, bare
+     * metal, another orchestrator). The console still owns its configuration - routes, services,
+     * strategies, auth policies and certificates are published to the instance's own Nacos
+     * namespace exactly as for a Kubernetes instance. Only the lifecycle operations
+     * (deploy/start/stop/scale/pods/spec/image) are unavailable, and every one of those already
+     * rejects an instance with no cluster association.
      */
     @Transactional
     public GatewayInstanceEntity createInstance(InstanceCreateRequest request) {
-        // Guard before findById: a null id makes Spring Data throw its own
-        // "The given id must not be null", which the persistence exception translator wraps
-        // into a non-IllegalArgumentException - so the controller's 400 branch never sees it
-        // and the caller gets an opaque 500 instead of a usable validation error.
-        if (request.getClusterId() == null) {
-            throw new IllegalArgumentException(
-                "clusterId is required: a gateway instance must belong to a Kubernetes cluster");
-        }
+        boolean external = request.getClusterId() == null;
 
-        // Validate cluster exists
-        KubernetesCluster cluster = clusterRepository.findById(request.getClusterId())
-                .orElseThrow(() -> new IllegalArgumentException("Cluster not found: " + request.getClusterId()));
+        // A null clusterId is not an error - it selects the externally managed path below. A
+        // non-null one is resolved here, up front, so an unknown id surfaces as an
+        // IllegalArgumentException (400) rather than Spring Data's "The given id must not be null"
+        // from a later findById, which the persistence exception translator wraps into an opaque 500.
+        final KubernetesCluster cluster = external ? null
+                : clusterRepository.findById(request.getClusterId())
+                        .orElseThrow(() -> new IllegalArgumentException("Cluster not found: " + request.getClusterId()));
 
         // Check instance name uniqueness
         if (instanceRepository.existsByInstanceName(request.getInstanceName())) {
             throw new IllegalArgumentException("Instance name already exists: " + request.getInstanceName());
-        }
-
-        // Check namespace uniqueness
-        if (instanceRepository.existsByNamespace(request.getNamespace())) {
-            throw new IllegalArgumentException("Namespace already used by another instance: " + request.getNamespace());
         }
 
         // Generate instance ID (12 characters, lowercase alphanumeric)
@@ -300,7 +299,24 @@ public class GatewayInstanceService {
         // Use full instanceId for nacosNamespace and deploymentName (e.g., gateway-kd2onojjfcu9)
         // This makes namespace more traceable - you can directly see which instance it belongs to
         String nacosNamespace = "gateway-" + instanceId;  // e.g., gateway-kd2onojjfcu9
-        String deploymentName = nacosNamespace;  // Use same name for consistency
+
+        // `namespace` is the Kubernetes namespace: NOT NULL and unique. An external instance has
+        // none, so derive a unique placeholder rather than rejecting the registration.
+        String namespace = request.getNamespace();
+        if (namespace == null || namespace.isBlank()) {
+            if (!external) {
+                throw new IllegalArgumentException("namespace is required for a Kubernetes instance");
+            }
+            namespace = "external-" + instanceId;
+        }
+
+        // Check namespace uniqueness
+        if (instanceRepository.existsByNamespace(namespace)) {
+            throw new IllegalArgumentException("Namespace already used by another instance: " + namespace);
+        }
+
+        // Kubernetes object names: meaningless for an instance the console never deploys.
+        String deploymentName = external ? null : nacosNamespace;
 
         // Get spec configuration
         InstanceSpec spec = InstanceSpec.fromType(request.getSpecType());
@@ -315,11 +331,11 @@ public class GatewayInstanceService {
         // Get image
         String image = request.getImage();
         if (image == null || image.isEmpty()) {
-            image = defaultImage;
+            image = external ? null : defaultImage;
         }
 
         // Generate service name
-        String serviceName = deploymentName + "-service";
+        String serviceName = external ? null : deploymentName + "-service";
 
         // Get port configuration
         int serverPort = request.getServerPort() != null ? request.getServerPort() : defaultServerPort;
@@ -330,8 +346,8 @@ public class GatewayInstanceService {
         entity.setInstanceId(instanceId);
         entity.setInstanceName(request.getInstanceName());
         entity.setClusterId(request.getClusterId());
-        entity.setClusterName(cluster.getClusterName());
-        entity.setNamespace(request.getNamespace());
+        entity.setClusterName(cluster != null ? cluster.getClusterName() : null);
+        entity.setNamespace(namespace);
         entity.setNacosNamespace(nacosNamespace);
         entity.setSpecType(request.getSpecType());
         entity.setCpuCores(cpuCores);
@@ -360,18 +376,28 @@ public class GatewayInstanceService {
                 nacosNamespace,
                 "Gateway instance namespace for " + request.getInstanceName());
 
-        // Deploy to Kubernetes
-        try {
-            deployToKubernetes(entity, cluster, request.getCreateNamespace(), request.getImagePullPolicy(), serverPort, managementPort);
-            // Status will be updated to RUNNING when heartbeat is received
-            entity.setStatus(InstanceStatus.STARTING.getDescription());
-            entity.setStatusCode(InstanceStatus.STARTING.getCode());
-            entity.setStatusMessage("Instance deployed, waiting for heartbeat");
-        } catch (Exception e) {
-            log.error("Failed to deploy instance {} to Kubernetes: {}", instanceId, e.getMessage(), e);
-            entity.setStatus(InstanceStatus.ERROR.getDescription());
-            entity.setStatusCode(InstanceStatus.ERROR.getCode());
-            entity.setStatusMessage("Deployment failed: " + e.getMessage());
+        if (external) {
+            // Nothing to deploy: the gateway process already exists. It becomes manageable once it
+            // is (re)started pointing at this row - the status message is the operator's recipe.
+            entity.setStatusMessage("Externally managed instance registered, waiting for heartbeat. "
+                    + "Start the gateway with GATEWAY_INSTANCE_ID=" + instanceId
+                    + " and NACOS_NAMESPACE=" + nacosNamespace);
+            log.info("Registered externally managed gateway instance {} (nacos namespace {}), no Kubernetes deployment",
+                    instanceId, nacosNamespace);
+        } else {
+            // Deploy to Kubernetes
+            try {
+                deployToKubernetes(entity, cluster, request.getCreateNamespace(), request.getImagePullPolicy(), serverPort, managementPort);
+                // Status will be updated to RUNNING when heartbeat is received
+                entity.setStatus(InstanceStatus.STARTING.getDescription());
+                entity.setStatusCode(InstanceStatus.STARTING.getCode());
+                entity.setStatusMessage("Instance deployed, waiting for heartbeat");
+            } catch (Exception e) {
+                log.error("Failed to deploy instance {} to Kubernetes: {}", instanceId, e.getMessage(), e);
+                entity.setStatus(InstanceStatus.ERROR.getDescription());
+                entity.setStatusCode(InstanceStatus.ERROR.getCode());
+                entity.setStatusMessage("Deployment failed: " + e.getMessage());
+            }
         }
 
         // Update namespace cache
@@ -1058,6 +1084,13 @@ public class GatewayInstanceService {
         if (currentStatus != InstanceStatus.RUNNING.getCode() &&
                 currentStatus != InstanceStatus.STOPPED.getCode()) {
             throw new IllegalStateException("Can only update spec when instance is running or stopped");
+        }
+
+        // Local startup compatibility: check cluster association. Without this the next statement
+        // calls findById(null), and Spring Data answers "The given id must not be null" - a
+        // message that tells the operator nothing about the instance being externally managed.
+        if (instance.getClusterId() == null) {
+            throw new IllegalStateException("Instance has no cluster association. Cannot perform K8s operations on locally started instances.");
         }
 
         // Determine spec values

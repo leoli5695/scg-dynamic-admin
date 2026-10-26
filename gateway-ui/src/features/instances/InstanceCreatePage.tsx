@@ -5,7 +5,7 @@
  */
 import React, { useMemo, useState } from 'react';
 import {
-  Alert, Button, Card, Col, Divider, Form, Input, InputNumber, Row,
+  Alert, Button, Card, Col, Divider, Form, Input, InputNumber, Radio, Row,
   Select, Space, Spin, Tag  } from 'antd';
 import { message } from '../../utils/antdStatic';
 import {
@@ -49,11 +49,32 @@ const parseImageName = (fullName: string): LocalImage => {
   };
 };
 
+/**
+ * Strip everything the backend would interpret as "deploy this to Kubernetes". An external
+ * instance keeps only its identity and the middleware addresses it should be pointed at; the
+ * absence of clusterId is what selects the external registration path server-side.
+ */
+const toExternalRequest = (values: InstanceCreateRequest): InstanceCreateRequest => ({
+  instanceName: values.instanceName,
+  description: values.description,
+  nacosServerAddr: values.nacosServerAddr,
+  redisServerAddr: values.redisServerAddr,
+  jaegerServerAddr: values.jaegerServerAddr,
+  prometheusServerAddr: values.prometheusServerAddr,
+});
+
 const InstanceCreatePage: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [form] = Form.useForm<InstanceCreateRequest>();
   const [submitting, setSubmitting] = useState(false);
+  /**
+   * 'kubernetes' deploys a new gateway; 'external' only registers one the operator already
+   * started. The backend decides by the presence of clusterId, so an external submit must not
+   * carry any of the Kubernetes-only fields.
+   */
+  const [deployMode, setDeployMode] = useState<'kubernetes' | 'external'>('kubernetes');
+  const isExternal = deployMode === 'external';
 
   const clusters = useRequest((signal) => getClusters({ signal }));
   const specs = useRequest((signal) => listInstanceSpecs({ signal }));
@@ -63,7 +84,7 @@ const InstanceCreatePage: React.FC = () => {
   const selectedImagePullPolicy = Form.useWatch('imagePullPolicy', form);
 
   // Local images (only relevant when pull policy is "Never")
-  const needLocalImages = !!selectedClusterId && selectedImagePullPolicy === 'Never';
+  const needLocalImages = !isExternal && !!selectedClusterId && selectedImagePullPolicy === 'Never';
   const [selectedImageNamespace, setSelectedImageNamespace] = useState<string | undefined>(undefined);
 
   const imagesRequest = useRequest(
@@ -104,9 +125,11 @@ const InstanceCreatePage: React.FC = () => {
   const handleSubmit = async (values: InstanceCreateRequest) => {
     setSubmitting(true);
     try {
-      await createInstance(values);
+      const created = await createInstance(isExternal ? toExternalRequest(values) : values);
       message.success(t('instance.create_success'));
-      navigate('/instances');
+      // An external instance still has to be wired up by hand, so land on its detail page where
+      // the generated GATEWAY_INSTANCE_ID / NACOS_NAMESPACE are shown instead of the list.
+      navigate(created?.instanceId ? `/instances/${created.instanceId}` : '/instances');
     } catch (error) {
       const msg = error instanceof ApiError && error.message
         ? error.message
@@ -162,6 +185,36 @@ const InstanceCreatePage: React.FC = () => {
                 <span className="form-section-title">{t('instance.basic_info')}</span>
               </div>
               <div className="form-section-content">
+                <Form.Item label={t('instance.deploy_mode')} style={{ marginBottom: 16 }}>
+                  <Radio.Group
+                    value={deployMode}
+                    onChange={(e) => setDeployMode(e.target.value)}
+                    optionType="button"
+                    buttonStyle="solid"
+                    size="large"
+                  >
+                    <Radio.Button value="kubernetes">
+                      <Space>
+                        <ClusterOutlined />
+                        {t('instance.deploy_mode_kubernetes')}
+                      </Space>
+                    </Radio.Button>
+                    <Radio.Button value="external">
+                      <Space>
+                        <CloudServerOutlined />
+                        {t('instance.deploy_mode_external')}
+                      </Space>
+                    </Radio.Button>
+                  </Radio.Group>
+                </Form.Item>
+                {isExternal && (
+                  <Alert
+                    message={t('instance.external_hint')}
+                    type="warning"
+                    showIcon
+                    style={{ marginBottom: 16 }}
+                  />
+                )}
                 <Row gutter={16}>
                   <Col span={12}>
                     <Form.Item
@@ -172,47 +225,51 @@ const InstanceCreatePage: React.FC = () => {
                       <Input placeholder={t('instance.instance_name_placeholder')} size="large" />
                     </Form.Item>
                   </Col>
-                  <Col span={12}>
-                    <Form.Item
-                      name="clusterId"
-                      label={t('instance.cluster')}
-                      rules={[{ required: true, message: t('common.required') }]}
-                    >
-                      <Select placeholder={t('instance.select_cluster')} size="large">
-                        {(clusters.data ?? [])
-                          .filter((c) => c.connectionStatus === 'CONNECTED')
-                          .map((cluster) => (
-                            <Option key={cluster.id} value={cluster.id}>
-                              <Space>
-                                <ClusterOutlined style={{ color: '#60a5fa' }} />
-                                {cluster.clusterName}
-                                <Tag color="blue" style={{ marginLeft: 8 }}>{cluster.clusterVersion}</Tag>
-                              </Space>
-                            </Option>
-                          ))}
-                      </Select>
-                    </Form.Item>
-                  </Col>
+                  {!isExternal && (
+                    <Col span={12}>
+                      <Form.Item
+                        name="clusterId"
+                        label={t('instance.cluster')}
+                        rules={[{ required: true, message: t('common.required') }]}
+                      >
+                        <Select placeholder={t('instance.select_cluster')} size="large">
+                          {(clusters.data ?? [])
+                            .filter((c) => c.connectionStatus === 'CONNECTED')
+                            .map((cluster) => (
+                              <Option key={cluster.id} value={cluster.id}>
+                                <Space>
+                                  <ClusterOutlined style={{ color: '#60a5fa' }} />
+                                  {cluster.clusterName}
+                                  <Tag color="blue" style={{ marginLeft: 8 }}>{cluster.clusterVersion}</Tag>
+                                </Space>
+                              </Option>
+                            ))}
+                        </Select>
+                      </Form.Item>
+                    </Col>
+                  )}
                 </Row>
-                <Row gutter={16}>
-                  <Col span={12}>
-                    <Form.Item
-                      name="namespace"
-                      label={t('instance.namespace')}
-                      rules={[{ required: true, message: t('common.required') }]}
-                    >
-                      <Input placeholder={t('instance.namespace_placeholder')} size="large" />
-                    </Form.Item>
-                  </Col>
-                  <Col span={12}>
-                    <Form.Item name="createNamespace" label={t('instance.create_namespace')}>
-                      <Select size="large">
-                        <Option value>{t('common.yes')}</Option>
-                        <Option value={false}>{t('common.no')}</Option>
-                      </Select>
-                    </Form.Item>
-                  </Col>
-                </Row>
+                {!isExternal && (
+                  <Row gutter={16}>
+                    <Col span={12}>
+                      <Form.Item
+                        name="namespace"
+                        label={t('instance.namespace')}
+                        rules={[{ required: true, message: t('common.required') }]}
+                      >
+                        <Input placeholder={t('instance.namespace_placeholder')} size="large" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item name="createNamespace" label={t('instance.create_namespace')}>
+                        <Select size="large">
+                          <Option value>{t('common.yes')}</Option>
+                          <Option value={false}>{t('common.no')}</Option>
+                        </Select>
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                )}
               </div>
             </div>
 
@@ -275,7 +332,8 @@ const InstanceCreatePage: React.FC = () => {
               </div>
             </div>
 
-            {/* Resource Section */}
+            {/* Resource Section — Kubernetes only: an external instance has no Deployment to size. */}
+            {!isExternal && (
             <div className="form-section">
               <div className="form-section-header">
                 <div className="form-section-icon">
@@ -350,16 +408,20 @@ const InstanceCreatePage: React.FC = () => {
                 </Row>
               </div>
             </div>
+            )}
 
-            {/* Image Section */}
+            {/* Image Section — Kubernetes only; the description below it applies to both modes. */}
             <div className="form-section">
-              <div className="form-section-header">
-                <div className="form-section-icon">
-                  <CloudSyncOutlined />
+              {!isExternal && (
+                <div className="form-section-header">
+                  <div className="form-section-icon">
+                    <CloudSyncOutlined />
+                  </div>
+                  <span className="form-section-title">{t('instance.image_section')}</span>
                 </div>
-                <span className="form-section-title">{t('instance.image_section')}</span>
-              </div>
+              )}
               <div className="form-section-content">
+                {!isExternal && (
                 <Row gutter={16}>
                   <Col span={12}>
                     <Form.Item
@@ -452,6 +514,7 @@ const InstanceCreatePage: React.FC = () => {
                     </Form.Item>
                   </Col>
                 </Row>
+                )}
                 <Form.Item name="description" label={t('instance.description')}>
                   <TextArea rows={3} size="large" showCount maxLength={500} />
                 </Form.Item>
@@ -462,7 +525,7 @@ const InstanceCreatePage: React.FC = () => {
             <div className="form-footer">
               <Button size="large" onClick={handleCancel}>{t('common.cancel')}</Button>
               <Button type="primary" size="large" htmlType="submit" loading={submitting}>
-                {t('instance.create_and_deploy')}
+                {isExternal ? t('instance.register_external') : t('instance.create_and_deploy')}
               </Button>
             </div>
           </Form>

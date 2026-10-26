@@ -126,5 +126,13 @@
   "instance.image_section": "Image",
   "instance.page_subtitle": "Create, start/stop and scale gateway instances",
   "instance.no_clusters_available": "No clusters available — import a Kubernetes cluster first",
-  "instance.go_import_cluster": "Import a cluster"
+  "instance.go_import_cluster": "Import a cluster",
+  "instance.deploy_mode": "Deployment mode",
+  "instance.deploy_mode_kubernetes": "Deploy to Kubernetes",
+  "instance.deploy_mode_external": "External (self-managed)",
+  "instance.external_hint": "An external instance is started by you (docker run, bare metal, another orchestrator); the console only owns its configuration - routes, services, strategies. Registration creates a dedicated Nacos namespace, and you must restart the gateway with the returned GATEWAY_INSTANCE_ID and NACOS_NAMESPACE before it shows as running. Kubernetes operations - scaling, start/stop, pods, image upgrade - are unavailable for external instances.",
+  "instance.external_tag": "External",
+  "instance.register_external": "Register an external instance",
+  "instance.external_env_title": "Environment variables the gateway needs",
+  "instance.external_lifecycle_hint": "Start/stop and scaling of an external instance are handled by your own deployment; the console does not offer these actions."
 }

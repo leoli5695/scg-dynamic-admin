@@ -4,7 +4,7 @@
  */
 import React, { useState } from 'react';
 import {
-  Badge, Button, Card, Col, Descriptions, Popover, Progress, Row,
+  Alert, Badge, Button, Card, Col, Descriptions, Popover, Progress, Row,
   Space, Spin, Statistic, Tag, Tooltip, Typography
 } from 'antd';
 import {
@@ -363,6 +363,7 @@ const OverviewTab: React.FC = () => {
   const { instance, globalNacosAddr } = useInstanceDetail();
 
   const isRunning = instance.status === 'Running' || instance.status === 'RUNNING';
+  const isExternal = instance.clusterId == null;
   const accessUrl = getEffectiveAccessUrl(instance);
   const nacosAddr = instance.nacosServerAddr
     ? getEffectiveNacosServerAddr(instance)
@@ -379,6 +380,35 @@ const OverviewTab: React.FC = () => {
 
   return (
     <div className="instance-overview-stats">
+      {isExternal && (
+        <Alert
+          type={isRunning ? 'success' : 'info'}
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={t('instance.external_tag')}
+          description={(
+            <div>
+              <div>{t('instance.external_lifecycle_hint')}</div>
+              {!isRunning && (
+                <>
+                  <div style={{ marginTop: 8, marginBottom: 4 }}>
+                    {t('instance.external_env_title')}
+                  </div>
+                  <Text code copyable={{ text: `GATEWAY_INSTANCE_ID=${instance.instanceId}` }}>
+                    GATEWAY_INSTANCE_ID=
+                    {instance.instanceId}
+                  </Text>
+                  <br />
+                  <Text code copyable={{ text: `NACOS_NAMESPACE=${instance.nacosNamespace ?? ''}` }}>
+                    NACOS_NAMESPACE=
+                    {instance.nacosNamespace}
+                  </Text>
+                </>
+              )}
+            </div>
+          )}
+        />
+      )}
       <Row gutter={[24, 24]}>
         <Col xs={24} md={12} lg={6}>
           <Card className="instance-stat-card">
@@ -411,7 +441,18 @@ const OverviewTab: React.FC = () => {
         </Col>
         <Col xs={24} md={12} lg={6}>
           <Card className="instance-stat-card">
-            <HealthScorePopover />
+            {isExternal ? (
+              // The backend answers "score 100 / Healthy" for a clusterless instance, which reads
+              // as a clean bill of health for something it cannot see at all.
+              <div className="text-center">
+                <div style={{ marginBottom: 8, color: 'var(--text-muted)', fontSize: 12 }}>
+                  {t('instance.health_score')}
+                </div>
+                <Text type="secondary">{t('instance.health_unavailable')}</Text>
+              </div>
+            ) : (
+              <HealthScorePopover />
+            )}
           </Card>
         </Col>
       </Row>
@@ -422,7 +463,7 @@ const OverviewTab: React.FC = () => {
             <Text copyable>{instance.instanceId}</Text>
           </Descriptions.Item>
           <Descriptions.Item label={t('instance.cluster')}>
-            {instance.clusterName}
+            {isExternal ? t('instance.external_tag') : instance.clusterName}
           </Descriptions.Item>
           <Descriptions.Item label={t('instance.namespace')}>
             {instance.namespace}

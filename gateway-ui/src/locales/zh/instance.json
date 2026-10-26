@@ -126,5 +126,13 @@
   "instance.image_section": "镜像配置",
   "instance.page_subtitle": "管理网关实例的创建、启停与扩缩容",
   "instance.no_clusters_available": "暂无可用集群，先导入一个 Kubernetes 集群",
-  "instance.go_import_cluster": "去导入集群"
+  "instance.go_import_cluster": "去导入集群",
+  "instance.deploy_mode": "部署方式",
+  "instance.deploy_mode_kubernetes": "Kubernetes 集群部署",
+  "instance.deploy_mode_external": "外部实例（自行启动）",
+  "instance.external_hint": "外部实例由你自己启动（docker run、物理机或其他编排系统），控制台只负责下发路由、服务、策略等配置。注册后会生成专属 Nacos 命名空间，你需要用返回的 GATEWAY_INSTANCE_ID 与 NACOS_NAMESPACE 重启网关，实例才会变为运行中。扩缩容、启停、Pod、镜像升级等 Kubernetes 操作对外部实例不可用。",
+  "instance.external_tag": "外部实例",
+  "instance.register_external": "注册外部实例",
+  "instance.external_env_title": "启动网关所需环境变量",
+  "instance.external_lifecycle_hint": "外部实例的启停与扩缩容由你自己的部署方式管理，控制台不提供这些操作。"
 }

@@ -125,6 +125,11 @@ public class GatewayInstanceController {
             GatewayInstanceEntity instance = instanceService.startInstance(id);
             log.info("Started gateway instance: {}", id);
             return ResponseEntity.ok(ApiResponse.success(instance, "Instance started successfully"));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            // An externally managed instance has no Deployment to scale, so start/stop is refused
+            // by the service. That is a rejected request, not a server fault.
+            log.warn("Failed to start instance: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
         } catch (Exception e) {
             log.error("Error starting instance", e);
             return ResponseEntity.internalServerError().body(ApiResponse.error("Failed to start instance: " + e.getMessage()));
@@ -140,6 +145,9 @@ public class GatewayInstanceController {
             GatewayInstanceEntity instance = instanceService.stopInstance(id);
             log.info("Stopped gateway instance: {}", id);
             return ResponseEntity.ok(ApiResponse.success(instance, "Instance stopped successfully"));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            log.warn("Failed to stop instance: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
         } catch (Exception e) {
             log.error("Error stopping instance", e);
             return ResponseEntity.internalServerError().body(ApiResponse.error("Failed to stop instance: " + e.getMessage()));
