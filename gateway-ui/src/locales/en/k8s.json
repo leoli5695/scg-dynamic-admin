@@ -113,5 +113,13 @@
   "k8s.status_connected": "Connected",
   "k8s.status_failed": "Connection Failed",
   "k8s.status_unknown": "Unknown",
-  "k8s.version_unknown": "Unknown version"
+  "k8s.version_unknown": "Unknown version",
+  "k8s.reset_filters": "Reset filters",
+  "k8s.no_matches": "No matching clusters",
+  "k8s.connection_filter": "Cluster connection status",
+  "k8s.all_connections": "All connection states",
+  "k8s.needs_attention": "Disconnected / error",
+  "k8s.search_placeholder": "Search cluster name or version",
+  "k8s.empty_description": "Import a cluster to view nodes, pods and connectivity, and manage gateway deployments. Have your cluster Kubeconfig ready.",
+  "k8s.workspace_label": "GATEWAY WORKSPACE / CLUSTER INFRASTRUCTURE"
 }

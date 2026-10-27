@@ -149,5 +149,19 @@
   "instance.no_access_url": "No access URL",
   "instance.copied": "Copied to clipboard",
   "instance.list_updated_at": "Updated {{time}}",
-  "instance.auto_refresh_hint": "List auto-refreshes every 30s"
+  "instance.auto_refresh_hint": "List auto-refreshes every 30s",
+  "instance.total_hint": "All registered gateway instances",
+  "instance.running_hint": "Instances with running status",
+  "instance.workspace_label": "GATEWAY WORKSPACE / RESOURCES",
+  "instance.stopped_hint": "Currently stopped instances",
+  "instance.reset_search": "Reset filters",
+  "instance.search_placeholder": "Search name, instance ID or address",
+  "instance.overview_label": "Instance overview and status filters",
+  "instance.stale_notice": "{{count}} running instance(s) have delayed heartbeats. Check gateway connectivity and heartbeat reporting.",
+  "instance.error_hint": "Instances requiring investigation",
+  "instance.no_matches": "No matching instances",
+  "instance.filtered_status": "Status filter: {{status}}",
+  "instance.open_console": "Open console",
+  "instance.inventory_title": "Gateway instances",
+  "instance.clear_filter": "Clear filter"
 }

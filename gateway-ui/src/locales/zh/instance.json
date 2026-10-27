@@ -149,5 +149,19 @@
   "instance.no_access_url": "暂无访问地址",
   "instance.copied": "已复制到剪贴板",
   "instance.list_updated_at": "更新于 {{time}}",
-  "instance.auto_refresh_hint": "列表每 30 秒自动刷新"
+  "instance.auto_refresh_hint": "列表每 30 秒自动刷新",
+  "instance.total_hint": "已接入的全部网关实例",
+  "instance.running_hint": "服务状态为运行中",
+  "instance.workspace_label": "网关工作台 / 资源管理",
+  "instance.stopped_hint": "当前已停止的实例",
+  "instance.reset_search": "重置筛选",
+  "instance.search_placeholder": "搜索名称、实例 ID 或地址",
+  "instance.overview_label": "实例概览与状态筛选",
+  "instance.stale_notice": "{{count}} 个运行中实例的心跳已延迟，请检查网关连接或心跳上报。",
+  "instance.error_hint": "需要排查的异常实例",
+  "instance.no_matches": "没有找到匹配的实例",
+  "instance.filtered_status": "当前筛选：{{status}}",
+  "instance.open_console": "进入控制台",
+  "instance.inventory_title": "网关实例",
+  "instance.clear_filter": "清除筛选"
 }

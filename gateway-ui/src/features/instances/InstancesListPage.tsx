@@ -6,26 +6,55 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Button, Card, Col, Empty, Popconfirm, Row, Space, Spin, Tag, Tooltip, Typography,
+  Alert,
+  Button,
+  Card,
+  Col,
+  Empty,
+  Input,
+  Popconfirm,
+  Row,
+  Space,
+  Spin,
+  Tag,
+  Tooltip,
+  Typography,
 } from 'antd';
 import { message } from '../../utils/antdStatic';
 import {
-  CloudServerOutlined, CopyOutlined, DeleteOutlined,
-  InboxOutlined, LinkOutlined, PauseCircleOutlined, PlayCircleOutlined, PlusOutlined,
+  CloudServerOutlined,
+  CopyOutlined,
+  DeleteOutlined,
+  InboxOutlined,
+  LinkOutlined,
+  PauseCircleOutlined,
+  PlayCircleOutlined,
+  PlusOutlined,
   ReloadOutlined,
+  ArrowRightOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  SearchOutlined,
 } from '@ant-design/icons';
 import copy from 'copy-to-clipboard';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { usePolling, useRequest } from '../../hooks/useRequest';
 import {
-  deleteInstance, listInstances, refreshInstanceStatus, startInstance, stopInstance,
+  deleteInstance,
+  listInstances,
+  refreshInstanceStatus,
+  startInstance,
+  stopInstance,
 } from '../../api/instances';
 import { getClusters } from '../../api/kubernetes';
 import { INSTANCE_STATUS } from '../../types/instance';
 import type { GatewayInstance } from '../../types/instance';
 import {
-  getEffectiveAccessUrl, getStatusColor, getStatusText, getSpecText,
+  getEffectiveAccessUrl,
+  getStatusColor,
+  getStatusText,
+  getSpecText,
 } from '../../utils/instance';
 import { ApiError } from '../../api/http';
 import { parseServerTime } from '../../utils/serverTime';
@@ -71,9 +100,7 @@ const heartbeatView = (instance: GatewayInstance, now: number, t: TFunc): Heartb
   }
   return {
     tone: missed > 0 ? 'bad' : 'warn',
-    text: missed > 0
-      ? `${relative} · ${t('instance.missed_heartbeats', { n: missed })}`
-      : relative,
+    text: missed > 0 ? `${relative} · ${t('instance.missed_heartbeats', { n: missed })}` : relative,
   };
 };
 
@@ -82,6 +109,8 @@ const InstancesListPage: React.FC = () => {
   const navigate = useNavigate();
   const [now, setNow] = useState(() => Date.now());
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<number | null>(null);
 
   // Ticks the "x seconds ago" heartbeat labels without refetching.
   useEffect(() => {
@@ -99,12 +128,69 @@ const InstancesListPage: React.FC = () => {
   const clusterCount = clusters.data?.length ?? 0;
   const loading = instances.loading || clusters.loading;
 
-  const stats = useMemo(() => ({
-    total: list.length,
-    running: list.filter((i) => i.statusCode === INSTANCE_STATUS.RUNNING).length,
-    error: list.filter((i) => i.statusCode === INSTANCE_STATUS.ERROR).length,
-    stopped: list.filter((i) => i.statusCode === INSTANCE_STATUS.STOPPED).length,
-  }), [list]);
+  const stats = useMemo(
+    () => ({
+      total: list.length,
+      running: list.filter((i) => i.statusCode === INSTANCE_STATUS.RUNNING).length,
+      error: list.filter((i) => i.statusCode === INSTANCE_STATUS.ERROR).length,
+      stopped: list.filter((i) => i.statusCode === INSTANCE_STATUS.STOPPED).length,
+    }),
+    [list],
+  );
+
+  const visibleList = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return list.filter(
+      (instance) =>
+        (statusFilter === null || instance.statusCode === statusFilter) &&
+        (!query ||
+          [
+            instance.instanceName,
+            instance.instanceId,
+            instance.namespace,
+            getEffectiveAccessUrl(instance),
+          ].some((value) => value?.toLowerCase().includes(query))),
+    );
+  }, [list, search, statusFilter]);
+  const staleCount = list.filter((instance) => {
+    const heartbeat = heartbeatView(instance, now, t);
+    return heartbeat.tone === 'warn' || heartbeat.tone === 'bad';
+  }).length;
+
+  const statItems = [
+    {
+      key: 'total',
+      label: 'instance.stat_total',
+      value: stats.total,
+      status: null,
+      icon: <CloudServerOutlined />,
+      hint: 'instance.total_hint',
+    },
+    {
+      key: 'running',
+      label: 'instance.stat_running',
+      value: stats.running,
+      status: INSTANCE_STATUS.RUNNING,
+      icon: <CheckCircleOutlined />,
+      hint: 'instance.running_hint',
+    },
+    {
+      key: 'error',
+      label: 'instance.stat_error',
+      value: stats.error,
+      status: INSTANCE_STATUS.ERROR,
+      icon: <CloseCircleOutlined />,
+      hint: 'instance.error_hint',
+    },
+    {
+      key: 'stopped',
+      label: 'instance.stat_stopped',
+      value: stats.stopped,
+      status: INSTANCE_STATUS.STOPPED,
+      icon: <PauseCircleOutlined />,
+      hint: 'instance.stopped_hint',
+    },
+  ];
 
   /** Run a mutating action then refresh the list. */
   const runAction = async (
@@ -117,7 +203,10 @@ const InstancesListPage: React.FC = () => {
       if (successKey) message.success(t(successKey));
       instances.run();
     } catch (error) {
-      const msg = error instanceof ApiError && error.message ? error.message : t(failKey || 'common.operation_failed');
+      const msg =
+        error instanceof ApiError && error.message
+          ? error.message
+          : t(failKey || 'common.operation_failed');
       message.error(msg);
     }
   };
@@ -131,13 +220,11 @@ const InstancesListPage: React.FC = () => {
     <div className="instances-page">
       <div className="instances-page-header">
         <div className="instances-page-header-left">
+          <span className="instances-eyebrow">{t('instance.workspace_label')}</span>
           <div className="instances-page-title">
-            <CloudServerOutlined />
             <span className="instances-page-title-text">{t('menu.instances')}</span>
           </div>
-          <Text className="instances-page-subtitle">
-            {t('instance.page_subtitle')}
-          </Text>
+          <Text className="instances-page-subtitle">{t('instance.page_subtitle')}</Text>
         </div>
         <div className="instances-page-actions">
           <Tooltip title={t('instance.auto_refresh_hint')}>
@@ -145,9 +232,7 @@ const InstancesListPage: React.FC = () => {
               icon={<ReloadOutlined spin={instances.loading} />}
               onClick={() => instances.run()}
             >
-              {updatedAt
-                ? t('instance.list_updated_at', { time: updatedAt.toLocaleTimeString() })
-                : t('common.refresh')}
+              {t('common.refresh')}
             </Button>
           </Tooltip>
           <Button
@@ -161,41 +246,76 @@ const InstancesListPage: React.FC = () => {
         </div>
       </div>
 
-      {list.length > 0 && (
-        <div className="instances-stats">
-          <span className="instances-stat">
-            <i className="instances-stat-dot dot-total" />
-            {t('instance.stat_total')}
-            <b>{stats.total}</b>
+      <div className="instances-stats" aria-label={t('instance.overview_label')}>
+        {statItems.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            className={`instances-stat stat-${item.key} ${statusFilter === item.status ? 'is-selected' : ''}`}
+            aria-pressed={statusFilter === item.status}
+            onClick={() => setStatusFilter(statusFilter === item.status ? null : item.status)}
+          >
+            <span className="instances-stat-top">
+              <span>{t(item.label)}</span>
+              <span className="instances-stat-icon">{item.icon}</span>
+            </span>
+            <b>{instances.data ? item.value : '—'}</b>
+            <span className="instances-stat-hint">{t(item.hint)}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="instances-inventory-header">
+        <div>
+          <h2>
+            {t('instance.inventory_title')}
+            <span>{visibleList.length}</span>
+          </h2>
+          <p>
+            {updatedAt
+              ? t('instance.list_updated_at', { time: updatedAt.toLocaleTimeString() })
+              : t('instance.auto_refresh_hint')}
+          </p>
+        </div>
+        <Input
+          className="instances-search"
+          prefix={<SearchOutlined />}
+          allowClear
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder={t('instance.search_placeholder')}
+          aria-label={t('instance.search_placeholder')}
+        />
+      </div>
+      {statusFilter !== null && (
+        <div className="instances-filter-note">
+          <span>
+            {t('instance.filtered_status', { status: getStatusText(statusFilter, '', t) })}
           </span>
-          <span className="instances-stat">
-            <i className="instances-stat-dot dot-running" />
-            {t('instance.stat_running')}
-            <b>{stats.running}</b>
-          </span>
-          <span className="instances-stat">
-            <i className="instances-stat-dot dot-error" />
-            {t('instance.stat_error')}
-            <b>{stats.error}</b>
-          </span>
-          <span className="instances-stat">
-            <i className="instances-stat-dot dot-stopped" />
-            {t('instance.stat_stopped')}
-            <b>{stats.stopped}</b>
-          </span>
+          <Button type="link" size="small" onClick={() => setStatusFilter(null)}>
+            {t('instance.clear_filter')}
+          </Button>
         </div>
       )}
+      {staleCount > 0 && (
+        <Alert
+          className="instances-heartbeat-alert"
+          type="warning"
+          showIcon
+          message={t('instance.stale_notice', { count: staleCount })}
+        />
+      )}
 
-      <Spin spinning={loading}>
+      <Spin spinning={loading && !instances.data}>
         <Row gutter={[16, 16]} className="instances-grid">
-          {list.map((instance) => {
+          {visibleList.map((instance) => {
             // An externally managed instance has no Deployment, so the console cannot start or
             // stop it - offering the buttons would only produce a 400.
             const hasCluster = instance.clusterId != null;
             const accessUrl = getEffectiveAccessUrl(instance);
             const heartbeat = heartbeatView(instance, now, t);
             return (
-              <Col xs={24} md={12} key={instance.id}>
+              <Col xs={24} lg={12} xxl={8} key={instance.id}>
                 <Card
                   className="instance-card"
                   hoverable
@@ -254,6 +374,7 @@ const InstancesListPage: React.FC = () => {
                           <Button
                             className="instance-mini-btn"
                             type="text"
+                            aria-label={t('common.copy')}
                             size="small"
                             icon={<CopyOutlined />}
                             onClick={(e) => {
@@ -288,6 +409,7 @@ const InstancesListPage: React.FC = () => {
                           <Button
                             className="instance-mini-btn"
                             type="text"
+                            aria-label={t('common.copy')}
                             size="small"
                             icon={<CopyOutlined />}
                             onClick={(e) => {
@@ -315,58 +437,80 @@ const InstancesListPage: React.FC = () => {
                   {instance.statusMessage && (
                     <div className="instance-status-message">
                       <Tooltip title={instance.statusMessage} placement="topLeft">
-                        <Text className="instance-status-text">
-                          {instance.statusMessage}
-                        </Text>
+                        <Text className="instance-status-text">{instance.statusMessage}</Text>
                       </Tooltip>
                     </div>
                   )}
 
                   <div className="instance-card-actions" onClick={(e) => e.stopPropagation()}>
+                    <Button
+                      className="instance-open-button"
+                      type="link"
+                      onClick={() => navigate(`/instances/${instance.instanceId}`)}
+                    >
+                      {t('instance.open_console')}
+                      <ArrowRightOutlined />
+                    </Button>
                     {hasCluster && instance.statusCode === INSTANCE_STATUS.RUNNING && (
                       <Tooltip title={t('instance.stop')}>
                         <Button
                           className="instance-action-btn"
                           type="text"
+                          aria-label={t('instance.stop')}
                           icon={<PauseCircleOutlined />}
-                          onClick={() => runAction(
-                            () => stopInstance(instance.id),
-                            'instance.stop_success',
-                            'instance.stop_failed',
-                          )}
+                          onClick={() =>
+                            runAction(
+                              () => stopInstance(instance.id),
+                              'instance.stop_success',
+                              'instance.stop_failed',
+                            )
+                          }
                         />
                       </Tooltip>
                     )}
-                    {hasCluster && (instance.statusCode === INSTANCE_STATUS.STOPPED
-                      || instance.statusCode === INSTANCE_STATUS.ERROR) && (
-                      <Tooltip title={t('instance.start')}>
-                        <Button
-                          className="instance-action-btn instance-action-btn-start"
-                          type="text"
-                          icon={<PlayCircleOutlined />}
-                          onClick={() => runAction(
-                            () => startInstance(instance.id),
-                            'instance.start_success',
-                            'instance.start_failed',
-                          )}
-                        />
-                      </Tooltip>
-                    )}
+                    {hasCluster &&
+                      (instance.statusCode === INSTANCE_STATUS.STOPPED ||
+                        instance.statusCode === INSTANCE_STATUS.ERROR) && (
+                        <Tooltip title={t('instance.start')}>
+                          <Button
+                            className="instance-action-btn instance-action-btn-start"
+                            type="text"
+                            aria-label={t('instance.start')}
+                            icon={<PlayCircleOutlined />}
+                            onClick={() =>
+                              runAction(
+                                () => startInstance(instance.id),
+                                'instance.start_success',
+                                'instance.start_failed',
+                              )
+                            }
+                          />
+                        </Tooltip>
+                      )}
                     <Tooltip title={t('common.refresh')}>
                       <Button
                         className="instance-action-btn"
                         type="text"
+                        aria-label={t('common.refresh')}
                         icon={<ReloadOutlined />}
-                        onClick={() => runAction(() => refreshInstanceStatus(instance.id), undefined, 'common.refresh_failed')}
+                        onClick={() =>
+                          runAction(
+                            () => refreshInstanceStatus(instance.id),
+                            undefined,
+                            'common.refresh_failed',
+                          )
+                        }
                       />
                     </Tooltip>
                     <Popconfirm
                       title={t('instance.delete_confirm')}
-                      onConfirm={() => runAction(
-                        () => deleteInstance(instance.id),
-                        'instance.delete_success',
-                        'instance.delete_failed',
-                      )}
+                      onConfirm={() =>
+                        runAction(
+                          () => deleteInstance(instance.id),
+                          'instance.delete_success',
+                          'instance.delete_failed',
+                        )
+                      }
                       okText={t('common.confirm')}
                       cancelText={t('common.cancel')}
                     >
@@ -375,6 +519,7 @@ const InstancesListPage: React.FC = () => {
                           className="instance-action-btn instance-action-btn-danger"
                           type="text"
                           danger
+                          aria-label={t('common.delete')}
                           icon={<DeleteOutlined />}
                         />
                       </Tooltip>
@@ -385,6 +530,20 @@ const InstancesListPage: React.FC = () => {
             );
           })}
         </Row>
+        {list.length > 0 && visibleList.length === 0 && (
+          <div className="instances-empty">
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('instance.no_matches')}>
+              <Button
+                onClick={() => {
+                  setSearch('');
+                  setStatusFilter(null);
+                }}
+              >
+                {t('instance.reset_search')}
+              </Button>
+            </Empty>
+          </div>
+        )}
 
         {list.length === 0 && !loading && clusterCount > 0 && (
           <div className="instances-empty">

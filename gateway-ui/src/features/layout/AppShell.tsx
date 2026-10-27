@@ -121,7 +121,7 @@ const AppShell: React.FC = () => {
           </Header>
         )}
 
-        <Content className="main-content" style={{ overflow: 'auto' }}>
+        <Content className={`main-content${['/token-usage', '/kubernetes', '/license'].includes(location.pathname) ? ' management-content' : ''}${location.pathname === '/instances' ? ' instances-content' : ''}`} style={{ overflow: 'auto' }}>
           <React.Suspense
             fallback={(
               <div style={{

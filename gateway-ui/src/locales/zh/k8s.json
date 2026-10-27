@@ -113,5 +113,13 @@
   "k8s.status_connected": "已连接",
   "k8s.status_failed": "连接失败",
   "k8s.status_unknown": "未知",
-  "k8s.version_unknown": "版本未知"
+  "k8s.version_unknown": "版本未知",
+  "k8s.reset_filters": "重置筛选",
+  "k8s.no_matches": "没有找到匹配的集群",
+  "k8s.connection_filter": "集群连接状态",
+  "k8s.all_connections": "全部连接状态",
+  "k8s.needs_attention": "未连接 / 异常",
+  "k8s.search_placeholder": "搜索集群名称或版本",
+  "k8s.empty_description": "导入集群后，可在这里查看节点、Pod 与连接状态，并管理网关部署。请先准备好集群的 Kubeconfig。",
+  "k8s.workspace_label": "网关工作台 / 集群基础设施"
 }

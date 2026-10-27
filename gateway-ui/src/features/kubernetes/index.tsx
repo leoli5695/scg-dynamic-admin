@@ -1,20 +1,25 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Spin, Typography } from 'antd';
+import { Alert, Button, Input, Select, Spin } from 'antd';
 import { message, modal } from '../../utils/antdStatic';
 import {
-  CheckCircleOutlined, CloudServerOutlined, ClusterOutlined, DashboardOutlined, PlusOutlined, ReloadOutlined,
+  CheckCircleOutlined,
+  CloudServerOutlined,
+  ClusterOutlined,
+  DashboardOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  SearchOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { deleteCluster, getClusters, refreshClusterConnection } from '../../api/kubernetes';
 import { ApiError } from '../../api/http';
 import type { KubernetesCluster } from '../../types/kubernetes';
-import { StatsCard } from './components/StatsCard';
+import { ManagementMetric, ManagementPageHeader } from '../layout/components/ManagementPage';
 import { ClusterCard } from './components/ClusterCard';
 import { ImportClusterModal } from './components/ImportClusterModal';
 import { ClusterDetailDrawer } from './components/ClusterDetailDrawer';
 import './kubernetes.css';
-
-const { Text, Title } = Typography;
+import './overview.css';
 
 const KubernetesPage: React.FC = () => {
   const { t } = useTranslation();
@@ -22,17 +27,23 @@ const KubernetesPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [importModalVisible, setImportModalVisible] = useState(false);
   const [selectedCluster, setSelectedCluster] = useState<KubernetesCluster | null>(null);
+  const [search, setSearch] = useState('');
+  const [connectionFilter, setConnectionFilter] = useState('all');
+  const [loadError, setLoadError] = useState(false);
 
-  const errorMessage = useCallback((e: unknown, fallback: string) => (
-    e instanceof ApiError && e.message ? e.message : fallback
-  ), []);
+  const errorMessage = useCallback(
+    (e: unknown, fallback: string) => (e instanceof ApiError && e.message ? e.message : fallback),
+    [],
+  );
 
   const loadClusters = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const data = await getClusters();
       setClusters(data);
     } catch {
+      setLoadError(true);
       message.error(t('k8s.load_failed'));
     } finally {
       setLoading(false);
@@ -45,128 +56,187 @@ const KubernetesPage: React.FC = () => {
     })();
   }, [loadClusters]);
 
-  const handleRefreshConnection = useCallback(async (cluster: KubernetesCluster) => {
-    message.loading({ content: t('k8s.refreshing'), key: 'refresh', duration: 0 });
-    try {
-      const refreshed = await refreshClusterConnection(cluster.id);
-      message.success({ content: t('k8s.refresh_success'), key: 'refresh' });
-      setClusters(prev => prev.map(c => (c.id === refreshed.id ? refreshed : c)));
-      setSelectedCluster(prev => (prev && prev.id === refreshed.id ? refreshed : prev));
-    } catch (e) {
-      message.error({ content: errorMessage(e, t('k8s.refresh_failed')), key: 'refresh' });
-    }
-  }, [t, errorMessage]);
+  const handleRefreshConnection = useCallback(
+    async (cluster: KubernetesCluster) => {
+      message.loading({ content: t('k8s.refreshing'), key: 'refresh', duration: 0 });
+      try {
+        const refreshed = await refreshClusterConnection(cluster.id);
+        message.success({ content: t('k8s.refresh_success'), key: 'refresh' });
+        setClusters((prev) => prev.map((c) => (c.id === refreshed.id ? refreshed : c)));
+        setSelectedCluster((prev) => (prev && prev.id === refreshed.id ? refreshed : prev));
+      } catch (e) {
+        message.error({ content: errorMessage(e, t('k8s.refresh_failed')), key: 'refresh' });
+      }
+    },
+    [t, errorMessage],
+  );
 
-  const handleDeleteCluster = useCallback((cluster: KubernetesCluster) => {
-    modal.confirm({
-      title: t('k8s.delete_confirm_title'),
-      content: t('k8s.delete_confirm_content', { name: cluster.clusterName }),
-      okType: 'danger',
-      onOk: async () => {
-        try {
-          await deleteCluster(cluster.id);
-          message.success(t('k8s.delete_success'));
-          await loadClusters();
-        } catch (e) {
-          message.error(errorMessage(e, t('k8s.delete_failed')));
-        }
-      },
-    });
-  }, [loadClusters, t, errorMessage]);
+  const handleDeleteCluster = useCallback(
+    (cluster: KubernetesCluster) => {
+      modal.confirm({
+        title: t('k8s.delete_confirm_title'),
+        content: t('k8s.delete_confirm_content', { name: cluster.clusterName }),
+        okType: 'danger',
+        onOk: async () => {
+          try {
+            await deleteCluster(cluster.id);
+            message.success(t('k8s.delete_success'));
+            await loadClusters();
+          } catch (e) {
+            message.error(errorMessage(e, t('k8s.delete_failed')));
+          }
+        },
+      });
+    },
+    [loadClusters, t, errorMessage],
+  );
 
   const stats = useMemo(() => {
     const total = clusters.length;
-    const connected = clusters.filter(c => c.connectionStatus === 'CONNECTED').length;
+    const connected = clusters.filter((c) => c.connectionStatus === 'CONNECTED').length;
     const totalNodes = clusters.reduce((sum, c) => sum + (c.nodeCount || 0), 0);
     const totalPods = clusters.reduce((sum, c) => sum + (c.podCount || 0), 0);
     return { total, connected, totalNodes, totalPods };
   }, [clusters]);
 
+  const visibleClusters = useMemo(
+    () =>
+      clusters.filter((cluster) => {
+        const query = search.trim().toLowerCase();
+        const matchesStatus =
+          connectionFilter === 'all' ||
+          (connectionFilter === 'connected'
+            ? cluster.connectionStatus === 'CONNECTED'
+            : cluster.connectionStatus !== 'CONNECTED');
+        return (
+          matchesStatus &&
+          (!query ||
+            [cluster.clusterName, cluster.clusterVersion].some((value) =>
+              value?.toLowerCase().includes(query),
+            ))
+        );
+      }),
+    [clusters, search, connectionFilter],
+  );
+
   return (
-    <div className="page-container kubernetes-page">
+    <div className="kubernetes-page management-page">
       {/* Page Header */}
-      <div className="k8s-page-header">
-        <div className="k8s-page-header-left">
-          <div className="k8s-page-title">
-            <ClusterOutlined />
-            <Title level={3} style={{ margin: 0, color: '#f1f5f9' }}>{t('k8s.title')}</Title>
-          </div>
-          <Text className="k8s-page-subtitle">{t('k8s.description')}</Text>
-        </div>
-        <div className="k8s-page-actions">
-          <Button
-            icon={<ReloadOutlined />}
-            onClick={loadClusters}
-            loading={loading}
-          >
-            {t('common.refresh')}
-          </Button>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => setImportModalVisible(true)}
-            size="large"
-          >
-            {t('k8s.import_cluster')}
-          </Button>
-        </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="k8s-stats-grid">
-        <StatsCard
-          title={t('k8s.stats_total')}
-          value={stats.total}
-          icon={<ClusterOutlined />}
-          iconType="default"
-          subtitle={t('k8s.clusters')}
-        />
-        <StatsCard
-          title={t('k8s.stats_connected')}
-          value={stats.connected}
-          icon={<CheckCircleOutlined />}
-          iconType="success"
-          subtitle={t('k8s.active_clusters')}
-        />
-        <StatsCard
-          title={t('k8s.stats_nodes')}
-          value={stats.totalNodes}
-          icon={<CloudServerOutlined />}
-          iconType="default"
-          subtitle={t('k8s.total_nodes')}
-        />
-        <StatsCard
-          title={t('k8s.stats_pods')}
-          value={stats.totalPods}
-          icon={<DashboardOutlined />}
-          iconType="default"
-          subtitle={t('k8s.running_pods')}
-        />
-      </div>
-
-      {/* Cluster Cards */}
-      <Spin spinning={loading}>
-        {clusters.length === 0 ? (
-          <div className="k8s-empty">
-            <ClusterOutlined className="k8s-empty-icon" />
-            <Text className="k8s-empty-text">{t('k8s.empty')}</Text>
+      <ManagementPageHeader
+        title={t('k8s.title')}
+        subtitle={t('k8s.description')}
+        eyebrow={t('k8s.workspace_label')}
+        actions={
+          <>
+            <Button icon={<ReloadOutlined />} onClick={loadClusters} loading={loading}>
+              {t('common.refresh')}
+            </Button>
             <Button
               type="primary"
               icon={<PlusOutlined />}
               onClick={() => setImportModalVisible(true)}
               size="large"
             >
+              {t('k8s.import_cluster')}
+            </Button>
+          </>
+        }
+      />
+
+      {/* Stats Cards */}
+      <div className="management-metrics">
+        <ManagementMetric
+          title={t('k8s.stats_total')}
+          value={loading && clusters.length === 0 ? '—' : stats.total}
+          icon={<ClusterOutlined />}
+          subtitle={t('k8s.clusters')}
+        />
+        <ManagementMetric
+          title={t('k8s.stats_connected')}
+          value={loading && clusters.length === 0 ? '—' : stats.connected}
+          icon={<CheckCircleOutlined />}
+          tone="green"
+          subtitle={t('k8s.active_clusters')}
+        />
+        <ManagementMetric
+          title={t('k8s.stats_nodes')}
+          value={loading && clusters.length === 0 ? '—' : stats.totalNodes}
+          icon={<CloudServerOutlined />}
+          subtitle={t('k8s.total_nodes')}
+        />
+        <ManagementMetric
+          title={t('k8s.stats_pods')}
+          value={loading && clusters.length === 0 ? '—' : stats.totalPods}
+          icon={<DashboardOutlined />}
+          tone="purple"
+          subtitle={t('k8s.running_pods')}
+        />
+      </div>
+
+      <div className="management-section-heading">
+        <h3>
+          {t('k8s.cluster_list')}
+          <span className="management-count">{visibleClusters.length}</span>
+        </h3>
+        <div className="management-toolbar">
+          <Input
+            className="management-search"
+            prefix={<SearchOutlined />}
+            value={search}
+            allowClear
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={t('k8s.search_placeholder')}
+            aria-label={t('k8s.search_placeholder')}
+          />
+          <Select
+            value={connectionFilter}
+            onChange={setConnectionFilter}
+            style={{ minWidth: 130 }}
+            aria-label={t('k8s.connection_filter')}
+            options={[
+              { value: 'all', label: t('k8s.all_connections') },
+              { value: 'connected', label: t('k8s.status_connected') },
+              { value: 'other', label: t('k8s.needs_attention') },
+            ]}
+          />
+        </div>
+      </div>
+      {loadError && (
+        <Alert
+          type="error"
+          showIcon
+          message={t('k8s.load_failed')}
+          action={
+            <Button size="small" onClick={loadClusters}>
+              {t('common.refresh')}
+            </Button>
+          }
+        />
+      )}
+
+      {/* Cluster Cards */}
+      <Spin spinning={loading && clusters.length === 0}>
+        {clusters.length === 0 && !loadError ? (
+          <div className="management-empty">
+            <span className="management-empty-icon">
+              <ClusterOutlined />
+            </span>
+            <h3>{t('k8s.empty')}</h3>
+            <p>{t('k8s.empty_description')}</p>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => setImportModalVisible(true)}
+              size="large"
+              className="management-primary"
+            >
               {t('k8s.import_first')}
             </Button>
           </div>
-        ) : (
+        ) : visibleClusters.length > 0 ? (
           <>
-            <div className="k8s-section-header">
-              <Title level={5} style={{ margin: 0 }}>{t('k8s.cluster_list')}</Title>
-              <Text className="k8s-section-count">{t('k8s.cluster_count', { count: clusters.length })}</Text>
-            </div>
             <div className="cluster-grid">
-              {clusters.map(cluster => (
+              {visibleClusters.map((cluster) => (
                 <ClusterCard
                   key={cluster.id}
                   cluster={cluster}
@@ -177,6 +247,20 @@ const KubernetesPage: React.FC = () => {
               ))}
             </div>
           </>
+        ) : (
+          !loadError && (
+            <div className="management-empty">
+              <h3>{t('k8s.no_matches')}</h3>
+              <Button
+                onClick={() => {
+                  setSearch('');
+                  setConnectionFilter('all');
+                }}
+              >
+                {t('k8s.reset_filters')}
+              </Button>
+            </div>
+          )
         )}
       </Spin>
 
@@ -186,10 +270,7 @@ const KubernetesPage: React.FC = () => {
         onImported={loadClusters}
       />
 
-      <ClusterDetailDrawer
-        cluster={selectedCluster}
-        onClose={() => setSelectedCluster(null)}
-      />
+      <ClusterDetailDrawer cluster={selectedCluster} onClose={() => setSelectedCluster(null)} />
     </div>
   );
 };

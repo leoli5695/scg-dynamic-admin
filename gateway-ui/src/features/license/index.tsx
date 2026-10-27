@@ -1,13 +1,34 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Alert, Badge, Button, Card, Col, Descriptions, Divider, Empty, Progress, Row, Space, Spin,
-  Statistic, Table, Tabs, Tag, Tooltip, Typography  } from 'antd';
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Col,
+  Descriptions,
+  Divider,
+  Empty,
+  Row,
+  Spin,
+  Table,
+  Tabs,
+  Tag,
+  Tooltip,
+  Typography,
+} from 'antd';
 import { message } from '../../utils/antdStatic';
 import { parseServerTime } from '../../utils/serverTime';
 import type { ColumnsType } from 'antd/es/table';
 import {
-  ApiOutlined, CloseCircleOutlined, CloudOutlined,
-  GlobalOutlined, KeyOutlined, ReloadOutlined, SafetyCertificateOutlined, SettingOutlined, ThunderboltOutlined,
+  ApiOutlined,
+  CloseCircleOutlined,
+  CloudOutlined,
+  GlobalOutlined,
+  KeyOutlined,
+  ReloadOutlined,
+  SafetyCertificateOutlined,
+  SettingOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { getLicenseList, getLicenseStatus } from '../../api/license';
@@ -15,13 +36,18 @@ import logger from '../../utils/logger';
 import type { LicenseEdition } from '../../types/license';
 import type { LicenseListItem, LicenseStatus } from '../../types/license';
 import {
-  EDITION_CONFIG, FEATURE_CATALOG, STATUS_CONFIG,
-  type LicenseFeatureDef, type LicenseStatusCode,
+  EDITION_CONFIG,
+  FEATURE_CATALOG,
+  STATUS_CONFIG,
+  type LicenseFeatureDef,
+  type LicenseStatusCode,
 } from './constants/featureCatalog';
 import { ActivateLicenseModal } from './components/ActivateLicenseModal';
 import { FeatureDetailDrawer } from './components/FeatureDetailDrawer';
 import { FeatureMatrix } from './components/FeatureMatrix';
 import './license.css';
+import { ManagementMetric, ManagementPageHeader } from '../layout/components/ManagementPage';
+import './overview.css';
 
 const { Text, Title } = Typography;
 
@@ -37,10 +63,12 @@ const LicensePage: React.FC = () => {
   const [selectedFeature, setSelectedFeature] = useState<LicenseFeatureDef | null>(null);
 
   const updateFeatureStatus = useCallback((enabledFeatures: string[]) => {
-    setFeatures(FEATURE_CATALOG.map(f => ({
-      ...f,
-      enabled: enabledFeatures.includes(f.name),
-    })));
+    setFeatures(
+      FEATURE_CATALOG.map((f) => ({
+        ...f,
+        enabled: enabledFeatures.includes(f.name),
+      })),
+    );
   }, []);
 
   const fetchLicenseData = useCallback(async () => {
@@ -72,8 +100,10 @@ const LicensePage: React.FC = () => {
   }, [fetchLicenseData]);
 
   const editionConfig = licenseInfo
-    ? EDITION_CONFIG[licenseInfo.edition as LicenseEdition] ?? EDITION_CONFIG.BASIC
+    ? (EDITION_CONFIG[licenseInfo.edition as LicenseEdition] ?? EDITION_CONFIG.BASIC)
     : EDITION_CONFIG.BASIC;
+  const quotaValue = (value: number | undefined) =>
+    value === -1 ? t('licenseUI.unlimited') : value == null ? '—' : value.toLocaleString();
 
   const licenseColumns: ColumnsType<LicenseListItem> = [
     {
@@ -121,12 +151,7 @@ const LicensePage: React.FC = () => {
       width: 100,
       render: (status: string) => {
         const config = STATUS_CONFIG[status as LicenseStatusCode] ?? STATUS_CONFIG.ACTIVE;
-        return (
-          <Badge
-            status={config.color as 'success' | 'error'}
-            text={status}
-          />
-        );
+        return <Badge status={config.color as 'success' | 'error'} text={status} />;
       },
     },
     {
@@ -155,29 +180,32 @@ const LicensePage: React.FC = () => {
   ];
 
   return (
-    <div className="license-page">
+    <div className="license-page management-page">
       <Spin spinning={loading}>
         {/* Page Header */}
-        <div className="license-page-header">
-          <div className="license-page-title">
-            <KeyOutlined />
-            <Title level={4} style={{ margin: 0 }}>
-              License 授权管理
-            </Title>
-          </div>
-          <Space>
-            <Button icon={<ReloadOutlined />} onClick={fetchLicenseData}>
-              {t('common.refresh')}
-            </Button>
-            <Button
-              type="primary"
-              icon={<KeyOutlined />}
-              onClick={() => setActivateModalVisible(true)}
-            >
-              激活 License
-            </Button>
-          </Space>
-        </div>
+        <ManagementPageHeader
+          title={t('licenseUI.title')}
+          subtitle={t('licenseUI.subtitle')}
+          eyebrow={t('licenseUI.workspace_label')}
+          actions={
+            <>
+              <Button
+                icon={<ReloadOutlined spin={loading} />}
+                onClick={fetchLicenseData}
+                disabled={loading}
+              >
+                {t('common.refresh')}
+              </Button>
+              <Button
+                type="primary"
+                icon={<KeyOutlined />}
+                onClick={() => setActivateModalVisible(true)}
+              >
+                {t('licenseUI.activate')}
+              </Button>
+            </>
+          }
+        />
 
         {/* License Status Overview */}
         {!licenseInfo && (
@@ -217,12 +245,8 @@ const LicensePage: React.FC = () => {
                         <div className="license-edition-header">
                           {licenseInfo ? (
                             <>
-                              <div className="edition-icon">
-                                {editionConfig.icon}
-                              </div>
-                              <Title level={3}>
-                                {editionConfig.label}
-                              </Title>
+                              <div className="edition-icon">{editionConfig.icon}</div>
+                              <Title level={3}>{editionConfig.label}</Title>
                               <Tag color={licenseInfo.valid ? 'success' : 'error'}>
                                 {licenseInfo.valid ? '有效' : '无效'}
                               </Tag>
@@ -232,79 +256,83 @@ const LicensePage: React.FC = () => {
                               <div className="edition-icon">
                                 <KeyOutlined />
                               </div>
-                              <Title level={3}>基础版</Title>
-                              <Tag>免费</Tag>
+                              <Title level={3}>{t('licenseUI.not_activated')}</Title>
+                              <Tag>{t('licenseUI.basic_access')}</Tag>
                             </>
                           )}
                         </div>
-                        {licenseInfo?.daysRemaining != null && (
-                          <div className="license-expiry">
-                            <Progress
-                              percent={
-                                Math.max(
-                                  0,
-                                  Math.min(
-                                    100,
-                                    (licenseInfo.daysRemaining / 365) * 100,
-                                  ),
-                                )
-                              }
-                              status={
-                                licenseInfo.daysRemaining < 30
-                                  ? 'exception'
-                                  : 'active'
-                              }
-                              format={() => `剩余 ${licenseInfo.daysRemaining} 天`}
-                            />
-                          </div>
-                        )}
+                        <div className="license-summary-note">
+                          <span>
+                            {t('licenseUI.enabled_features', {
+                              count:
+                                licenseInfo?.features?.length ??
+                                features.filter((feature) => feature.enabled).length,
+                            })}
+                          </span>
+                          <span>
+                            {licenseInfo?.expired
+                              ? t('licenseUI.expired')
+                              : licenseInfo?.daysRemaining != null &&
+                                  licenseInfo.daysRemaining <= 365
+                                ? t('licenseUI.days_remaining', {
+                                    count: licenseInfo.daysRemaining,
+                                  })
+                                : licenseInfo?.expiresAt
+                                  ? t('licenseUI.valid_until', {
+                                      date: parseServerTime(
+                                        licenseInfo.expiresAt,
+                                      ).toLocaleDateString(),
+                                    })
+                                  : licenseInfo && !licenseInfo.expiresAt
+                                    ? t('licenseUI.permanent')
+                                    : t('licenseUI.activation_hint')}
+                          </span>
+                        </div>
                       </Card>
                     </Col>
 
                     <Col xs={24} lg={16}>
                       {/* Quota Overview */}
-                      <Card title="配额使用" className="quota-card">
-                        <Row gutter={16}>
-                          <Col span={6}>
-                            <Statistic
-                              title="实例数"
-                              value={licenseInfo?.quotas?.maxInstances || 1}
-                              suffix={`/ ${licenseInfo?.quotas?.maxInstances || 1}`}
-                              prefix={<CloudOutlined />}
-                            />
-                          </Col>
-                          <Col span={6}>
-                            <Statistic
-                              title="路由数"
-                              value={licenseInfo?.quotas?.maxRoutes || 100}
-                              suffix={`/ ${licenseInfo?.quotas?.maxRoutes || 100}`}
-                              prefix={<ApiOutlined />}
-                            />
-                          </Col>
-                          <Col span={6}>
-                            <Statistic
-                              title="服务数"
-                              value={licenseInfo?.quotas?.maxServices || 50}
-                              suffix={`/ ${licenseInfo?.quotas?.maxServices || 50}`}
-                              prefix={<GlobalOutlined />}
-                            />
-                          </Col>
-                          <Col span={6}>
-                            <Statistic
-                              title="限流 QPS"
-                              value={licenseInfo?.quotas?.maxRateLimitQPS || 100}
-                              suffix={`/ ${licenseInfo?.quotas?.maxRateLimitQPS || 100}`}
-                              prefix={<ThunderboltOutlined />}
-                            />
-                          </Col>
-                        </Row>
+                      <Card title={t('licenseUI.quota_title')} className="quota-card">
+                        <p className="license-quota-caption">{t('licenseUI.quota_hint')}</p>
+                        <div className="license-quota-grid">
+                          <ManagementMetric
+                            title={t('licenseUI.instances')}
+                            value={quotaValue(licenseInfo?.quotas?.maxInstances)}
+                            icon={<CloudOutlined />}
+                          />
+                          <ManagementMetric
+                            title={t('licenseUI.routes')}
+                            value={quotaValue(licenseInfo?.quotas?.maxRoutes)}
+                            icon={<ApiOutlined />}
+                          />
+                          <ManagementMetric
+                            title={t('licenseUI.services')}
+                            value={quotaValue(licenseInfo?.quotas?.maxServices)}
+                            icon={<GlobalOutlined />}
+                          />
+                          <ManagementMetric
+                            title={t('licenseUI.qps')}
+                            value={quotaValue(licenseInfo?.quotas?.maxRateLimitQPS)}
+                            icon={<ThunderboltOutlined />}
+                          />
+                        </div>
                         <Divider className="quota-divider" />
-                        <Descriptions column={{ xs: 2, md: 4 }} size="small" className="quota-descriptions">
+                        <Descriptions
+                          column={{ xs: 1, sm: 2, xl: 4 }}
+                          layout="vertical"
+                          colon={false}
+                          size="small"
+                          className="quota-descriptions"
+                        >
                           {licenseInfo && (
                             <>
                               <Descriptions.Item label="License ID">
-                                <Text copyable style={{ fontSize: 12 }}>
-                                  {licenseInfo.licenseId?.substring(0, 16)}...
+                                <Text
+                                  copyable={{ text: licenseInfo.licenseId || '' }}
+                                  style={{ fontSize: 12 }}
+                                >
+                                  {licenseInfo.licenseId || '—'}
                                 </Text>
                               </Descriptions.Item>
                               <Descriptions.Item label="客户">
@@ -314,7 +342,9 @@ const LicensePage: React.FC = () => {
                                 {licenseInfo.organization || '-'}
                               </Descriptions.Item>
                               <Descriptions.Item label="有效期至">
-                                {licenseInfo.expiresAt ? parseServerTime(licenseInfo.expiresAt).toLocaleDateString() : '永久'}
+                                {licenseInfo.expiresAt
+                                  ? parseServerTime(licenseInfo.expiresAt).toLocaleDateString()
+                                  : '永久'}
                               </Descriptions.Item>
                             </>
                           )}
@@ -324,10 +354,7 @@ const LicensePage: React.FC = () => {
                   </Row>
 
                   {/* Feature Matrix */}
-                  <FeatureMatrix
-                    features={features}
-                    onFeatureClick={setSelectedFeature}
-                  />
+                  <FeatureMatrix features={features} onFeatureClick={setSelectedFeature} />
                 </div>
               ),
             },
@@ -349,9 +376,7 @@ const LicensePage: React.FC = () => {
                       }}
                       scroll={{ x: 1000 }}
                       locale={{
-                        emptyText: (
-                          <Empty description="暂无 License 记录" />
-                        ),
+                        emptyText: <Empty description="暂无 License 记录" />,
                       }}
                     />
                   </Card>
@@ -368,10 +393,7 @@ const LicensePage: React.FC = () => {
         onActivated={fetchLicenseData}
       />
 
-      <FeatureDetailDrawer
-        feature={selectedFeature}
-        onClose={() => setSelectedFeature(null)}
-      />
+      <FeatureDetailDrawer feature={selectedFeature} onClose={() => setSelectedFeature(null)} />
     </div>
   );
 };

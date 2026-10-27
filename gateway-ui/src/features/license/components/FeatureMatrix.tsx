@@ -2,6 +2,7 @@ import React, { useCallback } from 'react';
 import { Card, List, Tabs, Tag, Typography } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined, CrownOutlined } from '@ant-design/icons';
 import { EDITION_CONFIG, type LicenseFeatureDef } from '../constants/featureCatalog';
+import { useTranslation } from 'react-i18next';
 
 const { Text } = Typography;
 
@@ -12,59 +13,95 @@ interface FeatureMatrixProps {
 
 /** Feature authorization matrix grouped by edition. */
 export const FeatureMatrix: React.FC<FeatureMatrixProps> = ({ features, onFeatureClick }) => {
-  const basicFeatures = features.filter(f => f.requiredEdition === 'BASIC');
-  const advancedFeatures = features.filter(f => f.requiredEdition === 'ADVANCED');
-  const enterpriseFeatures = features.filter(f => f.requiredEdition === 'ENTERPRISE');
+  const { t } = useTranslation();
+  const basicFeatures = features.filter((f) => f.requiredEdition === 'BASIC');
+  const advancedFeatures = features.filter((f) => f.requiredEdition === 'ADVANCED');
+  const enterpriseFeatures = features.filter((f) => f.requiredEdition === 'ENTERPRISE');
 
   // BASIC features are free (green), ADVANCED (blue), ENTERPRISE (purple)
-  const renderFeatureItem = useCallback((feature: LicenseFeatureDef) => {
-    const editionClass = feature.requiredEdition.toLowerCase();
+  const renderFeatureItem = useCallback(
+    (feature: LicenseFeatureDef) => {
+      const editionClass = feature.requiredEdition.toLowerCase();
 
-    return (
-      <List.Item key={feature.name}>
-        <div
-          className={`feature-item ${editionClass} ${feature.enabled ? 'enabled' : 'disabled'}`}
-          onClick={() => onFeatureClick(feature)}
-          style={{ cursor: 'pointer' }}
-        >
-          <div className="feature-icon">{feature.icon}</div>
-          <div className="feature-content">
-            <div className="feature-header">
-              <Text strong>{feature.displayName}</Text>
-              {feature.requiredEdition === 'BASIC' ? (
-                <Tag color="success" icon={<CheckCircleOutlined />} style={{ backgroundColor: '#22c55e', color: '#fff' }}>
-                  免费
-                </Tag>
-              ) : feature.enabled ? (
-                <Tag color="success" icon={<CheckCircleOutlined />}>
-                  已授权
-                </Tag>
-              ) : feature.requiredEdition === 'ADVANCED' ? (
-                <Tag color="processing" icon={<CloseCircleOutlined />} style={{ backgroundColor: '#3b82f6', color: '#fff' }}>
-                  高级版
-                </Tag>
-              ) : (
-                <Tag color="purple" icon={<CloseCircleOutlined />} style={{ backgroundColor: '#7c3aed', color: '#fff' }}>
-                  企业版
-                </Tag>
-              )}
+      return (
+        <List.Item key={feature.name}>
+          <div
+            className={`feature-item ${editionClass} ${feature.enabled ? 'enabled' : 'disabled'}`}
+            onClick={() => onFeatureClick(feature)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onFeatureClick(feature);
+              }
+            }}
+            style={{ cursor: 'pointer' }}
+          >
+            <div className="feature-icon">{feature.icon}</div>
+            <div className="feature-content">
+              <div className="feature-header">
+                <Text strong>{feature.displayName}</Text>
+                {feature.requiredEdition === 'BASIC' ? (
+                  <Tag
+                    color="success"
+                    icon={<CheckCircleOutlined />}
+                    style={{ backgroundColor: '#22c55e', color: '#fff' }}
+                  >
+                    免费
+                  </Tag>
+                ) : feature.enabled ? (
+                  <Tag color="success" icon={<CheckCircleOutlined />}>
+                    已授权
+                  </Tag>
+                ) : feature.requiredEdition === 'ADVANCED' ? (
+                  <Tag
+                    color="processing"
+                    icon={<CloseCircleOutlined />}
+                    style={{ backgroundColor: '#3b82f6', color: '#fff' }}
+                  >
+                    高级版
+                  </Tag>
+                ) : (
+                  <Tag
+                    color="purple"
+                    icon={<CloseCircleOutlined />}
+                    style={{ backgroundColor: '#7c3aed', color: '#fff' }}
+                  >
+                    企业版
+                  </Tag>
+                )}
+              </div>
+              <Text type="secondary" className="feature-desc">
+                {feature.description}
+              </Text>
             </div>
-            <Text type="secondary" className="feature-desc">
-              {feature.description}
-            </Text>
+            <div className="feature-edition">
+              <Tag color={EDITION_CONFIG[feature.requiredEdition].color}>
+                {EDITION_CONFIG[feature.requiredEdition].label}
+              </Tag>
+            </div>
           </div>
-          <div className="feature-edition">
-            <Tag color={EDITION_CONFIG[feature.requiredEdition].color}>
-              {EDITION_CONFIG[feature.requiredEdition].label}
-            </Tag>
-          </div>
-        </div>
-      </List.Item>
-    );
-  }, [onFeatureClick]);
+        </List.Item>
+      );
+    },
+    [onFeatureClick],
+  );
 
   return (
-    <Card title="功能授权矩阵" style={{ marginTop: 16 }}>
+    <Card
+      className="license-feature-matrix"
+      title={t('licenseUI.feature_matrix')}
+      extra={
+        <span className="license-feature-count">
+          {t('licenseUI.feature_count', {
+            enabled: features.filter((feature) => feature.enabled).length,
+            total: features.length,
+          })}
+        </span>
+      }
+      style={{ marginTop: 20 }}
+    >
       <Tabs
         items={[
           {
@@ -77,7 +114,7 @@ export const FeatureMatrix: React.FC<FeatureMatrixProps> = ({ features, onFeatur
             ),
             children: (
               <List
-                grid={{ gutter: 16, column: 2 }}
+                grid={{ gutter: 14, xs: 1, sm: 1, md: 2, xl: 2, xxl: 3 }}
                 dataSource={basicFeatures}
                 renderItem={renderFeatureItem}
               />
@@ -93,7 +130,7 @@ export const FeatureMatrix: React.FC<FeatureMatrixProps> = ({ features, onFeatur
             ),
             children: (
               <List
-                grid={{ gutter: 16, column: 2 }}
+                grid={{ gutter: 14, xs: 1, sm: 1, md: 2, xl: 2, xxl: 3 }}
                 dataSource={advancedFeatures}
                 renderItem={renderFeatureItem}
               />
@@ -109,7 +146,7 @@ export const FeatureMatrix: React.FC<FeatureMatrixProps> = ({ features, onFeatur
             ),
             children: (
               <List
-                grid={{ gutter: 16, column: 2 }}
+                grid={{ gutter: 14, xs: 1, sm: 1, md: 2, xl: 2, xxl: 3 }}
                 dataSource={enterpriseFeatures}
                 renderItem={renderFeatureItem}
               />

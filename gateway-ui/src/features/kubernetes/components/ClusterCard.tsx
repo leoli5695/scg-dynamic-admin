@@ -48,20 +48,29 @@ export const ClusterCard: React.FC<ClusterCardProps> = ({
 }) => {
   const { t } = useTranslation();
 
-  const handleDetail = useCallback((e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    onDetail(cluster);
-  }, [onDetail, cluster]);
+  const handleDetail = useCallback(
+    (e?: React.MouseEvent) => {
+      e?.stopPropagation();
+      onDetail(cluster);
+    },
+    [onDetail, cluster],
+  );
 
-  const handleRefresh = useCallback((e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    onRefresh(cluster);
-  }, [onRefresh, cluster]);
+  const handleRefresh = useCallback(
+    (e?: React.MouseEvent) => {
+      e?.stopPropagation();
+      onRefresh(cluster);
+    },
+    [onRefresh, cluster],
+  );
 
-  const handleDelete = useCallback((e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    onDelete(cluster);
-  }, [onDelete, cluster]);
+  const handleDelete = useCallback(
+    (e?: React.MouseEvent) => {
+      e?.stopPropagation();
+      onDelete(cluster);
+    },
+    [onDelete, cluster],
+  );
 
   const statusClass = getStatusClass(cluster.connectionStatus);
 
@@ -94,9 +103,7 @@ export const ClusterCard: React.FC<ClusterCardProps> = ({
               {cluster.nodeCount || 0} {t('k8s.nodes')}
             </span>
             <span className="cluster-card-divider">·</span>
-            <span className="cluster-card-stats">
-              {cluster.podCount || 0} Pods
-            </span>
+            <span className="cluster-card-stats">{cluster.podCount || 0} Pods</span>
           </div>
         </div>
 
@@ -104,15 +111,20 @@ export const ClusterCard: React.FC<ClusterCardProps> = ({
           <Tooltip title={t('common.detail')}>
             <button
               className="cluster-card-action-btn primary"
+              type="button"
+              aria-label={`${t('common.detail')} ${cluster.clusterName}`}
               onClick={handleDetail}
             >
               <EyeOutlined />
+              <span>{t('common.detail')}</span>
             </button>
           </Tooltip>
 
           <Tooltip title={t('common.refresh')}>
             <button
               className="cluster-card-action-btn"
+              type="button"
+              aria-label={`${t('common.refresh')} ${cluster.clusterName}`}
               onClick={handleRefresh}
             >
               <ReloadOutlined />
@@ -123,6 +135,8 @@ export const ClusterCard: React.FC<ClusterCardProps> = ({
           <Tooltip title={t('common.delete')}>
             <button
               className="cluster-card-action-btn danger"
+              type="button"
+              aria-label={`${t('common.delete')} ${cluster.clusterName}`}
               onClick={handleDelete}
             >
               <DeleteOutlined />

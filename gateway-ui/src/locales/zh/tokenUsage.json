@@ -42,5 +42,15 @@
   "tokenUsage.table.latency": "延迟(ms)",
   "tokenUsage.table.trace": "TraceId",
   "tokenUsage.table.instance": "实例",
-  "tokenUsage.empty": "该时间范围内暂无计量数据（需路由绑定 TOKEN_RATE_LIMITER 策略并经网关产生 AI 请求）"
+  "tokenUsage.empty": "可调整筛选条件，或通过已绑定 Token 计量策略的路由发起 AI 请求，查看输入与输出用量。",
+  "tokenUsage.error_hint": "请刷新重试，或稍后再查看计量数据。",
+  "tokenUsage.filters_title": "筛选条件",
+  "tokenUsage.empty_title": "当前筛选下暂无计量数据",
+  "tokenUsage.latency_hint": "请求平均响应时间",
+  "tokenUsage.load_failed": "计量数据加载失败",
+  "tokenUsage.active_hint": "产生请求的活跃租户",
+  "tokenUsage.requests_hint": "当前筛选范围内的 AI 请求",
+  "tokenUsage.tokens_hint": "输入与输出 Token 合计",
+  "tokenUsage.workspace_label": "网关工作台 / 用量洞察",
+  "tokenUsage.reset": "重置筛选"
 }

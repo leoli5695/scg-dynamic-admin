@@ -42,5 +42,15 @@
   "tokenUsage.table.latency": "Latency (ms)",
   "tokenUsage.table.trace": "TraceId",
   "tokenUsage.table.instance": "Instance",
-  "tokenUsage.empty": "No metering data in this range (routes need the TOKEN_RATE_LIMITER strategy and AI traffic through the gateway)"
+  "tokenUsage.empty": "Adjust your filters, or send AI requests through a route with a Token metering policy to see input and output usage.",
+  "tokenUsage.error_hint": "Refresh to retry, or check usage data again later.",
+  "tokenUsage.filters_title": "Usage filters",
+  "tokenUsage.empty_title": "No usage for these filters",
+  "tokenUsage.latency_hint": "Average request response time",
+  "tokenUsage.load_failed": "Unable to load usage data",
+  "tokenUsage.active_hint": "Tenants with recorded requests",
+  "tokenUsage.requests_hint": "AI requests within the selected range",
+  "tokenUsage.tokens_hint": "Combined input and output tokens",
+  "tokenUsage.workspace_label": "GATEWAY WORKSPACE / USAGE INSIGHTS",
+  "tokenUsage.reset": "Reset filters"
 }
