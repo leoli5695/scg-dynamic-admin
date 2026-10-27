@@ -10,7 +10,7 @@
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.16-brightgreen)](https://spring.io/projects/spring-boot)
 [![Spring Cloud Gateway](https://img.shields.io/badge/Spring%20Cloud%20Gateway-4.3.5-blue)](https://spring.io/projects/spring-cloud-gateway)
 [![React](https://img.shields.io/badge/React-19-blue)](https://react.dev/)
-[![Tests](https://img.shields.io/badge/Tests-see%20Test%20Status-yellow)]()
+[![Tests](https://img.shields.io/badge/Tests-see%20Test%20Status-yellow)](#testing)
 [![License](https://img.shields.io/badge/License-All__Rights__Reserved-lightgrey)](LICENSE)
 
 ---
@@ -490,24 +490,29 @@ self-service registration - so if they are missing the console has no user at al
 
 ## Testing
 
-Counts below come from `mvn test` on 2026-10-11 (JDK 21). The seckill-core-engine failures predate that run - the same 8 failures / 17 errors reproduce at commit `358d9a5`.
+Counts below were measured with `mvn -o test` on 2026-10-27 at commit `2e80a2e` (JDK 21, offline).
+"Errors" are tests that could not run at all because an external dependency is absent; the suite
+has zero assertion failures.
 
-| Module | Tests | Status |
-|--------|-------|--------|
-| **my-gateway** | 556 | ✅ All passing |
-| **gateway-admin** | 440 (+8 skipped) | ⚠️ 58 of 70 classes green locally; the other 12 are `@SpringBootTest` integration tests that need a reachable MySQL - without one they all fail at context load with `Communications link failure` |
-| **gateway-trace-starter** | 444 | ✅ All passing |
-| **license-client** | 83 | ✅ All passing |
-| **license-server** | 40 | ✅ All passing |
-| **seckill-core-engine** | 121 | ⚠️ 8 failures + 17 errors (pre-existing: `SeckillStockConcurrencyTest` expects a bare Redis on `localhost:30379`, so it only passes against the k3s NodePort) |
-| **gateway-ui** | 0 | ❌ No frontend tests yet |
-| **Total (JVM)** | **~1700** | ⚠️ **Not reproducible on a clean machine** - there is no CI, and two modules need external MySQL/Redis |
+| Module | Tests | Failures | Errors | Status |
+|--------|-------|----------|--------|--------|
+| **my-gateway** | 684 | 0 | 0 | ✅ All passing |
+| **gateway-admin** | 458 | 0 | 80 | ⚠️ 42 of 54 classes green locally; the other 12 are `@SpringBootTest` integration tests that need a reachable MySQL - without one they all fail at context load with `Communications link failure` |
+| **gateway-trace-starter** | 147 | 0 | 0 | ✅ All passing |
+| **license-client** | 83 | 0 | 0 | ✅ All passing |
+| **license-server** | 40 | 0 | 0 | ✅ All passing |
+| **seckill-core-engine** | 191 | 0 | 4 | ⚠️ 3 need a bare Redis on `localhost:30379`; 1 (`LuaSlidingWindowRateLimitTest`) needs Docker via Testcontainers |
+| **gateway-ui** | 0 | - | - | ❌ No frontend tests yet |
+| **Total (JVM)** | **1603** | **0** | **84** | ⚠️ Not reproducible on a clean machine: CI exists (`.github/workflows/ci.yml`) but has not been executed yet, and three external dependencies are required - MySQL:3306, Redis:30379 and Docker |
 
-Counts for my-gateway, license-client and license-server were measured on JDK 21 on 2026-10-24.
+Counts are the surefire aggregate lines, not a sum of the per-class reports: `@Nested` classes
+(133 in my-gateway, 27 in gateway-admin) make a per-class sum undercount.
+
 The old badge claimed an exact "1674 Tests"; that figure was padded by three `@RepeatedTest(100)`
 methods in `GatewayTracePropertiesTest` whose only assertion was `assertNotNull` on a primitive
 `boolean` - 300 executions, i.e. 18% of the total, that could never fail. They now assert the
-observed sampling rate instead of running the same tautology a hundred times.
+observed sampling rate instead of running the same tautology a hundred times, which is also why
+gateway-trace-starter reads 147 here rather than the 444 an older revision of this table claimed.
 
 Run tests:
 ```bash
