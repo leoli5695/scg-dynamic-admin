@@ -40,6 +40,26 @@ public class BasicAuthProcessor extends AbstractAuthProcessor {
     // In-memory user cache (can be replaced with external store)
     private final Map<String, UserCredentials> userCache = new ConcurrentHashMap<>();
 
+    @org.springframework.beans.factory.annotation.Value("${gateway.auth.basic.coalesce-enabled:true}")
+    private boolean coalesceEnabled = true;
+    // Successful-result reuse is opt-in. Concurrent work sharing does not require it.
+    @org.springframework.beans.factory.annotation.Value("${gateway.auth.basic.success-cache-ttl-ms:0}")
+    private long successCacheTtlMs;
+    private final byte[] fingerprintSecret = new byte[32];
+    private final java.util.concurrent.Semaphore pendingChecks = new java.util.concurrent.Semaphore(512);
+    private final Map<String, Verification> verifications = new ConcurrentHashMap<>();
+    private final com.github.benmanes.caffeine.cache.Cache<String, Long> successfulChecks =
+            com.github.benmanes.caffeine.cache.Caffeine.newBuilder().maximumSize(10000)
+                    .expireAfterWrite(java.time.Duration.ofSeconds(5)).build();
+
+    public BasicAuthProcessor() {
+        new java.security.SecureRandom().nextBytes(fingerprintSecret);
+    }
+
+    private static final class Verification {
+        private Mono<Boolean> result;
+    }
+
     @Override
     public AuthType getAuthType() {
         return AuthType.BASIC;
@@ -80,10 +100,9 @@ public class BasicAuthProcessor extends AbstractAuthProcessor {
         String password = parts[1];
 
         // Validate credentials
-        return Mono.defer(() -> validateCredentials(username, password, config))
-                .subscribeOn(PASSWORD_WORKERS)
+        return verify(username, password, config)
                 .flatMap(valid -> {
-                    if (valid) {
+                    if (valid && config.isEnabled()) {
                         // Add user info to exchange attributes
                         exchange.getAttributes().put("auth_user", username);
                         exchange.getAttributes().put("auth_type", "BASIC");
@@ -102,6 +121,101 @@ public class BasicAuthProcessor extends AbstractAuthProcessor {
                     log.error("Basic auth validation error: {}", ex.getMessage());
                     return Mono.error(new RuntimeException("Authentication error"));
                 });
+    }
+
+    private Mono<Boolean> verify(String username, String password, AuthConfig config) {
+        return Mono.defer(() -> {
+            AuthConfig snapshot = snapshot(username, config);
+            if (snapshot == null || !config.isEnabled()) return Mono.just(false);
+            boolean bcrypt = "BCRYPT".equalsIgnoreCase(snapshot.getPasswordHashAlgorithm());
+            if (!bcrypt || (!coalesceEnabled && successCacheTtlMs <= 0)) {
+                return Mono.defer(() -> validateCredentials(username, password, snapshot)).subscribeOn(PASSWORD_WORKERS)
+                        .map(valid -> valid && sameCredential(username, snapshot, config));
+            }
+            String key = fingerprint(username, password, snapshot, config);
+            Long until = successCacheTtlMs > 0 ? successfulChecks.getIfPresent(key) : null;
+            if (until != null && until - System.nanoTime() > 0) {
+                return Mono.just(sameCredential(username, snapshot, config));
+            }
+            if (!coalesceEnabled) {
+                return check(username, password, snapshot, config, key);
+            }
+            Verification verification = verifications.computeIfAbsent(key, ignored -> {
+                if (!pendingChecks.tryAcquire()) return null;
+                Verification task = new Verification();
+                task.result = check(username, password, snapshot, config, key)
+                        .doOnTerminate(() -> {
+                            verifications.remove(key, task);
+                            pendingChecks.release();
+                        }).cache();
+                return task;
+            });
+            if (verification == null) {
+                return Mono.error(new java.util.concurrent.RejectedExecutionException("Password verification queue full"));
+            }
+            return verification.result;
+        });
+    }
+
+    private boolean sameCredential(String username, AuthConfig verified, AuthConfig current) {
+        AuthConfig latest = snapshot(username, current);
+        return current.isEnabled() && latest != null
+                && java.util.Objects.equals(verified.getBasicPassword(), latest.getBasicPassword())
+                && java.util.Objects.equals(verified.getPasswordHashAlgorithm(), latest.getPasswordHashAlgorithm());
+    }
+
+    private Mono<Boolean> check(String username, String password, AuthConfig snapshot, AuthConfig current, String key) {
+        return Mono.defer(() -> validateCredentials(username, password, snapshot))
+                .subscribeOn(PASSWORD_WORKERS)
+                .map(valid -> {
+                    AuthConfig latest = snapshot(username, current);
+                    boolean unchanged = current.isEnabled() && latest != null
+                            && key.equals(fingerprint(username, password, latest, current));
+                    if (valid && unchanged && successCacheTtlMs > 0) {
+                        successfulChecks.put(key, System.nanoTime()
+                                + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(Math.min(successCacheTtlMs, 5000)));
+                    }
+                    return valid && unchanged;
+                });
+    }
+
+    /** Freeze exactly the selected stored credential; no mutable policy is captured by queued work. */
+    private AuthConfig snapshot(String username, AuthConfig config) {
+        String stored = null;
+        String algorithm = config.getPasswordHashAlgorithm();
+        if (config.getBasicUsername() != null && config.getBasicPassword() != null) {
+            if (!config.getBasicUsername().equals(username)) return null;
+            stored = config.getBasicPassword();
+        } else if (config.getBasicUsers() != null) {
+            stored = config.getBasicUsers().get(username);
+        }
+        if (stored == null) {
+            UserCredentials user = userCache.get(username);
+            if (user != null) { stored = user.getPassword(); algorithm = user.getHashAlgorithm(); }
+        }
+        if (stored == null) return null;
+        AuthConfig snapshot = new AuthConfig();
+        snapshot.setBasicUsername(username);
+        snapshot.setBasicPassword(stored);
+        snapshot.setPasswordHashAlgorithm(algorithm);
+        return snapshot;
+    }
+
+    /** A process-keyed digest: cache keys contain no password, Authorization header or stored hash. */
+    private String fingerprint(String username, String password, AuthConfig snapshot, AuthConfig policy) {
+        try {
+            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            mac.init(new javax.crypto.spec.SecretKeySpec(fingerprintSecret, "HmacSHA256"));
+            for (String value : new String[] { Integer.toHexString(System.identityHashCode(policy)),
+                    policy.getPolicyId(), username, password, snapshot.getBasicPassword(), snapshot.getPasswordHashAlgorithm() }) {
+                byte[] bytes = value == null ? new byte[0] : value.getBytes(StandardCharsets.UTF_8);
+                mac.update(java.nio.ByteBuffer.allocate(4).putInt(bytes.length).array());
+                mac.update(bytes);
+            }
+            return java.util.HexFormat.of().formatHex(mac.doFinal());
+        } catch (java.security.GeneralSecurityException e) {
+            throw new IllegalStateException("Cannot fingerprint Basic credentials", e);
+        }
     }
 
     /**

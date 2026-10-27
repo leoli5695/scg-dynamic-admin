@@ -112,5 +112,6 @@ nacos/
 
 # AI perf bench raw runs (regenerable, multi-MB jsonl)
 tools/ai-perf/results/
+tools/gateway-perf/results/
 *.tsbuildinfo
 dist/

@@ -212,6 +212,10 @@ gateway:
 
   # HMAC bodies are buffered for signature verification, then replayed to upstream.
   auth:
+    basic:
+      coalesce-enabled: ${GATEWAY_BASIC_COALESCE_ENABLED:true}
+      # Optional success reuse, capped at 5s; disabled by default.
+      success-cache-ttl-ms: ${GATEWAY_BASIC_SUCCESS_CACHE_TTL_MS:0}
     hmac:
       max-body-bytes: ${GATEWAY_HMAC_MAX_BODY_BYTES:1048576}
 

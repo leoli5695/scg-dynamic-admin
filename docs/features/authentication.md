@@ -161,7 +161,11 @@ curl -u admin:password123 \
 
 ---
 
-Basic password checks run once per request on a dedicated worker pool with at most eight threads (limited by available processors) and a bounded queue of 64 tasks per worker. Saturation returns 503 instead of blocking an event loop or accepting credentials without verification. Passwords are verified before route authorization.
+Basic password checks run at most once per request on a dedicated worker pool with at most eight threads (limited by available processors) and a bounded queue of 64 tasks per worker. Saturation returns 503 instead of blocking an event loop or accepting credentials without verification. Passwords are verified before route authorization.
+
+For BCrypt, concurrent requests using the same policy, username, password, stored hash and algorithm share one in-flight verification (`gateway.auth.basic.coalesce-enabled`, default `true`). Every request still performs route authorization. Failed passwords are not stored in a success cache; cancelling one waiter does not cancel verification for the other waiters. Unique checks have an additional 512-slot admission bound. Hash/algorithm changes and disabled policies cannot reuse an old successful result. BCrypt's configured cost is unchanged.
+
+Successful-result reuse across later requests is **disabled by default** (`gateway.auth.basic.success-cache-ttl-ms=0`). Operators may opt into a short window, capped at 5 seconds. Entries contain only a process-keyed credential digest and expiry, never a plaintext password or Authorization header, and are bound to the actual stored hash and policy instance. Set the TTL to zero when every later request must perform a fresh verification. Concurrent sharing helps repeated credentials under load; it does not remove BCrypt's cost for isolated requests or many distinct credentials.
 
 ## HMAC Signature Authentication
 
