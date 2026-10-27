@@ -12,8 +12,13 @@ import { useTranslation } from 'react-i18next';
 import { useRequest } from '../../hooks/useRequest';
 import { ApiError } from '../../api/http';
 import {
-  createStrategy, deleteStrategy, disableStrategy, enableStrategy,
-  listEnabledStrategyTypes, listStrategies, updateStrategy,
+  createStrategy,
+  deleteStrategy,
+  disableStrategy,
+  enableStrategy,
+  listEnabledStrategyTypes,
+  listStrategies,
+  updateStrategy,
 } from '../../api/strategies';
 import { listRoutes } from '../../api/routes';
 import type { StrategyDefinition, StrategyTypeInfo } from '../../types/strategy';
@@ -26,9 +31,8 @@ import './strategies-premium.css';
 
 const { Text, Title } = Typography;
 
-const errorMessage = (error: unknown, fallbackKey: string, t: (k: string) => string): string => (
-  error instanceof ApiError && error.message ? error.message : t(fallbackKey)
-);
+const errorMessage = (error: unknown, fallbackKey: string, t: (k: string) => string): string =>
+  error instanceof ApiError && error.message ? error.message : t(fallbackKey);
 
 /** Minimal placeholder when a stored strategy references an unknown type. */
 const fallbackTypeInfo = (typeCode: string): StrategyTypeInfo => ({
@@ -73,36 +77,46 @@ const StrategiesPage: React.FC = () => {
   );
   const routes = useMemo(() => routesRequest.data ?? [], [routesRequest.data]);
 
-  const typesRequest = useRequest(
-    (signal) => listEnabledStrategyTypes({ signal }),
-    { onError: () => {} },
-  );
+  const typesRequest = useRequest((signal) => listEnabledStrategyTypes({ signal }), {
+    onError: () => {},
+  });
   const strategyTypes = useMemo(() => typesRequest.data ?? [], [typesRequest.data]);
 
   const getStrategyType = (typeCode: string): StrategyTypeInfo | undefined =>
     strategyTypes.find((st) => st.typeCode === typeCode);
 
   /** A strategy is AI when its type's category is 'ai' (strategy_types.category). */
-  const isAiStrategy = useCallback((s: StrategyDefinition): boolean => (
-    (strategyTypes.find((st) => st.typeCode === s.strategyType)?.category || '').toLowerCase() === 'ai'
-  ), [strategyTypes]);
+  const isAiStrategy = useCallback(
+    (s: StrategyDefinition): boolean =>
+      (strategyTypes.find((st) => st.typeCode === s.strategyType)?.category || '').toLowerCase() ===
+      'ai',
+    [strategyTypes],
+  );
 
   // Locale-aware type label (Chinese name for zh, English name for en).
-  const typeLabel = useCallback((info?: StrategyTypeInfo, rawCode?: string): string => {
-    if (!info) return rawCode || '';
-    return i18n.language === 'en' ? info.typeNameEn : info.typeName;
-  }, [i18n.language]);
+  const typeLabel = useCallback(
+    (info?: StrategyTypeInfo, rawCode?: string): string => {
+      if (!info) return rawCode || '';
+      return i18n.language === 'en' ? info.typeNameEn : info.typeName;
+    },
+    [i18n.language],
+  );
 
-  const filteredStrategies = useMemo(() => strategies.filter((s) => {
-    const matchesType = filterType === 'all' || s.strategyType === filterType;
-    const matchesScope = filterScope === 'all' || s.scope === filterScope;
-    const matchesStatus = statusFilter === 'all'
-      || (statusFilter === 'enabled' && s.enabled)
-      || (statusFilter === 'disabled' && !s.enabled);
-    const matchesCategory = categoryTab === 'ALL'
-      || (categoryTab === 'AI' ? isAiStrategy(s) : !isAiStrategy(s));
-    return matchesType && matchesScope && matchesStatus && matchesCategory;
-  }), [strategies, filterType, filterScope, statusFilter, categoryTab, isAiStrategy]);
+  const filteredStrategies = useMemo(
+    () =>
+      strategies.filter((s) => {
+        const matchesType = filterType === 'all' || s.strategyType === filterType;
+        const matchesScope = filterScope === 'all' || s.scope === filterScope;
+        const matchesStatus =
+          statusFilter === 'all' ||
+          (statusFilter === 'enabled' && s.enabled) ||
+          (statusFilter === 'disabled' && !s.enabled);
+        const matchesCategory =
+          categoryTab === 'ALL' || (categoryTab === 'AI' ? isAiStrategy(s) : !isAiStrategy(s));
+        return matchesType && matchesScope && matchesStatus && matchesCategory;
+      }),
+    [strategies, filterType, filterScope, statusFilter, categoryTab, isAiStrategy],
+  );
 
   // Per-tab counts for the tab labels.
   const categoryCounts = useMemo(() => {
@@ -112,25 +126,34 @@ const StrategiesPage: React.FC = () => {
 
   // The type filter dropdown follows the active tab; the create-flow picker
   // always sees ALL types (it has its own general/AI tabs).
-  const selectableStrategyTypes = useMemo(() => (
-    categoryTab === 'ALL'
-      ? strategyTypes
-      : strategyTypes.filter((st) => (
-        categoryTab === 'AI'
-          ? (st.category || '').toLowerCase() === 'ai'
-          : (st.category || '').toLowerCase() !== 'ai'
-      ))
-  ), [strategyTypes, categoryTab]);
+  const selectableStrategyTypes = useMemo(
+    () =>
+      categoryTab === 'ALL'
+        ? strategyTypes
+        : strategyTypes.filter((st) =>
+            categoryTab === 'AI'
+              ? (st.category || '').toLowerCase() === 'ai'
+              : (st.category || '').toLowerCase() !== 'ai',
+          ),
+    [strategyTypes, categoryTab],
+  );
 
-  const strategyStats = useMemo(() => ({
-    total: strategies.length,
-    enabled: strategies.filter((s) => s.enabled).length,
-  }), [strategies]);
+  const strategyStats = useMemo(
+    () => ({
+      total: strategies.length,
+      enabled: strategies.filter((s) => s.enabled).length,
+    }),
+    [strategies],
+  );
 
-  const strategyTypeOptions = useMemo(() => selectableStrategyTypes.map((st) => ({
-    value: st.typeCode,
-    label: typeLabel(st),
-  })), [selectableStrategyTypes, typeLabel]);
+  const strategyTypeOptions = useMemo(
+    () =>
+      selectableStrategyTypes.map((st) => ({
+        value: st.typeCode,
+        label: typeLabel(st),
+      })),
+    [selectableStrategyTypes, typeLabel],
+  );
 
   // ============================================================
   // CRUD handlers
@@ -139,11 +162,13 @@ const StrategiesPage: React.FC = () => {
   const handleSelectType = (type: StrategyTypeInfo) => {
     const existing = findGlobalStrategy(strategies, type.typeCode);
     if (existing) {
-      message.warning(t('strategy.global_strategy_exists_warning', {
-        type: typeLabel(type),
-        name: existing.strategyName,
-        defaultValue: `已存在全局${typeLabel(type)}策略 "${existing.strategyName}"，只能创建路由级别的策略`,
-      }));
+      message.warning(
+        t('strategy.global_strategy_exists_warning', {
+          type: typeLabel(type),
+          name: existing.strategyName,
+          defaultValue: `已存在全局${typeLabel(type)}策略 "${existing.strategyName}"，只能创建路由级别的策略`,
+        }),
+      );
     }
     setTypeSelectOpen(false);
     setCreatingType(type);
@@ -153,11 +178,13 @@ const StrategiesPage: React.FC = () => {
     // Frontend guard for the one-global-per-type product rule.
     const existing = findGlobalStrategy(strategies, body.strategyType);
     if (body.scope === 'GLOBAL' && existing) {
-      message.error(t('strategy.global_strategy_exists_error', {
-        type: typeLabel(getStrategyType(body.strategyType)),
-        name: existing.strategyName,
-        defaultValue: `已存在全局${typeLabel(getStrategyType(body.strategyType))}策略 "${existing.strategyName}"，每个类型只允许创建一个全局策略`,
-      }));
+      message.error(
+        t('strategy.global_strategy_exists_error', {
+          type: typeLabel(getStrategyType(body.strategyType)),
+          name: existing.strategyName,
+          defaultValue: `已存在全局${typeLabel(getStrategyType(body.strategyType))}策略 "${existing.strategyName}"，每个类型只允许创建一个全局策略`,
+        }),
+      );
       return;
     }
     try {
@@ -208,47 +235,54 @@ const StrategiesPage: React.FC = () => {
   };
 
   const editingTypeInfo = editingStrategy
-    ? (getStrategyType(editingStrategy.strategyType) ?? fallbackTypeInfo(editingStrategy.strategyType))
+    ? (getStrategyType(editingStrategy.strategyType) ??
+      fallbackTypeInfo(editingStrategy.strategyType))
     : null;
 
   return (
-    <div className="strategies-page">
+    <div className="strategies-page console-resource-page">
       {/* Header with inline stat chips (clickable status filter, saves a full row) */}
       <div className="page-header-modern">
         <div className="page-header-left">
-          <Title level={3} className="page-title-main">{t('strategy.title')}</Title>
+          <Title level={3} className="page-title-main">
+            {t('strategy.title')}
+          </Title>
           <Text type="secondary">{t('strategy.description')}</Text>
         </div>
         <div className="page-header-right">
-          <InlineStatChips items={[
-            {
-              key: 'all',
-              value: strategyStats.total,
-              label: t('strategy.stats_total'),
-              active: statusFilter === 'all',
-              onClick: () => setStatusFilter('all'),
-            },
-            {
-              key: 'enabled',
-              value: strategyStats.enabled,
-              label: t('strategy.stats_enabled'),
-              tone: 'green',
-              active: statusFilter === 'enabled',
-              onClick: () => setStatusFilter('enabled'),
-            },
-            {
-              key: 'disabled',
-              value: strategyStats.total - strategyStats.enabled,
-              label: t('strategy.stats_disabled'),
-              tone: 'red',
-              active: statusFilter === 'disabled',
-              onClick: () => setStatusFilter('disabled'),
-            },
-          ]} />
+          <InlineStatChips
+            items={[
+              {
+                key: 'all',
+                value: strategyStats.total,
+                label: t('strategy.stats_total'),
+                active: statusFilter === 'all',
+                onClick: () => setStatusFilter('all'),
+              },
+              {
+                key: 'enabled',
+                value: strategyStats.enabled,
+                label: t('strategy.stats_enabled'),
+                tone: 'green',
+                active: statusFilter === 'enabled',
+                onClick: () => setStatusFilter('enabled'),
+              },
+              {
+                key: 'disabled',
+                value: strategyStats.total - strategyStats.enabled,
+                label: t('strategy.stats_disabled'),
+                tone: 'red',
+                active: statusFilter === 'disabled',
+                onClick: () => setStatusFilter('disabled'),
+              },
+            ]}
+          />
           <Select value={filterType} onChange={setFilterType} style={{ width: 160 }}>
             <Select.Option value="all">{t('common.all_types')}</Select.Option>
             {strategyTypeOptions.map((opt) => (
-              <Select.Option key={opt.value} value={opt.value}>{opt.label}</Select.Option>
+              <Select.Option key={opt.value} value={opt.value}>
+                {opt.label}
+              </Select.Option>
             ))}
           </Select>
           <Select value={filterScope} onChange={setFilterScope} style={{ width: 140 }}>
@@ -256,7 +290,12 @@ const StrategiesPage: React.FC = () => {
             <Select.Option value="GLOBAL">{t('strategy.scope_global')}</Select.Option>
             <Select.Option value="ROUTE">{t('strategy.scope_route')}</Select.Option>
           </Select>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setTypeSelectOpen(true)} className="create-btn">
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setTypeSelectOpen(true)}
+            className="create-btn"
+          >
             {t('strategy.create')}
           </Button>
         </div>
@@ -271,11 +310,19 @@ const StrategiesPage: React.FC = () => {
           { key: 'ALL', label: `${t('strategy.tab_all')} (${categoryCounts.all})` },
           {
             key: 'NORMAL',
-            label: (<span><ThunderboltOutlined /> {t('strategy.tab_normal')} ({categoryCounts.normal})</span>),
+            label: (
+              <span>
+                <ThunderboltOutlined /> {t('strategy.tab_normal')} ({categoryCounts.normal})
+              </span>
+            ),
           },
           {
             key: 'AI',
-            label: (<span><RobotOutlined /> {t('strategy.tab_ai')} ({categoryCounts.ai})</span>),
+            label: (
+              <span>
+                <RobotOutlined /> {t('strategy.tab_ai')} ({categoryCounts.ai})
+              </span>
+            ),
           },
         ]}
       />
@@ -288,7 +335,11 @@ const StrategiesPage: React.FC = () => {
               image={<ThunderboltOutlined className="empty-icon" />}
               description={<span className="empty-text">{t('strategy.empty')}</span>}
             >
-              <Button type="primary" icon={<PlusOutlined />} onClick={() => setTypeSelectOpen(true)}>
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={() => setTypeSelectOpen(true)}
+              >
                 {t('strategy.create_first')}
               </Button>
             </Empty>

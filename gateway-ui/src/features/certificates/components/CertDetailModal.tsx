@@ -16,7 +16,7 @@ interface CertDetailModalProps {
 const CertDetailModal: React.FC<CertDetailModalProps> = ({ certificate, onClose }) => {
   const { t } = useTranslation();
   return (
-    <Modal
+    <Modal className="console-dialog"
       title={t('cert.detail_title')}
       open
       onCancel={onClose}

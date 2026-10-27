@@ -20,7 +20,7 @@ const AnalysisModal: React.FC<Props> = ({ open, testId, loading, content, onClos
   const { t } = useTranslation();
 
   return (
-    <Modal
+    <Modal className="console-dialog"
       title={
         <Space>
           <RobotOutlined style={{ color: '#52c41a' }} />

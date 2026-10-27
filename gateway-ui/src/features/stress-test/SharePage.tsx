@@ -1,3 +1,4 @@
+import '../instance-detail/operations-ui.css';
 /**
  * Public stress-test share page — rendered at /share/:shareId without
  * auth or the app shell. Loads the shared report and offers markdown download.
@@ -123,7 +124,7 @@ const StressTestSharePage: React.FC = () => {
   }
 
   return (
-    <div style={{
+    <div className="console-workspace-page console-shared-report" style={{
       padding: '24px',
       maxWidth: '1200px',
       margin: '0 auto',
@@ -172,7 +173,7 @@ const StressTestSharePage: React.FC = () => {
 
         <Title level={5} style={{ color: '#f1f5f9', marginBottom: '16px' }}>Test Results</Title>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+        <div className="console-report-metrics" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
           <Card size="small" style={{ background: 'rgba(15, 23, 42, 0.6)', border: 'none' }}>
             <div style={{ textAlign: 'center' }}>
               <Text type="secondary">Total Requests</Text>
@@ -214,7 +215,7 @@ const StressTestSharePage: React.FC = () => {
 
         <Title level={5} style={{ color: '#f1f5f9', marginBottom: '16px' }}>Response Time Distribution</Title>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+        <div className="console-report-metrics" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
           {[
             { label: 'Min', value: test?.minResponseTimeMs },
             { label: 'P50', value: test?.p50ResponseTimeMs },

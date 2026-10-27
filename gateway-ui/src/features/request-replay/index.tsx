@@ -226,8 +226,8 @@ const RequestReplayPage: React.FC = () => {
   ], [t, handlePrepare]);
 
   return (
-    <div className="request-replay-page">
-      <div className="replay-header">
+    <div className="request-replay-page console-workspace-page console-resource-page">
+      <div className="replay-header console-page-header">
         <Title level={4} style={{ margin: 0 }}>
           <PlayCircleOutlined style={{ marginRight: 8 }} />
           {t('replay.title')}
@@ -265,7 +265,7 @@ const RequestReplayPage: React.FC = () => {
       </div>
 
       <Card title={t('replay.recent_traces')}>
-        <Table
+        <Table scroll={{ x: 'max-content' }}
           dataSource={traces}
           columns={columns}
           rowKey="id"

@@ -111,7 +111,7 @@ const FilterExecutionDetailDrawer: React.FC<FilterExecutionDetailDrawerProps> = 
   const healthStatus = getHealthStatus(execution.selfTimeMs);
 
   return (
-    <Drawer
+    <Drawer rootClassName="console-drawer"
       title={
         <span>
           <FilterOutlined style={{ marginRight: 8 }} />

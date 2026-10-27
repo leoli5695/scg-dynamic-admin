@@ -30,6 +30,7 @@ import { InstanceDetailProvider } from './InstanceDetailContext';
 import ScaleModal from './ScaleModal';
 import './instance-detail.css';
 import './console-ui.css';
+import './operations-ui.css';
 
 const { Title } = Typography;
 

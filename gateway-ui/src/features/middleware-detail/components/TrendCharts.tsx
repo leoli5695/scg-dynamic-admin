@@ -31,7 +31,7 @@ const TrendCharts: React.FC<TrendChartsProps> = ({ trendItems, middlewareType, t
           style={{ marginBottom: 16 }}
         />
         {consumerGroups.length > 0 ? (
-          <Table
+          <Table scroll={{ x: 'max-content' }}
             dataSource={consumerGroups}
             rowKey="group"
             pagination={false}

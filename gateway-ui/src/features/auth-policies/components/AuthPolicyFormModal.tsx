@@ -7,7 +7,8 @@
  * form (whitelistPaths, apiKeys, ...) must be carried over.
  */
 import React, { useMemo } from 'react';
-import { Button, Col, Form, Input, InputNumber, Modal, Row, Select, Switch } from 'antd';
+import ResourceEditor from '../../instance-detail/ResourceEditor';
+import { Col, Form, Input, InputNumber, Row, Select, Switch } from 'antd';
 import { EditOutlined, PlusOutlined, SafetyOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { AuthPolicyDefinition, AuthType } from '../../../types/authPolicy';
@@ -22,7 +23,10 @@ interface AuthPolicyFormModalProps {
 }
 
 const AuthPolicyFormModal: React.FC<AuthPolicyFormModalProps> = ({
-  mode, policy, onCancel, onSubmit,
+  mode,
+  policy,
+  onCancel,
+  onSubmit,
 }) => {
   const { t } = useTranslation();
   const isEdit = mode === 'edit';
@@ -42,9 +46,8 @@ const AuthPolicyFormModal: React.FC<AuthPolicyFormModalProps> = ({
   };
 
   const handleFinish = async (values: AuthPolicyDefinition) => {
-    const body: AuthPolicyDefinition = isEdit && policy
-      ? { ...policy, ...values, policyId: policy.policyId }
-      : values;
+    const body: AuthPolicyDefinition =
+      isEdit && policy ? { ...policy, ...values, policyId: policy.policyId } : values;
     setSubmitting(true);
     try {
       await onSubmit(body);
@@ -58,7 +61,11 @@ const AuthPolicyFormModal: React.FC<AuthPolicyFormModalProps> = ({
       case 'JWT':
         return (
           <>
-            <Form.Item name="secretKey" label={t('auth_policy.jwt_secret')} rules={[{ required: true }]}>
+            <Form.Item
+              name="secretKey"
+              label={t('auth_policy.jwt_secret')}
+              rules={[{ required: true }]}
+            >
               <Input.Password />
             </Form.Item>
             <Row gutter={16}>
@@ -102,13 +109,25 @@ const AuthPolicyFormModal: React.FC<AuthPolicyFormModalProps> = ({
       case 'OAUTH2':
         return (
           <>
-            <Form.Item name="clientId" label={t('auth_policy.client_id')} rules={[{ required: true }]}>
+            <Form.Item
+              name="clientId"
+              label={t('auth_policy.client_id')}
+              rules={[{ required: true }]}
+            >
               <Input />
             </Form.Item>
-            <Form.Item name="clientSecret" label={t('auth_policy.client_secret')} rules={[{ required: true }]}>
+            <Form.Item
+              name="clientSecret"
+              label={t('auth_policy.client_secret')}
+              rules={[{ required: true }]}
+            >
               <Input.Password />
             </Form.Item>
-            <Form.Item name="tokenEndpoint" label={t('auth_policy.token_endpoint')} rules={[{ required: true }]}>
+            <Form.Item
+              name="tokenEndpoint"
+              label={t('auth_policy.token_endpoint')}
+              rules={[{ required: true }]}
+            >
               <Input placeholder="https://auth.example.com/introspect" />
             </Form.Item>
             <Form.Item name="requiredScopes" label={t('auth_policy.required_scopes')}>
@@ -119,10 +138,18 @@ const AuthPolicyFormModal: React.FC<AuthPolicyFormModalProps> = ({
       case 'BASIC':
         return (
           <>
-            <Form.Item name="basicUsername" label={t('auth_policy.username')} rules={[{ required: true }]}>
+            <Form.Item
+              name="basicUsername"
+              label={t('auth_policy.username')}
+              rules={[{ required: true }]}
+            >
               <Input />
             </Form.Item>
-            <Form.Item name="basicPassword" label={t('auth_policy.password')} rules={[{ required: true }]}>
+            <Form.Item
+              name="basicPassword"
+              label={t('auth_policy.password')}
+              rules={[{ required: true }]}
+            >
               <Input.Password />
             </Form.Item>
             <Form.Item name="realm" label={t('auth_policy.realm')}>
@@ -133,7 +160,11 @@ const AuthPolicyFormModal: React.FC<AuthPolicyFormModalProps> = ({
       case 'HMAC':
         return (
           <>
-            <Form.Item name="accessKey" label={t('auth_policy.access_key')} rules={[{ required: true }]}>
+            <Form.Item
+              name="accessKey"
+              label={t('auth_policy.access_key')}
+              rules={[{ required: true }]}
+            >
               <Input />
             </Form.Item>
             <Form.Item name="signatureAlgorithm" label={t('auth_policy.signature_algorithm')}>
@@ -150,69 +181,96 @@ const AuthPolicyFormModal: React.FC<AuthPolicyFormModalProps> = ({
   };
 
   const typeOptions = AUTH_TYPES.map((type) => (
-    <Select.Option key={type} value={type}>{getAuthTypeLabel(type, t)}</Select.Option>
+    <Select.Option key={type} value={type}>
+      {getAuthTypeLabel(type, t)}
+    </Select.Option>
   ));
 
   return (
-    <Modal
+    <ResourceEditor
       title={
         <div className="modal-header-modern">
           <div className={`modal-icon-wrapper${isEdit ? ' edit' : ''}`}>
             {isEdit ? <EditOutlined /> : <PlusOutlined />}
           </div>
           <div className="modal-title-text">
-            <div className="modal-title">{t(isEdit ? 'auth_policy.edit' : 'auth_policy.create')}</div>
+            <div className="modal-title">
+              {t(isEdit ? 'auth_policy.edit' : 'auth_policy.create')}
+            </div>
             {!isEdit && <div className="modal-subtitle">{t('auth_policy.create_description')}</div>}
           </div>
         </div>
       }
-      open
+      form={form}
+      initialValues={initialValues}
+      submitting={submitting}
       onCancel={onCancel}
-      footer={null}
-      width={600}
-      destroyOnHidden
-    >
-      <Form
-        form={form}
-        layout="vertical"
-        initialValues={initialValues}
-        onFinish={handleFinish}
-      >
-        <div className="form-section-modern">
-          <Form.Item name="policyName" label={t('auth_policy.policy_name')} rules={[{ required: true }]}>
-            <Input placeholder={t('auth_policy.policy_name_placeholder')} />
-          </Form.Item>
-          <Form.Item name="authType" label={t('auth_policy.auth_type')} rules={[{ required: true }]}>
-            <Select disabled={isEdit} onChange={isEdit ? undefined : handleTypeChange}>
-              {typeOptions}
-            </Select>
-          </Form.Item>
-        </div>
-        <div className="form-section-modern">
-          <div className="section-header">
-            <SafetyOutlined className="section-icon" />
-            <span className="section-title">{t('auth_policy.config_section')}</span>
-          </div>
-          <Form.Item noStyle shouldUpdate={(prev, cur) => prev.authType !== cur.authType}>
-            {({ getFieldValue }) => renderConfigFields(getFieldValue('authType'))}
-          </Form.Item>
-        </div>
-        <Form.Item name="description" label={t('common.description')}>
-          <Input.TextArea rows={2} />
-        </Form.Item>
-        {isEdit && (
-          <Form.Item name="enabled" label={t('common.status')} valuePropName="checked">
-            <Switch checkedChildren={t('common.enabled')} unCheckedChildren={t('common.disabled')} />
-          </Form.Item>
-        )}
-        <div className="modal-footer-modern">
-          <Button onClick={onCancel}>{t('common.cancel')}</Button>
-          <Button type="primary" htmlType="submit" loading={submitting}>
-            {t(isEdit ? 'common.update' : 'common.create')}
-          </Button>
-        </div>
-      </Form>
-    </Modal>
+      onFinish={handleFinish}
+      submitLabel={t(isEdit ? 'common.update' : 'common.create')}
+      sections={[
+        {
+          label: t('strategy.basic_info'),
+          fields: ['policyName', 'authType'],
+          content: (
+            <>
+              <div className="form-section-modern">
+                <Form.Item
+                  name="policyName"
+                  label={t('auth_policy.policy_name')}
+                  rules={[{ required: true }]}
+                >
+                  <Input placeholder={t('auth_policy.policy_name_placeholder')} />
+                </Form.Item>
+                <Form.Item
+                  name="authType"
+                  label={t('auth_policy.auth_type')}
+                  rules={[{ required: true }]}
+                >
+                  <Select disabled={isEdit} onChange={isEdit ? undefined : handleTypeChange}>
+                    {typeOptions}
+                  </Select>
+                </Form.Item>
+              </div>
+            </>
+          ),
+        },
+        {
+          label: t('auth_policy.config_section'),
+          content: (
+            <>
+              <div className="form-section-modern">
+                <div className="section-header">
+                  <SafetyOutlined className="section-icon" />
+                  <span className="section-title">{t('auth_policy.config_section')}</span>
+                </div>
+                <Form.Item noStyle shouldUpdate={(prev, cur) => prev.authType !== cur.authType}>
+                  {({ getFieldValue }) => renderConfigFields(getFieldValue('authType'))}
+                </Form.Item>
+              </div>
+            </>
+          ),
+        },
+        {
+          label: t('strategy.advanced_settings'),
+          fields: ['description', 'enabled'],
+          content: (
+            <div className="form-section-modern">
+              <Form.Item name="description" label={t('common.description')}>
+                <Input.TextArea rows={2} />
+              </Form.Item>
+              {isEdit && (
+                <Form.Item name="enabled" label={t('common.status')} valuePropName="checked">
+                  <Switch
+                    checkedChildren={t('common.enabled')}
+                    unCheckedChildren={t('common.disabled')}
+                  />
+                </Form.Item>
+              )}
+            </div>
+          ),
+        },
+      ]}
+    />
   );
 };
 

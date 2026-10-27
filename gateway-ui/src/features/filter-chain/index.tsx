@@ -554,8 +554,8 @@ const FilterChainPage: React.FC = () => {
     .slice(0, 5);
 
   return (
-    <div className="filter-chain-page">
-      <div className="page-header" style={{
+    <div className="filter-chain-page console-workspace-page console-resource-page">
+      <div className="page-header console-page-header" style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -788,7 +788,7 @@ const FilterChainPage: React.FC = () => {
           </Button>
         )}
       >
-        <Table
+        <Table scroll={{ x: 'max-content' }}
           dataSource={filterStats}
           columns={filterColumns}
           rowKey="filterName"
@@ -800,7 +800,7 @@ const FilterChainPage: React.FC = () => {
 
       {/* Recent records */}
       <Card title={t('filterChain.recent_records')}>
-        <Table
+        <Table scroll={{ x: 'max-content' }}
           dataSource={records}
           columns={recordColumns}
           rowKey="traceId"
@@ -862,7 +862,7 @@ const FilterChainPage: React.FC = () => {
             <WaterfallChart ref={waterfallChartRef} executions={selectedRecord.executions || []} totalDuration={selectedRecord.totalDurationMs} />
           </Card>
 
-          <Table
+          <Table scroll={{ x: 'max-content' }}
             dataSource={selectedRecord.executions || []}
             columns={executionColumns}
             rowKey="filter"
@@ -873,7 +873,7 @@ const FilterChainPage: React.FC = () => {
       )}
 
       {/* Threshold configuration modal */}
-      <Modal
+      <Modal className="console-dialog"
         title="性能阈值配置"
         open={showThresholdModal}
         onCancel={() => setShowThresholdModal(false)}
@@ -930,7 +930,7 @@ const FilterChainPage: React.FC = () => {
       </Modal>
 
       {/* Export modal */}
-      <Modal
+      <Modal className="console-dialog"
         title="导出数据"
         open={showExportModal}
         onCancel={() => setShowExportModal(false)}

@@ -21,7 +21,7 @@ const QuickTestModal: React.FC<Props> = ({ open, onClose, onStart }) => {
   const [concurrent, setConcurrent] = useState(10);
 
   return (
-    <Modal
+    <Modal className="console-dialog"
       title={
         <Space>
           <ThunderboltOutlined style={{ color: '#165DFF' }} />

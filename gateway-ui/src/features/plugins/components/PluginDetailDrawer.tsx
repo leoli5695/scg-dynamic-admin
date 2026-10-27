@@ -6,7 +6,7 @@ import { Badge, Descriptions, Drawer, Tag, Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
 import type { Plugin } from '../../../types/plugin';
 import { getCategoryColor, getPluginDescription, getPluginStatus } from '../utils';
-import { parseServerTime } from '../../../utils/serverTime';
+import { formatServerTime } from '../../../utils/serverTime';
 
 interface PluginDetailDrawerProps {
   plugin: Plugin;
@@ -18,13 +18,7 @@ const PluginDetailDrawer: React.FC<PluginDetailDrawerProps> = ({ plugin, onClose
   const status = getPluginStatus(plugin);
 
   return (
-    <Drawer
-      title={t('plugins.detail_title')}
-      width={600}
-      open
-      onClose={onClose}
-      destroyOnHidden
-    >
+    <Drawer title={t('plugins.detail_title')} width={600} open onClose={onClose} destroyOnHidden>
       <Descriptions column={2} bordered>
         <Descriptions.Item label={t('plugins.plugin_id')} span={2}>
           {plugin.pluginId}
@@ -52,13 +46,21 @@ const PluginDetailDrawer: React.FC<PluginDetailDrawerProps> = ({ plugin, onClose
           <Badge status={status.badge} text={t(status.labelKey)} />
         </Descriptions.Item>
         <Descriptions.Item label={t('plugins.enabled_label')}>
-          {plugin.enabled ? <Tag color="green">{t('common.yes')}</Tag> : <Tag color="red">{t('common.no')}</Tag>}
+          {plugin.enabled ? (
+            <Tag color="green">{t('common.yes')}</Tag>
+          ) : (
+            <Tag color="red">{t('common.no')}</Tag>
+          )}
         </Descriptions.Item>
         <Descriptions.Item label={t('plugins.loaded_label')}>
           {plugin.loaded ? <Tag color="blue">{t('common.yes')}</Tag> : <Tag>{t('common.no')}</Tag>}
         </Descriptions.Item>
         <Descriptions.Item label={t('plugins.registered_label')}>
-          {plugin.registered ? <Tag color="success">{t('common.yes')}</Tag> : <Tag>{t('common.no')}</Tag>}
+          {plugin.registered ? (
+            <Tag color="success">{t('common.yes')}</Tag>
+          ) : (
+            <Tag>{t('common.no')}</Tag>
+          )}
         </Descriptions.Item>
         <Descriptions.Item label={t('plugins.jar_hash')}>
           {plugin.jarHash ? (
@@ -73,10 +75,10 @@ const PluginDetailDrawer: React.FC<PluginDetailDrawerProps> = ({ plugin, onClose
           {getPluginDescription(plugin, i18n.language)}
         </Descriptions.Item>
         <Descriptions.Item label={t('plugins.created_at')}>
-          {parseServerTime(plugin.createdAt).toLocaleString()}
+          {formatServerTime(plugin.createdAt)}
         </Descriptions.Item>
         <Descriptions.Item label={t('plugins.updated_at')}>
-          {parseServerTime(plugin.updatedAt).toLocaleString()}
+          {formatServerTime(plugin.updatedAt)}
         </Descriptions.Item>
       </Descriptions>
     </Drawer>

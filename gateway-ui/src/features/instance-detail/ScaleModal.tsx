@@ -92,7 +92,7 @@ const ScaleModal: React.FC<ScaleModalProps> = ({
   };
 
   return (
-    <Modal
+    <Modal className="console-dialog"
       title={t('instance.scale_title')}
       open={open}
       onOk={handleOk}

@@ -1,10 +1,19 @@
 import React, { useMemo, useState } from 'react';
 import {
-  Button, Card, Form, Input, Popconfirm, Select, Space, Spin, Switch, Tag, Typography  } from 'antd';
+  Button,
+  Card,
+  Form,
+  Input,
+  Popconfirm,
+  Select,
+  Space,
+  Spin,
+  Switch,
+  Tag,
+  Typography,
+} from 'antd';
 import { message } from '../../utils/antdStatic';
-import {
-  BellOutlined, MailOutlined, PlusOutlined, SendOutlined,
-} from '@ant-design/icons';
+import { BellOutlined, MailOutlined, PlusOutlined, SendOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useRequest } from '../../hooks/useRequest';
 import {
@@ -37,24 +46,22 @@ const AlertPage: React.FC = () => {
   const [historyPage, setHistoryPage] = useState(0);
   const [historyPageSize, setHistoryPageSize] = useState(10);
 
-  const configRequest = useRequest(
-    (signal) => getAlertConfig({ instanceId }, { signal }),
-    {
-      deps: [instanceId],
-      onSuccess: (data) => {
-        setEmails(data.emailRecipients ?? []);
-        form.setFieldsValue({
-          emailLanguage: data.emailLanguage || 'zh',
-          enabled: data.enabled,
-          ...mergeThresholdConfig(data.thresholdConfig),
-        });
-      },
+  const configRequest = useRequest((signal) => getAlertConfig({ instanceId }, { signal }), {
+    deps: [instanceId],
+    onSuccess: (data) => {
+      setEmails(data.emailRecipients ?? []);
+      form.setFieldsValue({
+        emailLanguage: data.emailLanguage || 'zh',
+        enabled: data.enabled,
+        ...mergeThresholdConfig(data.thresholdConfig),
+      });
     },
-  );
+  });
   const config = configRequest.data;
 
   const historyRequest = useRequest(
-    (signal) => getAlertHistory({ instanceId, page: historyPage, size: historyPageSize }, { signal }),
+    (signal) =>
+      getAlertHistory({ instanceId, page: historyPage, size: historyPageSize }, { signal }),
     { deps: [instanceId, historyPage, historyPageSize] },
   );
   const history = useMemo(() => historyRequest.data?.content ?? [], [historyRequest.data]);
@@ -65,9 +72,7 @@ const AlertPage: React.FC = () => {
     setHistoryPageSize(pageSize);
   };
 
-  const metricsRequest = useRequest(
-    (signal) => getAlertThresholdMetrics({ signal }),
-  );
+  const metricsRequest = useRequest((signal) => getAlertThresholdMetrics({ signal }));
 
   /** Persist just the recipient list (used by add/remove auto-save). */
   const saveEmailRecipients = async (emailList: string[]) => {
@@ -174,32 +179,47 @@ const AlertPage: React.FC = () => {
   };
 
   if (configRequest.loading && !config) {
-    return <div style={{ textAlign: 'center', padding: 100 }}><Spin size="large" /></div>;
+    return (
+      <div className="console-workspace-page console-loading-page">
+        <Spin size="large" />
+      </div>
+    );
   }
 
   return (
-    <div className="alert-settings-container">
-      <div className="alert-page-header">
+    <div className="alert-settings-container console-workspace-page console-resource-page">
+      <div className="alert-page-header console-page-header">
         <div className="alert-header-title">
           <BellOutlined className="alert-header-icon" />
-          <Title level={3} style={{ margin: 0 }}>{t('alert.title')}</Title>
+          <Title level={3} style={{ margin: 0 }}>
+            {t('alert.title')}
+          </Title>
         </div>
         <Space className="alert-header-actions">
           <Popconfirm title={t('alert.test_email_confirm')} onConfirm={handleTestEmail}>
-            <Button icon={<SendOutlined />} disabled={emails.length === 0} className="test-email-btn">
+            <Button
+              icon={<SendOutlined />}
+              disabled={emails.length === 0}
+              className="test-email-btn"
+            >
               {t('alert.test_email')}
             </Button>
           </Popconfirm>
-          <Button type="primary" onClick={handleSave} loading={saving} className="save-config-btn">
-            {t('alert.save_config')}
-          </Button>
         </Space>
       </div>
 
       <Form form={form} layout="vertical" className="alert-form">
         <div className="settings-grid">
           <div className="settings-card-wrapper">
-            <Card title={<Space><MailOutlined />{t('alert.email_settings')}</Space>} className="settings-card email-settings-card">
+            <Card
+              title={
+                <Space>
+                  <MailOutlined />
+                  {t('alert.email_settings')}
+                </Space>
+              }
+              className="settings-card email-settings-card"
+            >
               <Form.Item label={t('alert.email_recipients')}>
                 <Space.Compact style={{ width: '100%' }}>
                   <Input
@@ -216,14 +236,17 @@ const AlertPage: React.FC = () => {
 
               <div style={{ marginBottom: 16 }}>
                 {emails.map((email) => (
-                  <Tag key={email} closable onClose={() => handleRemoveEmail(email)} style={{ marginBottom: 4 }}>
+                  <Tag
+                    key={email}
+                    closable
+                    onClose={() => handleRemoveEmail(email)}
+                    style={{ marginBottom: 4 }}
+                  >
                     <MailOutlined style={{ marginRight: 4 }} />
                     {email}
                   </Tag>
                 ))}
-                {emails.length === 0 && (
-                  <Text type="secondary">{t('alert.no_emails')}</Text>
-                )}
+                {emails.length === 0 && <Text type="secondary">{t('alert.no_emails')}</Text>}
               </div>
 
               <Form.Item name="emailLanguage" label={t('alert.email_language')}>
@@ -234,7 +257,11 @@ const AlertPage: React.FC = () => {
               </Form.Item>
 
               <Form.Item name="enabled" label={t('alert.enabled')} valuePropName="checked">
-                <Switch checkedChildren={t('common.enabled')} unCheckedChildren={t('common.disabled')} className="alert-switch" />
+                <Switch
+                  checkedChildren={t('common.enabled')}
+                  unCheckedChildren={t('common.disabled')}
+                  className="alert-switch"
+                />
               </Form.Item>
             </Card>
           </div>
@@ -244,6 +271,12 @@ const AlertPage: React.FC = () => {
 
         <ThresholdCards />
       </Form>
+      <div className="console-settings-footer">
+        {' '}
+        <Button type="primary" onClick={handleSave} loading={saving} className="save-config-btn">
+          {t('alert.save_config')}
+        </Button>
+      </div>
 
       <HistoryTable
         history={history}

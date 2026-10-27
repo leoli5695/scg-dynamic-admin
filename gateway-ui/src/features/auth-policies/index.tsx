@@ -19,9 +19,17 @@ import { useTranslation } from 'react-i18next';
 import { useRequest } from '../../hooks/useRequest';
 import { ApiError } from '../../api/http';
 import {
-  createAuthBinding, createAuthPolicy, deleteAuthBinding, deleteAuthPolicy,
-  disableAuthBinding, disableAuthPolicy, enableAuthBinding, enableAuthPolicy,
-  listAuthBindings, listAuthPolicies, updateAuthPolicy,
+  createAuthBinding,
+  createAuthPolicy,
+  deleteAuthBinding,
+  deleteAuthPolicy,
+  disableAuthBinding,
+  disableAuthPolicy,
+  enableAuthBinding,
+  enableAuthPolicy,
+  listAuthBindings,
+  listAuthPolicies,
+  updateAuthPolicy,
 } from '../../api/authPolicies';
 import { listRoutes } from '../../api/routes';
 import type { AuthPolicyDefinition, RouteAuthBinding } from '../../types/authPolicy';
@@ -35,9 +43,8 @@ import '../strategies/strategies-premium.css';
 
 const { Title } = Typography;
 
-const errorMessage = (error: unknown, fallbackKey: string, t: (k: string) => string): string => (
-  error instanceof ApiError && error.message ? error.message : t(fallbackKey)
-);
+const errorMessage = (error: unknown, fallbackKey: string, t: (k: string) => string): string =>
+  error instanceof ApiError && error.message ? error.message : t(fallbackKey);
 
 const AuthPoliciesPage: React.FC = () => {
   const { t } = useTranslation();
@@ -68,10 +75,9 @@ const AuthPoliciesPage: React.FC = () => {
   const routes = useMemo(() => routesRequest.data ?? [], [routesRequest.data]);
 
   // Backend returns bindings of every instance; filter for this one.
-  const bindingsRequest = useRequest(
-    (signal) => listAuthBindings({ signal }),
-    { onError: () => {} },
-  );
+  const bindingsRequest = useRequest((signal) => listAuthBindings({ signal }), {
+    onError: () => {},
+  });
   const bindings = useMemo(() => {
     const all = bindingsRequest.data ?? [];
     return instanceId ? all.filter((b) => b.instanceId === instanceId) : all;
@@ -87,19 +93,25 @@ const AuthPoliciesPage: React.FC = () => {
     return map;
   }, [bindings]);
 
-  const filteredPolicies = useMemo(() => policies.filter(
-    (p) => filterType === 'all' || p.authType === filterType,
-  ), [policies, filterType]);
+  const filteredPolicies = useMemo(
+    () => policies.filter((p) => filterType === 'all' || p.authType === filterType),
+    [policies, filterType],
+  );
 
-  const stats = useMemo(() => ({
-    total: policies.length,
-    enabled: policies.filter((p) => p.enabled).length,
-    boundRoutes: new Set(bindings.filter((b) => b.enabled).map((b) => b.routeId)).size,
-  }), [policies, bindings]);
+  const stats = useMemo(
+    () => ({
+      total: policies.length,
+      enabled: policies.filter((p) => p.enabled).length,
+      boundRoutes: new Set(bindings.filter((b) => b.enabled).map((b) => b.routeId)).size,
+    }),
+    [policies, bindings],
+  );
 
-  const getRouteName = useCallback((routeId: string) =>
-    routes.find((r) => r.id === routeId)?.routeName || routeId?.substring(0, 12) || 'Unknown',
-  [routes]);
+  const getRouteName = useCallback(
+    (routeId: string) =>
+      routes.find((r) => r.id === routeId)?.routeName || routeId?.substring(0, 12) || 'Unknown',
+    [routes],
+  );
 
   // ============================================================
   // Policy CRUD handlers
@@ -167,8 +179,9 @@ const AuthPoliciesPage: React.FC = () => {
   const handleAddBindings = async (routeIds: string[], priority: number): Promise<boolean> => {
     if (!bindingPolicy?.policyId) return false;
     const policyId = bindingPolicy.policyId;
-    const results = await Promise.allSettled(routeIds.map((routeId) =>
-      createAuthBinding({ policyId, routeId, priority })));
+    const results = await Promise.allSettled(
+      routeIds.map((routeId) => createAuthBinding({ policyId, routeId, priority })),
+    );
     const successCount = results.filter((r) => r.status === 'fulfilled').length;
     const failCount = results.length - successCount;
     if (successCount > 0) {
@@ -205,7 +218,7 @@ const AuthPoliciesPage: React.FC = () => {
   };
 
   return (
-    <div className="strategies-page">
+    <div className="strategies-page console-resource-page">
       {/* Header with inline stat chips */}
       <div className="page-header-modern">
         <div className="page-header-left">
@@ -213,15 +226,29 @@ const AuthPoliciesPage: React.FC = () => {
           <Title level={2}>{t('auth_policy.title')}</Title>
         </div>
         <div className="page-header-right">
-          <InlineStatChips items={[
-            { key: 'total', value: stats.total, label: t('auth_policy.stats_total') },
-            { key: 'enabled', value: stats.enabled, label: t('auth_policy.stats_enabled'), tone: 'green' },
-            { key: 'bound', value: stats.boundRoutes, label: t('auth_policy.stats_bound'), tone: 'blue' },
-          ]} />
+          <InlineStatChips
+            items={[
+              { key: 'total', value: stats.total, label: t('auth_policy.stats_total') },
+              {
+                key: 'enabled',
+                value: stats.enabled,
+                label: t('auth_policy.stats_enabled'),
+                tone: 'green',
+              },
+              {
+                key: 'bound',
+                value: stats.boundRoutes,
+                label: t('auth_policy.stats_bound'),
+                tone: 'blue',
+              },
+            ]}
+          />
           <Select value={filterType} onChange={setFilterType} style={{ width: 150 }}>
             <Select.Option value="all">{t('auth_policy.all_types')}</Select.Option>
             {AUTH_TYPES.map((type) => (
-              <Select.Option key={type} value={type}>{getAuthTypeLabel(type, t)}</Select.Option>
+              <Select.Option key={type} value={type}>
+                {getAuthTypeLabel(type, t)}
+              </Select.Option>
             ))}
           </Select>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
@@ -281,10 +308,7 @@ const AuthPoliciesPage: React.FC = () => {
         />
       )}
       {usagePolicy && (
-        <UsageExampleModal
-          policy={usagePolicy}
-          onClose={() => setUsagePolicy(null)}
-        />
+        <UsageExampleModal policy={usagePolicy} onClose={() => setUsagePolicy(null)} />
       )}
     </div>
   );

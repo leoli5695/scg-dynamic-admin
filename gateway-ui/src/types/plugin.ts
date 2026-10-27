@@ -94,6 +94,7 @@ export interface PluginBindingStats {
 
 /** One configurable field declared by a plugin's config schema. */
 export interface PluginConfigField {
+  required?: boolean;
   name: string;
   /** number | switch | select | textarea | string (default). */
   type: string;

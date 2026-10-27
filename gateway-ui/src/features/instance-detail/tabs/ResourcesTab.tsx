@@ -25,7 +25,7 @@ const ResourcesTab: React.FC = () => {
   const metrics = metricsRequest.data;
 
   return (
-    <Card>
+    <Card className="console-workspace-page console-resource-page console-cluster-panel">
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Title level={5}>{t('resources.title')}</Title>
         <Button

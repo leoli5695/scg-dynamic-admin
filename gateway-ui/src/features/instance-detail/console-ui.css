@@ -1,5 +1,262 @@
 /* Shared visual language with the public login card. Keep selectors local:
    the editor modals are portalled outside the instance detail layout. */
+.console-resource-page {
+  max-width: 1480px;
+  margin: auto;
+  padding: 0;
+}
+.console-resource-page.strategies-page {
+  background: transparent;
+  padding: 0;
+}
+.console-resource-page.strategies-page .page-header-left {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.console-resource-page.strategies-page .page-header-left h2 {
+  margin: 0;
+  font-size: 25px;
+}
+.console-resource-page .page-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  font-size: 21px;
+  color: #a9c5ff;
+  background: #729aff18;
+  box-shadow: none;
+}
+.console-resource-page .strategies-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
+  gap: 18px;
+}
+.console-resource-page .strategy-card.ant-card,
+.plugins-page.console-resource-page > .ant-card,
+.plugin-bindings-page.console-resource-page > .ant-card {
+  background: linear-gradient(145deg, #19243a99, #101727) !important;
+  border: 1px solid #91a9de26 !important;
+  border-radius: 14px;
+  box-shadow: none;
+}
+.console-resource-page .strategy-card.ant-card:hover {
+  transform: none;
+  border-color: #91a9de55 !important;
+}
+.console-resource-page .strategy-card .strategy-name {
+  overflow-wrap: anywhere;
+}
+.console-resource-page .strategy-card .strategy-icon {
+  box-shadow: none;
+  border-radius: 12px;
+}
+.console-resource-page .strategy-card .strategy-config {
+  background: #0c142466;
+  border: 1px solid #91a9de1c;
+  border-radius: 9px;
+}
+.plugins-page.console-resource-page .ant-statistic {
+  padding: 18px;
+  background: #0c142466;
+  border: 1px solid #91a9de1c;
+  border-radius: 10px;
+}
+.console-resource-page .ant-table-wrapper {
+  max-width: 100%;
+}
+.console-resource-page .ant-table {
+  background: transparent;
+}
+.console-resource-page .ant-table-thead > tr > th {
+  background: #152137;
+  color: #a9b8d2;
+  border-color: #91a9de1c;
+}
+.console-resource-page .ant-table-tbody > tr > td {
+  border-color: #91a9de1c;
+}
+.plugin-bindings-page .page-header-modern > .ant-space {
+  flex-wrap: wrap;
+}
+
+/* Resource pickers use the same login palette and a viewport-bounded body. */
+.console-picker.ant-modal {
+  top: 24px;
+  max-width: calc(100vw - 32px);
+  padding-bottom: 24px;
+}
+.console-picker.ant-modal :is(.ant-modal-container, .ant-modal-content) {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 48px);
+  padding: 0 !important;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 100% 0, #687bce18, transparent 50%), #101727 !important;
+  border: 1px solid #91a9de3b;
+  border-radius: 20px !important;
+  box-shadow: 0 24px 80px #0006;
+}
+.console-picker.ant-modal .ant-modal-header {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 24px 58px 22px 28px !important;
+  background: transparent !important;
+  border-bottom: 1px solid #91a9de24;
+  text-align: left;
+}
+.console-picker.ant-modal .ant-modal-title {
+  color: #edf2ff;
+  font-size: 20px;
+}
+.console-picker.ant-modal .modal-header-modern,
+.resource-editor.ant-modal .modal-header-modern {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 14px;
+  text-align: left;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+.console-picker.ant-modal .modal-title-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  gap: 14px;
+  margin: 0;
+}
+.console-picker.ant-modal .modal-title-text {
+  text-align: left;
+  align-items: flex-start;
+}
+.console-picker.ant-modal .modal-title {
+  color: #edf2ff;
+  font-size: 20px;
+  font-weight: 600;
+}
+.console-picker.ant-modal .modal-subtitle {
+  color: #95a3bc;
+  font-size: 12px;
+  line-height: 1.7;
+  margin-top: 5px;
+  font-weight: 400;
+}
+.console-picker.ant-modal .ant-modal-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 28px 28px !important;
+  scrollbar-gutter: stable;
+}
+.console-picker.ant-modal .ant-tabs-nav {
+  margin-bottom: 24px;
+}
+.console-picker.ant-modal .ant-divider {
+  justify-content: flex-start;
+  margin: 22px 0 16px !important;
+  border-color: #91a9de1c;
+}
+.console-picker.ant-modal .ant-divider .ant-tag {
+  border: 0;
+  background: transparent;
+  color: #9eafcd;
+  font-size: 12px;
+  padding: 0;
+}
+.console-picker.ant-modal .ant-row {
+  align-items: stretch;
+}
+.console-picker.ant-modal .ant-col {
+  display: flex;
+}
+.console-picker.ant-modal .strategy-type-card,
+.console-picker.ant-modal .plugin-card-hover.ant-card {
+  box-sizing: border-box;
+  flex: 1;
+  width: 100%;
+  height: auto;
+  min-height: 164px;
+  padding: 20px !important;
+  border: 1px solid #91a9de26 !important;
+  border-radius: 12px !important;
+  background: #142035 !important;
+  text-align: left;
+  transition:
+    border-color 180ms,
+    background-color 180ms;
+  box-shadow: none !important;
+}
+.console-picker.ant-modal .strategy-type-card:hover,
+.console-picker.ant-modal .plugin-card-hover.ant-card:hover {
+  border-color: #8bacf780 !important;
+  background: #192941 !important;
+  transform: none !important;
+}
+.console-picker.ant-modal :is(.strategy-type-card, .plugin-card-hover):focus-visible {
+  outline: 2px solid #a9c5ff;
+  outline-offset: 3px;
+}
+.console-picker.ant-modal .strategy-type-card > div {
+  margin: 0 0 16px !important;
+  border-radius: 12px !important;
+  width: 40px !important;
+  height: 40px !important;
+  font-size: 21px !important;
+}
+.console-picker.ant-modal .strategy-type-card .ant-typography {
+  font-size: 13px !important;
+  line-height: 1.7;
+}
+.console-picker.ant-modal .strategy-type-card .ant-typography-secondary {
+  color: #95a3bc;
+  font-size: 12px !important;
+}
+.console-picker.ant-modal .plugin-card-hover .ant-card-body {
+  padding: 0 !important;
+}
+.resource-editor.ant-modal .editor-scroll > div[hidden] {
+  display: none !important;
+}
+.resource-editor.ant-modal .form-section-modern {
+  animation: none;
+}
+.resource-editor.ant-modal .ant-col {
+  min-width: 0;
+}
+.resource-editor.ant-modal .ant-divider {
+  border-color: #91a9de26;
+  color: #a9c5ff;
+}
+.resource-editor.ant-modal .ant-alert {
+  border-radius: 10px;
+  background: #819feb0d;
+  border-color: #819feb26;
+}
+@media (max-width: 700px) {
+  .console-resource-page .page-header-modern {
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .console-resource-page .page-header-right {
+    width: 100%;
+  }
+  .plugins-page.console-resource-page > .ant-card > .ant-card-body {
+    padding: 16px;
+  }
+  .console-picker.ant-modal .ant-modal-body {
+    padding: 16px !important;
+  }
+  .resource-editor.ant-modal .ant-row > .ant-col {
+    flex: 0 0 100%;
+    max-width: 100%;
+  }
+}
 .instance-detail-page {
   background: #0b1220;
   color: #e7eefb;

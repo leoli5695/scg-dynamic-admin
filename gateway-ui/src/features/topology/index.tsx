@@ -252,8 +252,8 @@ const TrafficTopologyPage: React.FC = () => {
   };
 
   return (
-    <div className="topology-page">
-      <div className="page-header" style={{
+    <div className="topology-page console-workspace-page console-resource-page">
+      <div className="page-header console-page-header" style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',

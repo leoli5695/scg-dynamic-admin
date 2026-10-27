@@ -38,7 +38,7 @@ const ServiceDetailDrawer: React.FC<ServiceDetailDrawerProps> = ({ service, onCl
     : health.status === 'warning' ? '#faad14' : '#ff4d4f';
 
   return (
-    <Drawer
+    <Drawer rootClassName="console-drawer"
       placement="right"
       width={600}
       open

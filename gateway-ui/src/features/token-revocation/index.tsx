@@ -98,9 +98,9 @@ const TokenRevocationPage: React.FC = () => {
   };
 
   return (
-    <div className="strategies-page">
+    <div className="strategies-page console-workspace-page console-resource-page">
       {/* Header */}
-      <div className="page-header-modern">
+      <div className="page-header-modern console-page-header">
         <div className="page-header-left">
           <SafetyCertificateOutlined className="page-icon" />
           <Title level={2}>{t('jwt_revocation.title')}</Title>

@@ -74,7 +74,7 @@ const DiagnosticPage: React.FC = () => {
 
   if (loading && !report) {
     return (
-      <div style={{ textAlign: 'center', padding: 100 }}>
+      <div className="console-workspace-page console-loading-page">
         <Spin size="large" />
         <div style={{ marginTop: 16 }}>
           <Text type="secondary">{t('diagnostic.running')}</Text>
@@ -84,8 +84,8 @@ const DiagnosticPage: React.FC = () => {
   }
 
   return (
-    <div className="diagnostic-page">
-      <div className="page-header" style={{
+    <div className="diagnostic-page console-workspace-page console-resource-page">
+      <div className="page-header console-page-header" style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -171,7 +171,7 @@ const DiagnosticPage: React.FC = () => {
             </Col>
             <Col xs={24} sm={16} md={18}>
               <Row gutter={16}>
-                <Col span={8}>
+                <Col xs={24} sm={12} lg={8}>
                   <Statistic
                     title={t('diagnostic.status')}
                     value={report.status}
@@ -182,13 +182,13 @@ const DiagnosticPage: React.FC = () => {
                     prefix={getStatusIcon(report.status)}
                   />
                 </Col>
-                <Col span={8}>
+                <Col xs={24} sm={12} lg={8}>
                   <Statistic
                     title={t('diagnostic.duration')}
                     value={report.duration}
                   />
                 </Col>
-                <Col span={8}>
+                <Col xs={24} sm={12} lg={8}>
                   <Statistic
                     title={t('diagnostic.timestamp')}
                     value={parseServerTime(report.endTime).toLocaleTimeString()}

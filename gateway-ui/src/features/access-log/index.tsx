@@ -8,12 +8,19 @@ import { Badge, Button, Form, Space, Spin, Tabs, Typography } from 'antd';
 import { message } from '../../utils/antdStatic';
 import type { TabsProps } from 'antd';
 import {
-  EyeOutlined, FileTextOutlined, ReloadOutlined, SaveOutlined, SettingOutlined,
+  EyeOutlined,
+  FileTextOutlined,
+  ReloadOutlined,
+  SaveOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useRequest } from '../../hooks/useRequest';
 import {
-  getAccessLogConfig, getDeployModes, resetAccessLogConfig, saveAccessLogConfig,
+  getAccessLogConfig,
+  getDeployModes,
+  resetAccessLogConfig,
+  saveAccessLogConfig,
 } from '../../api/accessLog';
 import type { AccessLogConfig, DeployMode, OutputTarget } from '../../types/accessLog';
 import { useInstanceDetail } from '../instance-detail/InstanceDetailContext';
@@ -40,22 +47,20 @@ const AccessLogPage: React.FC = () => {
   const [outputTarget, setOutputTarget] = useState<OutputTarget>('file');
   const [showFileConfig, setShowFileConfig] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState('config');
   const [logTotal, setLogTotal] = useState(0);
 
-  const configRequest = useRequest(
-    (signal) => getAccessLogConfig({ instanceId }, { signal }),
-    {
-      deps: [instanceId],
-      onError: () => message.error(t('access_log.load_failed')),
-      onSuccess: (data) => {
-        if (!data) return;
-        form.setFieldsValue(data);
-        const target = inferOutputTarget(data);
-        setOutputTarget(target);
-        setShowFileConfig(target !== 'stdout');
-      },
+  const configRequest = useRequest((signal) => getAccessLogConfig({ instanceId }, { signal }), {
+    deps: [instanceId],
+    onError: () => message.error(t('access_log.load_failed')),
+    onSuccess: (data) => {
+      if (!data) return;
+      form.setFieldsValue(data);
+      const target = inferOutputTarget(data);
+      setOutputTarget(target);
+      setShowFileConfig(target !== 'stdout');
     },
-  );
+  });
 
   const deployModesRequest = useRequest((signal) => getDeployModes({ signal }));
   const deployModes = deployModesRequest.data ?? [];
@@ -137,7 +142,11 @@ const AccessLogPage: React.FC = () => {
   };
 
   if (configRequest.loading && !configRequest.data) {
-    return <div style={{ textAlign: 'center', padding: 100 }}><Spin size="large" /></div>;
+    return (
+      <div className="console-workspace-page console-loading-page">
+        <Spin size="large" />
+      </div>
+    );
   }
 
   const tabItems: TabsProps['items'] = [
@@ -181,26 +190,31 @@ const AccessLogPage: React.FC = () => {
   ];
 
   return (
-    <div className="access-log-config-page">
-      <div className="page-header">
+    <div className="access-log-config-page console-workspace-page console-resource-page">
+      <div className="page-header console-page-header">
         <div className="header-title">
           <FileTextOutlined className="header-icon" />
-          <Title level={3} style={{ margin: 0 }}>{t('access_log.title')}</Title>
+          <Title level={3} style={{ margin: 0 }}>
+            {t('access_log.title')}
+          </Title>
         </div>
         <Space className="header-actions">
           <Button icon={<ReloadOutlined />} onClick={configRequest.run}>
             {t('common.refresh')}
           </Button>
-          <Button onClick={handleReset}>
-            {t('access_log.reset')}
-          </Button>
-          <Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={saving}>
-            {t('common.save')}
-          </Button>
         </Space>
       </div>
 
-      <Tabs defaultActiveKey="config" items={tabItems} />
+      <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
+      {activeTab === 'config' && (
+        <div className="console-settings-footer">
+          {' '}
+          <Button onClick={handleReset}>{t('access_log.reset')}</Button>
+          <Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={saving}>
+            {t('common.save')}
+          </Button>
+        </div>
+      )}
     </div>
   );
 };

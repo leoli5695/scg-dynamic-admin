@@ -55,7 +55,7 @@ const ConfigTab: React.FC<ConfigTabProps> = ({
       <Form form={form} layout="vertical">
         <Row gutter={24}>
           {/* Basic Settings */}
-          <Col span={12}>
+          <Col xs={24} lg={12}>
             <Card
               title={<Space><SettingOutlined />{t('access_log.basic_settings')}</Space>}
               className="config-card"
@@ -277,7 +277,7 @@ const ConfigTab: React.FC<ConfigTabProps> = ({
           </Col>
 
           {/* Log Content Settings */}
-          <Col span={12}>
+          <Col xs={24} lg={12}>
             <Card
               title={<Space><FileTextOutlined />{t('access_log.content_settings')}</Space>}
               className="config-card"

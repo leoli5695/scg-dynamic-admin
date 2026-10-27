@@ -93,7 +93,7 @@ const HistoryTable: React.FC<HistoryTableProps> = ({
         </Space>
       )}
     >
-      <Table
+      <Table scroll={{ x: 'max-content' }}
         dataSource={history}
         columns={columns}
         rowKey="id"

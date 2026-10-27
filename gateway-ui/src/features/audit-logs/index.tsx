@@ -5,9 +5,9 @@
  * read by the REST rollback endpoint, so the conflict modal was removed.
  */
 import React, { useState } from 'react';
-import { Radio } from 'antd';
+import { Radio, Typography } from 'antd';
 import { message } from '../../utils/antdStatic';
-import { TableOutlined, UnorderedListOutlined } from '@ant-design/icons';
+import { HistoryOutlined, TableOutlined, UnorderedListOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { ApiError } from '../../api/http';
 import { rollbackAuditLog } from '../../api/auditLogs';
@@ -43,9 +43,16 @@ const AuditLogsPage: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: 24 }}>
+    <div className="console-workspace-page console-resource-page">
       {/* View mode switch */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+      <div
+        className="console-page-header"
+        style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}
+      >
+        <Typography.Title level={3} style={{ margin: 0 }}>
+          <HistoryOutlined style={{ marginRight: 10 }} />
+          {t('menu.audit_logs')}
+        </Typography.Title>
         <Radio.Group
           value={viewMode}
           onChange={(e) => setViewMode(e.target.value)}
@@ -53,8 +60,12 @@ const AuditLogsPage: React.FC = () => {
           buttonStyle="solid"
           size="small"
         >
-          <Radio.Button value="table"><TableOutlined /> {t('audit.view_table')}</Radio.Button>
-          <Radio.Button value="timeline"><UnorderedListOutlined /> {t('audit.view_timeline')}</Radio.Button>
+          <Radio.Button value="table">
+            <TableOutlined /> {t('audit.view_table')}
+          </Radio.Button>
+          <Radio.Button value="timeline">
+            <UnorderedListOutlined /> {t('audit.view_timeline')}
+          </Radio.Button>
         </Radio.Group>
       </div>
 

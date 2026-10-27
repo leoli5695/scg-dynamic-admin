@@ -6,16 +6,26 @@ import { Input, InputNumber, Select, Switch } from 'antd';
 import type { PluginConfigField } from '../../../types/plugin';
 
 interface ConfigFieldInputProps {
+  id?: string;
+  'aria-describedby'?: string;
+  'aria-invalid'?: React.AriaAttributes['aria-invalid'];
+  'aria-required'?: React.AriaAttributes['aria-required'];
   field: PluginConfigField;
-  value: unknown;
-  onChange: (value: unknown) => void;
+  value?: unknown;
+  onChange?: (value: unknown) => void;
 }
 
-const ConfigFieldInput: React.FC<ConfigFieldInputProps> = ({ field, value, onChange }) => {
+const ConfigFieldInput: React.FC<ConfigFieldInputProps> = ({
+  field,
+  value,
+  onChange = () => {},
+  ...accessibility
+}) => {
   switch (field.type) {
     case 'number':
       return (
         <InputNumber
+          {...accessibility}
           value={value as number}
           onChange={(v) => onChange(v)}
           min={field.min}
@@ -24,11 +34,12 @@ const ConfigFieldInput: React.FC<ConfigFieldInputProps> = ({ field, value, onCha
         />
       );
     case 'switch':
-      return <Switch checked={Boolean(value)} onChange={(v) => onChange(v)} />;
+      return <Switch {...accessibility} checked={Boolean(value)} onChange={(v) => onChange(v)} />;
     case 'select':
       return (
         <Select
-          value={value as string}
+          {...accessibility}
+          value={value == null ? undefined : String(value)}
           onChange={(v) => onChange(v)}
           options={field.options}
           style={{ width: '100%' }}
@@ -38,7 +49,12 @@ const ConfigFieldInput: React.FC<ConfigFieldInputProps> = ({ field, value, onCha
       // Textarea keeps raw text; valid JSON is parsed so objects round-trip.
       return (
         <Input.TextArea
-          value={typeof value === 'object' && value !== null ? JSON.stringify(value, null, 2) : String(value ?? '')}
+          {...accessibility}
+          value={
+            typeof value === 'object' && value !== null
+              ? JSON.stringify(value, null, 2)
+              : String(value ?? '')
+          }
           onChange={(e) => {
             try {
               onChange(JSON.parse(e.target.value));
@@ -51,7 +67,7 @@ const ConfigFieldInput: React.FC<ConfigFieldInputProps> = ({ field, value, onCha
         />
       );
     default:
-      return <Input value={value as string} onChange={(e) => onChange(e.target.value)} />;
+      return <Input {...accessibility} value={value == null ? '' : String(value)} onChange={(e) => onChange(e.target.value)} />;
   }
 };
 

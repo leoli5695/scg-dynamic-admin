@@ -207,7 +207,7 @@ const FullChainTab: React.FC<FullChainTabProps> = ({ traceConfig }) => {
         </Button>
       </Space>
 
-      <Table
+      <Table scroll={{ x: 'max-content' }}
         loading={list.loading}
         dataSource={list.data?.chains ?? []}
         rowKey="traceId"

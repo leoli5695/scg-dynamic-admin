@@ -3,6 +3,8 @@
  * Duration mode and request-count mode are mutually exclusive.
  */
 import React from 'react';
+import EditorNavigation from '../../instance-detail/EditorNavigation';
+import { useEditorStep } from '../../instance-detail/useEditorStep';
 import {
   Alert,
   Button,
@@ -19,7 +21,8 @@ import {
   Table,
   Tag,
   Tooltip,
-  Typography } from 'antd';
+  Typography,
+} from 'antd';
 import { message } from '../../../utils/antdStatic';
 import {
   InfoCircleOutlined,
@@ -57,10 +60,26 @@ interface Props {
 }
 
 const PLACEHOLDER_ROWS = [
-  { key: 'randomInt', syntax: '{{randomInt}}', descKey: 'stress_test.placeholder_randomInt_default' },
-  { key: 'randomIntRange', syntax: '{{randomInt:min-max}}', descKey: 'stress_test.placeholder_randomInt_range' },
-  { key: 'randomString', syntax: '{{randomString}}', descKey: 'stress_test.placeholder_randomString_default' },
-  { key: 'randomStringLength', syntax: '{{randomString:length}}', descKey: 'stress_test.placeholder_randomString_length' },
+  {
+    key: 'randomInt',
+    syntax: '{{randomInt}}',
+    descKey: 'stress_test.placeholder_randomInt_default',
+  },
+  {
+    key: 'randomIntRange',
+    syntax: '{{randomInt:min-max}}',
+    descKey: 'stress_test.placeholder_randomInt_range',
+  },
+  {
+    key: 'randomString',
+    syntax: '{{randomString}}',
+    descKey: 'stress_test.placeholder_randomString_default',
+  },
+  {
+    key: 'randomStringLength',
+    syntax: '{{randomString:length}}',
+    descKey: 'stress_test.placeholder_randomString_length',
+  },
   { key: 'randomUuid', syntax: '{{randomUuid}}', descKey: 'stress_test.placeholder_randomUuid' },
   { key: 'timestamp', syntax: '{{timestamp}}', descKey: 'stress_test.placeholder_timestamp' },
 ];
@@ -68,6 +87,29 @@ const PLACEHOLDER_ROWS = [
 const CreateTab: React.FC<Props> = ({ creating, onStart }) => {
   const { t } = useTranslation();
   const [createForm] = Form.useForm<FormValues>();
+  const [active, setActive] = useEditorStep();
+  const stepLabels = [
+    t('stress_test.basic_settings'),
+    t('stress_test.load_parameters'),
+    t('stress_test.advanced_options'),
+  ];
+  const stepFields = [
+    ['testName', 'targetUrl', 'path', 'method', 'requestTimeoutSeconds'],
+    ['concurrentUsers', 'totalRequests', 'durationSeconds', 'targetQps', 'rampUpSeconds'],
+    ['headers', 'body'],
+  ];
+  const next = async () => {
+    try {
+      await createForm.validateFields(stepFields[active] as (keyof FormValues)[]);
+      setActive(active + 1);
+    } catch {
+      /* Inline field errors. */
+    }
+  };
+  const reset = () => {
+    createForm.resetFields();
+    setActive(0);
+  };
 
   const handleFinish = async (values: FormValues) => {
     let headers: Record<string, string> | null = null;
@@ -185,12 +227,26 @@ const CreateTab: React.FC<Props> = ({ creating, onStart }) => {
       ),
       children: (
         <>
-          <Form.Item name="headers" label={t('stress_test.headers')} help={t('stress_test.headers_help_json')}>
-            <TextArea rows={3} placeholder='{"Authorization": "Bearer token", "Content-Type": "application/json"}' />
+          <Form.Item
+            name="headers"
+            label={t('stress_test.headers')}
+            help={t('stress_test.headers_help_json')}
+          >
+            <TextArea
+              rows={3}
+              placeholder='{"Authorization": "Bearer token", "Content-Type": "application/json"}'
+            />
           </Form.Item>
 
-          <Form.Item name="body" label={t('stress_test.request_body')} help={t('stress_test.body_help')}>
-            <TextArea rows={4} placeholder='{"userId": {{randomInt:10000-100000}}, "token": "{{randomString:32}}"}' />
+          <Form.Item
+            name="body"
+            label={t('stress_test.request_body')}
+            help={t('stress_test.body_help')}
+          >
+            <TextArea
+              rows={4}
+              placeholder='{"userId": {{randomInt:10000-100000}}, "token": "{{randomString:32}}"}'
+            />
           </Form.Item>
 
           {/* Placeholder Help */}
@@ -207,6 +263,7 @@ const CreateTab: React.FC<Props> = ({ creating, onStart }) => {
                 children: (
                   <>
                     <Table
+                      scroll={{ x: 'max-content' }}
                       size="small"
                       pagination={false}
                       dataSource={PLACEHOLDER_ROWS.map((row) => ({ ...row, desc: t(row.descKey) }))}
@@ -214,7 +271,11 @@ const CreateTab: React.FC<Props> = ({ creating, onStart }) => {
                         {
                           title: t('stress_test.placeholder_syntax'),
                           dataIndex: 'syntax',
-                          render: (s: string) => <Tag color="geekblue" style={{ fontFamily: 'monospace' }}>{s}</Tag>,
+                          render: (s: string) => (
+                            <Tag color="geekblue" style={{ fontFamily: 'monospace' }}>
+                              {s}
+                            </Tag>
+                          ),
                         },
                         {
                           title: t('stress_test.placeholder_description'),
@@ -223,7 +284,16 @@ const CreateTab: React.FC<Props> = ({ creating, onStart }) => {
                       ]}
                     />
                     <Typography.Text type="secondary" style={{ marginTop: 8, display: 'block' }}>
-                      {t('stress_test.placeholder_example')}: <code style={{ background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: 4 }}>{'{"userId": {{randomInt:10000-100000}}}'}</code>
+                      {t('stress_test.placeholder_example')}:{' '}
+                      <code
+                        style={{
+                          background: 'rgba(0,0,0,0.1)',
+                          padding: '2px 6px',
+                          borderRadius: 4,
+                        }}
+                      >
+                        {'{"userId": {{randomInt:10000-100000}}}'}
+                      </code>
                     </Typography.Text>
                   </>
                 ),
@@ -237,44 +307,73 @@ const CreateTab: React.FC<Props> = ({ creating, onStart }) => {
 
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
-      {/* Preset Templates */}
-      <Card
-        title={
-          <Space>
-            <RocketOutlined />
-            {t('stress_test.quick_start_templates')}
-          </Space>
-        }
-        style={{ background: 'rgba(255,255,255,0.05)' }}
-      >
-        <Row gutter={[16, 16]}>
-          {TEST_TEMPLATES.map((template) => (
-            <Col xs={24} sm={12} md={6} lg={4} key={template.key}>
-              <Card
-                hoverable
-                size="small"
-                onClick={() => {
-                  createForm.setFieldsValue({ ...template.config });
-                  message.success(`${t('stress_test.template_applied')}: ${t(template.nameKey)}`);
-                }}
-                style={{ background: 'rgba(255,255,255,0.08)', borderColor: '#165DFF' }}
-              >
-                <Space direction="vertical" style={{ width: '100%' }} size="small">
-                  <Space>
-                    {template.icon}
-                    <Text strong style={{ color: '#fff' }}>{t(template.nameKey)}</Text>
-                  </Space>
-                  <Text type="secondary" style={{ fontSize: 12 }}>{t(template.descriptionKey)}</Text>
-                  <Tooltip title={t(template.scenarioKey)}>
-                    <Tag color="green" style={{ cursor: 'help' }}>{t('stress_test.scenario')}</Tag>
-                  </Tooltip>
-                  <Tag color="blue">{template.config.concurrentUsers} {t('stress_test.users')}</Tag>
-                </Space>
-              </Card>
-            </Col>
-          ))}
-        </Row>
-      </Card>
+      <Collapse
+        className="console-template-picker"
+        items={[
+          {
+            key: 'templates',
+            label: (
+              <Space>
+                <RocketOutlined />
+                {t('stress_test.quick_start_templates')}
+                <Tag>{TEST_TEMPLATES.length}</Tag>
+              </Space>
+            ),
+            children: (
+              <>
+                {' '}
+                <Row gutter={[16, 16]}>
+                  {TEST_TEMPLATES.map((template) => (
+                    <Col xs={24} sm={12} md={6} lg={4} key={template.key}>
+                      <Card
+                        hoverable
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            createForm.setFieldsValue({ ...template.config });
+                            setActive(0);
+                          }
+                        }}
+                        size="small"
+                        onClick={() => {
+                          createForm.setFieldsValue({ ...template.config });
+                          setActive(0);
+                          message.success(
+                            `${t('stress_test.template_applied')}: ${t(template.nameKey)}`,
+                          );
+                        }}
+                        style={{ background: 'rgba(255,255,255,0.08)', borderColor: '#165DFF' }}
+                      >
+                        <Space direction="vertical" style={{ width: '100%' }} size="small">
+                          <Space>
+                            {template.icon}
+                            <Text strong style={{ color: '#fff' }}>
+                              {t(template.nameKey)}
+                            </Text>
+                          </Space>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            {t(template.descriptionKey)}
+                          </Text>
+                          <Tooltip title={t(template.scenarioKey)}>
+                            <Tag color="green" style={{ cursor: 'help' }}>
+                              {t('stress_test.scenario')}
+                            </Tag>
+                          </Tooltip>
+                          <Tag color="blue">
+                            {template.config.concurrentUsers} {t('stress_test.users')}
+                          </Tag>
+                        </Space>
+                      </Card>
+                    </Col>
+                  ))}
+                </Row>
+              </>
+            ),
+          },
+        ]}
+      />
 
       {/* Test Configuration Form */}
       <Card
@@ -286,142 +385,195 @@ const CreateTab: React.FC<Props> = ({ creating, onStart }) => {
         }
         style={{ background: 'rgba(255,255,255,0.05)' }}
         extra={
-          <Button icon={<ReloadOutlined />} onClick={() => createForm.resetFields()}>
+          <Button icon={<ReloadOutlined />} onClick={reset}>
             {t('stress_test.reset')}
           </Button>
         }
       >
-        <Form form={createForm} layout="vertical" onFinish={handleFinish}>
-          <Collapse defaultActiveKey={['basic']} ghost items={collapseItems} />
+        <Form
+          form={createForm}
+          layout="vertical"
+          onFinish={handleFinish}
+          disabled={creating}
+          onFinishFailed={({ errorFields }) => {
+            const field = String(errorFields[0]?.name[0] ?? '');
+            setActive(
+              Math.max(
+                0,
+                stepFields.findIndex((fields) => fields.includes(field)),
+              ),
+            );
+          }}
+        >
+          <div className="console-inline-editor">
+            <EditorNavigation
+              steps={stepLabels}
+              active={active}
+              onChange={(step) => {
+                if (!creating) setActive(step);
+              }}
+            />
+            <div className="inline-editor-body">
+              <div hidden={active !== 0}>{collapseItems[0].children}</div>
+              <div hidden={active !== 1}>
+                <Divider style={{ textAlign: 'left' }}>{t('stress_test.load_parameters')}</Divider>
 
-          <Divider style={{ textAlign: 'left' }}>{t('stress_test.load_parameters')}</Divider>
-
-          <Alert
-            type="info"
-            showIcon
-            style={{ marginBottom: 16 }}
-            message={t('stress_test.mode_hint_title')}
-            description={t('stress_test.mode_hint_desc')}
-          />
-
-          <Row gutter={[16, 0]}>
-            <Col xs={24} sm={12} md={8}>
-              <Form.Item
-                name="concurrentUsers"
-                label={
-                  <Space>
-                    {t('stress_test.concurrent_users')}
-                    <Tooltip title={t('stress_test.concurrent_users_tooltip')}>
-                      <InfoCircleOutlined style={{ color: 'rgba(255,255,255,0.45)' }} />
-                    </Tooltip>
-                  </Space>
-                }
-                initialValue={10}
-                rules={[{ required: true, message: t('stress_test.concurrent_users_required') }]}
-              >
-                <InputNumber min={1} max={500} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12} md={8}>
-              <Form.Item
-                name="totalRequests"
-                label={
-                  <Space>
-                    {t('stress_test.total_requests')}
-                    <Tooltip title={t('stress_test.total_requests_tooltip')}>
-                      <InfoCircleOutlined style={{ color: 'rgba(255,255,255,0.45)' }} />
-                    </Tooltip>
-                  </Space>
-                }
-              >
-                <InputNumber
-                  min={1}
-                  max={1000000}
-                  placeholder={t('stress_test.unlimited')}
-                  style={{ width: '100%' }}
-                  onChange={(value) => {
-                    if (value !== null && value !== undefined) {
-                      createForm.setFieldValue('durationSeconds', undefined);
-                    }
-                  }}
+                <Alert
+                  type="info"
+                  showIcon
+                  style={{ marginBottom: 16 }}
+                  message={t('stress_test.mode_hint_title')}
+                  description={t('stress_test.mode_hint_desc')}
                 />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12} md={8}>
-              <Form.Item
-                name="durationSeconds"
-                label={
-                  <Space>
-                    {t('stress_test.duration_seconds')}
-                    <Tooltip title={t('stress_test.duration_tooltip')}>
-                      <InfoCircleOutlined style={{ color: 'rgba(255,255,255,0.45)' }} />
-                    </Tooltip>
-                  </Space>
-                }
+
+                <Row gutter={[16, 0]}>
+                  <Col xs={24} sm={12} md={8}>
+                    <Form.Item
+                      name="concurrentUsers"
+                      label={
+                        <Space>
+                          {t('stress_test.concurrent_users')}
+                          <Tooltip title={t('stress_test.concurrent_users_tooltip')}>
+                            <InfoCircleOutlined style={{ color: 'rgba(255,255,255,0.45)' }} />
+                          </Tooltip>
+                        </Space>
+                      }
+                      initialValue={10}
+                      rules={[
+                        { required: true, message: t('stress_test.concurrent_users_required') },
+                      ]}
+                    >
+                      <InputNumber min={1} max={500} style={{ width: '100%' }} />
+                    </Form.Item>
+                  </Col>
+                  <Col xs={24} sm={12} md={8}>
+                    <Form.Item
+                      name="totalRequests"
+                      label={
+                        <Space>
+                          {t('stress_test.total_requests')}
+                          <Tooltip title={t('stress_test.total_requests_tooltip')}>
+                            <InfoCircleOutlined style={{ color: 'rgba(255,255,255,0.45)' }} />
+                          </Tooltip>
+                        </Space>
+                      }
+                    >
+                      <InputNumber
+                        min={1}
+                        max={1000000}
+                        placeholder={t('stress_test.unlimited')}
+                        style={{ width: '100%' }}
+                        onChange={(value) => {
+                          if (value !== null && value !== undefined) {
+                            createForm.setFieldValue('durationSeconds', undefined);
+                          }
+                        }}
+                      />
+                    </Form.Item>
+                  </Col>
+                  <Col xs={24} sm={12} md={8}>
+                    <Form.Item
+                      name="durationSeconds"
+                      label={
+                        <Space>
+                          {t('stress_test.duration_seconds')}
+                          <Tooltip title={t('stress_test.duration_tooltip')}>
+                            <InfoCircleOutlined style={{ color: 'rgba(255,255,255,0.45)' }} />
+                          </Tooltip>
+                        </Space>
+                      }
+                    >
+                      <InputNumber
+                        min={1}
+                        max={3600}
+                        placeholder={t('stress_test.unlimited')}
+                        style={{ width: '100%' }}
+                        onChange={(value) => {
+                          if (value !== null && value !== undefined) {
+                            createForm.setFieldValue('totalRequests', undefined);
+                          }
+                        }}
+                      />
+                    </Form.Item>
+                  </Col>
+                </Row>
+
+                <Row gutter={[16, 0]}>
+                  <Col xs={24} sm={12} md={8}>
+                    <Form.Item
+                      name="targetQps"
+                      label={
+                        <Space>
+                          {t('stress_test.target_qps')}
+                          <Tooltip title={t('stress_test.target_qps_tooltip')}>
+                            <InfoCircleOutlined style={{ color: 'rgba(255,255,255,0.45)' }} />
+                          </Tooltip>
+                        </Space>
+                      }
+                    >
+                      <InputNumber
+                        min={1}
+                        max={10000}
+                        placeholder={t('stress_test.no_limit')}
+                        style={{ width: '100%' }}
+                      />
+                    </Form.Item>
+                  </Col>
+                  <Col xs={24} sm={12} md={8}>
+                    <Form.Item
+                      name="rampUpSeconds"
+                      label={
+                        <Space>
+                          {t('stress_test.ramp_up')}
+                          <Tooltip title={t('stress_test.ramp_up_tooltip')}>
+                            <InfoCircleOutlined style={{ color: 'rgba(255,255,255,0.45)' }} />
+                          </Tooltip>
+                        </Space>
+                      }
+                      initialValue={0}
+                    >
+                      <InputNumber min={0} max={300} style={{ width: '100%' }} />
+                    </Form.Item>
+                  </Col>
+                </Row>
+              </div>
+              <div hidden={active !== 2}>{advancedItems[0].children}</div>
+            </div>
+          </div>
+          <div className="console-settings-footer">
+            <span
+              style={{ marginRight: 'auto', color: 'var(--console-muted)', alignSelf: 'center' }}
+            >
+              {active + 1} / 3
+            </span>
+            <Button onClick={reset}>{t('stress_test.reset')}</Button>
+            {active > 0 && (
+              <Button onClick={() => setActive(active - 1)}>{t('routes.previous_step')}</Button>
+            )}
+            {active < 2 ? (
+              <Button
+                key="next"
+                type="primary"
+                htmlType="button"
+                onClick={(event) => {
+                  event.preventDefault();
+                  void next();
+                }}
               >
-                <InputNumber
-                  min={1}
-                  max={3600}
-                  placeholder={t('stress_test.unlimited')}
-                  style={{ width: '100%' }}
-                  onChange={(value) => {
-                    if (value !== null && value !== undefined) {
-                      createForm.setFieldValue('totalRequests', undefined);
-                    }
-                  }}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={[16, 0]}>
-            <Col xs={24} sm={12} md={8}>
-              <Form.Item
-                name="targetQps"
-                label={
-                  <Space>
-                    {t('stress_test.target_qps')}
-                    <Tooltip title={t('stress_test.target_qps_tooltip')}>
-                      <InfoCircleOutlined style={{ color: 'rgba(255,255,255,0.45)' }} />
-                    </Tooltip>
-                  </Space>
-                }
+                {t('routes.next_step')}
+              </Button>
+            ) : (
+              <Button
+                key="start"
+                type="primary"
+                htmlType="submit"
+                icon={<PlayCircleOutlined />}
+                loading={creating}
               >
-                <InputNumber min={1} max={10000} placeholder={t('stress_test.no_limit')} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12} md={8}>
-              <Form.Item
-                name="rampUpSeconds"
-                label={
-                  <Space>
-                    {t('stress_test.ramp_up')}
-                    <Tooltip title={t('stress_test.ramp_up_tooltip')}>
-                      <InfoCircleOutlined style={{ color: 'rgba(255,255,255,0.45)' }} />
-                    </Tooltip>
-                  </Space>
-                }
-                initialValue={0}
-              >
-                <InputNumber min={0} max={300} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Collapse ghost style={{ marginTop: 16 }} items={advancedItems} />
-
-          <Divider />
-
-          <Form.Item>
-            <Space>
-              <Button type="primary" htmlType="submit" icon={<PlayCircleOutlined />} loading={creating} size="large">
                 {t('stress_test.start_test')}
               </Button>
-              <Button onClick={() => createForm.resetFields()} size="large">
-                {t('stress_test.reset')}
-              </Button>
-            </Space>
-          </Form.Item>
+            )}
+          </div>
         </Form>
       </Card>
     </Space>

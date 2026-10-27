@@ -288,8 +288,8 @@ const TracePage: React.FC = () => {
   );
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+    <div className="console-workspace-page console-resource-page">
+      <div className="console-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Title level={3} style={{ margin: 0 }}>
           <ApiOutlined style={{ marginRight: 8 }} />
           {t('trace.title')}
@@ -317,22 +317,22 @@ const TracePage: React.FC = () => {
 
       {/* Statistics Cards */}
       <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={6}>
+        <Col xs={24} sm={12} lg={6}>
           <Card className="tracing-stat-card" size="small">
             <Statistic title={t('trace.total')} value={stats?.total || 0} />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={24} sm={12} lg={6}>
           <Card className="tracing-stat-card" size="small">
             <Statistic title={t('trace.errors_today')} value={stats?.errorsToday || 0} valueStyle={{ color: '#cf1322' }} />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={24} sm={12} lg={6}>
           <Card className="tracing-stat-card" size="small">
             <Statistic title={t('trace.errors_last_hour')} value={stats?.errorsLastHour || 0} valueStyle={{ color: '#faad14' }} />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={24} sm={12} lg={6}>
           <Card className="tracing-stat-card" size="small">
             <Statistic title={t('trace.replay_count')} value={filteredTraces.reduce((sum, item) => sum + (item.replayCount || 0), 0)} />
           </Card>

@@ -192,7 +192,7 @@ const AiCopilotPage: React.FC = () => {
   ];
 
   return (
-    <div style={{ padding: '24px' }}>
+    <div className="console-workspace-page console-resource-page">
       <Card
         title={
           <span>

@@ -62,7 +62,7 @@ const ReplayResultModal: React.FC<ReplayResultModalProps> = ({ open, result, onC
   ];
 
   return (
-    <Modal
+    <Modal className="console-dialog"
       title={(
         <Space>
           <SwapOutlined />
@@ -164,7 +164,7 @@ const ReplayResultModal: React.FC<ReplayResultModalProps> = ({ open, result, onC
               {/* Body diff */}
               {result.comparison.bodyDiff && result.comparison.bodyDiff.length > 0 && (
                 <Card size="small" title={t('replay.body_differences')} style={{ marginTop: 16 }}>
-                  <Table
+                  <Table scroll={{ x: 'max-content' }}
                     dataSource={result.comparison.bodyDiff}
                     columns={bodyDiffColumns}
                     rowKey="field"

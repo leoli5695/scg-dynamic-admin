@@ -50,7 +50,7 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
   };
 
   return (
-    <Drawer
+    <Drawer rootClassName="console-drawer"
       title={(
         <Space>
           <ApartmentOutlined />

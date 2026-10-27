@@ -93,7 +93,7 @@ const DiffDrawer: React.FC<DiffDrawerProps> = ({ instanceId, logId, open, onClos
   const targetLink = diff ? getTargetLink(diff.targetType, diff.targetId, diff.instanceId || instanceId) : null;
 
   return (
-    <Drawer
+    <Drawer rootClassName="console-drawer"
       title={
         <Space>
           <DiffOutlined />
@@ -179,7 +179,7 @@ const DiffDrawer: React.FC<DiffDrawerProps> = ({ instanceId, logId, open, onClos
           {/* Changes table */}
           {diff.changes && diff.changes.length > 0 && (
             <Card size="small" title={t('audit.change_details')} style={{ marginBottom: 16 }}>
-              <Table
+              <Table scroll={{ x: 'max-content' }}
                 dataSource={diff.changes}
                 columns={changeColumns}
                 rowKey={(c) => `${c.type}-${c.field ?? c.path ?? ''}`}

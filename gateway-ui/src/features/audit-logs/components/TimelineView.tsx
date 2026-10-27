@@ -39,7 +39,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ instanceId }) => {
   const timeline = timelineRequest.data;
 
   const renderDiffTable = (diff: TimelineDiffEntry[]) => (
-    <Table
+    <Table scroll={{ x: 'max-content' }}
       dataSource={diff || []}
       columns={[
         {

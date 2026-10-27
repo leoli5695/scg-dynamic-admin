@@ -121,7 +121,7 @@ const RouteMetricsTable: React.FC<RouteMetricsTableProps> = ({ data, loading }) 
   }
 
   return (
-    <Table
+    <Table scroll={{ x: 'max-content' }}
       dataSource={data}
       columns={columns}
       rowKey={(record) => `${record.uri}-${record.method}`}

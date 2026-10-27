@@ -33,7 +33,11 @@ interface StrategyTypeSelectModalProps {
 }
 
 const StrategyTypeSelectModal: React.FC<StrategyTypeSelectModalProps> = ({
-  strategyTypes, initialTab = 'general', loading, onSelect, onCancel,
+  strategyTypes,
+  initialTab = 'general',
+  loading,
+  onSelect,
+  onCancel,
 }) => {
   const { t } = useTranslation();
 
@@ -59,16 +63,19 @@ const StrategyTypeSelectModal: React.FC<StrategyTypeSelectModalProps> = ({
           <Divider style={{ margin: '0 0 16px 0' }}>
             <Tag color="blue">{CATEGORY_LABELS[category] || category}</Tag>
           </Divider>
-          <Row gutter={[16, 16]} justify="center">
+          <Row gutter={[12, 12]}>
             {types.map((type) => (
-              <Col span={6} key={type.typeCode}>
+              <Col xs={24} sm={12} lg={8} key={type.typeCode}>
                 <div
                   className="strategy-type-card"
                   role="button"
                   tabIndex={0}
                   onClick={() => onSelect(type)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') onSelect(type);
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onSelect(type);
+                    }
                   }}
                 >
                   <div
@@ -95,7 +102,9 @@ const StrategyTypeSelectModal: React.FC<StrategyTypeSelectModalProps> = ({
                   </Text>
                   {type.description && (
                     <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 8 }}>
-                      {type.description.length > 30 ? `${type.description.substring(0, 30)}...` : type.description}
+                      {type.description.length > 30
+                        ? `${type.description.substring(0, 30)}...`
+                        : type.description}
                     </Text>
                   )}
                 </div>
@@ -125,8 +134,8 @@ const StrategyTypeSelectModal: React.FC<StrategyTypeSelectModalProps> = ({
       open
       onCancel={onCancel}
       footer={null}
-      width={800}
-      className="strategy-type-select-modal"
+      width={1060}
+      className="console-picker strategy-type-select-modal"
     >
       <Spin spinning={loading}>
         <Tabs

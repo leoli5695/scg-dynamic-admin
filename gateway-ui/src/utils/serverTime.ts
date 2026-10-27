@@ -7,11 +7,18 @@
  */
 const OFFSET_SUFFIX_RE = /(Z|[+-]\d{2}:?\d{2})$/i;
 
-export const parseServerTime = (value: string | number): Date => {
+export const parseServerTime = (value: string | number | null | undefined): Date => {
   if (typeof value === 'number') return new Date(value);
+  if (typeof value !== 'string' || !value.trim()) return new Date(NaN);
   const trimmed = value.trim();
   if (OFFSET_SUFFIX_RE.test(trimmed)) return new Date(trimmed);
   return new Date(`${trimmed.replace(' ', 'T')}+08:00`);
+};
+
+/** Missing or malformed timestamps are absent data, not a page-render error. */
+export const formatServerTime = (value: string | number | null | undefined): string => {
+  const date = parseServerTime(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
 };
 
 export default parseServerTime;

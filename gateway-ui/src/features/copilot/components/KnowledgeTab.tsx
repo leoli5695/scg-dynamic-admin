@@ -354,7 +354,7 @@ const KnowledgeTab: React.FC = () => {
           />
         }
       >
-        <Table<KnowledgeChunkItem>
+        <Table<KnowledgeChunkItem> scroll={{ x: 'max-content' }}
           rowKey="id"
           size="small"
           loading={listLoading}

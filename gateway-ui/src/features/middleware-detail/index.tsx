@@ -1,3 +1,4 @@
+import '../instance-detail/operations-ui.css';
 /**
  * Middleware detail page (opened in a new tab from the middleware drawer).
  * Reads serviceName / middlewareType / exporterUrl from the query string,
@@ -91,9 +92,9 @@ const MiddlewareDetailPage: React.FC = () => {
   );
 
   return (
-    <div className="middleware-detail-page" style={{ padding: 24 }}>
+    <div className="middleware-detail-page console-workspace-page console-resource-page">
       {/* 页面头部 */}
-      <div className="page-header" style={{ marginBottom: 24 }}>
+      <div className="page-header console-page-header" style={{ marginBottom: 24 }}>
         <Row align="middle" gutter={16}>
           <Col>
             <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)}>

@@ -32,7 +32,7 @@ const EventsTab: React.FC = () => {
   const normalCount = eventsRequest.data?.normalCount ?? 0;
 
   return (
-    <Card>
+    <Card className="console-workspace-page console-resource-page console-cluster-panel">
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Space>
           <Badge status={warningCount > 0 ? 'error' : 'success'} text={`${warningCount} Warning`} />

@@ -157,7 +157,7 @@ const TraceDetailDrawer: React.FC<TraceDetailDrawerProps> = ({
   };
 
   return (
-    <Drawer
+    <Drawer rootClassName="console-drawer"
       title={(
         <Space>
           <Text>{t('trace.detail_title')}</Text>

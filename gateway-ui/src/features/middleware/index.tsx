@@ -144,9 +144,9 @@ const ServiceMiddlewarePage: React.FC = () => {
   ], [t]);
 
   return (
-    <div className="service-middleware-page">
+    <div className="service-middleware-page console-workspace-page console-resource-page">
       {/* Header with inline stat chips */}
-      <div className="page-header-modern">
+      <div className="page-header-modern console-page-header">
         <div className="page-header-left">
           <Title level={3} className="page-title-main">
             {t('middleware.title')}
@@ -192,7 +192,7 @@ const ServiceMiddlewarePage: React.FC = () => {
 
       {/* Services Table */}
       <Card className="middleware-table-card">
-        <Table
+        <Table scroll={{ x: 'max-content' }}
           dataSource={filteredServices}
           columns={columns}
           rowKey="serviceName"

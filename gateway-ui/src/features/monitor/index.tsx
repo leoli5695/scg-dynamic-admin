@@ -125,7 +125,7 @@ const MonitorPage: React.FC = () => {
 
   if (metricsRequest.loading && !metrics) {
     return (
-      <div style={{ textAlign: 'center', padding: 100 }}>
+      <div className="console-workspace-page console-loading-page">
         <Spin size="large" />
         <div style={{ marginTop: 16 }}>
           <Text type="secondary">{t('common.loading')}</Text>
@@ -135,8 +135,8 @@ const MonitorPage: React.FC = () => {
   }
 
   return (
-    <div className="monitor-page">
-      <div className="page-header">
+    <div className="monitor-page console-workspace-page console-resource-page">
+      <div className="page-header console-page-header">
         <Title level={4} style={{ margin: 0 }}>
           <DashboardOutlined style={{ marginRight: 8 }} />
           {t('monitor.title')}
@@ -215,7 +215,7 @@ const MonitorPage: React.FC = () => {
       )}
 
       <Card title={<Space><CloudServerOutlined />{t('monitor.gateway_instances')}</Space>} style={{ marginBottom: 16 }}>
-        <Table
+        <Table scroll={{ x: 'max-content' }}
           dataSource={metrics?.instances ?? []}
           columns={instanceColumns}
           rowKey="instance"

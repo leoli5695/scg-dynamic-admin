@@ -316,9 +316,9 @@ const StressTestPage: React.FC = () => {
   ];
 
   return (
-    <div style={{ padding: '24px' }}>
+    <div className="console-workspace-page console-resource-page">
       {/* Header */}
-      <div style={{ marginBottom: '24px' }}>
+      <div className="console-page-header" style={{ marginBottom: '24px' }}>
         <Space style={{ width: '100%', justifyContent: 'space-between' }}>
           <Title level={3} style={{ color: '#fff' }}>
             {t('stress_test.title')}

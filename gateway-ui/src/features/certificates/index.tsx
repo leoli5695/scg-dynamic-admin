@@ -5,12 +5,14 @@
  * backend's @RequestParam signature (the old JSON-body call was broken).
  */
 import React, { useCallback, useMemo, useState } from 'react';
-import {
-  Button, Card, Col, Popconfirm, Row, Space, Statistic, Table, Tag, Typography  } from 'antd';
+import { Button, Card, Col, Popconfirm, Row, Space, Statistic, Table, Tag, Typography } from 'antd';
 import { message } from '../../utils/antdStatic';
 import type { ColumnsType } from 'antd/es/table';
 import {
-  DeleteOutlined, PlusOutlined, ReloadOutlined, SafetyCertificateOutlined,
+  DeleteOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  SafetyCertificateOutlined,
 } from '@ant-design/icons';
 import { useParams } from 'react-router-dom';
 import { parseServerTime } from '../../utils/serverTime';
@@ -18,8 +20,13 @@ import { useTranslation } from 'react-i18next';
 import { useRequest } from '../../hooks/useRequest';
 import { ApiError } from '../../api/http';
 import {
-  deleteCertificate, getCertificateStats, listCertificates,
-  refreshCertificateStatuses, setCertificateEnabled, uploadKeystore, uploadPemCertificate,
+  deleteCertificate,
+  getCertificateStats,
+  listCertificates,
+  refreshCertificateStatuses,
+  setCertificateEnabled,
+  uploadKeystore,
+  uploadPemCertificate,
 } from '../../api/certificates';
 import type { SslCertificate } from '../../types/certificate';
 import StatusTag from './components/StatusTag';
@@ -28,9 +35,8 @@ import UploadCertModal, { CertificateUploadPayload } from './components/UploadCe
 
 const { Title, Text } = Typography;
 
-const errorMessage = (error: unknown, fallbackKey: string, t: (k: string) => string): string => (
-  error instanceof ApiError && error.message ? error.message : t(fallbackKey)
-);
+const errorMessage = (error: unknown, fallbackKey: string, t: (k: string) => string): string =>
+  error instanceof ApiError && error.message ? error.message : t(fallbackKey);
 
 const CertificatePage: React.FC = () => {
   const { t } = useTranslation();
@@ -76,25 +82,31 @@ const CertificatePage: React.FC = () => {
     }
   };
 
-  const handleToggleEnabled = useCallback(async (cert: SslCertificate) => {
-    try {
-      await setCertificateEnabled(cert.id, !cert.enabled);
-      message.success(t('cert.update_success'));
-      reload();
-    } catch (error) {
-      message.error(errorMessage(error, 'cert.update_error', t));
-    }
-  }, [t, reload]);
+  const handleToggleEnabled = useCallback(
+    async (cert: SslCertificate) => {
+      try {
+        await setCertificateEnabled(cert.id, !cert.enabled);
+        message.success(t('cert.update_success'));
+        reload();
+      } catch (error) {
+        message.error(errorMessage(error, 'cert.update_error', t));
+      }
+    },
+    [t, reload],
+  );
 
-  const handleDelete = useCallback(async (cert: SslCertificate) => {
-    try {
-      await deleteCertificate(cert.id);
-      message.success(t('cert.delete_success'));
-      reload();
-    } catch (error) {
-      message.error(errorMessage(error, 'cert.delete_error', t));
-    }
-  }, [t, reload]);
+  const handleDelete = useCallback(
+    async (cert: SslCertificate) => {
+      try {
+        await deleteCertificate(cert.id);
+        message.success(t('cert.delete_success'));
+        reload();
+      } catch (error) {
+        message.error(errorMessage(error, 'cert.delete_error', t));
+      }
+    },
+    [t, reload],
+  );
 
   const handleRefreshStatus = async () => {
     try {
@@ -106,115 +118,132 @@ const CertificatePage: React.FC = () => {
     }
   };
 
-  const columns = useMemo<ColumnsType<SslCertificate>>(() => [
-    {
-      title: t('cert.cert_name'),
-      dataIndex: 'certName',
-      key: 'certName',
-      render: (text: string) => <Text strong>{text}</Text>,
-    },
-    {
-      title: t('cert.domain'),
-      dataIndex: 'domain',
-      key: 'domain',
-    },
-    {
-      title: t('cert.type'),
-      dataIndex: 'certType',
-      key: 'certType',
-      render: (type: string) => <Tag color="blue">{type}</Tag>,
-    },
-    {
-      title: t('cert.status'),
-      dataIndex: 'status',
-      key: 'status',
-      render: (_status: string, record) => (
-        <StatusTag status={record.status} daysToExpiry={record.daysToExpiry} />
-      ),
-    },
-    {
-      title: t('cert.valid_to'),
-      dataIndex: 'validTo',
-      key: 'validTo',
-      render: (date: string) => (date ? parseServerTime(date).toLocaleDateString() : '-'),
-    },
-    {
-      title: t('cert.enabled'),
-      dataIndex: 'enabled',
-      key: 'enabled',
-      render: (_enabled: boolean, record) => (
-        <Popconfirm
-          title={record.enabled ? t('cert.disable_confirm') : t('cert.enable_confirm')}
-          onConfirm={() => handleToggleEnabled(record)}
-        >
-          <Tag color={record.enabled ? 'green' : 'default'} style={{ cursor: 'pointer' }}>
-            {record.enabled ? t('cert.enabled') : t('cert.disabled')}
-          </Tag>
-        </Popconfirm>
-      ),
-    },
-    {
-      title: t('common.actions'),
-      key: 'actions',
-      render: (_unknown, record) => (
-        <Space>
-          <Button size="small" onClick={() => setDetailCert(record)}>
-            {t('common.detail')}
-          </Button>
-          <Popconfirm title={t('cert.delete_confirm')} onConfirm={() => handleDelete(record)}>
-            <Button size="small" danger icon={<DeleteOutlined />}>
-              {t('common.delete')}
-            </Button>
+  const columns = useMemo<ColumnsType<SslCertificate>>(
+    () => [
+      {
+        title: t('cert.cert_name'),
+        dataIndex: 'certName',
+        key: 'certName',
+        render: (text: string) => <Text strong>{text}</Text>,
+      },
+      {
+        title: t('cert.domain'),
+        dataIndex: 'domain',
+        key: 'domain',
+      },
+      {
+        title: t('cert.type'),
+        dataIndex: 'certType',
+        key: 'certType',
+        render: (type: string) => <Tag color="blue">{type}</Tag>,
+      },
+      {
+        title: t('cert.status'),
+        dataIndex: 'status',
+        key: 'status',
+        render: (_status: string, record) => (
+          <StatusTag status={record.status} daysToExpiry={record.daysToExpiry} />
+        ),
+      },
+      {
+        title: t('cert.valid_to'),
+        dataIndex: 'validTo',
+        key: 'validTo',
+        render: (date: string) => (date ? parseServerTime(date).toLocaleDateString() : '-'),
+      },
+      {
+        title: t('cert.enabled'),
+        dataIndex: 'enabled',
+        key: 'enabled',
+        render: (_enabled: boolean, record) => (
+          <Popconfirm
+            title={record.enabled ? t('cert.disable_confirm') : t('cert.enable_confirm')}
+            onConfirm={() => handleToggleEnabled(record)}
+          >
+            <Tag color={record.enabled ? 'green' : 'default'} style={{ cursor: 'pointer' }}>
+              {record.enabled ? t('cert.enabled') : t('cert.disabled')}
+            </Tag>
           </Popconfirm>
-        </Space>
-      ),
-    },
-  ], [t, handleToggleEnabled, handleDelete]);
+        ),
+      },
+      {
+        title: t('common.actions'),
+        key: 'actions',
+        render: (_unknown, record) => (
+          <Space>
+            <Button size="small" onClick={() => setDetailCert(record)}>
+              {t('common.detail')}
+            </Button>
+            <Popconfirm title={t('cert.delete_confirm')} onConfirm={() => handleDelete(record)}>
+              <Button size="small" danger icon={<DeleteOutlined />}>
+                {t('common.delete')}
+              </Button>
+            </Popconfirm>
+          </Space>
+        ),
+      },
+    ],
+    [t, handleToggleEnabled, handleDelete],
+  );
 
   return (
-    <div style={{ padding: 24 }}>
-      <Title level={3}>
-        <SafetyCertificateOutlined style={{ marginRight: 8 }} />
-        {t('cert.title')}
-      </Title>
+    <div className="console-workspace-page console-resource-page">
+      <div className="console-page-header">
+        <Title level={3}>
+          <SafetyCertificateOutlined style={{ marginRight: 8 }} />
+          {t('cert.title')}
+        </Title>
+        {/* Action Buttons */}
+        <Space wrap>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setUploadOpen(true)}>
+            {t('cert.upload')}
+          </Button>
+          <Button icon={<ReloadOutlined />} onClick={handleRefreshStatus}>
+            {t('cert.refresh_status')}
+          </Button>
+        </Space>
+      </div>
 
       {/* Statistics Cards */}
       <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={6}>
+        <Col xs={24} sm={12} lg={6}>
           <Card className="certificate-stat-card">
             <Statistic title={t('cert.total')} value={stats?.total ?? 0} />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={24} sm={12} lg={6}>
           <Card className="certificate-stat-card">
-            <Statistic title={t('cert.valid')} value={stats?.valid ?? 0} valueStyle={{ color: '#3f8600' }} />
+            <Statistic
+              title={t('cert.valid')}
+              value={stats?.valid ?? 0}
+              valueStyle={{ color: '#3f8600' }}
+            />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={24} sm={12} lg={6}>
           <Card className="certificate-stat-card">
-            <Statistic title={t('cert.expiring_soon')} value={stats?.expiringSoon ?? 0} valueStyle={{ color: '#faad14' }} />
+            <Statistic
+              title={t('cert.expiring_soon')}
+              value={stats?.expiringSoon ?? 0}
+              valueStyle={{ color: '#faad14' }}
+            />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={24} sm={12} lg={6}>
           <Card className="certificate-stat-card">
-            <Statistic title={t('cert.expired')} value={stats?.expired ?? 0} valueStyle={{ color: '#cf1322' }} />
+            <Statistic
+              title={t('cert.expired')}
+              value={stats?.expired ?? 0}
+              valueStyle={{ color: '#cf1322' }}
+            />
           </Card>
         </Col>
       </Row>
 
-      {/* Action Buttons */}
-      <Space style={{ marginBottom: 16 }}>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setUploadOpen(true)}>
-          {t('cert.upload')}
-        </Button>
-        <Button icon={<ReloadOutlined />} onClick={handleRefreshStatus}>
-          {t('cert.refresh_status')}
-        </Button>
-      </Space>
-
       {/* Certificate Table */}
       <Card>
         <Table
+          scroll={{ x: 'max-content' }}
           className="certificate-table"
           loading={certsRequest.loading}
           dataSource={certificates}
@@ -225,16 +254,10 @@ const CertificatePage: React.FC = () => {
       </Card>
 
       {uploadOpen && (
-        <UploadCertModal
-          onCancel={() => setUploadOpen(false)}
-          onSubmit={handleUpload}
-        />
+        <UploadCertModal onCancel={() => setUploadOpen(false)} onSubmit={handleUpload} />
       )}
       {detailCert && (
-        <CertDetailModal
-          certificate={detailCert}
-          onClose={() => setDetailCert(null)}
-        />
+        <CertDetailModal certificate={detailCert} onClose={() => setDetailCert(null)} />
       )}
     </div>
   );

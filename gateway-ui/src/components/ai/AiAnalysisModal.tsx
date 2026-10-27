@@ -177,7 +177,7 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
   );
 
   return (
-    <Modal
+    <Modal className="console-dialog"
       title={
         <Space>
           <RobotOutlined />

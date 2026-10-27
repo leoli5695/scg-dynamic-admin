@@ -49,7 +49,11 @@ const UploadPluginModal: React.FC<UploadPluginModalProps> = ({
 
   return (
     <Modal
+      className="console-picker plugin-upload-modal"
       title={t('plugins.upload_title')}
+      mask={{ closable: !uploading }}
+      closable={!uploading}
+      keyboard={!uploading}
       open
       onCancel={onClose}
       footer={null}
