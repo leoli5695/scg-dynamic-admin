@@ -239,5 +239,18 @@
   "strategy.version_mode.query": "Query",
   "strategies.create_first": "Create your first strategy",
   "strategy.stats_disabled": "Disabled",
-  "strategy.config": "Strategy Configuration"
+  "strategy.config": "Strategy Configuration",
+  "strategy.picker_hint": "Search by name or keyword, or choose a category",
+  "strategy.picker_search": "Search all strategies: name / keyword / JWT…",
+  "strategy.picker_category": "Strategy categories",
+  "strategy.picker_results": "{{count}} strategies found",
+  "strategy.picker_reset": "Clear filters",
+  "strategy.picker_empty": "No matching strategies. Try another keyword.",
+  "strategy.picker_category_traffic": "Traffic",
+  "strategy.picker_category_security": "Security",
+  "strategy.picker_category_resilience": "Resilience",
+  "strategy.picker_category_transform": "Transformation",
+  "strategy.picker_category_observability": "Observability",
+  "strategy.picker_category_misc": "Other",
+  "strategy.picker_category_ai": "AI capabilities"
 }

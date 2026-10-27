@@ -239,5 +239,18 @@
   "strategy.route_id_ai_helper": "AI 类策略只能绑定 AI 路由；请先创建 AI 路由并绑定 AI 服务",
   "strategy.tab_all": "全部策略",
   "strategy.tab_normal": "普通策略",
-  "strategy.tab_ai": "AI 策略"
+  "strategy.tab_ai": "AI 策略",
+  "strategy.picker_hint": "搜索名称或关键词，也可按分类快速选择",
+  "strategy.picker_search": "搜索全部策略：名称 / 英文名 / JWT…",
+  "strategy.picker_category": "策略分类",
+  "strategy.picker_results": "找到 {{count}} 种策略",
+  "strategy.picker_reset": "清除筛选",
+  "strategy.picker_empty": "没有匹配的策略，试试其他关键词",
+  "strategy.picker_category_traffic": "流量控制",
+  "strategy.picker_category_security": "安全防护",
+  "strategy.picker_category_resilience": "弹性容错",
+  "strategy.picker_category_transform": "数据转换",
+  "strategy.picker_category_observability": "可观测性",
+  "strategy.picker_category_misc": "其他",
+  "strategy.picker_category_ai": "AI 能力"
 }
