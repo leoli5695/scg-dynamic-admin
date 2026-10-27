@@ -4,8 +4,11 @@
  * Body aligns with model/ServiceDefinition.java.
  */
 import React, { useState } from 'react';
+import EditorNavigation from '../../instance-detail/EditorNavigation';
+import EditorCategorySwitch from '../../instance-detail/EditorCategorySwitch';
+import { useEditorStep } from '../../instance-detail/useEditorStep';
 import {
-  Alert, Button, Form, Input, Modal, Segmented, Select  } from 'antd';
+  Alert, Button, Form, Input, Modal, Select  } from 'antd';
 import { message } from '../../../utils/antdStatic';
 import {
   ApiOutlined, ClusterOutlined, EditOutlined, ExclamationCircleOutlined,
@@ -51,6 +54,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
   );
   const [submitting, setSubmitting] = useState(false);
 
+  const [activeStep, setActiveStep, stepDirection] = useEditorStep();
   const isEdit = mode === 'edit';
 
   const category = (Form.useWatch('category', form) ?? (isEdit ? service?.category : 'NORMAL')) as ServiceCategory;
@@ -64,15 +68,23 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
     setInstances((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const stepLabels = [t('services.basic_config'), t(isAi ? 'services.ai_config' : 'services.service_instances')];
+  const nextStep = async () => {
+    try {
+      await form.validateFields(['category', 'name', 'loadBalancer', 'description']);
+      setActiveStep((step) => Math.min(step + 1, stepLabels.length - 1));
+    } catch { /* Ant Design shows the field errors in the current section. */ }
+  };
+
   const handleFinish = async (values: ServiceFormValues) => {
     if (!isAi) {
-      for (const inst of instances) {
+      for (const [index, inst] of instances.entries()) {
         if (!isValidIP(inst.ip)) {
-          message.error(t('message.invalid_ip_format', { index: 1, ip: inst.ip }));
+          message.error(t('message.invalid_ip_format', { index: index + 1, ip: inst.ip }));
           return;
         }
         if (!isValidPort(inst.port)) {
-          message.error(t('message.invalid_port', { index: 1, port: inst.port }));
+          message.error(t('message.invalid_port', { index: index + 1, port: inst.port }));
           return;
         }
       }
@@ -94,13 +106,13 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
     <Modal
       title={(
         <div className="modal-header-modern">
-          <div className="modal-title-wrapper">
+          <div className="modal-title-wrapper" key={category}>
             <div className={`modal-icon-wrapper ${isEdit ? 'edit' : ''}`}>
-              {isEdit ? <EditOutlined /> : <PlusOutlined />}
+              {isAi ? <RobotOutlined /> : <ClusterOutlined />}
             </div>
             <div className="modal-title-text">
-              <div className="modal-title">{t(isEdit ? 'services.edit' : 'services.create')}</div>
-              <div className="modal-subtitle">{t(isEdit ? 'services.edit_description' : 'services.create_description')}</div>
+              <div className="modal-title">{t(`services.${isEdit ? 'edit' : 'create'}_${isAi ? 'ai' : 'normal'}`)}</div>
+              <div className="modal-subtitle">{t('services.' + (isAi ? 'ai_editor_subtitle' : 'normal_editor_subtitle'))}</div>
             </div>
           </div>
         </div>
@@ -108,16 +120,24 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
       open
       onCancel={onCancel}
       footer={null}
-      width={600}
-      className={`service-modal ${isEdit ? 'service-edit-modal' : 'service-create-modal'}`}
-      destroyOnClose
-      maskClosable
+      width={1000}
+      className={`console-editor service-editor${isAi ? ' is-ai' : ''}`}
+      destroyOnHidden
+      mask={{ closable: false }}
+      closable={!submitting}
+      keyboard={!submitting}
       focusTriggerAfterClose
     >
       <Form
         form={form}
         layout="vertical"
+        scrollToFirstError={{ behavior: 'smooth', focus: true }}
+        disabled={submitting}
         onFinish={handleFinish}
+        onFinishFailed={({ errorFields }) => {
+          const field = String(errorFields[0]?.name[0] ?? '');
+          setActiveStep(['name', 'category', 'loadBalancer', 'description'].includes(field) ? 0 : 1);
+        }}
         initialValues={isEdit ? {
           name: service?.name,
           loadBalancer: service?.loadBalancer,
@@ -127,7 +147,10 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
           baseUrl: service?.baseUrl,
         } : { loadBalancer: 'weighted', category: 'NORMAL' }}
       >
-        <div className="form-section-modern">
+        <div className="editor-workspace">
+        <EditorNavigation steps={stepLabels} active={activeStep} onChange={setActiveStep} />
+        <div className="editor-scroll" data-direction={stepDirection}>
+        <div className="form-section-modern" hidden={activeStep !== 0}>
           <div className="section-header">
             <ClusterOutlined className="section-icon" />
             <span className="section-title">{t('services.basic_config')}</span>
@@ -138,24 +161,24 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
               label={t('services.category')}
               tooltip={isEdit ? t('services.category_locked') : t('services.category_helper')}
             >
-              <Segmented
+              <EditorCategorySwitch
                 disabled={isEdit}
-                options={[
-                  { label: (<span><ClusterOutlined /> {t('services.category_normal')}</span>), value: 'NORMAL' },
-                  { label: (<span><RobotOutlined /> {t('services.category_ai')}</span>), value: 'AI' },
-                ]}
+                label={t('services.category')}
+                normalLabel={t('services.category_normal')}
+                aiLabel={t('services.category_ai')}
               />
             </Form.Item>
+            <p className="editor-type-hint" key={category}>{t('services.' + (isAi ? 'ai_type_hint' : 'normal_type_hint'))}</p>
             <div className="form-row">
               <Form.Item
                 name="name"
                 label={t('services.name')}
-                rules={isEdit ? undefined : [{ required: true, message: t('services.name_required') }]}
+                rules={isEdit ? undefined : [{ required: true, whitespace: true, message: t('services.name_required') }]}
                 className="form-item-half"
               >
                 <Input placeholder={isEdit ? undefined : t('services.name_placeholder')} disabled={isEdit} size="large" />
               </Form.Item>
-              <Form.Item name="loadBalancer" label={t('services.loadBalancer')} className="form-item-half">
+              <Form.Item hidden={isAi} name="loadBalancer" label={t('services.loadBalancer')} className="form-item-half">
                 <LoadBalancerSelect />
               </Form.Item>
             </div>
@@ -171,7 +194,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
         </div>
 
         {isAi && (
-          <div className="form-section-modern">
+          <div className="form-section-modern" hidden={activeStep !== 1}>
             <div className="section-header">
               <RobotOutlined className="section-icon" />
               <span className="section-title">{t('services.ai_config')}</span>
@@ -214,7 +237,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
         )}
 
         {!isAi && (
-        <div className="form-section-modern">
+        <div className="form-section-modern" hidden={activeStep !== 1}>
           <div className="section-header">
             <ApiOutlined className="section-icon" />
             <span className="section-title">{t('services.service_instances')}</span>
@@ -256,11 +279,19 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
         </div>
         )}
 
+        </div>
+        </div>
         <div className="modal-footer-modern">
-          <Button onClick={onCancel} size="large">{t('common.cancel')}</Button>
-          <Button type="primary" htmlType="submit" size="large" loading={submitting} icon={isEdit ? <EditOutlined /> : <PlusOutlined />}>
-            {t(isEdit ? 'common.update' : 'common.create')}
-          </Button>
+          <span className="editor-progress">{activeStep + 1} / {stepLabels.length}</span>
+          <Button onClick={onCancel} disabled={submitting}>{t('common.cancel')}</Button>
+          {activeStep > 0 && <Button onClick={() => setActiveStep(activeStep - 1)} disabled={submitting}>{t('services.previous_step')}</Button>}
+          {activeStep < stepLabels.length - 1 ? (
+            <Button key="next" type="primary" htmlType="button" onClick={nextStep}>{t('services.next_step')}</Button>
+          ) : (
+            <Button key="submit" type="primary" htmlType="submit" loading={submitting} icon={isEdit ? <EditOutlined /> : <PlusOutlined />}>
+              {t(isEdit ? 'services.save_changes' : 'services.create')}
+            </Button>
+          )}
         </div>
       </Form>
     </Modal>

@@ -51,7 +51,7 @@ const GrayRulesForm: React.FC<GrayRulesFormProps> = ({
               {fields.map(({ key, name, ...restField }) => {
                 const ruleType = form.getFieldValue(['grayRules', name, 'type']) || 'HEADER';
                 return (
-                  <div key={key} style={{
+                  <div key={key} className="editor-rule-card" style={{
                     padding: '8px 10px',
                     marginBottom: '6px',
                     background: '#2a2520',
@@ -59,7 +59,7 @@ const GrayRulesForm: React.FC<GrayRulesFormProps> = ({
                     border: '1px solid #8b5a2b',
                   }}
                   >
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'nowrap' }}>
+                    <div className="editor-rule-fields">
                       <Form.Item {...restField} name={[name, 'type']} noStyle initialValue="HEADER">
                         <Select
                           style={{ width: 85, flexShrink: 0 }}

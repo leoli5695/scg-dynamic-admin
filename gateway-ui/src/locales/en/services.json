@@ -96,5 +96,20 @@
   "services.credential_none": "No key configured",
   "services.tab_all": "All Services",
   "services.tab_normal": "Normal Services",
-  "services.tab_ai": "AI Services"
+  "services.tab_ai": "AI Services",
+  "services.empty_hint": "Create a service and add upstream instances for your routes.",
+  "services.no_matches": "No matching services",
+  "services.filter_hint": "Try another keyword or clear the current filters.",
+  "services.clear_filters": "Clear filters",
+  "services.next_step": "Continue",
+  "services.previous_step": "Back",
+  "services.save_changes": "Save changes",
+  "services.create_normal": "Create service",
+  "services.create_ai": "Create AI service",
+  "services.edit_normal": "Edit service",
+  "services.edit_ai": "Edit AI service",
+  "services.normal_editor_subtitle": "Connect upstream instances and configure load balancing",
+  "services.ai_editor_subtitle": "Connect a model provider and manage its credentials and endpoint",
+  "services.normal_type_hint": "Distribute requests across upstream instances with weighted, round-robin and other strategies.",
+  "services.ai_type_hint": "Connect a model provider using an API key and an optional base URL."
 }

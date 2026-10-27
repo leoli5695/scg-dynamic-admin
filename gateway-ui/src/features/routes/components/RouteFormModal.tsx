@@ -5,11 +5,14 @@
  * of the body (backend uses dedicated /enable and /disable endpoints).
  */
 import React, { useState } from 'react';
+import EditorNavigation from '../../instance-detail/EditorNavigation';
+import EditorCategorySwitch from '../../instance-detail/EditorCategorySwitch';
+import { useEditorStep } from '../../instance-detail/useEditorStep';
 import {
-  Alert, Button, Form, Input, Modal, Segmented, Typography  } from 'antd';
+  Alert, Button, Form, Input, Modal, Typography  } from 'antd';
 import { message } from '../../../utils/antdStatic';
 import {
-  ApiOutlined, ClusterOutlined, EditOutlined, FileTextOutlined, LinkOutlined,
+  ApiOutlined, EditOutlined, FileTextOutlined, LinkOutlined,
   PlusOutlined, RobotOutlined, RocketOutlined, ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -50,6 +53,7 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
   const { instanceId } = useParams<{ instanceId: string }>();
   const [form] = Form.useForm<RouteFormValues>();
 
+  const [activeStep, setActiveStep, stepDirection] = useEditorStep();
   const isEdit = mode === 'edit';
 
   // Route category drives the target-config section: AI routes bind AI services only.
@@ -73,7 +77,7 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
 
   // Live services list for the gray-rule target dropdown.
   const watchedServices = Form.useWatch('services', form);
-  const configuredServices = isEdit ? initialBindings : (watchedServices ?? []);
+  const configuredServices = watchedServices ?? initialBindings;
 
   const initialValues: Partial<RouteFormValues> = isEdit ? {
     routeName: route?.routeName,
@@ -99,21 +103,32 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
     modelPredicates: (route?.modelPredicates ?? []).map((p) => ({
       matchType: p.matchType || 'PREFIX', value: p.value,
     })),
-  } : { order: 0, routingMode: 'SINGLE', category: 'NORMAL' };
+  } : { order: 0, routingMode: 'SINGLE', category: 'NORMAL', predicates: [{ name: 'Path', args: '' }] };
+
+  const stepLabels = [t('routes.basic_info'), t('routes.target_configuration'), t('routes.predicates_section')];
+  const nextStep = async () => {
+    try {
+      await form.validateFields(activeStep === 0 ? ['category', 'routeName', 'order', 'description'] : isAi ? ['aiUpstreams', 'modelPredicates'] : ['serviceId', 'services', 'routingMode'], { recursive: true });
+      setActiveStep((step) => Math.min(step + 1, stepLabels.length - 1));
+    } catch { /* Ant Design shows the field errors in the current section. */ }
+  };
 
   const handleFinish = async (values: RouteFormValues) => {
     const predicateList = values.predicates ?? [];
     if (predicateList.length === 0) {
+      setActiveStep(2);
       message.error(t('routes.predicate_required'));
       return;
     }
     if (!predicateList.some((p) => p?.name === 'Path')) {
+      setActiveStep(2);
       message.error(t('routes.path_predicate_required'));
       return;
     }
     if (isAi) {
       const ups = (values.aiUpstreams ?? []).filter((u) => u && u.provider);
       if (ups.length === 0) {
+        setActiveStep(1);
         message.error(t('routes.ai_at_least_one_upstream'));
         return;
       }
@@ -124,11 +139,13 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
       }
       if (routingMode === 'MULTI') {
         if (!values.services || values.services.length === 0) {
+          setActiveStep(1);
           message.error(t('routes.at_least_one_service'));
           return;
         }
         const total = sumWeights(values.services);
         if (total !== 100) {
+          setActiveStep(1);
           message.error(t('routes.weight_must_be_100', { total }));
           return;
         }
@@ -156,6 +173,7 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
   };
 
   const gotoPluginBindings = () => {
+    onCancel();
     navigate(`/instances/${instanceId}/plugin_bindings`);
   };
 
@@ -163,13 +181,13 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
     <Modal
       title={(
         <div className="modal-header-modern">
-          <div className="modal-title-wrapper">
+          <div className="modal-title-wrapper" key={category}>
             <div className={`modal-icon-wrapper ${isEdit ? 'edit' : ''}`}>
-              {isEdit ? <EditOutlined /> : <PlusOutlined />}
+              {isAi ? <RobotOutlined /> : <ApiOutlined />}
             </div>
             <div className="modal-title-text">
-              <div className="modal-title">{t(isEdit ? 'routes.edit' : 'routes.create')}</div>
-              <div className="modal-subtitle">{t(isEdit ? 'routes.edit_description' : 'routes.create_description')}</div>
+              <div className="modal-title">{t(`routes.${isEdit ? 'edit' : 'create'}_${isAi ? 'ai' : 'normal'}`)}</div>
+              <div className="modal-subtitle">{t('routes.' + (isAi ? 'ai_editor_subtitle' : 'normal_editor_subtitle'))}</div>
             </div>
           </div>
         </div>
@@ -177,20 +195,31 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
       open
       onCancel={onCancel}
       footer={null}
-      width={720}
-      className={`route-modal ${isEdit ? 'route-edit-modal' : 'route-create-modal'}`}
-      destroyOnClose
-      maskClosable
+      width={1060}
+      className={`console-editor route-editor${isAi ? ' is-ai' : ''}`}
+      destroyOnHidden
+      mask={{ closable: false }}
+      closable={!submitting}
+      keyboard={!submitting}
       focusTriggerAfterClose
     >
       <Form
         form={form}
         layout="vertical"
+        scrollToFirstError={{ behavior: 'smooth', focus: true }}
+        disabled={submitting}
         onFinish={handleFinish}
+        onFinishFailed={({ errorFields }) => {
+          const field = String(errorFields[0]?.name[0] ?? '');
+          setActiveStep(['routeName', 'category', 'order', 'description'].includes(field) ? 0 : ['predicates'].includes(field) ? 2 : 1);
+        }}
         initialValues={initialValues}
       >
+        <div className="editor-workspace">
+        <EditorNavigation steps={stepLabels} active={activeStep} onChange={setActiveStep} />
+        <div className="editor-scroll" data-direction={stepDirection}>
         {/* Basic info */}
-        <div className="form-section-modern">
+        <div className="form-section-modern" hidden={activeStep !== 0}>
           <div className="section-header">
             <FileTextOutlined className="section-icon" />
             <span className="section-title">{t('routes.basic_info')}</span>
@@ -201,18 +230,20 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
               label={t('routes.category')}
               tooltip={isEdit ? t('routes.category_locked') : t('routes.category_helper')}
             >
-              <Segmented
+              <EditorCategorySwitch
                 disabled={isEdit}
-                options={[
-                  { label: (<span><ClusterOutlined /> {t('routes.category_normal')}</span>), value: 'NORMAL' },
-                  { label: (<span><RobotOutlined /> {t('routes.category_ai')}</span>), value: 'AI' },
-                ]}
+                label={t('routes.category')}
+                normalLabel={t('routes.category_normal')}
+                aiLabel={t('routes.category_ai')}
               />
             </Form.Item>
+            <p className="editor-type-hint" key={category}>{t('routes.' + (isAi ? 'ai_type_hint' : 'normal_type_hint'))}</p>
+            <div className="form-row">
             <Form.Item
+              className="form-item-half"
               name="routeName"
               label={t('routes.route_name')}
-              rules={isEdit ? undefined : [{ required: true }]}
+              rules={isEdit ? undefined : [{ required: true, whitespace: true, message: t('routes.name_required') }]}
             >
               <Input
                 placeholder={isEdit ? undefined : t('routes.route_name_placeholder')}
@@ -220,7 +251,6 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
                 size="large"
               />
             </Form.Item>
-            <div className="form-row">
               <Form.Item name="order" label={t('routes.order')} className="form-item-half">
                 <Input type="number" placeholder="0" size="large" />
               </Form.Item>
@@ -232,7 +262,7 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
         </div>
 
         {/* Target configuration */}
-        <div className="form-section-modern">
+        <div className="form-section-modern" hidden={activeStep !== 1}>
           <div className="section-header">
             {isAi ? <RobotOutlined className="section-icon" /> : <ApiOutlined className="section-icon" />}
             <span className="section-title">{isAi ? t('routes.ai_target_configuration') : t('routes.target_configuration')}</span>
@@ -266,7 +296,7 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
         </div>
 
         {/* Predicates */}
-        <div className="form-section-modern">
+        <div className="form-section-modern" hidden={activeStep !== 2}>
           <div className="section-header">
             <ThunderboltOutlined className="section-icon" />
             <span className="section-title">{t('routes.predicates_section')}</span>
@@ -288,7 +318,7 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
         </div>
 
         {/* Plugins — managed on the plugin binding page */}
-        <div className="form-section-modern">
+        <div className="form-section-modern editor-plugin-note" hidden={activeStep !== 2}>
           <div className="section-header">
             <RocketOutlined className="section-icon" />
             <span className="section-title">{t('routes.plugins_section')}</span>
@@ -311,11 +341,19 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
         </div>
 
         {/* Footer */}
+        </div>
+        </div>
         <div className="modal-footer-modern">
-          <Button onClick={onCancel} size="large">{t('common.cancel')}</Button>
-          <Button type="primary" htmlType="submit" size="large" loading={submitting} icon={isEdit ? <EditOutlined /> : <PlusOutlined />}>
-            {t(isEdit ? 'common.update' : 'routes.create')}
-          </Button>
+          <span className="editor-progress">{activeStep + 1} / {stepLabels.length}</span>
+          <Button onClick={onCancel} disabled={submitting}>{t('common.cancel')}</Button>
+          {activeStep > 0 && <Button onClick={() => setActiveStep(activeStep - 1)} disabled={submitting}>{t('routes.previous_step')}</Button>}
+          {activeStep < stepLabels.length - 1 ? (
+            <Button key="next" type="primary" htmlType="button" onClick={nextStep}>{t('routes.next_step')}</Button>
+          ) : (
+            <Button key="submit" type="primary" htmlType="submit" loading={submitting} icon={isEdit ? <EditOutlined /> : <PlusOutlined />}>
+              {t(isEdit ? 'routes.save_changes' : 'routes.create')}
+            </Button>
+          )}
         </div>
       </Form>
     </Modal>

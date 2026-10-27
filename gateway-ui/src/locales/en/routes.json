@@ -160,5 +160,20 @@
   "routes.ai_add_model_mapping": "Add mapping",
   "routes.tab_all": "All Routes",
   "routes.tab_normal": "Normal Routes",
-  "routes.tab_ai": "AI Routes"
+  "routes.tab_ai": "AI Routes",
+  "routes.empty_hint": "Create a route and connect a request path to a target service.",
+  "routes.no_matches": "No matching routes",
+  "routes.filter_hint": "Try another keyword or clear the current filters.",
+  "routes.clear_filters": "Clear filters",
+  "routes.next_step": "Continue",
+  "routes.previous_step": "Back",
+  "routes.save_changes": "Save changes",
+  "routes.create_normal": "Create route",
+  "routes.create_ai": "Create AI route",
+  "routes.edit_normal": "Edit route",
+  "routes.edit_ai": "Edit AI route",
+  "routes.normal_editor_subtitle": "Match incoming requests and forward traffic to a target service",
+  "routes.ai_editor_subtitle": "Configure AI services, traffic weights and model matching",
+  "routes.normal_type_hint": "Match requests by path, method and other conditions, then forward them to an upstream service.",
+  "routes.ai_type_hint": "Forward requests to AI services with provider weights and model mappings."
 }

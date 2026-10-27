@@ -94,7 +94,7 @@ const PredicateItem: React.FC<PredicateItemProps> = ({
           onClick={() => onRemove(name)}
           style={{ marginLeft: 8 }}
         >
-          {t('common.remove')}
+          {t('common.delete')}
         </Button>
       </Form.Item>
     </div>

@@ -1,0 +1,257 @@
+/* Shared visual language with the public login card. Keep selectors local:
+   the editor modals are portalled outside the instance detail layout. */
+.instance-detail-page {
+  background: #0b1220;
+  color: #e7eefb;
+}
+.instance-detail-page .instance-detail-header {
+  background: #0e1727;
+  border-color: #91a9de1c;
+  padding: 20px 28px;
+  gap: 16px;
+}
+.instance-detail-page .instance-detail-title.ant-typography { margin: 0; font-size: 21px; }
+.instance-detail-page .instance-detail-header-left { min-width: 0; flex-wrap: wrap; gap: 12px; }
+.instance-detail-page .instance-detail-status-tag { border-radius: 6px; margin: 0; }
+.instance-detail-page .instance-detail-tabs { background: #0e1727; padding-inline: 28px; }
+.instance-detail-page .instance-detail-tabs .ant-tabs-tab { padding: 17px 12px; }
+.instance-detail-page .instance-detail-content {
+  padding: 28px;
+  background: radial-gradient(ellipse at 100% 0, #687bce09, transparent 55%), #0b1220;
+}
+.instance-detail-page .instance-overview-stats { padding: 0; max-width: 1480px; margin: auto; }
+.instance-detail-page .instance-summary-bar {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 22px 24px; border: 1px solid #91a9de26; border-radius: 14px;
+  background: linear-gradient(145deg, #19243acc, #101727);
+}
+.instance-detail-page .instance-summary-item { padding: 0 24px; gap: 8px; min-width: 0; }
+.instance-detail-page .instance-summary-label { color: #95a3bc; font-size: 12px; }
+.instance-detail-page .instance-summary-value { font-size: 18px; flex-wrap: wrap; }
+.instance-detail-page .instance-info-section.ant-card {
+  background: linear-gradient(145deg, #19243a99, #101727);
+  border: 1px solid #91a9de26; border-radius: 14px; box-shadow: none;
+}
+.instance-detail-page .instance-info-section .ant-card-head { background: transparent; border-color: #91a9de1c; }
+.instance-detail-page .instance-info-section .ant-descriptions-item-content { overflow-wrap: anywhere; }
+.instance-detail-page .instance-info-section .ant-descriptions-item-label { color: #95a3bc; }
+.instance-detail-page .instance-overview-stats > .ant-alert { background: #17304766; border: 1px solid #7ca5eb33; border-radius: 12px; }
+
+:is(.services-page, .routes-page).console-resource-page { max-width: 1480px; margin: auto; }
+.console-resource-page .page-header-modern { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+.console-resource-page .page-header-left { flex: 1 1 260px; }
+.console-resource-page .page-title-main.ant-typography { margin: 0 0 8px; font-size: 25px; font-weight: 600; letter-spacing: -.5px; }
+.console-resource-page .page-header-left > .ant-typography { color: #95a3bc; }
+.console-resource-page .page-header-right { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.console-resource-page .search-input.ant-input-affix-wrapper { width: 260px; height: 40px; background: #0e1727 !important; border: 1px solid #91a9de38 !important; border-radius: 9px; padding: 8px 12px; }
+.console-resource-page .search-input input.ant-input { background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0; border-radius: 0; }
+.console-resource-page .search-input .ant-input-prefix { margin-right: 9px; color: #95a3bc; }
+.console-resource-page .ant-btn { border-radius: 9px; }
+.console-resource-page .ant-btn-primary,
+.console-editor.ant-modal .ant-btn-primary {
+  background: linear-gradient(105deg, #477fec, #6866dc) !important;
+  border: 1px solid #88a8fc55 !important; box-shadow: 0 4px 14px #416ee622 !important;
+  color: #fff !important; transition: filter .15s;
+}
+.console-resource-page .create-btn.ant-btn { height: 40px; padding-inline: 18px; font-weight: 500; }
+.console-resource-page .ant-btn-primary:hover,
+.console-editor.ant-modal .ant-btn-primary:hover { filter: brightness(1.1); transform: none; }
+.console-resource-page :is(.service-category-tabs, .route-category-tabs) .ant-tabs-nav::before { border-color: #91a9de24; }
+.console-resource-page :is(.service-category-tabs, .route-category-tabs) .ant-tabs-tab { padding: 12px 4px 16px; }
+.console-resource-page .empty-card.ant-card {
+  background: radial-gradient(ellipse at 50% 0, #687bce0d, transparent 65%), #101a2b !important;
+  border: 1px solid #91a9de26 !important; border-radius: 16px; box-shadow: none;
+}
+.console-resource-page .empty-card .ant-card-body { padding: clamp(40px, 7vh, 80px) 24px; }
+.console-resource-page .empty-card .ant-empty { margin: 0; }
+.console-resource-page .empty-card .ant-empty-image { height: 64px; margin-bottom: 20px; }
+.console-resource-page .empty-icon { display: inline-grid; place-items: center; width: 64px; height: 64px; font-size: 29px; color: #91b3ff; background: #819feb12; border: 1px solid #819feb28; border-radius: 18px; }
+.console-resource-page .empty-text { color: #e0e9fa; font-size: 15px; font-weight: 500; }
+.console-resource-page .empty-hint { color: #95a3bc; font-size: 13px; margin: 10px 0 0; line-height: 1.8; }
+.console-resource-page .empty-card .ant-empty-footer { margin-top: 24px; }
+.console-resource-page .empty-card .ant-btn { height: 40px; padding-inline: 20px; }
+.console-resource-page :is(.service-card, .route-card).ant-card { background: #111c2e !important; border: 1px solid #91a9de26 !important; border-radius: 13px; box-shadow: none !important; }
+.console-resource-page :is(.service-card, .route-card).ant-card:hover { transform: none !important; border-color: #91a9de50 !important; }
+.console-resource-page :is(.service-card, .route-card) .ant-card-body { padding: 20px; }
+.console-resource-page :is(.route-icon, .service-icon) { background: #819feb12; color: #91b3ff; box-shadow: none; }
+.console-resource-page .route-info { display: flex; flex-direction: row !important; align-items: center; text-align: left; min-width: 0; gap: 12px; }
+.console-resource-page .route-details { min-width: 0; text-align: left; }
+.console-resource-page .route-card-header .ant-btn-dangerous { background: transparent !important; border-color: transparent !important; color: #d790a0 !important; }
+.console-resource-page .route-card-header { gap: 12px; margin-bottom: 18px; }
+.console-resource-page .route-section { margin-bottom: 14px; }
+.console-resource-page .route-name { overflow-wrap: anywhere; }
+.console-resource-page .predicate-tag { border-radius: 6px !important; font-size: 12px !important; padding: 2px 8px !important; }
+
+/* Header, form scroll area and footer occupy separate rows. Actions stay visible. */
+.console-editor.ant-modal { top: 32px; padding-bottom: 32px; max-width: calc(100vw - 32px); }
+.console-editor.ant-modal .ant-modal-container,
+.console-editor.ant-modal .ant-modal-content {
+  padding: 0 !important; overflow: hidden;
+  background: radial-gradient(ellipse at 100% 0, #687bce18, transparent 50%), #101727 !important;
+  border: 1px solid #91a9de3b !important; border-radius: 20px !important;
+  box-shadow: 0 24px 80px #0006, 0 1px 0 #d2e1ff12 inset !important;
+  backdrop-filter: none !important;
+}
+.console-editor.ant-modal .ant-modal-header { margin: 0; padding: 24px 56px 22px 28px !important; background: transparent !important; border-bottom: 1px solid #91a9de24 !important; }
+.console-editor.ant-modal .modal-title-wrapper { display: flex; align-items: center; gap: 14px; }
+.console-editor.ant-modal .modal-icon-wrapper,
+.console-editor.ant-modal .modal-icon-wrapper.edit { flex-shrink: 0; width: 44px; height: 44px; border: 1px solid #819feb38; border-radius: 12px; background: #819feb14; color: #9ebcff; box-shadow: none; }
+.console-editor.ant-modal .modal-title { color: #edf2ff; font-size: 20px; line-height: 1.5; font-weight: 600; }
+.console-editor.ant-modal .modal-subtitle { margin-top: 5px; color: #95a3bc; font-size: 12px; font-weight: 400; line-height: 1.7; }
+.console-editor.ant-modal .ant-modal-close { top: 22px !important; right: 18px !important; }
+.console-editor.ant-modal .ant-modal-body { max-height: none; overflow: visible; padding: 0 !important; }
+.console-editor.ant-modal .editor-scroll { max-height: calc(100dvh - 260px); overflow-y: auto; overscroll-behavior: contain; padding: 24px 28px; scrollbar-gutter: stable; }
+.console-editor.ant-modal .form-section-modern { margin: 0 0 22px; padding: 20px; background: #19243a66; border: 1px solid #91a9de1c; border-radius: 12px; }
+.console-editor.ant-modal .form-section-modern:last-child { margin-bottom: 0; }
+.console-editor.ant-modal .section-header { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin-bottom: 18px; padding-bottom: 14px; border-color: #91a9de1c; }
+.console-editor.ant-modal .section-icon { color: #9ebcff; background: #819feb14; }
+.console-editor.ant-modal .section-title { color: #e1eafa; font-size: 14px; }
+.console-editor.ant-modal .section-subtitle { color: #95a3bc; font-size: 12px; font-weight: 400; }
+.console-editor.ant-modal .section-content { display: block; }
+.console-editor.ant-modal .form-row { display: flex; gap: 16px; }
+.console-editor.ant-modal .form-item-half { flex: 1; min-width: 0; }
+.console-editor.ant-modal .ant-form-item { margin-bottom: 20px; }
+.console-editor.ant-modal .section-content > .ant-form-item:last-child { margin-bottom: 0; }
+.console-editor.ant-modal .ant-form-item-label > label { color: #bdcbe2 !important; font-size: 13px; }
+.console-editor.ant-modal :is(.ant-input, .ant-input-number, .ant-input-affix-wrapper, .ant-select-selector) { background: #0c1424 !important; border-color: #91a9de33 !important; border-radius: 9px !important; color: #e7eefb !important; box-shadow: none; }
+.console-editor.ant-modal .ant-input-affix-wrapper input.ant-input { background: transparent !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
+.console-editor.ant-modal :is(.ant-input, .ant-input-affix-wrapper):focus-within { border-color: #86a8fa !important; box-shadow: 0 0 0 3px #668af51a !important; }
+.console-editor.ant-modal .ant-input-status-error { border-color: #ed7d89 !important; }
+.console-editor.ant-modal .ant-input::placeholder { color: #788aa8; }
+.console-editor.ant-modal .ant-input:disabled { color: #8393b0 !important; background: #1a2435 !important; }
+.console-editor.ant-modal .ant-segmented { padding: 4px; background: #0c1424; border: 1px solid #91a9de26; border-radius: 10px; }
+.console-editor.ant-modal .ant-segmented-item-label { padding: 4px 16px; }
+.console-editor.ant-modal .ant-segmented-item-selected { background: #253b66; color: #c7d9ff; box-shadow: none; border-radius: 7px; }
+.console-editor.ant-modal .instance-row-modern { padding: 16px; background: #0c142466; border: 1px solid #91a9de24; border-radius: 10px; }
+.console-editor.ant-modal .instance-row-grid { display: grid; grid-template-columns: minmax(140px, 2fr) repeat(2, minmax(65px, 1fr)) minmax(100px, 1.2fr); gap: 12px; }
+.console-editor.ant-modal .instance-row-grid .ant-form-item { margin: 0; }
+.console-editor.ant-modal .instance-row-grid :is(.ant-input, .ant-select) { width: 100%; }
+.console-editor.ant-modal .form-item-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.console-editor.ant-modal .form-item-row > .ant-input,
+.console-editor.ant-modal .form-item-row > .ant-select:nth-child(2) { flex: 1; width: auto !important; min-width: 130px; }
+.console-editor.ant-modal .ant-btn-dashed { background: #819feb08 !important; border-color: #819feb40 !important; color: #a9c4fa !important; box-shadow: none; }
+.console-editor.ant-modal .modal-footer-modern { margin: 0; padding: 18px 28px; display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid #91a9de24; background: #111b2d; }
+.console-editor.ant-modal .modal-footer-modern .ant-btn { height: 40px; min-width: 96px; border-radius: 9px; font-size: 14px; }
+
+@media (max-width: 1100px) {
+  .console-resource-page .page-header-right { width: 100%; }
+  .console-resource-page .search-input.ant-input-affix-wrapper { flex: 1; min-width: 180px; }
+}
+@media (max-width: 700px) {
+  .instance-detail-page .instance-detail-header { padding: 16px; }
+  .instance-detail-page .instance-detail-content { padding: 20px 16px; }
+  .instance-detail-page .instance-summary-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; padding: 20px; }
+  .instance-detail-page .instance-summary-item { padding: 0; border: 0; }
+  .console-resource-page .page-header-right { gap: 10px; }
+  .console-editor.ant-modal { top: 12px; padding-bottom: 12px; }
+  .console-editor.ant-modal .ant-modal-header { padding: 20px 48px 20px 18px !important; }
+  .console-editor.ant-modal .editor-scroll { padding: 18px 14px; max-height: calc(100dvh - 240px); }
+  .console-editor.ant-modal .form-section-modern { padding: 16px; }
+  .console-editor.ant-modal .form-row { flex-direction: column; gap: 0; }
+  .console-editor.ant-modal .instance-row-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .console-editor.ant-modal .modal-footer-modern { padding: 16px 18px; }
+}
+
+/* Configuration workspace: one focused section, with persistent navigation. */
+.console-editor.ant-modal .editor-workspace { display: grid; grid-template-columns: 190px minmax(0, 1fr); }
+.console-editor.ant-modal .editor-navigation { padding: 24px 14px; background: #0c1424; border-right: 1px solid #91a9de1c; }
+.console-editor.ant-modal .editor-step { display: flex; align-items: center; gap: 10px; width: 100%; padding: 13px 12px; margin-bottom: 8px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: #8f9fb9; font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.console-editor.ant-modal .editor-step:hover { background: #819feb0a; color: #dce7fa; }
+.console-editor.ant-modal .editor-step:focus-visible { outline: 2px solid #86a8fa; outline-offset: 2px; }
+.console-editor.ant-modal .editor-step.is-active { background: #819feb12; border-color: #819feb28; color: #c5d7ff; }
+.console-editor.ant-modal .editor-step-number { font-size: 11px; font-variant-numeric: tabular-nums; color: #7f9dd4; }
+.console-editor.ant-modal .editor-step-arrow { margin-left: auto; font-size: 10px; }
+.console-editor.ant-modal .editor-scroll { min-height: min(430px, calc(100dvh - 260px)); max-height: calc(100dvh - 260px); padding: 26px 32px; }
+.console-editor.ant-modal .form-section-modern { border: 0 !important; border-radius: 0 !important; padding: 0; background: transparent !important; box-shadow: none !important; }
+.console-editor.ant-modal .form-section-modern[hidden] { display: none; }
+.console-editor.ant-modal .section-header { border: 0; margin-bottom: 22px; padding: 0; }
+.console-editor.ant-modal .section-title { font-size: 15px; font-weight: 500; }
+.console-editor.ant-modal .section-icon { display: none; }
+.console-editor.ant-modal .section-subtitle { width: 100%; }
+.console-editor.ant-modal .ant-form-item { margin-bottom: 22px; }
+.console-editor.ant-modal .ant-input-lg { min-height: 40px; font-size: 14px; padding: 8px 12px; }
+.console-editor.ant-modal textarea.ant-input { min-height: 80px; height: auto; resize: vertical; }
+.console-editor.ant-modal .editor-progress { margin-right: auto; align-self: center; color: #8495b2; font-size: 12px; font-variant-numeric: tabular-nums; }
+.console-editor.ant-modal .editor-plugin-note { border-top: 1px solid #91a9de1c; padding-top: 22px; margin-top: 26px; }
+.console-editor.ant-modal .editor-plugin-note .ant-alert { background: #819feb09; border-color: #819feb22; }
+.console-editor.ant-modal .ant-input { height: 40px !important; }
+.console-editor.ant-modal .ant-input-affix-wrapper { height: 40px !important; }
+.console-editor.ant-modal .ant-input-affix-wrapper > input.ant-input { height: auto !important; padding: 0 !important; }
+.console-editor.ant-modal .ant-input-textarea-affix-wrapper { height: auto !important; min-height: 90px; padding: 0 !important; }
+.console-editor.ant-modal .ant-input-textarea-affix-wrapper > textarea.ant-input { height: auto !important; min-height: 90px; border: 0 !important; background: transparent !important; box-shadow: none !important; padding: 10px 12px !important; }
+.console-editor.ant-modal .ant-select { min-height: 40px; background: #0c1424 !important; border: 1px solid #91a9de33 !important; border-radius: 9px; }
+.console-editor.ant-modal .ant-select .ant-select-content { background: transparent !important; border: 0 !important; box-shadow: none !important; height: auto !important; }
+.console-editor.ant-modal .ant-select-focused { border-color: #86a8fa !important; box-shadow: 0 0 0 3px #668af51a !important; }
+.console-editor.ant-modal .editor-rule-card { background: #0c142466 !important; border: 1px solid #91a9de26 !important; border-radius: 9px !important; padding: 14px !important; }
+.console-editor.ant-modal .editor-rule-fields { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.console-editor.ant-modal .editor-rule-fields > .ant-select { flex: 1 1 150px; min-width: 0; }
+.console-editor.ant-modal .editor-rule-fields > .ant-input { flex: 1 1 100px; }
+/* Bound the whole dialog, including header and footer, to the viewport. */
+.console-editor.ant-modal { top: 24px !important; }
+.console-editor.ant-modal :is(.ant-modal-container, .ant-modal-content) { height: min(680px, calc(100dvh - 48px)); display: flex; flex-direction: column; }
+.console-editor.ant-modal .ant-modal-header { flex-shrink: 0; }
+.console-editor.ant-modal .ant-modal-body { flex: 1; min-height: 0; overflow: hidden; }
+.console-editor.ant-modal .ant-modal-body > form { height: 100%; display: flex; flex-direction: column; }
+.console-editor.ant-modal .editor-workspace { flex: 1; min-height: 0; }
+.console-editor.ant-modal .editor-scroll { min-height: 0; max-height: none; }
+.console-editor.ant-modal .modal-footer-modern { flex-shrink: 0; }
+.instance-detail-page .instance-detail-header-left { flex-shrink: 0; }
+.instance-detail-page .instance-detail-title.ant-typography { white-space: nowrap; }
+@media (max-width: 1000px) {
+  .instance-detail-page .instance-detail-header { flex-wrap: wrap; }
+  .instance-detail-page .instance-detail-header-right { margin-left: auto; }
+}
+@media (max-width: 700px) {
+  .console-editor.ant-modal .editor-workspace { grid-template-rows: auto minmax(0, 1fr); }
+}
+@media (max-width: 700px) {
+  .console-editor.ant-modal .editor-workspace { grid-template-columns: minmax(0, 1fr); }
+  .console-editor.ant-modal .editor-navigation { display: flex; padding: 10px 14px; gap: 8px; border-right: 0; border-bottom: 1px solid #91a9de1c; }
+  .console-editor.ant-modal .editor-step { justify-content: center; padding: 10px 6px; margin: 0; font-size: 12px; }
+  .console-editor.ant-modal .editor-step-arrow { display: none; }
+  .console-editor.ant-modal .editor-scroll { padding: 22px 20px; min-height: min(360px, calc(100dvh - 300px)); max-height: calc(100dvh - 300px); }
+  .console-editor.ant-modal .modal-footer-modern { gap: 8px; }
+  .console-editor.ant-modal .modal-footer-modern .ant-btn { min-width: 64px; padding-inline: 12px; }
+}
+
+/* Persistent indicators move between choices; only decorative content animates.
+   Form controls stay mounted so switching never resets values or keyboard focus. */
+.console-editor.ant-modal { --editor-accent: #a9c5ff; --editor-tint: #729aff18; }
+.console-editor.ant-modal.is-ai { --editor-accent: #c2b0ff; --editor-tint: #ab89ff1c; }
+.console-editor.ant-modal .modal-icon-wrapper { color: var(--editor-accent); background: var(--editor-tint); transition: color 240ms, background-color 240ms; }
+.console-editor.ant-modal .modal-title-wrapper { animation: editor-title-enter 220ms ease-out both; }
+.console-editor.ant-modal .editor-category-switch { position: relative; display: inline-grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 5px; border: 1px solid #91a9de30; border-radius: 12px; background: #0a1323; isolation: isolate; }
+.console-editor.ant-modal .editor-category-indicator { position: absolute; z-index: -1; top: 5px; bottom: 5px; left: 5px; width: calc((100% - 14px) / 2); border-radius: 8px; background: linear-gradient(125deg, #36588e, #2c4068); border: 1px solid #9fbfff45; box-shadow: 0 2px 5px #0003, 0 1px 0 #d8e5ff12 inset; transition: transform 280ms cubic-bezier(.22, 1, .36, 1), background 240ms, border-color 240ms; }
+.console-editor.ant-modal .editor-category-switch[data-value="AI"] .editor-category-indicator { transform: translateX(calc(100% + 4px)); background: linear-gradient(125deg, #53447e, #3a3564); border-color: #bea6ff60; }
+.console-editor.ant-modal .editor-category-switch button { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px; padding: 8px 18px; border: 0; border-radius: 8px; color: #8f9fb9; background: transparent; font: inherit; font-size: 13px; cursor: pointer; transition: color 200ms; }
+.console-editor.ant-modal .editor-category-switch button[aria-checked="true"] { color: #f0f4ff; }
+.console-editor.ant-modal .editor-category-switch button:hover { color: #e0eaff; }
+.console-editor.ant-modal .editor-category-switch button:focus-visible { outline: 2px solid var(--editor-accent); outline-offset: 2px; }
+.console-editor.ant-modal .editor-category-switch[aria-disabled="true"] { opacity: .65; }
+.console-editor.ant-modal .editor-category-switch button:disabled { cursor: not-allowed; }
+.console-editor.ant-modal .editor-type-hint { margin: -10px 0 24px; color: #8f9fb9; font-size: 12px; line-height: 1.8; animation: editor-title-enter 220ms ease-out both; }
+.console-editor.ant-modal .editor-navigation { position: relative; isolation: isolate; }
+.console-editor.ant-modal .editor-navigation::before { content: ''; position: absolute; z-index: -1; left: 14px; right: 14px; top: 24px; height: 48px; box-sizing: border-box; border: 1px solid #819feb35; border-radius: 8px; background: var(--editor-tint); transform: translateY(calc(var(--editor-active-step) * 56px)); transition: transform 280ms cubic-bezier(.22, 1, .36, 1), background-color 240ms; }
+.console-editor.ant-modal .editor-step { height: 48px; box-sizing: border-box; transition: color 180ms, background-color 180ms; }
+.console-editor.ant-modal .editor-step.is-active { background: transparent; border-color: transparent; color: var(--editor-accent); }
+.console-editor.ant-modal .editor-step-arrow { animation: editor-title-enter 220ms ease-out; }
+.console-editor.ant-modal .editor-scroll { --editor-enter-x: 14px; }
+.console-editor.ant-modal .editor-scroll[data-direction="backward"] { --editor-enter-x: -14px; }
+.console-editor.ant-modal .form-section-modern:not([hidden]) { animation: editor-section-enter 240ms cubic-bezier(.22, 1, .36, 1) both; }
+@keyframes editor-title-enter {
+  from { opacity: .35; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes editor-section-enter {
+  from { opacity: .15; transform: translateX(var(--editor-enter-x)); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@media (max-width: 700px) {
+  .console-editor.ant-modal .editor-navigation { display: grid; grid-template-columns: repeat(var(--editor-step-count), minmax(0, 1fr)); }
+  .console-editor.ant-modal .editor-navigation::before { top: 10px; right: auto; width: calc((100% - 28px - (var(--editor-step-count) - 1) * 8px) / var(--editor-step-count)); height: 40px; transform: translateX(calc(var(--editor-active-step) * (100% + 8px))); }
+  .console-editor.ant-modal .editor-step { height: 40px; }
+  .console-editor.ant-modal .editor-scroll { min-height: 0; max-height: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .console-editor.ant-modal *, .console-editor.ant-modal *::before { animation: none !important; transition: none !important; }
+}

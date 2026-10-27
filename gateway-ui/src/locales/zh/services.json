@@ -96,5 +96,20 @@
   "services.credential_none": "未配置密钥",
   "services.tab_all": "全部服务",
   "services.tab_normal": "普通服务",
-  "services.tab_ai": "AI 服务"
+  "services.tab_ai": "AI 服务",
+  "services.empty_hint": "创建服务并添加后端实例，为路由提供转发目标。",
+  "services.no_matches": "没有匹配的服务",
+  "services.filter_hint": "试试其他关键词，或清除筛选条件。",
+  "services.clear_filters": "清除筛选",
+  "services.next_step": "下一步",
+  "services.previous_step": "上一步",
+  "services.save_changes": "保存修改",
+  "services.create_normal": "创建普通服务",
+  "services.create_ai": "创建 AI 服务",
+  "services.edit_normal": "编辑普通服务",
+  "services.edit_ai": "编辑 AI 服务",
+  "services.normal_editor_subtitle": "配置后端节点与负载均衡，连接你的业务服务",
+  "services.ai_editor_subtitle": "接入模型供应商，统一管理访问凭证与服务地址",
+  "services.normal_type_hint": "将请求分发到后端实例，支持加权、轮询等负载均衡策略。",
+  "services.ai_type_hint": "连接大模型供应商，通过 API Key 和 Base URL 配置模型访问。"
 }

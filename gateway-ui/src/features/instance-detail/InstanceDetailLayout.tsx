@@ -29,6 +29,7 @@ import UserMenu from '../layout/UserMenu';
 import { InstanceDetailProvider } from './InstanceDetailContext';
 import ScaleModal from './ScaleModal';
 import './instance-detail.css';
+import './console-ui.css';
 
 const { Title } = Typography;
 

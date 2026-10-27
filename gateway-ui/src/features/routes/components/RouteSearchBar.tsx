@@ -46,14 +46,7 @@ const RouteSearchBar: React.FC<RouteSearchBarProps> = ({
           onChange={(e) => onSearchChange(e.target.value)}
           allowClear
           className="search-input"
-          suffix={(
-            <Button
-              type="text"
-              icon={<SearchOutlined />}
-              onClick={() => {}}
-              style={{ color: '#94a3b8' }}
-            />
-          )}
+          prefix={<SearchOutlined />}
         />
         <Select
           placeholder={t('routes.status_filter_placeholder')}

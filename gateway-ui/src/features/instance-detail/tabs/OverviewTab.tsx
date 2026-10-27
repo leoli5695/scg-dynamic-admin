@@ -443,7 +443,7 @@ const OverviewTab: React.FC = () => {
       </div>
 
       <Card className="instance-info-section" title={t('instance.basic_info')}>
-        <Descriptions column={{ xs: 1, sm: 2, md: 3 }}>
+        <Descriptions layout="vertical" column={{ xs: 1, sm: 2, xl: 3 }}>
           <Descriptions.Item label={t('instance.instance_id')}>
             <Text copyable>{instance.instanceId}</Text>
           </Descriptions.Item>

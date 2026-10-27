@@ -160,5 +160,20 @@
   "routes.ai_add_model_mapping": "添加映射",
   "routes.tab_all": "全部路由",
   "routes.tab_normal": "普通路由",
-  "routes.tab_ai": "AI 路由"
+  "routes.tab_ai": "AI 路由",
+  "routes.empty_hint": "创建路由，配置访问路径与目标服务，开始转发请求。",
+  "routes.no_matches": "没有匹配的路由",
+  "routes.filter_hint": "试试其他关键词，或清除筛选条件。",
+  "routes.clear_filters": "清除筛选",
+  "routes.next_step": "下一步",
+  "routes.previous_step": "上一步",
+  "routes.save_changes": "保存修改",
+  "routes.create_normal": "创建普通路由",
+  "routes.create_ai": "创建 AI 路由",
+  "routes.edit_normal": "编辑普通路由",
+  "routes.edit_ai": "编辑 AI 路由",
+  "routes.normal_editor_subtitle": "定义请求匹配规则，将流量转发到目标服务",
+  "routes.ai_editor_subtitle": "配置模型服务、流量权重与模型匹配规则",
+  "routes.normal_type_hint": "按路径、请求方法等条件匹配请求，并转发到后端服务。",
+  "routes.ai_type_hint": "将请求转发到 AI 服务，支持多供应商权重与模型映射。"
 }

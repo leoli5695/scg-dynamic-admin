@@ -40,9 +40,7 @@ const AiUpstreamsForm: React.FC<AiUpstreamsFormProps> = ({ aiServices }) => {
                 border: '1px solid rgba(148, 163, 184, 0.2)',
               }}
               >
-                <div style={{
-                  display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'nowrap',
-                }}
+                <div className="editor-rule-fields"
                 >
                   <Form.Item
                     {...restField}

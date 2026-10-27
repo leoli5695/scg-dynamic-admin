@@ -20,6 +20,7 @@ import ServiceCard from './components/ServiceCard';
 import ServiceDetailDrawer from './components/ServiceDetailDrawer';
 import ServiceFormModal from './components/ServiceFormModal';
 import './services-premium.css';
+import '../instance-detail/console-ui.css';
 
 const { Text, Title } = Typography;
 
@@ -205,7 +206,7 @@ const ServicesPage: React.FC = () => {
   ];
 
   return (
-    <div className="services-page">
+    <div className="services-page console-resource-page">
       {/* Header (stat chips double as health filter) */}
       <div className="page-header-modern">
         <div className="page-header-left">
@@ -229,25 +230,16 @@ const ServicesPage: React.FC = () => {
             onChange={(e) => setSearchTerm(e.target.value)}
             allowClear
             className="search-input"
-            suffix={(
-              <Button
-                type="text"
-                icon={<SearchOutlined />}
-                onClick={() => {}}
-                style={{ color: '#94a3b8' }}
-              />
-            )}
+            prefix={<SearchOutlined />}
           />
-          {services.length > 0 && (
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => setCreateOpen(true)}
-              className="create-btn"
-            >
-              {t('services.create')}
-            </Button>
-          )}
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setCreateOpen(true)}
+            className="create-btn"
+          >
+            {t('services.create')}
+          </Button>
         </div>
       </div>
 
@@ -275,9 +267,11 @@ const ServicesPage: React.FC = () => {
           <Card className="empty-card">
             <Empty
               image={<ClusterOutlined className="empty-icon" />}
-              description={<span className="empty-text">{t('services.empty_description')}</span>}
+              description={<><span className="empty-text">{t('services.' + (services.length ? 'no_matches' : 'empty_description'))}</span><p className="empty-hint">{t('services.' + (services.length ? 'filter_hint' : 'empty_hint'))}</p></>}
             >
-              {services.length === 0 && (
+              {services.length > 0 ? (
+                <Button onClick={() => { setSearchTerm(''); setHealthFilter('all'); setCategoryTab('ALL'); }}>{t('services.clear_filters')}</Button>
+              ) : (
                 <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
                   {t('services.create_first')}
                 </Button>

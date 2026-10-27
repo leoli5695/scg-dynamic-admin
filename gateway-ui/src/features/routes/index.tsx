@@ -22,6 +22,7 @@ import RouteFormModal from './components/RouteFormModal';
 import RouteSearchBar, { RouteStatusFilter } from './components/RouteSearchBar';
 import RouteStatsBar from './components/RouteStatsBar';
 import './routes-premium.css';
+import '../instance-detail/console-ui.css';
 
 const errorMessage = (error: unknown, fallbackKey: string, t: (k: string) => string): string => (
   error instanceof ApiError && error.message ? error.message : t(fallbackKey)
@@ -199,7 +200,7 @@ const RoutesPage: React.FC = () => {
   };
 
   return (
-    <div className="routes-page">
+    <div className="routes-page console-resource-page">
       <RouteSearchBar
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
@@ -235,11 +236,11 @@ const RoutesPage: React.FC = () => {
           <Card className="empty-card">
             <Empty
               image={<CompassOutlined className="empty-icon" />}
-              description={<span className="empty-text">{t('routes.empty_description')}</span>}
+              description={<><span className="empty-text">{t('routes.' + (routes.length ? 'no_matches' : 'empty_description'))}</span><p className="empty-hint">{t('routes.' + (routes.length ? 'filter_hint' : 'empty_hint'))}</p></>}
             >
-              <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+              {routes.length > 0 ? <Button onClick={() => { setSearchTerm(''); setStatusFilter('all'); setCategoryTab('ALL'); }}>{t('routes.clear_filters')}</Button> : <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
                 {t('routes.create_first')}
-              </Button>
+              </Button>}
             </Empty>
           </Card>
         ) : (
