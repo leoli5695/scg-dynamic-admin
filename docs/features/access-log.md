@@ -4,6 +4,8 @@
 
 The gateway provides comprehensive access logging with JSON format output, supporting multiple deployment modes and real-time log viewing.
 
+JSON serialization and output run on a dedicated worker with a bounded 1,024-entry queue. A full queue drops new access-log records instead of blocking requests. Monitor `gateway.accesslog.dropped` and `gateway.accesslog.queued` (Prometheus names `gateway_accesslog_dropped_total` and `gateway_accesslog_queued`) to detect collection backpressure. Access logs are therefore best effort under overload.
+
 ## Features
 
 - **JSON Format Logging**: Structured logs for easy aggregation and analysis

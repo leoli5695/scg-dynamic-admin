@@ -30,6 +30,8 @@ import reactor.core.publisher.Mono;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import org.springframework.beans.factory.annotation.Value;
 
 /**
  * Cache global filter for GET/HEAD requests.
@@ -43,9 +45,66 @@ import java.util.concurrent.TimeUnit;
 public class CacheGlobalFilter implements GlobalFilter, Ordered {
 
     private final StrategyManager strategyManager;
+    private static final List<String> BUILTIN_VARY_HEADERS = List.of("Origin",
+            "Access-Control-Request-Method", "Access-Control-Request-Headers");
 
     // Cache instances per route: routeId -> cache
-    private final Map<String, Cache<String, CachedResponse>> routeCaches = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, RouteCache> routeCaches = new java.util.concurrent.ConcurrentHashMap<>();
+    @Value("${gateway.response-cache.max-bytes:268435456}")
+    private long maxTotalBytes = 268435456;
+    private final AtomicLong cachedBytes = new AtomicLong();
+
+    private final class RouteCache {
+        private final AtomicLong bytes = new AtomicLong();
+        private final long limit;
+        private final Cache<String, CachedResponse> cache;
+        private boolean active = true;
+
+        RouteCache(Map<String, Object> config) {
+            limit = Math.max(0, getLongValue(config, "maxCacheBytes", 67108864));
+            cache = Caffeine.newBuilder().maximumSize(Math.max(0, getIntValue(config, "maxSize", 10000)))
+                    .expireAfterWrite(Math.max(0, getLongValue(config, "ttlSeconds", 60)), TimeUnit.SECONDS)
+                    .scheduler(com.github.benmanes.caffeine.cache.Scheduler.systemScheduler())
+                    .executor(Runnable::run)
+                    .<String, CachedResponse>removalListener((key, value, cause) -> {
+                        if (value != null) {
+                            bytes.addAndGet(-value.weight);
+                            cachedBytes.addAndGet(-value.weight);
+                        }
+                    }).build();
+        }
+
+        synchronized void invalidate() {
+            active = false;
+            cache.invalidateAll();
+            cache.cleanUp();
+        }
+
+        synchronized void put(String key, CachedResponse response) {
+            if (!active) return;
+            cache.cleanUp();
+            long weight = response.body.length + 256L + key.length() * 2L;
+            for (var header : response.headers.entrySet()) {
+                weight += header.getKey().length() * 2L + 64L;
+                for (String value : header.getValue()) weight += value.length() * 2L + 32L;
+            }
+            if (weight > limit - bytes.get()) return;
+            long current;
+            do {
+                current = cachedBytes.get();
+                if (weight > maxTotalBytes - current) return;
+            } while (!cachedBytes.compareAndSet(current, current + weight));
+            response.weight = weight;
+            bytes.addAndGet(weight);
+            try {
+                cache.put(key, response);
+            } catch (RuntimeException e) {
+                bytes.addAndGet(-weight);
+                cachedBytes.addAndGet(-weight);
+                throw e;
+            }
+        }
+    }
 
     /**
      * FIX: drop per-route Caffeine instances when cache strategies change.
@@ -67,7 +126,7 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
 
             @Override
             public void onCleared() {
-                routeCaches.values().forEach(Cache::invalidateAll);
+                routeCaches.values().forEach(RouteCache::invalidate);
                 routeCaches.clear();
             }
         });
@@ -78,14 +137,14 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
             return;
         }
         if (strategy.getRouteId() != null) {
-            Cache<String, CachedResponse> cache = routeCaches.remove(strategy.getRouteId());
+            RouteCache cache = routeCaches.remove(strategy.getRouteId());
             if (cache != null) {
-                cache.invalidateAll();
+                cache.invalidate();
             }
             log.debug("Invalidated route cache instance for route: {}", strategy.getRouteId());
         } else {
             // Global strategy: rebuild all route cache instances with new settings
-            routeCaches.values().forEach(Cache::invalidateAll);
+            routeCaches.values().forEach(RouteCache::invalidate);
             routeCaches.clear();
             log.debug("Invalidated all route cache instances (global cache strategy changed)");
         }
@@ -99,6 +158,11 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
         // Get cache config
         Map<String, Object> config = strategyManager.getCacheConfig(routeId);
         if (config == null || !getBoolValue(config, "enabled", true)) {
+            return chain.filter(exchange);
+        }
+
+        // Shared caches must never reuse personalized responses, even with a custom key.
+        if (hasCredentials(exchange) || forbidsCaching(request.getHeaders())) {
             return chain.filter(exchange);
         }
 
@@ -130,10 +194,10 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
         String cacheKey = buildCacheKey(exchange, config);
 
         // Get or create cache for this route
-        Cache<String, CachedResponse> cache = getOrCreateCache(routeId, config);
+        RouteCache cache = getOrCreateCache(routeId, config);
 
         // Try to get from cache
-        CachedResponse cached = cache.getIfPresent(cacheKey);
+        CachedResponse cached = cache.cache.getIfPresent(cacheKey);
         if (cached != null && !cached.isExpired()) {
             log.debug("Cache hit for route {}, key: {}", routeId, cacheKey);
             return writeCachedResponse(exchange, cached);
@@ -154,9 +218,8 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
                 }
 
                 // Check if response is cacheable
-                String cacheControl = getHeaders().getFirst(HttpHeaders.CACHE_CONTROL);
-                if (cacheControl != null && cacheControl.contains("no-cache")) {
-                    log.debug("Response marked as no-cache, skipping cache");
+                if (forbidsCaching(getHeaders()) || getHeaders().containsKey(HttpHeaders.SET_COOKIE)
+                        || !supportsVary(getHeaders(), config)) {
                     return super.writeWith(body);
                 }
 
@@ -194,7 +257,7 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
                 });
 
                 return super.writeWith(tee)
-                        .doFinally(signal -> {
+                        .doOnSuccess(ignored -> {
                             if (exceeded.get() || sink.size() == 0) {
                                 return;
                             }
@@ -250,8 +313,8 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
         String keyExpression = getStringValue(config, "cacheKeyExpression", "${method}:${path}:${query}");
 
         String method = request.getMethod().name();
-        String path = request.getURI().getPath();
-        String query = request.getURI().getQuery();
+        String path = request.getURI().getRawPath();
+        String query = request.getURI().getRawQuery();
         String routeId = RouteUtils.getRouteId(exchange);
 
         String key = keyExpression;
@@ -261,35 +324,70 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
         key = key.replace("${routeId}", routeId);
 
         // Add vary headers to key
-        List<String> varyHeaders = getStringListValue(config, "varyHeaders");
-        if (varyHeaders != null && !varyHeaders.isEmpty()) {
-            StringBuilder varyKey = new StringBuilder(key);
-            for (String header : varyHeaders) {
-                String headerValue = request.getHeaders().getFirst(header);
-                if (headerValue != null) {
-                    varyKey.append(":").append(header).append("=").append(headerValue);
+        List<String> varyHeaders = new java.util.ArrayList<>(BUILTIN_VARY_HEADERS);
+        List<String> configured = getStringListValue(config, "varyHeaders");
+        if (configured != null) varyHeaders.addAll(configured);
+        StringBuilder varyKey = new StringBuilder(key).append("|host=").append(request.getURI().getRawAuthority());
+        for (String header : varyHeaders) {
+            List<String> values = request.getHeaders().getOrEmpty(header);
+            varyKey.append('|').append(header.toLowerCase(java.util.Locale.ROOT)).append(':').append(values.size());
+            for (String value : values) {
+                varyKey.append(':').append(value.length()).append(':').append(value);
+            }
+        }
+        return varyKey.toString();
+    }
+
+    private boolean hasCredentials(ServerWebExchange exchange) {
+        HttpHeaders headers = exchange.getRequest().getHeaders();
+        if (headers.containsKey(HttpHeaders.AUTHORIZATION) || headers.containsKey(HttpHeaders.COOKIE)) {
+            return true;
+        }
+        for (String name : List.of("X-API-Key", "Api-Key", "ApiKey", "X-Access-Key", "X-AccessKey",
+                "Access-Key", "AccessKey", "X-Client-Id")) {
+            if (headers.containsKey(name)) {
+                return true;
+            }
+        }
+        return List.of("auth_type", "auth_user", "jwt_claims", "jwt_subject", "api_key_metadata",
+                "api_key", "auth_access_key").stream().anyMatch(exchange.getAttributes()::containsKey);
+    }
+
+    private boolean forbidsCaching(HttpHeaders headers) {
+        if (headers.getOrEmpty(HttpHeaders.PRAGMA).stream().anyMatch(value -> value.equalsIgnoreCase("no-cache"))) {
+            return true;
+        }
+        for (String value : headers.getOrEmpty(HttpHeaders.CACHE_CONTROL)) {
+            for (String directive : value.split(",")) {
+                String name = directive.split("=", 2)[0].trim();
+                if (name.equalsIgnoreCase("no-cache") || name.equalsIgnoreCase("no-store")
+                        || name.equalsIgnoreCase("private")) {
+                    return true;
                 }
             }
-            key = varyKey.toString();
         }
+        return false;
+    }
 
-        return key;
+    private boolean supportsVary(HttpHeaders headers, Map<String, Object> config) {
+        List<String> configured = getStringListValue(config, "varyHeaders");
+        for (String value : headers.getOrEmpty(HttpHeaders.VARY)) {
+            for (String name : value.split(",")) {
+                boolean builtIn = BUILTIN_VARY_HEADERS.stream().anyMatch(name.trim()::equalsIgnoreCase);
+                if (name.trim().equals("*") || (!builtIn && (configured == null
+                        || configured.stream().noneMatch(name.trim()::equalsIgnoreCase)))) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     /**
      * Get or create cache for route.
      */
-    private Cache<String, CachedResponse> getOrCreateCache(String routeId, Map<String, Object> config) {
-        return routeCaches.computeIfAbsent(routeId, id -> {
-            long ttlSeconds = getLongValue(config, "ttlSeconds", 60L);
-            int maxSize = getIntValue(config, "maxSize", 10000);
-
-            return Caffeine.newBuilder()
-                    .maximumSize(maxSize)
-                    .expireAfterWrite(ttlSeconds, TimeUnit.SECONDS)
-                    .recordStats()
-                    .build();
-        });
+    private RouteCache getOrCreateCache(String routeId, Map<String, Object> config) {
+        return routeCaches.computeIfAbsent(routeId, id -> new RouteCache(config));
     }
 
     /**
@@ -388,6 +486,7 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
         final byte[] body;
         final long expiresAt;
         final long createdAt;
+        long weight;
 
         CachedResponse(int statusCode, HttpHeaders headers, byte[] body, long expiresAt) {
             this.statusCode = statusCode;

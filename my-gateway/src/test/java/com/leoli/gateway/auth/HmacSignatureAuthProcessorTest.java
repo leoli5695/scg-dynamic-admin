@@ -527,7 +527,8 @@ class HmacSignatureAuthProcessorTest {
             String stringToSign = buildStringToSign(path, null, timestamp, nonce);
             String signature = calculateSignature(stringToSign, SECRET_KEY, "HmacSHA256");
 
-            MockServerHttpRequest request = MockServerHttpRequest.get(path)
+            MockServerHttpRequest request = MockServerHttpRequest.method(org.springframework.http.HttpMethod.GET,
+                            java.net.URI.create(path))
                     .header("X-Access-Key", ACCESS_KEY)
                     .header("X-Signature", signature)
                     .header("X-Timestamp", String.valueOf(timestamp))

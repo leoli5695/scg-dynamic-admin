@@ -92,6 +92,12 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
     @Value("${gateway.trace.sampling-rate-for-errors:100}")
     private int samplingRateForErrors;
 
+    @Value("${gateway.trace.body-sampling-rate:10}")
+    private int bodySamplingRate = 10;
+    @Value("${gateway.trace.max-inflight-body-bytes:16777216}")
+    private long maxInflightBodyBytes = 16777216;
+    private final AtomicLong inflightBodyBytes = new AtomicLong();
+
     @Value("${gateway.trace.include-filter-chain:true}")
     private boolean includeFilterChain;
 
@@ -153,6 +159,30 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
                     .doFinally(signalType -> afterRequest(exchange, startTime, finalTraceId, null, null));
         }
 
+        // Decide before any body allocation. Error/slow metadata is still retained when
+        // the body was not sampled, or when the concurrent capture budget is exhausted.
+        long reservation = Math.max(0L, maxBodySize) * 4L;
+        if (ThreadLocalRandom.current().nextInt(100) >= bodySamplingRate || reservation == 0
+                || !reserveBodyBytes(reservation)) {
+            return chain.filter(exchange)
+                    .doFinally(signal -> afterRequest(exchange, startTime, finalTraceId, null, null));
+        }
+        return Mono.defer(() -> captureBodies(exchange, chain, startTime, finalTraceId))
+                .doFinally(signal -> inflightBodyBytes.addAndGet(-reservation));
+    }
+
+    private boolean reserveBodyBytes(long amount) {
+        long current;
+        do {
+            current = inflightBodyBytes.get();
+            if (amount > maxInflightBodyBytes - current) return false;
+        } while (!inflightBodyBytes.compareAndSet(current, current + amount));
+        return true;
+    }
+
+    private Mono<Void> captureBodies(ServerWebExchange exchange, GatewayFilterChain chain,
+                                      long startTime, String finalTraceId) {
+        ServerHttpRequest request = exchange.getRequest();
         // Check if we need to capture request body (for POST/PUT)
         boolean shouldCaptureBody = shouldCaptureBody(request);
 
@@ -329,7 +359,13 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
 
         // Determine replay type based on request characteristics
         String replayType = isWebSocket ? "WEBSOCKET" : isSse ? "SSE" : "HTTP";
-        boolean replayable = !isWebSocket && !isSse; // WebSocket/SSE cannot be fully replayed
+        boolean mayHaveBody = exchange.getRequest().getHeaders().getContentLength() > 0
+                || (!HttpMethod.GET.equals(exchange.getRequest().getMethod())
+                    && !HttpMethod.HEAD.equals(exchange.getRequest().getMethod())
+                    && exchange.getRequest().getHeaders().getContentLength() != 0);
+        boolean completeBody = requestBody != null && !requestBody.contains("[TRUNCATED]")
+                && !requestBody.startsWith("[BODY_TOO_LARGE:");
+        boolean replayable = !isWebSocket && !isSse && (!mayHaveBody || completeBody);
 
         // Sampling logic
         int random = ThreadLocalRandom.current().nextInt(100);
@@ -361,11 +397,11 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
         // Normal requests: use captureAll and samplingRate
         if (captureAll) {
             if (samplingRate >= 100 || random < samplingRate) {
-                log.info("Capturing ALL trace: traceId={}, samplingRate={}, random={}", traceId, samplingRate, random);
+                log.debug("Capturing ALL trace: traceId={}, samplingRate={}, random={}", traceId, samplingRate, random);
                 captureTrace(exchange, startTime, traceId, requestBody, responseBody, duration, statusCode,
                         false, false, replayType, replayable, "ALL");
             } else {
-                log.info("Skipping trace due to sampling: traceId={}, samplingRate={}, random={}", traceId, samplingRate, random);
+                log.debug("Skipping trace due to sampling: traceId={}, samplingRate={}, random={}", traceId, samplingRate, random);
             }
         }
     }

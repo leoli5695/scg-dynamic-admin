@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Executors;
 
 import static com.leoli.gateway.constants.GatewayConfigConstants.GROUP;
 import static com.leoli.gateway.constants.GatewayConfigConstants.ROUTES_INDEX;
@@ -221,5 +222,152 @@ class RouteRefresherTest {
         refresher.periodicSyncRoutes();
 
         verify(routeManager, never()).removeRoute(any());
+    }
+
+    private void indexEvent(String json) {
+        ReflectionTestUtils.invokeMethod(refresher, "onRoutesIndexChanged", ROUTES_INDEX, GROUP, json);
+    }
+
+    private ConfigCenterService.ConfigListener routeListener() {
+        ArgumentCaptor<ConfigCenterService.ConfigListener> captor =
+                ArgumentCaptor.forClass(ConfigCenterService.ConfigListener.class);
+        verify(configService, Mockito.atLeastOnce())
+                .addListener(eq(ROUTE_PREFIX + "r1"), eq(GROUP), captor.capture());
+        return captor.getValue();
+    }
+
+    @Test
+    void startupRegistersBeforeReadingAndDoesNotOverwriteImmediateListenerUpdate() throws Exception {
+        stubIndex("r1");
+        stubRoute("r1", 1111);
+        Mockito.doAnswer(call -> {
+            ConfigCenterService.ConfigListener listener = call.getArgument(2);
+            listener.onConfigChange(ROUTE_PREFIX + "r1", GROUP, routeJson("r1", 2222));
+            return null;
+        }).when(configService).addListener(eq(ROUTE_PREFIX + "r1"), eq(GROUP), any());
+
+        refresher.init();
+        awaitAsyncRouteLoads();
+
+        assertEquals(2222, appliedPort());
+        verify(configService, never()).getConfig(ROUTE_PREFIX + "r1", GROUP);
+    }
+
+    @Test
+    void inFlightLoadCannotResurrectDeletedRoute() throws Exception {
+        CountDownLatch reading = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        when(configService.getConfig(ROUTE_PREFIX + "r1", GROUP)).thenAnswer(call -> {
+            reading.countDown();
+            assertTrue(release.await(10, TimeUnit.SECONDS));
+            return routeJson("r1", 1111);
+        });
+        try {
+            indexEvent("[\"r1\"]");
+            assertTrue(reading.await(10, TimeUnit.SECONDS));
+            indexEvent("[]");
+        } finally {
+            release.countDown();
+        }
+        awaitAsyncRouteLoads();
+        verify(routeManager, never()).putRoute(eq("r1"), any());
+        verify(routeManager).removeRoute("r1");
+    }
+
+    @Test
+    void inFlightLoadCannotOverwriteNewerListenerUpdate() throws Exception {
+        CountDownLatch reading = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        when(configService.getConfig(ROUTE_PREFIX + "r1", GROUP)).thenAnswer(call -> {
+            reading.countDown();
+            assertTrue(release.await(10, TimeUnit.SECONDS));
+            return routeJson("r1", 1111);
+        });
+        try {
+            indexEvent("[\"r1\"]");
+            assertTrue(reading.await(10, TimeUnit.SECONDS));
+            routeListener().onConfigChange(ROUTE_PREFIX + "r1", GROUP, routeJson("r1", 2222));
+        } finally {
+            release.countDown();
+        }
+        awaitAsyncRouteLoads();
+        assertEquals(2222, appliedPort());
+    }
+
+    @Test
+    void callbackFromDeletedLifetimeCannotModifyRecreatedRoute() throws Exception {
+        stubRoute("r1", 1111);
+        indexEvent("[\"r1\"]");
+        awaitAsyncRouteLoads();
+        ConfigCenterService.ConfigListener oldListener = routeListener();
+        indexEvent("[]");
+        stubRoute("r1", 2222);
+        indexEvent("[\"r1\"]");
+        awaitAsyncRouteLoads();
+        Mockito.clearInvocations(routeManager, routeLocator);
+
+        oldListener.onConfigChange(ROUTE_PREFIX + "r1", GROUP, routeJson("r1", 3333));
+        oldListener.onConfigChange(ROUTE_PREFIX + "r1", GROUP, null);
+
+        verify(routeManager, never()).putRoute(any(), any());
+        verify(routeManager, never()).removeRoute(any());
+        verify(routeLocator, never()).refresh();
+    }
+
+    @Test
+    void pollCannotOverwriteListenerUpdateWhileReadingContent() throws Exception {
+        stubIndex("r1");
+        stubRoute("r1", 1111);
+        refresher.periodicSyncRoutes();
+        awaitAsyncRouteLoads();
+        Mockito.clearInvocations(routeManager);
+        CountDownLatch reading = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        when(configService.getConfig(ROUTE_PREFIX + "r1", GROUP)).thenAnswer(call -> {
+            reading.countDown();
+            assertTrue(release.await(10, TimeUnit.SECONDS));
+            return routeJson("r1", 1111);
+        });
+        ExecutorService poll = Executors.newSingleThreadExecutor();
+        try {
+            var completed = poll.submit(refresher::periodicSyncRoutes);
+            assertTrue(reading.await(10, TimeUnit.SECONDS));
+            routeListener().onConfigChange(ROUTE_PREFIX + "r1", GROUP, routeJson("r1", 2222));
+            release.countDown();
+            completed.get(10, TimeUnit.SECONDS);
+            assertEquals(2222, appliedPort());
+        } finally {
+            release.countDown();
+            poll.shutdownNow();
+        }
+    }
+
+    @Test
+    void staleIndexReadCannotRecreateRouteRemovedByIndexListener() throws Exception {
+        stubIndex("r1");
+        stubRoute("r1", 1111);
+        refresher.periodicSyncRoutes();
+        awaitAsyncRouteLoads();
+        Mockito.clearInvocations(routeManager);
+        CountDownLatch reading = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        when(configService.getConfig(ROUTES_INDEX, GROUP)).thenAnswer(call -> {
+            reading.countDown();
+            assertTrue(release.await(10, TimeUnit.SECONDS));
+            return "[\"r1\"]";
+        });
+        ExecutorService poll = Executors.newSingleThreadExecutor();
+        try {
+            var completed = poll.submit(refresher::periodicSyncRoutes);
+            assertTrue(reading.await(10, TimeUnit.SECONDS));
+            indexEvent("[]");
+            release.countDown();
+            completed.get(10, TimeUnit.SECONDS);
+            awaitAsyncRouteLoads();
+            verify(routeManager, never()).putRoute(any(), any());
+        } finally {
+            release.countDown();
+            poll.shutdownNow();
+        }
     }
 }

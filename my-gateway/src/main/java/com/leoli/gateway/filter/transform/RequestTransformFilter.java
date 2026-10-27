@@ -152,16 +152,8 @@ public class RequestTransformFilter implements GlobalFilter, Ordered {
 
         // FIX (OOM): bounded join by maxBodySize; the Content-Length pre-check in filter() covers
         // known sizes, this limit also guards chunked requests.
-        return DataBufferUtils.join(request.getBody(), config.getMaxBodySize())
-                .defaultIfEmpty(new DefaultDataBufferFactory().wrap(new byte[0]))
-                .flatMap(dataBuffer -> {
-                    // Read body bytes with guaranteed release to prevent direct buffer memory leak
-                    final byte[] bytes = new byte[dataBuffer.readableByteCount()];
-                    try {
-                        dataBuffer.read(bytes);
-                    } finally {
-                        DataBufferUtils.release(dataBuffer);
-                    }
+        return com.leoli.gateway.util.RequestBodyCache.read(exchange, config.getMaxBodySize())
+                .flatMap(bytes -> {
 
                     try {
                         // Check size limit
@@ -208,7 +200,8 @@ public class RequestTransformFilter implements GlobalFilter, Ordered {
                             }
                         };
 
-                        return chain.filter(exchange.mutate().request(newRequest).build());
+                        ServerWebExchange transformed = exchange.mutate().request(newRequest).build();
+                        return chain.filter(transformed.mutate().request(com.leoli.gateway.util.RequestBodyCache.wrap(transformed, newBytes)).build());
 
                     } catch (Exception e) {
                         log.error("Error transforming request body: {}", e.getMessage(), e);
@@ -233,12 +226,7 @@ public class RequestTransformFilter implements GlobalFilter, Ordered {
      * continues the chain must use the rebuilt request to avoid losing the body.
      */
     private ServerWebExchange rebuildWithCachedBody(ServerWebExchange exchange, ServerHttpRequest request, byte[] bytes) {
-        ServerHttpRequest newRequest = new ServerHttpRequestDecorator(request) {
-            @Override
-            public Flux<DataBuffer> getBody() {
-                return Flux.just(exchange.getResponse().bufferFactory().wrap(bytes));
-            }
-        };
+        ServerHttpRequest newRequest = com.leoli.gateway.util.RequestBodyCache.wrap(exchange, bytes);
         return exchange.mutate().request(newRequest).build();
     }
 

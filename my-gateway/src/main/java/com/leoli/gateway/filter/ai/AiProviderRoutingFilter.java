@@ -100,15 +100,8 @@ public class AiProviderRoutingFilter implements GlobalFilter, Ordered {
         long maxBodySize = Math.max(1024, config.getMaxBodySize());
         ServerHttpResponse response = exchange.getResponse();
 
-        return DataBufferUtils.join(exchange.getRequest().getBody(), (int) Math.min(maxBodySize, Integer.MAX_VALUE))
-                .defaultIfEmpty(response.bufferFactory().wrap(new byte[0]))
-                .flatMap(dataBuffer -> {
-                    byte[] bytes = new byte[dataBuffer.readableByteCount()];
-                    try {
-                        dataBuffer.read(bytes);
-                    } finally {
-                        DataBufferUtils.release(dataBuffer);
-                    }
+        return com.leoli.gateway.util.RequestBodyCache.read(exchange, (int) Math.min(maxBodySize, Integer.MAX_VALUE))
+                .flatMap(bytes -> {
                     String body = new String(bytes, StandardCharsets.UTF_8);
 
                     String model = extractModel(body);

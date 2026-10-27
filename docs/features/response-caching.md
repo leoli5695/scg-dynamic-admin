@@ -27,7 +27,7 @@ GET/HEAD Request
        ↓
 ┌─────────────────┐
 │ Cache-Control:  │── Yes ──▶ Don't cache
-│ no-cache?       │
+│ forbids cache?  │
 └─────────────────┘
        │ No
        ↓
@@ -41,7 +41,7 @@ GET/HEAD Request
 ```json
 {
   "routeId": "static-api",
-  "ttl": 300,
+  "ttlSeconds": 300,
   "maxSize": 1000,
   "enabled": true
 }
@@ -49,8 +49,11 @@ GET/HEAD Request
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `ttl` | Cache expiration time (seconds) | `300` |
-| `maxSize` | Maximum number of cache entries | `1000` |
+| `ttlSeconds` | Cache expiration time (seconds) | `60` |
+| `maxSize` | Maximum number of cache entries | `10000` |
+| `maxCacheBytes` | Per-route estimated retained bytes (body, key and headers); new entries are skipped when full | `67108864` (64 MiB) |
+
+The instance-wide estimated retained-byte budget is 256 MiB by default (`gateway.response-cache.max-bytes` / `GATEWAY_RESPONSE_CACHE_MAX_BYTES`). Both byte budgets and the entry-count limit apply. Expiration, eviction and strategy invalidation release the reservation. These budgets cover retained entries, not all JVM or in-flight response memory.
 
 ---
 
@@ -73,7 +76,7 @@ Age: 120
 
 Cache key consists of:
 - Route ID
-- Request URL (including query parameters)
+- Raw request path and query parameters (percent escapes remain distinct)
 - Vary Headers (if configured)
 
 ### Vary Headers
@@ -88,6 +91,8 @@ Configure headers to differentiate cache:
 
 Requests with different `Accept` headers are cached separately.
 
+Host and the three CORS headers (`Origin`, `Access-Control-Request-Method`, `Access-Control-Request-Headers`) are always part of the key. Other upstream `Vary` headers must be included in `varyHeaders` for the response to be cached. `Vary: *` is never cached.
+
 ---
 
 ## Cache Invalidation
@@ -97,8 +102,8 @@ Requests with different `Accept` headers are cached separately.
 Automatic expiration:
 
 ```yaml
-# Default 5 minutes
-ttl: 300
+# Default 60 seconds
+ttlSeconds: 60
 ```
 
 ### Manual Clear
@@ -112,9 +117,11 @@ DELETE /api/cache/{routeId}
 ### Skip Cache
 
 Requests with the following headers are not cached:
-- `Cache-Control: no-cache`
+- `Cache-Control: no-cache` or `no-store`
 - `Pragma: no-cache`
-- `Authorization` (when present)
+- `Authorization`, `Cookie`, API key or HMAC access key headers
+
+Requests with a verified authentication identity also bypass the shared cache, even if the original credential header has been removed. Personalized responses are not stored in this cache. Responses declaring `private`, `no-store` or `no-cache`, or setting cookies, are not stored. A response is cached only after its body finishes successfully; cancelled or failed streams are discarded.
 
 ---
 
@@ -125,7 +132,7 @@ Requests with the following headers are not cached:
 | Static Resources | 3600 | 5000 |
 | API Responses | 60 | 1000 |
 | Configuration | 300 | 100 |
-| User Data | 30 | 2000 |
+| Public Reference Data | 30 | 2000 |
 
 ---
 

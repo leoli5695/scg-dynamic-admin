@@ -1035,27 +1035,25 @@ public class AuthPolicyService {
         headers.add(Map.of("name", "X-Access-Key", "value", accessKey));
         headers.add(Map.of("name", "X-Signature", "value", "<calculated_signature>"));
         headers.add(Map.of("name", "X-Timestamp", "value", "<current_timestamp>"));
-        if (policy.isRequireNonce()) {
-            headers.add(Map.of("name", "X-Nonce", "value", "<random_string>"));
-        }
+        headers.add(Map.of("name", "X-Nonce", "value", "<unique_random_string>"));
         example.put("requiredHeaders", headers);
 
         // Signature calculation info
         example.put("signatureAlgorithm", signatureAlgorithm != null ? signatureAlgorithm : "HMAC-SHA256");
-        example.put("signatureCalculation", "signature = HMAC-SHA256(secretKey, stringToSign)");
-        example.put("stringToSignFormat", "Method + Path + Timestamp + Nonce + BodyHash");
+        example.put("signatureCalculation", "signature = Base64(HMAC(configuredAlgorithm, secretKey, UTF8(stringToSign)))");
+        example.put("stringToSignFormat", "Method + '\\n' + RawPath + '\\n' + SortedRawQuery + '\\n' + Timestamp + '\\n' + Nonce; append '\\n' + lowercaseHex(SHA256(bodyBytes)) for non-empty bodies only");
 
         // Access key info
         example.put("accessKey", accessKey);
         example.put("clockSkewMinutes", policy.getClockSkewMinutes());
 
         // Note about complexity
-        example.put("note", "HMAC signature calculation is complex. Consider using a client SDK or providing signature calculation endpoint.");
+        example.put("note", "Sort raw query components separated by '&' without URL-decoding. Sign the exact body bytes sent. Non-empty bodies require the SHA-256 suffix; legacy body-less signatures cannot authorize them. X-Content-MD5 is optional but must match when present.");
 
         // Curl example (with placeholder signature)
         String curlExample = String.format(
             "curl -H \"X-Access-Key: %s\" -H \"X-Signature: <calculated>\" " +
-            "-H \"X-Timestamp: <timestamp>\" http://your-api-endpoint",
+            "-H \"X-Timestamp: <timestamp>\" -H \"X-Nonce: <unique_random_string>\" http://your-api-endpoint",
             accessKey
         );
         example.put("curlExample", curlExample);

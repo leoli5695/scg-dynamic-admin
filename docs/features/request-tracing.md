@@ -10,9 +10,11 @@ Request tracing automatically captures:
 
 | Capture Type | Condition | Storage |
 |--------------|-----------|---------|
-| **ERROR** | HTTP 4xx/5xx | Complete request/response |
-| **SLOW** | Exceeds threshold (configurable) | Complete request/response |
+| **ERROR** | HTTP 4xx/5xx | Metadata plus bodies when sampled and within budget |
+| **SLOW** | Exceeds threshold (configurable) | Metadata plus bodies when sampled and within budget |
 | **ALL** | Sampling mode (optional) | Sampled requests |
+
+Body sampling is decided before allocation and is independent of trace metadata sampling. `gateway.trace.body-sampling-rate` defaults to 10%; set `GATEWAY_TRACE_BODY_SAMPLING_RATE=100` for full body sampling when debugging. An instance-wide estimated in-flight body-capture budget defaults to 16 MiB (`gateway.trace.max-inflight-body-bytes` / `GATEWAY_TRACE_MAX_INFLIGHT_BODY_BYTES`). Requests outside the body sample or budget still retain error/slow metadata according to the existing policies, with no captured body. Reservations are released on success, failure and cancellation.
 
 ---
 

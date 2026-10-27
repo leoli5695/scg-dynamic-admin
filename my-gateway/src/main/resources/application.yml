@@ -67,6 +67,34 @@ spring:
         enabled: ${CONSUL_SERVICE_REGISTRY_ENABLED:false}
       enabled: false  # Explicitly disable Consul
 
+    gateway:
+      discovery:
+        locator:
+          enabled: ${GATEWAY_DISCOVERY_LOCATOR_ENABLED:true}
+          # Enable lowerCaseServiceId for easier routing
+          lower-case-service-id: ${GATEWAY_LOWER_CASE_SERVICE_ID:false}
+      # Routing (upstream) client - the one that actually proxies requests.
+      # Keep this under spring.cloud.gateway, alongside discovery (not spring.gateway).
+      httpclient:
+        pool:
+          # FIXED with an explicit cap rather than ELASTIC (unbounded, exhausts file
+          # descriptors under a stream-heavy AI workload). reactor-netty counts
+          # max-connections per upstream host, so it must be >= the concurrent
+          # streams expected per provider per node.
+          type: ${GATEWAY_HTTPCLIENT_POOL_TYPE:FIXED}
+          max-connections: ${GATEWAY_HTTPCLIENT_MAX_CONNECTIONS:2000}
+          acquire-timeout: ${GATEWAY_HTTPCLIENT_ACQUIRE_TIMEOUT:45000}
+          max-idle-time: ${GATEWAY_HTTPCLIENT_MAX_IDLE_TIME:60000}
+        connect-timeout: ${GATEWAY_HTTPCLIENT_CONNECT_TIMEOUT:5000}
+        # LLM scale: reasoning models can take minutes before the first byte, and a
+        # short timeout cuts long completions off mid-stream.
+        response-timeout: ${GATEWAY_HTTPCLIENT_RESPONSE_TIMEOUT:300s}
+        # Asking upstream for gzip makes it buffer SSE events, which destroys
+        # time-to-first-token on streaming responses.
+        compression: false
+      # Actuator endpoints share the main HTTP port (80 by default).
+
+
   # FIX (P1 scheduler starvation): @Scheduled defaults to a SINGLE-thread pool.
   # With ~12 scheduled tasks (health checks, instance heartbeat, config refresh,
   # shadow-quota snapshots), one blocking task delays all the others - notably the
@@ -76,36 +104,6 @@ spring:
     scheduling:
       pool:
         size: ${GATEWAY_SCHEDULER_POOL_SIZE:8}
-
-  gateway:
-    discovery:
-      locator:
-        enabled: ${GATEWAY_DISCOVERY_LOCATOR_ENABLED:true}
-        # Enable lowerCaseServiceId for easier routing
-        lower-case-service-id: ${GATEWAY_LOWER_CASE_SERVICE_ID:false}
-    # Routing (upstream) client - the one that actually proxies requests.
-    # An earlier version of this block was indented under discovery:, making the
-    # key spring.cloud.gateway.discovery.httpclient.* which SCG does not
-    # recognise, so none of it ever applied. Keep it at the gateway: level.
-    httpclient:
-      pool:
-        # FIXED with an explicit cap rather than ELASTIC (unbounded, exhausts file
-        # descriptors under a stream-heavy AI workload). reactor-netty counts
-        # max-connections per upstream host, so it must be >= the concurrent
-        # streams expected per provider per node.
-        type: ${GATEWAY_HTTPCLIENT_POOL_TYPE:FIXED}
-        max-connections: ${GATEWAY_HTTPCLIENT_MAX_CONNECTIONS:2000}
-        acquire-timeout: ${GATEWAY_HTTPCLIENT_ACQUIRE_TIMEOUT:45000}
-        max-idle-time: ${GATEWAY_HTTPCLIENT_MAX_IDLE_TIME:60000}
-      connect-timeout: ${GATEWAY_HTTPCLIENT_CONNECT_TIMEOUT:5000}
-      # LLM scale: reasoning models can take minutes before the first byte, and a
-      # short timeout cuts long completions off mid-stream.
-      response-timeout: ${GATEWAY_HTTPCLIENT_RESPONSE_TIMEOUT:300s}
-      # Asking upstream for gzip makes it buffer SSE events, which destroys
-      # time-to-first-token on streaming responses.
-      compression: false
-    # Note: Actuator endpoints are available on management port (8081)
-    # Access http://gateway:8081/actuator/health or http://gateway:8081/actuator/prometheus
 
   # ============================================================================
   # Redis Configuration (for distributed rate limiting)
@@ -159,6 +157,9 @@ spring:
 gateway:
   # Request Trace Configuration - for topology Client nodes
   trace:
+    # Body sampling is decided before allocation; error/slow metadata is captured separately.
+    body-sampling-rate: ${GATEWAY_TRACE_BODY_SAMPLING_RATE:10}
+    max-inflight-body-bytes: ${GATEWAY_TRACE_MAX_INFLIGHT_BODY_BYTES:16777216}
     capture-all: ${GATEWAY_TRACE_CAPTURE_ALL:true}  # set to false in production
     capture-errors: ${GATEWAY_TRACE_CAPTURE_ERRORS:true}
     capture-slow: ${GATEWAY_TRACE_CAPTURE_SLOW:true}
@@ -204,6 +205,15 @@ gateway:
   jwt:
     revocation:
       enabled: ${GATEWAY_JWT_REVOCATION_ENABLED:true}
+
+  # Instance-wide retained-response budget; each route also defaults to 64 MiB.
+  response-cache:
+    max-bytes: ${GATEWAY_RESPONSE_CACHE_MAX_BYTES:268435456}
+
+  # HMAC bodies are buffered for signature verification, then replayed to upstream.
+  auth:
+    hmac:
+      max-body-bytes: ${GATEWAY_HMAC_MAX_BODY_BYTES:1048576}
 
   # Timeout Configuration
   # Fallbacks for fields a configured timeout strategy omits. Routes with NO strategy get no route metadata, so spring.cloud.gateway.httpclient.* above applies.

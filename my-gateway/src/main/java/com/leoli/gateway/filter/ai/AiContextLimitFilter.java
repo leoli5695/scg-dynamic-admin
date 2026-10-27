@@ -78,15 +78,8 @@ public class AiContextLimitFilter implements GlobalFilter, Ordered {
         }
 
         long maxBodySize = Math.max(1024, config.getMaxBodySize());
-        return DataBufferUtils.join(exchange.getRequest().getBody(), (int) Math.min(maxBodySize, Integer.MAX_VALUE))
-                .defaultIfEmpty(exchange.getResponse().bufferFactory().wrap(new byte[0]))
-                .flatMap(dataBuffer -> {
-                    byte[] bytes = new byte[dataBuffer.readableByteCount()];
-                    try {
-                        dataBuffer.read(bytes);
-                    } finally {
-                        DataBufferUtils.release(dataBuffer);
-                    }
+        return com.leoli.gateway.util.RequestBodyCache.read(exchange, (int) Math.min(maxBodySize, Integer.MAX_VALUE))
+                .flatMap(bytes -> {
                     String body = new String(bytes, StandardCharsets.UTF_8);
 
                     long estimated = AiTokenEstimator.estimateChat(body, objectMapper).orElse(-1L);
@@ -118,14 +111,7 @@ public class AiContextLimitFilter implements GlobalFilter, Ordered {
     }
 
     private ServerWebExchange withReplayedBody(ServerWebExchange exchange, byte[] bytes) {
-        ServerHttpRequest request = exchange.getRequest();
-        ServerHttpRequestDecorator decorated = new ServerHttpRequestDecorator(request) {
-            @Override
-            public Flux<DataBuffer> getBody() {
-                return Flux.just(exchange.getResponse().bufferFactory().wrap(bytes));
-            }
-        };
-        return exchange.mutate().request(decorated).build();
+        return exchange.mutate().request(com.leoli.gateway.util.RequestBodyCache.wrap(exchange, bytes)).build();
     }
 
     /**

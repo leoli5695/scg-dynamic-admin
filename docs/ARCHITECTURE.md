@@ -171,7 +171,7 @@ The gateway uses SPI pattern for extensibility:
             v                                       |
    +-----------------+                              |
    | Spring Cloud    | <----------------------------+
-   |    Gateway      |       Routes Updated (< 1 second)
+   |    Gateway      |       Routes Updated (Listener / Reconcile)
    +-----------------+
 ```
 
@@ -400,7 +400,7 @@ The gateway uses a **simple and effective** caching strategy:
                     Config Center (Nacos/Consul)
                            |
                            | Real-time Push (Listener)
-                           | < 100ms latency
+                           | Listener + periodic reconciliation
                            v
    +-------------------------------------------------------------+
    |          In-Memory Cache (ConcurrentHashMap)                |
@@ -455,7 +455,7 @@ A multi-level cache with fallback would be **over-engineering** for this use cas
    | Config Center|
    +------+------+
           |
-          | 3. Push via Listener (< 100ms)
+          | 3. Listener or periodic reconciliation
           v
    +-------------+
    |  Gateway    |
@@ -471,7 +471,7 @@ A multi-level cache with fallback would be **over-engineering** for this use cas
    +-------------+
 ```
 
-**Total Latency:** Admin API -> Gateway update typically < 1 second
+**Propagation:** Listeners apply changes when delivered. Periodic reconciliation defaults to 60 seconds (`gateway.config-sync.interval-ms`, environment variable `GATEWAY_CONFIG_SYNC_INTERVAL_MS`). If listener delivery fails, allow up to one polling interval plus fetch and apply time; config-center failures delay updates until recovery.
 
 ---
 
@@ -1400,7 +1400,7 @@ This API Gateway architecture demonstrates:
 - **Clean separation** of control plane (admin) and data plane (gateway)
 - **Extensible design** via SPI and Strategy patterns
 - **High availability** with fallback caching and graceful degradation
-- **Real-time configuration** with < 1 second propagation latency
+- **Dynamic configuration** via listeners and periodic reconciliation (60-second default interval)
 - **Enterprise features** including multi-auth, circuit breaking, and rate limiting
 
 ---
@@ -1839,7 +1839,7 @@ This API Gateway architecture demonstrates:
 - **Clean separation** of control plane (admin) and data plane (gateway)
 - **Extensible design** via SPI and Strategy patterns
 - **High availability** with fallback caching and graceful degradation
-- **Real-time configuration** with < 1 second propagation latency
+- **Dynamic configuration** via listeners and periodic reconciliation (60-second default interval)
 - **Enterprise features** including multi-auth, circuit breaking, and rate limiting
 - **Multi-service routing** with gray release support for canary deployments
 - **SSL termination** with dynamic certificate loading and expiry monitoring

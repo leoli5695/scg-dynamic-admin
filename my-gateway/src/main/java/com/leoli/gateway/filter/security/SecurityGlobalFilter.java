@@ -380,12 +380,7 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
                     .flatMap(threats -> {
                         // Rebuild request with cached body BEFORE threat handling, so that
                         // DETECT mode (which forwards the request) does not lose the consumed body.
-                        ServerHttpRequest newRequest = new org.springframework.http.server.reactive.ServerHttpRequestDecorator(request) {
-                            @Override
-                            public reactor.core.publisher.Flux<DataBuffer> getBody() {
-                                return reactor.core.publisher.Flux.just(exchange.getResponse().bufferFactory().wrap(bytes));
-                            }
-                        };
+                        ServerHttpRequest newRequest = com.leoli.gateway.util.RequestBodyCache.wrap(exchange, bytes);
                         ServerWebExchange rebuiltExchange = exchange.mutate().request(newRequest).build();
 
                         if (!threats.isEmpty()) {

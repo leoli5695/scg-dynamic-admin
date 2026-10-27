@@ -47,6 +47,16 @@ public class RouteRefresher {
     // Route listeners cache: <routeId, listener>
     private final ConcurrentHashMap<String, ConfigCenterService.ConfigListener> routeListeners = new ConcurrentHashMap<>();
 
+    // Each registration is a distinct lifetime, including delete/re-create with the same ID.
+    // Revisions prevent an in-flight read from overwriting a newer listener update.
+    private static final class RouteState {
+        private long revision;
+    }
+
+    private final Map<String, RouteState> routeStates = new HashMap<>();
+    private long indexRevision;
+    private boolean stopped;
+
     /**
      * Content each route data ID was last applied with, so the periodic reconcile can
      * detect edits and not just index changes. See {@link ConfigContentTracker} for why
@@ -101,7 +111,9 @@ public class RouteRefresher {
      * Cleanup before bean destruction
      */
     @PreDestroy
-    public void destroy() {
+    public synchronized void destroy() {
+        stopped = true;
+        routeStates.clear();
         // Remove all route listeners
         for (String routeId : listeningRouteIds) {
             String routeDataId = ROUTE_PREFIX + routeId;
@@ -122,11 +134,15 @@ public class RouteRefresher {
     /**
      * Handle routes index change event.
      */
-    private void onRoutesIndexChanged(String dataId, String group, String newIndexContent) {
+    private synchronized void onRoutesIndexChanged(String dataId, String group, String newIndexContent) {
+        if (stopped) {
+            return;
+        }
         log.info("📋 Routes index changed detected");
 
         try {
             List<String> newRouteIds = parseRouteIds(newIndexContent);
+            indexRevision++;
             Set<String> oldRouteIds = new HashSet<>(listeningRouteIds);
 
             // Convert List to Set for difference calculation
@@ -165,7 +181,11 @@ public class RouteRefresher {
     /**
      * Handle single route change event (create/update/delete).
      */
-    private void onSingleRouteChange(String routeId, String content) {
+    private synchronized void onSingleRouteChange(String routeId, RouteState state, String content) {
+        if (stopped || routeStates.get(routeId) != state) {
+            return;
+        }
+        state.revision++;
         String routeDataId = ROUTE_PREFIX + routeId;
         try {
             if (content == null || content.isBlank()) {
@@ -199,23 +219,27 @@ public class RouteRefresher {
         log.info("🔥 Loading all routes on startup...");
 
         try {
+            long observedIndexRevision;
+            synchronized (this) {
+                observedIndexRevision = indexRevision;
+            }
             String indexContent = configService.getConfig(ROUTES_INDEX, GROUP);
             List<String> routeIds = parseRouteIds(indexContent);
-
-            for (String routeId : routeIds) {
-                String routeDataId = ROUTE_PREFIX + routeId;
-                String routeConfig = configService.getConfig(routeDataId, GROUP);
-
-                if (routeConfig != null && !routeConfig.isBlank()) {
-                    RouteDefinition route = parseRoute(routeConfig);
-                    routeManager.putRoute(routeId, route);
-
-                    // Add listener for this route
-                    addRouteListener(routeId);
-
-                    log.debug("Loaded route: {}", routeId);
+            Map<String, RouteState> initialLoads = new LinkedHashMap<>();
+            synchronized (this) {
+                if (stopped || indexRevision != observedIndexRevision) {
+                    return;
+                }
+                indexRevision++;
+                for (String routeId : routeIds) {
+                    RouteState state = registerRouteListener(routeId, ROUTE_PREFIX + routeId);
+                    if (state != null) {
+                        initialLoads.put(routeId, state);
+                    }
                 }
             }
+            initialLoads.forEach((routeId, state) ->
+                    loadRouteWithRetry(routeId, ROUTE_PREFIX + routeId, state, 0));
 
             log.info("✅ Loaded {} routes on startup", routeIds.size());
 
@@ -237,78 +261,109 @@ public class RouteRefresher {
      * any config changes that happen between registration and load.
      * This fixes the issue where enabling a disabled route returns 404.
      */
-    private void addRouteListener(String routeId) {
+    private synchronized void addRouteListener(String routeId) {
         String routeDataId = ROUTE_PREFIX + routeId;
 
         // STEP 1: Register listener FIRST (to catch any config changes)
-        registerRouteListener(routeId, routeDataId);
+        RouteState state = registerRouteListener(routeId, routeDataId);
+        if (state == null) {
+            return;
+        }
 
         // STEP 2: Load route config asynchronously with retry.
         // FIX: never sleep on the config-center callback thread - a burst of new routes
         // would otherwise block all other config listener callbacks for seconds.
-        routeLoadExecutor.submit(() -> loadRouteWithRetry(routeId, routeDataId));
+        routeLoadExecutor.submit(() -> loadRouteWithRetry(routeId, routeDataId, state, 0));
     }
 
     /**
      * Load a route config synchronously with retry (runs on routeLoadExecutor).
      */
-    private void loadRouteWithRetry(String routeId, String routeDataId) {
+    private void loadRouteWithRetry(String routeId, String routeDataId, RouteState state, long revision) {
         String routeConfig = null;
         int maxRetries = 3;
         for (int i = 0; i < maxRetries; i++) {
+            synchronized (this) {
+                if (stopped || routeStates.get(routeId) != state || state.revision != revision) {
+                    return;
+                }
+            }
             routeConfig = configService.getConfig(routeDataId, GROUP);
             if (routeConfig != null && !routeConfig.isBlank()) {
                 break;
             }
-            // Exponential backoff: 100ms, 200ms, 400ms
+            // Linear backoff: 100ms, 200ms, 300ms
             try {
                 Thread.sleep(100L * (i + 1));
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                break;
+                return;
             }
         }
 
         // STEP 3: Load route into manager if config found
         if (routeConfig != null && !routeConfig.isBlank()) {
-            try {
-                // Recorded before parsing, as in onSingleRouteChange: a payload we cannot
-                // parse must not be retried on every reconcile cycle. Re-publishing it
-                // changes the content, which is what makes the next attempt happen.
-                appliedContent.recordIfChanged(routeDataId, routeConfig);
-                RouteDefinition route = parseRoute(routeConfig);
-                routeManager.putRoute(routeId, route);
-                log.info("✅ Loaded route: {} -> {} (route.id={}, predicates={})",
-                        routeId, route.getUri(), route.getId(), route.getPredicates());
-                // Refresh SCG routes now that the async load completed
-                refreshSCGRoutes();
-            } catch (Exception e) {
-                log.error("Failed to parse route: {}", routeId, e);
-            }
+            applyFetchedRoute(routeId, state, revision, routeConfig);
         } else {
-            log.warn("⚠️  Route config not found in Nacos after {} retries: {}, listener will wait for future config", maxRetries, routeDataId);
+            log.warn("Route config not found after {} retries: {}", maxRetries, routeDataId);
         }
+    }
+
+    private synchronized boolean applyFetchedRoute(String routeId, RouteState state, long revision, String content) {
+        if (stopped || routeStates.get(routeId) != state || state.revision != revision) {
+            return false;
+        }
+        String routeDataId = ROUTE_PREFIX + routeId;
+        try {
+            // Record invalid payloads too, so reconciliation does not parse them every cycle.
+            if (!appliedContent.recordIfChanged(routeDataId, content)) {
+                return false;
+            }
+            state.revision++;
+            RouteDefinition route = parseRoute(content);
+            routeManager.putRoute(routeId, route);
+            log.info("Loaded route: {} -> {}", routeId, route.getUri());
+            refreshSCGRoutes();
+            return true;
+        } catch (Exception e) {
+            log.error("Failed to parse route: {}", routeId, e);
+        }
+        return false;
     }
 
     /**
      * Register listener for route updates.
      */
-    private void registerRouteListener(String routeId, String routeDataId) {
+    private synchronized RouteState registerRouteListener(String routeId, String routeDataId) {
+        if (stopped || routeStates.containsKey(routeId)) {
+            return null;
+        }
+        RouteState state = new RouteState();
+        routeStates.put(routeId, state);
         ConfigCenterService.ConfigListener listener = (dataId, group, content) -> {
-            onSingleRouteChange(routeId, content);
+            onSingleRouteChange(routeId, state, content);
         };
 
-        configService.addListener(routeDataId, GROUP, listener);
         routeListeners.put(routeId, listener);
         listeningRouteIds.add(routeId);
+        try {
+            configService.addListener(routeDataId, GROUP, listener);
+        } catch (RuntimeException e) {
+            routeStates.remove(routeId);
+            routeListeners.remove(routeId);
+            listeningRouteIds.remove(routeId);
+            throw e;
+        }
 
         log.info("✅ Added listener for route: {}", routeId);
+        return state;
     }
 
     /**
      * Remove listener for a deleted route.
      */
-    private void removeRouteListener(String routeId) {
+    private synchronized void removeRouteListener(String routeId) {
+        routeStates.remove(routeId);
         String routeDataId = ROUTE_PREFIX + routeId;
         ConfigCenterService.ConfigListener listener = routeListeners.remove(routeId);
 
@@ -522,6 +577,13 @@ public class RouteRefresher {
     @Scheduled(fixedRateString = "${gateway.config-sync.interval-ms:60000}")
     public void periodicSyncRoutes() {
         try {
+            long observedIndexRevision;
+            synchronized (this) {
+                if (stopped) {
+                    return;
+                }
+                observedIndexRevision = indexRevision;
+            }
             String indexContent = configService.getConfig(ROUTES_INDEX, GROUP);
             if (indexContent == null || indexContent.isBlank()) {
                 // Ambiguous between "no routes left" and "the config center could not answer".
@@ -536,23 +598,43 @@ public class RouteRefresher {
             Set<String> indexed = new HashSet<>(nacosRouteIds);
 
             int removed = 0;
-            for (String routeId : new HashSet<>(listeningRouteIds)) {
-                if (!indexed.contains(routeId)) {
-                    log.warn("🔍 Found route dropped from the index during periodic sync: {}", routeId);
-                    removeRouteListener(routeId);
-                    removed++;
+            Set<String> added = new HashSet<>();
+            synchronized (this) {
+                if (stopped || indexRevision != observedIndexRevision) {
+                    return;
+                }
+                indexRevision++;
+                for (String routeId : new HashSet<>(listeningRouteIds)) {
+                    if (!indexed.contains(routeId)) {
+                        log.warn("Found route dropped from the index during periodic sync: {}", routeId);
+                        removeRouteListener(routeId);
+                        removed++;
+                    }
+                }
+                for (String routeId : nacosRouteIds) {
+                    if (!listeningRouteIds.contains(routeId)) {
+                        addRouteListener(routeId);
+                        added.add(routeId);
+                    }
+                }
+                if (removed > 0) {
+                    refreshSCGRoutes();
                 }
             }
 
-            int added = 0;
             int edited = 0;
             for (String routeId : nacosRouteIds) {
-                if (!listeningRouteIds.contains(routeId)) {
-                    log.warn("🔍 Found missing route during periodic sync: {}", routeId);
-                    // Registers the listener, then loads and records the config asynchronously.
-                    addRouteListener(routeId);
-                    added++;
+                if (added.contains(routeId)) {
                     continue;
+                }
+                RouteState state;
+                long revision;
+                synchronized (this) {
+                    state = routeStates.get(routeId);
+                    if (stopped || state == null) {
+                        continue;
+                    }
+                    revision = state.revision;
                 }
 
                 String routeDataId = ROUTE_PREFIX + routeId;
@@ -560,20 +642,13 @@ public class RouteRefresher {
                 if (content == null || content.isBlank()) {
                     continue;
                 }
-                if (appliedContent.recordIfChanged(routeDataId, content)) {
-                    log.warn("🔍 Found edited route during periodic sync: {}", routeId);
-                    onSingleRouteChange(routeId, content);
+                if (applyFetchedRoute(routeId, state, revision, content)) {
                     edited++;
                 }
             }
 
-            if (removed > 0) {
-                // Additions and edits refresh SCG on their own path; removals went straight
-                // to the manager, so the compiled definitions are still the old ones.
-                refreshSCGRoutes();
-            }
-            if (added > 0 || edited > 0 || removed > 0) {
-                log.info("📊 Periodic route sync: {} added, {} edited, {} removed", added, edited, removed);
+            if (edited > 0 || removed > 0) {
+                log.info("Periodic route sync: {} applied, {} removed", edited, removed);
             }
 
         } catch (Exception e) {

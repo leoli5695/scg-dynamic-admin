@@ -168,23 +168,11 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
             return Mono.just(exchange);
         }
         long maxBodySize = Math.max(1024, config.getEstimateMaxBodySize());
-        return DataBufferUtils.join(exchange.getRequest().getBody(), (int) Math.min(maxBodySize, Integer.MAX_VALUE))
-                .defaultIfEmpty(exchange.getResponse().bufferFactory().wrap(new byte[0]))
-                .map(dataBuffer -> {
-                    byte[] bytes = new byte[dataBuffer.readableByteCount()];
-                    try {
-                        dataBuffer.read(bytes);
-                    } finally {
-                        DataBufferUtils.release(dataBuffer);
-                    }
+        return com.leoli.gateway.util.RequestBodyCache.read(exchange, (int) Math.min(maxBodySize, Integer.MAX_VALUE))
+                .map(bytes -> {
                     String body = new String(bytes, StandardCharsets.UTF_8);
                     exchange.getAttributes().put(AiContextLimitFilter.CACHED_REQUEST_BODY_ATTR, body);
-                    ServerHttpRequestDecorator replay = new ServerHttpRequestDecorator(exchange.getRequest()) {
-                        @Override
-                        public Flux<DataBuffer> getBody() {
-                            return Flux.just(exchange.getResponse().bufferFactory().wrap(bytes));
-                        }
-                    };
+                    org.springframework.http.server.reactive.ServerHttpRequest replay = com.leoli.gateway.util.RequestBodyCache.wrap(exchange, bytes);
                     return exchange.mutate().request(replay).build();
                 });
     }

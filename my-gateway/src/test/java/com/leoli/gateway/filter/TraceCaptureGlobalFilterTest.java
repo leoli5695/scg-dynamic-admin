@@ -39,6 +39,54 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class TraceCaptureGlobalFilterTest {
 
+    @Test
+    void zeroBodySamplingStillReportsErrorMetadata() {
+        ReflectionTestUtils.setField(filter, "captureErrors", true);
+        ReflectionTestUtils.setField(filter, "samplingRateForErrors", 100);
+        ReflectionTestUtils.setField(filter, "bodySamplingRate", 0);
+        ReflectionTestUtils.setField(filter, "maxBodySize", 100);
+        var exchange = MockServerWebExchange.from(MockServerHttpRequest.post("/failed")
+                .contentType(MediaType.APPLICATION_JSON).body("{}"));
+        filter.filter(exchange, forwarded -> {
+            org.junit.jupiter.api.Assertions.assertSame(exchange.getResponse(), forwarded.getResponse());
+            forwarded.getResponse().setStatusCode(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR);
+            return Mono.empty();
+        }).block();
+        ArgumentCaptor<Object> trace = ArgumentCaptor.forClass(Object.class);
+        org.mockito.Mockito.verify(bodySpec).bodyValue(trace.capture());
+        Map<?, ?> payload = (Map<?, ?>) trace.getValue();
+        assertEquals(500, payload.get("statusCode"));
+        org.junit.jupiter.api.Assertions.assertNull(payload.get("responseBody"));
+        assertEquals(false, payload.get("replayable"));
+    }
+
+    @Test
+    void bodyBudgetBypassesCaptureWhenBusyAndIsReleasedOnCancellation() {
+        ReflectionTestUtils.setField(filter, "captureAll", true);
+        ReflectionTestUtils.setField(filter, "samplingRate", 100);
+        ReflectionTestUtils.setField(filter, "bodySamplingRate", 100);
+        ReflectionTestUtils.setField(filter, "maxBodySize", 100);
+        ReflectionTestUtils.setField(filter, "maxInflightBodyBytes", 400L);
+        var first = MockServerWebExchange.from(MockServerHttpRequest.get("/first"));
+        var subscription = filter.filter(first, forwarded -> {
+            org.junit.jupiter.api.Assertions.assertNotSame(first.getResponse(), forwarded.getResponse());
+            return Mono.never();
+        }).subscribe();
+        var reserved = (java.util.concurrent.atomic.AtomicLong) ReflectionTestUtils.getField(filter, "inflightBodyBytes");
+        try {
+            assertEquals(400, reserved.get());
+            var second = MockServerWebExchange.from(MockServerHttpRequest.get("/second"));
+            filter.filter(second, forwarded -> {
+                org.junit.jupiter.api.Assertions.assertSame(second.getResponse(), forwarded.getResponse());
+                return Mono.empty();
+            }).block();
+            assertEquals(400, reserved.get());
+        } finally {
+            subscription.dispose();
+        }
+        assertEquals(0, reserved.get());
+    }
+
     @Mock
     private TrustedProxyProperties trustedProxyProperties;
 

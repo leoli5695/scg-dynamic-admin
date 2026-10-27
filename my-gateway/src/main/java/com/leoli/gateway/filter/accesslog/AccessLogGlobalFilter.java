@@ -102,6 +102,17 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
     // Current config - uses external AccessLogConfig class
     private volatile AccessLogConfig config = new AccessLogConfig();
 
+    private final java.util.concurrent.atomic.AtomicLong droppedLogs = new java.util.concurrent.atomic.AtomicLong();
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private io.micrometer.core.instrument.MeterRegistry meterRegistry;
+    private final java.util.concurrent.ThreadPoolExecutor logWriter = new java.util.concurrent.ThreadPoolExecutor(
+            1, 1, 0L, java.util.concurrent.TimeUnit.MILLISECONDS,
+            new java.util.concurrent.ArrayBlockingQueue<>(1024), task -> {
+                Thread thread = new Thread(task, "gateway-access-log");
+                thread.setDaemon(true);
+                return thread;
+            }, new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
+
     // Content the config was last applied with, so the periodic reconcile can tell
     // "unchanged" from "edited" instead of rebuilding the Logback appenders every cycle.
     private final ConfigContentTracker appliedContent = new ConfigContentTracker();
@@ -111,6 +122,11 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
 
     @PostConstruct
     public void init() {
+        if (meterRegistry != null) {
+            io.micrometer.core.instrument.FunctionCounter.builder("gateway.accesslog.dropped", droppedLogs,
+                    java.util.concurrent.atomic.AtomicLong::doubleValue).register(meterRegistry);
+            meterRegistry.gauge("gateway.accesslog.queued", logWriter, writer -> writer.getQueue().size());
+        }
         loadConfig();
         configListener = (dataId, group, content) -> {
             log.info("Access log config changed");
@@ -124,6 +140,7 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
 
     @PreDestroy
     public void destroy() {
+        logWriter.shutdown();
         if (configListener != null) {
             configCenterService.removeListener(ACCESS_LOG_CONFIG, GROUP, configListener);
         }
@@ -439,16 +456,8 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
         // FIX (OOM): bounded join. Content-Length pre-check happens in filter(); this limit also
         // guards chunked requests. If the limit is exceeded mid-stream the body is already partially
         // consumed and cannot be forwarded safely, so reject with 413 instead of forwarding garbage.
-        return DataBufferUtils.join(request.getBody(), (int) MAX_REQUEST_BODY_LOG_SIZE)
-                .defaultIfEmpty(new DefaultDataBufferFactory().wrap(new byte[0]))
-                .flatMap(dataBuffer -> {
-                    // Read body bytes with guaranteed release to prevent direct buffer memory leak
-                    final byte[] bytes = new byte[dataBuffer.readableByteCount()];
-                    try {
-                        dataBuffer.read(bytes);
-                    } finally {
-                        DataBufferUtils.release(dataBuffer);
-                    }
+        return com.leoli.gateway.util.RequestBodyCache.read(exchange, (int) MAX_REQUEST_BODY_LOG_SIZE)
+                .flatMap(bytes -> {
 
                     // Use SensitiveDataSanitizer for masking and truncation
                     final String requestBody = sensitiveDataSanitizer.sanitizeBody(
@@ -456,12 +465,7 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
                             contentType,
                             config);
 
-                    ServerHttpRequest newRequest = new ServerHttpRequestDecorator(request) {
-                        @Override
-                        public Flux<DataBuffer> getBody() {
-                            return Flux.just(exchange.getResponse().bufferFactory().wrap(bytes));
-                        }
-                    };
+                    ServerHttpRequest newRequest = com.leoli.gateway.util.RequestBodyCache.wrap(exchange, bytes);
 
                     ServerWebExchange mutatedExchange = exchange.mutate()
                             .request(newRequest)
@@ -559,11 +563,28 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
                 logEntry.put("responseBody", "[BINARY_FILE_DOWNLOAD]");
             }
 
-            String jsonLine = objectMapper.writeValueAsString(logEntry);
-            ACCESS_LOG_LOGGER.info(jsonLine);
+            enqueueLog(logEntry);
 
         } catch (Exception e) {
             log.error("Failed to write access log: {}", e.getMessage());
+        }
+    }
+
+    public long getDroppedLogCount() {
+        return droppedLogs.get();
+    }
+
+    private void enqueueLog(Map<String, Object> entry) {
+        try {
+            logWriter.execute(() -> {
+                try {
+                    ACCESS_LOG_LOGGER.info(objectMapper.writeValueAsString(entry));
+                } catch (Exception e) {
+                    droppedLogs.incrementAndGet();
+                }
+            });
+        } catch (java.util.concurrent.RejectedExecutionException e) {
+            droppedLogs.incrementAndGet();
         }
     }
 

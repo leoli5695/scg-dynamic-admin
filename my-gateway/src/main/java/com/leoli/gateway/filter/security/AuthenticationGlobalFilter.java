@@ -3,6 +3,7 @@ package com.leoli.gateway.filter.security;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.leoli.gateway.auth.AuthProcessManager;
+import com.leoli.gateway.auth.HmacSignatureAuthProcessor;
 import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.manager.AuthBindingManager;
 import com.leoli.gateway.manager.StrategyManager;
@@ -114,6 +115,18 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
 
         // Step 3: Get credentials (policies) bound to this route
         Set<String> boundPolicies = authBindingManager.getPoliciesForRoute(routeId);
+        if ("BASIC".equals(requiredAuthType)) {
+            String[] credentials = extractBasicAuth(exchange.getRequest().getHeaders());
+            String candidate = credentials == null ? null : authBindingManager.findBasicPolicyByUsername(credentials[0]);
+            if (candidate == null) {
+                return writeUnauthorizedResponse(exchange, "Authentication required");
+            }
+            // Authenticate once, then check route authorization. Invalid passwords never get a 403.
+            return authenticateWithPolicy(exchange, authenticated -> boundPolicies.contains(candidate)
+                            ? chain.filter(authenticated)
+                            : writeForbiddenResponse(authenticated, "Credential not authorized for this route"),
+                    routeId, candidate, requiredAuthType);
+        }
         if (boundPolicies.isEmpty()) {
             log.warn("Route {} requires auth but no credentials bound", routeId);
             // Check if user provided credentials that are valid but not authorized for this route
@@ -448,18 +461,31 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
 
         final AuthConfig finalConfig = config;
 
-        return authProcessManager.authenticate(exchange, finalConfig)
-                .then(Mono.defer(() -> {
-                    log.debug("Authentication successful for route: {} with credential: {}",
-                            routeId, policyId);
-                    return chain.filter(exchange);
-                }))
+        return Mono.defer(() -> authProcessManager.authenticate(exchange, finalConfig))
+                .thenReturn(true)
                 .onErrorResume(e -> {
+                    if (e instanceof java.util.concurrent.RejectedExecutionException) {
+                        exchange.getResponse().setStatusCode(HttpStatus.SERVICE_UNAVAILABLE);
+                        return exchange.getResponse().setComplete().thenReturn(false);
+                    }
+                    if (e instanceof org.springframework.core.io.buffer.DataBufferLimitException) {
+                        exchange.getResponse().setStatusCode(HttpStatus.PAYLOAD_TOO_LARGE);
+                        return exchange.getResponse().setComplete().thenReturn(false);
+                    }
                     log.warn("Authentication failed for route {} with credential {}: {}",
                             routeId, policyId, e.getMessage());
                     // Reason stays server-side: echoing e.getMessage() handed internal
                     // detail (library internals, policy state) to unauthenticated callers.
-                    return writeUnauthorizedResponse(exchange, "Authentication failed");
+                    return writeUnauthorizedResponse(exchange, "Authentication failed").thenReturn(false);
+                })
+                .flatMap(authenticated -> {
+                    if (!authenticated) {
+                        return Mono.empty();
+                    }
+                    log.debug("Authentication successful for route: {} with credential: {}",
+                            routeId, policyId);
+                    return chain.filter("HMAC".equals(requiredAuthType)
+                            ? HmacSignatureAuthProcessor.replayVerifiedBody(exchange) : exchange);
                 });
     }
 

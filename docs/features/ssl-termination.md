@@ -150,11 +150,13 @@ Certificate updates do not require Gateway restart:
 │   5. Gateway receives event                  │
 │   6. Hot-reload certificate                  │
 │                                              │
-│   Total latency: < 1 second                  │
+│   Latency: listener / periodic sync          │
 └─────────────────────────────────────────────┘
 ```
 
 ---
+
+Certificate changes use listeners plus periodic reconciliation. The default polling interval is 60 seconds (`gateway.config-sync.interval-ms` / `GATEWAY_CONFIG_SYNC_INTERVAL_MS`); missed listener events take up to one interval plus fetch/apply time. Config-center outages delay updates until recovery.
 
 ## Expiry Monitoring
 

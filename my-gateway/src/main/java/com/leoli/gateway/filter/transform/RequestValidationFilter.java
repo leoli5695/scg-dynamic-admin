@@ -153,16 +153,8 @@ public class RequestValidationFilter implements GlobalFilter, Ordered {
 
         // FIX (OOM): bounded join; the Content-Length pre-check in filter() covers known sizes,
         // this limit also guards chunked requests.
-        return DataBufferUtils.join(request.getBody(), MAX_VALIDATION_BODY_SIZE)
-                .defaultIfEmpty(new DefaultDataBufferFactory().wrap(new byte[0]))
-                .flatMap(dataBuffer -> {
-                    // Read body bytes with guaranteed release to prevent direct buffer memory leak
-                    final byte[] bytes = new byte[dataBuffer.readableByteCount()];
-                    try {
-                        dataBuffer.read(bytes);
-                    } finally {
-                        DataBufferUtils.release(dataBuffer);
-                    }
+        return com.leoli.gateway.util.RequestBodyCache.read(exchange, MAX_VALIDATION_BODY_SIZE)
+                .flatMap(bytes -> {
 
                     try {
                         String bodyStr = new String(bytes, StandardCharsets.UTF_8);
@@ -198,24 +190,14 @@ public class RequestValidationFilter implements GlobalFilter, Ordered {
                         }
 
                         // Rebuild request with cached body
-                        ServerHttpRequest newRequest = new ServerHttpRequestDecorator(request) {
-                            @Override
-                            public Flux<DataBuffer> getBody() {
-                                return Flux.just(exchange.getResponse().bufferFactory().wrap(bytes));
-                            }
-                        };
+                        ServerHttpRequest newRequest = com.leoli.gateway.util.RequestBodyCache.wrap(exchange, bytes);
 
                         return chain.filter(exchange.mutate().request(newRequest).build());
 
                     } catch (Exception e) {
                         log.error("Error validating request body: {}", e.getMessage(), e);
                         // FIX: body was already consumed by join - rebuild it before pass-through
-                        ServerHttpRequest rebuiltRequest = new ServerHttpRequestDecorator(request) {
-                            @Override
-                            public Flux<DataBuffer> getBody() {
-                                return Flux.just(exchange.getResponse().bufferFactory().wrap(bytes));
-                            }
-                        };
+                        ServerHttpRequest rebuiltRequest = com.leoli.gateway.util.RequestBodyCache.wrap(exchange, bytes);
                         return chain.filter(exchange.mutate().request(rebuiltRequest).build());
                     }
                 })

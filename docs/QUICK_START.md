@@ -351,7 +351,7 @@ curl http://localhost:80/actuator/health
 
 ### Hot Reload
 
-Configuration changes in Nacos automatically propagate to the gateway in < 1 second. No restart required.
+Configuration changes in Nacos propagate without a restart through listeners and periodic reconciliation. The default reconciliation interval is 60 seconds, configured by `gateway.config-sync.interval-ms` or `GATEWAY_CONFIG_SYNC_INTERVAL_MS`. When listeners do not deliver changes, propagation takes up to one polling interval plus fetch and apply time. Config-center outages delay updates until connectivity recovers.
 
 ### Debug Mode
 

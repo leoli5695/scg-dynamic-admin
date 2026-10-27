@@ -5,11 +5,16 @@ import com.leoli.gateway.enums.AuthType;
 import com.leoli.gateway.model.AuthConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.core.io.buffer.DataBufferUtils;
+import org.springframework.http.server.reactive.ServerHttpRequestDecorator;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Flux;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -20,6 +25,7 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Map;
+import java.util.HexFormat;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -29,8 +35,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * Features:
  * - Request signing with HMAC-SHA256
  * - Timestamp validation to prevent replay attacks
- * - Content-MD5 header support (validated only for empty bodies; streaming bodies
- *   cannot be hashed without consuming them, see validateContentMd5)
+ * - SHA-256 body digest covered by the signature for non-empty bodies
+ * - Optional Content-MD5 header validated against the actual body
  * - Custom header support
  * - Multiple access key support
  * - Distributed nonce validation via reactive Redis (for multi-instance deployments)
@@ -47,6 +53,10 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
     private static final String X_TIMESTAMP = AuthConstants.TIMESTAMP_HEADER;
     private static final String X_NONCE = AuthConstants.NONCE_HEADER;
     private static final String X_CONTENT_MD5 = "X-Content-MD5";
+    private static final String CACHED_BODY_ATTR = HmacSignatureAuthProcessor.class.getName() + ".body";
+
+    @Value("${gateway.auth.hmac.max-body-bytes:1048576}")
+    private int maxBodyBytes = 1048576;
 
     // Default clock skew tolerance (uses AuthConstants for gateway-wide consistency)
     private static final int DEFAULT_CLOCK_SKEW_MINUTES = AuthConstants.DEFAULT_CLOCK_SKEW_MINUTES;
@@ -109,6 +119,15 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
             return Mono.error(new RuntimeException("Request timestamp expired or invalid"));
         }
 
+        return com.leoli.gateway.util.RequestBodyCache.read(exchange, maxBodyBytes)
+                .flatMap(body -> {
+                    exchange.getAttributes().put(CACHED_BODY_ATTR, body);
+                    return verifyRequest(exchange, config, headers, accessKey, signature, timestamp, nonce, body);
+                });
+    }
+
+    private Mono<Void> verifyRequest(ServerWebExchange exchange, AuthConfig config, HttpHeaders headers,
+                                     String accessKey, String signature, String timestamp, String nonce, byte[] body) {
         // FIX: validate nonce unconditionally - previously a missing nonce skipped validation
         // entirely (the caller guarded with `nonce != null`), defeating replay protection.
         // Nonce validation is now reactive so the Redis SETNX never blocks the EventLoop.
@@ -127,7 +146,7 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
                     }
 
                     // Build string to sign
-                    String stringToSign = buildStringToSign(exchange, timestamp, nonce);
+                    String stringToSign = buildStringToSign(exchange, timestamp, nonce, body);
 
                     // Calculate expected signature
                     String expectedSignature = calculateSignature(stringToSign, secretKey, config.getSignatureAlgorithm());
@@ -141,7 +160,7 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
                     }
 
                     // Optionally validate Content-MD5 for request body integrity
-                    if (!validateContentMd5(exchange, headers.getFirst(X_CONTENT_MD5))) {
+                    if (!validateContentMd5(body, headers.getFirst(X_CONTENT_MD5))) {
                         logFailure("HMAC", "Content-MD5 mismatch");
                         return Mono.<Void>error(new RuntimeException("Content-MD5 mismatch"));
                     }
@@ -252,32 +271,18 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
         return true;
     }
 
-    /**
-     * Validate the optional Content-MD5 header for request body integrity.
-     * <p>
-     * FIX (declared but never validated): the header used to be logged and ignored.
-     * Streaming request bodies cannot be hashed here without consuming them (the auth
-     * processor cannot re-wrap the exchange), so validation is performed for empty bodies
-     * and skipped with a debug log otherwise - the misleading "always validated" claim was
-     * removed from the class documentation.
-     */
-    private boolean validateContentMd5(ServerWebExchange exchange, String contentMd5) {
+    /** Validate the optional Content-MD5 against the exact bytes received. */
+    private boolean validateContentMd5(byte[] body, String contentMd5) {
         if (contentMd5 == null || contentMd5.isEmpty()) {
             return true;
         }
 
-        long contentLength = exchange.getRequest().getHeaders().getContentLength();
-        if (contentLength == 0) {
-            String expected = calculateMD5("");
-            if (!constantTimeEquals(contentMd5, expected)) {
-                log.warn("Content-MD5 header does not match empty request body");
-                return false;
-            }
-            return true;
+        try {
+            String expected = Base64.getEncoder().encodeToString(MessageDigest.getInstance("MD5").digest(body));
+            return constantTimeEquals(contentMd5, expected);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
         }
-
-        log.debug("Content-MD5 validation skipped for streaming request body (Content-Length: {})", contentLength);
-        return true;
     }
 
     /**
@@ -303,17 +308,17 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
     /**
      * Build the string to sign from request components.
      */
-    private String buildStringToSign(ServerWebExchange exchange, String timestamp, String nonce) {
+    private String buildStringToSign(ServerWebExchange exchange, String timestamp, String nonce, byte[] body) {
         StringBuilder sb = new StringBuilder();
 
         // HTTP Method
         sb.append(exchange.getRequest().getMethod().name()).append("\n");
 
         // Request URI
-        sb.append(exchange.getRequest().getURI().getPath()).append("\n");
+        sb.append(exchange.getRequest().getURI().getRawPath()).append("\n");
 
         // Query string (sorted)
-        String query = exchange.getRequest().getURI().getQuery();
+        String query = exchange.getRequest().getURI().getRawQuery();
         if (query != null && !query.isEmpty()) {
             sb.append(sortQueryString(query)).append("\n");
         } else {
@@ -328,7 +333,26 @@ public class HmacSignatureAuthProcessor extends AbstractAuthProcessor {
             sb.append(nonce);
         }
 
+        // Empty-body clients retain their existing canonical string. A non-empty body
+        // must be signed: accepting the legacy form here would preserve the tampering bug.
+        if (body.length > 0) {
+            try {
+                sb.append('\n').append(HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(body)));
+            } catch (java.security.NoSuchAlgorithmException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+
         return sb.toString();
+    }
+
+    /** Replay the verified bytes for routing after the processor has consumed the body. */
+    public static ServerWebExchange replayVerifiedBody(ServerWebExchange exchange) {
+        byte[] body = exchange.getAttribute(CACHED_BODY_ATTR);
+        if (body == null) {
+            return exchange;
+        }
+        return exchange.mutate().request(com.leoli.gateway.util.RequestBodyCache.wrap(exchange, body)).build();
     }
 
     /**

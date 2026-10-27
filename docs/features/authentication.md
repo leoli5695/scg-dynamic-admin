@@ -161,6 +161,8 @@ curl -u admin:password123 \
 
 ---
 
+Basic password checks run once per request on a dedicated worker pool with at most eight threads (limited by available processors) and a bounded queue of 64 tasks per worker. Saturation returns 503 instead of blocking an event loop or accepting credentials without verification. Passwords are verified before route authorization.
+
 ## HMAC Signature Authentication
 
 ### Configuration
@@ -177,31 +179,43 @@ curl -u admin:password123 \
 
 ### Signature Generation
 
-Client generates signature:
+Client signs the exact bytes sent. The canonical string is `METHOD\nRAW_PATH\nSORTED_RAW_QUERY\nTIMESTAMP\nNONCE`, followed by `\n` and the lowercase SHA-256 hex digest for a non-empty body. Sort raw query components separated by `&` without decoding percent escapes. Empty bodies omit the digest suffix and retain the previous signature format.
 
 ```java
-String payload = requestBody;
+byte[] payload = requestBody.getBytes(StandardCharsets.UTF_8);
 String timestamp = String.valueOf(System.currentTimeMillis());
-String data = timestamp + "\n" + payload;
+String nonce = UUID.randomUUID().toString();
+String[] queryParts = uri.getRawQuery() == null ? new String[0] : uri.getRawQuery().split("&");
+Arrays.sort(queryParts);
+String data = method + "\n" + uri.getRawPath() + "\n"
+        + String.join("&", queryParts) + "\n" + timestamp + "\n" + nonce;
+if (payload.length > 0) {
+    data += "\n" + HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(payload));
+}
 
 Mac mac = Mac.getInstance("HmacSHA256");
-mac.init(new SecretKeySpec(secretKey.getBytes(), "HmacSHA256"));
-String signature = Base64.encode(mac.doFinal(data.getBytes()));
+mac.init(new SecretKeySpec(secretKey.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+String signature = Base64.getEncoder().encodeToString(mac.doFinal(data.getBytes(StandardCharsets.UTF_8)));
 ```
 
 ### Request Headers
 
 ```
+X-Access-Key: configured-access-key
 X-Signature: base64-encoded-signature
-X-Timestamp: 1234567890
+X-Timestamp: current-unix-time-in-milliseconds
+X-Nonce: unique-random-string
 ```
 
 ### Server Validation
 
 Gateway validates:
 1. Timestamp is within valid range (prevent replay attacks)
-2. Signature matches
-3. Algorithm is correct
+2. Nonce has not already been used
+3. Signature matches the method, raw path/query, timestamp, nonce and actual body digest
+4. Optional `X-Content-MD5` matches the actual body bytes
+
+Non-empty request bodies signed using the old format must update their client signer; they are rejected rather than accepted without integrity protection. Encoded URLs must be signed using their raw escaped form. The body is buffered with a default 1 MiB limit (`gateway.auth.hmac.max-body-bytes` / `GATEWAY_HMAC_MAX_BODY_BYTES`); oversized bodies return 413. Verified bytes are replayed for forwarding and retry.
 
 ---
 

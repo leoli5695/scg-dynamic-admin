@@ -274,7 +274,7 @@ Route configuration changes are automatically synced to Gateway:
 
 1. Admin API updates route -> saves to MySQL
 2. Publishes to Nacos -> Gateway listens for changes
-3. Gateway updates route table (< 1 second)
+3. Gateway updates the route table via listeners or periodic reconciliation (60-second default interval, plus fetch/apply time)
 
 **No Gateway restart required!**
 

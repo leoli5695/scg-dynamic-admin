@@ -21,7 +21,7 @@
 
 | Challenge | Traditional Gateway | Our Solution |
 |-----------|-------------------|--------------|
-| **Config Changes** | Restart required | Hot-reload in < 1 second |
+| **Config Changes** | Restart required | Hot-reload via listeners + periodic reconciliation |
 | **Gray Release** | Complex setup | Visual configuration, instant deploy |
 | **Monitoring** | Separate tools | Built-in dashboards + AI analysis |
 | **SSL Certificates** | Manual management | Auto-discovery + expiry alerts |
@@ -37,7 +37,7 @@
 
 | Feature | Description |
 |---------|-------------|
-| **Dynamic Route Management** | Create, update, delete routes without restart - changes propagate in < 1 second |
+| **Dynamic Route Management** | Create, update, delete routes without restart - changes propagate via listeners + periodic reconciliation |
 | **Multi-Service Routing** | Route to multiple backend services with weight-based load balancing |
 | **Gray Release (Canary Deploy)** | Header/Cookie/Query/Weight-based traffic splitting for safe deployments |
 | **Service Discovery** | Nacos/Consul integration with `lb://` protocol, plus static services via `static://` |
@@ -119,7 +119,7 @@
 │  └───────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
-                                    │ Config Push (< 1 second)
+                                    │ Config Push + Periodic Sync
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                            DATA PLANE                                     │
@@ -136,6 +136,8 @@
 │  └───────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+Configuration changes are applied through listeners and periodic reconciliation. The reconciliation interval defaults to 60 seconds (`gateway.config-sync.interval-ms` / `GATEWAY_CONFIG_SYNC_INTERVAL_MS`). When listener delivery fails, allow up to one interval plus fetch and apply time; config-center outages delay updates until recovery.
 
 **Key Benefits:**
 - Zero-downtime configuration updates

@@ -100,15 +100,8 @@ public class AiSemanticCacheFilter implements GlobalFilter, Ordered {
         long maxBodySize = Math.max(1024, config.getMaxBodySize());
         ServerHttpResponse response = exchange.getResponse();
 
-        return DataBufferUtils.join(exchange.getRequest().getBody(), (int) Math.min(maxBodySize, Integer.MAX_VALUE))
-                .defaultIfEmpty(response.bufferFactory().wrap(new byte[0]))
-                .flatMap(dataBuffer -> {
-                    byte[] bytes = new byte[dataBuffer.readableByteCount()];
-                    try {
-                        dataBuffer.read(bytes);
-                    } finally {
-                        DataBufferUtils.release(dataBuffer);
-                    }
+        return com.leoli.gateway.util.RequestBodyCache.read(exchange, (int) Math.min(maxBodySize, Integer.MAX_VALUE))
+                .flatMap(bytes -> {
                     if (bytes.length == 0) {
                         return chain.filter(exchange);
                     }
@@ -263,21 +256,7 @@ public class AiSemanticCacheFilter implements GlobalFilter, Ordered {
     }
 
     private ServerHttpRequest rebuildRequest(ServerWebExchange exchange, byte[] bytes) {
-        ServerHttpRequest request = exchange.getRequest();
-        return new ServerHttpRequestDecorator(request) {
-            @Override
-            public Flux<DataBuffer> getBody() {
-                return Flux.just(exchange.getResponse().bufferFactory().wrap(bytes));
-            }
-
-            @Override
-            public HttpHeaders getHeaders() {
-                HttpHeaders headers = new HttpHeaders();
-                headers.putAll(super.getHeaders());
-                headers.setContentLength(bytes.length);
-                return headers;
-            }
-        };
+        return com.leoli.gateway.util.RequestBodyCache.wrap(exchange, bytes);
     }
 
     /**

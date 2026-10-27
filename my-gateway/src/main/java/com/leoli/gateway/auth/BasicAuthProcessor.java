@@ -8,7 +8,6 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.util.Base64;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,6 +27,12 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 @Component
 public class BasicAuthProcessor extends AbstractAuthProcessor {
+
+    // CPU-heavy password checks must not run on Netty's event loops. The queue is bounded.
+    private static final reactor.core.scheduler.Scheduler PASSWORD_WORKERS =
+            reactor.core.scheduler.Schedulers.newBoundedElastic(
+                    Math.max(1, Math.min(8, Runtime.getRuntime().availableProcessors())),
+                    64, "gateway-password", 60, true);
 
     private static final String BASIC_PREFIX = "Basic ";
     private static final String WWW_AUTHENTICATE_HEADER = "WWW-Authenticate";
@@ -75,7 +80,8 @@ public class BasicAuthProcessor extends AbstractAuthProcessor {
         String password = parts[1];
 
         // Validate credentials
-        return validateCredentials(username, password, config)
+        return Mono.defer(() -> validateCredentials(username, password, config))
+                .subscribeOn(PASSWORD_WORKERS)
                 .flatMap(valid -> {
                     if (valid) {
                         // Add user info to exchange attributes
@@ -90,6 +96,9 @@ public class BasicAuthProcessor extends AbstractAuthProcessor {
                     }
                 })
                 .onErrorResume(ex -> {
+                    if (ex instanceof java.util.concurrent.RejectedExecutionException) {
+                        return Mono.error(ex);
+                    }
                     log.error("Basic auth validation error: {}", ex.getMessage());
                     return Mono.error(new RuntimeException("Authentication error"));
                 });
@@ -98,11 +107,11 @@ public class BasicAuthProcessor extends AbstractAuthProcessor {
     /**
      * Validate username and password against configured credentials.
      */
-    private Mono<Boolean> validateCredentials(String username, String password, AuthConfig config) {
+    protected Mono<Boolean> validateCredentials(String username, String password, AuthConfig config) {
         // Check if using single credential from config
         if (config.getBasicUsername() != null && config.getBasicPassword() != null) {
             boolean valid = config.getBasicUsername().equals(username) &&
-                    verifyPassword(password, config.getBasicPassword(), config.getPasswordHashAlgorithm());
+                    BasicPasswordVerifier.matches(password, config.getBasicPassword(), config.getPasswordHashAlgorithm());
             return Mono.just(valid);
         }
 
@@ -110,7 +119,7 @@ public class BasicAuthProcessor extends AbstractAuthProcessor {
         if (config.getBasicUsers() != null && !config.getBasicUsers().isEmpty()) {
             String storedPassword = config.getBasicUsers().get(username);
             if (storedPassword != null) {
-                boolean valid = verifyPassword(password, storedPassword, config.getPasswordHashAlgorithm());
+                boolean valid = BasicPasswordVerifier.matches(password, storedPassword, config.getPasswordHashAlgorithm());
                 return Mono.just(valid);
             }
         }
@@ -118,111 +127,11 @@ public class BasicAuthProcessor extends AbstractAuthProcessor {
         // Check user cache
         UserCredentials cached = userCache.get(username);
         if (cached != null) {
-            boolean valid = verifyPassword(password, cached.getPassword(), cached.getHashAlgorithm());
+            boolean valid = BasicPasswordVerifier.matches(password, cached.getPassword(), cached.getHashAlgorithm());
             return Mono.just(valid);
         }
 
         return Mono.just(false);
-    }
-
-    /**
-     * Verify password with optional hash algorithm.
-     */
-    private boolean verifyPassword(String inputPassword, String storedPassword, String hashAlgorithm) {
-        if (inputPassword == null || storedPassword == null) {
-            return false;
-        }
-
-        if (hashAlgorithm == null || hashAlgorithm.isEmpty() || "PLAIN".equalsIgnoreCase(hashAlgorithm)) {
-            return constantTimeEquals(inputPassword, storedPassword);
-        }
-
-        switch (hashAlgorithm.toUpperCase()) {
-            case "MD5":
-                return constantTimeEquals(hashMD5(inputPassword), storedPassword);
-            case "SHA256":
-            case "SHA-256":
-                return constantTimeEquals(hashSHA256(inputPassword), storedPassword);
-            case "BCRYPT":
-                // Stored value is a bcrypt hash - verifyBCrypt is the only correct check.
-                return verifyBCrypt(inputPassword, storedPassword);
-            default:
-                // Fail closed: an unrecognized algorithm must never degrade into a
-                // plaintext comparison against the stored hash.
-                log.error("Unsupported password hash algorithm '{}', rejecting credentials", hashAlgorithm);
-                return false;
-        }
-    }
-
-    /**
-     * Length- and content-comparison in constant time (no early exit on first
-     * differing byte), so password verification does not leak a timing signal.
-     */
-    private boolean constantTimeEquals(String a, String b) {
-        if (a == null || b == null) {
-            return false;
-        }
-        return MessageDigest.isEqual(
-                a.getBytes(StandardCharsets.UTF_8),
-                b.getBytes(StandardCharsets.UTF_8));
-    }
-
-    /**
-     * Hash password with MD5 (not recommended for production, use SHA256 or bcrypt).
-     */
-    private String hashMD5(String input) {
-        try {
-            java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
-            byte[] digest = md.digest(input.getBytes(StandardCharsets.UTF_8));
-            return bytesToHex(digest);
-        } catch (Exception e) {
-            log.error("MD5 hashing failed", e);
-            return null;
-        }
-    }
-
-    /**
-     * Hash password with SHA-256.
-     */
-    private String hashSHA256(String input) {
-        try {
-            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(input.getBytes(StandardCharsets.UTF_8));
-            return bytesToHex(digest);
-        } catch (Exception e) {
-            log.error("SHA-256 hashing failed", e);
-            return null;
-        }
-    }
-
-    /**
-     * Verify a bcrypt-hashed password.
-     */
-    private boolean verifyBCrypt(String input, String hash) {
-        if (input == null || hash == null || hash.isEmpty()) {
-            return false;
-        }
-        try {
-            // FIX (P1 auth bypass): the previous placeholder did input.equals(hash),
-            // so the raw password matched when the stored value equalled it (and the
-            // "hash" was never actually verified). Use real BCrypt verification.
-            return org.springframework.security.crypto.bcrypt.BCrypt.checkpw(input, hash);
-        } catch (IllegalArgumentException e) {
-            // Stored value is not a valid BCrypt hash - fail closed.
-            log.error("Stored password is not a valid BCrypt hash - rejecting credentials");
-            return false;
-        }
-    }
-
-    /**
-     * Convert bytes to hex string.
-     */
-    private String bytesToHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) {
-            sb.append(String.format("%02x", b));
-        }
-        return sb.toString();
     }
 
     /**

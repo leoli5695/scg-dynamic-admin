@@ -3,6 +3,7 @@ package com.leoli.gateway.manager;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.auth.JwtValidationCache;
+import com.leoli.gateway.auth.BasicPasswordVerifier;
 import com.leoli.gateway.center.spi.ConfigCenterService;
 import com.leoli.gateway.enums.AuthType;
 import com.leoli.gateway.model.AuthConfig;
@@ -362,11 +363,19 @@ public class AuthBindingManager {
 
         // Verify password matches
         AuthConfig config = policyCache.get(policyId);
-        if (config != null && config.isEnabled() && password.equals(config.getBasicPassword())) {
+        if (config != null && config.isEnabled()
+                && BasicPasswordVerifier.matches(password, config.getBasicPassword(), config.getPasswordHashAlgorithm())) {
             return policyId;
         }
 
         return null;
+    }
+
+    /** Candidate lookup only; the Basic processor must verify the password before authorization. */
+    public String findBasicPolicyByUsername(String username) {
+        String id = basicAuthIndex.get(username);
+        AuthConfig config = id == null ? null : policyCache.get(id);
+        return config != null && config.isEnabled() ? id : null;
     }
 
     /**
