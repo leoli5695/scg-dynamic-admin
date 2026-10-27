@@ -39,6 +39,22 @@
 .strategy-picker-search-row .ant-input {
   background: transparent;
 }
+.strategy-picker.ant-modal .strategy-picker-search-row .ant-input-affix-wrapper {
+  height: 38px;
+  padding: 7px 11px;
+  box-sizing: border-box;
+}
+.strategy-picker.ant-modal .strategy-picker-search-row .ant-input-affix-wrapper > input.ant-input {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+  padding: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  line-height: 22px;
+}
 .strategy-picker-search-row .ant-input-prefix {
   color: #95a3bc;
   margin-right: 8px;
