@@ -12,6 +12,8 @@ public interface ConfigCenterService {
 
     /**
      * Get configuration value by key.
+     * A null value means the config is absent; unavailable reads without a fallback
+     * should throw rather than masquerading as a deletion.
      */
     String getConfig(String dataId, String group);
 

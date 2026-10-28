@@ -29,6 +29,34 @@ Use the `lb://` protocol in route URI:
 
 Gateway automatically retrieves all instances of `user-service` from Nacos/Consul.
 
+### Nacos outage fallback
+
+A running gateway keeps its loaded routes, static service instances and strategies in memory.
+When Nacos becomes unavailable, configuration reads reuse cached content. If neither the
+adapter cache nor the Nacos SDK snapshot has the requested config, the adapter reports an
+unavailable read instead of returning a value that could be mistaken for deletion. A manual
+strategy reload reconciles in place and does not clear existing protection before reading.
+
+Nacos service discovery also retains the last successfully queried instance list, isolated
+by service name, namespace, group and query type (all instances or healthy instances).
+Exceptions and empty results while the SDK reports `DOWN` reuse this list. Once the SDK
+reconnects, successful reads replace cached content and endpoint lists. A successful empty
+instance list while connected clears old endpoints; a confirmed config deletion invalidates
+its fallback copy, so it cannot be resurrected by a later outage.
+
+This protects an already loaded gateway while its upstream services remain available.
+The adapter caches are process-local: a new process without a usable SDK disk snapshot
+cannot reconstruct config or endpoints during an outage. Persist the SDK snapshot directory
+separately if restart recovery is required. New config cannot take effect until Nacos is
+reachable again; the existing listener and periodic sync paths pick up recovery.
+
+Regression coverage includes SDK exceptions, disconnected empty snapshots, namespace/group
+isolation, request upstream selection, recovery updates and explicit deletion:
+
+```bash
+mvn -pl my-gateway -am -Dtest=NacosConfigFallbackTest,NacosDiscoveryFallbackTest,NacosOutageIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false test
+```
+
 ### Service Registration
 
 Backend services need to register with Nacos:

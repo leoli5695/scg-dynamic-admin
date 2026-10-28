@@ -43,7 +43,26 @@ public class NacosConfigService extends AbstractConfigService {
     public String getConfig(String dataId, String group) {
         String key = buildKey(dataId, group);
         try {
+            String cached = contentCache.get(key);
+            if (cached != null && "DOWN".equalsIgnoreCase(nacosConfigService.getServerStatus())) {
+                markUnhealthy();
+                return cached;
+            }
             String content = nacosConfigService.getConfig(dataId, group, 5000);
+            // The SDK may answer from its disk snapshot (including null) while disconnected.
+            // A disconnected null is not proof of deletion.
+            if ("DOWN".equalsIgnoreCase(nacosConfigService.getServerStatus())) {
+                markUnhealthy();
+                cached = contentCache.get(key);
+                if (cached != null) {
+                    return cached;
+                }
+                if (content != null && !content.isBlank()) {
+                    contentCache.put(key, content);
+                    return content;
+                }
+                throw new IllegalStateException("Nacos is disconnected and has no cached config: " + key);
+            }
             markHealthy();
             if (content != null && !content.trim().isEmpty()) {
                 // Update cache on success
@@ -68,8 +87,7 @@ public class NacosConfigService extends AbstractConfigService {
                 log.warn("Using cached fallback for {}#{}", dataId, group);
                 return cachedContent;
             }
-            log.error("No cached fallback available for {}#{} - returning null", dataId, group);
-            return null;
+            throw new IllegalStateException("Nacos config unavailable and no cached fallback: " + key, e);
         } catch (Exception e) {
             log.error("Unexpected error getting config from Nacos: {}#{}", dataId, group, e);
             markUnhealthy();
@@ -78,7 +96,7 @@ public class NacosConfigService extends AbstractConfigService {
                 log.warn("Using cached fallback for {}#{} after unexpected error", dataId, group);
                 return cachedContent;
             }
-            return null;
+            throw new IllegalStateException("Nacos config unavailable and no cached fallback: " + key, e);
         }
     }
 
@@ -119,10 +137,19 @@ public class NacosConfigService extends AbstractConfigService {
 
                 @Override
                 public void receiveConfigInfo(String configInfo) {
+                    if ((configInfo == null || configInfo.isBlank())
+                            && "DOWN".equalsIgnoreCase(nacosConfigService.getServerStatus())) {
+                        markUnhealthy();
+                        log.warn("Ignoring ambiguous empty config while Nacos is disconnected: {}", key);
+                        return;
+                    }
                     // Update cache when receiving new config
                     if (configInfo != null && !configInfo.trim().isEmpty()) {
                         contentCache.put(buildKey(dataId, group), configInfo);
                         markHealthy();
+                    } else {
+                        // An authoritative deletion must also invalidate the fallback copy.
+                        contentCache.remove(key);
                     }
                     notifyListeners(dataId, group, configInfo);
                 }

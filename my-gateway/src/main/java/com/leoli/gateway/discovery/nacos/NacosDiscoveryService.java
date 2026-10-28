@@ -9,6 +9,8 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Nacos implementation of DiscoveryService.
@@ -19,6 +21,12 @@ public class NacosDiscoveryService extends AbstractDiscoveryService {
 
     private final NamingService namingService;
     private final NacosNamingServiceFactory namingServiceFactory;
+
+    private record CacheKey(String serviceName, String namespace, String group, boolean healthyOnly) { }
+
+    // This adapter is bound to one default namespace. Explicit namespace/group lookups
+    // use separate keys, including healthy-only queries, so fallback cannot cross scopes.
+    private final Map<CacheKey, List<ServiceInstance>> instanceCache = new ConcurrentHashMap<>();
 
     /**
      * Constructor with single NamingService (for backward compatibility).
@@ -41,23 +49,31 @@ public class NacosDiscoveryService extends AbstractDiscoveryService {
 
     @Override
     protected List<ServiceInstance> doGetInstances(String serviceName) {
+        CacheKey key = new CacheKey(serviceName, "", "DEFAULT_GROUP", false);
         try {
+            if (hasDisconnectedFallback(key, namingService)) {
+                return cachedInstances(key);
+            }
             List<Instance> nacosInstances = namingService.getAllInstances(serviceName);
-            return convertToServiceInstances(nacosInstances);
+            return cacheInstances(key, nacosInstances, namingService.getServerStatus());
         } catch (Exception e) {
             log.error("Failed to get instances from Nacos for service: {}", serviceName, e);
-            return new ArrayList<>();
+            return cachedInstances(key);
         }
     }
 
     @Override
     protected List<ServiceInstance> doGetHealthyInstances(String serviceName) {
+        CacheKey key = new CacheKey(serviceName, "", "DEFAULT_GROUP", true);
         try {
+            if (hasDisconnectedFallback(key, namingService)) {
+                return cachedInstances(key);
+            }
             List<Instance> nacosInstances = namingService.selectInstances(serviceName, true);
-            return convertToServiceInstances(nacosInstances);
+            return cacheInstances(key, nacosInstances, namingService.getServerStatus());
         } catch (Exception e) {
             log.error("Failed to get healthy instances from Nacos for service: {}", serviceName, e);
-            return new ArrayList<>();
+            return cachedInstances(key);
         }
     }
 
@@ -70,9 +86,14 @@ public class NacosDiscoveryService extends AbstractDiscoveryService {
      * @return List of service instances
      */
     public List<ServiceInstance> getInstances(String serviceName, String namespace, String group) {
+        CacheKey key = new CacheKey(serviceName, namespace == null ? "" : namespace.trim(), normalizeGroup(group), false);
         try {
             NamingService targetNamingService = getNamingServiceForNamespace(namespace);
             String targetGroup = normalizeGroup(group);
+
+            if (hasDisconnectedFallback(key, targetNamingService)) {
+                return cachedInstances(key);
+            }
 
             log.debug("Querying Nacos for service: {}, namespace: {}, group: {}",
                     serviceName,
@@ -80,11 +101,11 @@ public class NacosDiscoveryService extends AbstractDiscoveryService {
                     targetGroup);
 
             List<Instance> nacosInstances = targetNamingService.getAllInstances(serviceName, targetGroup);
-            return convertToServiceInstances(nacosInstances);
+            return cacheInstances(key, nacosInstances, targetNamingService.getServerStatus());
         } catch (Exception e) {
             log.error("Failed to get instances from Nacos for service: {}, namespace: {}, group: {}",
                     serviceName, namespace, group, e);
-            return new ArrayList<>();
+            return cachedInstances(key);
         }
     }
 
@@ -97,9 +118,14 @@ public class NacosDiscoveryService extends AbstractDiscoveryService {
      * @return List of healthy service instances
      */
     public List<ServiceInstance> getHealthyInstances(String serviceName, String namespace, String group) {
+        CacheKey key = new CacheKey(serviceName, namespace == null ? "" : namespace.trim(), normalizeGroup(group), true);
         try {
             NamingService targetNamingService = getNamingServiceForNamespace(namespace);
             String targetGroup = normalizeGroup(group);
+
+            if (hasDisconnectedFallback(key, targetNamingService)) {
+                return cachedInstances(key);
+            }
 
             log.debug("Querying Nacos for healthy instances: {}, namespace: {}, group: {}",
                     serviceName,
@@ -107,12 +133,48 @@ public class NacosDiscoveryService extends AbstractDiscoveryService {
                     targetGroup);
 
             List<Instance> nacosInstances = targetNamingService.selectInstances(serviceName, targetGroup, true);
-            return convertToServiceInstances(nacosInstances);
+            return cacheInstances(key, nacosInstances, targetNamingService.getServerStatus());
         } catch (Exception e) {
             log.error("Failed to get healthy instances from Nacos for service: {}, namespace: {}, group: {}",
                     serviceName, namespace, group, e);
+            return cachedInstances(key);
+        }
+    }
+
+    private boolean hasDisconnectedFallback(CacheKey key, NamingService client) {
+        return instanceCache.containsKey(key) && "DOWN".equalsIgnoreCase(client.getServerStatus());
+    }
+
+    private List<ServiceInstance> cacheInstances(CacheKey key, List<Instance> instances, String serverStatus) {
+        List<ServiceInstance> converted = convertToServiceInstances(instances);
+        if (converted.isEmpty() && "DOWN".equalsIgnoreCase(serverStatus)) {
+            // Some SDK paths answer from their local snapshot instead of throwing.
+            // An empty snapshot while disconnected is not a deregistration event.
+            return cachedInstances(key);
+        }
+        // A successful empty result is authoritative: do not resurrect deregistered hosts.
+        instanceCache.put(key, converted);
+        return copyInstances(converted);
+    }
+
+    private List<ServiceInstance> cachedInstances(CacheKey key) {
+        List<ServiceInstance> cached = instanceCache.get(key);
+        if (cached == null) {
             return new ArrayList<>();
         }
+        log.warn("Using cached Nacos service instances: service={}, namespace={}, group={}, count={}",
+                key.serviceName(), key.namespace(), key.group(), cached.size());
+        return copyInstances(cached);
+    }
+
+    private List<ServiceInstance> copyInstances(List<ServiceInstance> instances) {
+        return instances.stream().map(instance -> {
+            ServiceInstance copy = new ServiceInstance(instance.getServiceId(), instance.getHost(), instance.getPort());
+            copy.setHealthy(instance.isHealthy());
+            copy.setEnabled(instance.isEnabled());
+            copy.setWeight(instance.getWeight());
+            return copy;
+        }).collect(Collectors.toList());
     }
 
     /**

@@ -194,15 +194,9 @@ public class StrategyRefresher {
      */
     public void reloadFromConfigCenter() {
         log.info("Reloading all strategies from config center...");
-        strategyManager.clear();
-        // FIX: actually remove listeners from the config center before clearing the map,
-        // otherwise duplicate listeners accumulate on every reload.
-        for (Map.Entry<String, ConfigCenterService.ConfigListener> entry : activeListeners.entrySet()) {
-            configService.removeListener(STRATEGY_PREFIX + entry.getKey(), GROUP, entry.getValue());
-        }
-        activeListeners.clear();
-        appliedContent.clear();
-        loadInitialStrategies();
+        // Reconcile in place. Clearing first drops live protection if Nacos fails
+        // during the reload, even though we already have a working strategy table.
+        periodicSyncStrategies();
     }
 
     /**

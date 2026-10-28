@@ -108,7 +108,7 @@ gateway-admin/src/main/resources/static/assets/
 
 # A local nacos/ working directory (this repo has no git submodules - .gitmodules was an empty
 # file and has been removed).
-nacos/
+/nacos/
 
 # AI perf bench raw runs (regenerable, multi-MB jsonl)
 tools/ai-perf/results/
