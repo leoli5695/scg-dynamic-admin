@@ -28,7 +28,8 @@ class TokenUsageExceptionQueryTest {
                 """);
         new ResourceDatabasePopulator(new ClassPathResource("sql/alter-token-usage-outcome.sql"),
                 new ClassPathResource("sql/alter-token-usage-event-id.sql"),
-                new ClassPathResource("sql/alter-token-usage-reconciliation.sql")).execute(source);
+                new ClassPathResource("sql/alter-token-usage-reconciliation.sql"),
+                new ClassPathResource("sql/alter-token-quota-ledger.sql")).execute(source);
         for (String status : new String[]{"UNKNOWN","ESTIMATED","CONFIRMED","RECONCILED"})
             jdbc.update("INSERT INTO token_usage_history (tenant_id,total_tokens,usage_status,settlement_status,request_time) VALUES ('t',0,?,'APPLIED',?)",
                     status,LocalDateTime.of(2026,10,28,12,0));

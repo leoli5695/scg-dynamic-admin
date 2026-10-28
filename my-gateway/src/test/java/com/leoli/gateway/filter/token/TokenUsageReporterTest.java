@@ -112,4 +112,12 @@ class TokenUsageReporterTest {
             assertFalse(java.nio.file.Files.exists(directory.resolve(".lock")));
         } finally { reporter.close(); }
     }
+    @Test void durableAcceptancePreservesLedgerEventIdentity() throws Exception {
+        var reporter = reporter(new SimpleMeterRegistry()); String id = java.util.UUID.randomUUID().toString();
+        try { assertTrue(reporter.reportDurably(Map.of("tenantId","t","eventId",id))); }
+        finally { reporter.close(); }
+        try (var store = new TokenUsageOutbox(directory,67108864,4096)) {
+            assertEquals(id,new ObjectMapper().readTree(store.batch(1).getFirst().bytes()).get("eventId").asText());
+        }
+    }
 }

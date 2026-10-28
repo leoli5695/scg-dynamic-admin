@@ -85,6 +85,8 @@ export interface TokenUsageEvent {
   quotaMonth?: string | null;
   quotaDay?: string | null;
   quotaPeriod?: string | null;
+  quotaLedgerId?: string | null;
+  quotaLedgerState?: 'PENDING' | 'READY' | null;
   settlementStatus?: string;
   provider?: string | null;
   serviceId?: string | null;

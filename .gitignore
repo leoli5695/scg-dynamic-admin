@@ -86,6 +86,7 @@ prometheus/internal-token
 
 # Application specific
 **/data/token-usage/
+**/data/token-quota/
 gateway-admin/admin-err.log
 gateway-admin/admin.log
 gateway-admin/run.log

@@ -119,6 +119,8 @@ public class TokenUsageAnalyticsService {
             m.put("quotaMonth", e.getQuotaMonth());
             m.put("quotaDay", e.getQuotaDay());
             m.put("quotaPeriod", e.getQuotaPeriod());
+            m.put("quotaLedgerId", e.getQuotaLedgerId());
+            m.put("quotaLedgerState", e.getQuotaLedgerState());
             m.put("requestTime", e.getRequestTime() != null ? e.getRequestTime().toString() : null);
             m.put("tenantId", e.getTenantId());
             m.put("routeId", e.getRouteId());

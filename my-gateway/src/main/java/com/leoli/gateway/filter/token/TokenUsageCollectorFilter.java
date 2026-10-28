@@ -6,6 +6,7 @@ import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.filter.TraceIdGlobalFilter;
 import com.leoli.gateway.filter.ai.AiProviderRoutingFilter;
 import com.leoli.gateway.limiter.TokenQuotaManager;
+import com.leoli.gateway.limiter.TokenQuotaLedger;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.StrategyDefinition;
 import com.leoli.gateway.model.TokenQuotaConfig;
@@ -72,6 +73,8 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
 
     @Autowired(required = false)
     private TokenQuotaManager tokenQuotaManager;
+    @Autowired(required = false)
+    private TokenQuotaLedger tokenQuotaLedger;
 
     @Autowired
     private TokenUsageParser tokenUsageParser;
@@ -101,6 +104,8 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
 
         // Get token quota configuration
         ConfigWrapper config = getConfig(routeId);
+        TokenQuotaConfig frozen = exchange.getAttribute(TokenQuotaLedger.CONFIG_ATTR);
+        if (frozen != null) { config.enabled = frozen.isEnabled(); config.tokenQuotaConfig = frozen; }
 
         if (!config.enabled || !config.tokenQuotaConfig.isEnabled()) {
             return chain.filter(exchange);
@@ -519,7 +524,12 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
             // after a day/month boundary refunds into the bucket it was charged in.
             TokenQuotaManager.QuotaPeriodStamp stamp =
                     exchange.getAttribute(TokenQuotaPreCheckFilter.ATTR_PERIOD_STAMP);
-            if (usageStatus == AiUsageResult.Status.UNKNOWN) {
+            if (tokenQuotaLedger != null && exchange.getAttribute(TokenQuotaLedger.REQUEST_ATTR) != null) {
+                // Persist the final intent before the same receipt adjusts both quota buckets.
+                exchange.getAttributes().put("ai.settlement.status", tokenQuotaLedger.complete(
+                        exchange.getAttribute(TokenQuotaLedger.REQUEST_ATTR),result.chargedTokens(),usagePayload(exchange,tenantId,usage,actualTokens)));
+                exchange.getAttributes().put("ai.ledger.report.handled",true);
+            } else if (usageStatus == AiUsageResult.Status.UNKNOWN) {
                 log.warn("AI usage unknown for tenant {}; retaining reserved tokens {} for reconciliation",
                         tenantId, preDeductedTokens);
             } else if (preDeductedTokens > 0) {
@@ -588,10 +598,25 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
      */
     private void reportUsageToAdmin(ServerWebExchange exchange, String tenantId,
                                     TokenUsage usage, long actualTokens) {
+        if (Boolean.TRUE.equals(exchange.getAttribute("ai.ledger.report.handled"))) return;
+        if (tokenQuotaLedger != null && exchange.getAttribute(TokenQuotaLedger.REQUEST_ATTR) != null) {
+            AiUsageResult result = exchange.getAttribute(AiUsageResult.RESULT_ATTR);
+            try { tokenQuotaLedger.complete(exchange.getAttribute(TokenQuotaLedger.REQUEST_ATTR),
+                    result != null ? result.chargedTokens() : null,usagePayload(exchange,tenantId,usage,actualTokens)); }
+            catch (Exception error) { log.error("Quota final intent could not be persisted; request remains in ledger for recovery",error); }
+            return;
+        }
         if (tokenUsageReporter == null) {
             return;
         }
         try {
+            tokenUsageReporter.report(usagePayload(exchange,tenantId,usage,actualTokens));
+        } catch (Exception e) {
+            log.warn("Failed to build token usage report for tenant {} (ignored)", tenantId, e);
+        }
+    }
+
+    private Map<String,Object> usagePayload(ServerWebExchange exchange, String tenantId, TokenUsage usage, long actualTokens) {
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("tenantId", tenantId);
             payload.put("traceId", exchange.getAttribute(TraceIdGlobalFilter.TRACE_ID_ATTR));
@@ -628,10 +653,7 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                 payload.put("latencyMs", (finishedNs - startNs) / 1_000_000L);
             }
             payload.put("requestTime", LocalDateTime.now().toString());
-            tokenUsageReporter.report(payload);
-        } catch (Exception e) {
-            log.warn("Failed to build token usage report for tenant {} (ignored)", tenantId, e);
-        }
+            return payload;
     }
 
     /**

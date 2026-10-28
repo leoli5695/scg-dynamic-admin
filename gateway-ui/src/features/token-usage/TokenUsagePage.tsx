@@ -606,7 +606,7 @@ const TokenUsagePage: React.FC = () => {
           </Card>
         </>
       )}
-      {reconciling && <TokenUsageReconciliationDrawer key={reconciling.id} event={reconciling}
+      {reconciling && <TokenUsageReconciliationDrawer key={reconciling.id} event={events.find(e => e.id === reconciling.id) ?? reconciling}
         onClose={() => setReconciling(null)} onApplied={refresh} />}
     </div>
   );

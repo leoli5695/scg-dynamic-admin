@@ -1,4 +1,5 @@
 {
+  "tokenUsage.reconcile.ledgerPending": "请求账本仍在恢复结算。请待自动结算完成或停止后刷新明细，再进行人工核对，避免重复调整额度。",
   "tokenUsage.reconcile.unresolvedOnly": "仅显示待核对明细",
   "tokenUsage.status.RECONCILED": "已核对",
   "tokenUsage.reconcile.title": "用量核对与补偿",

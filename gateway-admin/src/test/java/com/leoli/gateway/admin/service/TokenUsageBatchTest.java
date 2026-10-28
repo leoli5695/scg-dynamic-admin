@@ -29,7 +29,8 @@ class TokenUsageBatchTest {
         new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(
                 new org.springframework.core.io.ClassPathResource("sql/alter-token-usage-outcome.sql"),
                 new org.springframework.core.io.ClassPathResource("sql/alter-token-usage-event-id.sql"),
-                new org.springframework.core.io.ClassPathResource("sql/alter-token-usage-reconciliation.sql")).execute(source);
+                new org.springframework.core.io.ClassPathResource("sql/alter-token-usage-reconciliation.sql"),
+                new org.springframework.core.io.ClassPathResource("sql/alter-token-quota-ledger.sql")).execute(source);
     }
     @Test void recordsNumbersUnicodeAndLifecycleFields() {
         tx.executeWithoutResult(status -> service.recordTokenUsageBatch(List.of(Map.of("tenantId", "租户", "traceId", "one",
@@ -100,5 +101,30 @@ class TokenUsageBatchTest {
             first.get(10, java.util.concurrent.TimeUnit.SECONDS); second.get(10, java.util.concurrent.TimeUnit.SECONDS);
         }
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM token_usage_history", Integer.class));
+    }
+    @Test void managedEventsAdvanceOnceWithoutDowngradingOrOverwritingManualCorrection() {
+        String id = UUID.randomUUID().toString();
+        var event = new HashMap<String,Object>(Map.of("tenantId","t","eventId",id,"quotaLedgerId",id,
+                "quotaLedgerState","PENDING","usageStatus","CONFIRMED","settlementStatus","PENDING","chargedTokens",30L,"reservedTokens",100L));
+        tx.executeWithoutResult(status -> service.recordTokenUsageBatch(List.of(event)));
+        var ready = new HashMap<>(event); ready.put("quotaLedgerState","READY"); ready.put("settlementStatus","APPLIED");
+        tx.executeWithoutResult(status -> service.recordTokenUsageBatch(List.of(ready,event)));
+        assertEquals("READY",jdbc.queryForObject("SELECT quota_ledger_state FROM token_usage_history",String.class));
+        assertEquals("APPLIED",jdbc.queryForObject("SELECT settlement_status FROM token_usage_history",String.class));
+        jdbc.update("UPDATE token_usage_history SET usage_status='RECONCILED',charged_tokens=40");
+        tx.executeWithoutResult(status -> service.recordTokenUsageBatch(List.of(ready)));
+        assertEquals(40L,jdbc.queryForObject("SELECT charged_tokens FROM token_usage_history",Long.class));
+    }
+    @Test void readyBeforePendingIsNotDowngradedAndChangedTargetsAreRejected() {
+        String id = UUID.randomUUID().toString();
+        var event = new HashMap<String,Object>(Map.of("tenantId","t","eventId",id,"quotaLedgerId",id,
+                "quotaLedgerState","READY","usageStatus","UNKNOWN","settlementStatus","PENDING","reservedTokens",100L));
+        tx.executeWithoutResult(status -> service.recordTokenUsageBatch(List.of(event)));
+        event.put("quotaLedgerState","PENDING");
+        tx.executeWithoutResult(status -> service.recordTokenUsageBatch(List.of(event)));
+        assertEquals("READY",jdbc.queryForObject("SELECT quota_ledger_state FROM token_usage_history",String.class));
+        jdbc.update("UPDATE token_usage_history SET quota_ledger_state='PENDING'");
+        event.put("quotaLedgerState","READY"); event.put("reservedTokens",200L);
+        assertThrows(IllegalArgumentException.class,() -> tx.executeWithoutResult(status -> service.recordTokenUsageBatch(List.of(event))));
     }
 }

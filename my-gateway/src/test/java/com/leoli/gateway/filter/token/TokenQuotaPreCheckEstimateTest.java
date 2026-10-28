@@ -100,6 +100,30 @@ class TokenQuotaPreCheckEstimateTest {
                 + "x".repeat(300) + "\"}]}";
     }
 
+    @Test void ledgerAdmissionChargesTheEstimateMultiplierOnceAndOwnsEarlyAbort() {
+        var ledger = mock(com.leoli.gateway.limiter.TokenQuotaLedger.class);
+        ReflectionTestUtils.setField(filter,"tokenQuotaLedger",ledger);
+        var config = new TokenQuotaConfig(); config.setEnabled(true); config.setPreDeductStrategy("ESTIMATE");
+        stubConfig(config);
+        when(ledger.begin(anyString(),eq("acme"),eq(210L),eq(config),any(),anyMap()))
+                .thenReturn(new com.leoli.gateway.limiter.TokenQuotaLedger.Admission(true,210,790,790,false));
+        filter.filter(post(chatBody()),chain).block();
+        verify(ledger).begin(anyString(),eq("acme"),eq(210L),eq(config),any(),anyMap());
+        verify(ledger,timeout(3000)).abort(anyString());
+        verify(tokenQuotaManager,never()).preDeductTokens(anyString(),anyLong(),any(),any());
+        verify(tokenQuotaManager,never()).settleTokenUsage(anyString(),anyLong(),anyLong(),any(),any());
+    }
+    @Test void rejectedLedgerReservationNeverFallsThroughToAReadOnlyQuotaCheck() {
+        var ledger = mock(com.leoli.gateway.limiter.TokenQuotaLedger.class);
+        ReflectionTestUtils.setField(filter,"tokenQuotaLedger",ledger);
+        var config = new TokenQuotaConfig(); config.setEnabled(true); config.setPreDeductStrategy("ESTIMATE"); stubConfig(config);
+        when(ledger.begin(anyString(),anyString(),anyLong(),any(),any(),anyMap()))
+                .thenReturn(new com.leoli.gateway.limiter.TokenQuotaLedger.Admission(false,210,10,10,false));
+        var exchange = post(chatBody()); filter.filter(exchange,chain).block();
+        assertEquals(org.springframework.http.HttpStatus.TOO_MANY_REQUESTS,exchange.getResponse().getStatusCode());
+        verify(chain,never()).filter(any()); verify(tokenQuotaManager,never()).checkQuota(anyString(),any());
+    }
+
     @Test
     void failureBeforeTheUsageCollectorReleasesThePreDeductionIntoItsOriginalPeriod() {
         var config = new TokenQuotaConfig(); config.setEnabled(true); config.setPreDeductStrategy("ESTIMATE");

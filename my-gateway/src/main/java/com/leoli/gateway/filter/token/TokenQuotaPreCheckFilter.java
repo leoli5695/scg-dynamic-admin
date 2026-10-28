@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.filter.ai.AiContextLimitFilter;
 import com.leoli.gateway.limiter.TokenQuotaManager;
+import com.leoli.gateway.limiter.TokenQuotaLedger;
 import com.leoli.gateway.limiter.TokenQuotaManager.QuotaCheckResult;
 import com.leoli.gateway.limiter.TokenQuotaManager.QuotaStatus;
 import com.leoli.gateway.manager.StrategyManager;
@@ -72,6 +73,8 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
 
     @Autowired(required = false)
     private TokenQuotaManager tokenQuotaManager;
+    @Autowired(required = false)
+    private TokenQuotaLedger tokenQuotaLedger;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -200,6 +203,11 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
 
     private Mono<Void> applyQuotaCheck(ServerWebExchange exchange, GatewayFilterChain chain,
                                        String tenantId, ConfigWrapper config, long estimatedInputTokens) {
+        if (tokenQuotaLedger != null) {
+            TokenQuotaConfig frozen = objectMapper.convertValue(config.tokenQuotaConfig,TokenQuotaConfig.class);
+            exchange.getAttributes().put(TokenQuotaLedger.CONFIG_ATTR,frozen);
+            return applyLedgerCheck(exchange,chain,tenantId,frozen,estimatedInputTokens);
+        }
         // Apply pre-deduct strategy.
         // FIX (blocking Redis on EventLoop): all quota Redis operations are blocking;
         // execute them on boundedElastic so the Netty EventLoop is never stalled by a
@@ -260,6 +268,14 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
     /** No upstream call can occur before the collector: release reservations on an earlier short circuit. */
     private void refundBeforeCollector(ServerWebExchange exchange, String tenantId, TokenQuotaConfig config) {
         if (Boolean.TRUE.equals(exchange.getAttribute(TokenUsageCollectorFilter.SETTLEMENT_OWNER_ATTR))) return;
+        String ledgerId = exchange.getAttribute(TokenQuotaLedger.REQUEST_ATTR);
+        if (tokenQuotaLedger != null && ledgerId != null) {
+            if (!exchange.getAttributes().containsKey("token_quota_pre_deducted")) return;
+            var aborted = (java.util.concurrent.atomic.AtomicBoolean) exchange.getAttributes().computeIfAbsent("token_quota_early_refund", key -> new java.util.concurrent.atomic.AtomicBoolean());
+            if (aborted.compareAndSet(false,true)) Mono.fromRunnable(() -> tokenQuotaLedger.abort(ledgerId))
+                    .subscribeOn(Schedulers.boundedElastic()).subscribe(ignored -> { },error -> log.error("Quota cancellation remains in durable ledger: {}",ledgerId,error));
+            return;
+        }
         Long reserved = exchange.getAttribute("token_quota_pre_deducted");
         if (reserved == null || reserved <= 0) return;
         java.util.concurrent.atomic.AtomicBoolean refunded = (java.util.concurrent.atomic.AtomicBoolean)
@@ -272,6 +288,42 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
                 })
                 .subscribeOn(Schedulers.boundedElastic())
                 .subscribe(ignored -> { }, error -> log.error("Failed to release pre-deducted quota before collector: tenant={}", tenantId, error));
+    }
+
+    private Mono<Void> applyLedgerCheck(ServerWebExchange exchange, GatewayFilterChain chain, String tenant,
+                                       TokenQuotaConfig config, long estimated) {
+        String id = (String) exchange.getAttributes().computeIfAbsent(TokenQuotaLedger.REQUEST_ATTR,key -> java.util.UUID.randomUUID().toString());
+        var cancelled = new java.util.concurrent.atomic.AtomicBoolean();
+        return Mono.fromCallable(() -> {
+                    var stamp = tokenQuotaManager.currentPeriodStamp();
+                    exchange.getAttributes().put(ATTR_PERIOD_STAMP,stamp);
+                    String strategy = config.getPreDeductStrategy();
+                    long reserve = ("ESTIMATE".equalsIgnoreCase(strategy) || ("HYBRID".equalsIgnoreCase(strategy) && estimated >= config.getHybridThreshold()))
+                            ? Math.multiplyExact(estimated,config.getEstimateMultiplier()) : 0;
+                    Map<String,Object> context = new java.util.LinkedHashMap<>();
+                    context.put("routeId",RouteUtils.getRouteId(exchange));
+                    context.put("traceId",exchange.getAttribute(com.leoli.gateway.filter.TraceIdGlobalFilter.TRACE_ID_ATTR));
+                    context.put("requestTime",java.time.LocalDateTime.now().toString());
+                    var admission = tokenQuotaLedger.begin(id,tenant,reserve,config,stamp,context);
+                    exchange.getAttributes().put("token_quota_pre_deducted",admission.allowed() ? admission.reserved() : 0L);
+                    if (cancelled.get()) refundBeforeCollector(exchange,tenant,config);
+                    return admission;
+                }).subscribeOn(Schedulers.boundedElastic())
+                .flatMap(admission -> {
+                    if (!admission.allowed()) return GatewayResponseHelper.writeErrorResponse(exchange.getResponse(),HttpStatus.TOO_MANY_REQUESTS,52902,"Token quota exceeded");
+                    var quota = config.getTenantQuota(tenant);
+                    var headers = exchange.getResponse().getHeaders();
+                    headers.set("X-Token-Quota-Limit-Monthly",Long.toString(quota.getMonthlyQuota()));
+                    headers.set("X-Token-Quota-Remaining-Monthly",Long.toString(admission.monthlyRemaining()));
+                    headers.set("X-Token-Quota-Limit-Daily",Long.toString(quota.getDailyQuota()));
+                    headers.set("X-Token-Quota-Remaining-Daily",Long.toString(admission.dailyRemaining()));
+                    headers.set("X-Token-Quota-Used-Monthly",Long.toString(Math.max(0,quota.getMonthlyQuota()-admission.monthlyRemaining())));
+                    headers.set("X-Token-Quota-Used-Daily",Long.toString(Math.max(0,quota.getDailyQuota()-admission.dailyRemaining())));
+                    return Mono.defer(() -> chain.filter(exchange));
+                }).onErrorResume(TokenQuotaLedger.Unavailable.class,error -> GatewayResponseHelper.writeErrorResponse(
+                        exchange.getResponse(),HttpStatus.SERVICE_UNAVAILABLE,50302,"Token quota accounting is temporarily unavailable"))
+                .doOnCancel(() -> cancelled.set(true))
+                .doFinally(signal -> refundBeforeCollector(exchange,tenant,config));
     }
 
     /**

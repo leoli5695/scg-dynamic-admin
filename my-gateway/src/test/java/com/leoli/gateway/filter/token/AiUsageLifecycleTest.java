@@ -123,4 +123,25 @@ class AiUsageLifecycleTest {
         assertSame(confirmed, exchange.getAttribute(AiUsageResult.RESULT_ATTR));
         assertSame(confirmed, completion.join());
     }
+    @Test void managedCollectorUsesLedgerRatherThanLegacyQuotaAndReporter() {
+        var ledger = mock(com.leoli.gateway.limiter.TokenQuotaLedger.class);
+        ReflectionTestUtils.setField(collector,"tokenQuotaLedger",ledger);
+        when(ledger.complete(anyString(),eq(30L),anyMap())).thenReturn("PENDING");
+        var exchange = MockServerWebExchange.from(MockServerHttpRequest.post("/v1/chat/completions"));
+        String id = java.util.UUID.randomUUID().toString();
+        exchange.getAttributes().put("token_quota_tenant_id","tenant");
+        exchange.getAttributes().put("token_quota_pre_deducted",100L);
+        exchange.getAttributes().put(TokenQuotaPreCheckFilter.ATTR_PERIOD_STAMP,STAMP);
+        exchange.getAttributes().put(com.leoli.gateway.limiter.TokenQuotaLedger.REQUEST_ATTR,id);
+        exchange.getAttributes().put(com.leoli.gateway.limiter.TokenQuotaLedger.CONFIG_ATTR,config);
+        // A policy removal during the request must not turn a served request into an early refund.
+        when(strategies.getStrategyForRoute(anyString(),eq("TOKEN_RATE_LIMITER"))).thenReturn(null);
+        collector.filter(exchange,terminal -> {
+            terminal.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
+            return terminal.getResponse().writeWith(Mono.just(new DefaultDataBufferFactory().wrap(
+                    "{\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":20,\"total_tokens\":30}}".getBytes(StandardCharsets.UTF_8))));
+        }).block();
+        verify(ledger,timeout(3000)).complete(eq(id),eq(30L),argThat(row -> "CONFIRMED".equals(row.get("usageStatus"))));
+        verifyNoInteractions(quota,reporter);
+    }
 }

@@ -185,6 +185,11 @@ gateway:
   instance-id: ${GATEWAY_INSTANCE_ID:gateway-1}
 
   # Mount this directory on persistent storage; each running gateway needs its own directory.
+  token-quota-ledger:
+    directory: ${GATEWAY_QUOTA_LEDGER_DIRECTORY:${user.dir}/data/token-quota/${gateway.instance-id}}
+    max-pending: ${GATEWAY_QUOTA_LEDGER_MAX_PENDING:4096}
+    replay-hours: ${GATEWAY_QUOTA_LEDGER_REPLAY_HOURS:168}
+    retry-ms: ${GATEWAY_QUOTA_LEDGER_RETRY_MS:5000}
   token-usage:
     outbox-directory: ${GATEWAY_USAGE_OUTBOX_DIRECTORY:${user.dir}/data/token-usage/${gateway.instance-id}}
     outbox-max-bytes: ${GATEWAY_USAGE_OUTBOX_MAX_BYTES:67108864}

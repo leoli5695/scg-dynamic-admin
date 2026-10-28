@@ -445,6 +445,8 @@ public class TokenQuotaService {
         history.setQuotaMonth((String) usageData.get("quotaMonth"));
         history.setQuotaDay((String) usageData.get("quotaDay"));
         history.setQuotaPeriod((String) usageData.get("quotaPeriod"));
+        history.setQuotaLedgerId((String) usageData.get("quotaLedgerId"));
+        history.setQuotaLedgerState((String) usageData.get("quotaLedgerState"));
 
         Integer promptTokens = asInt(usageData.get("promptTokens"));
         Integer completionTokens = asInt(usageData.get("completionTokens"));
@@ -485,6 +487,12 @@ public class TokenQuotaService {
             Object eventId = row.get("eventId");
             if (eventId != null && (!(eventId instanceof String text) || text.isBlank() || text.length() > 64))
                 throw new IllegalArgumentException("eventId must be a nonblank string of at most 64 characters");
+            if (row.get("quotaLedgerId") != null) {
+                if (!Objects.equals(eventId,row.get("quotaLedgerId"))
+                        || !Set.of("PENDING","READY").contains(Objects.toString(row.get("quotaLedgerState"),"")))
+                    throw new IllegalArgumentException("Managed quota events require matching ledger/event IDs and a valid ledger state");
+                UUID.fromString(eventId.toString());
+            }
             Object time = row.get("requestTime");
             LocalDateTime requestTime = time instanceof String text ? LocalDateTime.parse(text)
                     : time instanceof LocalDateTime date ? date : now;
@@ -495,12 +503,12 @@ public class TokenQuotaService {
                     row.get("responseFormat"), asLong(row.get("latencyMs")), requestTime, now,
                     row.getOrDefault("usageStatus", "LEGACY"), row.getOrDefault("settlementStatus", "LEGACY"),
                     row.get("provider"), row.get("serviceId"), asLong(row.get("chargedTokens")), asLong(row.get("reservedTokens")), eventId,
-                    row.get("quotaMonth"), row.get("quotaDay"), row.get("quotaPeriod")});
+                    row.get("quotaMonth"), row.get("quotaDay"), row.get("quotaPeriod"), row.get("quotaLedgerId"), row.get("quotaLedgerState")});
         }
         String insert = "INSERT INTO token_usage_history (tenant_id,trace_id,route_id,model,prompt_tokens,"
                 + "completion_tokens,total_tokens,instance_id,response_format,latency_ms,request_time,created_at,"
-                + "usage_status,settlement_status,provider,service_id,charged_tokens,reserved_tokens,event_id,quota_month,quota_day,quota_period)"
-                + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+                + "usage_status,settlement_status,provider,service_id,charged_tokens,reserved_tokens,event_id,quota_month,quota_day,quota_period,quota_ledger_id,quota_ledger_state)"
+                + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
         List<Object[]> events = rows.stream().filter(row -> row[18] != null).toList();
         List<Object[]> legacy = rows.stream().filter(row -> row[18] == null).toList();
         try {
@@ -522,10 +530,23 @@ public class TokenQuotaService {
 
     private boolean alreadyRecorded(Object[] row) {
         if (row[18] == null) return false;
-        List<String> tenants = usageJdbc.queryForList(
-                "SELECT tenant_id FROM token_usage_history WHERE event_id = ? FOR UPDATE", String.class, row[18]);
-        if (tenants.isEmpty()) return false;
-        if (!Objects.equals(tenants.get(0), row[0])) throw new IllegalArgumentException("eventId belongs to another tenant");
+        List<Map<String,Object>> stored = usageJdbc.queryForList(
+                "SELECT * FROM token_usage_history WHERE event_id = ? FOR UPDATE", row[18]);
+        if (stored.isEmpty()) return false;
+        Map<String,Object> existing = stored.getFirst();
+        if (!Objects.equals(existing.get("tenant_id"), row[0])) throw new IllegalArgumentException("eventId belongs to another tenant");
+        if (row[22] != null && "READY".equals(row[23])) {
+            if ("PENDING".equals(existing.get("quota_ledger_state")) && Objects.equals(row[22],existing.get("quota_ledger_id"))
+                    && (!Objects.equals(existing.get("usage_status"),row[12])
+                    || !Objects.equals(asLong(existing.get("charged_tokens")),asLong(row[16]))
+                    || !Objects.equals(asLong(existing.get("reserved_tokens")),asLong(row[17]))))
+                throw new IllegalArgumentException("Final quota intent cannot change during replay");
+            // Delivery can be reordered. Only advance the same managed event; never overwrite manual reconciliation.
+            usageJdbc.update("UPDATE token_usage_history SET quota_ledger_state='READY',settlement_status=? "
+                            + "WHERE event_id=? AND tenant_id=? AND quota_ledger_id=? AND quota_ledger_state='PENDING' "
+                            + "AND (usage_status IS NULL OR usage_status <> 'RECONCILED')",
+                    row[13],row[18],row[0],row[22]);
+        }
         return true;
     }
 

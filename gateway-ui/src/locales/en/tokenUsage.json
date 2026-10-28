@@ -1,4 +1,5 @@
 {
+  "tokenUsage.reconcile.ledgerPending": "The request ledger is still recovering settlement. Refresh after recovery completes or stops before submitting a manual correction, to avoid duplicate quota adjustments.",
   "tokenUsage.reconcile.unresolvedOnly": "Show unresolved events only",
   "tokenUsage.status.RECONCILED": "Reconciled",
   "tokenUsage.reconcile.title": "Verify usage and reconcile quota",

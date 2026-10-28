@@ -19,6 +19,7 @@ const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event, onClose, onApp
   const [error, setError] = useState('');
   const request = useRequest((signal) => getTokenUsageReconciliation(event.id, { signal }), { deps: [event.id] });
   const command = request.data;
+  const ledgerPending = !!event.quotaLedgerId && event.quotaLedgerState !== 'READY';
   const unresolved = ['UNKNOWN', 'ESTIMATED'].includes(event.usageStatus ?? '')
     || ['FAILED', 'PENDING'].includes(event.settlementStatus ?? '');
   const hasPeriod = !!event.quotaMonth && !!event.quotaDay;
@@ -80,7 +81,7 @@ const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event, onClose, onApp
           {canWrite && command.status !== 'APPLIED' && <Button loading={saving} onClick={retry}>{t('tokenUsage.reconcile.retry')}</Button>}
           <details><summary>{t('tokenUsage.reconcile.original')}</summary><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{command.original_usage}</pre></details>
         </Space>
-      ) : unresolved && canWrite ? (
+      ) : ledgerPending ? <Alert type="info" message={t('tokenUsage.reconcile.ledgerPending')} style={{ marginTop: 16 }} /> : unresolved && canWrite ? (
         <Form form={form} layout="vertical" style={{ marginTop: 16 }} initialValues={{
           promptTokens: event.promptTokens ?? undefined, completionTokens: event.completionTokens ?? undefined,
           totalTokens: event.totalTokens ?? undefined, chargedTokens: event.chargedTokens ?? undefined,

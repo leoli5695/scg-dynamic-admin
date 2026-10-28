@@ -61,6 +61,8 @@ public class TokenUsageReconciliationService {
     public Map<String, Object> create(long usageId, Correction correction, String operator) {
         validate(correction);
         Map<String, Object> usage = usage(usageId, true);
+        if (!text(usage,"quota_ledger_id").isEmpty() && !"READY".equals(text(usage,"quota_ledger_state")))
+            throw new IllegalStateException("Request ledger is still replaying; wait for a confirmed or stopped settlement before manual correction");
         var existing = jdbc.queryForList("SELECT * FROM token_usage_reconciliation WHERE usage_id=?", usageId);
         if (!existing.isEmpty()) {
             Map<String, Object> command = existing.getFirst();

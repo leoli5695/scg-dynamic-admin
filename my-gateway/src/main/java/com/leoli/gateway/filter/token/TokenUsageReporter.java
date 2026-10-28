@@ -64,20 +64,26 @@ public class TokenUsageReporter {
         }
     }
     public void report(Map<String, Object> data) {
-        if (!enabled()) return;
+        reportDurably(data);
+    }
+    /** True only after the immutable snapshot has been accepted by the persistent outbox. */
+    public boolean reportDurably(Map<String, Object> data) {
+        if (!enabled()) return false;
         try {
             if (reactor.core.scheduler.Schedulers.isInNonBlockingThread())
                 throw new IllegalStateException("Usage persistence requires a blocking-capable settlement thread");
             Map<String, Object> snapshot = new LinkedHashMap<>(data);
-            snapshot.put("eventId", UUID.randomUUID().toString());
+            snapshot.computeIfAbsent("eventId", ignored -> UUID.randomUUID().toString());
             // Called by settlement on boundedElastic: disk IO must never run on a Netty event loop.
             store().append(mapper.writeValueAsBytes(snapshot));
+            return true;
         } catch (Exception error) {
             reportFailures.increment();
             long now = System.nanoTime();
             long next = nextPersistenceWarning.get();
             if (now >= next && nextPersistenceWarning.compareAndSet(next, now + TimeUnit.SECONDS.toNanos(30)))
                 log.warn("Unable to persist token usage (further warnings suppressed for 30 seconds): {}", error.toString());
+            return false;
         }
     }
     synchronized void flush() {
@@ -104,6 +110,7 @@ public class TokenUsageReporter {
         }
     }
     boolean enabled() { return internalToken != null && !internalToken.isBlank(); }
+    public boolean isConfigured() { return enabled(); }
     @PreDestroy public synchronized void close() {
         synchronized (lifecycle) { closed = true; }
         worker.shutdownNow();

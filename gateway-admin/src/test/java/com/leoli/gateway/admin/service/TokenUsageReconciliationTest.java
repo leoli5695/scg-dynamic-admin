@@ -35,6 +35,7 @@ class TokenUsageReconciliationTest {
                 """);
         new ResourceDatabasePopulator(new ClassPathResource("sql/alter-token-usage-reconciliation.sql")).execute(source);
         jdbc.update("INSERT INTO token_usage_history VALUES (1,'tenant',0,0,0,NULL,100,'UNKNOWN','PENDING','202610','20261028','BOTH')");
+        new ResourceDatabasePopulator(new ClassPathResource("sql/alter-token-quota-ledger.sql")).execute(source);
     }
     private TokenUsageReconciliationService.Correction correction(long monthly, long daily) {
         return new TokenUsageReconciliationService.Correction(10,20,30,30L,monthly,daily,"Verified against provider statement and per-bucket ledger");
@@ -115,5 +116,12 @@ class TokenUsageReconciliationTest {
         }
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM token_usage_reconciliation", Integer.class));
         verify(redis,times(1)).execute(eq(TokenUsageReconciliationService.APPLY), anyList(), any(Object[].class));
+    }
+    @Test void automaticLedgerReplayMustStopBeforeAnyManualCorrection() {
+        jdbc.update("UPDATE token_usage_history SET quota_ledger_id=?,quota_ledger_state='PENDING'",UUID.randomUUID().toString());
+        assertThrows(IllegalStateException.class,() -> create(-70,-70));
+        assertThrows(IllegalStateException.class,() -> create(0,0));
+        jdbc.update("UPDATE token_usage_history SET quota_ledger_state='READY'");
+        assertNotNull(create(-70,-70));
     }
 }
