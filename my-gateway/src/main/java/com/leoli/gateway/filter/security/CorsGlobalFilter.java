@@ -54,6 +54,7 @@ public class CorsGlobalFilter implements GlobalFilter, Ordered {
         if (config == null || !getBoolValue(config, "enabled", true)) {
             return chain.filter(exchange);
         }
+        addVary(exchange.getResponse(), "Origin");
 
         String origin = request.getHeaders().getFirst(ORIGIN_HEADER);
 
@@ -76,28 +77,43 @@ public class CorsGlobalFilter implements GlobalFilter, Ordered {
     private Mono<Void> handlePreflightRequest(ServerWebExchange exchange, Map<String, Object> config, String origin) {
         ServerHttpRequest request = exchange.getRequest();
         ServerHttpResponse response = exchange.getResponse();
+        addVary(response, "Access-Control-Request-Method", "Access-Control-Request-Headers");
 
         // Check if origin is allowed
         List<String> allowedOrigins = getStringListValue(config, "allowedOrigins");
         if (!isOriginAllowed(origin, allowedOrigins)) {
             log.warn("CORS preflight rejected for origin: {}", origin);
-            return writeCorsForbiddenResponse(response, origin);
+            return writeCorsForbiddenResponse(response, "origin '" + (origin != null ? origin : "unknown") + "' is not allowed");
+        }
+
+        String requestMethod = request.getHeaders().getFirst(ACCESS_CONTROL_REQUEST_METHOD);
+        List<String> allowedMethods = getStringListValue(config, "allowedMethods");
+        if (allowedMethods.isEmpty()) allowedMethods = List.of("GET", "HEAD", "POST");
+        if (requestMethod == null || (!allowedMethods.contains("*") && !allowedMethods.contains(requestMethod))) {
+            return writeCorsForbiddenResponse(response, "requested method '" + requestMethod + "' is not allowed");
+        }
+        String requestHeaders = request.getHeaders().getFirst(ACCESS_CONTROL_REQUEST_HEADERS);
+        List<String> allowedHeaders = getStringListValue(config, "allowedHeaders");
+        if (requestHeaders != null && !requestHeaders.isBlank() && !allowedHeaders.contains("*")) {
+            for (String requested : requestHeaders.split(",")) {
+                if (allowedHeaders.stream().noneMatch(header -> header.equalsIgnoreCase(requested.trim()))) {
+                    return writeCorsForbiddenResponse(response, "requested header '" + requested.trim() + "' is not allowed");
+                }
+            }
         }
 
         // Add CORS headers
         addCorsHeaders(response, config, origin);
 
         // Add preflight-specific headers
-        String requestMethod = request.getHeaders().getFirst(ACCESS_CONTROL_REQUEST_METHOD);
         if (requestMethod != null) {
-            response.getHeaders().set("Access-Control-Allow-Methods", String.join(", ", getStringListValue(config, "allowedMethods")));
+            response.getHeaders().set("Access-Control-Allow-Methods", allowedMethods.contains("*")
+                    ? requestMethod : String.join(", ", allowedMethods));
         }
 
-        String requestHeaders = request.getHeaders().getFirst(ACCESS_CONTROL_REQUEST_HEADERS);
         if (requestHeaders != null) {
             response.getHeaders().set("Access-Control-Allow-Headers", requestHeaders);
         } else {
-            List<String> allowedHeaders = getStringListValue(config, "allowedHeaders");
             response.getHeaders().set("Access-Control-Allow-Headers", String.join(", ", allowedHeaders));
         }
 
@@ -118,14 +134,15 @@ public class CorsGlobalFilter implements GlobalFilter, Ordered {
 
         // Access-Control-Allow-Origin
         List<String> allowedOrigins = getStringListValue(config, "allowedOrigins");
+        if (!isOriginAllowed(origin, allowedOrigins)) return;
+        boolean allowCredentials = getBoolValue(config, "allowCredentials", false);
         if (allowedOrigins.contains("*")) {
-            headers.set("Access-Control-Allow-Origin", "*");
+            headers.set("Access-Control-Allow-Origin", allowCredentials ? origin : "*");
         } else if (origin != null && isOriginAllowed(origin, allowedOrigins)) {
             headers.set("Access-Control-Allow-Origin", origin);
         }
 
         // Access-Control-Allow-Credentials
-        boolean allowCredentials = getBoolValue(config, "allowCredentials", false);
         if (allowCredentials) {
             headers.set("Access-Control-Allow-Credentials", "true");
         }
@@ -135,6 +152,14 @@ public class CorsGlobalFilter implements GlobalFilter, Ordered {
         if (!exposedHeaders.isEmpty()) {
             headers.set("Access-Control-Expose-Headers", String.join(", ", exposedHeaders));
         }
+    }
+
+    private static void addVary(ServerHttpResponse response, String... names) {
+        var vary = new java.util.ArrayList<>(response.getHeaders().getVary());
+        for (String name : names) {
+            if (vary.stream().noneMatch(name::equalsIgnoreCase)) vary.add(name);
+        }
+        response.getHeaders().setVary(vary);
     }
 
     /**
@@ -196,7 +221,7 @@ public class CorsGlobalFilter implements GlobalFilter, Ordered {
      * Write CORS forbidden response with error body.
      * Returns HTTP 403 with JSON body explaining the CORS rejection.
      */
-    private Mono<Void> writeCorsForbiddenResponse(ServerHttpResponse response, String origin) {
+    private Mono<Void> writeCorsForbiddenResponse(ServerHttpResponse response, String detail) {
         response.setStatusCode(HttpStatus.FORBIDDEN);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
 
@@ -210,8 +235,7 @@ public class CorsGlobalFilter implements GlobalFilter, Ordered {
             payload.put("httpStatus", 403);
             payload.put("code", 403);
             payload.put("error", "Forbidden");
-            payload.put("message", "CORS preflight request rejected: origin '"
-                    + (origin != null ? origin : "unknown") + "' is not allowed");
+            payload.put("message", "CORS preflight request rejected: " + detail);
             payload.put("data", null);
             body = OBJECT_MAPPER.writeValueAsString(payload);
         } catch (Exception e) {

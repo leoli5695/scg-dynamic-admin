@@ -225,16 +225,16 @@ class CorsGlobalFilterTest {
     }
 
     @Test
-    @DisplayName("the preflight echoes the requested headers when the client lists them")
-    void preflightEchoesRequestedHeaders() {
+    @DisplayName("the preflight rejects requested headers outside the configured allowlist")
+    void preflightRejectsUnconfiguredHeaders() {
         givenConfig(config("allowedOrigins", List.of(ALLOWED),
                 "allowedHeaders", List.of("Authorization")));
         MockServerWebExchange exchange = preflight(ALLOWED, "X-Custom-Header, Authorization");
 
         StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
 
-        assertEquals("X-Custom-Header, Authorization",
-                exchange.getResponse().getHeaders().getFirst("Access-Control-Allow-Headers"));
+        assertEquals(HttpStatus.FORBIDDEN, exchange.getResponse().getStatusCode());
+        assertTrue(bodyOf(exchange).contains("X-Custom-Header"));
     }
 
     @Test

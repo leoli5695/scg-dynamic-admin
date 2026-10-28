@@ -50,16 +50,16 @@ public class TrustedProxyProperties {
 
     /**
      * Which IP to use from X-Forwarded-For chain.
-     * - FIRST: Use the first IP (original client, most common)
+     * - FIRST: Walk from the right past trusted proxies to the nearest untrusted sender.
      * - LAST: Use the last IP (closest to gateway)
      * <p>
-     * Typically use FIRST, as the first IP is the original client.
+     * FIRST ignores caller-inserted entries to the left of that sender.
      */
     private ForwardedIpPosition position = ForwardedIpPosition.FIRST;
 
     /**
-     * Maximum number of IPs in X-Forwarded-For chain to process.
-     * Prevents DoS via extremely long header values.
+     * Maximum number of IPs accepted across all X-Forwarded-For header values.
+     * Longer or malformed chains fall back to the direct peer.
      */
     private int maxForwardedIps = 10;
 

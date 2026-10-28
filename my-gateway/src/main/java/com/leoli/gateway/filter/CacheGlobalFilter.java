@@ -133,7 +133,8 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
     }
 
     private void invalidateIfCache(StrategyDefinition strategy) {
-        if (!StrategyDefinition.TYPE_CACHE.equals(strategy.getStrategyType())) {
+        if (!StrategyDefinition.TYPE_CACHE.equals(strategy.getStrategyType())
+                && !StrategyDefinition.TYPE_CORS.equals(strategy.getStrategyType())) {
             return;
         }
         if (strategy.getRouteId() != null) {

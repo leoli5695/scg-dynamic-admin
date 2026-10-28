@@ -128,22 +128,24 @@ public class StrategyManager {
      * concurrent requests saw no config at all. Now the cache entry is
      * replaced in place and only the index entries are re-pointed.
      */
-    public void putStrategy(String strategyId, StrategyDefinition strategy) {
+    public synchronized void putStrategy(String strategyId, StrategyDefinition strategy) {
         if (strategyId == null || strategy == null) {
             return;
         }
 
-        // Drop stale index entries of the previous version (without notifying)
         StrategyDefinition old = strategyCache.get(strategyId);
-        if (old != null) {
-            removeFromIndexes(old, strategyId);
-        }
-
-        // Update cache first so readers never see a missing entry
-        strategyCache.put(strategyId, strategy);
-
-        // Update indexes
+        // Publish destination membership before replacing the definition. Readers
+        // validate its actual binding, so the new index cannot expose the old policy.
         addToIndexes(strategy, strategyId);
+        strategyCache.put(strategyId, strategy);
+        boolean sameIndex = old != null && ((old.isRouteBound() && strategy.isRouteBound()
+                && Objects.equals(old.getRouteId(), strategy.getRouteId()))
+                || (old.isGlobal() && strategy.isGlobal()
+                && Objects.equals(old.getStrategyType(), strategy.getStrategyType())));
+        if (old != null && !sameIndex) removeFromIndexes(old, strategyId);
+        if (old != null && (!sameIndex || !Objects.equals(old.getStrategyType(), strategy.getStrategyType()))) {
+            notifyRemoved(old); // Invalidate filters' caches for the previous route/type.
+        }
 
         log.debug("Strategy cached: {} (type={}, scope={})", strategyId, strategy.getStrategyType(), strategy.getScope());
         notifyChanged(strategy);
@@ -182,7 +184,7 @@ public class StrategyManager {
     /**
      * Remove a strategy.
      */
-    public void removeStrategy(String strategyId) {
+    public synchronized void removeStrategy(String strategyId) {
         StrategyDefinition strategy = strategyCache.remove(strategyId);
         if (strategy == null) {
             return;
@@ -216,10 +218,11 @@ public class StrategyManager {
         List<StrategyDefinition> result = new ArrayList<>();
 
         // Add global strategies first
-        for (Set<String> strategyIds : globalStrategiesByType.values()) {
-            for (String strategyId : strategyIds) {
+        for (Map.Entry<String, Set<String>> index : globalStrategiesByType.entrySet()) {
+            for (String strategyId : index.getValue()) {
                 StrategyDefinition strategy = strategyCache.get(strategyId);
-                if (strategy != null && strategy.isEnabled()) {
+                if (strategy != null && strategy.isEnabled() && strategy.isGlobal()
+                        && index.getKey().equals(strategy.getStrategyType())) {
                     result.add(strategy);
                 }
             }
@@ -230,7 +233,8 @@ public class StrategyManager {
         if (routeStrategies != null) {
             for (String strategyId : routeStrategies) {
                 StrategyDefinition strategy = strategyCache.get(strategyId);
-                if (strategy != null && strategy.isEnabled()) {
+                if (strategy != null && strategy.isEnabled() && strategy.isRouteBound()
+                        && Objects.equals(routeId, strategy.getRouteId())) {
                     result.add(strategy);
                 }
             }
@@ -246,29 +250,43 @@ public class StrategyManager {
      * Route-bound takes precedence over global.
      */
     public StrategyDefinition getStrategyForRoute(String routeId, String strategyType) {
+        StrategyDefinition best = null;
         // First check route-bound
         Set<String> routeStrategies = routeStrategyIndex.get(routeId);
         if (routeStrategies != null) {
             for (String strategyId : routeStrategies) {
                 StrategyDefinition strategy = strategyCache.get(strategyId);
-                if (strategy != null && strategy.isEnabled() && strategyType.equals(strategy.getStrategyType())) {
-                    return strategy;
+                if (strategy != null && strategy.isEnabled() && strategy.isRouteBound()
+                        && Objects.equals(routeId, strategy.getRouteId()) && strategyType.equals(strategy.getStrategyType())) {
+                    best = prefer(best, strategy);
                 }
             }
         }
+
+        if (best != null) return best;
 
         // Then check global
         Set<String> globalStrategies = globalStrategiesByType.get(strategyType);
         if (globalStrategies != null) {
             for (String strategyId : globalStrategies) {
                 StrategyDefinition strategy = strategyCache.get(strategyId);
-                if (strategy != null && strategy.isEnabled()) {
-                    return strategy;
+                if (strategy != null && strategy.isEnabled() && strategy.isGlobal()
+                        && strategyType.equals(strategy.getStrategyType())) {
+                    best = prefer(best, strategy);
                 }
             }
         }
 
-        return null;
+        return best;
+    }
+
+    private static StrategyDefinition prefer(StrategyDefinition current, StrategyDefinition candidate) {
+        if (current == null || candidate.getPriority() > current.getPriority()) return candidate;
+        if (candidate.getPriority() == current.getPriority()
+                && Objects.toString(candidate.getStrategyId(), "").compareTo(Objects.toString(current.getStrategyId(), "")) < 0) {
+            return candidate;
+        }
+        return current;
     }
 
     /**
@@ -280,7 +298,8 @@ public class StrategyManager {
         if (strategyIds != null) {
             for (String strategyId : strategyIds) {
                 StrategyDefinition strategy = strategyCache.get(strategyId);
-                if (strategy != null && strategy.isEnabled()) {
+                if (strategy != null && strategy.isEnabled() && strategy.isGlobal()
+                        && strategyType.equals(strategy.getStrategyType())) {
                     result.add(strategy);
                 }
             }
@@ -291,7 +310,7 @@ public class StrategyManager {
     /**
      * Remove all strategies for a route.
      */
-    public void removeStrategiesForRoute(String routeId) {
+    public synchronized void removeStrategiesForRoute(String routeId) {
         Set<String> routeStrategies = routeStrategyIndex.remove(routeId);
         if (routeStrategies != null) {
             for (String strategyId : routeStrategies) {
@@ -307,7 +326,7 @@ public class StrategyManager {
     /**
      * Clear all strategies.
      */
-    public void clear() {
+    public synchronized void clear() {
         strategyCache.clear();
         routeStrategyIndex.clear();
         globalStrategiesByType.clear();
@@ -483,20 +502,22 @@ public class StrategyManager {
      * Get strategy from snapshot by route and type.
      */
     private StrategyDefinition getStrategyFromSnapshot(String routeId, String strategyType) {
+        StrategyDefinition best = null;
         // Check route-bound in snapshot
         for (StrategyDefinition strategy : strategySnapshot.values()) {
             if (strategy.isRouteBound() && routeId.equals(strategy.getRouteId())
                     && strategyType.equals(strategy.getStrategyType()) && strategy.isEnabled()) {
-                return strategy;
+                best = prefer(best, strategy);
             }
         }
+        if (best != null) return best;
         // Check global in snapshot
         for (StrategyDefinition strategy : strategySnapshot.values()) {
             if (strategy.isGlobal() && strategyType.equals(strategy.getStrategyType()) && strategy.isEnabled()) {
-                return strategy;
+                best = prefer(best, strategy);
             }
         }
-        return null;
+        return best;
     }
 
     /**
