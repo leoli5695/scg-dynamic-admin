@@ -34,6 +34,7 @@ import {
 } from './utils';
 import TraceDetailDrawer from './components/TraceDetailDrawer';
 import FullChainTab from './components/FullChainTab';
+import { routeConfigurationUrl } from '../request-journey/links';
 import './trace.css';
 
 const { Title, Text } = Typography;
@@ -515,7 +516,7 @@ const TracePage: React.FC = () => {
         trace={detailTrace}
         onClose={() => setDetailVisible(false)}
         onJumpToDistributed={() => setActiveTab('distributed')}
-        onNavigateToRoute={() => navigate(`/instances/${instanceId}/routes`)}
+        onNavigateToRoute={routeId => navigate(routeConfigurationUrl(instanceId, routeId))}
       />
     </div>
   );
