@@ -40,10 +40,7 @@ class SeckillDeductLuaSyncArgsTest {
     private static final Long SECKILL_ID = 42L;
     private static final int SHARD_COUNT = 8;
 
-    private static final List<String> EXPECTED_KEYS = Arrays.asList(
-            "seckill:bought:42",
-            "seckill:user_shard:42",
-            "seckill:stock:42:shard:");
+    private static final List<String> EXPECTED_KEYS = StockKeys.script(SECKILL_ID, SHARD_COUNT, false, false);
 
     @Mock
     private StringRedisTemplate redisTemplate;

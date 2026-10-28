@@ -35,6 +35,9 @@ public interface OrderMapper extends BaseMapper<SeckillOrder> {
     @Select("SELECT * FROM seckill_order WHERE order_no = #{orderNo}")
     SeckillOrder selectByOrderNo(@Param("orderNo") String orderNo);
 
+    @Select("SELECT * FROM seckill_order WHERE user_id = #{userId} AND order_no = #{orderNo}")
+    SeckillOrder selectByUserAndOrderNo(@Param("userId") Long userId, @Param("orderNo") String orderNo);
+
     /**
      * 根据用户和活动查询订单
      *

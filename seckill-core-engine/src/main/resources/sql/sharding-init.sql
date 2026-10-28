@@ -193,3 +193,19 @@ VALUES (1, 'iPhone 15 Pro', 5999.00, 8999.00, 1000, 'Apple iPhone 15 Pro 256GB',
 -- 创建示例秒杀活动
 INSERT INTO `seckill_activity` (`id`, `activity_name`, `product_id`, `seckill_price`, `original_price`, `total_stock`, `start_time`, `end_time`, `status`, `limit_per_user`) 
 VALUES (1, 'iPhone 15 Pro 秒杀活动', 1, 5999.00, 8999.00, 1000, NOW() - INTERVAL 1 HOUR, NOW() + INTERVAL 2 HOUR, 1, 1);
+
+-- Durable post-order events (apply before starting order consumers).
+-- Apply to ds_0 before enabling the new order consumer. No existing rows are modified.
+CREATE TABLE IF NOT EXISTS seckill_db_0.order_delivery (
+  order_no VARCHAR(64) NOT NULL PRIMARY KEY,
+  payload MEDIUMTEXT NOT NULL,
+  delay_level INT NOT NULL,
+  es_sent TINYINT NOT NULL DEFAULT 0,
+  rollback_sent TINYINT NOT NULL DEFAULT 0,
+  completed TINYINT NOT NULL DEFAULT 0,
+  attempts INT NOT NULL DEFAULT 0,
+  next_attempt_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_pending_delivery (completed, next_attempt_at, order_no),
+  KEY idx_delivery_cleanup (completed, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

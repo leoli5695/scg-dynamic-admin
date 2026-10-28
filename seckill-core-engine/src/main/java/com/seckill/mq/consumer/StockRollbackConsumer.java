@@ -88,7 +88,7 @@ public class StockRollbackConsumer implements RocketMQListener<String> {
             }
 
             // Step 1: 查询订单状态
-            com.seckill.entity.SeckillOrder order = orderMapper.selectByOrderNo(orderNo);
+            com.seckill.entity.SeckillOrder order = orderMapper.selectByUserAndOrderNo(orderMessage.getUserId(), orderNo);
             if (order == null) {
                 log.warn("订单不存在，可能已被处理: orderNo={}", orderNo);
                 markRollbackCompleted(orderNo);

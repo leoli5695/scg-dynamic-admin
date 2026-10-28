@@ -36,12 +36,17 @@ local userId = ARGV[1]           -- 用户ID
 local quantity = tonumber(ARGV[2])
 local shardCount = tonumber(ARGV[3])
 local preferredShard = tonumber(ARGV[4])
+if not quantity or quantity <= 0 or quantity ~= math.floor(quantity)
+    or not shardCount or shardCount < 1 or shardCount > 128
+    or not preferredShard or preferredShard < 0 or preferredShard >= shardCount then
+    return -99
+end
 
 -- ============================================================================
 -- Step 0: 检查库存是否已预热（分片Key是否存在）
 -- ============================================================================
 -- 如果第一个分片Key不存在，说明库存未预热，返回特殊错误码
-local firstShardKey = shardPrefix .. '0'
+local firstShardKey = (KEYS[4] or shardPrefix .. '0')
 local firstShardExists = redis.call('EXISTS', firstShardKey)
 if firstShardExists == 0 then
     return -2  -- 库存未预热，需要调用WarmupService进行预热
@@ -72,7 +77,7 @@ local selectedShard = -1
 -- 2.1 先尝试首选分片 (userId % shardCount)
 -- 这样同一用户的请求优先打到同一分片
 -- 便于回补时精确恢复到原分片
-local preferredKey = shardPrefix .. preferredShard
+local preferredKey = (KEYS[4 + preferredShard] or shardPrefix .. preferredShard)
 local preferredStock = redis.call('GET', preferredKey)
 
 -- 检查Key是否存在且库存足够
@@ -83,7 +88,7 @@ else
     -- 从分片0开始轮询，跳过已检查的首选分片
     for i = 0, shardCount - 1 do
         if i ~= preferredShard then  -- 跳过已检查的首选分片
-            local shardKey = shardPrefix .. i
+            local shardKey = (KEYS[4 + i] or shardPrefix .. i)
             local stock = redis.call('GET', shardKey)
             -- 检查Key是否存在且库存足够
             if stock and tonumber(stock) >= quantity then
@@ -105,7 +110,7 @@ end
 -- Step 4: 执行扣减 (原子操作)
 -- ============================================================================
 -- Redis保证Lua脚本原子性，不会被打断
-local shardKey = shardPrefix .. selectedShard
+local shardKey = (KEYS[4 + selectedShard] or shardPrefix .. selectedShard)
 redis.call('DECRBY', shardKey, quantity)
 
 -- ============================================================================

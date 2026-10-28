@@ -125,11 +125,7 @@ public class SeckillDeductLua {
             int preferredShard = (int) (userId % shardCount);
 
             // 构建Lua脚本参数
-            List<String> keys = Arrays.asList(
-                    BOUGHT_KEY_PREFIX + seckillId,
-                    USER_SHARD_PREFIX + seckillId,
-                    STOCK_SHARD_PREFIX + seckillId + ":shard:"
-            );
+            List<String> keys = StockKeys.script(seckillId, shardCount, seckillConfig.isStockHashTagEnabled(), false);
 
             // 使用SHA缓存执行（减少网络传输）
             Long result = luaScriptService.executeDeductScript(
@@ -179,11 +175,7 @@ public class SeckillDeductLua {
             int shardCount = seckillConfig.getShardCount();
 
             // 构建Lua脚本参数
-            List<String> keys = Arrays.asList(
-                    USER_SHARD_PREFIX + seckillId,
-                    BOUGHT_KEY_PREFIX + seckillId,
-                    STOCK_SHARD_PREFIX + seckillId + ":shard:"
-            );
+            List<String> keys = StockKeys.script(seckillId, shardCount, seckillConfig.isStockHashTagEnabled(), true);
 
             // 使用SHA缓存执行
             Long result = luaScriptService.executeRollbackScript(
@@ -227,7 +219,7 @@ public class SeckillDeductLua {
 
         // 初始化各分片库存
         for (int i = 0; i < shardCount; i++) {
-            String shardKey = STOCK_SHARD_PREFIX + seckillId + ":shard:" + i;
+            String shardKey = StockKeys.prefix(seckillId, seckillConfig.isStockHashTagEnabled()) + i;
 
             // 最后一个分片加上余数，确保总库存准确
             int actualStock = stockPerShard + (i == shardCount - 1 ? remainder : 0);
@@ -239,11 +231,11 @@ public class SeckillDeductLua {
         }
 
         // 清空购买记录
-        String boughtKey = BOUGHT_KEY_PREFIX + seckillId;
+        String boughtKey = StockKeys.bought(seckillId, seckillConfig.isStockHashTagEnabled());
         redisTemplate.delete(boughtKey);
 
         // 清空分片记录
-        String userShardKey = USER_SHARD_PREFIX + seckillId;
+        String userShardKey = StockKeys.users(seckillId, seckillConfig.isStockHashTagEnabled());
         redisTemplate.delete(userShardKey);
 
         log.info("库存预热完成: seckillId={}", seckillId);
@@ -272,7 +264,7 @@ public class SeckillDeductLua {
 
         // 仅更新各分片库存
         for (int i = 0; i < shardCount; i++) {
-            String shardKey = STOCK_SHARD_PREFIX + seckillId + ":shard:" + i;
+            String shardKey = StockKeys.prefix(seckillId, seckillConfig.isStockHashTagEnabled()) + i;
 
             // 最后一个分片加上余数，确保总库存准确
             int actualStock = stockPerShard + (i == shardCount - 1 ? remainder : 0);
@@ -318,11 +310,7 @@ public class SeckillDeductLua {
         try {
             int shardCount = seckillConfig.getShardCount();
 
-            List<String> keys = Arrays.asList(
-                    BOUGHT_KEY_PREFIX + seckillId,
-                    USER_SHARD_PREFIX + seckillId,
-                    STOCK_SHARD_PREFIX + seckillId + ":shard:"
-            );
+            List<String> keys = StockKeys.script(seckillId, shardCount, seckillConfig.isStockHashTagEnabled(), false);
 
             // ARGV 布局: shardCount 后接若干 (userId, quantity, preferredShard) 三元组
             List<String> args = new ArrayList<>();
@@ -363,12 +351,14 @@ public class SeckillDeductLua {
      * 获取总库存（统计各分片）
      * ============================================================================
      */
+    public String boughtKey(Long seckillId) { return StockKeys.bought(seckillId, seckillConfig.isStockHashTagEnabled()); }
+
     public int getTotalStock(Long seckillId) {
         int shardCount = seckillConfig.getShardCount();
         int totalStock = 0;
 
         for (int i = 0; i < shardCount; i++) {
-            String shardKey = STOCK_SHARD_PREFIX + seckillId + ":shard:" + i;
+            String shardKey = StockKeys.prefix(seckillId, seckillConfig.isStockHashTagEnabled()) + i;
             String stockStr = redisTemplate.opsForValue().get(shardKey);
             if (stockStr != null) {
                 totalStock += Integer.parseInt(stockStr);
@@ -388,7 +378,7 @@ public class SeckillDeductLua {
         List<Integer> stocks = new java.util.ArrayList<>();
 
         for (int i = 0; i < shardCount; i++) {
-            String shardKey = STOCK_SHARD_PREFIX + seckillId + ":shard:" + i;
+            String shardKey = StockKeys.prefix(seckillId, seckillConfig.isStockHashTagEnabled()) + i;
             String stockStr = redisTemplate.opsForValue().get(shardKey);
             stocks.add(stockStr != null ? Integer.parseInt(stockStr) : 0);
         }
@@ -402,7 +392,7 @@ public class SeckillDeductLua {
      * ============================================================================
      */
     public boolean hasBought(Long seckillId, Long userId) {
-        String boughtKey = BOUGHT_KEY_PREFIX + seckillId;
+        String boughtKey = StockKeys.bought(seckillId, seckillConfig.isStockHashTagEnabled());
         return Boolean.TRUE.equals(redisTemplate.opsForSet().isMember(boughtKey, String.valueOf(userId)));
     }
 
@@ -425,16 +415,16 @@ public class SeckillDeductLua {
 
         // 1. 删除所有分片库存 Key
         for (int i = 0; i < shardCount; i++) {
-            String shardKey = STOCK_SHARD_PREFIX + seckillId + ":shard:" + i;
+            String shardKey = StockKeys.prefix(seckillId, seckillConfig.isStockHashTagEnabled()) + i;
             redisTemplate.delete(shardKey);
         }
 
         // 2. 删除购买记录 Set
-        String boughtKey = BOUGHT_KEY_PREFIX + seckillId;
+        String boughtKey = StockKeys.bought(seckillId, seckillConfig.isStockHashTagEnabled());
         redisTemplate.delete(boughtKey);
 
         // 3. 删除用户分片记录 Hash
-        String userShardKey = USER_SHARD_PREFIX + seckillId;
+        String userShardKey = StockKeys.users(seckillId, seckillConfig.isStockHashTagEnabled());
         redisTemplate.delete(userShardKey);
 
         log.info("清理活动数据完成: seckillId={}, 已删除库存分片{}个、购买记录、分片记录", seckillId, shardCount);

@@ -53,6 +53,8 @@ public class ShardingDataSourceConfig {
     private final String dbPassword;
     private final boolean sqlShowEnabled;
     private final boolean isProduction;
+    @Value("${seckill.order-routing-version:1}")
+    private int orderRoutingVersion = 1;
 
     /**
      * Constructor with configuration injection.
@@ -199,6 +201,8 @@ public class ShardingDataSourceConfig {
 
         config.getTables().add(orderTableRule);
 
+        config.getTables().add(new ShardingTableRuleConfiguration("order_delivery", "ds_0.order_delivery"));
+
         // 配置 transaction_log 表（单库单表）
         ShardingTableRuleConfiguration transactionLogRule = new ShardingTableRuleConfiguration(
                 "transaction_log", "ds_0.transaction_log");
@@ -226,7 +230,9 @@ public class ShardingDataSourceConfig {
                 new AlgorithmConfiguration("INLINE", dbInlineProps));
 
         Properties tableInlineProps = new Properties();
-        tableInlineProps.setProperty("algorithm-expression", "order_${user_id % 16}");
+        if (orderRoutingVersion != 1 && orderRoutingVersion != 2) throw new IllegalArgumentException("Invalid order routing version");
+        tableInlineProps.setProperty("algorithm-expression", orderRoutingVersion == 2
+                ? "order_${user_id.intdiv(8) % 16}" : "order_${user_id % 16}");
         config.getShardingAlgorithms().put("order_table_inline",
                 new AlgorithmConfiguration("INLINE", tableInlineProps));
 

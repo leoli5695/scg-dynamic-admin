@@ -61,6 +61,7 @@ class StockReconciliationServiceTest {
 
     /** 摆好一个活动：初始库存 totalStock、Redis 剩余 remaining、防重 Set 里 buyerCount 个人。 */
     private void givenActivity(long seckillId, int totalStock, int remaining, long buyerCount) {
+        when(seckillDeductLua.boughtKey(seckillId)).thenReturn("seckill:bought:" + seckillId);
         SeckillActivity activity = new SeckillActivity();
         activity.setId(seckillId);
         activity.setTotalStock(totalStock);
@@ -140,6 +141,7 @@ class StockReconciliationServiceTest {
         when(seckillDeductLua.getTotalStock(5L)).thenReturn(97);
         when(setOps.size("seckill:bought:5")).thenReturn(1L);
 
+        when(seckillDeductLua.boughtKey(5L)).thenReturn("seckill:bought:5");
         service.manualReconcile(5L);
 
         verify(seckillDeductLua, never()).warmupStockOnly(anyLong(), anyInt());

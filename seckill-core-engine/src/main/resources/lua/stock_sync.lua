@@ -34,13 +34,13 @@ local shardCount = tonumber(ARGV[1])
 -- ============================================================================
 -- Step 0: 未预热的活动不能回写，否则会凭空造出半个活动的分片 Key
 -- ============================================================================
-if redis.call('EXISTS', shardPrefix .. '0') == 0 then
+if redis.call('EXISTS', (KEYS[4] or shardPrefix .. '0')) == 0 then
     return -2
 end
 
 local function stockOf(shardIndex)
     -- Redis 把 nil bulk reply 转成 Lua 的 false，直接 tonumber(false) 会抛错
-    local raw = redis.call('GET', shardPrefix .. shardIndex)
+    local raw = redis.call('GET', (KEYS[4 + shardIndex] or shardPrefix .. shardIndex))
     if not raw then
         return 0
     end
@@ -80,7 +80,7 @@ while i + 2 <= #ARGV do
         end
 
         if selected >= 0 then
-            redis.call('DECRBY', shardPrefix .. selected, quantity)
+            redis.call('DECRBY', (KEYS[4 + selected] or shardPrefix .. selected), quantity)
             -- HSETNX 而非 HSET：该用户可能降级前就在 Redis 买过并留下了分片记录，
             -- 覆盖掉会让那笔的回补跑错分片。
             redis.call('HSETNX', userShardKey, userId, selected)
@@ -103,7 +103,7 @@ while i + 2 <= #ARGV do
                     if take > left then
                         take = left
                     end
-                    redis.call('DECRBY', shardPrefix .. s2, take)
+                    redis.call('DECRBY', (KEYS[4 + s2] or shardPrefix .. s2), take)
                     left = left - take
                     applied = applied + take
                 end

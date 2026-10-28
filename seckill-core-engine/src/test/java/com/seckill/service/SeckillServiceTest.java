@@ -106,6 +106,31 @@ class SeckillServiceTest {
      */
     private StockRollbackDispatcher stockRollbackDispatcher;
 
+    @Test
+    void missingProductDoesNotDeductStockOrRollbackAnEarlierPurchase() {
+        when(localCacheService.getProduct(anyLong())).thenReturn(null);
+        var response = seckillService.doSeckill(request);
+        assertFalse(response.isSuccess());
+        verify(seckillDeductLua, never()).deductStock(anyLong(), anyLong(), anyInt());
+        verify(seckillDeductLua, never()).rollbackStock(anyLong(), anyLong(), anyInt());
+    }
+
+    @Test
+    void failureBeforeDeductionDoesNotReleaseAnotherRequestsReservation() {
+        when(localCacheService.getActivity(anyLong())).thenThrow(new IllegalStateException("cache"));
+        when(activityMapper.selectById(anyLong())).thenThrow(new IllegalStateException("DB"));
+        assertFalse(seckillService.doSeckill(request).isSuccess());
+        verify(seckillDeductLua, never()).rollbackStock(anyLong(), anyLong(), anyInt());
+    }
+
+    @Test
+    void failureAfterDeductionHasOneRollbackOwner() {
+        when(seckillDeductLua.deductStock(anyLong(), anyLong(), anyInt())).thenReturn(1000L);
+        when(localTransactionService.processOrderDirectly(any())).thenReturn(false);
+        assertFalse(seckillService.doSeckill(request).isSuccess());
+        verify(seckillDeductLua, times(1)).rollbackStock(1L, 10001L, 1);
+    }
+
     private SeckillRequest request;
     private SeckillActivity activity;
     private SeckillProduct product;

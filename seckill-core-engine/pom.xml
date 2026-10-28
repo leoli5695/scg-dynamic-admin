@@ -246,6 +246,11 @@
         </dependency>
 
         <!-- Testcontainers for Redis Lua integration tests -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!-- ⚠️ CRITICAL: Embedded Redis 不支持所有 Lua 命令，必须用真实 Redis -->
         <!-- 使用 GenericContainer("redis:7-alpine") 方式启动 Redis 容器 -->
         <dependency>

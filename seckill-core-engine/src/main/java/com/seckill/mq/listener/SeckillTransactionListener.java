@@ -115,9 +115,9 @@ public class SeckillTransactionListener implements TransactionListener {
                     return LocalTransactionState.ROLLBACK_MESSAGE;
 
                 case PROCESSING:
-                    // 处理中，继续等待
-                    log.info("事务回查结果: 处理中，等待下次回查");
-                    return LocalTransactionState.UNKNOW;
+                    // A durable PROCESSING row proves the producer's local transaction committed.
+                    // Order creation is downstream work and must not gate message visibility.
+                    return LocalTransactionState.COMMIT_MESSAGE;
 
                 default:
                     log.warn("事务回查结果: 未知状态，回滚消息");
@@ -126,7 +126,7 @@ public class SeckillTransactionListener implements TransactionListener {
 
         } catch (Exception e) {
             log.error("事务回查异常: error={}", e.getMessage(), e);
-            return LocalTransactionState.ROLLBACK_MESSAGE;
+            return LocalTransactionState.UNKNOW;
         }
     }
 

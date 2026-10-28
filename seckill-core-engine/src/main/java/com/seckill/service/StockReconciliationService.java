@@ -145,7 +145,7 @@ public class StockReconciliationService {
         int redisRemainingStock = seckillDeductLua.getTotalStock(seckillId);
 
         // 2. 从Redis获取已购买用户数
-        String boughtKey = BOUGHT_KEY_PREFIX + seckillId;
+        String boughtKey = seckillDeductLua.boughtKey(seckillId);
         Long boughtCount = redisTemplate.opsForSet().size(boughtKey);
         int actualBoughtCount = boughtCount != null ? boughtCount.intValue() : 0;
 

@@ -43,6 +43,8 @@ import java.util.List;
 @Service
 public class LuaScriptService {
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.seckill.config.SeckillConfig config = new com.seckill.config.SeckillConfig();
     private final StringRedisTemplate redisTemplate;
     private final RedisScript<Long> seckillDeductScript;
     private final RedisScript<Long> stockRollbackScript;
@@ -100,7 +102,7 @@ public class LuaScriptService {
         try {
             // 通过执行一次空操作来触发SHA缓存
             // Spring Data Redis会自动将脚本SHA发送到Redis并缓存
-            List<String> keys = Arrays.asList("seckill:warmup:test");
+            List<String> keys = StockKeys.script(0L, 1, config.isStockHashTagEnabled(), false);
             redisTemplate.execute(seckillDeductScript, keys, "0", "0", "1", "0");
             log.debug("Deduct script SHA loaded to Redis cache");
         } catch (Exception e) {
@@ -115,7 +117,7 @@ public class LuaScriptService {
     public void loadRollbackScript() {
         try {
             // 通过执行一次空操作来触发SHA缓存
-            List<String> keys = Arrays.asList("seckill:warmup:test", "seckill:warmup:test2", "seckill:warmup:test3");
+            List<String> keys = StockKeys.script(0L, 1, config.isStockHashTagEnabled(), true);
             redisTemplate.execute(stockRollbackScript, keys, "0", "0", "1");
             log.debug("Rollback script SHA loaded to Redis cache");
         } catch (Exception e) {
@@ -193,11 +195,7 @@ public class LuaScriptService {
                         @Override
                         public Object execute(org.springframework.data.redis.core.RedisOperations operations) {
                             for (BatchDeductRequest req : requests) {
-                                List<String> keys = Arrays.asList(
-                                        "seckill:bought:" + req.getSeckillId(),
-                                        "seckill:user_shard:" + req.getSeckillId(),
-                                        "seckill:stock:" + req.getSeckillId() + ":shard:"
-                                );
+                                List<String> keys = StockKeys.script(req.getSeckillId(), shardCount, config.isStockHashTagEnabled(), false);
 
                                 int preferredShard = (int) (req.getUserId() % shardCount);
 
@@ -256,11 +254,7 @@ public class LuaScriptService {
 
         for (BatchDeductRequest req : requests) {
             try {
-                List<String> keys = Arrays.asList(
-                        "seckill:bought:" + req.getSeckillId(),
-                        "seckill:user_shard:" + req.getSeckillId(),
-                        "seckill:stock:" + req.getSeckillId() + ":shard:"
-                );
+                List<String> keys = StockKeys.script(req.getSeckillId(), shardCount, config.isStockHashTagEnabled(), false);
 
                 int preferredShard = (int) (req.getUserId() % shardCount);
 

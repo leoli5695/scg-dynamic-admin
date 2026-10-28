@@ -15,8 +15,6 @@ import com.seckill.mapper.ProductMapper;
 import com.seckill.mapper.TransactionLogMapper;
 import com.seckill.redis.lua.SeckillDeductLua;
 import com.seckill.util.SnowflakeIdGenerator;
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
@@ -28,7 +26,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.concurrent.TimeUnit;
 
 /**
  * ============================================================================
@@ -84,17 +81,6 @@ public class SeckillService {
      */
     private final StockRollbackDispatcher stockRollbackDispatcher;
 
-    // OPTIMIZATION (P1-5): 事务状态本地缓存
-    // 用于RocketMQ事务回查时快速获取事务状态，避免每次都查询数据库
-    // 【修复】缓存时间延长至35分钟，覆盖RocketMQ最大重投窗口(30分钟) + 缓冲时间
-    // RocketMQ事务消息回查间隔: 60秒, 最大重试次数: 15次, 总窗口约30分钟
-    // 缓存35分钟确保在整个RocketMQ生命周期内都能命中缓存
-    private final Cache<String, TransactionStatus> transactionStatusCache = Caffeine.newBuilder()
-            .maximumSize(20000)  // 增加容量以支持更长的缓存时间
-            .expireAfterWrite(35, TimeUnit.MINUTES)  // 对齐RocketMQ超时时间 + 5分钟缓冲
-            .recordStats()  // 记录缓存统计，用于监控
-            .build();
-
     // RocketMQ事务消息生产者（通过 setter 注入，由 RocketMQProducerConfig 管理）
     private TransactionMQProducer transactionMQProducer;
 
@@ -125,18 +111,7 @@ public class SeckillService {
         log.info("SeckillService initialized: producerStatus={}",
                 transactionMQProducer != null ? "available" : "disabled");
         
-        // P2-7: 注册缓存命中率指标到Prometheus
-        io.micrometer.core.instrument.Gauge.builder("seckill.cache.transaction_status.hit_rate",
-                        transactionStatusCache, cache -> cache.stats().hitRate())
-                .description("Transaction status cache hit rate (0-1)")
-                .register(meterRegistry);
-        
-        io.micrometer.core.instrument.Gauge.builder("seckill.cache.transaction_status.size",
-                        transactionStatusCache, cache -> cache.estimatedSize())
-                .description("Transaction status cache current size")
-                .register(meterRegistry);
-        
-        log.info("Transaction status cache metrics registered to Prometheus");
+
     }
 
     /**
@@ -152,9 +127,10 @@ public class SeckillService {
         Long productId = request.getProductId();
         int quantity = request.getQuantity();
 
-        log.info("秒杀请求: userId={}, seckillId={}, productId={}, quantity={}",
+        log.debug("秒杀请求: userId={}, seckillId={}, productId={}, quantity={}",
                 userId, seckillId, productId, quantity);
 
+        boolean stockAcquired = false;
         try {
             // ========================================================================
             // Step 1: 活动校验（优先从本地缓存获取）
@@ -179,8 +155,28 @@ public class SeckillService {
             }
 
             // ========================================================================
-            // Step 2: 库存扣减（支持 Redis 降级）
+            // Step 2: 扣减前校验商品与金额，随后执行库存预占
             // ========================================================================
+            SeckillProduct product;
+            try {
+                product = localCacheService.getProduct(productId);
+            } catch (Exception e) {
+                log.warn("本地缓存获取商品失败，降级查询DB: productId={}", productId);
+                product = productMapper.selectById(productId);  // fallback
+            }
+            if (product == null) {
+                log.error("商品不存在: productId={}", productId);
+                return SeckillResponse.systemError("商品不存在");
+            }
+            if (product.getSeckillPrice() == null || product.getSeckillPrice().signum() < 0 || quantity <= 0) {
+                return SeckillResponse.systemError("商品价格或购买数量无效");
+            }
+            if (product.getSeckillId() != null && !product.getSeckillId().equals(seckillId)) {
+                return SeckillResponse.systemError("商品不属于当前活动");
+            }
+            BigDecimal totalAmount = product.getSeckillPrice().multiply(BigDecimal.valueOf(quantity));
+
+
             long luaResult;
 
             if (redisDegradeService.isDegraded()) {
@@ -234,28 +230,13 @@ public class SeckillService {
             // ========================================================================
             // Step 3: 预生成订单号和事务ID
             // ========================================================================
+            stockAcquired = true;
             String orderNo = String.valueOf(snowflakeIdGenerator.nextId());
             String transactionId = String.valueOf(snowflakeIdGenerator.nextId());
             int shardIndex = SeckillResult.shardIndexFromLuaResult(luaResult);
 
             // ========================================================================
-            // Step 4: 获取商品价格，计算总金额（优先从本地缓存获取）
-            // ========================================================================
-            SeckillProduct product;
-            try {
-                product = localCacheService.getProduct(productId);
-            } catch (Exception e) {
-                log.warn("本地缓存获取商品失败，降级查询DB: productId={}", productId);
-                product = productMapper.selectById(productId);  // fallback
-            }
-            if (product == null) {
-                log.error("商品不存在: productId={}", productId);
-                return SeckillResponse.systemError("商品不存在");
-            }
-            BigDecimal totalAmount = product.getSeckillPrice().multiply(BigDecimal.valueOf(quantity));
-
-            // ========================================================================
-            // Step 5: 发送订单消息（支持 MQ 降级）
+            // Step 4: 发送订单消息（支持 MQ 降级）
             // ========================================================================
             OrderMessage orderMessage = new OrderMessage();
             orderMessage.setTransactionId(transactionId);
@@ -292,11 +273,11 @@ public class SeckillService {
             }
 
             // ========================================================================
-            // Step 6: 返回成功响应
+            // Step 5: 返回受理结果
             // ========================================================================
             seckillSuccessCounter.increment();
 
-            log.info("秒杀成功: traceId={}, userId={}, seckillId={}, orderNo={}, shardIndex={}",
+            log.debug("秒杀成功: traceId={}, userId={}, seckillId={}, orderNo={}, shardIndex={}",
                     request.getTraceId(), userId, seckillId, orderNo, shardIndex);
 
             return SeckillResponse.success(orderNo);
@@ -306,7 +287,8 @@ public class SeckillService {
 
             // 异常情况下，需要回补库存
             try {
-                stockRollbackDispatcher.rollback(seckillId, userId, quantity);
+                if (stockAcquired && !(e instanceof OrderOutcomeUnknownException))
+                    stockRollbackDispatcher.rollback(seckillId, userId, quantity);
             } catch (Exception rollbackEx) {
                 log.error("库存回补失败: userId={}, seckillId={}", userId, seckillId, rollbackEx);
             }
@@ -336,7 +318,6 @@ public class SeckillService {
             boolean success = localTransactionService.processOrderDirectly(orderMessage);
             if (!success) {
                 log.error("本地事务处理失败: transactionId={}", orderMessage.getTransactionId());
-                stockRollbackDispatcher.rollback(orderMessage.getSeckillId(), orderMessage.getUserId(), orderMessage.getQuantity());
                 throw new RuntimeException("系统繁忙，请稍后再试");
             }
             return;
@@ -351,7 +332,10 @@ public class SeckillService {
             );
 
             // 发送事务半消息
-            transactionMQProducer.sendMessageInTransaction(message, null);
+            var sendResult = transactionMQProducer.sendMessageInTransaction(message, null);
+            if (sendResult.getLocalTransactionState() != org.apache.rocketmq.client.producer.LocalTransactionState.COMMIT_MESSAGE) {
+                throw new IllegalStateException("Local order transaction was not committed");
+            }
 
             log.info("事务消息发送成功: transactionId={}", orderMessage.getTransactionId());
             // 记录成功，用于自动恢复判断
@@ -364,6 +348,13 @@ public class SeckillService {
             // 【P1修复】记录失败次数，触发自动降级
             mqDegradeService.recordFailure();
 
+            // A lost commit ACK must not trigger a second local transaction or release its stock.
+            TransactionLog durable;
+            try { durable = transactionLogMapper.selectByTransactionId(orderMessage.getTransactionId()); }
+            catch (Exception unavailable) { throw new OrderOutcomeUnknownException(unavailable); }
+            if (durable != null && durable.getStatus() != TransactionStatus.FAILED.getCode()) return;
+            if (durable != null) throw new IllegalStateException("Local transaction rolled back", e);
+
             // 【P1修复】降级处理：回退到本地事务，而不是抛出异常
             log.warn("MQ发送失败，降级到本地事务处理: transactionId={}", orderMessage.getTransactionId());
 
@@ -375,7 +366,6 @@ public class SeckillService {
             if (!success) {
                 log.error("MQ降级模式本地事务处理失败: orderNo={}", orderMessage.getOrderNo());
                 // 回补库存
-                stockRollbackDispatcher.rollback(orderMessage.getSeckillId(), orderMessage.getUserId(), orderMessage.getQuantity());
                 throw new RuntimeException("系统繁忙，请稍后再试");
             }
         }
@@ -421,30 +411,9 @@ public class SeckillService {
         }
     }
 
-    /**
-     * ============================================================================
-     * 检查本地事务状态（事务回查）
-     * ============================================================================
-     * <p>
-     * OPTIMIZATION (P1): 增加本地缓存
-     * - RocketMQ事务回查时优先从本地缓存获取状态
-     * - 缓存未命中时查询数据库并写入缓存
-     * - 减少数据库查询，提高回查响应速度
-     * <p>
-     * 缓存策略：
-     * - 最大容量：10000条事务记录
-     * - 过期时间：5分钟（与RocketMQ重投窗口期对应）
-     * - 缓存命中时响应时间从~10ms降至~0.1ms
-     */
+    /** Broker checks read committed producer-log state; order creation may still be pending. */
     public TransactionStatus checkLocalTransaction(String transactionId) {
-        // OPTIMIZATION (P1): 先从本地缓存获取
-        TransactionStatus cachedStatus = transactionStatusCache.getIfPresent(transactionId);
-        if (cachedStatus != null) {
-            log.debug("事务回查缓存命中: transactionId={}, status={}", transactionId, cachedStatus);
-            return cachedStatus;
-        }
-
-        // 缓存未命中，查询数据库
+        // Other instances and compensation may change order status. Broker decisions use durable state.
         TransactionLog transactionLog = transactionLogMapper.selectByTransactionId(transactionId);
 
         if (transactionLog == null) {
@@ -455,11 +424,7 @@ public class SeckillService {
 
         TransactionStatus status = TransactionStatus.fromCode(transactionLog.getStatus());
 
-        // OPTIMIZATION (P1): 写入缓存
-        transactionStatusCache.put(transactionId, status);
-
-        log.info("事务回查: transactionId={}, status={}, cacheStats={}",
-                transactionId, status, transactionStatusCache.stats().hitRate());
+        log.debug("事务回查: transactionId={}, status={}", transactionId, status);
         return status;
     }
 
@@ -478,8 +443,6 @@ public class SeckillService {
             transactionLog.setUpdateTime(LocalDateTime.now());
             transactionLogMapper.updateById(transactionLog);
 
-            // OPTIMIZATION (P1): 更新缓存
-            transactionStatusCache.put(transactionId, TransactionStatus.SUCCESS);
         }
     }
 
@@ -498,8 +461,6 @@ public class SeckillService {
             transactionLog.setUpdateTime(LocalDateTime.now());
             transactionLogMapper.updateById(transactionLog);
 
-            // OPTIMIZATION (P1): 更新缓存
-            transactionStatusCache.put(transactionId, TransactionStatus.FAILED);
 
             // 回补库存
             stockRollbackDispatcher.rollback(
@@ -521,5 +482,9 @@ public class SeckillService {
         } catch (Exception e) {
             throw new RuntimeException("序列化失败", e);
         }
+    }
+
+    private static final class OrderOutcomeUnknownException extends RuntimeException {
+        OrderOutcomeUnknownException(Throwable cause) { super("Transaction outcome requires reconciliation", cause); }
     }
 }

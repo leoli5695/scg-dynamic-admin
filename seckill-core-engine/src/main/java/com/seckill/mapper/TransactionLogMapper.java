@@ -20,6 +20,11 @@ import org.apache.ibatis.annotations.Select;
 @Mapper
 public interface TransactionLogMapper extends BaseMapper<TransactionLog> {
 
+    @org.apache.ibatis.annotations.Update({"<script>",
+            "UPDATE transaction_log SET status = 1, update_time = CURRENT_TIMESTAMP WHERE status = 0 AND transaction_id IN",
+            "<foreach collection='ids' item='id' open='(' separator=',' close=')'>#{id}</foreach>", "</script>"})
+    int markOrdersCreated(@Param("ids") java.util.List<String> ids);
+
     /**
      * 根据事务ID查询
      */

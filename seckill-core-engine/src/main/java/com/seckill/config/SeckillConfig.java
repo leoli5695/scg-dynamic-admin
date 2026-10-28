@@ -16,6 +16,11 @@ public class SeckillConfig {
 
     private int shardCount = 8;
 
+    // Keep v1 until all historical rows have been migrated during a maintenance window.
+    private int orderRoutingVersion = 1;
+    // Enable only after migrating ALL stock/bought/user_shard keys while traffic is stopped.
+    private boolean stockHashTagEnabled = false;
+
     /**
      * Maximum purchase count per user per activity.
      * This is the actual purchase limit, NOT the shard count.
@@ -108,6 +113,7 @@ public class SeckillConfig {
      */
     @Data
     public static class BatchConfig {
+        private long acknowledgementTimeoutMs = 5000;
         /**
          * 队列容量上限（防止内存膨胀）
          * 默认200，生产环境可根据流量调整

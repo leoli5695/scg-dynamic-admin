@@ -167,8 +167,11 @@ gateway:
 # 秒杀引擎核心配置
 # ============================================================================
 seckill:
-  # 热点Key分片数量（将库存分散到8个Key，避免单Key热点）
+  # One activity is atomic within one Redis slot; multiple keys do not multiply node throughput.
   shard-count: 8
+  # Change only after an offline migration; all application instances must use the same version.
+  order-routing-version: ${SECKILL_ORDER_ROUTING_VERSION:1}
+  stock-hash-tag-enabled: ${SECKILL_STOCK_HASH_TAG_ENABLED:false}
 
   # 生产模式开关（测试阶段设置为false，生产环境设置为true）
   production-mode: false
@@ -218,6 +221,7 @@ seckill:
   # ============================================================================
   # 允许根据流量动态调整攒批参数，优化性能和内存使用
   batch:
+    acknowledgement-timeout-ms: ${SECKILL_BATCH_ACK_TIMEOUT_MS:5000}
     # 队列容量上限（防止内存膨胀）
     queue-capacity: ${SECKILL_BATCH_QUEUE_CAPACITY:200}
     # 批量写入阈值（达到此数量触发批量写入）

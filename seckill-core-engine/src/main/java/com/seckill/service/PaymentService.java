@@ -40,6 +40,8 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class PaymentService {
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.seckill.config.SeckillConfig seckillConfig = new com.seckill.config.SeckillConfig();
     private final OrderMapper orderMapper;
     private final StringRedisTemplate redisTemplate;
     private final TransactionLogMapper transactionLogMapper;
@@ -309,7 +311,7 @@ public class PaymentService {
 
         try {
             // 修复：正确的stockKey格式应该是 seckill:stock:{seckillId}:shard:{shardIndex}
-            String stockKey = "seckill:stock:" + seckillId + ":shard:" + shardIndex;
+            String stockKey = com.seckill.redis.lua.StockKeys.prefix(seckillId, seckillConfig.isStockHashTagEnabled()) + shardIndex;
             redisTemplate.opsForValue().increment(stockKey, quantity);
             log.info("Redis库存回补成功: key={}, quantity={}, traceId={}", stockKey, quantity, traceId);
         } catch (Exception e) {

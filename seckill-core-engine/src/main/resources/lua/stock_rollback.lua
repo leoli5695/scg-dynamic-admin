@@ -31,6 +31,10 @@ local shardPrefix = KEYS[3]
 local userId = ARGV[1]
 local quantity = tonumber(ARGV[2])
 local shardCount = tonumber(ARGV[3])
+if not quantity or quantity <= 0 or quantity ~= math.floor(quantity)
+    or not shardCount or shardCount < 1 or shardCount > 128 then
+    return -99
+end
 
 -- ============================================================================
 -- Step 1: 检查用户是否已购买
@@ -56,7 +60,7 @@ end
 -- ============================================================================
 -- 注意：这里回补到用户原扣减的分片
 -- 不是随机分配，避免某分片库存溢出
-local shardKey = shardPrefix .. shardIndex
+local shardKey = (KEYS[4 + shardIndex] or shardPrefix .. shardIndex)
 redis.call('INCRBY', shardKey, quantity)
 
 -- ============================================================================

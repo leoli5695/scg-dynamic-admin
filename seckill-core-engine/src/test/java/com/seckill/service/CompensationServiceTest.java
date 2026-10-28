@@ -110,7 +110,7 @@ class CompensationServiceTest {
 
         when(transactionLogMapper.selectByTransactionId("tx-12345"))
                 .thenReturn(testTransaction);
-        when(orderMapper.selectByOrderNo("order-001"))
+        when(orderMapper.selectByUserAndOrderNo(100L, "order-001"))
                 .thenReturn(null);
 
         compensationService.processTimeoutTransaction(testTransaction, "短时超时");
@@ -127,7 +127,7 @@ class CompensationServiceTest {
 
         when(transactionLogMapper.selectByTransactionId("tx-12345"))
                 .thenReturn(testTransaction);
-        when(orderMapper.selectByOrderNo("order-001"))
+        when(orderMapper.selectByUserAndOrderNo(100L, "order-001"))
                 .thenReturn(null);
         when(seckillDeductLua.rollbackStock(1L, 100L, 1))
                 .thenReturn(1003L); // 成功回补到分片3
@@ -146,7 +146,7 @@ class CompensationServiceTest {
     void processTimeoutTransaction_pendingPayment_rollbackAndCancel() {
         when(transactionLogMapper.selectByTransactionId("tx-12345"))
                 .thenReturn(testTransaction);
-        when(orderMapper.selectByOrderNo("order-001"))
+        when(orderMapper.selectByUserAndOrderNo(100L, "order-001"))
                 .thenReturn(testOrder);
         when(seckillDeductLua.rollbackStock(1L, 100L, 1))
                 .thenReturn(1003L);
@@ -169,7 +169,7 @@ class CompensationServiceTest {
 
         when(transactionLogMapper.selectByTransactionId("tx-12345"))
                 .thenReturn(testTransaction);
-        when(orderMapper.selectByOrderNo("order-001"))
+        when(orderMapper.selectByUserAndOrderNo(100L, "order-001"))
                 .thenReturn(testOrder);
 
         compensationService.processTimeoutTransaction(testTransaction, "短时超时");

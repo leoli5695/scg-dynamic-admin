@@ -161,7 +161,7 @@ public class CompensationService {
         }
 
         // 检查订单是否存在
-        SeckillOrder order = orderMapper.selectByOrderNo(tx.getOrderNo());
+        SeckillOrder order = orderMapper.selectByUserAndOrderNo(tx.getUserId(), tx.getOrderNo());
 
         if (order == null) {
             // 【关键优化】检查是否处于 RocketMQ 重投窗口期
