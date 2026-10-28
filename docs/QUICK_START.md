@@ -375,6 +375,17 @@ The schema is created by Hibernate (`ddl-auto: update` by default, `validate` un
 profile). There is no Flyway or Liquibase in this project yet, so `validate` against an empty
 database will fail - either let Hibernate create the schema first or restore a dump.
 
+Two ways this bites in a real deployment:
+
+- **The `prod` profile does not have the last word.** `SPRING_JPA_HIBERNATE_DDL_AUTO` in the
+  container environment outranks `application-prod.yml`, so a deployment can be running `update`
+  while the file in the jar says `validate`. Read the running container's env before reasoning
+  about schema behaviour.
+- **`update` is not a substitute for the scripts in `src/main/resources/sql/`.** It adds missing
+  tables and columns, but it never widens an existing column's type and never applies a `DEFAULT`
+  that the entity does not declare via `columnDefinition`. Anything the SQL scripts do beyond
+  "add a nullable column" still has to be run by hand.
+
 > An earlier revision of this document described an H2 console at
 > `http://localhost:9090/h2-console`. That never worked: gateway-admin has no H2 dependency and
 > does not enable an H2 console.
@@ -385,8 +396,9 @@ database will fail - either let Hibernate create the schema first or restore a d
 
 - [ ] Set `ADMIN_USERNAME` / `ADMIN_PASSWORD` to real values (there is no default account)
 - [ ] Enable HTTPS on gateway
-- [ ] Switch `ddl-auto` to `validate` (the `prod` profile already does) and back the schema with a
-      dump, since there is no migration tool
+- [ ] Switch `ddl-auto` to `validate` (the `prod` profile already does - confirm no
+      `SPRING_JPA_HIBERNATE_DDL_AUTO` in the container env silently overrides it) and back the
+      schema with a dump, since there is no migration tool
 - [ ] Set up Redis for distributed rate limiting
 - [ ] Configure alert thresholds
 - [ ] Enable request tracing

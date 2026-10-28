@@ -6,12 +6,17 @@
 # was not valid YAML. All four are caught by nothing more exotic than
 # `mvn verify` plus a YAML parse.
 #
-# STATUS: this workflow has NOT been executed yet. It cannot be validated
-# locally (no Docker, no MySQL/Redis/Nacos on the maintainer's machine); it needs
-# one push to main or a PR to confirm the service containers come up and the
-# 12 gateway-admin @SpringBootTest classes - which fail locally with
-# "Communications link failure" purely because there is no database - actually
-# pass. Treat the first run as the verification step.
+# STATUS (verified 2026-10-28, after 39 runs): the service containers do come up -
+# "Initialize containers" and the Nacos writability probe below both pass - so this
+# workflow is the only place where the 12 gateway-admin @SpringBootTest classes and
+# the 3 Redis-backed seckill tests actually execute. On the maintainer's machine they
+# can only ever error out with "Communications link failure", so a green local
+# `mvn test` says nothing about them. Treat the Actions tab as the authoritative
+# verdict; it is not reproducible locally.
+#
+# As of that date the Backend job's `mvn verify` step has been red on every
+# non-cancelled run since 2209032, which is not visible locally for exactly the
+# reason above.
 # =============================================================================
 name: CI
 

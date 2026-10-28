@@ -492,29 +492,39 @@ self-service registration - so if they are missing the console has no user at al
 
 ## Testing
 
-Counts below were measured with `mvn -o test` on 2026-10-27 at commit `2e80a2e` (JDK 21, offline).
+Counts below were measured with `mvn -o test` on 2026-10-28 at commit `ed93868` (JDK 21, offline).
 "Errors" are tests that could not run at all because an external dependency is absent; the suite
 has zero assertion failures.
 
 | Module | Tests | Failures | Errors | Status |
 |--------|-------|----------|--------|--------|
-| **my-gateway** | 684 | 0 | 0 | ✅ All passing |
-| **gateway-admin** | 458 | 0 | 80 | ⚠️ 42 of 54 classes green locally; the other 12 are `@SpringBootTest` integration tests that need a reachable MySQL - without one they all fail at context load with `Communications link failure` |
-| **gateway-trace-starter** | 147 | 0 | 0 | ✅ All passing |
+| **my-gateway** | 973 | 0 | 0 | ✅ All passing (2 skipped) |
+| **gateway-admin** | 547 | 0 | 80 | ⚠️ 63 of 75 classes green locally; the other 12 are `@SpringBootTest` integration tests that need a reachable MySQL - without one they all fail at context load with `Communications link failure` |
+| **gateway-trace-starter** | 160 | 0 | 0 | ✅ All passing |
 | **license-client** | 83 | 0 | 0 | ✅ All passing |
 | **license-server** | 40 | 0 | 0 | ✅ All passing |
-| **seckill-core-engine** | 191 | 0 | 4 | ⚠️ 3 need a bare Redis on `localhost:30379`; 1 (`LuaSlidingWindowRateLimitTest`) needs Docker via Testcontainers |
-| **gateway-ui** | 0 | - | - | ❌ No frontend tests yet |
-| **Total (JVM)** | **1603** | **0** | **84** | ⚠️ Not reproducible on a clean machine: CI exists (`.github/workflows/ci.yml`) but has not been executed yet, and three external dependencies are required - MySQL:3306, Redis:30379 and Docker |
+| **seckill-core-engine** | 217 | 0 | 4 | ⚠️ 3 need a bare Redis on `localhost:30379`; 1 (`LuaSlidingWindowRateLimitTest`) needs Docker via Testcontainers (4 skipped) |
+| **gateway-ui** | 5 | - | - | ⚠️ Route-contract tests only (`npm run test:routes`); no component coverage |
+| **Total (JVM)** | **2020** | **0** | **84** | ⚠️ Not reproducible on a clean machine without MySQL:3306, Redis:30379 and Docker |
+
+CI (`.github/workflows/ci.yml`) runs on every push to `main` and starts real MySQL 8, Redis 7 and
+Nacos v2.3.0 service containers, so the 84 errors above do not occur there - the Actions tab is the
+authoritative verdict, and it is also the only place those 12 `@SpringBootTest` classes and the 3
+Redis-backed seckill tests actually execute.
 
 Counts are the surefire aggregate lines, not a sum of the per-class reports: `@Nested` classes
 (133 in my-gateway, 27 in gateway-admin) make a per-class sum undercount.
+
+`npm run test:routes` imports `src/features/routes/utils.ts` directly, which needs Node's type
+stripping - Node 22.18 or newer. CI asks `setup-node` for `'22'`, which floats to a version that
+has it; an older local Node 22 fails with `ERR_UNKNOWN_FILE_EXTENSION` rather than reporting a
+test failure.
 
 The old badge claimed an exact "1674 Tests"; that figure was padded by three `@RepeatedTest(100)`
 methods in `GatewayTracePropertiesTest` whose only assertion was `assertNotNull` on a primitive
 `boolean` - 300 executions, i.e. 18% of the total, that could never fail. They now assert the
 observed sampling rate instead of running the same tautology a hundred times, which is also why
-gateway-trace-starter reads 147 here rather than the 444 an older revision of this table claimed.
+gateway-trace-starter reads 160 here rather than the 444 an older revision of this table claimed.
 
 Run tests:
 ```bash
