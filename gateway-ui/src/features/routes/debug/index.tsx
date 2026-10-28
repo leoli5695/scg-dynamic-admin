@@ -10,6 +10,7 @@ import { useInstanceDetail } from '../../instance-detail/InstanceDetailContext';
 import type { RouteResponse } from '../../../types/route';
 import { debugDefaults, parseDebugHeaders } from './defaults';
 import { responseView } from './responseView';
+import RawResponseViewer from './RawResponseViewer';
 import { requestJourneyUrl, routeConfigurationUrl } from '../../request-journey/links';
 import './route-debug.css';
 
@@ -136,7 +137,7 @@ function Workbench({ route }: { route: RouteResponse }) {
           { key: 'body', label: t('routes.debug_response_body'), children: <>
             <Segmented aria-label={t('routes.debug_display_mode')} value={responseMode} onChange={setResponseMode}
               options={[{ label: t('routes.debug_readable'), value: 'readable' }, { label: t('routes.debug_raw'), value: 'raw' }]} />
-            {responseMode === 'raw' ? <pre className="route-debug-output" style={{ marginTop: 12 }}>{output || (busy ? t('routes.debug_waiting') : t('routes.debug_no_body'))}</pre> : <>
+            {responseMode === 'raw' ? <RawResponseViewer raw={output} streaming={sse} usage={readable.usage} /> : <>
               {readable.usage && <Space wrap className="route-debug-usage">
                 <Tag>{t('routes.debug_input_tokens')}: {readable.usage.input ?? '—'}</Tag>
                 <Tag>{t('routes.debug_output_tokens')}: {readable.usage.output ?? '—'}</Tag>
