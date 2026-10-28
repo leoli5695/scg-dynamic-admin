@@ -88,7 +88,9 @@ public interface TokenUsageHistoryRepository extends JpaRepository<TokenUsageHis
     /** 总量卡：请求数 / prompt / completion / total / 平均延迟 / 活跃租户·路由·模型数。 */
     @Query("SELECT COUNT(h), COALESCE(SUM(h.promptTokens),0), COALESCE(SUM(h.completionTokens),0)," +
            " COALESCE(SUM(h.totalTokens),0), AVG(h.latencyMs)," +
-           " COUNT(DISTINCT h.tenantId), COUNT(DISTINCT h.routeId), COUNT(DISTINCT h.model)" +
+           " COUNT(DISTINCT h.tenantId), COUNT(DISTINCT h.routeId), COUNT(DISTINCT h.model)," +
+           " SUM(CASE WHEN h.usageStatus = 'UNKNOWN' THEN 1 ELSE 0 END)," +
+           " SUM(CASE WHEN h.settlementStatus = 'FAILED' THEN 1 ELSE 0 END)" +
            " FROM TokenUsageHistoryEntity h WHERE h.requestTime >= :from AND h.requestTime <= :to" + DIM_FILTER)
     List<Object[]> overview(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to,
                       @Param("instanceId") String instanceId, @Param("routeId") String routeId,

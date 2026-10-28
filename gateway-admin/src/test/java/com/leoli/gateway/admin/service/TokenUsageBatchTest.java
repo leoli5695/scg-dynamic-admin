@@ -26,6 +26,8 @@ class TokenUsageBatchTest {
                 prompt_tokens INTEGER,completion_tokens INTEGER,total_tokens INTEGER,instance_id VARCHAR(64),
                 response_format VARCHAR(20),latency_ms BIGINT,request_time TIMESTAMP NOT NULL,created_at TIMESTAMP NOT NULL)
                 """);
+        new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(
+                new org.springframework.core.io.ClassPathResource("sql/alter-token-usage-outcome.sql")).execute(source);
     }
     @Test void recordsNumbersUnicodeAndLifecycleFields() {
         tx.executeWithoutResult(status -> service.recordTokenUsageBatch(List.of(Map.of("tenantId", "租户", "traceId", "one",
@@ -40,6 +42,19 @@ class TokenUsageBatchTest {
         assertThrows(org.springframework.dao.DataIntegrityViolationException.class, () -> tx.executeWithoutResult(status ->
                 service.recordTokenUsageBatch(List.of(Map.of("tenantId", "t", "traceId", "dup"), Map.of("tenantId", "t", "traceId", "dup")))));
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM token_usage_history", Integer.class));
+    }
+    @Test void preservesUnknownAndFailedSettlementStates() {
+        var row = new HashMap<String, Object>();
+        row.put("tenantId", "tenant"); row.put("usageStatus", "UNKNOWN");
+        row.put("settlementStatus", "PENDING"); row.put("reservedTokens", 100L);
+        row.put("provider", "openai"); row.put("serviceId", "channel-a"); row.put("totalTokens", null);
+        tx.executeWithoutResult(status -> service.recordTokenUsageBatch(List.of(row)));
+        var stored = jdbc.queryForMap("SELECT * FROM token_usage_history");
+        assertEquals("UNKNOWN", stored.get("USAGE_STATUS"));
+        assertEquals("PENDING", stored.get("SETTLEMENT_STATUS"));
+        assertNull(stored.get("CHARGED_TOKENS"));
+        assertEquals(100L, stored.get("RESERVED_TOKENS"));
+        assertEquals("channel-a", stored.get("SERVICE_ID"));
     }
     @Test void validatesBatchBeforeWriting() {
         assertThrows(IllegalArgumentException.class, () -> service.recordTokenUsageBatch(List.of(Map.of("tenantId", "t"), Map.of())));

@@ -1,6 +1,7 @@
 package com.leoli.gateway.filter.ai;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leoli.gateway.ai.AiUsageResult;
 import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.filter.token.TokenUsageCollectorFilter;
 import com.leoli.gateway.manager.StrategyManager;
@@ -24,6 +25,7 @@ import org.springframework.http.server.reactive.ServerHttpResponseDecorator;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Flux;
 
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -37,11 +39,11 @@ import java.util.concurrent.atomic.AtomicLong;
  * Emits, per proxied AI request:
  * <ul>
  *   <li>metrics: {@code ai.tokens.input} / {@code ai.tokens.output} counters and
- *       {@code ai.llm.service.duration} / {@code ai.llm.first.token.duration}
+ *       {@code ai.llm.service.duration} / {@code ai.llm.first.byte.duration}
  *       timers, tagged route/model/provider/tenant (Higress' gateway-route-service-
  *       model-consumer dimensions);</li>
  *   <li>log: one structured {@code ai_log} info line with model, input/output
- *       tokens, first-token and service durations, cache hit and session id;</li>
+ *       tokens, first-byte and service durations, cache hit and session id;</li>
  *   <li>trace: the same values as tags on the current OTel span when
  *       micrometer-tracing is active.</li>
  * </ul>
@@ -83,64 +85,95 @@ public class AiStatisticsFilter implements GlobalFilter, Ordered {
         }
 
         exchange.getAttributes().put(ATTR_START_NS, System.nanoTime());
+        Span requestSpan = tracer != null ? tracer.currentSpan() : null;
         AtomicLong firstChunkNs = new AtomicLong(0);
 
         ServerHttpResponseDecorator decorated = new ServerHttpResponseDecorator(exchange.getResponse()) {
             @Override
             public Mono<Void> writeWith(Publisher<? extends DataBuffer> body) {
-                firstChunkNs.compareAndSet(0, System.nanoTime());
-                return super.writeWith(body);
+                return super.writeWith(Flux.from(body).doOnNext(buffer -> {
+                    if (buffer.readableByteCount() > 0) firstChunkNs.compareAndSet(0, System.nanoTime());
+                }));
             }
 
             @Override
             public Mono<Void> writeAndFlushWith(Publisher<? extends Publisher<? extends DataBuffer>> body) {
-                firstChunkNs.compareAndSet(0, System.nanoTime());
-                return super.writeAndFlushWith(body);
+                return super.writeAndFlushWith(Flux.from(body).map(group -> Flux.from(group).doOnNext(buffer -> {
+                    if (buffer.readableByteCount() > 0) firstChunkNs.compareAndSet(0, System.nanoTime());
+                })));
             }
         };
 
-        return chain.filter(exchange.mutate().response(decorated).build())
-                .doFinally(signal -> record(exchange, config, routeId, firstChunkNs.get()));
+        java.util.concurrent.atomic.AtomicBoolean recorded = new java.util.concurrent.atomic.AtomicBoolean();
+        Runnable finish = () -> {
+                    if (!recorded.compareAndSet(false, true)) return;
+                    long finishedNs = System.nanoTime();
+                    var completion = AiUsageResult.completion(exchange);
+                    if (completion == null) {
+                        record(exchange, config, routeId, firstChunkNs.get(), finishedNs, requestSpan);
+                    } else {
+                        completion.thenAccept(result -> record(exchange, config, routeId, firstChunkNs.get(), finishedNs, requestSpan));
+                    }
+                };
+        return Mono.defer(() -> chain.filter(exchange.mutate().response(decorated).build()))
+                .doOnSuccess(ignored -> finish.run()).doOnError(error -> finish.run()).doOnCancel(finish);
     }
 
-    private void record(ServerWebExchange exchange, AiStatisticsConfig config, String routeId, long firstChunkNs) {
+    private void record(ServerWebExchange exchange, AiStatisticsConfig config, String routeId, long firstChunkNs,
+                        long finishedNs, Span requestSpan) {
         try {
             Long start = exchange.getAttribute(ATTR_START_NS);
             if (start == null) {
                 return;
             }
-            long now = System.nanoTime();
-            long serviceMs = (now - start) / 1_000_000;
-            Long firstTokenMs = firstChunkNs > 0 ? (firstChunkNs - start) / 1_000_000 : null;
+            long serviceMs = (finishedNs - start) / 1_000_000;
+            Long firstByteMs = firstChunkNs > 0 ? (firstChunkNs - start) / 1_000_000 : null;
 
             String model = orNone(exchange.getAttribute(AiProviderRoutingFilter.AI_MODEL_ATTR));
             String provider = orNone(exchange.getAttribute(AiProviderRoutingFilter.AI_PROVIDER_ATTR));
+            String service = orNone(exchange.getAttribute(AiProviderRoutingFilter.AI_SERVICE_ATTR));
             String tenant = orNone(exchange.getAttribute("token_quota_tenant_id"));
             boolean cacheHit = Boolean.TRUE.equals(exchange.getAttribute(AiSemanticCacheFilter.AI_CACHE_HIT_ATTR));
             long[] usage = exchange.getAttribute(TokenUsageCollectorFilter.AI_USAGE_ATTR);
-            long inputTokens = cacheHit ? 0 : (usage != null ? usage[0] : 0);
-            long outputTokens = cacheHit ? 0 : (usage != null ? usage[1] : 0);
+            AiUsageResult result = exchange.getAttribute(AiUsageResult.RESULT_ATTR);
+            String usageStatus = cacheHit ? "NOT_BILLED" : result != null ? result.status().name()
+                    : usage != null ? "CONFIRMED" : "UNKNOWN";
+            Long inputTokens = null;
+            Long outputTokens = null;
+            if (cacheHit) {
+                inputTokens = 0L;
+                outputTokens = 0L;
+            } else if (result != null) {
+                inputTokens = result.inputTokens();
+                outputTokens = result.outputTokens();
+            } else if (usage != null) {
+                inputTokens = usage[0];
+                outputTokens = usage[1];
+            }
 
             ServerHttpResponse response = exchange.getResponse();
             String contentType = response.getHeaders().getFirst("Content-Type");
             boolean stream = contentType != null && contentType.contains("text/event-stream");
 
             if (config.isEnableMetrics() && meterRegistry != null) {
-                Counter.builder("ai.tokens.input")
+                if (inputTokens != null) Counter.builder("ai.tokens.input")
                         .tag("route", orNone(routeId)).tag("model", model)
                         .tag("provider", provider).tag("tenant", tenant)
                         .register(meterRegistry).increment(inputTokens);
-                Counter.builder("ai.tokens.output")
+                if (outputTokens != null) Counter.builder("ai.tokens.output")
                         .tag("route", orNone(routeId)).tag("model", model)
                         .tag("provider", provider).tag("tenant", tenant)
                         .register(meterRegistry).increment(outputTokens);
+                Counter.builder("ai.usage.requests").tag("route", orNone(routeId))
+                        .tag("provider", provider).tag("status", usageStatus)
+                        .register(meterRegistry).increment();
                 Timer.builder("ai.llm.service.duration")
                         .tag("route", orNone(routeId)).tag("model", model).tag("provider", provider)
                         .register(meterRegistry).record(Duration.ofMillis(serviceMs));
-                if (stream && firstTokenMs != null) {
-                    Timer.builder("ai.llm.first.token.duration")
+                if (stream && firstByteMs != null) {
+                    Timer.builder("ai.llm.first.byte.duration")
                             .tag("route", orNone(routeId)).tag("model", model).tag("provider", provider)
-                            .register(meterRegistry).record(Duration.ofMillis(firstTokenMs));
+                            .register(meterRegistry).record(Duration.ofMillis(firstByteMs));
                 }
             }
 
@@ -148,12 +181,14 @@ public class AiStatisticsFilter implements GlobalFilter, Ordered {
             aiLog.put("model", model);
             aiLog.put("input_token", inputTokens);
             aiLog.put("output_token", outputTokens);
-            aiLog.put("llm_first_token_duration", firstTokenMs);
+            aiLog.put("llm_first_byte_duration", firstByteMs);
+            aiLog.put("usage_status", usageStatus);
             aiLog.put("llm_service_duration", serviceMs);
             aiLog.put("response_type", stream ? "stream" : "json");
             aiLog.put("cache_hit", cacheHit);
             aiLog.put("route", orNone(routeId));
             aiLog.put("provider", provider);
+            aiLog.put("service", service);
             aiLog.put("tenant", tenant);
             if (config.getSessionIdHeader() != null && !config.getSessionIdHeader().isBlank()) {
                 String session = exchange.getRequest().getHeaders().getFirst(config.getSessionIdHeader());
@@ -163,7 +198,7 @@ public class AiStatisticsFilter implements GlobalFilter, Ordered {
             }
 
             if (config.isEnableSpanTags() && tracer != null) {
-                Span span = tracer.currentSpan();
+                Span span = requestSpan;
                 if (span != null) {
                     aiLog.forEach((k, v) -> {
                         if (v != null) {

@@ -234,6 +234,11 @@ const TokenUsagePage: React.FC = () => {
 
   return (
     <div className="token-usage-page management-page">
+      {((overview?.unknownUsageRequests ?? 0) > 0 || (overview?.failedSettlementRequests ?? 0) > 0) && (
+        <Alert type="warning" showIcon message={t('tokenUsage.pendingWarning', {
+          unknown: overview?.unknownUsageRequests ?? 0, failed: overview?.failedSettlementRequests ?? 0,
+        })} />
+      )}
       <ManagementPageHeader
         title={t('tokenUsage.title')}
         subtitle={t('tokenUsage.subtitle')}
@@ -492,7 +497,7 @@ const TokenUsagePage: React.FC = () => {
 
           <Card size="small" title={t('tokenUsage.table.title')}>
             <Table
-              scroll={{ x: 1250 }}
+              scroll={{ x: 1800 }}
               rowKey="id"
               size="small"
               loading={eventsReq.loading}
@@ -531,20 +536,37 @@ const TokenUsagePage: React.FC = () => {
                   render: (v: string | null) => v ?? '-',
                 },
                 {
+                  title: t('tokenUsage.table.usageStatus'), dataIndex: 'usageStatus', width: 110,
+                  render: (v: string | null) => t(`tokenUsage.status.${v ?? 'LEGACY'}`, { defaultValue: v ?? 'LEGACY' }),
+                },
+                {
+                  title: t('tokenUsage.table.settlementStatus'), dataIndex: 'settlementStatus', width: 110,
+                  render: (v: string | null) => t(`tokenUsage.status.${v ?? 'LEGACY'}`, { defaultValue: v ?? 'LEGACY' }),
+                },
+                { title: t('tokenUsage.table.service'), dataIndex: 'serviceId', ellipsis: true,
+                  render: (v: string | null) => v ?? '-' },
+                { title: t('tokenUsage.table.reserved'), dataIndex: 'reservedTokens', width: 90, align: 'right',
+                  render: (v: number | null) => v ?? '-' },
+                { title: t('tokenUsage.table.charged'), dataIndex: 'chargedTokens', width: 90, align: 'right',
+                  render: (v: number | null) => v ?? '-' },
+                {
                   title: t('tokenUsage.table.prompt'),
                   dataIndex: 'promptTokens',
+                  render: (v: number | null) => v ?? '-',
                   width: 80,
                   align: 'right',
                 },
                 {
                   title: t('tokenUsage.table.completion'),
                   dataIndex: 'completionTokens',
+                  render: (v: number | null) => v ?? '-',
                   width: 80,
                   align: 'right',
                 },
                 {
                   title: t('tokenUsage.table.total'),
                   dataIndex: 'totalTokens',
+                  render: (v: number | null) => v ?? '-',
                   width: 80,
                   align: 'right',
                 },

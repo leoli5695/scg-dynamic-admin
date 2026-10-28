@@ -136,6 +136,25 @@ class TokenUsageCollectorFilterSseTest {
     }
 
     @Test
+    void observingSseBuffersPreservesTheirOriginalReadPositionInBothWritePaths() {
+        for (boolean flush : List.of(false, true)) {
+            var exchange = MockServerWebExchange.from(MockServerHttpRequest.post("/v1/chat/completions").build());
+            exchange.getAttributes().put(ROUTE_ATTR, "ai-route");
+            exchange.getAttributes().put("token_quota_tenant_id", TENANT);
+            org.mockito.Mockito.doAnswer(invocation -> {
+                org.springframework.web.server.ServerWebExchange forwarded = invocation.getArgument(0);
+                forwarded.getResponse().getHeaders().setContentType(MediaType.TEXT_EVENT_STREAM);
+                DataBuffer buffer = forwarded.getResponse().bufferFactory().wrap(("skipped" + USAGE_CHUNK + DONE_CHUNK).getBytes(StandardCharsets.UTF_8));
+                buffer.readPosition(7);
+                return flush ? forwarded.getResponse().writeAndFlushWith(Flux.just(Mono.just(buffer)))
+                        : forwarded.getResponse().writeWith(Mono.just(buffer));
+            }).when(chain).filter(any());
+            filter.filter(exchange, chain).block(java.time.Duration.ofSeconds(5));
+            org.junit.jupiter.api.Assertions.assertEquals(USAGE_CHUNK + DONE_CHUNK, exchange.getResponse().getBodyAsString().block());
+        }
+    }
+
+    @Test
     @DisplayName("Clean per-event framing settles the real 74 tokens")
     void settlesRealUsageWhenEventsArriveIntact() {
         runStream(List.of(CONTENT_CHUNK, CONTENT_CHUNK, FINISH_CHUNK, USAGE_CHUNK, DONE_CHUNK));

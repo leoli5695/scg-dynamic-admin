@@ -1,6 +1,7 @@
 package com.leoli.gateway.filter.token;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leoli.gateway.ai.AiUsageResult;
 import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.filter.TraceIdGlobalFilter;
 import com.leoli.gateway.filter.ai.AiProviderRoutingFilter;
@@ -91,6 +92,7 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
     private static final String ATTR_PRE_DEDUCTED = "token_quota_pre_deducted";
     private static final String ATTR_ESTIMATED_INPUT = "token_quota_estimated_input";
     private static final String ATTR_TENANT_ID = "token_quota_tenant_id";
+    public static final String SETTLEMENT_OWNER_ATTR = "token_quota_settlement_collector";
     private static final String ATTR_STREAM_INTERRUPTED = "token_quota_stream_interrupted";
 
     @Override
@@ -195,6 +197,7 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                 }
 
                 return super.writeWith(flux.doOnNext(dataBuffer -> {
+                    int originalReadPosition = dataBuffer.readPosition();
                     try {
                         // Read and buffer response chunk
                         byte[] bytes = new byte[dataBuffer.readableByteCount()];
@@ -210,7 +213,7 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                         // parse above advances the read position. If handleSseChunk/frames
                         // threw, readPosition(0) was previously skipped and the client got
                         // misaligned bytes. Always restore the position before the write.
-                        dataBuffer.readPosition(0);
+                        dataBuffer.readPosition(originalReadPosition);
                     }
                 }));
             }
@@ -224,6 +227,7 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                 // while preserving flush boundaries (keeps time-to-first-token intact).
                 Flux<? extends org.reactivestreams.Publisher<? extends DataBuffer>> groups =
                         Flux.from(body).map(group -> Flux.from(group).doOnNext(dataBuffer -> {
+                            int originalReadPosition = dataBuffer.readPosition();
                             try {
                                 byte[] bytes = new byte[dataBuffer.readableByteCount()];
                                 dataBuffer.read(bytes);
@@ -234,7 +238,7 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                             } finally {
                                 // FIX (see writeWith): always restore the read position so a
                                 // throwing side-copy parse can never misalign the client stream.
-                                dataBuffer.readPosition(0);
+                                dataBuffer.readPosition(originalReadPosition);
                             }
                         }));
                 return super.writeAndFlushWith(groups);
@@ -245,13 +249,24 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                 .response(decoratedResponse)
                 .build();
 
+        exchange.getAttributes().put(AiUsageResult.COMPLETION_ATTR,
+                new java.util.concurrent.CompletableFuture<AiUsageResult>());
+
         // Continue filter chain and process response in doFinally
-        return chain.filter(decoratedExchange)
+        Mono<Void> result = Mono.defer(() -> {
+                    exchange.getAttributes().put(SETTLEMENT_OWNER_ATTR, true);
+                    return chain.filter(decoratedExchange);
+                })
                 .doFinally(signalType -> {
+                    exchange.getAttributes().put("ai.response.finished.ns", System.nanoTime());
                     // The last event may still be sitting in the accumulator when the
                     // stream ends without a trailing blank line.
-                    for (String event : frames.flush()) {
-                        handleSseChunk(event, buffer, totalTokens, bufferedChars, config.tokenQuotaConfig);
+                    try {
+                        for (String event : frames.flush()) {
+                            handleSseChunk(event, buffer, totalTokens, bufferedChars, config.tokenQuotaConfig);
+                        }
+                    } catch (Exception error) {
+                        log.warn("Final SSE usage parsing failed on route {}", routeId, error);
                     }
                     // By now the upstream Content-Type is known, so this no longer
                     // depends on the client having sent Accept: text/event-stream.
@@ -267,18 +282,20 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                                     config.tokenQuotaConfig, buffer, totalTokens.get(),
                                     preDeductedTokens, interrupted, isSse))
                             .subscribeOn(Schedulers.boundedElastic())
-                            // processTokenUsageWithSettlement swallows its own errors, but its
-                            // catch block still calls refundTokens - if THAT throws (e.g. Redis
-                            // down) the exception escapes the runnable. Without an error consumer
-                            // it lands in Reactor's onErrorDropped and is lost without tenant
-                            // context, leaving pre-deducted tokens unreconciled and invisible.
                             .subscribe(
                                     ignored -> { },
-                                    error -> log.error(
+                                    error -> {
+                                        new AiUsageResult(AiUsageResult.Status.UNKNOWN, null, null, null, null,
+                                                preDeductedTokens, interrupted).publish(exchange);
+                                        exchange.getAttributes().put("ai.settlement.status", "FAILED");
+                                        reportUsageToAdmin(exchange, tenantId, null, 0);
+                                        log.error(
                                             "Token settlement task failed for tenant {} after internal "
                                                     + "handling; pre-deducted tokens ({}) may be unreconciled: {}",
-                                            tenantId, preDeductedTokens, error.getMessage(), error));
+                                            tenantId, preDeductedTokens, error.getMessage(), error);
+                                    });
                 });
+        return result;
     }
 
     /**
@@ -468,18 +485,40 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
 
             long actualTokens = usage != null && usage.hasUsage() ? usage.getTotalTokens() : 0;
 
+            AiUsageResult.Status usageStatus = usage != null && usage.hasUsage()
+                    ? AiUsageResult.Status.CONFIRMED : AiUsageResult.Status.UNKNOWN;
+
             // Handle interrupted stream
             if (interrupted && isSse) {
-                actualTokens = handleInterruptedStream(tenantId, actualTokens, incrementalTokens,
-                        preDeductedTokens, config);
+                if (usageStatus != AiUsageResult.Status.CONFIRMED || !config.isSsePartialBillingOnInterrupt()) {
+                    actualTokens = handleInterruptedStream(tenantId, actualTokens, incrementalTokens,
+                            preDeductedTokens, config);
+                }
+                if (!config.isSsePartialBillingOnInterrupt()) {
+                    usageStatus = AiUsageResult.Status.NOT_BILLED;
+                } else if (usageStatus == AiUsageResult.Status.UNKNOWN && actualTokens > 0) {
+                    usageStatus = AiUsageResult.Status.ESTIMATED;
+                }
             }
+
+            AiUsageResult result = new AiUsageResult(usageStatus,
+                    usage != null && usage.hasUsage() ? (long) usage.getPromptTokens() : null,
+                    usage != null && usage.hasUsage() ? (long) usage.getCompletionTokens() : null,
+                    usage != null && usage.hasUsage() ? (long) usage.getTotalTokens() : null,
+                    usageStatus == AiUsageResult.Status.UNKNOWN ? null : actualTokens,
+                    preDeductedTokens, interrupted);
+            // Publish before Redis I/O: metrics and reporting consume exactly this decision.
+            result.publish(exchange);
 
             // Settlement: refund or consume based on pre-deducted vs actual.
             // Reuse the period stamp frozen at pre-deduct time so a request that settled
             // after a day/month boundary refunds into the bucket it was charged in.
             TokenQuotaManager.QuotaPeriodStamp stamp =
                     exchange.getAttribute(TokenQuotaPreCheckFilter.ATTR_PERIOD_STAMP);
-            if (preDeductedTokens > 0) {
+            if (usageStatus == AiUsageResult.Status.UNKNOWN) {
+                log.warn("AI usage unknown for tenant {}; retaining reserved tokens {} for reconciliation",
+                        tenantId, preDeductedTokens);
+            } else if (preDeductedTokens > 0) {
                 if (stamp != null) {
                     tokenQuotaManager.settleTokenUsage(tenantId, preDeductedTokens, actualTokens, config, stamp);
                 } else {
@@ -505,14 +544,14 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                     tenantId, preDeductedTokens, actualTokens, interrupted);
 
             // Publish settled usage for AiStatisticsFilter (metrics/log/span tags).
-            exchange.getAttributes().put(AI_USAGE_ATTR, new long[]{
+            if (usageStatus == AiUsageResult.Status.CONFIRMED) exchange.getAttributes().put(AI_USAGE_ATTR, new long[]{
                     usage != null ? usage.getPromptTokens() : 0,
                     usage != null ? usage.getCompletionTokens() : 0,
                     actualTokens});
 
             // Fixed-window token rate limit (Higress ai-token-ratelimit response
             // phase): charge the settled usage to the windows checked pre-request.
-            if (tokenQuotaManager != null) {
+            if (tokenQuotaManager != null && result.chargedTokens() != null) {
                 java.util.List<Object[]> windowKeys =
                         exchange.getAttribute(TokenQuotaPreCheckFilter.ATTR_WINDOW_USAGE_KEYS);
                 if (windowKeys != null) {
@@ -527,17 +566,14 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
 
         } catch (Exception e) {
             log.error("Error processing token usage for tenant {}", tenantId, e);
-
-            // On error, refund pre-deducted tokens if configured (into the charged period)
-            if (preDeductedTokens > 0 && config.isAutoRefundEnabled()) {
-                TokenQuotaManager.QuotaPeriodStamp stamp =
-                        exchange.getAttribute(TokenQuotaPreCheckFilter.ATTR_PERIOD_STAMP);
-                if (stamp != null) {
-                    tokenQuotaManager.refundTokens(tenantId, preDeductedTokens, config, "PROCESSING_ERROR", stamp);
-                } else {
-                    tokenQuotaManager.refundTokens(tenantId, preDeductedTokens, config, "PROCESSING_ERROR");
-                }
+            // Redis may have applied the write before the connection failed. Refunding here
+            // could double-adjust quota; retain the reservation and mark settlement for review.
+            exchange.getAttributes().put("ai.settlement.status", "FAILED");
+            if (exchange.getAttribute(AiUsageResult.RESULT_ATTR) == null) {
+                new AiUsageResult(AiUsageResult.Status.UNKNOWN, null, null, null, null,
+                        preDeductedTokens, interrupted).publish(exchange);
             }
+            reportUsageToAdmin(exchange, tenantId, null, 0);
         }
     }
 
@@ -559,11 +595,28 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
             payload.put("promptTokens", usage != null ? usage.getPromptTokens() : 0);
             payload.put("completionTokens", usage != null ? usage.getCompletionTokens() : 0);
             payload.put("totalTokens", actualTokens);
+            AiUsageResult result = exchange.getAttribute(AiUsageResult.RESULT_ATTR);
+            if (result != null) {
+                payload.put("usageStatus", result.status().name());
+                payload.put("promptTokens", result.inputTokens());
+                payload.put("completionTokens", result.outputTokens());
+                payload.put("totalTokens", result.totalTokens());
+                payload.put("chargedTokens", result.chargedTokens());
+                payload.put("reservedTokens", result.reservedTokens());
+                payload.put("interrupted", result.interrupted());
+            }
+            payload.put("settlementStatus", exchange.getAttributeOrDefault("ai.settlement.status",
+                    result != null && result.status() == AiUsageResult.Status.UNKNOWN ? "PENDING" : "APPLIED"));
+            payload.put("provider", exchange.getAttribute(AiProviderRoutingFilter.AI_PROVIDER_ATTR));
+            payload.put("serviceId", exchange.getAttribute(AiProviderRoutingFilter.AI_SERVICE_ATTR));
+            payload.put("model", exchange.getAttributeOrDefault(AiProviderRoutingFilter.AI_MODEL_ATTR,
+                    usage != null && usage.getModel() != null ? usage.getModel() : "unknown"));
             payload.put("responseFormat", aiResponseFormat(exchange));
             payload.put("instanceId", instanceId);
             Long startNs = exchange.getAttribute(TokenQuotaPreCheckFilter.ATTR_START_NS);
             if (startNs != null) {
-                payload.put("latencyMs", (System.nanoTime() - startNs) / 1_000_000L);
+                long finishedNs = exchange.getAttributeOrDefault("ai.response.finished.ns", System.nanoTime());
+                payload.put("latencyMs", (finishedNs - startNs) / 1_000_000L);
             }
             payload.put("requestTime", LocalDateTime.now().toString());
             tokenUsageReporter.report(payload);
@@ -657,17 +710,10 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
             return TokenUsage.empty();
         }
 
-        // Check if stream is complete (has [DONE] marker)
-        boolean isComplete = !interrupted && tokenUsageParser.isSseStreamComplete(sseChunks);
-
-        if (isComplete) {
-            // Stream complete, aggregate usage from all chunks
-            TokenUsage aggregated = tokenUsageParser.aggregateSseUsage(sseChunks);
-
-            if (aggregated.hasUsage()) {
-                log.debug("SSE stream complete, aggregated usage: total={}", aggregated.getTotalTokens());
-                return aggregated;
-            }
+        // Preserve provider-reported usage even if the connection closed after its usage frame.
+        TokenUsage aggregated = tokenUsageParser.aggregateSseUsage(sseChunks);
+        if (aggregated.hasUsage()) {
+            return aggregated;
         }
 
         // Stream incomplete or interrupted, use incremental if available

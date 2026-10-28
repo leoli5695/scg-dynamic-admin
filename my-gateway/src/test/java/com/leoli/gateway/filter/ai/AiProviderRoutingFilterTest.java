@@ -100,6 +100,98 @@ class AiProviderRoutingFilterTest {
         return new String(b, StandardCharsets.UTF_8);
     }
 
+    private AiProxyConfig.Upstream service(String id, int weight, String model) {
+        AiProxyConfig.Upstream up = new AiProxyConfig.Upstream();
+        up.setServiceId(id);
+        up.setProvider("openai");
+        up.setCredentialRef("key-" + id);
+        up.setBaseUrlOverride("https://" + id + ".example/v1");
+        up.setWeight(weight);
+        up.setModelMapping(Map.of("support-chat", model));
+        return up;
+    }
+
+    @Test
+    void balancesSameProviderServicesWithoutMixingCredentialsOrMappings() {
+        AiProxyConfig config = enabledConfig();
+        config.setUpstreams(List.of(service("a", 1, "gpt-a"), service("b", 3, "gpt-b")));
+        // A stale legacy entry must not override service-level configuration.
+        config.setProviderApiKeyRefs(Map.of("openai", "wrong-key"));
+        stubConfig(config);
+        when(keyResolver.resolveKey(anyString())).thenAnswer(inv -> Mono.just("secret-" + inv.getArgument(0)));
+        java.util.Map<String, Integer> counts = new java.util.HashMap<>();
+        when(chain.filter(any())).thenAnswer(inv -> {
+            org.springframework.web.server.ServerWebExchange ex = inv.getArgument(0);
+            String id = ex.getAttribute(AiProviderRoutingFilter.AI_SERVICE_ATTR);
+            counts.merge(id, 1, Integer::sum);
+            assertEquals(URI.create("https://" + id + ".example/v1/chat/completions"),
+                    ex.getAttribute(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR));
+            assertEquals("Bearer secret-key-" + id, ex.getRequest().getHeaders().getFirst("Authorization"));
+            assertEquals("gpt-" + id, objectMapper.readTree(bodyOf(ex)).path("model").asText());
+            return Mono.empty();
+        });
+        for (int i = 0; i < 40; i++) {
+            StepVerifier.create(filter.filter(post("{\"model\":\"support-chat\",\"messages\":[]}"), chain))
+                    .verifyComplete();
+        }
+        assertEquals(Map.of("a", 10, "b", 30), counts);
+        verify(keyResolver, never()).resolveKey("wrong-key");
+    }
+
+    @Test
+    void pinsServiceOrderAcrossRetriesAndPreservesFallbackMapping() {
+        AiProxyConfig config = enabledConfig();
+        config.setUpstreams(List.of(service("a", 1, "gpt-a"), service("b", 1, "gpt-b")));
+        AiProxyConfig.FallbackTarget fb = new AiProxyConfig.FallbackTarget();
+        fb.setProvider("qwen");
+        fb.setServiceId("backup");
+        fb.setCredentialRef("key-backup");
+        fb.setModelMapping(Map.of("support-chat", "qwen-plus"));
+        config.setFallbacks(List.of(fb));
+        stubConfig(config);
+        when(keyResolver.resolveKey(anyString())).thenReturn(Mono.just("secret"));
+        java.util.List<String> ids = new java.util.ArrayList<>();
+        when(chain.filter(any())).thenAnswer(inv -> {
+            org.springframework.web.server.ServerWebExchange ex = inv.getArgument(0);
+            ids.add(ex.getAttribute(AiProviderRoutingFilter.AI_SERVICE_ATTR));
+            return Mono.empty();
+        });
+        MockServerWebExchange ex = post("{\"model\":\"support-chat\"}");
+        StepVerifier.create(filter.filter(ex, chain)).verifyComplete();
+        // Another request advances the balancer; retries must retain the first request's plan.
+        StepVerifier.create(filter.filter(post("{\"model\":\"support-chat\"}"), chain)).verifyComplete();
+        StepVerifier.create(filter.filter(ex, chain)).verifyComplete();
+        StepVerifier.create(filter.filter(ex, chain)).verifyComplete();
+        assertEquals(List.of("a", "b", "b", "backup"), ids);
+        assertEquals("qwen-plus", ex.getAttribute(AiProviderRoutingFilter.AI_MODEL_ATTR));
+    }
+
+    @Test
+    void skipsUnresolvableServiceWithoutLosingOtherSameProviderService() {
+        AiProxyConfig config = enabledConfig();
+        config.setUpstreams(List.of(service("a", 1, "gpt-a"), service("b", 1, "gpt-b")));
+        stubConfig(config);
+        when(keyResolver.resolveKey("key-a")).thenReturn(Mono.empty());
+        when(keyResolver.resolveKey("key-b")).thenReturn(Mono.just("secret"));
+        when(chain.filter(any())).thenReturn(Mono.empty());
+        MockServerWebExchange ex = post("{\"model\":\"support-chat\"}");
+        StepVerifier.create(filter.filter(ex, chain)).verifyComplete();
+        assertEquals("b", ex.getAttribute(AiProviderRoutingFilter.AI_SERVICE_ATTR));
+        assertEquals("gpt-b", ex.getAttribute(AiProviderRoutingFilter.AI_MODEL_ATTR));
+    }
+
+    @Test
+    void unknownAliasCannotFallBackToLegacyProviderMaps() {
+        AiProxyConfig config = enabledConfig();
+        config.setUpstreams(List.of(service("a", 1, "gpt-a")));
+        config.setProviderApiKeyRefs(Map.of("qwen", "legacy"));
+        stubConfig(config);
+        MockServerWebExchange ex = post("{\"model\":\"qwen-plus\"}");
+        StepVerifier.create(filter.filter(ex, chain)).verifyComplete();
+        verifyNoInteractions(keyResolver, chain);
+        assertTrue(ex.getResponse().getStatusCode().isError());
+    }
+
     @Test
     @DisplayName("Passes through when AI_PROXY config is absent")
     void passthroughWhenNoConfig() {

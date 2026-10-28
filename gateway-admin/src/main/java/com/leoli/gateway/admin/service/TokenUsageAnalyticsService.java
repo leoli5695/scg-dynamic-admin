@@ -46,6 +46,8 @@ public class TokenUsageAnalyticsService {
         m.put("activeTenants", asLong(r[5]));
         m.put("activeRoutes", asLong(r[6]));
         m.put("activeModels", asLong(r[7]));
+        m.put("unknownUsageRequests", asLong(r[8]));
+        m.put("failedSettlementRequests", asLong(r[9]));
         return m;
     }
 
@@ -118,9 +120,20 @@ public class TokenUsageAnalyticsService {
             m.put("routeId", e.getRouteId());
             m.put("model", e.getModel());
             m.put("responseFormat", e.getResponseFormat());
+            m.put("usageStatus", e.getUsageStatus() != null ? e.getUsageStatus() : "LEGACY");
+            m.put("settlementStatus", e.getSettlementStatus() != null ? e.getSettlementStatus() : "LEGACY");
+            m.put("provider", e.getProvider());
+            m.put("serviceId", e.getServiceId());
+            m.put("chargedTokens", e.getChargedTokens());
+            m.put("reservedTokens", e.getReservedTokens());
             m.put("promptTokens", e.getPromptTokens());
             m.put("completionTokens", e.getCompletionTokens());
             m.put("totalTokens", e.getTotalTokens());
+            if ("UNKNOWN".equals(e.getUsageStatus()) || "ESTIMATED".equals(e.getUsageStatus())) {
+                m.put("promptTokens", null);
+                m.put("completionTokens", null);
+                m.put("totalTokens", null);
+            }
             m.put("latencyMs", e.getLatencyMs());
             m.put("traceId", e.getTraceId());
             m.put("instanceId", e.getInstanceId());

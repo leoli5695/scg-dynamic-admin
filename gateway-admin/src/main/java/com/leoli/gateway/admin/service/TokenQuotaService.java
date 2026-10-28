@@ -432,6 +432,12 @@ public class TokenQuotaService {
         history.setTraceId((String) usageData.get("traceId"));
         history.setRouteId((String) usageData.get("routeId"));
         history.setModel((String) usageData.get("model"));
+        history.setUsageStatus((String) usageData.getOrDefault("usageStatus", "LEGACY"));
+        history.setSettlementStatus((String) usageData.getOrDefault("settlementStatus", "LEGACY"));
+        history.setProvider((String) usageData.get("provider"));
+        history.setServiceId((String) usageData.get("serviceId"));
+        history.setChargedTokens(asLong(usageData.get("chargedTokens")));
+        history.setReservedTokens(asLong(usageData.get("reservedTokens")));
 
         Integer promptTokens = asInt(usageData.get("promptTokens"));
         Integer completionTokens = asInt(usageData.get("completionTokens"));
@@ -476,11 +482,14 @@ public class TokenQuotaService {
                     Optional.ofNullable(asInt(row.get("promptTokens"))).orElse(0),
                     Optional.ofNullable(asInt(row.get("completionTokens"))).orElse(0),
                     Optional.ofNullable(asInt(row.get("totalTokens"))).orElse(0), row.get("instanceId"),
-                    row.get("responseFormat"), asLong(row.get("latencyMs")), requestTime, now});
+                    row.get("responseFormat"), asLong(row.get("latencyMs")), requestTime, now,
+                    row.getOrDefault("usageStatus", "LEGACY"), row.getOrDefault("settlementStatus", "LEGACY"),
+                    row.get("provider"), row.get("serviceId"), asLong(row.get("chargedTokens")), asLong(row.get("reservedTokens"))});
         }
         usageJdbc.batchUpdate("INSERT INTO token_usage_history (tenant_id,trace_id,route_id,model,prompt_tokens,"
-                + "completion_tokens,total_tokens,instance_id,response_format,latency_ms,request_time,created_at)"
-                + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", rows);
+                + "completion_tokens,total_tokens,instance_id,response_format,latency_ms,request_time,created_at,"
+                + "usage_status,settlement_status,provider,service_id,charged_tokens,reserved_tokens)"
+                + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows);
     }
 
     /** JSON 数字进 Map 后类型不定（Integer/Long），统一按 Number 取，避免强转 ClassCastException。 */

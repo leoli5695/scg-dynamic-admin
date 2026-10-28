@@ -24,6 +24,19 @@ public class AiProxyConfig {
 
     private boolean enabled = false;
 
+    /** Service-level targets. When present these take precedence over legacy provider maps. */
+    private java.util.List<Upstream> upstreams = new java.util.ArrayList<>();
+
+    @Data
+    public static class Upstream {
+        private String serviceId;
+        private String provider;
+        private String credentialRef;
+        private String baseUrlOverride;
+        private int weight = 100;
+        private Map<String, String> modelMapping = new HashMap<>();
+    }
+
     // ============== Provider selection ==============
 
     /**
@@ -133,6 +146,8 @@ public class AiProxyConfig {
     /** One failover target in the ordered chain. */
     @Data
     public static class FallbackTarget {
+        private String serviceId;
+        private Map<String, String> modelMapping = new HashMap<>();
         /** Provider id (deepseek/qwen/zhipu/moonshot/openai/anthropic/custom). */
         private String provider;
         /** Upstream model for this target; defaults to the requested model. */

@@ -94,7 +94,7 @@ class TokenUsageParserTest {
     }
 
     @Test
-    @DisplayName("Parse OpenAI format with zero tokens - return empty")
+    @DisplayName("Explicit zero usage is confirmed, unlike missing usage")
     void parseOpenAIFormat_zeroTokens() {
         String response = """
             {
@@ -109,11 +109,24 @@ class TokenUsageParserTest {
 
         TokenUsage usage = parser.parseJsonResponse(response, "OPENAI", null);
 
-        assertFalse(usage.hasUsage());
-        assertTrue(usage.isEmpty());
+        assertTrue(usage.hasUsage());
+        assertFalse(usage.isEmpty());
     }
 
     // ============== Anthropic Format Tests ==============
+
+    @Test
+    void malformedOrPartialUsageIsUnknownButSseZeroIsConfirmed() {
+        for (String usage : List.of("null", "{}", "{\"prompt_tokens\":0}",
+                "{\"prompt_tokens\":-1,\"completion_tokens\":2}")) {
+            assertFalse(parser.parseJsonResponse("{\"usage\":" + usage + "}", "OPENAI", null).hasUsage());
+        }
+        TokenUsage zero = parser.aggregateSseUsage(List.of(
+                "data: {\"usage\":{\"prompt_tokens\":0,\"completion_tokens\":0,\"total_tokens\":0}}",
+                "data: [DONE]"));
+        assertTrue(zero.hasUsage());
+        assertEquals(0, zero.getTotalTokens());
+    }
 
     @Test
     @DisplayName("Parse Anthropic format - success")

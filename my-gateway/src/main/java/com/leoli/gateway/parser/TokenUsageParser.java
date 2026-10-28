@@ -95,7 +95,8 @@ public class TokenUsageParser {
     private TokenUsage parseOpenAIFormat(JsonNode root) {
         JsonNode usageNode = root.path("usage");
 
-        if (usageNode.isMissingNode()) {
+        if (!usageNode.isObject() || !((usageNode.path("prompt_tokens").isIntegralNumber()
+                && usageNode.path("completion_tokens").isIntegralNumber()) || usageNode.path("total_tokens").isIntegralNumber())) {
             return TokenUsage.empty();
         }
 
@@ -108,7 +109,7 @@ public class TokenUsageParser {
             totalTokens = promptTokens + completionTokens;
         }
 
-        if (promptTokens == 0 && completionTokens == 0) {
+        if (promptTokens < 0 || completionTokens < 0 || totalTokens < 0) {
             return TokenUsage.empty();
         }
 
@@ -117,6 +118,7 @@ public class TokenUsageParser {
         usage.setCompletionTokens(completionTokens);
         usage.setTotalTokens(totalTokens);
         usage.setFormat("OPENAI");
+        usage.setReported(true);
 
         return usage;
     }
@@ -127,14 +129,15 @@ public class TokenUsageParser {
     private TokenUsage parseAnthropicFormat(JsonNode root) {
         JsonNode usageNode = root.path("usage");
 
-        if (usageNode.isMissingNode()) {
+        if (!usageNode.isObject() || !(usageNode.path("input_tokens").isIntegralNumber()
+                && usageNode.path("output_tokens").isIntegralNumber())) {
             return TokenUsage.empty();
         }
 
         int inputTokens = usageNode.path("input_tokens").asInt(0);
         int outputTokens = usageNode.path("output_tokens").asInt(0);
 
-        if (inputTokens == 0 && outputTokens == 0) {
+        if (inputTokens < 0 || outputTokens < 0) {
             return TokenUsage.empty();
         }
 
@@ -143,6 +146,7 @@ public class TokenUsageParser {
         usage.setCompletionTokens(outputTokens); // Map output to completion
         usage.setTotalTokens(inputTokens + outputTokens);
         usage.setFormat("ANTHROPIC");
+        usage.setReported(true);
 
         return usage;
     }
@@ -258,30 +262,33 @@ public class TokenUsageParser {
         int totalPrompt = 0;
         int totalCompletion = 0;
         int lastTotal = 0;
+        boolean reported = false;
 
         for (String chunk : chunks) {
             TokenUsage chunkUsage = parseSseChunk(chunk);
 
-            if (!chunkUsage.isEmpty()) {
+            if (chunkUsage.hasUsage()) {
                 // Some services report cumulative totals, some report incremental
                 // Use the maximum total seen (handles both cases)
-                if (chunkUsage.getTotalTokens() > lastTotal) {
+                if (!reported || chunkUsage.getTotalTokens() > lastTotal) {
                     lastTotal = chunkUsage.getTotalTokens();
                     totalPrompt = chunkUsage.getPromptTokens();
                     totalCompletion = chunkUsage.getCompletionTokens();
                 }
+                reported = true;
             }
         }
 
-        if (totalPrompt == 0 && totalCompletion == 0) {
+        if (!reported) {
             return TokenUsage.empty();
         }
 
         TokenUsage usage = new TokenUsage();
         usage.setPromptTokens(totalPrompt);
         usage.setCompletionTokens(totalCompletion);
-        usage.setTotalTokens(totalPrompt + totalCompletion);
+        usage.setTotalTokens(lastTotal);
         usage.setFormat("SSE_AGGREGATED");
+        usage.setReported(true);
 
         return usage;
     }
@@ -338,6 +345,7 @@ public class TokenUsageParser {
         private String format;
         private String model;
         private long timestamp;
+        private boolean reported;
 
         public static TokenUsage empty() {
             TokenUsage usage = new TokenUsage();
@@ -350,11 +358,11 @@ public class TokenUsageParser {
         }
 
         public boolean isEmpty() {
-            return promptTokens == 0 && completionTokens == 0;
+            return !reported && totalTokens == 0 && promptTokens == 0 && completionTokens == 0;
         }
 
         public boolean hasUsage() {
-            return totalTokens > 0;
+            return reported || totalTokens > 0;
         }
 
         /**

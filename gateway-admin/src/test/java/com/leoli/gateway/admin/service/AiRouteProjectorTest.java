@@ -185,6 +185,50 @@ class AiRouteProjectorTest {
     // ---------- syncProxyStrategy: projection ----------
 
     @Test
+    @SuppressWarnings("unchecked")
+    void preservesSameProviderServicesAndTheirMappings() {
+        when(serviceRepository.findByServiceName("channel-a"))
+                .thenReturn(aiService("channel-a", "openai", "key-a", "https://a.example/v1"));
+        when(serviceRepository.findByServiceName("channel-b"))
+                .thenReturn(aiService("channel-b", "openai", "key-b", "https://b.example/v1"));
+        when(strategyRepository.findByRouteIdAndInstanceId(ROUTE_ID, INSTANCE_ID)).thenReturn(List.of());
+        AiUpstream a = upstream("channel-a", 20);
+        a.setModelMapping(Map.of("support-chat", "gpt-a"));
+        AiUpstream b = upstream("channel-b", 80);
+        b.setModelMapping(Map.of("support-chat", "gpt-b"));
+        RouteDefinition route = aiRoute("chat", a, b);
+        AiRouteFallbackConfig fallback = new AiRouteFallbackConfig();
+        fallback.setEnabled(true);
+        fallback.setUpstreams(List.of(b));
+        route.setAiFallback(fallback);
+
+        projector.syncProxyStrategy(route, ROUTE_ID, INSTANCE_ID);
+
+        Map<String, Object> config = capturedCreateConfig();
+        List<Map<String, Object>> targets = (List<Map<String, Object>>) config.get("upstreams");
+        assertEquals(2, targets.size());
+        assertEquals("channel-a", targets.get(0).get("serviceId"));
+        assertEquals("key-a", targets.get(0).get("credentialRef"));
+        assertEquals("https://a.example/v1", targets.get(0).get("baseUrlOverride"));
+        assertEquals(20, targets.get(0).get("weight"));
+        assertEquals(Map.of("support-chat", "gpt-a"), targets.get(0).get("modelMapping"));
+        assertEquals("key-b", targets.get(1).get("credentialRef"));
+        assertEquals(80, targets.get(1).get("weight"));
+        assertEquals(Map.of("support-chat", "gpt-b"), targets.get(1).get("modelMapping"));
+        List<Map<String, Object>> fallbacks = (List<Map<String, Object>>) config.get("fallbacks");
+        assertEquals("channel-b", fallbacks.get(0).get("serviceId"));
+        assertEquals(b.getModelMapping(), fallbacks.get(0).get("modelMapping"));
+    }
+
+    @Test
+    void rejectsInvalidWeightsBeforePublishing() {
+        RouteDefinition route = aiRoute("chat", upstream("channel-a", 0));
+        assertThrows(IllegalArgumentException.class, () -> projector.validateAiRoute(route));
+        assertThrows(IllegalArgumentException.class, () -> projector.syncProxyStrategy(route, ROUTE_ID, INSTANCE_ID));
+        verify(strategyService, never()).createStrategy(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
     @DisplayName("projects bound AI services into providerApiKeyRefs / baseUrlOverride / modelMapping")
     @SuppressWarnings("unchecked")
     void projectsBoundServicesIntoProxyConfig() {

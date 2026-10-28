@@ -23,6 +23,19 @@ public class TokenUsageHistoryEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "usage_status", length = 20)
+    private String usageStatus;
+    @Column(name = "settlement_status", length = 20)
+    private String settlementStatus;
+    @Column(name = "provider", length = 64)
+    private String provider;
+    @Column(name = "service_id", length = 255)
+    private String serviceId;
+    @Column(name = "charged_tokens")
+    private Long chargedTokens;
+    @Column(name = "reserved_tokens")
+    private Long reservedTokens;
+
     /**
      * Tenant identifier.
      */

@@ -22,11 +22,10 @@ import java.util.Map;
 /**
  * Projects an AI route's bound AI services into the route's companion AI_PROXY strategy.
  * <p>
- * This is the hinge that makes the Higress-style "AI route binds AI services" model work on
- * the existing ns/v3 data plane without rewriting it: {@code AiProviderRoutingFilter} already
- * only routes to providers that have an entry in {@code AiProxyConfig.providerApiKeyRefs}, so
- * populating that map from the bound AI services is sufficient to confine the route to exactly
- * those services. The built-in provider catalogue still supplies base URLs / protocol.
+ * Each bound service is projected independently into {@code AiProxyConfig.upstreams}, retaining
+ * its identity, endpoint, credential, weight and model mapping even when several services share
+ * a provider type. Legacy provider maps remain for compatibility with older configurations;
+ * the service-level list is authoritative on the updated data plane.
  * <p>
  * Field names written into the strategy config mirror {@code com.leoli.gateway.model.AiProxyConfig}.
  *
@@ -81,6 +80,7 @@ public class AiRouteProjector {
             if (up == null || !StringUtils.hasText(up.getProvider())) {
                 throw new IllegalArgumentException("AI 路由存在未指定服务的上游绑定");
             }
+            validateWeight(up);
             requireConfiguredAiService(up.getProvider());
         }
         if (route.getAiFallback() != null && Boolean.TRUE.equals(route.getAiFallback().getEnabled())) {
@@ -139,10 +139,20 @@ public class AiRouteProjector {
         Map<String, String> refs = new LinkedHashMap<>();
         Map<String, String> baseUrlOverrides = new LinkedHashMap<>();
         Map<String, String> modelMapping = new LinkedHashMap<>();
+        List<Map<String, Object>> upstreams = new ArrayList<>();
 
         for (AiUpstream up : route.getAiUpstreams()) {
+            validateWeight(up);
             ServiceDefinition svc = requireConfiguredAiService(up.getProvider());
             String providerType = svc.getProviderType();
+            Map<String, Object> target = new LinkedHashMap<>();
+            target.put("serviceId", up.getProvider());
+            target.put("provider", providerType);
+            target.put("credentialRef", svc.getCredentialRef());
+            target.put("weight", up.getWeight() == null ? 100 : up.getWeight());
+            target.put("baseUrlOverride", svc.getBaseUrl());
+            target.put("modelMapping", up.getModelMapping());
+            upstreams.add(target);
             refs.put(providerType, svc.getCredentialRef());
             if (StringUtils.hasText(svc.getBaseUrl())) {
                 baseUrlOverrides.put(providerType, svc.getBaseUrl().trim());
@@ -155,6 +165,7 @@ public class AiRouteProjector {
         Map<String, Object> config = new LinkedHashMap<>();
         config.put("enabled", true);
         config.put("providerSelection", "MODEL");
+        config.put("upstreams", upstreams);
         config.put("providerApiKeyRefs", refs);
         if (!baseUrlOverrides.isEmpty()) {
             config.put("providerBaseUrlOverride", baseUrlOverrides);
@@ -168,6 +179,8 @@ public class AiRouteProjector {
             for (AiUpstream fb : route.getAiFallback().getUpstreams()) {
                 ServiceDefinition svc = requireConfiguredAiService(fb.getProvider());
                 Map<String, Object> target = new LinkedHashMap<>();
+                target.put("serviceId", fb.getProvider());
+                target.put("modelMapping", fb.getModelMapping());
                 target.put("provider", svc.getProviderType());
                 target.put("credentialRef", svc.getCredentialRef());
                 if (StringUtils.hasText(svc.getBaseUrl())) {
@@ -178,6 +191,12 @@ public class AiRouteProjector {
             config.put("fallbacks", fallbacks);
         }
         return config;
+    }
+
+    private void validateWeight(AiUpstream upstream) {
+        if (upstream.getWeight() != null && (upstream.getWeight() < 1 || upstream.getWeight() > 100)) {
+            throw new IllegalArgumentException("AI 上游权重必须在 1 到 100 之间");
+        }
     }
 
     private StrategyEntity findCompanion(String routeId, String instanceId) {

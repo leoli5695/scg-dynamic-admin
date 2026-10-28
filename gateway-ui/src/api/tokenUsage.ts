@@ -16,6 +16,8 @@ export interface TokenUsageFilters {
 }
 
 export interface TokenUsageOverview {
+  unknownUsageRequests?: number;
+  failedSettlementRequests?: number;
   requests: number;
   promptTokens: number;
   completionTokens: number;
@@ -45,15 +47,21 @@ export interface TokenUsageBreakdownRow {
 }
 
 export interface TokenUsageEvent {
+  usageStatus?: 'CONFIRMED' | 'ESTIMATED' | 'UNKNOWN' | 'NOT_BILLED' | 'LEGACY';
+  settlementStatus?: string;
+  provider?: string | null;
+  serviceId?: string | null;
+  chargedTokens?: number | null;
+  reservedTokens?: number | null;
   id: number;
   requestTime: string | null;
   tenantId: string;
   routeId: string | null;
   model: string | null;
   responseFormat: string | null;
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
   latencyMs: number | null;
   traceId: string | null;
   instanceId: string | null;

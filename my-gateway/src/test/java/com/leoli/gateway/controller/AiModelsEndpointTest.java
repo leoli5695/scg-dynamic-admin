@@ -96,4 +96,19 @@ class AiModelsEndpointTest {
         assertEquals("list", resp.get("object"));
         assertTrue(((List<Map<String, Object>>) resp.get("data")).isEmpty());
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void discoversAliasesFromServiceTargetsWithoutExposingCredentials() {
+        when(strategyManager.getAllStrategies()).thenReturn(List.of(aiProxyStrategy(Map.of(
+                "enabled", true,
+                "upstreams", List.of(Map.of("serviceId", "channel-a", "provider", "openai",
+                        "credentialRef", "secret-ref", "weight", 20,
+                        "modelMapping", Map.of("support-chat", "gpt-a")))))));
+        List<Map<String, Object>> data = (List<Map<String, Object>>) endpoint.listModels().get("data");
+        assertEquals(1, data.size());
+        assertEquals("support-chat", data.get(0).get("id"));
+        assertEquals("openai", data.get(0).get("owned_by"));
+        assertFalse(data.toString().contains("secret-ref"));
+    }
 }

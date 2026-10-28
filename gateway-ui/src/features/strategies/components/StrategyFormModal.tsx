@@ -239,7 +239,8 @@ const StrategyFormModal: React.FC<StrategyFormModalProps> = ({
       routeId: values.scope === 'ROUTE' ? String(values.routeId ?? '') : undefined,
       priority: typeof values.priority === 'number' ? values.priority : 100,
       enabled: values.enabled !== false,
-      config: buildStrategyConfig(values, strategyTypeCode),
+      config: buildStrategyConfig(strategyTypeCode === 'AI_PROXY'
+        ? { ...strategy?.config, ...values } : values, strategyTypeCode),
       description: values.description ? String(values.description) : undefined,
     };
     await onSubmit(body);

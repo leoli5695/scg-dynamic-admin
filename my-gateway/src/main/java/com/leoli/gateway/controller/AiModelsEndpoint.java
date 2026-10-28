@@ -60,6 +60,17 @@ public class AiModelsEndpoint {
                 continue;
             }
 
+            if (config.getUpstreams() != null) {
+                config.getUpstreams().stream().filter(up -> up != null && up.getWeight() > 0
+                        && up.getCredentialRef() != null && !up.getCredentialRef().isBlank())
+                        .forEach(up -> {
+                            if (up.getModelMapping() != null) {
+                                up.getModelMapping().keySet().forEach(model ->
+                                        addModel(byId, model, up.getProvider(), created));
+                            }
+                        });
+            }
+
             if (config.getModelRouting() != null) {
                 config.getModelRouting().forEach((model, provider) ->
                         addModel(byId, model, provider != null ? provider : inferProvider(model), created));

@@ -65,6 +65,13 @@ public class AiProviderRoutingFilter implements GlobalFilter, Ordered {
     public static final String AI_PROVIDER_ATTR = "ai.provider";
     public static final String AI_MODEL_ATTR = "ai.model";
     public static final String AI_RESPONSE_FORMAT_ATTR = "ai.response_format";
+    public static final String AI_SERVICE_ATTR = "ai.service";
+
+    private static final String TARGETS_ATTR = "ai.routing.targets";
+    private record CandidateKey(String service, String provider, String credential, int weight) { }
+    private record BalanceKey(String route, List<CandidateKey> candidates) { }
+    private final com.github.benmanes.caffeine.cache.Cache<BalanceKey, java.util.concurrent.atomic.AtomicReference<long[]>> selections =
+            com.github.benmanes.caffeine.cache.Caffeine.newBuilder().maximumSize(10000).build();
 
     private final StrategyManager strategyManager;
     private final ProviderKeyResolver keyResolver;
@@ -159,6 +166,9 @@ public class AiProviderRoutingFilter implements GlobalFilter, Ordered {
                     "无法获取任何 Provider 密钥（已尝试 " + targets.size() + " 个目标）");
         }
         Target target = targets.get(index);
+        if (exchange.getAttribute(TARGETS_ATTR) != null) {
+            exchange.getAttributes().put(ATTEMPT_INDEX_ATTR, index + 1);
+        }
 
         // switchIfEmpty is on Mono<String> (emits when present) - NOT on the downstream
         // Mono<Void>, which would falsely trigger on normal completion.
@@ -171,14 +181,17 @@ public class AiProviderRoutingFilter implements GlobalFilter, Ordered {
                     URI upstream = buildUpstreamUri(target.provider, target.baseUrlOverride, exchange);
                     exchange.getAttributes().put(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR, upstream);
                     exchange.getAttributes().put(AI_PROVIDER_ATTR, target.provider.getId());
+                    if (target.serviceId != null) {
+                        exchange.getAttributes().put(AI_SERVICE_ATTR, target.serviceId);
+                    }
                     exchange.getAttributes().put(AI_MODEL_ATTR, target.upstreamModel);
                     exchange.getAttributes().put(AI_RESPONSE_FORMAT_ATTR,
                             config.getResponseFormat() != null ? config.getResponseFormat() : "OPENAI");
 
                     ServerHttpRequest newRequest = decorateRequest(exchange, target.provider, key, upstream,
                             outBytes, config);
-                    log.info("AI proxy routing: route={}, model={} -> provider={}, upstream={} (attempt {}/{})",
-                            routeId, requestedModel, target.provider.getId(), upstream, index + 1, targets.size());
+                    log.info("AI proxy routing: route={}, model={} -> provider={}, service={}, upstream={} (attempt {}/{})",
+                            routeId, requestedModel, target.provider.getId(), target.serviceId, upstream, index + 1, targets.size());
                     keyPoolSelector.acquire(target.provider.getId(), target.credentialRef, config);
                     return chain.filter(exchange.mutate().request(newRequest).build())
                             .doFinally(signal -> keyPoolSelector.release(
@@ -240,10 +253,30 @@ public class AiProviderRoutingFilter implements GlobalFilter, Ordered {
      */
     private List<Target> buildTargets(ServerWebExchange exchange, AiProxyConfig config,
                                       String requestedModel, String mappedModel) {
+        List<Target> saved = exchange.getAttribute(TARGETS_ATTR);
+        if (saved != null) {
+            return saved;
+        }
         List<Target> targets = new ArrayList<>();
 
         Optional<LlmProvider> primary = resolveProvider(exchange, config, requestedModel);
-        if (primary.isPresent()) {
+        if (config.getUpstreams() != null && !config.getUpstreams().isEmpty()) {
+            List<AiProxyConfig.Upstream> eligible = config.getUpstreams().stream()
+                    .filter(up -> up != null && up.getWeight() > 0
+                            && up.getCredentialRef() != null && !up.getCredentialRef().isBlank()
+                            && ProviderRegistry.byId(up.getProvider()).isPresent())
+                    .filter(up -> matchesUpstream(up, config, requestedModel, primary))
+                    .toList();
+            long totalWeight = eligible.stream().mapToLong(AiProxyConfig.Upstream::getWeight).sum();
+            if (totalWeight > 0) {
+                int selected = selectService(RouteUtils.getRouteId(exchange), eligible, totalWeight);
+                // Pin the ordered plan to this request: retries must not re-run load balancing.
+                addServiceTarget(targets, eligible.get(selected), requestedModel);
+                for (int i = 0; i < eligible.size(); i++) {
+                    if (i != selected) addServiceTarget(targets, eligible.get(i), requestedModel);
+                }
+            }
+        } else if (primary.isPresent()) {
             // Pool-aware selection (Higress ai-load-balancer counterpart); falls back
             // to the legacy single providerApiKeyRefs entry when no pool is configured.
             String ref = keyPoolSelector.selectRef(primary.get().getId(), config);
@@ -269,13 +302,55 @@ public class AiProviderRoutingFilter implements GlobalFilter, Ordered {
                     continue;
                 }
                 String targetModel = (fb.getModel() != null && !fb.getModel().isBlank())
-                        ? fb.getModel() : requestedModel;
+                        ? fb.getModel() : fb.getModelMapping() == null ? requestedModel
+                        : fb.getModelMapping().getOrDefault(requestedModel, requestedModel);
                 String override = (fb.getBaseUrlOverride() != null && !fb.getBaseUrlOverride().isBlank())
                         ? fb.getBaseUrlOverride() : overrideFor(config, provider.get().getId());
-                targets.add(new Target(provider.get(), ref, targetModel, override));
+                targets.add(new Target(provider.get(), ref, targetModel, override, fb.getServiceId()));
             }
         }
+        if (config.getUpstreams() != null && !config.getUpstreams().isEmpty()) {
+            exchange.getAttributes().put(TARGETS_ATTR, targets);
+        }
         return targets;
+    }
+
+    /** Smooth weighted rotation, local to this gateway; CAS keeps selection off blocking locks. */
+    private int selectService(String routeId, List<AiProxyConfig.Upstream> eligible, long totalWeight) {
+        BalanceKey key = new BalanceKey(routeId, eligible.stream().map(up ->
+                new CandidateKey(up.getServiceId(), up.getProvider(), up.getCredentialRef(), up.getWeight())).toList());
+        var state = selections.get(key, ignored -> new java.util.concurrent.atomic.AtomicReference<>(new long[eligible.size()]));
+        while (true) {
+            long[] previous = state.get();
+            long[] next = previous.clone();
+            int selected = 0;
+            for (int i = 0; i < next.length; i++) {
+                next[i] += eligible.get(i).getWeight();
+                if (next[i] > next[selected]) selected = i;
+            }
+            next[selected] -= totalWeight;
+            if (state.compareAndSet(previous, next)) return selected;
+        }
+    }
+
+    private boolean matchesUpstream(AiProxyConfig.Upstream up, AiProxyConfig config,
+                                    String model, Optional<LlmProvider> resolved) {
+        if (config.getProviderSelection() != null && !"MODEL".equalsIgnoreCase(config.getProviderSelection())) {
+            return resolved.map(p -> p.getId().equalsIgnoreCase(up.getProvider())).orElse(false);
+        }
+        if (model == null || model.isBlank()) return false;
+        String explicit = config.getModelRouting() == null ? null : config.getModelRouting().get(model);
+        if (explicit != null && !explicit.isBlank()) {
+            return resolved.map(p -> p.getId().equalsIgnoreCase(up.getProvider())).orElse(false);
+        }
+        return (up.getModelMapping() != null && up.getModelMapping().containsKey(model))
+                || resolved.map(p -> p.getId().equalsIgnoreCase(up.getProvider())).orElse(false);
+    }
+
+    private void addServiceTarget(List<Target> targets, AiProxyConfig.Upstream up, String model) {
+        String mapped = up.getModelMapping() == null ? model : up.getModelMapping().getOrDefault(model, model);
+        targets.add(new Target(ProviderRegistry.byId(up.getProvider()).orElseThrow(),
+                up.getCredentialRef(), mapped, up.getBaseUrlOverride(), up.getServiceId()));
     }
 
     private String overrideFor(AiProxyConfig config, String providerId) {
@@ -289,12 +364,18 @@ public class AiProviderRoutingFilter implements GlobalFilter, Ordered {
         final String credentialRef;
         final String upstreamModel;
         final String baseUrlOverride;
+        final String serviceId;
 
         Target(LlmProvider provider, String credentialRef, String upstreamModel, String baseUrlOverride) {
+            this(provider, credentialRef, upstreamModel, baseUrlOverride, null);
+        }
+
+        Target(LlmProvider provider, String credentialRef, String upstreamModel, String baseUrlOverride, String serviceId) {
             this.provider = provider;
             this.credentialRef = credentialRef;
             this.upstreamModel = upstreamModel;
             this.baseUrlOverride = baseUrlOverride;
+            this.serviceId = serviceId;
         }
     }
 

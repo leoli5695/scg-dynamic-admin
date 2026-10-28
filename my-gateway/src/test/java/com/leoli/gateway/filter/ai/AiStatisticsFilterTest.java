@@ -119,7 +119,7 @@ class AiStatisticsFilterTest {
                 .tag("model", "qwen-plus").counter().count());
         assertEquals(1, meterRegistry.get("ai.llm.service.duration")
                 .tag("model", "qwen-plus").timer().count());
-        assertEquals(1, meterRegistry.get("ai.llm.first.token.duration")
+        assertEquals(1, meterRegistry.get("ai.llm.first.byte.duration")
                 .tag("model", "qwen-plus").timer().count());
     }
 
@@ -142,7 +142,7 @@ class AiStatisticsFilterTest {
         assertEquals(0.0, meterRegistry.get("ai.tokens.input").counter().count());
         assertEquals(0.0, meterRegistry.get("ai.tokens.output").counter().count());
         // Non-stream: no first-token timer
-        assertEquals(0, meterRegistry.find("ai.llm.first.token.duration").timers().size());
+        assertEquals(0, meterRegistry.find("ai.llm.first.byte.duration").timers().size());
     }
 
     @Test
