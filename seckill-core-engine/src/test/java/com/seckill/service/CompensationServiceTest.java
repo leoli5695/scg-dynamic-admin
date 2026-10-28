@@ -1,235 +1,38 @@
 package com.seckill.service;
 
-import com.seckill.entity.SeckillOrder;
-import com.seckill.entity.TransactionLog;
-import com.seckill.enums.OrderStatus;
-import com.seckill.enums.TransactionStatus;
-import com.seckill.mapper.OrderMapper;
-import com.seckill.mapper.TransactionLogMapper;
-import com.seckill.redis.lua.SeckillDeductLua;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
+import com.seckill.entity.*;
+import com.seckill.mapper.*;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.time.LocalDateTime;
-
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.*;
 
-/**
- * ============================================================================
- * 补偿服务单元测试
- * ============================================================================
- * <p>
- * 测试范围:
- * 1. 超时事务处理逻辑
- * 2. 未支付订单取消逻辑
- * 3. 手动库存回补逻辑
- * 4. RocketMQ重投窗口期保护
- *
- * @author leoli
- */
-@ExtendWith(MockitoExtension.class)
 class CompensationServiceTest {
-
-    @Mock
-    private OrderMapper orderMapper;
-
-    @Mock
-    private SeckillDeductLua seckillDeductLua;
-
-    @Mock
-    private TransactionLogMapper transactionLogMapper;
-
-    @Mock
-    private LocalFallbackService localFallbackService;
-
-    private CompensationService compensationService;
-
-    private TransactionLog testTransaction;
-    private SeckillOrder testOrder;
-
-    @BeforeEach
-    void setUp() {
-        // 用真 dispatcher 包住 seckillDeductLua mock：localFallbackService.rollbackStockLocal
-        // 未打桩时返回 false，回补照旧落到 Redis，所以下面所有
-        // verify(seckillDeductLua).rollbackStock(...) 仍然是在验真的那条路径。
-        compensationService = new CompensationService(
-                orderMapper,
-                new StockRollbackDispatcher(seckillDeductLua, localFallbackService),
-                transactionLogMapper);
-
-        testTransaction = new TransactionLog();
-        testTransaction.setTransactionId("tx-12345");
-        testTransaction.setSeckillId(1L);
-        testTransaction.setUserId(100L);
-        testTransaction.setOrderNo("order-001");
-        testTransaction.setQuantity(1);
-        testTransaction.setStatus(TransactionStatus.PROCESSING.getCode());
-        testTransaction.setCreateTime(LocalDateTime.now().minusMinutes(10));
-        testTransaction.setRetryCount(0);
-
-        testOrder = new SeckillOrder();
-        testOrder.setOrderNo("order-001");
-        testOrder.setSeckillId(1L);
-        testOrder.setUserId(100L);
-        testOrder.setQuantity(1);
-        testOrder.setShardIndex(3);
-        testOrder.setStatus(OrderStatus.PENDING_PAYMENT.getCode());
+    private final OrderMapper orders=mock(OrderMapper.class);
+    private final TransactionLogMapper transactions=mock(TransactionLogMapper.class);
+    private final OrderLifecycleService lifecycle=mock(OrderLifecycleService.class);
+    private final StockReleaseService releases=mock(StockReleaseService.class);
+    private final CompensationService service=new CompensationService(orders,transactions,lifecycle,releases);
+    private TransactionLog tx(){var tx=new TransactionLog();tx.setTransactionId("tx");tx.setOrderNo("a");tx.setUserId(42L);tx.setStatus(0);return tx;}
+    private SeckillOrder order(int state){var o=new SeckillOrder();o.setOrderNo("a");o.setUserId(42L);o.setStatus(state);o.setQuantity(1);return o;}
+    @Test void absentOrderDoesNotReleaseAConcurrentConsumersReservation(){
+        when(transactions.selectByTransactionId("tx")).thenReturn(tx());service.processTimeoutTransaction(tx(),"test");
+        verifyNoInteractions(lifecycle,releases);verify(transactions,never()).markOrderTerminal(anyLong(),anyString());
     }
-
-    // ==================== processTimeoutTransaction Tests ====================
-
-    @Test
-    @DisplayName("超时事务处理：事务已被处理时跳过")
-    void processTimeoutTransaction_alreadyProcessed_skips() {
-        // 模拟事务状态已变更
-        TransactionLog processedTx = new TransactionLog();
-        processedTx.setTransactionId("tx-12345");
-        processedTx.setStatus(TransactionStatus.SUCCESS.getCode());
-
-        when(transactionLogMapper.selectByTransactionId("tx-12345"))
-                .thenReturn(processedTx);
-
-        compensationService.processTimeoutTransaction(testTransaction, "短时超时");
-
-        // 验证没有执行回补操作
-        verify(seckillDeductLua, never()).rollbackStock(anyLong(), anyLong(), anyInt());
-        verify(transactionLogMapper, never()).updateById(any());
+    @Test void stalePendingSnapshotGoesThroughConditionalTransition(){
+        service.cancelUnpaidOrder(order(0));verify(lifecycle).cancelExpired(42L,"a");verifyNoInteractions(releases);
+        verify(orders,never()).updateById(any(SeckillOrder.class));
     }
-
-    @Test
-    @DisplayName("超时事务处理：订单不存在且在重投窗口期内，跳过回补")
-    void processTimeoutTransaction_inResendWindow_skips() {
-        // 设置事务刚创建（在重投窗口期内）
-        testTransaction.setCreateTime(LocalDateTime.now().minusMinutes(3));
-
-        when(transactionLogMapper.selectByTransactionId("tx-12345"))
-                .thenReturn(testTransaction);
-        when(orderMapper.selectByUserAndOrderNo(100L, "order-001"))
-                .thenReturn(null);
-
-        compensationService.processTimeoutTransaction(testTransaction, "短时超时");
-
-        // 验证没有执行回补（等待RocketMQ重投）
-        verify(seckillDeductLua, never()).rollbackStock(anyLong(), anyLong(), anyInt());
+    @Test void paidOrderIsNeverReleasedByReconciliation(){
+        when(transactions.selectByTransactionId("tx")).thenReturn(tx());when(orders.selectByUserAndOrderNo(42L,"a")).thenReturn(order(1));
+        service.processTimeoutTransaction(tx(),"test");verifyNoInteractions(lifecycle,releases);verify(transactions).markOrdersCreated(java.util.List.of("tx"));
     }
-
-    @Test
-    @DisplayName("超时事务处理：订单不存在且超过重投窗口期，执行回补")
-    void processTimeoutTransaction_exceedsResendWindow_rollback() {
-        // 设置事务超过重投窗口期
-        testTransaction.setCreateTime(LocalDateTime.now().minusMinutes(10));
-
-        when(transactionLogMapper.selectByTransactionId("tx-12345"))
-                .thenReturn(testTransaction);
-        when(orderMapper.selectByUserAndOrderNo(100L, "order-001"))
-                .thenReturn(null);
-        when(seckillDeductLua.rollbackStock(1L, 100L, 1))
-                .thenReturn(1003L); // 成功回补到分片3
-
-        compensationService.processTimeoutTransaction(testTransaction, "长时超时兜底");
-
-        // 验证执行了回补
-        verify(seckillDeductLua).rollbackStock(1L, 100L, 1);
-        verify(transactionLogMapper).updateById(any());
-
-        assertEquals(TransactionStatus.FAILED.getCode(), testTransaction.getStatus());
+    @Test void oldTerminalRowsAreNotBlindlyRestocked(){
+        when(orders.selectByUserAndSeckill(42L,1L)).thenReturn(order(2));assertFalse(service.manualRollback(1L,42L,1));verifyNoInteractions(releases);
     }
-
-    @Test
-    @DisplayName("超时事务处理：订单待支付状态，执行回补并取消订单")
-    void processTimeoutTransaction_pendingPayment_rollbackAndCancel() {
-        when(transactionLogMapper.selectByTransactionId("tx-12345"))
-                .thenReturn(testTransaction);
-        when(orderMapper.selectByUserAndOrderNo(100L, "order-001"))
-                .thenReturn(testOrder);
-        when(seckillDeductLua.rollbackStock(1L, 100L, 1))
-                .thenReturn(1003L);
-
-        compensationService.processTimeoutTransaction(testTransaction, "短时超时");
-
-        // 验证执行了回补
-        verify(seckillDeductLua).rollbackStock(1L, 100L, 1);
-        // 验证订单状态更新为已取消
-        verify(orderMapper).updateById(argThat(order ->
-                order.getStatus() == OrderStatus.CANCELLED.getCode()));
-        // 验证事务状态更新为失败
-        assertEquals(TransactionStatus.FAILED.getCode(), testTransaction.getStatus());
-    }
-
-    @Test
-    @DisplayName("超时事务处理：订单已支付，标记事务成功")
-    void processTimeoutTransaction_paidOrder_markSuccess() {
-        testOrder.setStatus(OrderStatus.PAID.getCode());
-
-        when(transactionLogMapper.selectByTransactionId("tx-12345"))
-                .thenReturn(testTransaction);
-        when(orderMapper.selectByUserAndOrderNo(100L, "order-001"))
-                .thenReturn(testOrder);
-
-        compensationService.processTimeoutTransaction(testTransaction, "短时超时");
-
-        // 验证没有执行回补
-        verify(seckillDeductLua, never()).rollbackStock(anyLong(), anyLong(), anyInt());
-        // 验证事务状态更新为成功
-        assertEquals(TransactionStatus.SUCCESS.getCode(), testTransaction.getStatus());
-    }
-
-    // ==================== cancelUnpaidOrder Tests ====================
-
-    @Test
-    @DisplayName("取消未支付订单：成功回补库存并取消订单")
-    void cancelUnpaidOrder_success() {
-        when(seckillDeductLua.rollbackStock(1L, 100L, 1))
-                .thenReturn(1003L);
-
-        compensationService.cancelUnpaidOrder(testOrder);
-
-        verify(seckillDeductLua).rollbackStock(1L, 100L, 1);
-        verify(orderMapper).updateById(argThat(order ->
-                order.getStatus() == OrderStatus.CANCELLED.getCode()));
-    }
-
-    @Test
-    @DisplayName("取消未支付订单：库存回补失败，订单状态不变")
-    void cancelUnpaidOrder_rollbackFails() {
-        when(seckillDeductLua.rollbackStock(1L, 100L, 1))
-                .thenReturn(0L); // 库存不足返回码
-
-        compensationService.cancelUnpaidOrder(testOrder);
-
-        verify(seckillDeductLua).rollbackStock(1L, 100L, 1);
-        // 验证订单状态未变更
-        verify(orderMapper, never()).updateById(any());
-    }
-
-    // ==================== manualRollback Tests ====================
-
-    @Test
-    @DisplayName("手动回补：成功返回true")
-    void manualRollback_success() {
-        when(seckillDeductLua.rollbackStock(1L, 100L, 1))
-                .thenReturn(1003L);
-
-        boolean result = compensationService.manualRollback(1L, 100L, 1);
-
-        assertTrue(result);
-        verify(seckillDeductLua).rollbackStock(1L, 100L, 1);
-    }
-
-    @Test
-    @DisplayName("手动回补：失败返回false")
-    void manualRollback_fail() {
-        when(seckillDeductLua.rollbackStock(1L, 100L, 1))
-                .thenReturn(-1L); // 未找到分片记录
-
-        boolean result = compensationService.manualRollback(1L, 100L, 1);
-
-        assertFalse(result);
+    @Test void manualRetryRequiresMatchingQuantityAndAnExistingDurableIntent(){
+        var order=order(3);order.setStockReleaseId("a");order.setStockReleaseState(1);
+        when(orders.selectByUserAndSeckill(42L,1L)).thenReturn(order);when(releases.release(order)).thenReturn(true);
+        assertFalse(service.manualRollback(1L,42L,2));assertTrue(service.manualRollback(1L,42L,1));verify(releases,times(1)).release(order);
     }
 }

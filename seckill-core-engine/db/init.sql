@@ -53,6 +53,10 @@ BEGIN
                     `total_amount`  DECIMAL(10,2) NOT NULL COMMENT ''总金额'',
                     
                     `status`        TINYINT      NOT NULL DEFAULT 0 COMMENT ''0:待支付 1:已支付 2:已取消 3:已退款'',
+  stock_release_state TINYINT NOT NULL DEFAULT 0,
+  stock_release_id VARCHAR(64) NULL,
+  stock_release_next_at DATETIME NULL,
+  INDEX idx_stock_release (stock_release_state, stock_release_next_at, id),
                     `pay_time`      DATETIME     COMMENT ''支付时间'',
                     `pay_channel`   VARCHAR(32)  COMMENT ''支付渠道(ALIPAY/WECHAT)'',
                     

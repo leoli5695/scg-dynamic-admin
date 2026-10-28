@@ -69,6 +69,10 @@ public class SeckillOrder {
      */
     private Integer status;
 
+    /** 0=no release requested; 1=pending durable release; 2=Redis release confirmed. */
+    private Integer stockReleaseState;
+    private String stockReleaseId;
+
     /**
      * 支付时间
      */

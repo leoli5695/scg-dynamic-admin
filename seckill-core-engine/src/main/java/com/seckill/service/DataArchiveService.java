@@ -146,7 +146,7 @@ public class DataArchiveService {
                 archiveOrderToHistory(order);
 
                 // 2. 删除原订单
-                orderMapper.deleteById(order.getId());
+                if (orderMapper.deleteArchivedOrder(order.getUserId(), order.getOrderNo(), order.getStatus()) != 1) continue;
 
                 // 3. 更新 ES 索引标记为已归档
                 markESIndexAsArchived(order.getOrderNo());
@@ -278,7 +278,7 @@ public class DataArchiveService {
 
         for (SeckillOrder order : orders) {
             archiveOrderToHistory(order);
-            orderMapper.deleteById(order.getId());
+            if (orderMapper.deleteArchivedOrder(order.getUserId(), order.getOrderNo(), order.getStatus()) != 1) continue;
             markESIndexAsArchived(order.getOrderNo());
         }
 

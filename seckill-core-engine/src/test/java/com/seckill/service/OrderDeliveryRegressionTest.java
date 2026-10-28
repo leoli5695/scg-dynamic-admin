@@ -62,7 +62,7 @@ class OrderDeliveryRegressionTest {
         assertThrows(IllegalArgumentException.class,()->OrderShardRouting.table(1,3));
     }
     @Test void everyStockKeyIsExplicitAndSharesTheActivityHashTag() {
-        var keys=StockKeys.script(42L,8,true,false);assertEquals(11,keys.size());
+        var keys=StockKeys.script(42L,8,true,false);assertEquals(12,keys.size());
         assertTrue(keys.stream().allMatch(key -> key.contains("{42}")));
         for(int shard=0;shard<8;shard++)assertEquals("seckill:stock:{42}:shard:"+shard,keys.get(3+shard));
         assertEquals(keys.get(0),StockKeys.script(42L,8,true,true).get(1));

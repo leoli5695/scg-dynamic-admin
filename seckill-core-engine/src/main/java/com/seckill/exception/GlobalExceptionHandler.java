@@ -30,6 +30,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public SeckillResponse handleAccessDenied(org.springframework.security.access.AccessDeniedException e) {
+        return SeckillResponse.systemError("无权访问该资源");
+    }
 
     // ============================================================================
     // 业务异常处理（返回业务错误码）

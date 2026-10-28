@@ -55,7 +55,7 @@ public class OrderQueryService {
 
         switch (queryType) {
             case "ORDER_NO":
-                return queryByOrderNo(request.getOrderNo(), traceId);
+                return queryByOrderNo(request.getOrderNo(), request.getUserId(), traceId);
             case "USER_ACTIVITY":
                 return queryByUserAndActivity(request.getUserId(), request.getSeckillId(), traceId);
             case "USER_LIST":
@@ -74,14 +74,14 @@ public class OrderQueryService {
      * <p>
      * 最精确的查询方式，ShardingSphere会通过唯一索引路由
      */
-    private OrderQueryResponse queryByOrderNo(String orderNo, String traceId) {
+    private OrderQueryResponse queryByOrderNo(String orderNo, Long userId, String traceId) {
         if (orderNo == null || orderNo.isEmpty()) {
             return OrderQueryResponse.fail("订单号不能为空");
         }
 
         try {
             // 直接查询MySQL（订单号有唯一索引，可精确路由）
-            SeckillOrder order = orderMapper.selectByOrderNo(orderNo);
+            SeckillOrder order = userId == null ? orderMapper.selectByOrderNo(orderNo) : orderMapper.selectByUserAndOrderNo(userId, orderNo);
 
             if (order == null) {
                 log.info("订单未找到: orderNo={}, traceId={}", orderNo, traceId);

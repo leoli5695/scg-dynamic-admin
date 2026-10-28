@@ -34,6 +34,16 @@ public class SeckillConfig {
     private ReconciliationConfig reconciliation = new ReconciliationConfig();
     private InternalApiConfig internalApi = new InternalApiConfig();
     private BatchConfig batch = new BatchConfig();  // OPTIMIZATION (P2): 攒批配置
+    private IdentityConfig identity = new IdentityConfig();
+
+    @Data
+    public static class IdentityConfig {
+        private String issuer = "";
+        private String audience = "";
+        private String jwkSetUri = "";
+        private String publicKeyPem = "";
+        private String userIdClaim = "sub";
+    }
 
     @Data
     public static class WarmupConfig {

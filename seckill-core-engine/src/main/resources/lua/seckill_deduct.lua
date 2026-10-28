@@ -60,6 +60,14 @@ end
 if redis.call('SISMEMBER', boughtKey, userId) == 1 then
     return -1  -- 已购买，快速拒绝
 end
+-- A terminal order still occupies the DB's UNIQUE(user_id,seckill_id) participation slot.
+-- Releasing its stock must not let this user reserve again and hit an unrecoverable DB conflict.
+local releaseLedger = KEYS[4 + shardCount]
+if releaseLedger then
+    local ledgerType = redis.call('TYPE', releaseLedger).ok
+    if ledgerType ~= 'none' and ledgerType ~= 'hash' then return -99 end
+    if ledgerType == 'hash' and redis.call('HEXISTS', releaseLedger, '__closed_user:' .. userId) == 1 then return -1 end
+end
 
 -- ============================================================================
 -- Step 2: 分片库存扣减 (热点Key分散策略)

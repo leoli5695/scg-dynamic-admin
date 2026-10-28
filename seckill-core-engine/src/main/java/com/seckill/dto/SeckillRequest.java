@@ -13,9 +13,8 @@ import lombok.Data;
 public class SeckillRequest {
 
     /**
-     * 用户ID（由网关注入）
+     * 用户ID（HTTP 入口用已验证 JWT 身份覆盖此字段）
      */
-    @NotNull(message = "用户ID不能为空")
     private Long userId;
 
     /**

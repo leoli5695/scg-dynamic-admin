@@ -70,11 +70,7 @@ public class RefundController {
         }
         request.setTraceId(traceId);
 
-        // 从网关传递的header中获取userId（优先使用网关认证的userId）
-        String userIdFromHeader = httpRequest.getHeader("X-User-Id");
-        if (userIdFromHeader != null && !userIdFromHeader.isEmpty()) {
-            request.setUserId(Long.parseLong(userIdFromHeader));
-        }
+        request.setUserId(com.seckill.service.TrustedUserIdentity.requireUserId());
 
         log.info("退款申请: traceId={}, orderNo={}, userId={}, amount={}",
                 traceId, request.getOrderNo(), request.getUserId(), request.getRefundAmount());
@@ -99,6 +95,7 @@ public class RefundController {
         // 【P2-19修复】调用 OrderQueryService 查询订单
         OrderQueryRequest request = new OrderQueryRequest();
         request.setOrderNo(orderNo);
+        request.setUserId(com.seckill.service.TrustedUserIdentity.requireUserId());
         request.setQueryType("ORDER_NO");
 
         OrderQueryResponse response = orderQueryService.query(request);

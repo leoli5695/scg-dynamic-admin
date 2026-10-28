@@ -9,6 +9,7 @@ if(count<1||count>128)throw new Error('shardCount must be 1..128');
 if(mode && mode!=='--copy-offline')throw new Error('Unknown mode');
 const pairs=[['seckill:bought:'+activity,'seckill:bought:{'+activity+'}'],
   ['seckill:user_shard:'+activity,'seckill:user_shard:{'+activity+'}'],
+  ['seckill:released:'+activity,'seckill:released:{'+activity+'}'],
   ...Array.from({length:count},(_,i)=>[`seckill:stock:${activity}:shard:${i}`,`seckill:stock:{${activity}}:shard:${i}`])];
 if(!mode){console.log(JSON.stringify({offlineRequired:true,copies:pairs},null,2));process.exit(0);}
 const base=['-c','--raw','-h',process.env.REDIS_HOST??'127.0.0.1','-p',process.env.REDIS_PORT??'6379'];

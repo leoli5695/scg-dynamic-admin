@@ -31,7 +31,7 @@ import org.springframework.web.bind.annotation.*;
  * <p>
  * 注意:
  * - 网关已处理鉴权和IP限流
- * - userId由网关注入，不信任前端传递
+ * - userId取自本服务验证过的 JWT，不信任请求体和 X-User-Id
  * - traceId由网关生成并传递(X-Trace-Id header)
  * <p>
  * 网关传递的Header:
@@ -83,6 +83,8 @@ public class SeckillController {
             @Valid @RequestBody SeckillRequest request,
             HttpServletRequest httpRequest) {
 
+        request.setUserId(com.seckill.service.TrustedUserIdentity.requireUserId());
+
         // 从网关传递的header中获取traceId
         String traceId = httpRequest.getHeader("X-Trace-Id");
         if (traceId == null || traceId.isEmpty()) {
@@ -133,11 +135,13 @@ public class SeckillController {
     @GetMapping("/result")
     public SeckillResultResponse checkResult(
             @Parameter(description = "用户ID", required = true, example = "10001")
-            @RequestParam Long userId,
+            @RequestParam(required = false) Long userId,
             @Parameter(description = "秒杀活动ID", required = true, example = "1")
             @RequestParam Long seckillId) {
 
-        log.info("查询秒杀结果: userId={}, seckillId={}", userId, seckillId);
+        if (userId != null) com.seckill.service.TrustedUserIdentity.requireSameUser(userId);
+        userId = com.seckill.service.TrustedUserIdentity.requireUserId();
+        log.debug("查询秒杀结果: userId={}, seckillId={}", userId, seckillId);
 
         // 【P2-17修复】调用 OrderQueryService 查询订单
         OrderQueryRequest request = new OrderQueryRequest();

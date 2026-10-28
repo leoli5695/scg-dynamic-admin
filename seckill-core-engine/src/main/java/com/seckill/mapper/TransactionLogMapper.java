@@ -25,6 +25,10 @@ public interface TransactionLogMapper extends BaseMapper<TransactionLog> {
             "<foreach collection='ids' item='id' open='(' separator=',' close=')'>#{id}</foreach>", "</script>"})
     int markOrdersCreated(@Param("ids") java.util.List<String> ids);
 
+    @org.apache.ibatis.annotations.Update("UPDATE transaction_log SET status=2, update_time=CURRENT_TIMESTAMP " +
+            "WHERE user_id=#{userId} AND order_no=#{orderNo} AND status=0")
+    int markOrderTerminal(@Param("userId") Long userId, @Param("orderNo") String orderNo);
+
     /**
      * 根据事务ID查询
      */

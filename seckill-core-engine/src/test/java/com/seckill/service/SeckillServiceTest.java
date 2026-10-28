@@ -345,7 +345,7 @@ class SeckillServiceTest {
     }
 
     @Test
-    @DisplayName("降级模式 - 扣减成功(返回剩余库存)仍走下单，且不碰 Redis Lua")
+    @DisplayName("降级模式 - 本地库存不能证明独占额度，拒绝新订单")
     void testDoSeckill_DegradeMode_DeductSucceeds_OrderCreated() {
         when(redisDegradeService.isDegraded()).thenReturn(true);
         when(activityMapper.selectById(1L)).thenReturn(activity);
@@ -356,13 +356,14 @@ class SeckillServiceTest {
 
         SeckillResponse response = seckillService.doSeckill(request);
 
-        assertEquals(SeckillResult.SUCCESS.getCode(), response.getCode());
-        verify(localTransactionService).processOrderDirectly(any());
+        assertEquals(SeckillResult.DEGRADE_STOCK_INSUFFICIENT.getCode(), response.getCode());
+        verify(localTransactionService, never()).processOrderDirectly(any());
+        verify(localFallbackService, never()).deductStockLocal(anyLong(), anyLong(), anyInt());
         verify(seckillDeductLua, never()).deductStock(anyLong(), anyLong(), anyInt());
     }
 
     @Test
-    @DisplayName("降级模式 - 返回0是「扣到刚好归零」而非失败，必须下单成功")
+    @DisplayName("降级模式 - 本地返回零也不能绕过停售闸门")
     void testDoSeckill_DegradeMode_StockReachesZero_OrderCreated() {
         when(redisDegradeService.isDegraded()).thenReturn(true);
         when(activityMapper.selectById(1L)).thenReturn(activity);
@@ -373,7 +374,8 @@ class SeckillServiceTest {
 
         SeckillResponse response = seckillService.doSeckill(request);
 
-        assertEquals(SeckillResult.SUCCESS.getCode(), response.getCode());
-        verify(localTransactionService).processOrderDirectly(any());
+        assertEquals(SeckillResult.DEGRADE_STOCK_INSUFFICIENT.getCode(), response.getCode());
+        verify(localTransactionService, never()).processOrderDirectly(any());
+        verify(localFallbackService, never()).deductStockLocal(anyLong(), anyLong(), anyInt());
     }
 }

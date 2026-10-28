@@ -180,35 +180,11 @@ public class SeckillService {
             long luaResult;
 
             if (redisDegradeService.isDegraded()) {
-                // Redis 降级模式：使用本地库存计数器
                 seckillDegradeCounter.increment();
-                log.warn("Redis降级模式，使用本地库存扣减: seckillId={}, userId={}", seckillId, userId);
-                int localResult = localFallbackService.deductStockLocal(seckillId, userId, quantity);
-
-                if (localResult == -2) {
-                    seckillAlreadyBoughtCounter.increment();
-                    log.warn("本地防重检查：已购买过: userId={}, seckillId={}", userId, seckillId);
-                    return SeckillResponse.fail(SeckillResult.ALREADY_BOUGHT);
-                } else if (localResult == -1) {
-                    seckillStockInsufficientCounter.increment();
-                    log.warn("本地库存不足: userId={}, seckillId={}", userId, seckillId);
-                    return SeckillResponse.fail(SeckillResult.STOCK_INSUFFICIENT);
-                } else if (localResult < 0) {
-                    // -3 是 LocalFallbackService 的多实例超卖防护（本地库存已降到 minStockThreshold）。
-                    // 漏掉它时 -3 会落到下面的 luaResult = 1000 -> SUCCESS，即没扣到任何库存却下单成功，
-                    // 而且库存越低越容易触发，正好是防护本该生效的时候。这里用 < 0 兜住全部失败码，
-                    // 以后 deductStockLocal 新增负数返回码也不会再被当成成功。
-                    log.warn("本地降级拒绝扣减: seckillId={}, userId={}, code={}",
-                            seckillId, userId, localResult);
-                    return SeckillResponse.fail(SeckillResult.DEGRADE_STOCK_INSUFFICIENT);
-                }
-
-                luaResult = 1000;  // 本地扣减成功，模拟 shard 0
-
-            } else {
-                // 正常模式：Redis Lua 脚本原子扣减
-                luaResult = seckillDeductLua.deductStock(seckillId, userId, quantity);
+                // No exclusive inventory quota is available when Redis is unreachable.
+                return SeckillResponse.fail(SeckillResult.DEGRADE_STOCK_INSUFFICIENT);
             }
+            luaResult = seckillDeductLua.deductStock(seckillId, userId, quantity);
 
             SeckillResult result = SeckillResult.fromLuaResult(luaResult);
 

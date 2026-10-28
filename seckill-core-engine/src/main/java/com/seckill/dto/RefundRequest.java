@@ -31,7 +31,6 @@ public class RefundRequest {
     /**
      * 用户ID（用于校验订单归属）
      */
-    @NotNull(message = "用户ID不能为空")
     private Long userId;
 
     /**

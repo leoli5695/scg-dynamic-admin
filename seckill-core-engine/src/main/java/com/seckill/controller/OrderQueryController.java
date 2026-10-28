@@ -64,7 +64,8 @@ public class OrderQueryController {
         OrderQueryRequest request = new OrderQueryRequest();
         request.setQueryType(queryType);
         request.setOrderNo(orderNo);
-        request.setUserId(userId);
+        if (userId != null) com.seckill.service.TrustedUserIdentity.requireSameUser(userId);
+        request.setUserId(com.seckill.service.TrustedUserIdentity.requireUserId());
         request.setSeckillId(seckillId);
         request.setPageSize(pageSize);
         request.setPageOffset(pageOffset);
@@ -76,12 +77,7 @@ public class OrderQueryController {
         }
         request.setTraceId(traceId);
 
-        // 从网关传递的header中获取userId（优先使用网关认证的userId）
-        String userIdFromHeader = httpRequest.getHeader("X-User-Id");
-        if (userIdFromHeader != null && !userIdFromHeader.isEmpty() && userId == null) {
-            request.setUserId(Long.parseLong(userIdFromHeader));
-        }
-
+        if ("ACTIVITY_LIST".equals(queryType)) com.seckill.service.TrustedUserIdentity.requireAdmin();
         return orderQueryService.query(request);
     }
 
@@ -102,6 +98,7 @@ public class OrderQueryController {
         OrderQueryRequest request = new OrderQueryRequest();
         request.setQueryType("ORDER_NO");
         request.setOrderNo(orderNo);
+        request.setUserId(com.seckill.service.TrustedUserIdentity.requireUserId());
 
         String traceId = httpRequest.getHeader("X-Trace-Id");
         if (traceId == null || traceId.isEmpty()) {
@@ -130,7 +127,8 @@ public class OrderQueryController {
 
         OrderQueryRequest request = new OrderQueryRequest();
         request.setQueryType("USER_ACTIVITY");
-        request.setUserId(userId);
+        com.seckill.service.TrustedUserIdentity.requireSameUser(userId);
+        request.setUserId(com.seckill.service.TrustedUserIdentity.requireUserId());
         request.setSeckillId(seckillId);
 
         String traceId = httpRequest.getHeader("X-Trace-Id");
@@ -192,7 +190,8 @@ public class OrderQueryController {
 
         OrderQueryRequest request = new OrderQueryRequest();
         request.setQueryType("USER_LIST");
-        request.setUserId(userId);
+        com.seckill.service.TrustedUserIdentity.requireSameUser(userId);
+        request.setUserId(com.seckill.service.TrustedUserIdentity.requireUserId());
         request.setPageSize(pageSize);
         request.setPageOffset(pageOffset);
 

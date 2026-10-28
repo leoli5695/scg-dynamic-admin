@@ -38,6 +38,27 @@ public interface OrderMapper extends BaseMapper<SeckillOrder> {
     @Select("SELECT * FROM seckill_order WHERE user_id = #{userId} AND order_no = #{orderNo}")
     SeckillOrder selectByUserAndOrderNo(@Param("userId") Long userId, @Param("orderNo") String orderNo);
 
+    /** The state transition and its release intent are ONE statement on ONE physical order table. */
+    @Update("UPDATE seckill_order SET status=2, stock_release_state=1, stock_release_id=order_no, update_time=CURRENT_TIMESTAMP " +
+            "WHERE user_id=#{userId} AND order_no=#{orderNo} AND status=0 AND create_time <= #{cutoff}")
+    int cancelExpired(@Param("userId") Long userId, @Param("orderNo") String orderNo, @Param("cutoff") LocalDateTime cutoff);
+
+    @Update("UPDATE seckill_order SET status=3, stock_release_state=1, stock_release_id=order_no, update_time=CURRENT_TIMESTAMP " +
+            "WHERE user_id=#{userId} AND order_no=#{orderNo} AND status=1 AND total_amount=#{amount}")
+    int refundPaid(@Param("userId") Long userId, @Param("orderNo") String orderNo, @Param("amount") java.math.BigDecimal amount);
+
+    @Select("SELECT * FROM seckill_order WHERE stock_release_state=1 AND status IN (2,3) " +
+            "AND (stock_release_next_at IS NULL OR stock_release_next_at <= CURRENT_TIMESTAMP) ORDER BY stock_release_next_at,id LIMIT 100")
+    List<SeckillOrder> selectPendingReleases();
+
+    @Update("UPDATE seckill_order SET stock_release_state=2 WHERE user_id=#{userId} AND order_no=#{orderNo} " +
+            "AND stock_release_id=#{releaseId} AND stock_release_state=1 AND status IN (2,3)")
+    int confirmRelease(@Param("userId") Long userId, @Param("orderNo") String orderNo, @Param("releaseId") String releaseId);
+
+    @Update("UPDATE seckill_order SET stock_release_next_at=TIMESTAMPADD(SECOND,30,CURRENT_TIMESTAMP) " +
+            "WHERE user_id=#{userId} AND order_no=#{orderNo} AND stock_release_state=1")
+    int deferRelease(@Param("userId") Long userId, @Param("orderNo") String orderNo);
+
     /**
      * 根据用户和活动查询订单
      *
@@ -66,8 +87,11 @@ public interface OrderMapper extends BaseMapper<SeckillOrder> {
      * 注意: 这是全路由查询，仅在归档等低频场景使用
      * 状态: 1=已支付, 2=已取消, 3=已退款
      */
-    @Select("SELECT * FROM seckill_order WHERE status IN (1, 2, 3) AND create_time < #{threshold} ORDER BY create_time ASC LIMIT #{limit}")
+    @Select("SELECT * FROM seckill_order WHERE status IN (1, 2, 3) AND stock_release_state <> 1 AND create_time < #{threshold} ORDER BY create_time ASC LIMIT #{limit}")
     List<SeckillOrder> selectForArchive(@Param("threshold") LocalDateTime threshold, @Param("limit") int limit);
+
+    @org.apache.ibatis.annotations.Delete("DELETE FROM seckill_order WHERE user_id=#{userId} AND order_no=#{orderNo} AND status=#{status} AND stock_release_state <> 1")
+    int deleteArchivedOrder(@Param("userId") Long userId, @Param("orderNo") String orderNo, @Param("status") Integer status);
 
     /**
      * ============================================================================
