@@ -196,13 +196,8 @@ public class FilterChainTracker {
      * Update filter statistics.
      */
     private void updateFilterStats(FilterExecution execution) {
-        filterStats.compute(execution.getFilterName(), (name, stats) -> {
-            if (stats == null) {
-                stats = new FilterStats(name, execution.getOrder());
-            }
-            stats.recordExecution(execution);
-            return stats;
-        });
+        filterStats.computeIfAbsent(execution.getFilterName(),
+                name -> new FilterStats(name, execution.getOrder())).recordExecution(execution);
     }
 
     /**

@@ -68,6 +68,8 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
 
     @Value("${gateway.rate-limiter.redis.enabled:true}")
     private boolean redisLimitEnabled;
+    @Value("${gateway.rate-limiter.batch-enabled:true}")
+    private boolean batchEnabled;
 
     @Value("${gateway.rate-limiter.shadow-quota.enabled:true}")
     private boolean shadowQuotaEnabled;
@@ -206,9 +208,27 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
 
         String rejectStrategy = config.getRejectStrategy();
 
-        return Flux.fromIterable(keys)
+        Flux<DimOutcome> outcomes;
+        if (batchEnabled && !keys.isEmpty() && redisLimitEnabled && redisHealthChecker != null
+                && redisHealthChecker.isRedisAvailableForRateLimiting() && distributedRateLimiter != null
+                && distributedRateLimiter.supportsBatch()) {
+            var requests = keys.stream().map(key -> new DistributedRateLimiter.LimitRequest(key.getKey(),
+                    key.getQuotaConfig().getQps(), key.getQuotaConfig().getBurstCapacity(),
+                    key.getQuotaConfig().getWindowSizeMs())).toList();
+            outcomes = distributedRateLimiter.tryAcquireBatchReactive(requests, "FIRST_HIT".equals(rejectStrategy))
+                    .flatMapMany(results -> Flux.range(0, results.size()).map(i -> {
+                        CheckResult check = new CheckResult();
+                        check.setAllowed(results.get(i).isAllowed()); check.setRemaining(results.get(i).getRemainingRequests());
+                        return new DimOutcome(keys.get(i), check);
+                    }))
+                    // Never issue the Redis operations again after an ambiguous batch failure.
+                    .onErrorResume(error -> localOutcomes(keys, rejectStrategy));
+        } else {
+            outcomes = Flux.fromIterable(keys)
                 .concatMap(dimKey -> checkSingleDimension(dimKey)
-                        .map(checkResult -> new DimOutcome(dimKey, checkResult)))
+                        .map(checkResult -> new DimOutcome(dimKey, checkResult)));
+        }
+        return outcomes
                 .doOnNext(outcome -> {
                     DimensionKey dimKey = outcome.dimKey();
                     CheckResult checkResult = outcome.checkResult();
@@ -228,6 +248,13 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
                 // FIRST_HIT: stop at the first denied dimension (previous loop returned immediately)
                 .takeWhile(outcome -> !("FIRST_HIT".equals(rejectStrategy) && !outcome.checkResult().isAllowed()))
                 .then(Mono.fromSupplier(() -> result));
+    }
+
+    private Flux<DimOutcome> localOutcomes(List<DimensionKey> keys, String rejectStrategy) {
+        return Flux.fromIterable(keys).map(key -> {
+            CheckResult check = new CheckResult(); applyLocalWindow(check, key.getKey(), key.getQuotaConfig());
+            return new DimOutcome(key, check);
+        }).takeUntil(outcome -> "FIRST_HIT".equals(rejectStrategy) && !outcome.checkResult().isAllowed());
     }
 
     /**

@@ -72,6 +72,10 @@ public class AiSemanticCacheFilter implements GlobalFilter, Ordered {
     private final ObjectMapper objectMapper;
     private final GatewayEmbeddingClient embeddingClient;
     private final SemanticCacheStore cacheStore;
+    private final com.leoli.gateway.util.ByteBudget storeBudget = new com.leoli.gateway.util.ByteBudget();
+    private final com.leoli.gateway.util.BodyWorkPool storePool = new com.leoli.gateway.util.BodyWorkPool("gateway-cache-store", 2, 16);
+    @jakarta.annotation.PreDestroy
+    public void closeStorePool() { storePool.close(); }
 
     @Autowired
     public AiSemanticCacheFilter(StrategyManager strategyManager,
@@ -152,9 +156,8 @@ public class AiSemanticCacheFilter implements GlobalFilter, Ordered {
                                     return chain.filter(rebuild(exchange, bytes)); // embedding failed: fail open
                                 }
                                 float[] vector = vecOpt.get();
-                                // search() scans every entry under one global lock, and this flatMap
-                                // runs on the WebClient EventLoop thread - offload the lookup so a slow
-                                // scan cannot stall unrelated routes sharing that loop, then hop to
+                                // Search scans its scope shard. Offload the lookup so a slow
+                                // scan cannot stall unrelated routes sharing the WebClient loop, then hop to
                                 // parallel() so the downstream chain is not run on a blocking-pool thread.
                                 return Mono.fromCallable(() -> cacheStore.search(scope, vector,
                                                 config.getSimilarityThreshold()))
@@ -222,18 +225,16 @@ public class AiSemanticCacheFilter implements GlobalFilter, Ordered {
                             buf.read(b);
                             DataBufferUtils.release(buf);
                             String bodyText = new String(b, StandardCharsets.UTF_8);
-                            // Populate off the write path: put() normalizes and takes the same global
-                            // lock as search(), while writeWith runs on the Netty EventLoop.
-                            Mono.fromRunnable(() -> {
-                                        try {
+                            // Pending writes have their own byte budget and bounded executor.
+                            var lease = storeBudget.tryAcquire(2L * bodyText.length() + 4L * vector.length,
+                                    8L * 1024 * 1024);
+                            if (lease != null) {
+                                storePool.submit(lease, () -> {
                                             cacheStore.put(scope, vector, bodyText, config.getTtlSeconds());
-                                        } catch (Exception e) {
-                                            log.warn("AI cache: failed to store entry for scope {}: {}",
-                                                    scope, e.getMessage());
-                                        }
-                                    })
-                                    .subscribeOn(Schedulers.boundedElastic())
-                                    .subscribe();
+                                            return true;
+                                        }).doFinally(signal -> lease.close())
+                                        .subscribe(ignored -> { }, error -> log.debug("AI cache store skipped: {}", error.getMessage()));
+                            }
                             return super.writeWith(Mono.just(original.bufferFactory().wrap(b)));
                         });
             }

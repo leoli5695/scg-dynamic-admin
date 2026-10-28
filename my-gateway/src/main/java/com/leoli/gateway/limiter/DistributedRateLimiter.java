@@ -26,6 +26,56 @@ import java.util.concurrent.atomic.AtomicLong;
 @Slf4j
 @Conditional(RedisEnabledCondition.class)
 public class DistributedRateLimiter {
+    @org.springframework.beans.factory.annotation.Value("${spring.data.redis.mode:single}")
+    private String redisMode = "single";
+    private volatile DefaultRedisScript<java.util.List> batchScript;
+    public record LimitRequest(String key, int qps, int burst, long windowMs) { }
+    public boolean supportsBatch() { return !"cluster".equalsIgnoreCase(redisMode)
+            && reactiveRedisTemplate != null && rateLimitScript != null; }
+
+    private DefaultRedisScript<java.util.List> batchScript() {
+        if (batchScript != null) return batchScript;
+        synchronized (this) {
+            if (batchScript == null) {
+                String single = rateLimitScript.getScriptAsString();
+                String body = single.substring(single.indexOf("-- Use Redis TIME"))
+                        .replace("key .. ':seq'", "seqKey");
+                String script = "local function acquire(key, seqKey, windowSize, maxRequests, burstCapacity)\n"
+                        + body + "\nend\nlocal results = {}\n"
+                        + "for i = 1, #KEYS / 2 do\n"
+                        + " local a = 2 + (i-1)*3\n local k = 1 + (i-1)*2\n"
+                        + " local result = acquire(KEYS[k], KEYS[k+1], tonumber(ARGV[a]), tonumber(ARGV[a+1]), tonumber(ARGV[a+2]))\n"
+                        + " results[i] = result\n if result == 0 and ARGV[1] == '1' then break end\nend\nreturn results";
+                batchScript = new DefaultRedisScript<>(script, java.util.List.class);
+            }
+            return batchScript;
+        }
+    }
+
+    /** Single/Sentinel only: keep dimension order and FIRST_HIT counting in one Redis round trip. */
+    public Mono<java.util.List<RateLimitResult>> tryAcquireBatchReactive(java.util.List<LimitRequest> requests, boolean firstHit) {
+        java.util.List<String> keys = new java.util.ArrayList<>();
+        java.util.List<String> args = new java.util.ArrayList<>();
+        args.add(firstHit ? "1" : "0");
+        for (LimitRequest request : requests) {
+            keys.add(request.key()); keys.add(request.key() + ":seq");
+            args.add(Long.toString(request.windowMs())); args.add(Integer.toString(request.qps()));
+            args.add(Integer.toString(request.burst()));
+        }
+        return reactiveRedisTemplate.execute(batchScript(), keys, args).next()
+                .switchIfEmpty(Mono.error(new IllegalStateException("Redis returned no batch result")))
+                .map(values -> {
+                    if (values.isEmpty() || values.size() > requests.size()
+                            || (!firstHit && values.size() != requests.size()))
+                        throw new IllegalStateException("Invalid Redis batch result");
+                    java.util.List<RateLimitResult> results = new java.util.ArrayList<>();
+                    for (int i = 0; i < values.size(); i++) results.add(((Number) values.get(i)).longValue() == 1
+                            ? RateLimitResult.allowed(requests.get(i).burst()) : RateLimitResult.denied(0));
+                    if (values.size() < requests.size() && results.getLast().isAllowed())
+                        throw new IllegalStateException("Incomplete Redis batch result");
+                    return results;
+                });
+    }
 
     @Autowired(required = false)
     private StringRedisTemplate redisTemplate;

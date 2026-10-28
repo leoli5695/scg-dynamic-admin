@@ -63,4 +63,15 @@ class SemanticCacheStoreTest {
         store.put("s", new float[]{1f, 0f}, "resp", 60);
         assertTrue(store.search("s", new float[0], 0.95).isEmpty());
     }
+
+    @Test void byteBudgetEvictsAndClearReleasesRetainedWeight() {
+        ReflectionTestUtils.setField(store, "maxBytes", 400L);
+        store.put("s", new float[]{1, 0}, "a".repeat(100), 60);
+        store.put("s", new float[]{0, 1}, "b".repeat(100), 60);
+        assertTrue(store.retainedBytes() <= 400); assertEquals(1, store.size());
+        assertTrue(store.search("s", new float[]{1, 0}, .99).isEmpty());
+        store.put("s", new float[]{1, 0}, "x".repeat(1000), 60);
+        assertEquals(1, store.size());
+        store.clear(); assertEquals(0, store.retainedBytes());
+    }
 }

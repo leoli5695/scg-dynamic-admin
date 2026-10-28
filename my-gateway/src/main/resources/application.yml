@@ -155,6 +155,19 @@ spring:
 # Gateway Center Configuration
 # Set type to 'nacos' (default) or 'consul' to switch between config centers
 gateway:
+  retry:
+    max-cached-body-bytes: ${GATEWAY_RETRY_MAX_CACHED_BODY_BYTES:65536}
+    max-inflight-body-bytes: ${GATEWAY_RETRY_MAX_INFLIGHT_BODY_BYTES:16777216}
+  transform:
+    # Shared request/response budget; charge 8x actual received bytes for buffers/trees/copies.
+    max-inflight-body-bytes: ${GATEWAY_TRANSFORM_MAX_INFLIGHT_BODY_BYTES:134217728}
+  monitor:
+    filter-tracking:
+      # One sampling decision per request; circuit-breaker feedback is always retained.
+      sampling-rate: ${GATEWAY_FILTER_TRACKING_SAMPLING_RATE:0.01}
+  ai:
+    cache:
+      max-bytes: ${GATEWAY_AI_CACHE_MAX_BYTES:33554432}
   # Request Trace Configuration - for topology Client nodes
   trace:
     # Body sampling is decided before allocation; error/slow metadata is captured separately.
@@ -287,16 +300,18 @@ gateway:
   
   # Rate Limiter Configuration
   rate-limiter:
+    batch-enabled: ${GATEWAY_RATE_LIMIT_BATCH_ENABLED:true}
     # Redis 限流开关（默认 true，可手动关闭强制使用本地限流）
     redis:
       enabled: ${REDIS_LIMITER_ENABLED:true}
 
   # WAF / SecurityGlobalFilter
   security:
+    max-inflight-body-bytes: ${GATEWAY_SECURITY_MAX_INFLIGHT_BODY_BYTES:67108864}
     # Ceiling on how much of a request body the WAF will buffer and regex-scan. Requests declaring a
     # larger Content-Length are rejected outright, and streaming bodies are cut off at this many bytes.
-    # This is the knob for WAF-driven memory pressure: the scan runs on boundedElastic, which the
-    # token-quota, semantic-cache and SSL-refresh paths share. The WAF's own rule set (SQL/XSS
+    # This is the single-body limit; concurrent bytes and dedicated scanning workers are also bounded.
+    # The WAF's own rule set (SQL/XSS
     # patterns, BLOCK vs DETECT, excludePaths) comes from the strategy config, not from here.
     # Was hardcoded at 10MB while the code comment claimed this key already existed.
     max-body-size-mb: ${GATEWAY_SECURITY_MAX_BODY_SIZE_MB:10}

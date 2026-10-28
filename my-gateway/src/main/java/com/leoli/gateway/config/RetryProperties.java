@@ -13,7 +13,7 @@ import java.util.Set;
  *   retry:
  *     default-max-attempts: 3
  *     default-retry-interval-ms: 1000
- *     max-cached-body-bytes: 1048576
+ *     max-cached-body-bytes: 65536
  *     default-retry-on-status-codes: [500, 502, 503, 504]
  *     default-retry-on-exceptions:
  *       - java.net.ConnectException
@@ -38,9 +38,9 @@ public class RetryProperties {
     /**
      * FIX: maximum request body size (bytes) that can be cached to support retry with body.
      * Requests with a larger Content-Length run a single attempt without retry;
-     * chunked requests exceeding this limit mid-stream are rejected with 413.
+     * unknown-length uploads stream directly without retry.
      */
-    private int maxCachedBodyBytes = 1024 * 1024;
+    private int maxCachedBodyBytes = 64 * 1024;
 
     /**
      * Default HTTP status codes that trigger retry.

@@ -49,6 +49,9 @@ import java.util.regex.Pattern;
 @Component
 @Slf4j
 public class ResponseTransformFilter implements GlobalFilter, Ordered {
+    @Autowired
+    private TransformBodyWork bodyWork = new TransformBodyWork();
+    public void closeWorkPool() { bodyWork.close(); }
 
     @Autowired
     private StrategyManager strategyManager;
@@ -120,12 +123,21 @@ public class ResponseTransformFilter implements GlobalFilter, Ordered {
                 }
 
                 // join() takes an int limit; maxBodySize is long - clamp to Integer.MAX_VALUE
-                return DataBufferUtils.join(body, (int) Math.min(maxBodySize, Integer.MAX_VALUE))
+                return Mono.defer(() -> {
+                    var lease = bodyWork.budget.tryAcquire(0, bodyWork.maxBytes);
+                    if (lease == null) {
+                        setStatusCode(HttpStatus.SERVICE_UNAVAILABLE);
+                        getHeaders().remove(HttpHeaders.CONTENT_LENGTH);
+                        return setComplete();
+                    }
+                    return Mono.using(() -> lease, ignored -> DataBufferUtils.join(
+                                    com.leoli.gateway.util.ByteBudget.charge(body, lease, 8, bodyWork.maxBytes),
+                                    (int) Math.min(maxBodySize, Integer.MAX_VALUE))
                         .flatMap(buffer -> {
                             byte[] allBytes = new byte[buffer.readableByteCount()];
                             buffer.read(allBytes);
                             DataBufferUtils.release(buffer);
-
+                            return bodyWork.pool.submit(lease, () -> {
                             try {
                                 // Transform the body
                                 String originalBody = new String(allBytes, StandardCharsets.UTF_8);
@@ -147,6 +159,7 @@ public class ResponseTransformFilter implements GlobalFilter, Ordered {
                                 // Return original data on transform failure
                                 return super.writeWith(Flux.just(originalResponse.bufferFactory().wrap(allBytes)));
                             }
+                            }).flatMap(result -> result);
                         })
                         .onErrorResume(DataBufferLimitException.class, e -> {
                             // Chunked body exceeded the limit mid-stream; the body is already
@@ -159,7 +172,12 @@ public class ResponseTransformFilter implements GlobalFilter, Ordered {
                                     .getBytes(StandardCharsets.UTF_8);
                             return originalResponse.writeWith(
                                     Mono.just(originalResponse.bufferFactory().wrap(err)));
-                        });
+                        }).onErrorResume(java.util.concurrent.RejectedExecutionException.class, error -> {
+                            setStatusCode(HttpStatus.SERVICE_UNAVAILABLE);
+                            getHeaders().remove(HttpHeaders.CONTENT_LENGTH);
+                            return setComplete();
+                        }), com.leoli.gateway.util.ByteBudget.Lease::close);
+                });
             }
         };
 

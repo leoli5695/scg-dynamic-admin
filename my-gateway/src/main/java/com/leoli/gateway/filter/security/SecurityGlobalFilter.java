@@ -46,6 +46,12 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
 
     private final StrategyManager strategyManager;
     private final ObjectMapper objectMapper;
+    private final com.leoli.gateway.util.ByteBudget scanBudget = new com.leoli.gateway.util.ByteBudget();
+    private final com.leoli.gateway.util.BodyWorkPool scanPool = new com.leoli.gateway.util.BodyWorkPool("gateway-waf", 2, 8);
+    @Value("${gateway.security.max-inflight-body-bytes:67108864}")
+    private long maxInflightBodyBytes = 64L * 1024 * 1024;
+    @jakarta.annotation.PreDestroy
+    public void closeScanPool() { scanPool.close(); }
 
     /**
      * Maximum body size for security scanning. Bodies larger than this are rejected to prevent OOM
@@ -316,7 +322,6 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
 
         // SECURITY: 在流级别限制累计字节数，避免客户端伪造 Content-Length 后
         // DataBufferUtils.join 把整个 body 载入内存造成 OOM。
-        java.util.concurrent.atomic.AtomicLong totalBytes = new java.util.concurrent.atomic.AtomicLong(0);
         // FIX (P0, size limit did not limit anything): the oversize handler below writes the 413 and
         // then completes EMPTY, and `defaultIfEmpty` cannot tell that apart from a genuinely empty
         // body - so the flatMap ran on a zero-byte buffer, found no threats, and called
@@ -324,14 +329,26 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
         // upstream then wrote a second response body over it. This flag is what distinguishes
         // "rejected" from "empty". The Content-Length fast path above needs no flag: it returns the
         // response directly and never reaches the chain.
-        java.util.concurrent.atomic.AtomicBoolean rejected = new java.util.concurrent.atomic.AtomicBoolean(false);
-        return DataBufferUtils.join(
+        return Mono.defer(() -> {
+            java.util.concurrent.atomic.AtomicLong totalBytes = new java.util.concurrent.atomic.AtomicLong(0);
+            java.util.concurrent.atomic.AtomicBoolean rejected = new java.util.concurrent.atomic.AtomicBoolean(false);
+            var lease = scanBudget.tryAcquire(0, maxInflightBodyBytes);
+            if (lease == null) {
+                exchange.getResponse().setStatusCode(HttpStatus.SERVICE_UNAVAILABLE);
+                return exchange.getResponse().setComplete();
+            }
+            return Mono.using(() -> lease, ignored -> DataBufferUtils.join(
                 request.getBody().handle((dataBuffer, sink) -> {
                     long newTotal = totalBytes.addAndGet(dataBuffer.readableByteCount());
                     if (newTotal > maxBodySizeBytes) {
                         DataBufferUtils.release(dataBuffer);
                         sink.error(new org.springframework.core.io.buffer.DataBufferLimitException(
                                 "Body exceeded max size " + maxBodySizeBytes + " bytes"));
+                        return;
+                    }
+                    if (!lease.tryGrow(4L * dataBuffer.readableByteCount(), maxInflightBodyBytes)) {
+                        DataBufferUtils.release(dataBuffer);
+                        sink.error(new java.util.concurrent.RejectedExecutionException("Concurrent WAF body budget exhausted"));
                         return;
                     }
                     sink.next(dataBuffer);
@@ -369,14 +386,13 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
                     // Netty EventLoop for tens of milliseconds — stalling every other
                     // connection multiplexed on that loop. The DataBuffer read/release
                     // stays on the loop (cheap); only the scan is pushed to
-                    // boundedElastic so a single large request cannot block the gateway.
-                    return Mono.fromCallable(() -> {
+                    // a dedicated bounded pool so it cannot occupy quota/other background workers.
+                    return scanPool.submit(lease, () -> {
                         String body = new String(bytes, StandardCharsets.UTF_8);
                         List<String> threats = new ArrayList<>(existingThreats);
                         checkValue(body, enableSqlInjection, enableXss, threats);
                         return threats;
                     })
-                    .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
                     .flatMap(threats -> {
                         // Rebuild request with cached body BEFORE threat handling, so that
                         // DETECT mode (which forwards the request) does not lose the consumed body.
@@ -389,7 +405,11 @@ public class SecurityGlobalFilter implements GlobalFilter, Ordered {
 
                         return chain.filter(rebuiltExchange);
                     });
-                });
+                }).onErrorResume(java.util.concurrent.RejectedExecutionException.class, error -> {
+                    exchange.getResponse().setStatusCode(HttpStatus.SERVICE_UNAVAILABLE);
+                    return exchange.getResponse().setComplete();
+                }), com.leoli.gateway.util.ByteBudget.Lease::close);
+        });
     }
 
     /**

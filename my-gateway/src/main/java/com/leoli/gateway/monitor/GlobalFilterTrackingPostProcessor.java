@@ -26,16 +26,16 @@ import java.util.Set;
  */
 @Slf4j
 @Component
-// Wrapping every GlobalFilter is what makes per-filter timing possible, and it is not free: 28 of the
-// 32 filters get wrapped, and FilterChainTracker recomputes the whole-chain duration at the end of
-// each one. Under load that is the dominant per-request overhead of the tracking feature. It defaults
-// to ON so nothing changes for an existing deployment, but production can now turn the whole thing
-// off with gateway.monitor.filter-tracking.enabled=false instead of having no choice.
+// Detailed timings share one request-level sampling decision (default 1%). Circuit-breaker
+// checks and result feedback still run for all requests. The wrapping itself can be disabled
+// with gateway.monitor.filter-tracking.enabled=false.
 @ConditionalOnProperty(name = "gateway.monitor.filter-tracking.enabled", havingValue = "true", matchIfMissing = true)
 public class GlobalFilterTrackingPostProcessor implements BeanPostProcessor, Ordered {
 
     private final FilterChainTracker tracker;
     private final FilterCircuitBreakerManager circuitBreakerManager;
+    @org.springframework.beans.factory.annotation.Value("${gateway.monitor.filter-tracking.sampling-rate:0.01}")
+    private double samplingRate = 0.01;
 
     // Filters that should NOT be wrapped (already tracked or special handling needed)
     // IMPORTANT: All names must be lowercase to match beanName.toLowerCase() check below
@@ -83,6 +83,7 @@ public class GlobalFilterTrackingPostProcessor implements BeanPostProcessor, Ord
         // Wrap the filter with tracking (now includes circuit breaker)
         GlobalFilter originalFilter = (GlobalFilter) bean;
         TrackedGlobalFilter trackedFilter = new TrackedGlobalFilter(originalFilter, tracker, circuitBreakerManager);
+        trackedFilter.setSamplingRate(samplingRate);
 
         wrappedFilterNames.add(beanName);
         log.info("Wrapped GlobalFilter '{}' with tracking (circuit breaker enabled)", beanName);

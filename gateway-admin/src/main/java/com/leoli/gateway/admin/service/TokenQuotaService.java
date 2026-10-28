@@ -45,6 +45,8 @@ public class TokenQuotaService {
     private final AuditLogService auditLogService;
     private final ConfigCenterService configCenterService;
     private final ObjectMapper objectMapper;
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.jdbc.core.JdbcTemplate usageJdbc;
 
     // Redis template (optional, may not be available in admin service)
     private final StringRedisTemplate redisTemplate;
@@ -456,6 +458,29 @@ public class TokenQuotaService {
 
         tokenUsageHistoryRepository.save(history);
         log.debug("Recorded token usage for tenant {}: total={}", tenantId, history.getTotalTokens());
+    }
+
+    /** One transaction and one JDBC batch; IDENTITY entities cannot provide batched inserts via saveAll. */
+    @Transactional
+    public void recordTokenUsageBatch(List<Map<String, Object>> records) {
+        if (records.isEmpty() || records.size() > 32) throw new IllegalArgumentException("Batch must contain 1..32 records");
+        LocalDateTime now = LocalDateTime.now();
+        List<Object[]> rows = new ArrayList<>();
+        for (Map<String, Object> row : records) {
+            if (!(row.get("tenantId") instanceof String tenant) || tenant.isBlank())
+                throw new IllegalArgumentException("tenantId required");
+            Object time = row.get("requestTime");
+            LocalDateTime requestTime = time instanceof String text ? LocalDateTime.parse(text)
+                    : time instanceof LocalDateTime date ? date : now;
+            rows.add(new Object[]{tenant, row.get("traceId"), row.get("routeId"), row.get("model"),
+                    Optional.ofNullable(asInt(row.get("promptTokens"))).orElse(0),
+                    Optional.ofNullable(asInt(row.get("completionTokens"))).orElse(0),
+                    Optional.ofNullable(asInt(row.get("totalTokens"))).orElse(0), row.get("instanceId"),
+                    row.get("responseFormat"), asLong(row.get("latencyMs")), requestTime, now});
+        }
+        usageJdbc.batchUpdate("INSERT INTO token_usage_history (tenant_id,trace_id,route_id,model,prompt_tokens,"
+                + "completion_tokens,total_tokens,instance_id,response_format,latency_ms,request_time,created_at)"
+                + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", rows);
     }
 
     /** JSON 数字进 Map 后类型不定（Integer/Long），统一按 Number 取，避免强转 ClassCastException。 */

@@ -15,12 +15,18 @@ public final class RequestBodyCache {
     private RequestBodyCache() { }
 
     public static Mono<byte[]> read(ServerWebExchange exchange, int limit) {
+        return read(exchange, limit, null, 0, 0);
+    }
+
+    public static Mono<byte[]> read(ServerWebExchange exchange, int limit, ByteBudget.Lease lease, int copies, long budgetLimit) {
         if (exchange.getRequest() instanceof BodyRequest cached) {
-            return cached.bytes.length > limit
-                    ? Mono.error(new DataBufferLimitException("Cached request body exceeds " + limit + " bytes"))
-                    : Mono.just(cached.bytes);
+            if (cached.bytes.length > limit) return Mono.error(new DataBufferLimitException("Cached request body exceeds " + limit + " bytes"));
+            return Mono.defer(() -> lease == null || lease.tryGrow((long) copies * cached.bytes.length, budgetLimit)
+                    ? Mono.just(cached.bytes) : Mono.error(new java.util.concurrent.RejectedExecutionException("Concurrent body budget exhausted")));
         }
-        return DataBufferUtils.join(exchange.getRequest().getBody(), limit)
+        Flux<DataBuffer> body = lease == null ? exchange.getRequest().getBody()
+                : ByteBudget.charge(exchange.getRequest().getBody(), lease, copies, budgetLimit);
+        return DataBufferUtils.join(body, limit)
                 .map(buffer -> {
                     try {
                         byte[] bytes = new byte[buffer.readableByteCount()];

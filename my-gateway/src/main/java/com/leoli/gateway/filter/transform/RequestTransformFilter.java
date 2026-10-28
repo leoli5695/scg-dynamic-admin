@@ -48,6 +48,9 @@ import java.util.regex.Pattern;
 @Component
 @Slf4j
 public class RequestTransformFilter implements GlobalFilter, Ordered {
+    @Autowired
+    private TransformBodyWork bodyWork = new TransformBodyWork();
+    public void closeWorkPool() { bodyWork.close(); }
 
     @Autowired
     private StrategyManager strategyManager;
@@ -152,8 +155,15 @@ public class RequestTransformFilter implements GlobalFilter, Ordered {
 
         // FIX (OOM): bounded join by maxBodySize; the Content-Length pre-check in filter() covers
         // known sizes, this limit also guards chunked requests.
-        return com.leoli.gateway.util.RequestBodyCache.read(exchange, config.getMaxBodySize())
-                .flatMap(bytes -> {
+        return Mono.defer(() -> {
+            var lease = bodyWork.budget.tryAcquire(0, bodyWork.maxBytes);
+            if (lease == null) {
+                exchange.getResponse().setStatusCode(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE);
+                return exchange.getResponse().setComplete();
+            }
+            return Mono.using(() -> lease, ignored -> com.leoli.gateway.util.RequestBodyCache.read(exchange,
+                            config.getMaxBodySize(), lease, 8, bodyWork.maxBytes)
+                .flatMap(bytes -> bodyWork.pool.submit(lease, () -> {
 
                     try {
                         // Check size limit
@@ -208,7 +218,7 @@ public class RequestTransformFilter implements GlobalFilter, Ordered {
                         // FIX: body was already consumed by join - rebuild it before pass-through
                         return chain.filter(rebuildWithCachedBody(exchange, request, bytes));
                     }
-                })
+                }).flatMap(result -> result))
                 .onErrorResume(org.springframework.core.io.buffer.DataBufferLimitException.class, e -> {
                     // Chunked body exceeded maxBodySize mid-stream - the body is already partially
                     // consumed and cannot be forwarded safely; reject with 413.
@@ -217,7 +227,11 @@ public class RequestTransformFilter implements GlobalFilter, Ordered {
                     ServerHttpResponse response = exchange.getResponse();
                     response.setStatusCode(org.springframework.http.HttpStatus.PAYLOAD_TOO_LARGE);
                     return response.setComplete();
-                });
+                }).onErrorResume(java.util.concurrent.RejectedExecutionException.class, error -> {
+                    exchange.getResponse().setStatusCode(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE);
+                    return exchange.getResponse().setComplete();
+                }), com.leoli.gateway.util.ByteBudget.Lease::close);
+        });
     }
 
     /**

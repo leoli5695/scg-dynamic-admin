@@ -50,6 +50,9 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
 
     private final StrategyManager strategyManager;
     private final RetryProperties retryProperties;
+    private final com.leoli.gateway.util.ByteBudget bodyBudget = new com.leoli.gateway.util.ByteBudget();
+    @org.springframework.beans.factory.annotation.Value("${gateway.retry.max-inflight-body-bytes:16777216}")
+    private long maxInflightBodyBytes = 16L * 1024 * 1024;
 
     // Cache for retry configurations
     private final Map<String, RetryConfig> configCache = new ConcurrentHashMap<>();
@@ -119,13 +122,19 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
         long contentLength = exchange.getRequest().getHeaders().getContentLength();
         if (mayHaveBody && contentLength != 0) {
             int maxCachedBodyBytes = retryProperties.getMaxCachedBodyBytes();
-            if (contentLength > maxCachedBodyBytes) {
+            if (contentLength < 0 || contentLength > maxCachedBodyBytes) {
                 // Body too large to cache safely - run a single attempt without retry (body untouched)
-                log.warn("Request body ({} bytes) exceeds retry cache limit ({} bytes) for route {}, "
-                        + "executing single attempt without retry", contentLength, maxCachedBodyBytes, routeId);
+                log.debug("Body length {} is not eligible for retry caching (limit={}), route={}",
+                        contentLength, maxCachedBodyBytes, routeId);
                 return chain.filter(exchange);
             }
-            return cacheBodyAndExecute(exchange, chain, config, routeId, maxCachedBodyBytes);
+            return Mono.defer(() -> {
+                var lease = bodyBudget.tryAcquire(2L * maxCachedBodyBytes, maxInflightBodyBytes);
+                if (lease == null) return chain.filter(exchange);
+                return Mono.using(() -> lease,
+                        ignored -> cacheBodyAndExecute(exchange, chain, config, routeId, maxCachedBodyBytes),
+                        com.leoli.gateway.util.ByteBudget.Lease::close);
+            });
         }
 
         return executeWithRetry(exchange, chain, config, 0);
@@ -136,8 +145,6 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
      * request so every retry attempt can re-read the body. Uses a dedicated attribute key to avoid
      * conflicting with SCG's CACHED_REQUEST_BODY_ATTR (which expects a DataBuffer value).
      */
-    private static final String RETRY_CACHED_BODY_ATTR = "retryCachedBodyBytes";
-
     private Mono<Void> cacheBodyAndExecute(ServerWebExchange exchange, GatewayFilterChain chain,
                                            RetryConfig config, String routeId, int maxCachedBodyBytes) {
         return DataBufferUtils.join(exchange.getRequest().getBody(), maxCachedBodyBytes)
@@ -146,7 +153,6 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
                     final byte[] bodyBytes = new byte[dataBuffer.readableByteCount()];
                     dataBuffer.read(bodyBytes);
                     DataBufferUtils.release(dataBuffer);
-                    exchange.getAttributes().put(RETRY_CACHED_BODY_ATTR, bodyBytes);
                     ServerHttpRequestDecorator cachedRequest = new ServerHttpRequestDecorator(exchange.getRequest()) {
                         @Override
                         public Flux<DataBuffer> getBody() {

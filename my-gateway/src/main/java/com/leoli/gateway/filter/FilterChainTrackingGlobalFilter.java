@@ -38,14 +38,16 @@ public class FilterChainTrackingGlobalFilter implements GlobalFilter, Ordered {
      */
     public static final String CHAIN_START_TIME_ATTR = "chainStartTimeNanos";
 
+    @jakarta.annotation.PostConstruct
+    public void configureSlowThreshold() {
+        if (tracker != null) tracker.setSlowThresholdMs(slowThresholdMs);
+    }
+
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         if (tracker == null) {
             return chain.filter(exchange);
         }
-
-        // Set slow threshold from config
-        tracker.setSlowThresholdMs(slowThresholdMs);
 
         // Record chain start time
         long startTime = System.nanoTime();

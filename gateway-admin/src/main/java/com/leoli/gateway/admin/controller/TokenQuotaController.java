@@ -315,6 +315,12 @@ public class TokenQuotaController extends BaseController {
     }
 
     // ============== Internal API (for Gateway callbacks) ==============
+    @PostMapping("/internal/record-usage/batch")
+    public ResponseEntity<ApiResponse<Void>> recordUsageBatch(@RequestBody List<Map<String, Object>> records) {
+        if (records.isEmpty() || records.size() > 32) return ResponseEntity.badRequest().build();
+        tokenQuotaService.recordTokenUsageBatch(records);
+        return ok("Usage recorded successfully");
+    }
 
     /**
      * Internal endpoint for recording token usage from Gateway.

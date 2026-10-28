@@ -37,6 +37,9 @@ public class TrackedGlobalFilter implements GlobalFilter, Ordered {
     private final int order;
     private final FilterChainTracker tracker;
     private final FilterCircuitBreakerManager circuitBreakerManager;
+    private double samplingRate = 1.0;
+    private static final String SAMPLED_ATTR = TrackedGlobalFilter.class.getName() + ".sampled";
+    public void setSamplingRate(double rate) { samplingRate = Math.max(0, Math.min(1, rate)); }
 
     public TrackedGlobalFilter(GlobalFilter delegate, FilterChainTracker tracker,
                                 FilterCircuitBreakerManager circuitBreakerManager) {
@@ -99,6 +102,14 @@ public class TrackedGlobalFilter implements GlobalFilter, Ordered {
                     });
             }
 
+            boolean sampled = (boolean) exchange.getAttributes().computeIfAbsent(SAMPLED_ATTR,
+                    key -> java.util.concurrent.ThreadLocalRandom.current().nextDouble() < samplingRate);
+            if (!sampled) {
+                return delegate.filter(exchange, chain)
+                        .doOnSuccess(v -> { if (circuitBreakerManager != null) circuitBreakerManager.recordExecutionResult(filterName, true); })
+                        .doOnError(e -> { if (circuitBreakerManager != null) circuitBreakerManager.recordExecutionResult(filterName, false); })
+                        .doOnCancel(() -> { if (circuitBreakerManager != null) circuitBreakerManager.recordExecutionResult(filterName, false); });
+            }
             // Get trace ID from exchange (set by TraceIdGlobalFilter)
             // IMPORTANT: This must be inside Mono.defer to ensure TraceIdGlobalFilter
             // has already executed and set the traceId
