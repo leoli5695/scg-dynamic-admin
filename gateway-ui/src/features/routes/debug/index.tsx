@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Button, Card, Input, InputNumber, Result, Select, Space, Spin, Tabs, Tag, Typography } from 'antd';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Button, Card, Input, InputNumber, Result, Segmented, Select, Space, Spin, Tabs, Tag, Typography } from 'antd';
 import { ArrowLeftOutlined, BugOutlined, SendOutlined, StopOutlined } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -9,6 +9,7 @@ import { useRequest } from '../../../hooks/useRequest';
 import { useInstanceDetail } from '../../instance-detail/InstanceDetailContext';
 import type { RouteResponse } from '../../../types/route';
 import { debugDefaults, parseDebugHeaders } from './defaults';
+import { responseView } from './responseView';
 import { requestJourneyUrl, routeConfigurationUrl } from '../../request-journey/links';
 import './route-debug.css';
 
@@ -28,6 +29,7 @@ function Workbench({ route }: { route: RouteResponse }) {
   const [busy, setBusy] = useState(false);
   const [meta, setMeta] = useState<DebugEvent | null>(null);
   const [output, setOutput] = useState('');
+  const [responseMode, setResponseMode] = useState<'readable' | 'raw'>('readable');
   const [completion, setCompletion] = useState<DebugEvent | null>(null);
   const [error, setError] = useState('');
   const [policyId, setPolicyId] = useState<string | null>();
@@ -75,6 +77,7 @@ function Workbench({ route }: { route: RouteResponse }) {
   const traceId = Object.entries(responseHeaders).find(([name]) => name.toLowerCase() === 'x-trace-id')?.[1]?.[0];
   const matchedRoute = Object.entries(responseHeaders).find(([name]) => name.toLowerCase() === 'x-gateway-route-id')?.[1]?.[0];
   const sse = Object.entries(responseHeaders).some(([name, values]) => name.toLowerCase() === 'content-type' && values.some((value) => value.includes('text/event-stream')));
+  const readable = useMemo(() => responseView(output, sse), [output, sse]);
   const gateway = instance.effectiveAccessUrl || instance.manualAccessUrl || instance.reportedAccessUrl || instance.discoveredAccessUrl || '';
 
   return <div className="route-debug-page">
@@ -128,9 +131,24 @@ function Workbench({ route }: { route: RouteResponse }) {
         {matchedRoute && matchedRoute !== route.id && <Alert type="warning" showIcon title={t('journey.routeMismatch')} description={`${route.id} → ${matchedRoute}`} />}
         {error && <Alert type="error" showIcon title={error} />}
         {completion?.truncated && <Alert type="warning" showIcon title={t('routes.debug_truncated')} />}
-        {sse && completion && !error && !output.includes('[DONE]') && route.category === 'AI' && <Alert type="warning" showIcon title={t('routes.debug_incomplete_stream')} />}
+        {sse && completion && !error && !readable.complete && route.category === 'AI' && <Alert type="warning" showIcon title={t('routes.debug_incomplete_stream')} />}
         {!meta && !busy && !error ? <div className="route-debug-empty">{t('routes.debug_empty')}</div> : <Tabs items={[
-          { key: 'body', label: t('routes.debug_response_body'), children: <pre className="route-debug-output">{output || (busy ? t('routes.debug_waiting') : t('routes.debug_no_body'))}</pre> },
+          { key: 'body', label: t('routes.debug_response_body'), children: <>
+            <Segmented aria-label={t('routes.debug_display_mode')} value={responseMode} onChange={setResponseMode}
+              options={[{ label: t('routes.debug_readable'), value: 'readable' }, { label: t('routes.debug_raw'), value: 'raw' }]} />
+            {responseMode === 'raw' ? <pre className="route-debug-output" style={{ marginTop: 12 }}>{output || (busy ? t('routes.debug_waiting') : t('routes.debug_no_body'))}</pre> : <>
+              {readable.usage && <Space wrap className="route-debug-usage">
+                <Tag>{t('routes.debug_input_tokens')}: {readable.usage.input ?? '—'}</Tag>
+                <Tag>{t('routes.debug_output_tokens')}: {readable.usage.output ?? '—'}</Tag>
+                <Tag color="blue">{t('routes.debug_total_tokens')}: {readable.usage.total ?? '—'}</Tag>
+              </Space>}
+              <pre className="route-debug-output route-debug-readable">{readable.modelResponse ? readable.answer ||
+                (busy ? t('routes.debug_generating') : readable.tools.length ? t('routes.debug_tools_only') : t('routes.debug_no_answer')) :
+                sse ? (busy ? t('routes.debug_waiting') : t('routes.debug_unparsed_stream')) : readable.formatted || t('routes.debug_no_body')}</pre>
+              {readable.reasoning && <details className="route-debug-secondary"><summary>{t('routes.debug_reasoning')}</summary><pre>{readable.reasoning}</pre></details>}
+              {readable.tools.length > 0 && <details className="route-debug-secondary"><summary>{t('routes.debug_tool_calls')}</summary><pre>{JSON.stringify(readable.tools, null, 2)}</pre></details>}
+            </>}
+          </> },
           { key: 'headers', label: t('routes.debug_response_headers'), children: <pre className="route-debug-output">{JSON.stringify(responseHeaders, null, 2)}</pre> },
         ]} />}
       </Card>

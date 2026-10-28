@@ -13,4 +13,9 @@
 .route-debug-trace { margin: 12px 0; overflow-wrap: anywhere; }
 .route-debug-empty { min-height: 330px; display: grid; place-content: center; color: var(--ant-color-text-secondary, #94a3b8); }
 .route-debug-grid .ant-alert { margin-top: 12px; }
+.route-debug-usage { display: flex; margin-top: 16px; }
+.route-debug-readable { margin-top: 12px; min-height: 180px; font-family: inherit !important; font-size: 15px; line-height: 1.8; }
+.route-debug-secondary { margin-top: 16px; color: var(--text-secondary, #a5b4cb); }
+.route-debug-secondary summary { cursor: pointer; }
+.route-debug-secondary pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; padding: 12px; font-size: 12px; }
 @media (max-width: 1100px) { .route-debug-grid { grid-template-columns: minmax(0, 1fr); } }
