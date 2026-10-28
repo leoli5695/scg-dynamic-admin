@@ -124,7 +124,7 @@ const InstancesListPage: React.FC = () => {
     onSuccess: () => setUpdatedAt(new Date()),
   });
 
-  const list = instances.data ?? [];
+  const list = useMemo(() => instances.data ?? [], [instances.data]);
   const clusterCount = clusters.data?.length ?? 0;
   const loading = instances.loading || clusters.loading;
 
