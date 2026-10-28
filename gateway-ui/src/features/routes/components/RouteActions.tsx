@@ -4,8 +4,9 @@
 import React, { useCallback } from 'react';
 import { Button, Popconfirm, Space, Tooltip } from 'antd';
 import {
-  DeleteOutlined, EditOutlined, EyeOutlined, PlayCircleOutlined, StopOutlined,
+  BugOutlined, DeleteOutlined, EditOutlined, EyeOutlined, PlayCircleOutlined, StopOutlined,
 } from '@ant-design/icons';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { RouteResponse } from '../../../types/route';
 
@@ -21,6 +22,8 @@ const RouteActions = React.memo(({
   route, onEdit, onDetail, onToggle, onDelete,
 }: RouteActionDropdownProps) => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { instanceId } = useParams();
 
   const handleEdit = useCallback(() => onEdit(route), [onEdit, route]);
   const handleDetail = useCallback(() => onDetail(route), [onDetail, route]);
@@ -28,7 +31,8 @@ const RouteActions = React.memo(({
   const handleDelete = useCallback(() => onDelete(route), [onDelete, route]);
 
   return (
-    <Space>
+    <Space wrap>
+      <Button size="small" icon={<BugOutlined />} onClick={() => navigate(`/instances/${instanceId}/routes/${route.id}/debug`)}>{t('routes.debug')}</Button>
       <Tooltip title={t('common.edit')}>
         <Button type="text" size="small" icon={<EditOutlined />} className="action-btn" onClick={handleEdit} />
       </Tooltip>

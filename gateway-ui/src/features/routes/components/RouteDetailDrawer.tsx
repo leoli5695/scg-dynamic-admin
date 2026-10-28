@@ -8,11 +8,12 @@ import {
 } from 'antd';
 import { modal } from '../../../utils/antdStatic';
 import {
-  ApiOutlined, BranchesOutlined, CloseOutlined, CloudOutlined,
+  ApiOutlined, BranchesOutlined, BugOutlined, CloseOutlined, CloudOutlined,
   DeleteOutlined, EditOutlined, FileTextOutlined, SplitCellsOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { useNavigate, useParams } from 'react-router-dom';
 import type { RouteResponse, RouteServiceBinding } from '../../../types/route';
 
 interface RouteDetailDrawerProps {
@@ -26,6 +27,8 @@ const RouteDetailDrawer: React.FC<RouteDetailDrawerProps> = ({
   route, onClose, onEdit, onDelete,
 }) => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { instanceId } = useParams();
 
   const handleDeleteClick = () => {
     modal.confirm({
@@ -239,6 +242,7 @@ const RouteDetailDrawer: React.FC<RouteDetailDrawerProps> = ({
         )}
 
         <div className="drawer-actions">
+          <Button icon={<BugOutlined />} onClick={() => navigate(`/instances/${instanceId}/routes/${route.id}/debug`)}>{t('routes.debug')}</Button>
           <Button type="primary" icon={<EditOutlined />} onClick={() => onEdit(route)}>{t('common.edit')}</Button>
           <Button danger icon={<DeleteOutlined />} onClick={handleDeleteClick}>{t('common.delete')}</Button>
         </div>

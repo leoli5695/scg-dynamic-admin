@@ -1,0 +1,16 @@
+.route-debug-page { display: grid; gap: 20px; max-width: 1600px; margin: 0 auto; }
+.route-debug-page > .ant-btn { justify-self: start; }
+.route-debug-heading { display: flex; align-items: center; gap: 16px; }
+.route-debug-heading > .anticon { font-size: 28px; color: #60a5fa; }
+.route-debug-heading h3 { margin: 0 0 4px !important; }
+.route-debug-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 20px; align-items: start; }
+.route-debug-label { display: block; margin: 16px 0 8px; font-weight: 500; }
+.route-debug-label:first-child { margin-top: 0; }
+.route-debug-hint { display: block; margin-top: 8px; font-size: 12px; }
+.route-debug-code, .route-debug-output { font-family: "JetBrains Mono", Consolas, monospace !important; font-size: 13px; }
+.route-debug-output { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; min-height: 280px; max-height: 65vh; overflow: auto; padding: 16px; border-radius: 8px; background: rgba(127,127,127,.08); }
+.route-debug-send { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+.route-debug-trace { margin: 12px 0; overflow-wrap: anywhere; }
+.route-debug-empty { min-height: 330px; display: grid; place-content: center; color: var(--ant-color-text-secondary, #94a3b8); }
+.route-debug-grid .ant-alert { margin-top: 12px; }
+@media (max-width: 1100px) { .route-debug-grid { grid-template-columns: minmax(0, 1fr); } }
