@@ -3,6 +3,7 @@
  * All endpoints return the ApiResponse envelope except /export (raw blob).
  */
 import { httpClient } from './http';
+import type { RequestOptions } from './http';
 import type {
   SharedStressTestReport,
   StartStressTestResult,
@@ -36,18 +37,18 @@ export function getStressTest(testId: number): Promise<StressTest> {
 }
 
 /** List all tests of an instance. */
-export function getStressTestsByInstance(instanceId: string): Promise<StressTest[]> {
-  return httpClient.get<StressTest[]>(`/api/stress-test/instance/${instanceId}`);
+export function getStressTestsByInstance(instanceId: string, options?: RequestOptions): Promise<StressTest[]> {
+  return httpClient.get<StressTest[]>(`/api/stress-test/instance/${encodeURIComponent(instanceId)}`, options);
 }
 
 /** Live status snapshot of a running test (no timeline). */
-export function getStressTestStatus(testId: number): Promise<StressTestLiveStatus> {
-  return httpClient.get<StressTestLiveStatus>(`/api/stress-test/${testId}/status`);
+export function getStressTestStatus(testId: number, options?: RequestOptions): Promise<StressTestLiveStatus> {
+  return httpClient.get<StressTestLiveStatus>(`/api/stress-test/${testId}/status`, options);
 }
 
 /** Timeline + summary metrics of a test. */
-export function getStressTestMetrics(testId: number): Promise<StressTestMetrics> {
-  return httpClient.get<StressTestMetrics>(`/api/stress-test/${testId}/metrics`);
+export function getStressTestMetrics(testId: number, options?: RequestOptions): Promise<StressTestMetrics> {
+  return httpClient.get<StressTestMetrics>(`/api/stress-test/${testId}/metrics`, options);
 }
 
 /** Stop a running test. */

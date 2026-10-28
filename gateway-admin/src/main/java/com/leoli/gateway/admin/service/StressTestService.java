@@ -21,6 +21,8 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -105,14 +107,14 @@ public class StressTestService {
                 3,
                 3,
                 60L, TimeUnit.SECONDS,
-                new LinkedBlockingQueue<>(100), // Bounded queue for orchestration
+                new LinkedBlockingQueue<>(3),
                 r -> {
                     Thread t = new Thread(r);
                     t.setDaemon(true);
                     t.setName("stress-orchestrator-" + t.getId());
                     return t;
                 },
-                new ThreadPoolExecutor.CallerRunsPolicy()
+                new ThreadPoolExecutor.AbortPolicy()
         );
 
         log.info("StressTestService initialized: HttpClient pool={}, HTTP/1.1, bounded queues", poolSize);
@@ -132,6 +134,7 @@ public class StressTestService {
         if (httpExecutor != null) {
             httpExecutor.shutdownNow();
         }
+        if (httpClient != null) httpClient.shutdownNow();
         log.info("StressTestService destroyed");
     }
 
@@ -159,7 +162,7 @@ public class StressTestService {
         test.setInstanceId(instanceId);
         test.setTestName(config.getTestName());
         test.setTargetUrl(targetUrl);
-        test.setMethod(config.getMethod() != null ? config.getMethod() : "GET");
+        test.setMethod(config.getMethod() != null && !config.getMethod().isBlank() ? config.getMethod().trim().toUpperCase(Locale.ROOT) : "GET");
         test.setHeaders(config.getHeaders() != null ? toJson(config.getHeaders()) : null);
         test.setBody(config.getBody());
         test.setConcurrentUsers(config.getConcurrentUsers() != null ? config.getConcurrentUsers() : 10);
@@ -176,9 +179,18 @@ public class StressTestService {
         }
 
         test.setRampUpSeconds(config.getRampUpSeconds() != null ? config.getRampUpSeconds() : 0);
+        test.setTargetQps(config.getTargetQps());
+        test.setRequestTimeoutSeconds(config.getRequestTimeoutSeconds() != null ? config.getRequestTimeoutSeconds() : 30);
         test.setStatus("CREATED");
 
         test = stressTestRepository.save(test);
+
+        StressTestSession reserved = new StressTestSession(test.getTotalRequests() != null ? test.getTotalRequests() : Integer.MAX_VALUE,
+                test.getDurationSeconds());
+        synchronized (runningTests) {
+            if (runningTests.size() >= 3) throw new IllegalStateException("Maximum 3 concurrent tests allowed");
+            runningTests.put(test.getId(), reserved);
+        }
 
         // Register synchronization to start test AFTER transaction commits
         // This ensures the test record is visible to the async thread
@@ -191,6 +203,9 @@ public class StressTestService {
             public void afterCommit() {
                 log.info("Transaction committed, starting async stress test: {}", testId);
                 startTestAsync(testId, targetQps, requestTimeoutSeconds);
+            }
+            @Override public void afterCompletion(int status) {
+                if (status != TransactionSynchronization.STATUS_COMMITTED) runningTests.remove(testId, reserved);
             }
         });
 
@@ -241,15 +256,16 @@ public class StressTestService {
         // FIX: single get + null check - containsKey/get race could NPE when the
         // session is removed between the two calls.
         StressTestSession session = runningTests.get(testId);
-        if ("RUNNING".equals(test.getStatus()) && session != null) {
+        if (("RUNNING".equals(test.getStatus()) || "CREATED".equals(test.getStatus())) && session != null) {
+            var summary = session.stats.getSummary();
             status.setProgress(session.getProgress());
             status.setLiveRps(session.getLiveRps());
-            status.setActualRequests(session.totalCompleted.get());
-            status.setSuccessfulRequests(session.totalCompleted.get() - session.totalFailed.get());
-            status.setFailedRequests(session.totalFailed.get());
-            status.setAvgResponseTimeMs(session.stats.getSummary().getAvgResponseTime());
-            status.setRequestsPerSecond(session.getLiveRps());
-            status.setErrorRate(session.stats.getSummary().getErrorRate());
+            status.setActualRequests((int) summary.getTotalRequests());
+            status.setSuccessfulRequests((int) summary.getSuccessRequests());
+            status.setFailedRequests((int) summary.getFailedRequests());
+            status.setAvgResponseTimeMs(summary.getAvgResponseTime());
+            status.setRequestsPerSecond(summary.getRequestsPerSecond());
+            status.setErrorRate(summary.getErrorRate());
         }
 
         return status;
@@ -267,13 +283,13 @@ public class StressTestService {
         // If test is running, get live metrics from session.
         // FIX: single get + null check to avoid the containsKey/get race.
         StressTestSession liveSession = runningTests.get(testId);
-        if ("RUNNING".equals(test.getStatus()) && liveSession != null) {
+        if (("RUNNING".equals(test.getStatus()) || "CREATED".equals(test.getStatus())) && liveSession != null) {
             metrics.setProgress(liveSession.getProgress());
             metrics.setTimeline(liveSession.stats.getTimeline());
             metrics.setSummary(liveSession.stats.getSummary());
         } else {
             // For completed tests, build metrics from stored data
-            metrics.setProgress(1.0);
+            metrics.setProgress("CREATED".equals(test.getStatus()) ? 0.0 : 1.0);
             com.leoli.gateway.admin.model.StressTestMetrics.SummaryMetrics summary = new com.leoli.gateway.admin.model.StressTestMetrics.SummaryMetrics();
             summary.setTotalRequests(test.getActualRequests() != null ? test.getActualRequests().longValue() : 0);
             summary.setSuccessRequests(test.getSuccessfulRequests() != null ? test.getSuccessfulRequests().longValue() : 0);
@@ -297,25 +313,25 @@ public class StressTestService {
     /**
      * Stop a running test.
      */
-    @Transactional
     public StressTest stopTest(Long testId) {
         StressTest test = getTest(testId);
 
-        if (!"RUNNING".equals(test.getStatus())) {
+        if (!"RUNNING".equals(test.getStatus()) && !"CREATED".equals(test.getStatus())) {
             throw new RuntimeException("Test is not running");
         }
 
         // Signal stop and cancel in-flight requests
-        if (runningTests.containsKey(testId)) {
-            StressTestSession session = runningTests.get(testId);
-            session.stop();
-            session.cancelAll();
-        }
+        StressTestSession session = runningTests.get(testId);
+        if (session == null) throw new IllegalStateException("Test is not active on this admin node; stop it on the node that started it");
+        session.stop();
 
-        test.setStatus("STOPPED");
-        test.setEndTime(LocalDateTime.now());
-
-        return stressTestRepository.save(test);
+        // Do not dirty a possibly OSIV-managed entity: an audit transaction could
+        // flush it later and overwrite statistics saved by the worker.
+        StressTest response = new StressTest();
+        org.springframework.beans.BeanUtils.copyProperties(test, response);
+        response.setStatus("STOPPED");
+        response.setEndTime(LocalDateTime.now());
+        return response;
     }
 
     /**
@@ -359,7 +375,7 @@ public class StressTestService {
     public void deleteTest(Long testId) {
         StressTest test = getTest(testId);
 
-        if ("RUNNING".equals(test.getStatus())) {
+        if ("RUNNING".equals(test.getStatus()) || runningTests.containsKey(testId)) {
             throw new RuntimeException("Cannot delete running test");
         }
 
@@ -404,6 +420,24 @@ public class StressTestService {
         Integer timeoutSeconds = config.getRequestTimeoutSeconds();
         if (timeoutSeconds != null && (timeoutSeconds < 1 || timeoutSeconds > 300)) {
             throw new IllegalArgumentException("Request timeout must be between 1 and 300 seconds");
+        }
+        if (config.getRampUpSeconds() != null && (config.getRampUpSeconds() < 0 || config.getRampUpSeconds() > 300
+                || (durationSeconds != null && config.getRampUpSeconds() > durationSeconds))) {
+            throw new IllegalArgumentException("Ramp-up must be between 0 and 300 seconds and cannot exceed duration");
+        }
+        if (config.getTargetQps() != null && (config.getTargetQps() < 0 || config.getTargetQps() > 10000)) {
+            throw new IllegalArgumentException("Target QPS must be between 0 (unlimited) and 10000");
+        }
+        new StressTestValidator().validateHttpMethod(config.getMethod());
+        if (config.getBody() != null && config.getBody().getBytes(StandardCharsets.UTF_8).length > 1024 * 1024) {
+            throw new IllegalArgumentException("Request body exceeds 1 MiB");
+        }
+        if (config.getHeaders() != null) {
+            if (toJson(config.getHeaders()).getBytes(StandardCharsets.UTF_8).length > 8192) {
+                throw new IllegalArgumentException("Request headers exceed 8 KiB");
+            }
+            HttpRequest.Builder validation = HttpRequest.newBuilder();
+            config.getHeaders().forEach(validation::header);
         }
     }
     
@@ -450,14 +484,18 @@ public class StressTestService {
     }
 
     private void startTestAsync(Long testId, Integer targetQps, int requestTimeoutSeconds) {
-        orchestrationExecutor.submit(() -> {
-            try {
-                executeTest(testId, targetQps, requestTimeoutSeconds);
-            } catch (Exception e) {
-                log.error("Stress test {} failed", testId, e);
-                markTestFailed(testId, e.getMessage());
-            }
-        });
+        try {
+            orchestrationExecutor.submit(() -> {
+                try {
+                    executeTest(testId, targetQps, requestTimeoutSeconds);
+                } catch (Exception e) {
+                    log.error("Stress test {} failed", testId, e);
+                    markTestFailed(testId, e.getMessage());
+                }
+            });
+        } catch (RejectedExecutionException rejected) {
+            markTestFailed(testId, "Stress test executor is busy or shutting down");
+        }
     }
 
     /**
@@ -473,7 +511,7 @@ public class StressTestService {
         headers.forEach(builder::header);
 
         // Set method and body
-        String method = test.getMethod().toUpperCase();
+        String method = test.getMethod().trim().toUpperCase(Locale.ROOT);
         String body = test.getBody();
 
         // Resolve placeholders in body (each request gets fresh random values)
@@ -494,11 +532,16 @@ public class StressTestService {
             case "PATCH" -> builder.method("PATCH", body != null ?
                     HttpRequest.BodyPublishers.ofString(body) :
                     HttpRequest.BodyPublishers.noBody());  // Added: support PATCH
-            default -> builder.GET();
+            case "GET", "HEAD" -> builder.method(method, HttpRequest.BodyPublishers.noBody());
+            case "OPTIONS" -> builder.method(method, body != null ? HttpRequest.BodyPublishers.ofString(body) : HttpRequest.BodyPublishers.noBody());
+            default -> throw new IllegalArgumentException("Unsupported HTTP method: " + method);
         }
 
         // Ensure Content-Type for requests with body
-        if (body != null && !body.isEmpty() && !headers.containsKey("Content-Type")) {
+        if (body != null && body.getBytes(StandardCharsets.UTF_8).length > 1024 * 1024) {
+            throw new IllegalArgumentException("Expanded request body exceeds 1 MiB");
+        }
+        if (body != null && !body.isEmpty() && headers.keySet().stream().noneMatch("Content-Type"::equalsIgnoreCase)) {
             builder.header("Content-Type", "application/json");
         }
 
@@ -508,321 +551,133 @@ public class StressTestService {
     /**
      * Execute a single async request and return a CompletableFuture of the result.
      */
-    private CompletableFuture<TestResult> executeRequestAsync(HttpRequest request,
-                                                              Semaphore semaphore,
-                                                              StressTestSession session) {
-        long startTime = System.currentTimeMillis();
-
-        CompletableFuture<TestResult> future = httpClient
-                .sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                .thenApply(response -> {
-                    TestResult result = new TestResult();
-                    result.startTime = startTime;
-                    result.endTime = System.currentTimeMillis();
-                    result.responseTime = result.endTime - result.startTime;
-                    result.statusCode = response.statusCode();
-                    result.success = response.statusCode() >= 200 && response.statusCode() < 300;
-                    result.bodySize = response.body() != null ? response.body().length() : 0;
-                    return result;
-                })
-                .exceptionally(ex -> {
-                    TestResult result = new TestResult();
-                    result.startTime = startTime;
-                    result.endTime = System.currentTimeMillis();
-                    result.responseTime = result.endTime - result.startTime;
-                    result.success = false;
-                    result.error = ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage();
-                    return result;
-                });
-
-        // Register completion callback: release permit, record result
-        CompletableFuture<TestResult> tracked = future.whenComplete((result, ex) -> {
-            semaphore.release();
-            if (result != null) {
-                session.recordResult(result);
-                if (result.success) {
-                    session.totalCompleted.incrementAndGet();
-                } else {
-                    session.totalCompleted.incrementAndGet();
-                    session.totalFailed.incrementAndGet();
-                }
-            }
-        });
-
-        session.addInflight(tracked);
-        return tracked;
+    private CompletableFuture<TestResult> executeRequestAsync(HttpRequest request, Semaphore semaphore, StressTestSession session) {
+        long started = System.nanoTime();
+        synchronized (session) {
+            if (session.shouldStop()) { semaphore.release(); return CompletableFuture.completedFuture(null); }
+            CompletableFuture<HttpResponse<Long>> transport = httpClient.sendAsync(request, info -> new CountingBodySubscriber());
+            long timeoutMs = request.timeout().orElse(Duration.ofSeconds(30)).toMillis();
+            CompletableFuture<TestResult> accounted = transport.copy().orTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                    .handle((response, error) -> {
+                        TestResult result = new TestResult();
+                        result.responseTime = Math.max(0, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
+                        if (error == null) {
+                            result.statusCode = response.statusCode();
+                            result.success = result.statusCode >= 200 && result.statusCode < 300;
+                            result.bodySize = response.body() != null ? response.body() : 0;
+                            if (!result.success) result.error = "HTTP " + result.statusCode;
+                        } else {
+                            Throwable cause = error;
+                            while (cause instanceof CompletionException && cause.getCause() != null) cause = cause.getCause();
+                            if (cause instanceof TimeoutException) transport.cancel(true);
+                            result.error = cause instanceof CancellationException ? "Request cancelled" :
+                                    cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName();
+                        }
+                        return result;
+                    }).whenComplete((result, error) -> {
+                        try { if (result != null) session.recordResult(result); }
+                        finally { semaphore.release(); }
+                    });
+            session.addInflight(transport, accounted);
+            return accounted;
+        }
     }
 
-    /**
-     * Core test execution logic with async HttpClient, rate control, and ramp-up.
-     */
+    /** Dispatch until the monotonic deadline, then drain accounted requests before persisting. */
     private void executeTest(Long testId, Integer targetQps, int requestTimeoutSeconds) {
+        StressTestSession session = runningTests.get(testId);
+        if (session == null) return;
         StressTest test = stressTestRepository.findById(testId).orElse(null);
-        if (test == null) {
-            log.error("Test {} not found", testId);
-            return;
-        }
-
-        // Mark as running
-        test.setStatus("RUNNING");
-        test.setStartTime(LocalDateTime.now());
-        stressTestRepository.save(test);
-
-        // Create session
-        int totalRequests;
-        Integer durationSeconds = test.getDurationSeconds();
-
-        if (durationSeconds != null) {
-            totalRequests = test.getTotalRequests() != null ? test.getTotalRequests() : Integer.MAX_VALUE;
-        } else {
-            totalRequests = test.getTotalRequests() != null ? test.getTotalRequests() : 1000;
-        }
-
-        int concurrentUsers = test.getConcurrentUsers();
-        int rampUpSeconds = test.getRampUpSeconds() != null ? test.getRampUpSeconds() : 0;
-
-        StressTestSession session = new StressTestSession(totalRequests, durationSeconds);
-        runningTests.put(testId, session);
-
-        // Parse headers and build reusable HttpRequest
-        Map<String, String> headers = parseHeaders(test.getHeaders());
-        HttpRequest request = buildHttpRequest(test, headers, requestTimeoutSeconds);
-
-        // Semaphore for concurrency control
-        int initialPermits = rampUpSeconds > 0 ? 1 : concurrentUsers;
-        Semaphore semaphore = new Semaphore(initialPermits);
-        AtomicInteger releasedPermits = new AtomicInteger(initialPermits);
-
-        // Results collection
-        List<TestResult> allResults = Collections.synchronizedList(new ArrayList<>());
-
-        // Submitted request counter
-        AtomicInteger submittedCount = new AtomicInteger(0);
-
-        long startTimeMs = System.currentTimeMillis();
-        long nextSendNanos = System.nanoTime();
-
+        if (test == null) { runningTests.remove(testId, session); return; }
+        String failure = null;
         try {
-            while (!session.shouldStop()) {
-                long elapsedMs = System.currentTimeMillis() - startTimeMs;
-
-                // Check termination conditions
-                boolean requestLimitReached = durationSeconds == null
-                        && totalRequests > 0
-                        && submittedCount.get() >= totalRequests;
-                boolean durationReached = durationSeconds != null
-                        && elapsedMs >= durationSeconds * 1000L;
-                boolean bothSet = durationSeconds != null
-                        && totalRequests > 0
-                        && submittedCount.get() >= totalRequests;
-
-                if (requestLimitReached || durationReached || bothSet) {
-                    break;
-                }
-
-                // Ramp-up: dynamically increase semaphore permits
-                if (rampUpSeconds > 0) {
-                    adjustRampUpPermits(semaphore, releasedPermits, concurrentUsers, elapsedMs, rampUpSeconds * 1000L);
-                }
-
-                // Rate control: wait until next send time
-                if (targetQps != null && targetQps > 0) {
-                    long nowNanos = System.nanoTime();
-                    if (nowNanos < nextSendNanos) {
-                        LockSupport.parkNanos(nextSendNanos - nowNanos);
-                    }
-                    // Calculate interval for next request
-                    // For high QPS, batch sending is handled by the tight loop
-                    long intervalNanos = 1_000_000_000L / targetQps;
-                    nextSendNanos += intervalNanos;
-
-                    // Prevent falling behind: if we're way behind, reset
-                    if (System.nanoTime() - nextSendNanos > 1_000_000_000L) {
-                        nextSendNanos = System.nanoTime();
-                    }
-                }
-
-                // Acquire semaphore permit (wait up to 50ms)
-                boolean acquired;
-                try {
-                    acquired = semaphore.tryAcquire(50, TimeUnit.MILLISECONDS);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
-                }
-
-                if (!acquired) {
-                    continue; // Concurrency limit reached, retry
-                }
-
-                if (session.shouldStop()) {
-                    semaphore.release();
-                    break;
-                }
-
-                submittedCount.incrementAndGet();
-
-                // Fire async request
-                CompletableFuture<TestResult> future = executeRequestAsync(request, semaphore, session);
-                future.thenAccept(allResults::add);
+            synchronized (session) {
+                session.start();
+                test.setStartTime(LocalDateTime.now());
+                if (!session.shouldStop()) test.setStatus("RUNNING");
+                stressTestRepository.save(test);
+                if (session.shouldStop()) return;
             }
-
-            // Wait for all in-flight requests to complete
-            long waitTimeoutMs = Math.max(requestTimeoutSeconds * 2000L, 60000);
-            session.awaitCompletion(waitTimeoutMs);
-
-        } catch (Exception e) {
-            log.error("Test execution error", e);
+            int concurrency = test.getConcurrentUsers();
+            int rampUpSeconds = test.getRampUpSeconds() != null ? test.getRampUpSeconds() : 0;
+            Integer duration = test.getDurationSeconds();
+            int limit = test.getTotalRequests() != null ? test.getTotalRequests() : Integer.MAX_VALUE;
+            Map<String, String> headers = parseHeaders(test.getHeaders());
+            boolean dynamicBody = test.getBody() != null && test.getBody().contains("{{");
+            HttpRequest template = dynamicBody ? null : buildHttpRequest(test, headers, requestTimeoutSeconds);
+            int initial = rampUpSeconds > 0 ? 1 : concurrency;
+            Semaphore semaphore = new Semaphore(initial);
+            AtomicInteger released = new AtomicInteger(initial);
+            long started = System.nanoTime();
+            long deadline = duration != null ? started + TimeUnit.SECONDS.toNanos(duration) : Long.MAX_VALUE;
+            long nextSend = started;
+            int submitted = 0;
+            while (!session.shouldStop() && submitted < limit) {
+                if (Thread.currentThread().isInterrupted()) { session.stop(); break; }
+                long now = System.nanoTime();
+                if (now >= deadline) break;
+                if (rampUpSeconds > 0) adjustRampUpPermits(semaphore, released, concurrency,
+                        TimeUnit.NANOSECONDS.toMillis(now - started), rampUpSeconds * 1000L);
+                if (targetQps != null && targetQps > 0 && now < nextSend) {
+                    LockSupport.parkNanos(Math.min(TimeUnit.MILLISECONDS.toNanos(50), Math.min(nextSend - now, deadline - now)));
+                    continue;
+                }
+                if (!semaphore.tryAcquire(50, TimeUnit.MILLISECONDS)) continue;
+                if (session.shouldStop() || System.nanoTime() >= deadline) { semaphore.release(); break; }
+                try {
+                    HttpRequest request = dynamicBody ? buildHttpRequest(test, headers, requestTimeoutSeconds) : template;
+                    if (System.nanoTime() >= deadline) { semaphore.release(); break; }
+                    executeRequestAsync(request, semaphore, session);
+                } catch (RuntimeException error) { semaphore.release(); throw error; }
+                submitted++;
+                if (targetQps != null && targetQps > 0) nextSend = System.nanoTime() + 1_000_000_000L / targetQps;
+            }
+            session.awaitCompletion(Math.max(requestTimeoutSeconds * 1000L + 5000, 10000));
+        } catch (InterruptedException interrupted) {
+            session.stop();
+            Thread.currentThread().interrupt();
+        } catch (Exception error) {
+            failure = error.getMessage() != null ? error.getMessage() : error.getClass().getSimpleName();
+            log.error("Stress test {} execution failed", testId, error);
+            session.cancelAll();
+        } finally {
+            try {
+                session.awaitCompletion(5000);
+                test.setEndTime(LocalDateTime.now());
+                session.stats.applyTo(test, objectMapper);
+                test.setStatus(failure != null ? "FAILED" : session.shouldStop() ? "STOPPED" : "COMPLETED");
+                stressTestRepository.save(test);
+            } finally {
+                runningTests.remove(testId, session);
+            }
         }
-
-        // Calculate results
-        test.setEndTime(LocalDateTime.now());
-        test.setActualRequests(allResults.size());
-        test.setSuccessfulRequests((int) allResults.stream().filter(r -> r.success).count());
-        test.setFailedRequests((int) allResults.stream().filter(r -> !r.success).count());
-
-        if (!allResults.isEmpty()) {
-            calculateStatistics(test, allResults);
-        }
-
-        // Save final results
-        test.setStatus(session.shouldStop() ? "STOPPED" : "COMPLETED");
-        stressTestRepository.save(test);
-
-        // Clean up
-        runningTests.remove(testId);
-        log.info("Stress test {} finished: status={}, requests={}, rps={}, avgMs={}",
-                testId, test.getStatus(), test.getActualRequests(),
-                test.getRequestsPerSecond(), test.getAvgResponseTimeMs());
     }
 
-    /**
-     * Dynamically adjust semaphore permits during ramp-up phase.
-     */
     private void adjustRampUpPermits(Semaphore semaphore, AtomicInteger releasedPermits,
                                      int targetConcurrency, long elapsedMs, long rampUpMs) {
-        if (elapsedMs >= rampUpMs) {
-            // Ramp-up complete, release all remaining permits
-            int delta = targetConcurrency - releasedPermits.get();
-            if (delta > 0) {
-                semaphore.release(delta);
-                releasedPermits.addAndGet(delta);
-            }
-            return;
-        }
-
-        double progress = (double) elapsedMs / rampUpMs;
-        int targetPermits = Math.max(1, (int) (targetConcurrency * progress));
-        int delta = targetPermits - releasedPermits.get();
-
+        int target = elapsedMs >= rampUpMs ? targetConcurrency
+                : Math.max(1, (int) (targetConcurrency * ((double) elapsedMs / rampUpMs)));
+        int delta = target - releasedPermits.get();
         if (delta > 0) {
             semaphore.release(delta);
             releasedPermits.addAndGet(delta);
         }
     }
 
-    private void calculateStatistics(StressTest test, List<TestResult> results) {
-        // Filter successful results
-        List<Long> responseTimes = results.stream()
-                .filter(r -> r.success)
-                .map(r -> r.responseTime)
-                .sorted()
-                .collect(Collectors.toList());
-
-        if (responseTimes.isEmpty()) {
-            test.setMinResponseTimeMs(0.0);
-            test.setMaxResponseTimeMs(0.0);
-            test.setAvgResponseTimeMs(0.0);
-        } else {
-            test.setMinResponseTimeMs(responseTimes.get(0).doubleValue());
-            test.setMaxResponseTimeMs(responseTimes.get(responseTimes.size() - 1).doubleValue());
-            test.setAvgResponseTimeMs(responseTimes.stream().mapToLong(l -> l).average().orElse(0));
-
-            // Percentiles
-            test.setP50ResponseTimeMs(getPercentile(responseTimes, 50));
-            test.setP90ResponseTimeMs(getPercentile(responseTimes, 90));
-            test.setP95ResponseTimeMs(getPercentile(responseTimes, 95));
-            test.setP99ResponseTimeMs(getPercentile(responseTimes, 99));
-        }
-
-        // Calculate RPS
-        long durationMs = test.getEndTime() != null && test.getStartTime() != null ?
-                java.time.Duration.between(test.getStartTime(), test.getEndTime()).toMillis() :
-                System.currentTimeMillis() - results.get(0).startTime;
-        if (durationMs > 0) {
-            test.setRequestsPerSecond(results.size() * 1000.0 / durationMs);
-        }
-
-        // Calculate error rate
-        test.setErrorRate(results.isEmpty() ? 0 :
-                (double) results.stream().filter(r -> !r.success).count() / results.size() * 100);
-
-        // Calculate throughput
-        long totalBytes = results.stream().filter(r -> r.success).mapToLong(r -> r.bodySize).sum();
-        if (durationMs > 0) {
-            test.setThroughputKbps(totalBytes * 1000.0 / durationMs / 1024);
-        }
-
-        // Build distribution data
-        test.setResponseTimeDistribution(buildResponseTimeDistribution(responseTimes));
-        test.setErrorDistribution(buildErrorDistribution(results));
-    }
-
-    private double getPercentile(List<Long> sortedValues, int percentile) {
-        if (sortedValues.isEmpty()) return 0;
-        int index = (int) Math.ceil(percentile / 100.0 * sortedValues.size()) - 1;
-        index = Math.max(0, Math.min(index, sortedValues.size() - 1));
-        return sortedValues.get(index).doubleValue();
-    }
-
-    private String buildResponseTimeDistribution(List<Long> responseTimes) {
-        if (responseTimes.isEmpty()) return "{}";
-
-        Map<String, Integer> distribution = new LinkedHashMap<>();
-        long max = responseTimes.get(responseTimes.size() - 1);
-
-        int bucketCount = 10;
-        long bucketSize = max / bucketCount + 1;
-
-        for (int i = 0; i < bucketCount; i++) {
-            long bucketStart = i * bucketSize;
-            long bucketEnd = (i + 1) * bucketSize;
-            String bucketLabel = bucketStart + "-" + bucketEnd + "ms";
-
-            int count = 0;
-            for (long time : responseTimes) {
-                if (time >= bucketStart && time < bucketEnd) {
-                    count++;
-                }
-            }
-            distribution.put(bucketLabel, count);
-        }
-
-        return toJson(distribution);
-    }
-
-    private String buildErrorDistribution(List<TestResult> results) {
-        Map<String, Integer> errors = new LinkedHashMap<>();
-
-        for (TestResult result : results) {
-            if (!result.success) {
-                String errorKey = result.error != null ? result.error : "HTTP " + result.statusCode;
-                errors.merge(errorKey, 1, Integer::sum);
-            }
-        }
-
-        return toJson(errors);
-    }
-
     @Transactional
     public void markTestFailed(Long testId, String error) {
-        StressTest test = stressTestRepository.findById(testId).orElse(null);
-        if (test != null) {
-            test.setStatus("FAILED");
-            test.setEndTime(LocalDateTime.now());
-            stressTestRepository.save(test);
+        StressTestSession session = runningTests.get(testId);
+        if (session != null) session.stop();
+        try {
+            StressTest test = stressTestRepository.findById(testId).orElse(null);
+            if (test != null) {
+                test.setStatus("FAILED");
+                test.setEndTime(LocalDateTime.now());
+                stressTestRepository.save(test);
+            }
+        } finally {
+            runningTests.remove(testId);
         }
-        runningTests.remove(testId);
     }
 
     private Map<String, String> parseHeaders(String headersJson) {
@@ -1242,227 +1097,60 @@ public class StressTestService {
         }
     }
 
-    /**
-     * Tracks live metrics during test execution for real-time chart visualization.
-     */
-    private static class LiveMetricsTracker {
-        private final List<com.leoli.gateway.admin.model.StressTestMetrics.MetricDataPoint> timeline =
-                Collections.synchronizedList(new ArrayList<>());
-        private volatile com.leoli.gateway.admin.model.StressTestMetrics.SummaryMetrics summary =
-                new com.leoli.gateway.admin.model.StressTestMetrics.SummaryMetrics();
-
-        // Keep recent response times for percentile calculations
-        private final List<Long> recentResponseTimes = Collections.synchronizedList(new ArrayList<>());
-        private static final int MAX_RESPONSE_TIMES = 1000; // Keep last 1000 samples
-
-        private long lastSnapshotTime = 0;
-        private static final long SNAPSHOT_INTERVAL_MS = 2000; // Snapshot every 2 seconds
-
-        void recordResult(TestResult result, int totalCompleted, int totalFailed) {
-            // Track response time for percentile calculations
-            synchronized (recentResponseTimes) {
-                recentResponseTimes.add(result.responseTime);
-                while (recentResponseTimes.size() > MAX_RESPONSE_TIMES) {
-                    recentResponseTimes.remove(0);
-                }
-            }
-
-            // Update running summary
-            updateSummary(result, totalCompleted, totalFailed);
-
-            // Take periodic snapshot for timeline
-            long now = System.currentTimeMillis();
-            if (now - lastSnapshotTime >= SNAPSHOT_INTERVAL_MS) {
-                takeSnapshot(totalCompleted, totalFailed);
-                lastSnapshotTime = now;
-            }
-        }
-
-        private synchronized void updateSummary(TestResult result, int totalCompleted, int totalFailed) {
-            // Calculate running statistics
-            double avgRt = summary.getAvgResponseTime();
-            long count = summary.getTotalRequests();
-
-            // Running average calculation
-            double newAvgRt = ((avgRt * count) + result.responseTime) / (count + 1);
-
-            summary.setTotalRequests(count + 1);
-            summary.setSuccessRequests(summary.getSuccessRequests() + (result.success ? 1 : 0));
-            summary.setFailedRequests(summary.getFailedRequests() + (result.success ? 0 : 1));
-            summary.setAvgResponseTime(newAvgRt);
-
-            // Min/Max tracking
-            if (summary.getMinResponseTime() == 0 || result.responseTime < summary.getMinResponseTime()) {
-                summary.setMinResponseTime(result.responseTime);
-            }
-            if (result.responseTime > summary.getMaxResponseTime()) {
-                summary.setMaxResponseTime(result.responseTime);
-            }
-
-            // Error rate
-            if (summary.getTotalRequests() > 0) {
-                summary.setErrorRate((summary.getFailedRequests() * 100.0) / summary.getTotalRequests());
-            }
-
-            // RPS calculation
-            long elapsedMs = System.currentTimeMillis() - (lastSnapshotTime > 0 ? lastSnapshotTime : System.currentTimeMillis() - 1000);
-            if (elapsedMs > 0) {
-                summary.setRequestsPerSecond((summary.getTotalRequests() * 1000.0) / elapsedMs);
-            }
-
-            // Update percentiles from recent samples
-            updatePercentiles();
-        }
-
-        private void updatePercentiles() {
-            synchronized (recentResponseTimes) {
-                if (recentResponseTimes.isEmpty()) return;
-
-                List<Long> sorted = new ArrayList<>(recentResponseTimes);
-                Collections.sort(sorted);
-
-                summary.setP50ResponseTime(getPercentileValue(sorted, 50));
-                summary.setP90ResponseTime(getPercentileValue(sorted, 90));
-                summary.setP95ResponseTime(getPercentileValue(sorted, 95));
-                summary.setP99ResponseTime(getPercentileValue(sorted, 99));
-            }
-        }
-
-        private double getPercentileValue(List<Long> sortedValues, int percentile) {
-            if (sortedValues.isEmpty()) return 0;
-            int index = (int) Math.ceil(percentile / 100.0 * sortedValues.size()) - 1;
-            index = Math.max(0, Math.min(index, sortedValues.size() - 1));
-            return sortedValues.get(index);
-        }
-
-        private void takeSnapshot(int totalCompleted, int totalFailed) {
-            com.leoli.gateway.admin.model.StressTestMetrics.MetricDataPoint point =
-                    new com.leoli.gateway.admin.model.StressTestMetrics.MetricDataPoint();
-
-            point.setTimestamp(System.currentTimeMillis());
-            point.setTotalRequests(summary.getTotalRequests());
-            point.setSuccessRequests(summary.getSuccessRequests());
-            point.setFailedRequests(summary.getFailedRequests());
-            point.setAvgResponseTime(summary.getAvgResponseTime());
-            point.setP95ResponseTime(summary.getP95ResponseTime());
-            point.setP99ResponseTime(summary.getP99ResponseTime());
-            point.setErrorRate(summary.getErrorRate());
-
-            // Calculate current RPS from recent activity
-            if (timeline.size() >= 2) {
-                var lastPoint = timeline.get(timeline.size() - 1);
-                long timeDiff = point.getTimestamp() - lastPoint.getTimestamp();
-                long reqDiff = point.getTotalRequests() - lastPoint.getTotalRequests();
-                if (timeDiff > 0) {
-                    point.setRps((reqDiff * 1000.0) / timeDiff);
-                }
-            } else {
-                point.setRps(summary.getRequestsPerSecond());
-            }
-
-            timeline.add(point);
-
-            // Keep only last 300 data points (10 minutes at 2s intervals)
-            while (timeline.size() > 300) {
-                timeline.remove(0);
-            }
-        }
-
-        List<com.leoli.gateway.admin.model.StressTestMetrics.MetricDataPoint> getTimeline() {
-            return new ArrayList<>(timeline);
-        }
-
-        com.leoli.gateway.admin.model.StressTestMetrics.SummaryMetrics getSummary() {
-            return summary;
-        }
-    }
-
-    /**
-     * Tracks a running stress test session with real-time statistics.
-     */
-    private static class StressTestSession {
-        private volatile boolean stopped = false;
-        private final List<TestResult> recentResults = Collections.synchronizedList(new ArrayList<>());
-        private final ConcurrentLinkedQueue<CompletableFuture<?>> inflightFutures = new ConcurrentLinkedQueue<>();
-
-        final AtomicInteger totalCompleted = new AtomicInteger(0);
-        final AtomicInteger totalFailed = new AtomicInteger(0);
-        private final long testStartTimeMs = System.currentTimeMillis();
-
+    /** Running and reserved tasks, with the transport and accounting futures tracked separately. */
+    static class StressTestSession {
+        private volatile boolean stopped;
+        private final ConcurrentHashMap<CompletableFuture<?>, CompletableFuture<?>> inflight = new ConcurrentHashMap<>();
+        final AtomicInteger totalCompleted = new AtomicInteger();
+        final AtomicInteger totalFailed = new AtomicInteger();
+        private volatile long testStartTimeMs = System.currentTimeMillis();
         private final int totalRequests;
         private final Integer durationSeconds;
-
-        // Real-time metrics tracker
-        final LiveMetricsTracker stats = new LiveMetricsTracker();
-
-        StressTestSession(int totalRequests, Integer durationSeconds) {
-            this.totalRequests = totalRequests;
-            this.durationSeconds = durationSeconds;
+        volatile StressTestStatistics stats = new StressTestStatistics();
+        private volatile boolean started;
+        StressTestSession(int totalRequests, Integer durationSeconds) { this.totalRequests = totalRequests; this.durationSeconds = durationSeconds; }
+        void start() { stats = new StressTestStatistics(); testStartTimeMs = System.currentTimeMillis(); started = true; }
+        synchronized void stop() { stopped = true; cancelAll(); }
+        boolean shouldStop() { return stopped; }
+        void cancelAll() { inflight.keySet().forEach(source -> source.cancel(true)); }
+        void addInflight(CompletableFuture<?> source, CompletableFuture<?> accounted) {
+            inflight.put(source, accounted);
+            accounted.whenComplete((result, error) -> inflight.remove(source));
+            if (stopped) source.cancel(true);
         }
-
-        void stop() {
-            stopped = true;
-        }
-
-        boolean shouldStop() {
-            return stopped;
-        }
-
-        void cancelAll() {
-            inflightFutures.forEach(f -> f.cancel(true));
-        }
-
-        void addInflight(CompletableFuture<?> future) {
-            inflightFutures.add(future);
-            future.whenComplete((r, ex) -> inflightFutures.remove(future));
-        }
-
         void recordResult(TestResult result) {
-            recentResults.add(result);
-            // Keep only recent 100 results for live RPS calculation
-            while (recentResults.size() > 100) {
-                recentResults.remove(0);
-            }
-
-            // Update live metrics
-            stats.recordResult(result, totalCompleted.get(), totalFailed.get());
+            stats.record(result.responseTime, result.success, result.bodySize, result.error);
+            totalCompleted.incrementAndGet();
+            if (!result.success) totalFailed.incrementAndGet();
         }
-
         double getProgress() {
-            if (durationSeconds != null && durationSeconds > 0) {
-                long elapsed = System.currentTimeMillis() - testStartTimeMs;
-                return Math.min(1.0, elapsed / (durationSeconds * 1000.0));
-            }
-            if (totalRequests <= 0) return 0;
-            return Math.min(1.0, totalCompleted.get() / (double) totalRequests);
+            if (!started) return 0;
+            if (durationSeconds != null && durationSeconds > 0) return Math.min(1.0,
+                    (System.currentTimeMillis() - testStartTimeMs) / (durationSeconds * 1000.0));
+            return totalRequests <= 0 ? 0 : Math.min(1.0, totalCompleted.get() / (double) totalRequests);
         }
-
-        double getLiveRps() {
-            if (recentResults.size() < 2) return 0;
-            synchronized (recentResults) {
-                if (recentResults.size() < 2) return 0;
-                long recentDuration = recentResults.get(recentResults.size() - 1).endTime -
-                        recentResults.get(0).startTime;
-                if (recentDuration <= 0) return 0;
-                return recentResults.size() * 1000.0 / recentDuration;
-            }
-        }
-
+        double getLiveRps() { return stats.getLiveRps(); }
         void awaitCompletion(long timeoutMs) {
-            CompletableFuture<?>[] futures = inflightFutures.toArray(new CompletableFuture[0]);
-            if (futures.length > 0) {
-                try {
-                    CompletableFuture.allOf(futures).get(timeoutMs, TimeUnit.MILLISECONDS);
-                } catch (TimeoutException e) {
-                    log.warn("Timed out waiting for in-flight requests");
-                    cancelAll();
-                } catch (Exception e) {
-                    log.warn("Error waiting for completion", e);
-                }
+            CompletableFuture<?>[] futures = inflight.values().toArray(CompletableFuture[]::new);
+            try { CompletableFuture.allOf(futures).get(timeoutMs, TimeUnit.MILLISECONDS); }
+            catch (InterruptedException interrupted) { stop(); Thread.currentThread().interrupt(); }
+            catch (Exception error) {
+                cancelAll();
+                if (!stopped) throw new IllegalStateException("Cannot finish in-flight stress requests", error);
             }
         }
     }
 
+    /** Discard response chunks while counting actual bytes, including non-ASCII responses. */
+    private static final class CountingBodySubscriber implements HttpResponse.BodySubscriber<Long> {
+        private final CompletableFuture<Long> body = new CompletableFuture<>();
+        private long size;
+        public CompletionStage<Long> getBody() { return body; }
+        public void onSubscribe(Flow.Subscription subscription) { subscription.request(Long.MAX_VALUE); }
+        public void onNext(List<ByteBuffer> chunks) { for (ByteBuffer chunk : chunks) size += chunk.remaining(); }
+        public void onError(Throwable error) { body.completeExceptionally(error); }
+        public void onComplete() { body.complete(size); }
+    }
     private static class TestResult {
         long startTime;
         long endTime;
@@ -1470,6 +1158,6 @@ public class StressTestService {
         int statusCode;
         boolean success;
         String error;
-        int bodySize;
+        long bodySize;
     }
 }

@@ -117,7 +117,7 @@ public class StressTestPlaceholderResolver {
      */
     private String resolveRandomInt(String params) {
         if (params == null || params.isEmpty()) {
-            return String.valueOf(ThreadLocalRandom.current().nextInt(1, 1_000_000));
+            return String.valueOf(ThreadLocalRandom.current().nextInt(1, 1_000_001));
         }
 
         // Parse "min-max" format
@@ -130,7 +130,7 @@ public class StressTestPlaceholderResolver {
         int max = Integer.parseInt(range[1].trim());
 
         // ThreadLocalRandom.nextInt(min, max) is exclusive of max, so add 1
-        return String.valueOf(ThreadLocalRandom.current().nextInt(min, max + 1));
+        return String.valueOf(ThreadLocalRandom.current().nextLong(min, (long) max + 1));
     }
 
     /**
@@ -142,6 +142,7 @@ public class StressTestPlaceholderResolver {
         if (params != null && !params.isEmpty()) {
             length = Integer.parseInt(params.trim());
         }
+        if (length < 0 || length > 65536) throw new IllegalArgumentException("randomString length must be between 0 and 65536");
 
         // Generate alphanumeric string (a-z, A-Z, 0-9)
         return RandomStringUtils.randomAlphanumeric(length);

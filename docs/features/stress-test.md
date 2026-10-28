@@ -6,6 +6,29 @@
 
 ## Overview
 
+Execution and measurement rules:
+
+- Up to three tasks are reserved per admin process, including tasks waiting to
+  start. Transaction rollback and execution failure release the reservation.
+- Stopping a task cancels its underlying HTTP requests. Final counts are saved
+  only after request accounting finishes. Stop requests must reach the admin node
+  that started the task; task ownership is currently local to that process.
+- Duration bounds request dispatch. Already-dispatched requests are drained until
+  their individual timeouts; stopping cancels them immediately.
+- `targetQps` is an upper dispatch rate; zero or an omitted value is unlimited.
+  Random body placeholders are resolved for every request. HEAD and OPTIONS retain
+  their configured methods.
+- Latency summaries and percentiles include successful and failed attempts, with
+  millisecond resolution. The fixed histogram has a five-minute overflow bucket
+  represented by the maximum observed latency. Failed/cancelled attempts are shown
+  in the error distribution.
+- Response bodies are discarded as they arrive and their bytes are counted.
+  UTF-8 response size is measured in bytes rather than Java string characters.
+  Statistics storage is bounded independently of the total request count.
+- Live RPS uses a rolling window; report RPS uses total accounted attempts divided
+  by elapsed execution time. Frontend polling does not overlap or reuse results
+  after switching gateway instances.
+
 Stress test features:
 
 | Feature | Description |

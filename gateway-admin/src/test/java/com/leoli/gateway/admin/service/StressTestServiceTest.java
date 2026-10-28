@@ -12,6 +12,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
 
@@ -71,7 +72,9 @@ public class StressTestServiceTest {
         config.setTotalRequests(100);
 
         when(instanceRepository.findByInstanceId(TEST_INSTANCE_ID)).thenReturn(Optional.of(instance));
-        when(stressTestRepository.save(any(StressTest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(stressTestRepository.save(any(StressTest.class))).thenAnswer(invocation -> {
+            StressTest saved = invocation.getArgument(0); saved.setId(1L); return saved;
+        });
 
         // When. createAndStartTest registers an afterCommit synchronization that launches the
         // load asynchronously. Activating synchronization without ever committing exercises the
@@ -130,7 +133,9 @@ public class StressTestServiceTest {
         test.setStatus("RUNNING");
 
         when(stressTestRepository.findById(testId)).thenReturn(Optional.of(test));
-        when(stressTestRepository.save(any(StressTest.class))).thenReturn(test);
+        @SuppressWarnings("unchecked")
+        var active = (java.util.Map<Long, StressTestService.StressTestSession>) ReflectionTestUtils.getField(stressTestService, "runningTests");
+        active.put(testId, new StressTestService.StressTestSession(100, null));
 
         // Act - the service also signals the running session to stop, which is a no-op here
         // because no session was ever started.
@@ -138,6 +143,10 @@ public class StressTestServiceTest {
 
         // Assert
         assertNotNull(stopped);
+        assertNotSame(test, stopped);
+        assertEquals("RUNNING", test.getStatus(), "Stop must not dirty a managed database entity");
+        assertEquals("STOPPED", stopped.getStatus());
+        verify(stressTestRepository, never()).save(any(StressTest.class));
         verify(stressTestRepository).findById(testId);
     }
 

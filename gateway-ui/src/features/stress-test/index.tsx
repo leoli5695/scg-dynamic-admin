@@ -2,7 +2,7 @@
  * Stress test feature root — test history (with live progress polling),
  * template-based test creation, quick test, AI analysis, export and share.
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Button,
   Input,
@@ -52,6 +52,9 @@ const StressTestPage: React.FC = () => {
   const { t } = useTranslation();
   const { instance } = useInstanceDetail();
   const instanceId = instance.instanceId;
+  const scopeRef = useRef(instanceId);
+  scopeRef.current = instanceId;
+  const historyRequestRef = useRef(0);
 
   const [tests, setTests] = useState<StressTest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,23 +77,29 @@ const StressTestPage: React.FC = () => {
   const [analysisTestId, setAnalysisTestId] = useState<number | null>(null);
 
   const loadTests = useCallback(async () => {
+    const request = ++historyRequestRef.current;
     setLoading(true);
     try {
       const list = await getStressTestsByInstance(instanceId);
+      if (scopeRef.current !== instanceId || historyRequestRef.current !== request) return;
       const data = Array.isArray(list) ? list : [];
       setTests(data);
 
       // Resume live view when a test is still running.
-      const runningTest = data.find((item) => item.status === 'RUNNING');
+      const runningTest = data.find((item) => item.status === 'RUNNING' || item.status === 'CREATED');
       if (runningTest) {
         setRunningTestId(runningTest.id);
       }
     } catch {
-      message.error(t('stress_test.load_failed'));
+      if (scopeRef.current === instanceId && historyRequestRef.current === request) message.error(t('stress_test.load_failed'));
     } finally {
-      setLoading(false);
+      if (scopeRef.current === instanceId && historyRequestRef.current === request) setLoading(false);
     }
   }, [instanceId, t]);
+
+  useEffect(() => {
+    setTests([]); setRunningTestId(null); setRunningStatus(null); setTestMetrics(null);
+  }, [instanceId]);
 
   useEffect(() => {
     (async () => {
@@ -98,50 +107,53 @@ const StressTestPage: React.FC = () => {
     })();
   }, [loadTests]);
 
-  const fetchTestStatus = useCallback(async (testId: number) => {
+  const fetchTestStatus = useCallback(async (testId: number, signal: AbortSignal) => {
     setStatusLoading(true);
     try {
       // Fetch both status and metrics in parallel; timeline only exists on metrics.
       const [status, metrics] = await Promise.all([
-        getStressTestStatus(testId),
-        getStressTestMetrics(testId).catch(() => null),
+        getStressTestStatus(testId, { signal }),
+        getStressTestMetrics(testId, { signal }).catch(() => null),
       ]);
+      if (signal.aborted || scopeRef.current !== instanceId) return;
 
       setRunningStatus(status);
       if (metrics && metrics.timeline && metrics.timeline.length > 0) {
         setTestMetrics(metrics);
       }
 
-      if (status.status !== 'RUNNING') {
+      if (status.status !== 'RUNNING' && status.status !== 'CREATED') {
         setRunningTestId(null);
         setRunningStatus(null);
         setTestMetrics(null);
         await loadTests();
       }
     } catch {
-      message.error(t('stress_test.load_failed'));
+      if (!signal.aborted && scopeRef.current === instanceId) message.error(t('stress_test.load_failed'));
     } finally {
-      setStatusLoading(false);
+      if (!signal.aborted && scopeRef.current === instanceId) setStatusLoading(false);
     }
-  }, [loadTests, t]);
+  }, [loadTests, t, instanceId]);
 
   // Poll running test status every 2s.
   useEffect(() => {
     if (!runningTestId) return undefined;
     const currentId = runningTestId;
-    (async () => {
-      await fetchTestStatus(currentId);
-    })();
-    const interval = setInterval(() => {
-      void fetchTestStatus(currentId);
-    }, 2000);
-    return () => clearInterval(interval);
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      await fetchTestStatus(currentId, controller.signal);
+      if (!controller.signal.aborted) timer = setTimeout(() => { void poll(); }, 2000);
+    };
+    void poll();
+    return () => { controller.abort(); clearTimeout(timer); };
   }, [runningTestId, fetchTestStatus]);
 
   const handleCreateTest = useCallback(async (config: StressTestConfig): Promise<boolean> => {
     setCreating(true);
     try {
       const result = await startStressTest(config, instanceId);
+      if (scopeRef.current !== instanceId) return true;
       message.success(t('stress_test.test_started'));
       setRunningTestId(result.testId);
       setActiveTab('history');
@@ -158,6 +170,7 @@ const StressTestPage: React.FC = () => {
   const handleQuickTest = useCallback(async (requests: number, concurrent: number) => {
     try {
       const result = await quickStressTest({ instanceId, requests, concurrent });
+      if (scopeRef.current !== instanceId) return;
       message.success(t('stress_test.test_started'));
       setQuickModalVisible(false);
       setRunningTestId(result.testId);

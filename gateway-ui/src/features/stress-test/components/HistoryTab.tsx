@@ -194,7 +194,7 @@ const HistoryTab: React.FC<Props> = ({
               </Button>
             </>
           )}
-          {test.status !== 'RUNNING' && (
+          {test.status !== 'RUNNING' && test.status !== 'CREATED' && (
             <Button danger icon={<DeleteOutlined />} onClick={() => onDelete(test.id)}>
               {t('stress_test.delete_test')}
             </Button>
@@ -279,6 +279,14 @@ const HistoryTab: React.FC<Props> = ({
     <div>
       {/* Running test display */}
       {renderRunningTest()}
+      {tests.filter(test => (test.status === 'RUNNING' || test.status === 'CREATED') && test.id !== runningTestId).map(test => (
+        <Card key={test.id} size="small" style={{ marginBottom: 16 }}
+          title={<Space><Tag color="blue">{test.status}</Tag>{test.testName || `Test #${test.id}`}</Space>}
+          extra={<Button danger icon={<StopOutlined />} onClick={() => onStop(test.id)}>{t('stress_test.stop_test')}</Button>}
+        >
+          <Text type="secondary">{test.targetUrl}</Text>
+        </Card>
+      ))}
 
       {/* Completed tests */}
       <Spin spinning={loading}>
@@ -290,7 +298,7 @@ const HistoryTab: React.FC<Props> = ({
             showIcon
           />
         ) : (
-          tests.filter((test) => test.status !== 'RUNNING').map(renderCompletedTest)
+          tests.filter((test) => test.status !== 'RUNNING' && test.status !== 'CREATED').map(renderCompletedTest)
         )}
       </Spin>
     </div>
