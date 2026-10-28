@@ -73,9 +73,15 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
     executingRef.current = false;
     clearingRef.current = false;
     followBottomRef.current = true;
+    // A session switch has to show an empty pane before the restored history arrives, so these
+    // resets are the intent rather than a cascade to avoid. The clean fix is `key={sessionKey}` on
+    // the tab child at copilot/index.tsx:160, but this component carries 12 useState and there are
+    // no front-end tests, so that refactor should not happen blind inside a lint cleanup.
+    /* eslint-disable react-hooks/set-state-in-effect */
     setMessages([]); setPendingAction(null); setFeedback({}); setInputMessage('');
     setLoading(false); setExecuting(false); setClearing(false); setHistoryLoading(true);
     setStreamNote(''); setStreamingContent(''); setStreamDone(false);
+    /* eslint-enable react-hooks/set-state-in-effect */
     (async () => {
       let sid = localStorage.getItem(sessionKey);
       if (!sid) {
@@ -101,6 +107,10 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
       }
     })();
     return () => {
+      // Bumping the shared epoch is the whole point: it is what makes an in-flight history load or
+      // stream belonging to the previous session bail at its next guard. Copying epochRef.current
+      // into a local first, as the rule suggests, would leave the counter un-bumped and defeat it.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       epochRef.current++;
       controller.abort();
       abortRef.current?.abort();

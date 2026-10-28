@@ -53,7 +53,6 @@ const StressTestPage: React.FC = () => {
   const { instance } = useInstanceDetail();
   const instanceId = instance.instanceId;
   const scopeRef = useRef(instanceId);
-  scopeRef.current = instanceId;
   const historyRequestRef = useRef(0);
 
   const [tests, setTests] = useState<StressTest[]>([]);
@@ -97,7 +96,16 @@ const StressTestPage: React.FC = () => {
     }
   }, [instanceId, t]);
 
+  // Must run before the instanceId effects below: their staleness guards compare against scopeRef.
   useEffect(() => {
+    scopeRef.current = instanceId;
+  }, [instanceId]);
+
+  useEffect(() => {
+    // Dropping the previous instance's list and live view is the intent, so the extra render is not
+    // a cascade to avoid. The clean fix is a `key={instanceId}` remount at legacyTabs.tsx:124, but
+    // this page has no tests, so that should not happen blind inside a lint cleanup.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTests([]); setRunningTestId(null); setRunningStatus(null); setTestMetrics(null);
   }, [instanceId]);
 
