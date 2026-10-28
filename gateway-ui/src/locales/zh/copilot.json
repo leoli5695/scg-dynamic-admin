@@ -155,5 +155,6 @@
   "copilot.validation_error": "校验失败",
   "copilot.route_applied": "路由创建成功",
   "copilot.route_apply_failed": "路由创建失败",
-  "copilot.route_apply_error": "应用路由失败"
+  "copilot.route_apply_error": "应用路由失败",
+  "copilot.stream_interrupted": "回答连接已中断，尚未收到完整回复，请重新发送。"
 }

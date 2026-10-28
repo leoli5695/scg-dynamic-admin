@@ -4,6 +4,7 @@
  * All endpoints return raw bodies (no ApiResponse envelope).
  */
 import httpClient, { ApiError, RequestOptions } from './http';
+import { readCopilotStream } from './copilotStream';
 import type {
   AiProvider,
   ApiKeyValidationResult,
@@ -194,28 +195,20 @@ export async function sendCopilotChatStream(
     throw new ApiError(detail, resp.status);
   }
 
-  const reader = resp.body.getReader();
-  const decoder = new TextDecoder('utf-8');
-  let buffer = '';
+  if (!resp.headers.get('content-type')?.toLowerCase().includes('text/event-stream')) {
+    await resp.body.cancel();
+    throw new ApiError('AI service returned an invalid streaming response.', resp.status);
+  }
 
-  const dispatchFrame = (frame: string) => {
-    let event = 'message';
-    const dataLines: string[] = [];
-    for (const raw of frame.split('\n')) {
-      const line = raw.replace(/\r$/, '');
-      if (line.startsWith('event:')) {
-        event = line.slice(6).trim();
-      } else if (line.startsWith('data:')) {
-        dataLines.push(line.slice(5).replace(/^ /, ''));
-      }
-    }
-    if (dataLines.length === 0) return;
+  await readCopilotStream(resp.body, (event, data) => {
+    if (!['status', 'tool', 'delta', 'error', 'message'].includes(event)) return false;
     let parsed: unknown;
     try {
-      parsed = JSON.parse(dataLines.join('\n'));
+      parsed = JSON.parse(data);
     } catch {
-      return;
+      throw new ApiError('AI service returned an invalid stream event.', 502);
     }
+    if (!parsed || typeof parsed !== 'object') throw new ApiError('Invalid AI stream event.', 502);
     switch (event) {
       case 'status':
         handlers.onStatus?.(parsed as CopilotStreamStatus);
@@ -228,26 +221,18 @@ export async function sendCopilotChatStream(
         break;
       case 'error':
         handlers.onError?.((parsed as { message?: string })?.message || 'AI error');
-        break;
-      default:
+        return true;
+      case 'message':
+        if (typeof (parsed as CopilotChatResponse).success !== 'boolean'
+            || typeof (parsed as CopilotChatResponse).sessionId !== 'string'
+            || !(parsed as CopilotChatResponse).sessionId) {
+          throw new ApiError('Invalid final AI response.', 502);
+        }
         handlers.onMessage(parsed as CopilotChatResponse);
-        break;
+        return true;
     }
-  };
-
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let idx = buffer.indexOf('\n\n');
-    while (idx >= 0) {
-      const frame = buffer.slice(0, idx);
-      buffer = buffer.slice(idx + 2);
-      if (frame.trim()) dispatchFrame(frame);
-      idx = buffer.indexOf('\n\n');
-    }
-  }
-  if (buffer.trim()) dispatchFrame(buffer);
+    return false;
+  }, handlers.signal);
 }
 
 // ============== Knowledge base (RAG) management ==============

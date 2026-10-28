@@ -30,6 +30,11 @@ public interface CopilotProgressListener {
      */
     void onEvent(String type, Map<String, Object> data);
 
+    /** Check cancellation without emitting an event, including immediately before persistence. */
+    default void checkCancelled() {
+        if (Thread.currentThread().isInterrupted()) throw new CopilotStreamAbortedException("Request interrupted");
+    }
+
     /** 空实现：非流式路径使用。 */
     CopilotProgressListener NOOP = (type, data) -> { };
 }

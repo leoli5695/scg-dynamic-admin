@@ -15,11 +15,15 @@ import com.leoli.gateway.admin.service.copilot.CopilotProgressListener;
 import com.leoli.gateway.admin.service.copilot.CopilotStreamAbortedException;
 import com.leoli.gateway.admin.service.copilot.CopilotUsageGuard;
 import com.leoli.gateway.admin.service.copilot.PendingActionStore;
+import com.leoli.gateway.admin.service.copilot.CopilotSessionIds;
 import com.leoli.gateway.admin.service.knowledge.KnowledgeIngestService;
 import com.leoli.gateway.admin.service.knowledge.KnowledgeSearchService;
 import com.leoli.gateway.admin.validation.RouteValidator;
 import com.leoli.license.client.model.LicenseInfo;
 import jakarta.annotation.PreDestroy;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +36,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -89,7 +94,7 @@ public class AiCopilotController extends BaseController {
      * @return Chat response
      */
     @PostMapping("/chat")
-    public ResponseEntity<Map<String, Object>> chat(@RequestBody ChatRequest request) {
+    public ResponseEntity<Map<String, Object>> chat(@Valid @RequestBody ChatRequest request) {
         log.info("AI Copilot chat request: context={}", request.getContext());
 
         // License feature check - AI Copilot requires ENTERPRISE edition
@@ -107,7 +112,7 @@ public class AiCopilotController extends BaseController {
         }
 
         AiCopilotService.ChatResponse response = aiCopilotService.chat(
-                sessionId,
+                CopilotSessionIds.scoped(operator, sessionId),
                 request.getMessage(),
                 request.getContext(),
                 request.getInstanceId(),
@@ -137,7 +142,7 @@ public class AiCopilotController extends BaseController {
      * 采用 POST + text/event-stream，前端用 fetch 读取响应流（EventSource 不支持 POST）。
      */
     @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter chatStream(@RequestBody ChatRequest request, HttpServletResponse servletResponse) {
+    public SseEmitter chatStream(@Valid @RequestBody ChatRequest request, HttpServletResponse servletResponse) {
         // POST /api/** 已由 SecurityConfig 要求 ADMIN；此处再校验 license 特性
         licenseFeatureHelper.checkFeatureOrThrow(LicenseInfo.Feature.AI_COPilot);
 
@@ -160,9 +165,24 @@ public class AiCopilotController extends BaseController {
             return emitter;
         }
 
+        AtomicBoolean clientGone = new AtomicBoolean();
+        AtomicBoolean finished = new AtomicBoolean();
+        FutureTask<Void> task = new FutureTask<>(() -> {
+            runChatStream(emitter, request, sessionId, operator, clientGone, finished);
+            return null;
+        });
+        Runnable cancel = () -> {
+            clientGone.set(true);
+            if (!finished.get()) task.cancel(true);
+        };
+        emitter.onCompletion(cancel);
+        emitter.onTimeout(() -> { cancel.run(); emitter.complete(); });
+        emitter.onError(error -> cancel.run());
         try {
-            streamExecutor.execute(() -> runChatStream(emitter, request, sessionId, operator));
+            streamExecutor.execute(task);
         } catch (RejectedExecutionException rex) {
+            task.cancel(false);
+            finished.set(true);
             log.warn("Copilot SSE executor saturated; rejecting stream request");
             sendErrorQuietly(emitter, "服务繁忙，请稍后重试");
             emitter.complete();
@@ -173,41 +193,44 @@ public class AiCopilotController extends BaseController {
     /**
      * 在独立线程上驱动同步的对话管线，把进度事件写入 SseEmitter。
      */
-    private void runChatStream(SseEmitter emitter, ChatRequest request, String sessionId, String operator) {
-        AtomicBoolean clientGone = new AtomicBoolean(false);
-        CopilotProgressListener listener = (type, data) -> {
-            if (clientGone.get()) {
-                throw new CopilotStreamAbortedException("client already disconnected");
+    private void runChatStream(SseEmitter emitter, ChatRequest request, String sessionId, String operator,
+                               AtomicBoolean clientGone, AtomicBoolean finished) {
+        CopilotProgressListener listener = new CopilotProgressListener() {
+            @Override public void checkCancelled() {
+                if (clientGone.get() || Thread.currentThread().isInterrupted()) {
+                    throw new CopilotStreamAbortedException("client already disconnected");
+                }
             }
-            try {
-                emitter.send(SseEmitter.event().name(type).data(data, MediaType.APPLICATION_JSON));
-            } catch (IOException | IllegalStateException e) {
-                // 客户端断开：置位并抛出，尽快中断工具循环，避免继续消耗 token
-                clientGone.set(true);
-                throw new CopilotStreamAbortedException(e);
+            @Override public void onEvent(String type, Map<String, Object> data) {
+                checkCancelled();
+                try {
+                    emitter.send(SseEmitter.event().name(type).data(data, MediaType.APPLICATION_JSON));
+                } catch (IOException | IllegalStateException e) {
+                    clientGone.set(true);
+                    throw new CopilotStreamAbortedException(e);
+                }
             }
         };
 
         try {
             AiCopilotService.ChatResponse response = aiCopilotService.chat(
-                    sessionId, request.getMessage(), request.getContext(), request.getInstanceId(),
+                    CopilotSessionIds.scoped(operator, sessionId), request.getMessage(), request.getContext(), request.getInstanceId(),
                     request.getProvider(), request.getModel(), listener);
             copilotUsageGuard.recordUsage(operator, response.getTotalTokens());
 
             if (clientGone.get()) {
-                emitter.complete();
                 return;
             }
             Map<String, Object> result = response.toMap();
             result.put("sessionId", sessionId);
             emitter.send(SseEmitter.event().name("message").data(result, MediaType.APPLICATION_JSON));
-            emitter.complete();
         } catch (CopilotStreamAbortedException aborted) {
             log.debug("Copilot SSE client disconnected, stream aborted");
-            emitter.complete();
         } catch (Exception e) {
             log.error("Copilot SSE chat failed", e);
             sendErrorQuietly(emitter, e.getMessage() != null ? e.getMessage() : "AI 服务错误");
+        } finally {
+            finished.set(true);
             emitter.complete();
         }
     }
@@ -285,7 +308,7 @@ public class AiCopilotController extends BaseController {
     public ResponseEntity<Map<String, Object>> clearHistory(@PathVariable String sessionId) {
         log.info("Clearing conversation history for session: {}", sessionId);
 
-        aiCopilotService.clearHistory(sessionId);
+        aiCopilotService.clearHistory(CopilotSessionIds.scoped(getOperator(), sessionId));
 
         return ResponseEntity.ok(Map.of(
                 "success", true,
@@ -302,7 +325,7 @@ public class AiCopilotController extends BaseController {
     @GetMapping("/chat/{sessionId}/history")
     public ResponseEntity<Map<String, Object>> getHistory(@PathVariable String sessionId) {
         List<Map<String, Object>> msgs = new ArrayList<>();
-        for (var m : aiCopilotService.getHistory(sessionId)) {
+        for (var m : aiCopilotService.getHistory(CopilotSessionIds.scoped(getOperator(), sessionId))) {
             // 只回传 user/assistant 文本；toolDigest 是内部上下文，不展示
             if (!"user".equals(m.getRole()) && !"assistant".equals(m.getRole())) {
                 continue;
@@ -744,11 +767,18 @@ public class AiCopilotController extends BaseController {
     // ============== Request DTOs ==============
 
     public static class ChatRequest {
+        @Size(max = 128)
         private String sessionId;
+        @NotBlank
+        @Size(max = 32000)
         private String message;
+        @Size(max = 64)
         private String context;  // route, service, strategy, debug, performance
+        @Size(max = 128)
         private String instanceId;
+        @Size(max = 64)
         private String provider;
+        @Size(max = 256)
         private String model;
 
         // Getters and setters

@@ -53,6 +53,7 @@ public class AiCopilotService {
     private final ContextDataProvider contextDataProvider;
     private final CopilotResponseBuilder responseBuilder;
     private final PromptService promptService;
+    private final CopilotTurnGuard turnGuard = new CopilotTurnGuard();
 
     // ===================== Chat API =====================
 
@@ -81,8 +82,16 @@ public class AiCopilotService {
                              String provider, String model, CopilotProgressListener listener) {
         log.info("AI Copilot chat: session={}, context={}, instance={}, provider={}, model={}",
                 sessionId, context, instanceId, provider, model);
+        if (sessionId == null || sessionId.isBlank() || userMessage == null || userMessage.isBlank()) {
+            return new ChatResponse(false, null, "会话和消息不能为空");
+        }
+        var turn = turnGuard.tryStart(sessionId);
+        if (turn == null) return new ChatResponse(false, null, "当前会话正在处理上一条消息，请等待完成后再发送");
+        final CopilotProgressListener delegate = listener != null ? listener : CopilotProgressListener.NOOP;
+        listener = (type, data) -> { turn.checkActive(); delegate.onEvent(type, data); };
 
-        try {
+        try (turn) {
+            delegate.checkCancelled();
             // 1. 意图检测（委托给 IntentRouter）
             IntentResult intentResult = intentRouter.processIntent(
                     sessionId, userMessage, chatSessionManager.getLastIntent(sessionId));
@@ -92,8 +101,11 @@ public class AiCopilotService {
             // 2. 本地兜底（常见问题快速响应）
             if (intentResult.hasLocalFallback()) {
                 log.info("Local fallback matched for: {}", userMessage);
-                chatSessionManager.addToHistory(sessionId, "user", userMessage);
-                chatSessionManager.addToHistory(sessionId, "assistant", intentResult.getLocalFallback());
+                turn.commit(() -> {
+                    delegate.checkCancelled();
+                    chatSessionManager.addToHistory(sessionId, "user", userMessage);
+                    chatSessionManager.addToHistory(sessionId, "assistant", intentResult.getLocalFallback());
+                });
                 return new ChatResponse(true, intentResult.getLocalFallback(), null);
             }
 
@@ -109,7 +121,7 @@ public class AiCopilotService {
             String domain = intentResult.getIntent();
             boolean keywordMissed = domain == null || domain.isEmpty()
                     || "general".equals(domain) || "unknown".equals(domain);
-            if (keywordMissed) {
+            if (keywordMissed && (context == null || context.isBlank())) {
                 String semantic = semanticIntentClassifier.classify(config.getProvider(), effectiveModel, userMessage);
                 if (semantic != null && !semantic.isEmpty() && !"general".equals(semantic)) {
                     domain = semantic;
@@ -122,7 +134,8 @@ public class AiCopilotService {
             if (domain == null || domain.isEmpty()) {
                 domain = "general";
             }
-            chatSessionManager.setLastIntent(sessionId, domain);
+            final String selectedDomain = domain;
+            turn.commit(() -> chatSessionManager.setLastIntent(sessionId, selectedDomain));
             listener.onEvent("status", Map.of(
                     "stage", "intent",
                     "intent", domain,
@@ -148,8 +161,11 @@ public class AiCopilotService {
             String finalResponse = responseBuilder.addEvidenceMark(loopResult.getContent(), evidence);
 
             // 10. 更新历史记录（assistant 带上本轮工具摘要，供多轮追问引用）
-            chatSessionManager.addToHistory(sessionId, "user", userMessage);
-            chatSessionManager.addToHistory(sessionId, "assistant", finalResponse, loopResult.getToolDigest(), null);
+            turn.commit(() -> {
+                delegate.checkCancelled();
+                chatSessionManager.addToHistory(sessionId, "user", userMessage);
+                chatSessionManager.addToHistory(sessionId, "assistant", finalResponse, loopResult.getToolDigest(), null);
+            });
 
             ChatResponse chatResponse = new ChatResponse(true, finalResponse, null, evidence.toMap());
             chatResponse.setTotalTokens(loopResult.getTotalTokens());
@@ -171,7 +187,7 @@ public class AiCopilotService {
      * Clear conversation history.
      */
     public void clearHistory(String sessionId) {
-        chatSessionManager.clearHistory(sessionId);
+        turnGuard.cancelAndRun(sessionId, () -> chatSessionManager.clearHistory(sessionId));
     }
 
     /**

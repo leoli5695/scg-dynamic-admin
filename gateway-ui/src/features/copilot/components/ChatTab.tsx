@@ -17,6 +17,8 @@ import { clearCopilotChat, executeCopilotAction, getCopilotHistory, sendCopilotC
 import { ApiError, isAbortError } from '../../../api/http';
 import type { CopilotPendingAction } from '../../../types/copilot';
 import AiReportRenderer from '../../../components/ai/AiReportRenderer';
+import { useAuth } from '../../auth/AuthContext';
+import { copilotSessionStorageKey, createCopilotSessionId } from '../utils/session';
 import '../../../styles/ai-report.css';
 
 const { Text } = Typography;
@@ -38,9 +40,13 @@ interface ChatTabProps {
 
 const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const sessionKey = copilotSessionStorageKey(user?.username || 'anonymous', instanceId || 'all');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [clearing, setClearing] = useState(false);
   const [sessionId, setSessionId] = useState('');
   const [pendingAction, setPendingAction] = useState<CopilotPendingAction | null>(null);
   const [executing, setExecuting] = useState(false);
@@ -50,20 +56,36 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
   const [streamDone, setStreamDone] = useState(false);
   const [feedback, setFeedback] = useState<Record<number, 'UP' | 'DOWN'>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const followBottomRef = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
+  const epochRef = useRef(0);
+  const sendingRef = useRef(false);
+  const executingRef = useRef(false);
+  const clearingRef = useRef(false);
 
-  // Initialize session（稳定 sessionId 存 localStorage，刷新/换端可恢复；并载入持久化历史）
+  // 按账号与实例保存 sessionId，刷新后恢复该会话的持久化历史。
   useEffect(() => {
+    const epoch = ++epochRef.current;
+    const controller = new AbortController();
+    abortRef.current?.abort();
+    abortRef.current = null;
+    sendingRef.current = false;
+    executingRef.current = false;
+    clearingRef.current = false;
+    followBottomRef.current = true;
+    setMessages([]); setPendingAction(null); setFeedback({}); setInputMessage('');
+    setLoading(false); setExecuting(false); setClearing(false); setHistoryLoading(true);
+    setStreamNote(''); setStreamingContent(''); setStreamDone(false);
     (async () => {
-      const SESSION_KEY = 'copilot.sessionId';
-      let sid = localStorage.getItem(SESSION_KEY);
+      let sid = localStorage.getItem(sessionKey);
       if (!sid) {
-        sid = `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        localStorage.setItem(SESSION_KEY, sid);
+        sid = createCopilotSessionId();
+        localStorage.setItem(sessionKey, sid);
       }
       setSessionId(sid);
       try {
-        const h = await getCopilotHistory(sid);
+        const h = await getCopilotHistory(sid, { signal: controller.signal });
+        if (epochRef.current !== epoch) return;
         if (h.messages && h.messages.length > 0) {
           setMessages(h.messages.map(m => ({
             role: m.role,
@@ -73,22 +95,32 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
           })));
         }
       } catch (e) {
-        console.error('load copilot history failed', e);
+        if (!controller.signal.aborted) console.error('load copilot history failed', e);
+      } finally {
+        if (epochRef.current === epoch) setHistoryLoading(false);
       }
     })();
-  }, []);
+    return () => {
+      epochRef.current++;
+      controller.abort();
+      abortRef.current?.abort();
+    };
+  }, [sessionKey]);
 
   // Abort any in-flight stream on unmount
   useEffect(() => () => { abortRef.current?.abort(); }, []);
 
   // Scroll to bottom when messages change or the answer streams in
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamingContent]);
+    if (followBottomRef.current) messagesEndRef.current?.scrollIntoView({ behavior: loading ? 'auto' : 'smooth' });
+  }, [messages, streamingContent, loading]);
 
   const handleSendMessage = async () => {
-    if (loading) return; // 发送中禁止重复提交（回车会绕过按钮的 loading 禁用，进而触发后端同会话并发）
+    if (sendingRef.current || executingRef.current || historyLoading || clearingRef.current || !sessionId) return;
     if (!inputMessage.trim()) return;
+    sendingRef.current = true;
+    followBottomRef.current = true;
+    const epoch = ++epochRef.current;
 
     const userMessage: ChatMessage = {
       role: 'user',
@@ -102,9 +134,11 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
     setStreamNote(t('copilot.ai_thinking'));
     setStreamingContent('');
     setStreamDone(false);
+    setPendingAction(null);
 
     const controller = new AbortController();
     abortRef.current = controller;
+    const current = () => epochRef.current === epoch && !controller.signal.aborted;
 
     try {
       await sendCopilotChatStream(
@@ -118,8 +152,9 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
         },
         {
           signal: controller.signal,
-          onStatus: () => setStreamNote(t('copilot.ai_thinking')),
+          onStatus: () => { if (current()) setStreamNote(t('copilot.ai_thinking')); },
           onTool: (data) => {
+            if (!current()) return;
             if (data.status === 'running') {
               // 新一轮工具调用：清掉可能残留的分片文本，进度以 streamNote 呈现
               setStreamingContent('');
@@ -132,8 +167,9 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
               setStreamNote(t('copilot.please_confirm'));
             }
           },
-          onDelta: (text) => setStreamingContent(prev => prev + text),
+          onDelta: (text) => { if (current()) setStreamingContent(prev => prev + text); },
           onMessage: (response) => {
+            if (!current()) return;
             // 终态：用完整回答（含证据说明）替换打字机临时内容
             setStreamingContent('');
             setStreamDone(true);
@@ -145,6 +181,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
                 fromAi: true,
               }]);
               setSessionId(response.sessionId);
+              localStorage.setItem(sessionKey, response.sessionId);
               // AI proposed a write operation — surface it for explicit human confirmation.
               setPendingAction(response.pendingAction ?? null);
             } else {
@@ -152,31 +189,38 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
             }
           },
           onError: (msg) => {
+            if (!current()) return;
             setStreamDone(true);
             message.error(msg || t('copilot.chat_failed'));
           },
         },
       );
     } catch (e) {
-      if (!isAbortError(e)) {
-        message.error(e instanceof ApiError && e.message ? e.message : t('copilot.send_message_failed'));
+      if (current() && !isAbortError(e)) {
+        message.error(e instanceof ApiError && e.message ? e.message : t('copilot.stream_interrupted'));
       }
     } finally {
-      abortRef.current = null;
-      setStreamNote('');
-      setStreamingContent('');
-      setLoading(false);
+      if (epochRef.current === epoch) {
+        abortRef.current = null;
+        sendingRef.current = false;
+        setStreamNote('');
+        setStreamingContent('');
+        setLoading(false);
+      }
     }
   };
 
   const handleConfirmAction = async () => {
-    if (!pendingAction) return;
+    if (!pendingAction || executingRef.current || sendingRef.current || clearingRef.current) return;
+    executingRef.current = true;
+    const epoch = epochRef.current;
     setExecuting(true);
     try {
       const result = await executeCopilotAction({
         ticket: pendingAction.ticket,
         toolName: pendingAction.toolName,
       });
+      if (epochRef.current !== epoch) return;
       const assistantMessage: ChatMessage = {
         role: 'assistant',
         content: result.success
@@ -191,10 +235,13 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
         message.error(result.message || t('copilot.operation_failed'));
       }
     } catch (e) {
-      message.error(e instanceof ApiError && e.message ? e.message : t('copilot.operation_failed'));
+      if (epochRef.current === epoch) message.error(e instanceof ApiError && e.message ? e.message : t('copilot.operation_failed'));
     } finally {
-      setPendingAction(null);
-      setExecuting(false);
+      if (epochRef.current === epoch) {
+        executingRef.current = false;
+        setPendingAction(null);
+        setExecuting(false);
+      }
     }
   };
 
@@ -232,19 +279,29 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
   };
 
   const handleClearConversation = async () => {
+    if (clearingRef.current || executingRef.current || historyLoading || !sessionId) return;
+    clearingRef.current = true;
+    const epoch = ++epochRef.current;
+    setClearing(true);
     abortRef.current?.abort(); // 中止在途流式请求，避免旧会话的回复串进来
+    abortRef.current = null;
+    sendingRef.current = false;
+    setLoading(false); setStreamingContent(''); setStreamDone(false);
     try {
       await clearCopilotChat(sessionId);
+      if (epochRef.current !== epoch) return;
       setMessages([]);
       setPendingAction(null);
       setStreamNote('');
       setFeedback({});
-      const newSid = `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      localStorage.setItem('copilot.sessionId', newSid);
+      const newSid = createCopilotSessionId();
+      localStorage.setItem(sessionKey, newSid);
       setSessionId(newSid);
       message.success(t('copilot.conversation_cleared'));
     } catch {
-      message.error(t('copilot.clear_failed'));
+      if (epochRef.current === epoch) message.error(t('copilot.clear_failed'));
+    } finally {
+      if (epochRef.current === epoch) { clearingRef.current = false; setClearing(false); }
     }
   };
 
@@ -252,6 +309,10 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 350px)' }}>
       {/* Messages Area */}
       <div
+        onScroll={event => {
+          const area = event.currentTarget;
+          followBottomRef.current = area.scrollHeight - area.scrollTop - area.clientHeight < 80;
+        }}
         style={{
           flex: 1,
           overflowY: 'auto',
@@ -412,11 +473,12 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
               type="primary"
               danger
               loading={executing}
+              disabled={clearing || loading}
               onClick={handleConfirmAction}
             >
               {t('copilot.confirm_execute')}
             </Button>
-            <Button onClick={handleCancelAction} disabled={executing}>
+            <Button onClick={handleCancelAction} disabled={executing || clearing}>
               {t('copilot.confirm_cancel')}
             </Button>
           </div>
@@ -437,9 +499,10 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
           onChange={e => setInputMessage(e.target.value)}
           placeholder={t('copilot.input_placeholder')}
           autoSize={{ minRows: 1, maxRows: 4 }}
-          disabled={loading}
+          disabled={loading || historyLoading || clearing || executing}
+          maxLength={32000}
           onPressEnter={e => {
-            if (!e.shiftKey) {
+            if (!e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               handleSendMessage();
             }
@@ -456,11 +519,12 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
           icon={<SendOutlined />}
           onClick={handleSendMessage}
           loading={loading}
+          disabled={historyLoading || clearing || executing || !inputMessage.trim()}
         >
           {t('copilot.send')}
         </Button>
         <Tooltip title={t('copilot.clear_conversation')}>
-          <Button icon={<ClearOutlined />} onClick={handleClearConversation} />
+          <Button icon={<ClearOutlined />} onClick={handleClearConversation} loading={clearing} disabled={historyLoading || executing} />
         </Tooltip>
       </div>
     </div>

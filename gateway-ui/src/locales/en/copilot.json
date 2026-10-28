@@ -155,5 +155,6 @@
   "copilot.validation_error": "Validation failed",
   "copilot.route_applied": "Route created successfully",
   "copilot.route_apply_failed": "Failed to create route",
-  "copilot.route_apply_error": "Failed to apply route"
+  "copilot.route_apply_error": "Failed to apply route",
+  "copilot.stream_interrupted": "The response stream was interrupted before the complete reply arrived. Please send again."
 }
